@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChannelChannelIdRouteImport } from './routes/channel.$channelId'
+import { Route as ChannelChannelIdTitlesRouteImport } from './routes/channel.$channelId.titles'
 import { Route as ChannelChannelIdResearchRouteImport } from './routes/channel.$channelId.research'
 import { Route as ChannelChannelIdIdeasRouteImport } from './routes/channel.$channelId.ideas'
 import { Route as ChannelChannelIdSettingsProcessesRouteImport } from './routes/channel.$channelId.settings.processes'
@@ -30,6 +31,11 @@ const ChannelChannelIdRoute = ChannelChannelIdRouteImport.update({
   id: '/channel/$channelId',
   path: '/channel/$channelId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ChannelChannelIdTitlesRoute = ChannelChannelIdTitlesRouteImport.update({
+  id: '/titles',
+  path: '/titles',
+  getParentRoute: () => ChannelChannelIdRoute,
 } as any)
 const ChannelChannelIdResearchRoute =
   ChannelChannelIdResearchRouteImport.update({
@@ -55,6 +61,7 @@ export interface FileRoutesByFullPath {
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
+  '/channel/$channelId/titles': typeof ChannelChannelIdTitlesRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRoutesByTo {
@@ -63,6 +70,7 @@ export interface FileRoutesByTo {
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
+  '/channel/$channelId/titles': typeof ChannelChannelIdTitlesRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRoutesById {
@@ -72,6 +80,7 @@ export interface FileRoutesById {
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
+  '/channel/$channelId/titles': typeof ChannelChannelIdTitlesRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRouteTypes {
@@ -82,6 +91,7 @@ export interface FileRouteTypes {
     | '/channel/$channelId'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/research'
+    | '/channel/$channelId/titles'
     | '/channel/$channelId/settings/processes'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -90,6 +100,7 @@ export interface FileRouteTypes {
     | '/channel/$channelId'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/research'
+    | '/channel/$channelId/titles'
     | '/channel/$channelId/settings/processes'
   id:
     | '__root__'
@@ -98,6 +109,7 @@ export interface FileRouteTypes {
     | '/channel/$channelId'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/research'
+    | '/channel/$channelId/titles'
     | '/channel/$channelId/settings/processes'
   fileRoutesById: FileRoutesById
 }
@@ -130,6 +142,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChannelChannelIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/channel/$channelId/titles': {
+      id: '/channel/$channelId/titles'
+      path: '/titles'
+      fullPath: '/channel/$channelId/titles'
+      preLoaderRoute: typeof ChannelChannelIdTitlesRouteImport
+      parentRoute: typeof ChannelChannelIdRoute
+    }
     '/channel/$channelId/research': {
       id: '/channel/$channelId/research'
       path: '/research'
@@ -157,12 +176,14 @@ declare module '@tanstack/react-router' {
 interface ChannelChannelIdRouteChildren {
   ChannelChannelIdIdeasRoute: typeof ChannelChannelIdIdeasRoute
   ChannelChannelIdResearchRoute: typeof ChannelChannelIdResearchRoute
+  ChannelChannelIdTitlesRoute: typeof ChannelChannelIdTitlesRoute
   ChannelChannelIdSettingsProcessesRoute: typeof ChannelChannelIdSettingsProcessesRoute
 }
 
 const ChannelChannelIdRouteChildren: ChannelChannelIdRouteChildren = {
   ChannelChannelIdIdeasRoute: ChannelChannelIdIdeasRoute,
   ChannelChannelIdResearchRoute: ChannelChannelIdResearchRoute,
+  ChannelChannelIdTitlesRoute: ChannelChannelIdTitlesRoute,
   ChannelChannelIdSettingsProcessesRoute:
     ChannelChannelIdSettingsProcessesRoute,
 }
