@@ -163,6 +163,9 @@ export type Project = {
   duration: string;
   updatedAt: string;
   stages: Record<ProcessId, ProcessState>;
+  assignee: { name: string; initials: string };
+  isLate?: boolean;
+  thumbHue: number;
 };
 
 function stagesUpTo(current: ProcessId, currentState: ProcessState) {
