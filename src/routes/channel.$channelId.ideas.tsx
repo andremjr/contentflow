@@ -1,0 +1,999 @@
+import { createFileRoute, notFound, Link } from "@tanstack/react-router";
+import { useState, useRef, useEffect, type KeyboardEvent } from "react";
+import {
+  Lightbulb,
+  TrendingUp,
+  Users,
+  History,
+  Wand2,
+  X,
+  Plus,
+  Maximize2,
+  Minimize2,
+  RotateCcw,
+  Info,
+  Sparkles,
+  Ban,
+  Tag,
+  Play,
+  Save,
+  Braces,
+} from "lucide-react";
+import { AppShell } from "@/components/app-shell";
+import { TopBar } from "@/components/top-bar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import { channels } from "@/lib/mock-data";
+import { ChannelAvatar } from "@/components/channel-avatar";
+
+export const Route = createFileRoute("/channel/$channelId/ideas")({
+  head: ({ params }) => {
+    const ch = channels.find((c) => c.id === params.channelId);
+    const title = ch
+      ? `Ideias — ${ch.name} · ContentFlow OS`
+      : "Ideias — ContentFlow OS";
+    return {
+      meta: [
+        { title },
+        {
+          name: "description",
+          content:
+            "Configure descoberta de tendências, conexão com o público e uso do histórico para gerar ideias.",
+        },
+      ],
+    };
+  },
+  loader: ({ params }) => {
+    const channel = channels.find((c) => c.id === params.channelId);
+    if (!channel) throw notFound();
+    return { channel };
+  },
+  notFoundComponent: () => (
+    <AppShell>
+      <div className="flex flex-1 items-center justify-center p-10">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold">Canal não encontrado</h2>
+          <Button asChild className="mt-4">
+            <Link to="/dashboard">Ir para o dashboard</Link>
+          </Button>
+        </div>
+      </div>
+    </AppShell>
+  ),
+  component: IdeasScreen,
+});
+
+// ---------- mocks ----------
+
+const TREND_SOURCES = [
+  { id: "youtube", label: "YouTube Trending" },
+  { id: "google", label: "Google Trends" },
+  { id: "tiktok", label: "TikTok" },
+  { id: "twitter", label: "X / Twitter" },
+  { id: "reddit", label: "Reddit" },
+  { id: "news", label: "Notícias" },
+];
+
+const TREND_PERIODS = [
+  { value: "24h", label: "Últimas 24 horas" },
+  { value: "7d", label: "Últimos 7 dias" },
+  { value: "30d", label: "Últimos 30 dias" },
+  { value: "90d", label: "Últimos 90 dias" },
+];
+
+type EmotionId =
+  | "pain"
+  | "desire"
+  | "fear"
+  | "curiosity"
+  | "aspiration"
+  | "identification"
+  | "urgency"
+  | "transformation";
+
+const EMOTIONS: {
+  id: EmotionId;
+  label: string;
+  hint: string;
+}[] = [
+  { id: "pain", label: "Dor", hint: "Que problema resolve?" },
+  { id: "desire", label: "Desejo", hint: "O que a pessoa quer ter ou ser?" },
+  { id: "fear", label: "Medo", hint: "O que ela quer evitar?" },
+  { id: "curiosity", label: "Curiosidade", hint: "Que enigma desperta?" },
+  { id: "aspiration", label: "Aspiração", hint: "Que ideal ela busca?" },
+  { id: "identification", label: "Identificação", hint: "Com quem ela se identifica?" },
+  { id: "urgency", label: "Urgência", hint: "Por que agir agora?" },
+  { id: "transformation", label: "Transformação", hint: "Que mudança promete?" },
+];
+
+const HISTORY_ITEMS = [
+  { id: "titles", label: "Títulos anteriores" },
+  { id: "themes", label: "Temas recorrentes" },
+  { id: "performance", label: "Desempenho dos vídeos" },
+  { id: "comments", label: "Comentários da audiência" },
+  { id: "frequency", label: "Frequência de publicação" },
+];
+
+const PROMPT_VARIABLES = [
+  { key: "channel_name", label: "Nome do canal", desc: "Nome público do canal" },
+  { key: "channel_niche", label: "Nicho", desc: "Nicho principal do canal" },
+  { key: "target_audience", label: "Público", desc: "Perfil da audiência" },
+  { key: "channel_history", label: "Histórico", desc: "Últimos vídeos publicados" },
+  { key: "top_titles", label: "Top títulos", desc: "Títulos com maior CTR" },
+  { key: "language", label: "Idioma", desc: "Idioma principal" },
+  { key: "date", label: "Data atual", desc: "Data de execução" },
+];
+
+const DEFAULT_PROMPT = `Você é um estrategista de conteúdo para o canal {{channel_name}}, especializado em {{channel_niche}}.
+
+Gere 10 ideias de vídeo que:
+- Conversem com o público {{target_audience}}
+- Considerem o histórico recente: {{channel_history}}
+- Sejam alinhadas às tendências ativas do nicho
+
+Para cada ideia, retorne:
+1. Ângulo principal
+2. Gancho de abertura
+3. Emoção dominante
+4. Justificativa (1 frase)`;
+
+// ---------- component ----------
+
+function IdeasScreen() {
+  const { channel } = Route.useLoaderData();
+
+  // Discovery
+  const [useTrends, setUseTrends] = useState(true);
+  const [trendSources, setTrendSources] = useState<string[]>([
+    "youtube",
+    "google",
+  ]);
+  const [trendPeriod, setTrendPeriod] = useState("7d");
+  const [trendIntensity, setTrendIntensity] = useState<[number]>([70]);
+  const [requiredThemes, setRequiredThemes] = useState<string[]>([
+    "IA generativa",
+  ]);
+  const [forbiddenThemes, setForbiddenThemes] = useState<string[]>([
+    "política",
+  ]);
+
+  // Audience
+  const [emotions, setEmotions] = useState<EmotionId[]>([
+    "curiosity",
+    "transformation",
+  ]);
+  const [emotionCopy, setEmotionCopy] = useState<Record<EmotionId, string>>({
+    pain: "",
+    desire: "",
+    fear: "",
+    curiosity:
+      "Levantar perguntas que a audiência sempre quis fazer mas nunca teve resposta clara.",
+    aspiration: "",
+    identification: "",
+    urgency: "",
+    transformation:
+      "Mostrar antes/depois: como a ideia muda a forma como o espectador enxerga o tema.",
+  });
+
+  // History
+  const [useHistory, setUseHistory] = useState(true);
+  const [historyPeriod, setHistoryPeriod] = useState("90d");
+  const [historyItems, setHistoryItems] = useState<string[]>([
+    "titles",
+    "performance",
+  ]);
+  const [historyWeight, setHistoryWeight] = useState<[number]>([40]);
+  const [avoidRepeats, setAvoidRepeats] = useState(true);
+
+  // Prompt
+  const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
+  const [expanded, setExpanded] = useState(false);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+
+  const toggleEmotion = (id: EmotionId) => {
+    setEmotions((prev) =>
+      prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id],
+    );
+  };
+
+  const toggleSource = (id: string) => {
+    setTrendSources((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
+    );
+  };
+
+  const toggleHistoryItem = (id: string) => {
+    setHistoryItems((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const insertVariable = (key: string) => {
+    const token = `{{${key}}}`;
+    const el = promptRef.current;
+    if (!el) {
+      setPrompt((p) => `${p}${token}`);
+      return;
+    }
+    const start = el.selectionStart ?? prompt.length;
+    const end = el.selectionEnd ?? prompt.length;
+    const next = prompt.slice(0, start) + token + prompt.slice(end);
+    setPrompt(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = el.selectionEnd = start + token.length;
+    });
+  };
+
+  const restorePrompt = () => setPrompt(DEFAULT_PROMPT);
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <AppShell>
+        <TopBar
+          title="Ideias"
+          subtitle={`Configuração · ${channel.name}`}
+          breadcrumbs={[
+            { label: "ContentFlow OS" },
+            { label: "Canais" },
+            { label: channel.name, to: `/channel/${channel.id}` as never },
+            { label: "Ideias" },
+          ]}
+        />
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-[1100px] space-y-6 p-6">
+            {/* Header */}
+            <div className="flex items-start gap-4">
+              <ChannelAvatar channel={channel} size="lg" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+                  <Lightbulb className="h-3.5 w-3.5" />
+                  Ideias · Etapa 2 do pipeline
+                </div>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+                  Motor de ideias
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Combine tendências, conexão emocional e histórico para gerar
+                  pautas alinhadas ao {channel.name}.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm">
+                  <Save className="mr-1.5 h-3.5 w-3.5" />
+                  Salvar
+                </Button>
+                <Button size="sm">
+                  <Play className="mr-1.5 h-3.5 w-3.5" />
+                  Gerar ideias
+                </Button>
+              </div>
+            </div>
+
+            {/* Descoberta */}
+            <Section
+              icon={<TrendingUp className="h-4 w-4" />}
+              title="Descoberta"
+              description="Temas em alta e delimitação do escopo."
+              action={
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    Usar tendências
+                  </span>
+                  <Switch checked={useTrends} onCheckedChange={setUseTrends} />
+                </div>
+              }
+            >
+              <div
+                className={cn(
+                  "space-y-6 transition-opacity",
+                  !useTrends && "pointer-events-none opacity-40",
+                )}
+              >
+                <div className="grid gap-6 md:grid-cols-2">
+                  <FieldWrap
+                    label="Fontes de tendência"
+                    description="Selecione uma ou mais fontes de dados."
+                  >
+                    <MultiSelectSources
+                      selected={trendSources}
+                      onToggle={toggleSource}
+                    />
+                  </FieldWrap>
+
+                  <FieldWrap
+                    label="Período da tendência"
+                    description="Janela de análise das tendências."
+                  >
+                    <Select value={trendPeriod} onValueChange={setTrendPeriod}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TREND_PERIODS.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>
+                            {p.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FieldWrap>
+                </div>
+
+                <FieldWrap
+                  label="Intensidade da tendência"
+                  description="Quão viral um assunto deve estar para ser considerado."
+                  tooltip="Valores altos priorizam apenas picos virais recentes."
+                >
+                  <div className="space-y-2">
+                    <Slider
+                      value={trendIntensity}
+                      min={0}
+                      max={100}
+                      step={5}
+                      onValueChange={(v) =>
+                        setTrendIntensity([v[0]] as [number])
+                      }
+                    />
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>Emergente</span>
+                      <span className="font-medium text-foreground">
+                        {trendIntensity[0]}%
+                      </span>
+                      <span>Viral</span>
+                    </div>
+                  </div>
+                </FieldWrap>
+
+                <div className="grid gap-6 md:grid-cols-2">
+                  <TagField
+                    label="Temas obrigatórios"
+                    description="Toda ideia deve tocar pelo menos um destes temas."
+                    values={requiredThemes}
+                    onChange={setRequiredThemes}
+                    tone="primary"
+                    icon={<Tag className="h-3 w-3" />}
+                  />
+                  <TagField
+                    label="Assuntos proibidos"
+                    description="Nenhuma ideia deve abordar estes assuntos."
+                    values={forbiddenThemes}
+                    onChange={setForbiddenThemes}
+                    tone="destructive"
+                    icon={<Ban className="h-3 w-3" />}
+                  />
+                </div>
+              </div>
+            </Section>
+
+            {/* Conexão */}
+            <Section
+              icon={<Users className="h-4 w-4" />}
+              title="Conexão com o público"
+              description="Selecione as emoções que a ideia deve ativar."
+            >
+              <div className="flex flex-wrap gap-2">
+                {EMOTIONS.map((e) => {
+                  const active = emotions.includes(e.id);
+                  return (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() => toggleEmotion(e.id)}
+                      className={cn(
+                        "group inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors",
+                        active
+                          ? "border-primary bg-primary/15 text-primary"
+                          : "border-border bg-secondary/40 text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-3.5 w-3.5 items-center justify-center rounded-full border",
+                          active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border/80",
+                        )}
+                      >
+                        {active && (
+                          <svg
+                            viewBox="0 0 12 12"
+                            className="h-2.5 w-2.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <path d="M2 6l3 3 5-6" strokeLinecap="round" />
+                          </svg>
+                        )}
+                      </span>
+                      {e.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {emotions.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-secondary/20 p-6 text-center text-xs text-muted-foreground">
+                  Selecione ao menos uma emoção para descrever a conexão.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {emotions.map((id) => {
+                    const meta = EMOTIONS.find((e) => e.id === id)!;
+                    return (
+                      <div
+                        key={id}
+                        className="rounded-lg border border-border bg-secondary/30 p-4"
+                      >
+                        <div className="mb-2 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="secondary"
+                              className="bg-primary/15 text-primary"
+                            >
+                              {meta.label}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {meta.hint}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleEmotion(id)}
+                            className="text-xs text-muted-foreground hover:text-destructive"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                        <Textarea
+                          value={emotionCopy[id]}
+                          onChange={(e) =>
+                            setEmotionCopy((prev) => ({
+                              ...prev,
+                              [id]: e.target.value,
+                            }))
+                          }
+                          placeholder={`Como o conteúdo deve trabalhar ${meta.label.toLowerCase()}...`}
+                          className="min-h-[72px] resize-none"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Section>
+
+            {/* Histórico */}
+            <Section
+              icon={<History className="h-4 w-4" />}
+              title="Uso do histórico"
+              description="Aproveite dados do próprio canal."
+              action={
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    Considerar histórico do canal
+                  </span>
+                  <Switch
+                    checked={useHistory}
+                    onCheckedChange={setUseHistory}
+                  />
+                </div>
+              }
+            >
+              <div
+                className={cn(
+                  "space-y-6 transition-opacity",
+                  !useHistory && "pointer-events-none opacity-40",
+                )}
+              >
+                <div className="grid gap-6 md:grid-cols-2">
+                  <FieldWrap
+                    label="Período analisado"
+                    description="Janela retroativa de vídeos."
+                  >
+                    <Select
+                      value={historyPeriod}
+                      onValueChange={setHistoryPeriod}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="30d">Últimos 30 dias</SelectItem>
+                        <SelectItem value="90d">Últimos 90 dias</SelectItem>
+                        <SelectItem value="180d">Últimos 6 meses</SelectItem>
+                        <SelectItem value="365d">Último ano</SelectItem>
+                        <SelectItem value="all">Todo o histórico</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldWrap>
+
+                  <FieldWrap
+                    label="Peso do histórico"
+                    description="Quanto o histórico influencia versus novidade."
+                  >
+                    <div className="space-y-2">
+                      <Slider
+                        value={historyWeight}
+                        min={0}
+                        max={100}
+                        step={5}
+                        onValueChange={(v) =>
+                          setHistoryWeight([v[0]] as [number])
+                        }
+                      />
+                      <div className="flex justify-between text-[11px] text-muted-foreground">
+                        <span>Novidade</span>
+                        <span className="font-medium text-foreground">
+                          {historyWeight[0]}%
+                        </span>
+                        <span>Continuidade</span>
+                      </div>
+                    </div>
+                  </FieldWrap>
+                </div>
+
+                <FieldWrap
+                  label="Sinais a considerar"
+                  description="Marque os dados históricos que devem alimentar as ideias."
+                >
+                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                    {HISTORY_ITEMS.map((item) => {
+                      const checked = historyItems.includes(item.id);
+                      return (
+                        <label
+                          key={item.id}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm transition-colors",
+                            checked
+                              ? "border-primary/60 bg-primary/10"
+                              : "border-border bg-secondary/30 hover:border-border/80",
+                          )}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => toggleHistoryItem(item.id)}
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </FieldWrap>
+
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                  <Checkbox
+                    checked={avoidRepeats}
+                    onCheckedChange={(v) => setAvoidRepeats(Boolean(v))}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="text-sm font-medium">
+                      Evitar repetir temas recentes
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Ignora ideias que se sobrepõem a vídeos publicados nas
+                      últimas semanas.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </Section>
+
+            {/* Prompt */}
+            <Section
+              icon={<Wand2 className="h-4 w-4" />}
+              title="Instruções avançadas"
+              description="Prompt-mestre usado ao gerar ideias."
+            >
+              <div
+                className={cn(
+                  "overflow-hidden rounded-xl border border-border bg-[#0A1220] font-mono text-sm shadow-inner transition-all",
+                  expanded ? "fixed inset-6 z-50 flex flex-col" : "relative",
+                )}
+              >
+                <div className="flex items-center justify-between border-b border-border/60 bg-secondary/20 px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="flex h-2 w-2 rounded-full bg-destructive/70" />
+                    <span className="flex h-2 w-2 rounded-full bg-warning/70" />
+                    <span className="flex h-2 w-2 rounded-full bg-success/70" />
+                    <span className="ml-2 font-sans">prompt.ideas.md</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-7 px-2">
+                          <Braces className="mr-1 h-3.5 w-3.5" />
+                          Inserir variável
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64">
+                        <DropdownMenuLabel>
+                          Variáveis disponíveis
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {PROMPT_VARIABLES.map((v) => (
+                          <DropdownMenuItem
+                            key={v.key}
+                            onSelect={() => insertVariable(v.key)}
+                            className="flex-col items-start gap-0.5"
+                          >
+                            <span className="font-mono text-xs text-primary">
+                              {`{{${v.key}}}`}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {v.label} · {v.desc}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={restorePrompt}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Restaurar prompt padrão</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => setExpanded((v) => !v)}
+                        >
+                          {expanded ? (
+                            <Minimize2 className="h-3.5 w-3.5" />
+                          ) : (
+                            <Maximize2 className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {expanded ? "Reduzir" : "Expandir"}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </div>
+
+                <Textarea
+                  ref={promptRef}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  className={cn(
+                    "resize-none rounded-none border-0 bg-transparent font-mono text-sm leading-relaxed text-foreground focus-visible:ring-0",
+                    expanded ? "flex-1" : "min-h-[280px]",
+                  )}
+                  spellCheck={false}
+                />
+
+                <div className="flex items-center justify-between border-t border-border/60 bg-secondary/20 px-3 py-1.5 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-3">
+                    <span>{prompt.length} caracteres</span>
+                    <span>·</span>
+                    <span>
+                      {prompt.split(/\s+/).filter(Boolean).length} palavras
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Info className="h-3 w-3" />
+                    Suporta variáveis {`{{ nome }}`}
+                  </div>
+                </div>
+              </div>
+              {expanded && (
+                <div
+                  className="fixed inset-0 z-40 bg-background/70 backdrop-blur-sm"
+                  onClick={() => setExpanded(false)}
+                />
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="text-xs text-muted-foreground">
+                  Atalhos:
+                </span>
+                {PROMPT_VARIABLES.slice(0, 4).map((v) => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    onClick={() => insertVariable(v.key)}
+                    className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary/40 px-2 py-0.5 font-mono text-[11px] text-muted-foreground hover:border-primary/50 hover:text-primary"
+                  >
+                    <Plus className="h-2.5 w-2.5" />
+                    {v.key}
+                  </button>
+                ))}
+              </div>
+            </Section>
+
+            <Separator />
+
+            <div className="flex items-center justify-between gap-3 pb-6">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                As alterações são aplicadas apenas ao próximo lote de geração.
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost">Cancelar</Button>
+                <Button variant="secondary">
+                  <Save className="mr-1.5 h-3.5 w-3.5" />
+                  Salvar como modelo
+                </Button>
+                <Button>Salvar alterações</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    </TooltipProvider>
+  );
+}
+
+// ---------- helpers ----------
+
+function Section({
+  icon,
+  title,
+  description,
+  action,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-border bg-card/60 p-6 backdrop-blur">
+      <header className="mb-5 flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            {icon}
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">{title}</h2>
+            {description && (
+              <p className="text-xs text-muted-foreground">{description}</p>
+            )}
+          </div>
+        </div>
+        {action}
+      </header>
+      <div className="space-y-6">{children}</div>
+    </section>
+  );
+}
+
+function FieldWrap({
+  label,
+  description,
+  tooltip,
+  children,
+}: {
+  label: string;
+  description?: string;
+  tooltip?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <Label className="text-sm font-medium">{label}</Label>
+        {tooltip && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="h-3.5 w-3.5 cursor-help text-muted-foreground/70" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-xs">
+              {tooltip}
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+      {description && (
+        <p className="text-xs text-muted-foreground">{description}</p>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function MultiSelectSources({
+  selected,
+  onToggle,
+}: {
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const activeLabels = TREND_SOURCES.filter((s) => selected.includes(s.id));
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="w-full justify-between font-normal"
+        >
+          <span className="flex flex-wrap items-center gap-1">
+            {activeLabels.length === 0 ? (
+              <span className="text-muted-foreground">
+                Selecione as fontes
+              </span>
+            ) : (
+              activeLabels.map((s) => (
+                <Badge
+                  key={s.id}
+                  variant="secondary"
+                  className="bg-primary/15 text-primary"
+                >
+                  {s.label}
+                </Badge>
+              ))
+            )}
+          </span>
+          <Plus className="h-4 w-4 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[--radix-popover-trigger-width] p-1"
+      >
+        {TREND_SOURCES.map((s) => {
+          const active = selected.includes(s.id);
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => onToggle(s.id)}
+              className="flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm hover:bg-secondary"
+            >
+              <span>{s.label}</span>
+              {active && (
+                <svg
+                  viewBox="0 0 12 12"
+                  className="h-3 w-3 text-primary"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M2 6l3 3 5-6" strokeLinecap="round" />
+                </svg>
+              )}
+            </button>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function TagField({
+  label,
+  description,
+  values,
+  onChange,
+  tone = "primary",
+  icon,
+}: {
+  label: string;
+  description?: string;
+  values: string[];
+  onChange: (v: string[]) => void;
+  tone?: "primary" | "destructive";
+  icon?: React.ReactNode;
+}) {
+  const [draft, setDraft] = useState("");
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const add = (v: string) => {
+    const t = v.trim();
+    if (!t || values.includes(t)) return;
+    onChange([...values, t]);
+    setDraft("");
+  };
+  const remove = (v: string) => onChange(values.filter((x) => x !== v));
+
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      add(draft);
+    } else if (e.key === "Backspace" && !draft && values.length) {
+      remove(values[values.length - 1]);
+    }
+  };
+
+  return (
+    <FieldWrap label={label} description={description}>
+      <div
+        onClick={() => inputRef.current?.focus()}
+        className={cn(
+          "flex min-h-11 flex-wrap items-center gap-1.5 rounded-md border bg-input/40 px-2 py-1.5 transition-colors",
+          focused ? "border-primary ring-2 ring-primary/20" : "border-border",
+        )}
+      >
+        {values.map((v) => (
+          <Badge
+            key={v}
+            variant="secondary"
+            className={cn(
+              "gap-1 pl-2 pr-1 py-0.5 text-xs",
+              tone === "destructive" &&
+                "bg-destructive/15 text-destructive hover:bg-destructive/20",
+              tone === "primary" &&
+                "bg-primary/15 text-primary hover:bg-primary/20",
+            )}
+          >
+            {icon}
+            {v}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                remove(v);
+              }}
+              className="ml-0.5 rounded-full p-0.5 hover:bg-background/40"
+              aria-label={`Remover ${v}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        ))}
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={onKey}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={values.length === 0 ? "Digite e pressione Enter" : ""}
+          className="min-w-[8ch] flex-1 bg-transparent px-1 py-1 text-sm outline-none placeholder:text-muted-foreground"
+        />
+      </div>
+    </FieldWrap>
+  );
+}
