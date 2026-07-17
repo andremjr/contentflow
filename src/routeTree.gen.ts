@@ -13,6 +13,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChannelChannelIdRouteImport } from './routes/channel.$channelId'
 import { Route as ChannelChannelIdResearchRouteImport } from './routes/channel.$channelId.research'
+import { Route as ChannelChannelIdIdeasRouteImport } from './routes/channel.$channelId.ideas'
 import { Route as ChannelChannelIdSettingsProcessesRouteImport } from './routes/channel.$channelId.settings.processes'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -36,6 +37,11 @@ const ChannelChannelIdResearchRoute =
     path: '/research',
     getParentRoute: () => ChannelChannelIdRoute,
   } as any)
+const ChannelChannelIdIdeasRoute = ChannelChannelIdIdeasRouteImport.update({
+  id: '/ideas',
+  path: '/ideas',
+  getParentRoute: () => ChannelChannelIdRoute,
+} as any)
 const ChannelChannelIdSettingsProcessesRoute =
   ChannelChannelIdSettingsProcessesRouteImport.update({
     id: '/settings/processes',
@@ -47,6 +53,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
+  '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
@@ -54,6 +61,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
+  '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
@@ -62,6 +70,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
+  '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
@@ -71,6 +80,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/channel/$channelId'
+    | '/channel/$channelId/ideas'
     | '/channel/$channelId/research'
     | '/channel/$channelId/settings/processes'
   fileRoutesByTo: FileRoutesByTo
@@ -78,6 +88,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/channel/$channelId'
+    | '/channel/$channelId/ideas'
     | '/channel/$channelId/research'
     | '/channel/$channelId/settings/processes'
   id:
@@ -85,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/channel/$channelId'
+    | '/channel/$channelId/ideas'
     | '/channel/$channelId/research'
     | '/channel/$channelId/settings/processes'
   fileRoutesById: FileRoutesById
@@ -125,6 +137,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChannelChannelIdResearchRouteImport
       parentRoute: typeof ChannelChannelIdRoute
     }
+    '/channel/$channelId/ideas': {
+      id: '/channel/$channelId/ideas'
+      path: '/ideas'
+      fullPath: '/channel/$channelId/ideas'
+      preLoaderRoute: typeof ChannelChannelIdIdeasRouteImport
+      parentRoute: typeof ChannelChannelIdRoute
+    }
     '/channel/$channelId/settings/processes': {
       id: '/channel/$channelId/settings/processes'
       path: '/settings/processes'
@@ -136,11 +155,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface ChannelChannelIdRouteChildren {
+  ChannelChannelIdIdeasRoute: typeof ChannelChannelIdIdeasRoute
   ChannelChannelIdResearchRoute: typeof ChannelChannelIdResearchRoute
   ChannelChannelIdSettingsProcessesRoute: typeof ChannelChannelIdSettingsProcessesRoute
 }
 
 const ChannelChannelIdRouteChildren: ChannelChannelIdRouteChildren = {
+  ChannelChannelIdIdeasRoute: ChannelChannelIdIdeasRoute,
   ChannelChannelIdResearchRoute: ChannelChannelIdResearchRoute,
   ChannelChannelIdSettingsProcessesRoute:
     ChannelChannelIdSettingsProcessesRoute,
