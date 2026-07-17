@@ -1,5 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
-import { useState, useRef, useEffect, type KeyboardEvent } from "react";
+import { useState, useRef, type KeyboardEvent } from "react";
 import {
   Lightbulb,
   TrendingUp,
