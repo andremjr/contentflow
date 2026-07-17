@@ -80,6 +80,13 @@ export type Channel = {
   color: string;
   subscribers: string;
   niche: string;
+  language: string;
+  activeProjects: number;
+  frequency: string;
+  nextPublish: string;
+  currentProjectProgress: number;
+  status: "healthy" | "attention" | "paused";
+  trend: number[];
 };
 
 export const channels: Channel[] = [
@@ -90,6 +97,13 @@ export const channels: Channel[] = [
     color: "#2563EB",
     subscribers: "482K",
     niche: "Ciência",
+    language: "PT-BR",
+    activeProjects: 6,
+    frequency: "2x / semana",
+    nextPublish: "22 nov · 18h",
+    currentProjectProgress: 72,
+    status: "healthy",
+    trend: [12, 18, 15, 22, 20, 28, 34, 30, 38, 42, 40, 48],
   },
   {
     id: "ch-2",
@@ -98,6 +112,13 @@ export const channels: Channel[] = [
     color: "#3B82F6",
     subscribers: "1.2M",
     niche: "Finanças",
+    language: "PT-BR",
+    activeProjects: 9,
+    frequency: "3x / semana",
+    nextPublish: "24 nov · 09h",
+    currentProjectProgress: 54,
+    status: "attention",
+    trend: [40, 42, 45, 43, 50, 55, 52, 60, 58, 65, 70, 68],
   },
   {
     id: "ch-3",
@@ -106,6 +127,13 @@ export const channels: Channel[] = [
     color: "#60A5FA",
     subscribers: "218K",
     niche: "Cinema",
+    language: "EN",
+    activeProjects: 4,
+    frequency: "1x / semana",
+    nextPublish: "27 nov · 20h",
+    currentProjectProgress: 28,
+    status: "healthy",
+    trend: [8, 10, 12, 11, 14, 16, 18, 17, 20, 22, 24, 26],
   },
   {
     id: "ch-4",
@@ -114,6 +142,13 @@ export const channels: Channel[] = [
     color: "#22c55e",
     subscribers: "94K",
     niche: "Produtividade",
+    language: "PT-BR",
+    activeProjects: 5,
+    frequency: "2x / semana",
+    nextPublish: "30 nov · 07h",
+    currentProjectProgress: 100,
+    status: "paused",
+    trend: [30, 28, 32, 30, 34, 33, 36, 35, 34, 38, 36, 40],
   },
 ];
 
