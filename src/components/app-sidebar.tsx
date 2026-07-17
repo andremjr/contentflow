@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const NAV = [
-  { label: "Visão geral", icon: LayoutDashboard, to: "/" },
+  { label: "Visão geral", icon: LayoutDashboard, to: "/dashboard" },
   { label: "Canais", icon: Radio, to: "/channels" },
   { label: "Projetos", icon: FolderKanban, to: "/projects" },
   { label: "Biblioteca", icon: Library, to: "/library" },

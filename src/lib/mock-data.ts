@@ -80,6 +80,13 @@ export type Channel = {
   color: string;
   subscribers: string;
   niche: string;
+  language: string;
+  activeProjects: number;
+  frequency: string;
+  nextPublish: string;
+  currentProjectProgress: number;
+  status: "healthy" | "attention" | "paused";
+  trend: number[];
 };
 
 export const channels: Channel[] = [
@@ -90,6 +97,13 @@ export const channels: Channel[] = [
     color: "#2563EB",
     subscribers: "482K",
     niche: "Ciência",
+    language: "PT-BR",
+    activeProjects: 6,
+    frequency: "2x / semana",
+    nextPublish: "22 nov · 18h",
+    currentProjectProgress: 72,
+    status: "healthy",
+    trend: [12, 18, 15, 22, 20, 28, 34, 30, 38, 42, 40, 48],
   },
   {
     id: "ch-2",
@@ -98,6 +112,13 @@ export const channels: Channel[] = [
     color: "#3B82F6",
     subscribers: "1.2M",
     niche: "Finanças",
+    language: "PT-BR",
+    activeProjects: 9,
+    frequency: "3x / semana",
+    nextPublish: "24 nov · 09h",
+    currentProjectProgress: 54,
+    status: "attention",
+    trend: [40, 42, 45, 43, 50, 55, 52, 60, 58, 65, 70, 68],
   },
   {
     id: "ch-3",
@@ -106,6 +127,13 @@ export const channels: Channel[] = [
     color: "#60A5FA",
     subscribers: "218K",
     niche: "Cinema",
+    language: "EN",
+    activeProjects: 4,
+    frequency: "1x / semana",
+    nextPublish: "27 nov · 20h",
+    currentProjectProgress: 28,
+    status: "healthy",
+    trend: [8, 10, 12, 11, 14, 16, 18, 17, 20, 22, 24, 26],
   },
   {
     id: "ch-4",
@@ -114,6 +142,13 @@ export const channels: Channel[] = [
     color: "#22c55e",
     subscribers: "94K",
     niche: "Produtividade",
+    language: "PT-BR",
+    activeProjects: 5,
+    frequency: "2x / semana",
+    nextPublish: "30 nov · 07h",
+    currentProjectProgress: 100,
+    status: "paused",
+    trend: [30, 28, 32, 30, 34, 33, 36, 35, 34, 38, 36, 40],
   },
 ];
 
@@ -128,6 +163,9 @@ export type Project = {
   duration: string;
   updatedAt: string;
   stages: Record<ProcessId, ProcessState>;
+  assignee: { name: string; initials: string };
+  isLate?: boolean;
+  thumbHue: number;
 };
 
 function stagesUpTo(current: ProcessId, currentState: ProcessState) {
@@ -153,6 +191,8 @@ export const projects: Project[] = [
     duration: "18:24",
     updatedAt: "há 8 min",
     stages: stagesUpTo("editing", "processing"),
+    assignee: { name: "Marina Costa", initials: "MC" },
+    thumbHue: 220,
   },
   {
     id: "p-2",
@@ -165,6 +205,8 @@ export const projects: Project[] = [
     duration: "22:10",
     updatedAt: "há 42 min",
     stages: stagesUpTo("narration", "awaiting_review"),
+    assignee: { name: "Rafael Lima", initials: "RL" },
+    thumbHue: 260,
   },
   {
     id: "p-3",
@@ -177,6 +219,8 @@ export const projects: Project[] = [
     duration: "14:02",
     updatedAt: "há 2 h",
     stages: stagesUpTo("thumbnail", "configuring"),
+    assignee: { name: "Ana Prado", initials: "AP" },
+    thumbHue: 200,
   },
   {
     id: "p-4",
@@ -189,6 +233,8 @@ export const projects: Project[] = [
     duration: "09:48",
     updatedAt: "ontem",
     stages: stagesUpTo("publishing", "done"),
+    assignee: { name: "Lucas Andrade", initials: "LU" },
+    thumbHue: 150,
   },
   {
     id: "p-5",
@@ -201,6 +247,9 @@ export const projects: Project[] = [
     duration: "—",
     updatedAt: "há 1 h",
     stages: stagesUpTo("script", "error"),
+    assignee: { name: "Bruno Reis", initials: "BR" },
+    isLate: true,
+    thumbHue: 10,
   },
   {
     id: "p-6",
@@ -213,6 +262,66 @@ export const projects: Project[] = [
     duration: "26:30",
     updatedAt: "há 15 min",
     stages: stagesUpTo("assets", "processing"),
+    assignee: { name: "Carla Nunes", initials: "CN" },
+    thumbHue: 280,
+  },
+];
+
+export type ActionItem = {
+  id: string;
+  title: string;
+  kind: "approve_titles" | "review_script" | "select_thumb" | "fix_narration" | "confirm_publish";
+  priority: "high" | "medium" | "low";
+  channelId: string;
+  projectTitle: string;
+  deadline: string;
+};
+
+export const actionItems: ActionItem[] = [
+  {
+    id: "act-1",
+    title: "Aprovar títulos",
+    kind: "approve_titles",
+    priority: "high",
+    channelId: "ch-2",
+    projectTitle: "Como a Nvidia ganhou a guerra da IA",
+    deadline: "hoje · 18h",
+  },
+  {
+    id: "act-2",
+    title: "Revisar roteiro",
+    kind: "review_script",
+    priority: "high",
+    channelId: "ch-1",
+    projectTitle: "A física impossível de Interstellar",
+    deadline: "atrasado 2h",
+  },
+  {
+    id: "act-3",
+    title: "Selecionar thumbnail",
+    kind: "select_thumb",
+    priority: "medium",
+    channelId: "ch-3",
+    projectTitle: "A gramática visual de Denis Villeneuve",
+    deadline: "amanhã",
+  },
+  {
+    id: "act-4",
+    title: "Corrigir erro de narração",
+    kind: "fix_narration",
+    priority: "high",
+    channelId: "ch-2",
+    projectTitle: "Por que os bancos centrais estão perdendo o controle",
+    deadline: "hoje",
+  },
+  {
+    id: "act-5",
+    title: "Confirmar publicação",
+    kind: "confirm_publish",
+    priority: "low",
+    channelId: "ch-4",
+    projectTitle: "Rotina matinal de 5 CEOs de startups",
+    deadline: "30 nov · 07h",
   },
 ];
 
