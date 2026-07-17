@@ -5,8 +5,6 @@ import {
   MoreHorizontal,
   Users,
   Languages,
-  Radio,
-  CalendarClock,
   Activity,
   FolderKanban,
   CheckCircle2,
