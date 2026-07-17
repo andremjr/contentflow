@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChannelChannelIdRouteImport } from './routes/channel.$channelId'
+import { Route as ChannelChannelIdSettingsProcessesRouteImport } from './routes/channel.$channelId.settings.processes'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
@@ -28,35 +29,57 @@ const ChannelChannelIdRoute = ChannelChannelIdRouteImport.update({
   path: '/channel/$channelId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ChannelChannelIdSettingsProcessesRoute =
+  ChannelChannelIdSettingsProcessesRouteImport.update({
+    id: '/settings/processes',
+    path: '/settings/processes',
+    getParentRoute: () => ChannelChannelIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
-  '/channel/$channelId': typeof ChannelChannelIdRoute
+  '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
+  '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
-  '/channel/$channelId': typeof ChannelChannelIdRoute
+  '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
+  '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
-  '/channel/$channelId': typeof ChannelChannelIdRoute
+  '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
+  '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/channel/$channelId'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/channel/$channelId'
+    | '/channel/$channelId/settings/processes'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/channel/$channelId'
-  id: '__root__' | '/' | '/dashboard' | '/channel/$channelId'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/channel/$channelId'
+    | '/channel/$channelId/settings/processes'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/channel/$channelId'
+    | '/channel/$channelId/settings/processes'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
-  ChannelChannelIdRoute: typeof ChannelChannelIdRoute
+  ChannelChannelIdRoute: typeof ChannelChannelIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -82,13 +105,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChannelChannelIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/channel/$channelId/settings/processes': {
+      id: '/channel/$channelId/settings/processes'
+      path: '/settings/processes'
+      fullPath: '/channel/$channelId/settings/processes'
+      preLoaderRoute: typeof ChannelChannelIdSettingsProcessesRouteImport
+      parentRoute: typeof ChannelChannelIdRoute
+    }
   }
 }
+
+interface ChannelChannelIdRouteChildren {
+  ChannelChannelIdSettingsProcessesRoute: typeof ChannelChannelIdSettingsProcessesRoute
+}
+
+const ChannelChannelIdRouteChildren: ChannelChannelIdRouteChildren = {
+  ChannelChannelIdSettingsProcessesRoute:
+    ChannelChannelIdSettingsProcessesRoute,
+}
+
+const ChannelChannelIdRouteWithChildren =
+  ChannelChannelIdRoute._addFileChildren(ChannelChannelIdRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
-  ChannelChannelIdRoute: ChannelChannelIdRoute,
+  ChannelChannelIdRoute: ChannelChannelIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
