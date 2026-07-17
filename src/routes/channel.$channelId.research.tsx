@@ -267,6 +267,8 @@ function ResearchScreen() {
     <TooltipProvider delayDuration={200}>
       <AppShell>
         <TopBar
+          title="Pesquisa"
+          subtitle={`Nova pesquisa · ${channel.name}`}
           breadcrumbs={[
             { label: "ContentFlow OS" },
             { label: "Canais" },
