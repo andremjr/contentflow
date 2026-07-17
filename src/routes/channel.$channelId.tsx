@@ -295,7 +295,7 @@ function ChannelWorkspace() {
     return c;
   }, [projects]);
 
-  const status = STATUS_META[channel.status];
+  const status = STATUS_META[channel.status as keyof typeof STATUS_META];
   const activeCount = projects.filter((p) => p.state !== "done").length;
   const publishedCount = projects.filter((p) => p.state === "done").length;
   const errorCount = projects.filter((p) => p.state === "error" || p.state === "blocked").length;
