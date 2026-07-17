@@ -283,7 +283,7 @@ function ResearchScreen() {
             <div className="space-y-6">
               {/* Header */}
               <div className="flex items-start gap-4">
-                <ChannelAvatar channel={channel} size={56} />
+                <ChannelAvatar channel={channel} size="lg" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
                     <SearchIcon className="h-3.5 w-3.5" />
