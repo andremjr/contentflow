@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Plus,
@@ -18,7 +17,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NewChannelDialog } from "@/components/new-channel-dialog";
-import { channels as mockChannels, type Channel } from "@/lib/mock-data";
+import type { Channel } from "@/lib/mock-data";
+import { useChannels, removeChannel } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard")({
@@ -61,8 +61,7 @@ const STATUS_META: Record<
 };
 
 function DashboardPage() {
-  const [extraChannels, setExtraChannels] = useState<Channel[]>([]);
-  const channels = [...extraChannels, ...mockChannels];
+  const channels = useChannels();
   const hasChannels = channels.length > 0;
 
   return (
@@ -72,11 +71,7 @@ function DashboardPage() {
         title="Visão geral"
         subtitle="Escolha um canal para abrir sua produção"
         showNewProject={false}
-        actions={
-          <NewChannelDialog
-            onCreate={(c) => setExtraChannels((prev) => [c, ...prev])}
-          />
-        }
+        actions={<NewChannelDialog />}
       />
 
       <main className="flex-1 px-6 py-6">
@@ -133,7 +128,10 @@ function DashboardPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem>Duplicar</DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive">
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => removeChannel(c.id)}
+                            >
                               Remover
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -155,16 +153,14 @@ function DashboardPage() {
             </div>
           </section>
         ) : (
-          <EmptyState
-            onCreate={(c) => setExtraChannels((prev) => [c, ...prev])}
-          />
+          <EmptyState />
         )}
       </main>
     </AppShell>
   );
 }
 
-function EmptyState({ onCreate }: { onCreate: (c: Channel) => void }) {
+function EmptyState() {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center py-24 text-center">
       <div className="grid size-14 place-items-center rounded-2xl border border-border/60 bg-card">
@@ -177,7 +173,6 @@ function EmptyState({ onCreate }: { onCreate: (c: Channel) => void }) {
       </p>
       <div className="mt-5">
         <NewChannelDialog
-          onCreate={onCreate}
           trigger={
             <Button className="gap-1.5 gradient-brand text-white">
               <Plus className="size-4" />

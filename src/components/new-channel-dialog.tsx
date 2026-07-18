@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Channel } from "@/lib/mock-data";
+import { createChannel } from "@/lib/store";
 
 const COLOR_PRESETS = [
   "#2563EB",
@@ -99,6 +100,7 @@ export function NewChannelDialog({
       trend: Array.from({ length: 12 }, () => Math.round(20 + Math.random() * 40)),
     };
 
+    createChannel(newChannel);
     onCreate?.(newChannel);
     toast.success("Canal criado", {
       description: `${newChannel.name} adicionado ao workspace.`,

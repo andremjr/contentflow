@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { PROCESS_META, type ProcessId, type Project } from "@/lib/mock-data";
+import { completeStage } from "@/lib/store";
 
 type RunState = "idle" | "running" | "done" | "error";
 
@@ -27,8 +28,12 @@ export function ProcessRunner({
 
   const run = () => {
     setState("running");
-    window.setTimeout(() => setState("done"), 1400);
+    window.setTimeout(() => {
+      setState("done");
+      if (project) completeStage(project.id, processId);
+    }, 1400);
   };
+
 
 
   return (

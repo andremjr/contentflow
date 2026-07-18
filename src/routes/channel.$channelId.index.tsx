@@ -15,6 +15,7 @@ import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { ProcessStatus } from "@/components/process-status";
+import { NewProjectDialog } from "@/components/new-project-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -36,13 +37,10 @@ import {
 } from "@/components/ui/table";
 import {
   channels,
-  projects as allProjects,
   PROCESS_META,
-  PROCESS_ORDER,
   type Project,
-  type ProcessId,
-  type ProcessState,
 } from "@/lib/mock-data";
+import { useChannel, useProjects } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/channel/$channelId/")({
@@ -82,14 +80,12 @@ export const Route = createFileRoute("/channel/$channelId/")({
 });
 
 function ChannelWorkspace() {
-  const { channel } = Route.useLoaderData();
-  const projects = useMemo(
-    () => allProjects.filter((p) => p.channelId === channel.id),
-    [channel.id],
-  );
+  const { channel: loaderChannel } = Route.useLoaderData();
+  const liveChannel = useChannel(loaderChannel.id);
+  const channel = liveChannel ?? loaderChannel;
+  const projects = useProjects(channel.id);
   const [view, setView] = useState<"cards" | "table">("cards");
   const [search, setSearch] = useState("");
-
 
   const filtered = useMemo(() => {
     if (!search) return projects;
@@ -110,13 +106,7 @@ function ChannelWorkspace() {
         subtitle={`${channel.handle} · ${channel.niche} · ${channel.language}`}
         actions={
           <>
-            <Button
-              size="sm"
-              className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
-            >
-              <Plus className="size-4" />
-              Novo projeto
-            </Button>
+            <NewProjectDialog channelId={channel.id} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -188,7 +178,7 @@ function ChannelWorkspace() {
         </div>
 
         {filtered.length === 0 ? (
-          <EmptyProjects channelName={channel.name} />
+          <EmptyProjects channelId={channel.id} channelName={channel.name} />
         ) : view === "cards" ? (
           <ProjectGrid projects={filtered} channel={channel} />
         ) : (
@@ -393,7 +383,13 @@ function ProjectTable({
   );
 }
 
-function EmptyProjects({ channelName }: { channelName: string }) {
+function EmptyProjects({
+  channelId,
+  channelName,
+}: {
+  channelId: string;
+  channelName: string;
+}) {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center py-16 text-center">
       <div className="grid size-14 place-items-center rounded-2xl border border-border/60 bg-card">
@@ -403,10 +399,17 @@ function EmptyProjects({ channelName }: { channelName: string }) {
       <p className="mt-1 text-sm text-muted-foreground">
         Comece a produção de {channelName} criando o primeiro projeto.
       </p>
-      <Button className="mt-5 gap-1.5 gradient-brand text-white">
-        <Plus className="size-4" />
-        Novo projeto
-      </Button>
+      <div className="mt-5">
+        <NewProjectDialog
+          channelId={channelId}
+          trigger={
+            <Button className="gap-1.5 gradient-brand text-white">
+              <Plus className="size-4" />
+              Novo projeto
+            </Button>
+          }
+        />
+      </div>
     </div>
   );
 }
