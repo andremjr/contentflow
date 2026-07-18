@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
 import { projects, channels, PROCESS_META } from "@/lib/mock-data";
-import { Play, Download } from "lucide-react";
+import { Download } from "lucide-react";
 
 export const Route = createFileRoute("/project/$projectId/edit")({
   head: ({ params }) => {
