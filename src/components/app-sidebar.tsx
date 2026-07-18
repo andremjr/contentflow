@@ -269,7 +269,19 @@ function ChannelNav({
   pathname: string;
 }) {
   const channel = channels.find((c) => c.id === channelId);
-  const projects = allProjects.filter((p) => p.channelId === channelId);
+
+  const processMatchesActive = PROCESS_ORDER.some((pid) => {
+    const to = `/channel/${channelId}/${pid === "editing" ? "edit" : pid}`;
+    return pathname === to;
+  });
+  const settingsActive =
+    pathname === `/channel/${channelId}/settings/processes` ||
+    processMatchesActive;
+
+  const [processesOpen, setProcessesOpen] = useState(settingsActive);
+  useEffect(() => {
+    if (settingsActive) setProcessesOpen(true);
+  }, [settingsActive]);
 
   return (
     <>
@@ -304,64 +316,66 @@ function ChannelNav({
         active={pathname === `/channel/${channelId}`}
         collapsed={collapsed}
       />
-      <NavItem
-        icon={Wrench}
-        label="Configurar processos"
-        to={`/channel/${channelId}/settings/processes`}
-        active={pathname === `/channel/${channelId}/settings/processes`}
-        collapsed={collapsed}
-      />
 
-      <SectionLabel collapsed={collapsed} className="mt-4">
-        Configuração dos processos
-      </SectionLabel>
-      {PROCESS_ORDER.map((pid, i) => {
-        const meta = PROCESS_META[pid];
-        const to = `/channel/${channelId}/${pid === "editing" ? "edit" : pid}`;
-        const active = pathname === to;
-        return (
-          <NavItem
-            key={pid}
-            icon={meta.icon}
-            label={meta.label}
-            to={to}
-            active={active}
-            collapsed={collapsed}
-            trailing={
-              !collapsed && (
-                <span className="font-mono text-[9px] text-muted-foreground">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-              )
-            }
-          />
-        );
-      })}
-
-      {projects.length > 0 && (
+      {collapsed ? (
+        <NavItem
+          icon={Wrench}
+          label="Configurar processos"
+          to={`/channel/${channelId}/settings/processes`}
+          active={settingsActive}
+          collapsed={collapsed}
+        />
+      ) : (
         <>
-          <SectionLabel collapsed={collapsed} className="mt-4">
-            Projetos recentes
-          </SectionLabel>
-          {projects.slice(0, 8).map((p) => (
-            <NavItem
-              key={p.id}
-              label={p.title}
-              to={`/project/${p.id}`}
-              active={pathname.startsWith(`/project/${p.id}`)}
-              collapsed={collapsed}
-              leading={
-                <span className="grid size-5 shrink-0 place-items-center rounded bg-brand/15 font-mono text-[9px] text-brand-soft">
-                  {p.assignee.initials}
-                </span>
-              }
+          <button
+            type="button"
+            onClick={() => setProcessesOpen((v) => !v)}
+            className={cn(
+              "group flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition",
+              settingsActive
+                ? "bg-sidebar-accent text-foreground"
+                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+            )}
+          >
+            <Wrench className="size-4 shrink-0" />
+            <span className="flex-1 truncate text-left">Configurar processos</span>
+            <ChevronRight
+              className={cn(
+                "size-3.5 shrink-0 transition-transform",
+                processesOpen && "rotate-90",
+              )}
             />
-          ))}
+          </button>
+          {processesOpen && (
+            <div className="ml-3 mt-0.5 space-y-0.5 border-l border-sidebar-border/60 pl-2">
+              {PROCESS_ORDER.map((pid, i) => {
+                const meta = PROCESS_META[pid];
+                const to = `/channel/${channelId}/${pid === "editing" ? "edit" : pid}`;
+                const active = pathname === to;
+                return (
+                  <NavItem
+                    key={pid}
+                    icon={meta.icon}
+                    label={meta.label}
+                    to={to}
+                    active={active}
+                    collapsed={collapsed}
+                    trailing={
+                      <span className="font-mono text-[9px] text-muted-foreground">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                    }
+                  />
+                );
+              })}
+            </div>
+          )}
         </>
       )}
     </>
   );
 }
+
 
 /* ---------- level: project ---------- */
 
