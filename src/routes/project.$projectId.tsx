@@ -8,7 +8,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
-import { ChannelAvatar } from "@/components/channel-avatar";
+
 import {
   channels,
   projects,
