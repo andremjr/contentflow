@@ -36,8 +36,7 @@ export const Route = createFileRoute("/project/$projectId/research")({
 });
 
 function ProjectResearchPage() {
-  const { project, channel } = Route.useLoaderData();
-  const meta = PROCESS_META.research;
+  const { project } = Route.useLoaderData();
 
   return (
     <>
