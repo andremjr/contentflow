@@ -61,6 +61,8 @@ const STATUS_META: Record<
 };
 
 function DashboardPage() {
+  const [extraChannels, setExtraChannels] = useState<Channel[]>([]);
+  const channels = [...extraChannels, ...mockChannels];
   const hasChannels = channels.length > 0;
 
   return (
@@ -71,13 +73,9 @@ function DashboardPage() {
         subtitle="Escolha um canal para abrir sua produção"
         showNewProject={false}
         actions={
-          <Button
-            size="sm"
-            className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
-          >
-            <Plus className="size-4" />
-            Novo canal
-          </Button>
+          <NewChannelDialog
+            onCreate={(c) => setExtraChannels((prev) => [c, ...prev])}
+          />
         }
       />
 
