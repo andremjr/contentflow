@@ -110,12 +110,6 @@ export function createChannel(channel: Channel) {
   emit();
 }
 
-export function updateChannel(id: string, patch: Partial<Channel>) {
-  const idx = db.channels.findIndex((c) => c.id === id);
-  if (idx === -1) return;
-  db.channels[idx] = { ...db.channels[idx], ...patch };
-  emit();
-}
 
 export function removeChannel(id: string) {
   const i = db.channels.findIndex((c) => c.id === id);
