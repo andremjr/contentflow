@@ -18,11 +18,13 @@ export function TopBar({
   title,
   subtitle,
   actions,
+  showNewProject = true,
 }: {
   breadcrumbs?: Crumb[];
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  showNewProject?: boolean;
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-border/60 bg-background/70 backdrop-blur-xl">
