@@ -2,18 +2,16 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
-  Radio,
   ChevronsLeft,
   ChevronsRight,
   ChevronRight,
   ChevronLeft,
-  Command,
   HelpCircle,
-  Settings,
   FolderKanban,
   Layers,
   Wrench,
 } from "lucide-react";
+
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -57,11 +55,7 @@ function useLevel(): Level {
   }, [pathname]);
 }
 
-export function AppSidebar({
-  onOpenPalette,
-}: {
-  onOpenPalette: () => void;
-}) {
+export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const level = useLevel();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -89,26 +83,6 @@ export function AppSidebar({
         )}
       </Link>
 
-      {/* Command palette */}
-      <div className="px-3 pb-2">
-        <button
-          onClick={onOpenPalette}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-md border border-border/60 bg-background/40 px-2.5 py-2 text-xs text-muted-foreground transition hover:border-brand/40 hover:text-foreground",
-            collapsed && "justify-center px-0",
-          )}
-        >
-          <Command className="size-3.5" />
-          {!collapsed && (
-            <>
-              <span className="flex-1 text-left">Buscar…</span>
-              <kbd className="rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px]">
-                ⌘K
-              </kbd>
-            </>
-          )}
-        </button>
-      </div>
 
       {/* Dynamic nav */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
