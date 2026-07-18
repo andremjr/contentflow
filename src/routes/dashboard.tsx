@@ -91,7 +91,6 @@ function DashboardPage() {
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {channels.map((c) => {
-                const status = STATUS_META[c.status];
                 return (
                   <article
                     key={c.id}
@@ -117,44 +116,28 @@ function DashboardPage() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px]",
-                              status.class,
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "size-1.5 rounded-full",
-                                status.dot,
-                              )}
-                            />
-                            {status.label}
-                          </span>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-7 text-muted-foreground"
-                              >
-                                <MoreHorizontal className="size-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44">
-                              <DropdownMenuItem>Editar canal</DropdownMenuItem>
-                              <DropdownMenuItem>
-                                Pausar produção
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>Duplicar</DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-destructive">
-                                Remover
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground"
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem>Editar canal</DropdownMenuItem>
+                            <DropdownMenuItem>
+                              Pausar produção
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>Duplicar</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-destructive">
+                              Remover
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
 
