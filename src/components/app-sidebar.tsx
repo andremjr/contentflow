@@ -350,7 +350,7 @@ function ChannelNav({
             <div className="ml-3 mt-0.5 space-y-0.5 border-l border-sidebar-border/60 pl-2">
               {PROCESS_ORDER.map((pid, i) => {
                 const meta = PROCESS_META[pid];
-                const to = `/channel/${channelId}/${pid === "editing" ? "edit" : pid}`;
+                const to = `/channel/${channelId}/${processSlug(pid)}`;
                 const active = pathname === to;
                 return (
                   <NavItem
