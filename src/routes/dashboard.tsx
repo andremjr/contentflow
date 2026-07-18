@@ -91,7 +91,6 @@ function DashboardPage() {
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {channels.map((c) => {
-                const status = STATUS_META[c.status];
                 return (
                   <article
                     key={c.id}
