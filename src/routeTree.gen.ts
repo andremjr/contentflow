@@ -17,6 +17,7 @@ import { Route as ProjectProjectIdTitlesRouteImport } from './routes/project.$pr
 import { Route as ProjectProjectIdThumbnailRouteImport } from './routes/project.$projectId.thumbnail'
 import { Route as ProjectProjectIdScriptRouteImport } from './routes/project.$projectId.script'
 import { Route as ProjectProjectIdResearchRouteImport } from './routes/project.$projectId.research'
+import { Route as ProjectProjectIdPublishRouteImport } from './routes/project.$projectId.publish'
 import { Route as ProjectProjectIdNarrationRouteImport } from './routes/project.$projectId.narration'
 import { Route as ProjectProjectIdIdeasRouteImport } from './routes/project.$projectId.ideas'
 import { Route as ProjectProjectIdEditRouteImport } from './routes/project.$projectId.edit'
@@ -74,6 +75,11 @@ const ProjectProjectIdResearchRoute =
     path: '/research',
     getParentRoute: () => ProjectProjectIdRoute,
   } as any)
+const ProjectProjectIdPublishRoute = ProjectProjectIdPublishRouteImport.update({
+  id: '/publish',
+  path: '/publish',
+  getParentRoute: () => ProjectProjectIdRoute,
+} as any)
 const ProjectProjectIdNarrationRoute =
   ProjectProjectIdNarrationRouteImport.update({
     id: '/narration',
@@ -168,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/project/$projectId/edit': typeof ProjectProjectIdEditRoute
   '/project/$projectId/ideas': typeof ProjectProjectIdIdeasRoute
   '/project/$projectId/narration': typeof ProjectProjectIdNarrationRoute
+  '/project/$projectId/publish': typeof ProjectProjectIdPublishRoute
   '/project/$projectId/research': typeof ProjectProjectIdResearchRoute
   '/project/$projectId/script': typeof ProjectProjectIdScriptRoute
   '/project/$projectId/thumbnail': typeof ProjectProjectIdThumbnailRoute
@@ -192,6 +199,7 @@ export interface FileRoutesByTo {
   '/project/$projectId/edit': typeof ProjectProjectIdEditRoute
   '/project/$projectId/ideas': typeof ProjectProjectIdIdeasRoute
   '/project/$projectId/narration': typeof ProjectProjectIdNarrationRoute
+  '/project/$projectId/publish': typeof ProjectProjectIdPublishRoute
   '/project/$projectId/research': typeof ProjectProjectIdResearchRoute
   '/project/$projectId/script': typeof ProjectProjectIdScriptRoute
   '/project/$projectId/thumbnail': typeof ProjectProjectIdThumbnailRoute
@@ -217,6 +225,7 @@ export interface FileRoutesById {
   '/project/$projectId/edit': typeof ProjectProjectIdEditRoute
   '/project/$projectId/ideas': typeof ProjectProjectIdIdeasRoute
   '/project/$projectId/narration': typeof ProjectProjectIdNarrationRoute
+  '/project/$projectId/publish': typeof ProjectProjectIdPublishRoute
   '/project/$projectId/research': typeof ProjectProjectIdResearchRoute
   '/project/$projectId/script': typeof ProjectProjectIdScriptRoute
   '/project/$projectId/thumbnail': typeof ProjectProjectIdThumbnailRoute
@@ -243,6 +252,7 @@ export interface FileRouteTypes {
     | '/project/$projectId/edit'
     | '/project/$projectId/ideas'
     | '/project/$projectId/narration'
+    | '/project/$projectId/publish'
     | '/project/$projectId/research'
     | '/project/$projectId/script'
     | '/project/$projectId/thumbnail'
@@ -267,6 +277,7 @@ export interface FileRouteTypes {
     | '/project/$projectId/edit'
     | '/project/$projectId/ideas'
     | '/project/$projectId/narration'
+    | '/project/$projectId/publish'
     | '/project/$projectId/research'
     | '/project/$projectId/script'
     | '/project/$projectId/thumbnail'
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | '/project/$projectId/edit'
     | '/project/$projectId/ideas'
     | '/project/$projectId/narration'
+    | '/project/$projectId/publish'
     | '/project/$projectId/research'
     | '/project/$projectId/script'
     | '/project/$projectId/thumbnail'
@@ -361,6 +373,13 @@ declare module '@tanstack/react-router' {
       path: '/research'
       fullPath: '/project/$projectId/research'
       preLoaderRoute: typeof ProjectProjectIdResearchRouteImport
+      parentRoute: typeof ProjectProjectIdRoute
+    }
+    '/project/$projectId/publish': {
+      id: '/project/$projectId/publish'
+      path: '/publish'
+      fullPath: '/project/$projectId/publish'
+      preLoaderRoute: typeof ProjectProjectIdPublishRouteImport
       parentRoute: typeof ProjectProjectIdRoute
     }
     '/project/$projectId/narration': {
@@ -499,6 +518,7 @@ interface ProjectProjectIdRouteChildren {
   ProjectProjectIdEditRoute: typeof ProjectProjectIdEditRoute
   ProjectProjectIdIdeasRoute: typeof ProjectProjectIdIdeasRoute
   ProjectProjectIdNarrationRoute: typeof ProjectProjectIdNarrationRoute
+  ProjectProjectIdPublishRoute: typeof ProjectProjectIdPublishRoute
   ProjectProjectIdResearchRoute: typeof ProjectProjectIdResearchRoute
   ProjectProjectIdScriptRoute: typeof ProjectProjectIdScriptRoute
   ProjectProjectIdThumbnailRoute: typeof ProjectProjectIdThumbnailRoute
@@ -510,6 +530,7 @@ const ProjectProjectIdRouteChildren: ProjectProjectIdRouteChildren = {
   ProjectProjectIdEditRoute: ProjectProjectIdEditRoute,
   ProjectProjectIdIdeasRoute: ProjectProjectIdIdeasRoute,
   ProjectProjectIdNarrationRoute: ProjectProjectIdNarrationRoute,
+  ProjectProjectIdPublishRoute: ProjectProjectIdPublishRoute,
   ProjectProjectIdResearchRoute: ProjectProjectIdResearchRoute,
   ProjectProjectIdScriptRoute: ProjectProjectIdScriptRoute,
   ProjectProjectIdThumbnailRoute: ProjectProjectIdThumbnailRoute,
