@@ -5,7 +5,6 @@ import {
   Radio,
   ChevronsLeft,
   ChevronsRight,
-  ChevronDown,
   ChevronRight,
   ChevronLeft,
   Command,
@@ -23,14 +22,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   channels,
   projects as allProjects,
