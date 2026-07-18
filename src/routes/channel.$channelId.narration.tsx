@@ -279,10 +279,6 @@ function NarrationScreen() {
                   Configure formato do arquivo, voz e nuances da entrega vocal.
                 </p>
               </div>
-              <Button size="sm">
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-                Gerar narração
-              </Button>
             </div>
 
             {/* Arquivo de saída */}
@@ -632,65 +628,7 @@ function NarrationScreen() {
               </div>
             </Section>
 
-            {/* Prévia */}
-            <Section
-              icon={<Sparkles className="h-4 w-4" />}
-              title="Prévia simulada"
-              description="Ouça um trecho com todas as configurações aplicadas."
-            >
-              <FieldWrap label="Texto de teste">
-                <Textarea
-                  value={previewText}
-                  onChange={(e) => setPreviewText(e.target.value)}
-                  className="min-h-[90px]"
-                />
-              </FieldWrap>
 
-              <div className="overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 via-background to-background p-5">
-                <div className="flex items-start gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewPlaying((v) => !v)}
-                    className={cn(
-                      "flex h-14 w-14 shrink-0 items-center justify-center rounded-full transition-all",
-                      previewPlaying
-                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/40"
-                        : "bg-primary/15 text-primary hover:bg-primary/25",
-                    )}
-                    aria-label={previewPlaying ? "Pausar" : "Reproduzir"}
-                  >
-                    {previewPlaying ? (
-                      <Pause className="h-5 w-5" fill="currentColor" />
-                    ) : (
-                      <Play className="ml-0.5 h-5 w-5" fill="currentColor" />
-                    )}
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{activeVoice?.name ?? "—"}</span>
-                      <span>·</span>
-                      <span>{activeVoice?.language}</span>
-                      <span>·</span>
-                      <span>{format.toUpperCase()} · {sampleRate}</span>
-                    </div>
-                    <Waveform playing={previewPlaying} />
-                    <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
-                      <span>00:00</span>
-                      <span>00:14</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] md:grid-cols-6">
-                  <PreviewChip label="Velocidade" value={`${speed[0]}%`} />
-                  <PreviewChip label="Estabilidade" value={`${stability[0]}`} />
-                  <PreviewChip label="Expressividade" value={`${expressiveness[0]}`} />
-                  <PreviewChip label="Pausas" value={`${pauses[0]}`} />
-                  <PreviewChip label="Ênfase" value={`${emphasis[0]}`} />
-                  <PreviewChip label="Volume" value={`${volume[0]}%`} />
-                </div>
-              </div>
-            </Section>
 
             <Separator />
             <div className="flex items-center justify-between gap-3 pb-6">
