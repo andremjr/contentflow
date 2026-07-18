@@ -440,7 +440,7 @@ function ProjectNav({
       </SectionLabel>
       {PROCESS_ORDER.map((pid, i) => {
         const meta = PROCESS_META[pid];
-        const to = `/project/${projectId}/${pid === "editing" ? "edit" : pid}`;
+        const to = `/project/${projectId}/${pid === "editing" ? "edit" : pid === "publishing" ? "publish" : pid}`;
         const active = pathname === to;
         return (
           <NavItem
