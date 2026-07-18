@@ -1,14 +1,6 @@
-import { Bell, Plus, ChevronRight, Search, Filter } from "lucide-react";
+import { Plus, ChevronRight, Search, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 type Crumb = { label: string; to?: string };
