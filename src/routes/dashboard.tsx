@@ -409,12 +409,15 @@ function ChannelCards() {
 
             <div className="mt-4 flex items-center justify-end border-t border-border/50 pt-3">
               <Button
+                asChild
                 size="sm"
                 variant="ghost"
                 className="h-8 gap-1 text-xs text-brand-soft hover:text-foreground"
               >
-                Abrir workspace
-                <ExternalLink className="size-3.5" />
+                <Link to="/channel/$channelId" params={{ channelId: c.id }}>
+                  Abrir workspace
+                  <ExternalLink className="size-3.5" />
+                </Link>
               </Button>
             </div>
           </article>
@@ -539,12 +542,15 @@ function ChannelTable() {
                 <TableCell>
                   <div className="flex items-center justify-end gap-1">
                     <Button
+                      asChild
                       variant="ghost"
                       size="sm"
                       className="h-8 gap-1 text-xs text-brand-soft"
                     >
-                      Abrir
-                      <ExternalLink className="size-3" />
+                      <Link to="/channel/$channelId" params={{ channelId: c.id }}>
+                        Abrir
+                        <ExternalLink className="size-3" />
+                      </Link>
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -610,8 +616,10 @@ function ProductionTimeline() {
           const channel = channels.find((c) => c.id === p.channelId)!;
           const stage = PROCESS_META[p.currentStage];
           return (
-            <article
+            <Link
               key={p.id}
+              to="/project/$projectId"
+              params={{ projectId: p.id }}
               className="group relative w-[300px] shrink-0 snap-start overflow-hidden rounded-xl border border-border/70 bg-card transition hover:border-brand/50"
             >
               {/* Thumbnail placeholder */}
@@ -689,7 +697,7 @@ function ProductionTimeline() {
                   </span>
                 </footer>
               </div>
-            </article>
+            </Link>
           );
         })}
       </div>
