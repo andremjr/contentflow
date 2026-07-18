@@ -297,9 +297,10 @@ function TitlesScreen() {
         />
 
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="mx-auto max-w-[1100px] p-6">
             {/* MAIN */}
             <div className="space-y-6">
+
               {/* Header */}
               <div className="flex items-start gap-4">
                 <ChannelAvatar channel={channel} size="lg" />
@@ -315,10 +316,6 @@ function TitlesScreen() {
                     Modelos, vocabulário e comprimento aplicados a cada geração.
                   </p>
                 </div>
-                <Button size="sm">
-                  <Play className="mr-1.5 h-3.5 w-3.5" />
-                  Gerar títulos
-                </Button>
               </div>
 
               {/* Estruturas */}
@@ -486,79 +483,7 @@ function TitlesScreen() {
               </div>
             </div>
 
-            {/* PREVIEW */}
-            <aside className="lg:sticky lg:top-6 lg:h-fit">
-              <div className="rounded-xl border border-border bg-card/60 p-5 backdrop-blur">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-semibold">Prévia de títulos</h3>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Exemplos simulados aplicando as configurações atuais.
-                </p>
 
-                <Separator className="my-4" />
-
-                <ul className="space-y-2.5">
-                  {previewTitles.map((t, i) => {
-                    const ok =
-                      t.length >= lengthRange[0] &&
-                      t.length <= lengthRange[1];
-                    return (
-                      <li
-                        key={i}
-                        className="group rounded-lg border border-border bg-secondary/30 p-3 transition-colors hover:border-primary/40"
-                      >
-                        <div className="text-sm leading-snug text-foreground">
-                          {t.title}
-                        </div>
-                        <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-                          <Badge
-                            variant="secondary"
-                            className="bg-primary/10 text-primary"
-                          >
-                            {t.structure}
-                          </Badge>
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1",
-                              ok ? "text-success" : "text-warning",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "h-1.5 w-1.5 rounded-full",
-                                ok ? "bg-success" : "bg-warning",
-                              )}
-                            />
-                            {t.length} car.
-                          </span>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                <Separator className="my-4" />
-
-                <div className="rounded-lg bg-secondary/40 p-3 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5 text-foreground">
-                    <Info className="h-3.5 w-3.5 text-primary" />
-                    Regras ativas
-                  </div>
-                  <ul className="mt-2 space-y-1">
-                    <li>{selectedStructures.length} estruturas selecionadas</li>
-                    <li>{requiredKw.length} obrigatórias · {forbiddenKw.length} proibidas</li>
-                    <li>Faixa: {lengthRange[0]}–{lengthRange[1]} caracteres</li>
-                  </ul>
-                </div>
-
-                <Button className="mt-4 w-full">
-                  <Play className="mr-2 h-4 w-4" />
-                  Regenerar prévia
-                </Button>
-              </div>
-            </aside>
           </div>
         </div>
       </AppShell>

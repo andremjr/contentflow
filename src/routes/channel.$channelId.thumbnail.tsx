@@ -439,9 +439,10 @@ function ThumbnailScreen() {
         />
 
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="mx-auto max-w-[1200px] p-6">
             {/* MAIN */}
             <div className="space-y-6">
+
               {/* Header */}
               <div className="flex items-start gap-4">
                 <ChannelAvatar channel={channel} size="lg" />
@@ -457,10 +458,6 @@ function ThumbnailScreen() {
                     Configure referências, composição, elementos e tipografia.
                   </p>
                 </div>
-                <Button size="sm">
-                  <Play className="mr-1.5 h-3.5 w-3.5" />
-                  Gerar thumbnails
-                </Button>
               </div>
 
               {/* Referências */}
@@ -940,54 +937,7 @@ function ThumbnailScreen() {
               </div>
             </div>
 
-            {/* SIDE PREVIEW */}
-            <aside className="lg:sticky lg:top-6 lg:h-fit">
-              <div className="rounded-xl border border-border bg-card/60 p-5 backdrop-blur">
-                <div className="mb-3 flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-semibold">Prévia da thumbnail</h3>
-                </div>
-                <ThumbnailPreview
-                  layout={activeLayout}
-                  color={color}
-                  strokeColor={strokeColor}
-                  stroke={stroke[0]}
-                  shadow={shadow[0]}
-                  size={size[0]}
-                  align={align}
-                  weight={weight}
-                  font={activeFont.css}
-                  uppercase={uppercase}
-                  library={library}
-                />
-                <Separator className="my-4" />
-                <div className="rounded-lg bg-secondary/40 p-3 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5 text-foreground">
-                    <Info className="h-3.5 w-3.5 text-primary" />
-                    Regras ativas
-                  </div>
-                  <ul className="mt-2 space-y-1">
-                    <li>{selectedRefs.length} referências selecionadas</li>
-                    <li>Layout: {activeLayout.name}</li>
-                    <li>
-                      {library.filter((l) => l.required).length} elementos
-                      obrigatórios
-                    </li>
-                    <li>Fonte: {activeFont.label} · {size[0]}px</li>
-                  </ul>
-                </div>
-                <div className="mt-4 grid gap-2">
-                  <Button className="w-full">
-                    <Play className="mr-2 h-4 w-4" />
-                    Regenerar prévia
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                    Restaurar padrão do canal
-                  </Button>
-                </div>
-              </div>
-            </aside>
+
           </div>
         </div>
       </AppShell>

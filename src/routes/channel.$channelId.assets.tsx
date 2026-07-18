@@ -482,10 +482,6 @@ function AssetsScreen() {
                   vídeo final.
                 </p>
               </div>
-              <Button size="sm">
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-                Gerar plano de assets
-              </Button>
             </div>
 
             {/* Sincronização */}

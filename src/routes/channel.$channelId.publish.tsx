@@ -325,9 +325,10 @@ function PublishScreen() {
             </div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div>
             {/* Main column */}
             <div className="space-y-6">
+
               {/* Agenda */}
               <Section
                 icon={<CalendarClock className="h-4 w-4" />}
@@ -693,14 +694,7 @@ function PublishScreen() {
               </div>
             </div>
 
-            {/* Preview column */}
-            <aside className="lg:sticky lg:top-6 lg:h-fit">
-              <YoutubePreview
-                channel={channel}
-                links={links.filter((l) => l.inDescription)}
-                pinnedLinks={links.filter((l) => l.inPinnedComment)}
-              />
-            </aside>
+
           </div>
         </div>
       </div>

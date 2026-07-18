@@ -660,29 +660,7 @@ function EditScreen() {
               </div>
             </Section>
 
-            {/* Prévia */}
-            <Section
-              icon={<Zap className="h-4 w-4" />}
-              title="Prévia simulada"
-              description="Resumo visual da identidade de edição."
-            >
-              <EditIdentityPreview
-                trackName={
-                  tracks.find((t) => t.id === selectedTracks[0])?.name ??
-                  "Sem trilha"
-                }
-                volume={volume[0]}
-                ducking={ducking}
-                musicMode={musicMode}
-                transitionsCount={selectedTransitions.length}
-                defaultTransition={
-                  TRANSITIONS.find((t) => t.id === defaultTransition)?.name ??
-                  "—"
-                }
-                effectsActive={effects.filter((e) => e.active).length}
-                effectsRequired={effects.filter((e) => e.required).length}
-              />
-            </Section>
+
 
             <Separator />
             <div className="flex items-center justify-between gap-3 pb-6">
