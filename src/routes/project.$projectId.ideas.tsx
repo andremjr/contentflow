@@ -2,7 +2,7 @@ import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
-import { projects, channels, PROCESS_META } from "@/lib/mock-data";
+import { projects } from "@/lib/mock-data";
 import { Lightbulb } from "lucide-react";
 
 export const Route = createFileRoute("/project/$projectId/ideas")({
