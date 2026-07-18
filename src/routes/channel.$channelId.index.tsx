@@ -80,14 +80,12 @@ export const Route = createFileRoute("/channel/$channelId/")({
 });
 
 function ChannelWorkspace() {
-  const { channel } = Route.useLoaderData();
-  const projects = useMemo(
-    () => allProjects.filter((p) => p.channelId === channel.id),
-    [channel.id],
-  );
+  const { channel: loaderChannel } = Route.useLoaderData();
+  const liveChannel = useChannel(loaderChannel.id);
+  const channel = liveChannel ?? loaderChannel;
+  const projects = useProjects(channel.id);
   const [view, setView] = useState<"cards" | "table">("cards");
   const [search, setSearch] = useState("");
-
 
   const filtered = useMemo(() => {
     if (!search) return projects;
@@ -108,13 +106,7 @@ function ChannelWorkspace() {
         subtitle={`${channel.handle} · ${channel.niche} · ${channel.language}`}
         actions={
           <>
-            <Button
-              size="sm"
-              className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
-            >
-              <Plus className="size-4" />
-              Novo projeto
-            </Button>
+            <NewProjectDialog channelId={channel.id} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
