@@ -45,19 +45,7 @@ export function ProcessRunner({
 
           <div className="flex items-center gap-2">
             <StatusPill state={state} />
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className="h-9 text-xs text-muted-foreground"
-            >
-              <Link
-                to="/channel/$channelId/$process"
-                params={{ channelId: project.channelId, process: processId === "editing" ? "edit" : processId === "publishing" ? "publish" : processId }}
-              >
-                Configurações do canal
-              </Link>
-            </Button>
+
             {state === "done" ? (
               <Button
                 size="sm"
