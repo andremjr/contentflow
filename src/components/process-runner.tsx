@@ -1,10 +1,23 @@
 import { useState, type ReactNode } from "react";
-import { Play, RotateCcw, Check, Loader2, AlertTriangle } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Play, RotateCcw, Check, Loader2, AlertTriangle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { PROCESS_META, type ProcessId, type Project } from "@/lib/mock-data";
+import { PROCESS_META, PROCESS_ORDER, type ProcessId, type Project } from "@/lib/mock-data";
 import { completeStage } from "@/lib/store";
+
+const PROCESS_ROUTE_SEGMENT: Record<ProcessId, string> = {
+  research: "research",
+  ideas: "ideas",
+  titles: "titles",
+  thumbnail: "thumbnail",
+  script: "script",
+  narration: "narration",
+  assets: "assets",
+  editing: "edit",
+  publishing: "publish",
+};
 
 type RunState = "idle" | "running" | "done" | "error";
 
@@ -25,6 +38,10 @@ export function ProcessRunner({
   const stageState = project?.stages[processId];
   const initial: RunState = stageState === "done" || stageState === "approved" ? "done" : "idle";
   const [state, setState] = useState<RunState>(initial);
+  const navigate = useNavigate();
+
+  const currentIdx = PROCESS_ORDER.indexOf(processId);
+  const nextProcess = currentIdx >= 0 ? PROCESS_ORDER[currentIdx + 1] : undefined;
 
   const run = () => {
     setState("running");
@@ -32,6 +49,13 @@ export function ProcessRunner({
       setState("done");
       if (project) completeStage(project.id, processId);
     }, 1400);
+  };
+
+  const goNext = () => {
+    if (!project || !nextProcess) return;
+    navigate({
+      to: `/project/${project.id}/${PROCESS_ROUTE_SEGMENT[nextProcess]}`,
+    });
   };
 
 
@@ -55,15 +79,27 @@ export function ProcessRunner({
             <StatusPill state={state} />
 
             {state === "done" ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={run}
-                className="h-9 gap-1.5 border-border/60"
-              >
-                <RotateCcw className="size-3.5" />
-                Executar novamente
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={run}
+                  className="h-9 gap-1.5 border-border/60"
+                >
+                  <RotateCcw className="size-3.5" />
+                  Executar novamente
+                </Button>
+                {nextProcess && (
+                  <Button
+                    size="sm"
+                    onClick={goNext}
+                    className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
+                  >
+                    Próxima etapa: {PROCESS_META[nextProcess].label}
+                    <ArrowRight className="size-3.5" />
+                  </Button>
+                )}
+              </>
             ) : (
               <Button
                 size="sm"
