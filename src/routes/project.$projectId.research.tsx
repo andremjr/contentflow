@@ -1,6 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
 import { projects, channels, PROCESS_META } from "@/lib/mock-data";
@@ -42,18 +41,7 @@ function ProjectResearchPage() {
   const meta = PROCESS_META.research;
 
   return (
-    <AppShell>
-      <TopBar
-        showNewProject={false}
-        breadcrumbs={[
-          { label: "ContentFlow OS", to: "/dashboard" },
-          { label: channel.name, to: "/dashboard" },
-          { label: project.title, to: "/dashboard" },
-          { label: meta.label },
-        ]}
-        title={`${meta.label} · ${project.title}`}
-        subtitle="Coleta vídeos de referência com base nos filtros configurados no canal."
-      />
+    <>
       <ProcessRunner
         project={project}
         processId="research"
@@ -74,7 +62,7 @@ function ProjectResearchPage() {
           </ul>
         }
       />
-    </AppShell>
+    </>
   );
 }
 

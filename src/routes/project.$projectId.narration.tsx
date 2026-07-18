@@ -1,6 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
 import { projects, channels, PROCESS_META } from "@/lib/mock-data";
@@ -39,18 +38,7 @@ function ProjectNarrationPage() {
   const { project, channel } = Route.useLoaderData();
   const meta = PROCESS_META.narration;
   return (
-    <AppShell>
-      <TopBar
-        showNewProject={false}
-        breadcrumbs={[
-          { label: "ContentFlow OS", to: "/dashboard" },
-          { label: channel.name, to: "/dashboard" },
-          { label: project.title, to: "/dashboard" },
-          { label: meta.label },
-        ]}
-        title={`${meta.label} · ${project.title}`}
-        subtitle="Gera a narração usando a voz e os ajustes configurados no canal."
-      />
+    <>
       <ProcessRunner
         project={project}
         processId="narration"
@@ -83,6 +71,6 @@ function ProjectNarrationPage() {
           </div>
         }
       />
-    </AppShell>
+    </>
   );
 }

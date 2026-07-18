@@ -1,6 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
 import { projects, channels, PROCESS_META } from "@/lib/mock-data";
@@ -39,18 +38,7 @@ function ProjectAssetsPage() {
   const meta = PROCESS_META.assets;
   const hues = [200, 30, 120, 300, 60, 260, 180, 340];
   return (
-    <AppShell>
-      <TopBar
-        showNewProject={false}
-        breadcrumbs={[
-          { label: "ContentFlow OS", to: "/dashboard" },
-          { label: channel.name, to: "/dashboard" },
-          { label: project.title, to: "/dashboard" },
-          { label: meta.label },
-        ]}
-        title={`${meta.label} · ${project.title}`}
-        subtitle="Seleciona assets seguindo as regras de inserção do canal."
-      />
+    <>
       <ProcessRunner
         project={project}
         processId="assets"
@@ -73,6 +61,6 @@ function ProjectAssetsPage() {
           </div>
         }
       />
-    </AppShell>
+    </>
   );
 }
