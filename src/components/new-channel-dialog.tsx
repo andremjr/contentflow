@@ -103,7 +103,7 @@ export function NewChannelDialog({
     createChannel(newChannel);
     onCreate?.(newChannel);
     toast.success("Canal criado", {
-      description: `${newChannel.name} adicionado ao workspace.`,
+      description: `${newChannel.name} criado como novo workspace.`,
     });
     reset();
     setOpen(false);
