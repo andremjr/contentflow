@@ -39,6 +39,9 @@ import {
 } from "@/lib/mock-data";
 import { ChannelAvatar } from "@/components/channel-avatar";
 
+const processSlug = (pid: string) =>
+  pid === "editing" ? "edit" : pid === "publishing" ? "publish" : pid;
+
 type Level =
   | { kind: "overview" }
   | { kind: "channel"; channelId: string }
@@ -271,7 +274,7 @@ function ChannelNav({
   const channel = channels.find((c) => c.id === channelId);
 
   const processMatchesActive = PROCESS_ORDER.some((pid) => {
-    const to = `/channel/${channelId}/${pid === "editing" ? "edit" : pid}`;
+    const to = `/channel/${channelId}/${processSlug(pid)}`;
     return pathname === to;
   });
   const settingsActive =
@@ -350,7 +353,7 @@ function ChannelNav({
             <div className="ml-3 mt-0.5 space-y-0.5 border-l border-sidebar-border/60 pl-2">
               {PROCESS_ORDER.map((pid, i) => {
                 const meta = PROCESS_META[pid];
-                const to = `/channel/${channelId}/${pid === "editing" ? "edit" : pid}`;
+                const to = `/channel/${channelId}/${processSlug(pid)}`;
                 const active = pathname === to;
                 return (
                   <NavItem
@@ -440,7 +443,7 @@ function ProjectNav({
       </SectionLabel>
       {PROCESS_ORDER.map((pid, i) => {
         const meta = PROCESS_META[pid];
-        const to = `/project/${projectId}/${pid === "editing" ? "edit" : pid}`;
+        const to = `/project/${projectId}/${pid === "editing" ? "edit" : pid === "publishing" ? "publish" : pid}`;
         const active = pathname === to;
         return (
           <NavItem
