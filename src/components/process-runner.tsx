@@ -8,13 +8,12 @@ import { PROCESS_META, type ProcessId, type Project } from "@/lib/mock-data";
 type RunState = "idle" | "running" | "done" | "error";
 
 export function ProcessRunner({
-  project,
   processId,
   description,
   result,
   emptyHint,
 }: {
-  project: Project;
+  project?: Project;
   processId: ProcessId;
   description: string;
   result: ReactNode;
