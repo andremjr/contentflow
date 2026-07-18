@@ -111,10 +111,12 @@ export function TopBar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button size="sm" className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]">
-            <Plus className="size-4" />
-            Novo projeto
-          </Button>
+          {showNewProject && (
+            <Button size="sm" className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]">
+              <Plus className="size-4" />
+              Novo projeto
+            </Button>
+          )}
         </div>
       </div>
     </header>
