@@ -79,9 +79,6 @@ function DashboardPage() {
           <section>
             <header className="mb-4">
               <h2 className="text-sm font-semibold">Seus canais</h2>
-              <p className="text-xs text-muted-foreground">
-                {channels.length} {channels.length === 1 ? "canal" : "canais"} · cada canal é um workspace
-              </p>
             </header>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
