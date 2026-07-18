@@ -986,5 +986,3 @@ function PreviewChip({ label, value }: { label: string; value: string }) {
   );
 }
 
-// unused-import guard for KeyboardEvent / RotateCcw / Waves / X kept for future
-void RotateCcw; void Waves; void X; void ({} as KeyboardEvent<HTMLInputElement>);
