@@ -115,11 +115,7 @@ function ProjectLayout() {
       </nav>
 
       <Outlet />
-
-      {/* keep ChannelAvatar import from being flagged as unused in tree-shake */}
-      <span className="hidden">
-        <ChannelAvatar channel={channel} size="sm" />
-      </span>
     </AppShell>
   );
 }
+
