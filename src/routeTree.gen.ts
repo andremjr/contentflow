@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChannelChannelIdRouteImport } from './routes/channel.$channelId'
 import { Route as ChannelChannelIdTitlesRouteImport } from './routes/channel.$channelId.titles'
 import { Route as ChannelChannelIdThumbnailRouteImport } from './routes/channel.$channelId.thumbnail'
+import { Route as ChannelChannelIdScriptRouteImport } from './routes/channel.$channelId.script'
 import { Route as ChannelChannelIdResearchRouteImport } from './routes/channel.$channelId.research'
 import { Route as ChannelChannelIdIdeasRouteImport } from './routes/channel.$channelId.ideas'
 import { Route as ChannelChannelIdSettingsProcessesRouteImport } from './routes/channel.$channelId.settings.processes'
@@ -44,6 +45,11 @@ const ChannelChannelIdThumbnailRoute =
     path: '/thumbnail',
     getParentRoute: () => ChannelChannelIdRoute,
   } as any)
+const ChannelChannelIdScriptRoute = ChannelChannelIdScriptRouteImport.update({
+  id: '/script',
+  path: '/script',
+  getParentRoute: () => ChannelChannelIdRoute,
+} as any)
 const ChannelChannelIdResearchRoute =
   ChannelChannelIdResearchRouteImport.update({
     id: '/research',
@@ -68,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
+  '/channel/$channelId/script': typeof ChannelChannelIdScriptRoute
   '/channel/$channelId/thumbnail': typeof ChannelChannelIdThumbnailRoute
   '/channel/$channelId/titles': typeof ChannelChannelIdTitlesRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
@@ -78,6 +85,7 @@ export interface FileRoutesByTo {
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
+  '/channel/$channelId/script': typeof ChannelChannelIdScriptRoute
   '/channel/$channelId/thumbnail': typeof ChannelChannelIdThumbnailRoute
   '/channel/$channelId/titles': typeof ChannelChannelIdTitlesRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
@@ -89,6 +97,7 @@ export interface FileRoutesById {
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
+  '/channel/$channelId/script': typeof ChannelChannelIdScriptRoute
   '/channel/$channelId/thumbnail': typeof ChannelChannelIdThumbnailRoute
   '/channel/$channelId/titles': typeof ChannelChannelIdTitlesRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
@@ -101,6 +110,7 @@ export interface FileRouteTypes {
     | '/channel/$channelId'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/research'
+    | '/channel/$channelId/script'
     | '/channel/$channelId/thumbnail'
     | '/channel/$channelId/titles'
     | '/channel/$channelId/settings/processes'
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
     | '/channel/$channelId'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/research'
+    | '/channel/$channelId/script'
     | '/channel/$channelId/thumbnail'
     | '/channel/$channelId/titles'
     | '/channel/$channelId/settings/processes'
@@ -121,6 +132,7 @@ export interface FileRouteTypes {
     | '/channel/$channelId'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/research'
+    | '/channel/$channelId/script'
     | '/channel/$channelId/thumbnail'
     | '/channel/$channelId/titles'
     | '/channel/$channelId/settings/processes'
@@ -169,6 +181,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChannelChannelIdThumbnailRouteImport
       parentRoute: typeof ChannelChannelIdRoute
     }
+    '/channel/$channelId/script': {
+      id: '/channel/$channelId/script'
+      path: '/script'
+      fullPath: '/channel/$channelId/script'
+      preLoaderRoute: typeof ChannelChannelIdScriptRouteImport
+      parentRoute: typeof ChannelChannelIdRoute
+    }
     '/channel/$channelId/research': {
       id: '/channel/$channelId/research'
       path: '/research'
@@ -196,6 +215,7 @@ declare module '@tanstack/react-router' {
 interface ChannelChannelIdRouteChildren {
   ChannelChannelIdIdeasRoute: typeof ChannelChannelIdIdeasRoute
   ChannelChannelIdResearchRoute: typeof ChannelChannelIdResearchRoute
+  ChannelChannelIdScriptRoute: typeof ChannelChannelIdScriptRoute
   ChannelChannelIdThumbnailRoute: typeof ChannelChannelIdThumbnailRoute
   ChannelChannelIdTitlesRoute: typeof ChannelChannelIdTitlesRoute
   ChannelChannelIdSettingsProcessesRoute: typeof ChannelChannelIdSettingsProcessesRoute
@@ -204,6 +224,7 @@ interface ChannelChannelIdRouteChildren {
 const ChannelChannelIdRouteChildren: ChannelChannelIdRouteChildren = {
   ChannelChannelIdIdeasRoute: ChannelChannelIdIdeasRoute,
   ChannelChannelIdResearchRoute: ChannelChannelIdResearchRoute,
+  ChannelChannelIdScriptRoute: ChannelChannelIdScriptRoute,
   ChannelChannelIdThumbnailRoute: ChannelChannelIdThumbnailRoute,
   ChannelChannelIdTitlesRoute: ChannelChannelIdTitlesRoute,
   ChannelChannelIdSettingsProcessesRoute:
