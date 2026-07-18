@@ -164,7 +164,7 @@ function DashboardPage() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ onCreate }: { onCreate: (c: Channel) => void }) {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center py-24 text-center">
       <div className="grid size-14 place-items-center rounded-2xl border border-border/60 bg-card">
@@ -175,10 +175,17 @@ function EmptyState() {
         Adicione seu primeiro canal para começar a organizar a produção de
         conteúdo.
       </p>
-      <Button className="mt-5 gap-1.5 gradient-brand text-white">
-        <Plus className="size-4" />
-        Adicionar canal
-      </Button>
+      <div className="mt-5">
+        <NewChannelDialog
+          onCreate={onCreate}
+          trigger={
+            <Button className="gap-1.5 gradient-brand text-white">
+              <Plus className="size-4" />
+              Adicionar canal
+            </Button>
+          }
+        />
+      </div>
     </div>
   );
 }
