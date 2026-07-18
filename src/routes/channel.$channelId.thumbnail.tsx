@@ -458,10 +458,6 @@ function ThumbnailScreen() {
                     Configure referências, composição, elementos e tipografia.
                   </p>
                 </div>
-                <Button size="sm">
-                  <Play className="mr-1.5 h-3.5 w-3.5" />
-                  Gerar thumbnails
-                </Button>
               </div>
 
               {/* Referências */}

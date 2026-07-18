@@ -316,10 +316,6 @@ function TitlesScreen() {
                     Modelos, vocabulário e comprimento aplicados a cada geração.
                   </p>
                 </div>
-                <Button size="sm">
-                  <Play className="mr-1.5 h-3.5 w-3.5" />
-                  Gerar títulos
-                </Button>
               </div>
 
               {/* Estruturas */}
