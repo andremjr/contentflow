@@ -466,7 +466,7 @@ function NarrationView() {
 
   return (
     <AppShell>
-      <TopBar />
+      <TopBar title="Narração" subtitle={`${project.title} · ${channel.name}`} />
       <TooltipProvider delayDuration={200}>
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Header */}
