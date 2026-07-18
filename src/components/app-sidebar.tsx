@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
@@ -6,6 +6,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   ChevronDown,
+  ChevronRight,
   ChevronLeft,
   Command,
   HelpCircle,
@@ -14,6 +15,7 @@ import {
   Layers,
   Wrench,
 } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
