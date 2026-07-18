@@ -1,7 +1,7 @@
-import { Plus, ChevronRight, Search, Filter } from "lucide-react";
+import { Plus, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
 
 type Crumb = { label: string; to?: string };
 
@@ -43,25 +43,8 @@ export function TopBar({
           )}
         </div>
 
-        <div className="hidden flex-1 max-w-md lg:block">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar projetos, canais, assets…"
-              className="h-9 border-border/60 bg-background/60 pl-8 text-xs"
-            />
-          </div>
-        </div>
-
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="hidden h-9 gap-1.5 border-border/60 bg-background/40 sm:inline-flex"
-          >
-            <Filter className="size-3.5" />
-            Filtros
-          </Button>
+
 
           {actions}
 
