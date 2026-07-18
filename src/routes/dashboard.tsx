@@ -67,6 +67,7 @@ function DashboardPage() {
         breadcrumbs={[{ label: "ContentFlow OS" }, { label: "Visão geral" }]}
         title="Visão geral"
         subtitle="Escolha um canal para abrir sua produção"
+        showNewProject={false}
         actions={
           <Button
             size="sm"
