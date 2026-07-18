@@ -154,6 +154,7 @@ function ChannelWorkspace() {
   return (
     <AppShell>
       <TopBar
+        showNewProject={false}
         breadcrumbs={[
           { label: "ContentFlow OS", to: "/dashboard" },
           { label: "Canais", to: "/dashboard" },
