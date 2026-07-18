@@ -15,6 +15,7 @@ import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { ProcessStatus } from "@/components/process-status";
+import { NewProjectDialog } from "@/components/new-project-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -36,13 +37,10 @@ import {
 } from "@/components/ui/table";
 import {
   channels,
-  projects as allProjects,
   PROCESS_META,
-  PROCESS_ORDER,
   type Project,
-  type ProcessId,
-  type ProcessState,
 } from "@/lib/mock-data";
+import { useChannel, useProjects } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/channel/$channelId/")({
