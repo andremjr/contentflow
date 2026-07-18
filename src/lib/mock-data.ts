@@ -179,93 +179,77 @@ function stagesUpTo(current: ProcessId, currentState: ProcessState) {
   return map;
 }
 
-export const projects: Project[] = [
-  {
-    id: "p-1",
-    title: "O paradoxo dos buracos negros supermassivos",
-    channelId: "ch-1",
-    currentStage: "editing",
-    state: "processing",
-    progress: 72,
-    deadline: "22 nov",
-    duration: "18:24",
-    updatedAt: "há 8 min",
-    stages: stagesUpTo("editing", "processing"),
-    assignee: { name: "Marina Costa", initials: "MC" },
-    thumbHue: 220,
+type ProjectSeed = {
+  id: string;
+  title: string;
+  channelId: string;
+  progressLevel: "empty" | "mid" | "done";
+  deadline: string;
+  duration: string;
+  updatedAt: string;
+  assignee: { name: string; initials: string };
+  thumbHue: number;
+  isLate?: boolean;
+};
+
+const PROGRESS_PRESETS = {
+  empty: {
+    currentStage: "research" as ProcessId,
+    state: "not_started" as ProcessState,
+    progress: 0,
   },
-  {
-    id: "p-2",
-    title: "Por que os bancos centrais estão perdendo o controle",
-    channelId: "ch-2",
-    currentStage: "narration",
-    state: "awaiting_review",
-    progress: 54,
-    deadline: "24 nov",
-    duration: "22:10",
-    updatedAt: "há 42 min",
-    stages: stagesUpTo("narration", "awaiting_review"),
-    assignee: { name: "Rafael Lima", initials: "RL" },
-    thumbHue: 260,
+  mid: {
+    currentStage: "script" as ProcessId,
+    state: "awaiting_review" as ProcessState,
+    progress: 55,
   },
-  {
-    id: "p-3",
-    title: "A gramática visual de Denis Villeneuve",
-    channelId: "ch-3",
-    currentStage: "thumbnail",
-    state: "configuring",
-    progress: 28,
-    deadline: "27 nov",
-    duration: "14:02",
-    updatedAt: "há 2 h",
-    stages: stagesUpTo("thumbnail", "configuring"),
-    assignee: { name: "Ana Prado", initials: "AP" },
-    thumbHue: 200,
-  },
-  {
-    id: "p-4",
-    title: "Rotina matinal de 5 CEOs de startups",
-    channelId: "ch-4",
-    currentStage: "publishing",
-    state: "done",
+  done: {
+    currentStage: "publishing" as ProcessId,
+    state: "done" as ProcessState,
     progress: 100,
-    deadline: "publicado",
-    duration: "09:48",
-    updatedAt: "ontem",
-    stages: stagesUpTo("publishing", "done"),
-    assignee: { name: "Lucas Andrade", initials: "LU" },
-    thumbHue: 150,
   },
-  {
-    id: "p-5",
-    title: "A física impossível de Interstellar",
-    channelId: "ch-1",
-    currentStage: "script",
-    state: "error",
-    progress: 41,
-    deadline: "29 nov",
-    duration: "—",
-    updatedAt: "há 1 h",
-    stages: stagesUpTo("script", "error"),
-    assignee: { name: "Bruno Reis", initials: "BR" },
-    isLate: true,
-    thumbHue: 10,
-  },
-  {
-    id: "p-6",
-    title: "Como a Nvidia ganhou a guerra da IA",
-    channelId: "ch-2",
-    currentStage: "assets",
-    state: "processing",
-    progress: 63,
-    deadline: "30 nov",
-    duration: "26:30",
-    updatedAt: "há 15 min",
-    stages: stagesUpTo("assets", "processing"),
-    assignee: { name: "Carla Nunes", initials: "CN" },
-    thumbHue: 280,
-  },
+};
+
+const projectSeeds: ProjectSeed[] = [
+  // Deep Space Docs (ch-1) — Ciência
+  { id: "p-1-a", title: "A anatomia de uma supernova", channelId: "ch-1", progressLevel: "empty", deadline: "05 dez", duration: "—", updatedAt: "há 5 min", assignee: { name: "Marina Costa", initials: "MC" }, thumbHue: 220 },
+  { id: "p-1-b", title: "Por que Marte perdeu sua atmosfera", channelId: "ch-1", progressLevel: "mid", deadline: "28 nov", duration: "16:20", updatedAt: "há 1 h", assignee: { name: "Bruno Reis", initials: "BR" }, thumbHue: 12 },
+  { id: "p-1-c", title: "O paradoxo dos buracos negros supermassivos", channelId: "ch-1", progressLevel: "done", deadline: "publicado", duration: "18:24", updatedAt: "ontem", assignee: { name: "Marina Costa", initials: "MC" }, thumbHue: 260 },
+
+  // Cortex Finance (ch-2) — Finanças
+  { id: "p-2-a", title: "O colapso silencioso dos títulos longos", channelId: "ch-2", progressLevel: "empty", deadline: "08 dez", duration: "—", updatedAt: "há 20 min", assignee: { name: "Rafael Lima", initials: "RL" }, thumbHue: 200 },
+  { id: "p-2-b", title: "Por que os bancos centrais estão perdendo o controle", channelId: "ch-2", progressLevel: "mid", deadline: "24 nov", duration: "22:10", updatedAt: "há 42 min", assignee: { name: "Rafael Lima", initials: "RL" }, thumbHue: 265 },
+  { id: "p-2-c", title: "Como a Nvidia ganhou a guerra da IA", channelId: "ch-2", progressLevel: "done", deadline: "publicado", duration: "26:30", updatedAt: "há 2 dias", assignee: { name: "Carla Nunes", initials: "CN" }, thumbHue: 280 },
+
+  // Studio Noir (ch-3) — Cinema
+  { id: "p-3-a", title: "A luz de Roger Deakins", channelId: "ch-3", progressLevel: "empty", deadline: "12 dez", duration: "—", updatedAt: "há 1 h", assignee: { name: "Ana Prado", initials: "AP" }, thumbHue: 30 },
+  { id: "p-3-b", title: "A gramática visual de Denis Villeneuve", channelId: "ch-3", progressLevel: "mid", deadline: "27 nov", duration: "14:02", updatedAt: "há 2 h", assignee: { name: "Ana Prado", initials: "AP" }, thumbHue: 210 },
+  { id: "p-3-c", title: "Kubrick e a simetria como narrativa", channelId: "ch-3", progressLevel: "done", deadline: "publicado", duration: "19:45", updatedAt: "há 3 dias", assignee: { name: "Ana Prado", initials: "AP" }, thumbHue: 340 },
+
+  // Zen Productivity (ch-4) — Produtividade
+  { id: "p-4-a", title: "O mito da força de vontade", channelId: "ch-4", progressLevel: "empty", deadline: "15 dez", duration: "—", updatedAt: "há 30 min", assignee: { name: "Lucas Andrade", initials: "LU" }, thumbHue: 145 },
+  { id: "p-4-b", title: "Como construir uma rotina que se sustenta", channelId: "ch-4", progressLevel: "mid", deadline: "02 dez", duration: "11:30", updatedAt: "há 3 h", assignee: { name: "Lucas Andrade", initials: "LU" }, thumbHue: 170 },
+  { id: "p-4-c", title: "Rotina matinal de 5 CEOs de startups", channelId: "ch-4", progressLevel: "done", deadline: "publicado", duration: "09:48", updatedAt: "ontem", assignee: { name: "Lucas Andrade", initials: "LU" }, thumbHue: 150 },
 ];
+
+export const projects: Project[] = projectSeeds.map((s) => {
+  const preset = PROGRESS_PRESETS[s.progressLevel];
+  return {
+    id: s.id,
+    title: s.title,
+    channelId: s.channelId,
+    currentStage: preset.currentStage,
+    state: preset.state,
+    progress: preset.progress,
+    deadline: s.deadline,
+    duration: s.duration,
+    updatedAt: s.updatedAt,
+    stages: stagesUpTo(preset.currentStage, preset.state),
+    assignee: s.assignee,
+    isLate: s.isLate,
+    thumbHue: s.thumbHue,
+  };
+});
 
 export type ActionItem = {
   id: string;
