@@ -409,12 +409,15 @@ function ChannelCards() {
 
             <div className="mt-4 flex items-center justify-end border-t border-border/50 pt-3">
               <Button
+                asChild
                 size="sm"
                 variant="ghost"
                 className="h-8 gap-1 text-xs text-brand-soft hover:text-foreground"
               >
-                Abrir workspace
-                <ExternalLink className="size-3.5" />
+                <Link to="/channel/$channelId" params={{ channelId: c.id }}>
+                  Abrir workspace
+                  <ExternalLink className="size-3.5" />
+                </Link>
               </Button>
             </div>
           </article>
