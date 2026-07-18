@@ -1,7 +1,7 @@
-import { Plus, ChevronRight, Search, Filter } from "lucide-react";
+import { Plus, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
 
 type Crumb = { label: string; to?: string };
 
