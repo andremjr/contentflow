@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Plus,
@@ -16,7 +17,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { channels, type Channel } from "@/lib/mock-data";
+import { NewChannelDialog } from "@/components/new-channel-dialog";
+import { channels as mockChannels, type Channel } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard")({
@@ -59,6 +61,8 @@ const STATUS_META: Record<
 };
 
 function DashboardPage() {
+  const [extraChannels, setExtraChannels] = useState<Channel[]>([]);
+  const channels = [...extraChannels, ...mockChannels];
   const hasChannels = channels.length > 0;
 
   return (
@@ -69,13 +73,9 @@ function DashboardPage() {
         subtitle="Escolha um canal para abrir sua produção"
         showNewProject={false}
         actions={
-          <Button
-            size="sm"
-            className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
-          >
-            <Plus className="size-4" />
-            Novo canal
-          </Button>
+          <NewChannelDialog
+            onCreate={(c) => setExtraChannels((prev) => [c, ...prev])}
+          />
         }
       />
 
@@ -155,14 +155,16 @@ function DashboardPage() {
             </div>
           </section>
         ) : (
-          <EmptyState />
+          <EmptyState
+            onCreate={(c) => setExtraChannels((prev) => [c, ...prev])}
+          />
         )}
       </main>
     </AppShell>
   );
 }
 
-function EmptyState() {
+function EmptyState({ onCreate }: { onCreate: (c: Channel) => void }) {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center py-24 text-center">
       <div className="grid size-14 place-items-center rounded-2xl border border-border/60 bg-card">
@@ -173,10 +175,17 @@ function EmptyState() {
         Adicione seu primeiro canal para começar a organizar a produção de
         conteúdo.
       </p>
-      <Button className="mt-5 gap-1.5 gradient-brand text-white">
-        <Plus className="size-4" />
-        Adicionar canal
-      </Button>
+      <div className="mt-5">
+        <NewChannelDialog
+          onCreate={onCreate}
+          trigger={
+            <Button className="gap-1.5 gradient-brand text-white">
+              <Plus className="size-4" />
+              Adicionar canal
+            </Button>
+          }
+        />
+      </div>
     </div>
   );
 }
