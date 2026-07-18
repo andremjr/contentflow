@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Plus,
@@ -18,7 +17,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NewChannelDialog } from "@/components/new-channel-dialog";
-import { channels as mockChannels, type Channel } from "@/lib/mock-data";
+import { type Channel } from "@/lib/mock-data";
+import { useChannels, removeChannel } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard")({
