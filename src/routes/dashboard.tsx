@@ -697,7 +697,7 @@ function ProductionTimeline() {
                   </span>
                 </footer>
               </div>
-            </article>
+            </Link>
           );
         })}
       </div>
