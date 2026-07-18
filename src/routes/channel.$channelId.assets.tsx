@@ -1440,6 +1440,3 @@ function PromptEditor({
   );
 }
 
-// keep unused-icon reference guards satisfied by referencing types
-void ({} as KeyboardEvent<HTMLInputElement>);
-void X;
