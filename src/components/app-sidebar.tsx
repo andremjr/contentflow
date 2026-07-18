@@ -271,7 +271,7 @@ function ChannelNav({
   const channel = channels.find((c) => c.id === channelId);
 
   const processMatchesActive = PROCESS_ORDER.some((pid) => {
-    const to = `/channel/${channelId}/${pid === "editing" ? "edit" : pid}`;
+    const to = `/channel/${channelId}/${processSlug(pid)}`;
     return pathname === to;
   });
   const settingsActive =
