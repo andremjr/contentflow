@@ -110,12 +110,6 @@ export function createChannel(channel: Channel) {
   emit();
 }
 
-export function updateChannel(id: string, patch: Partial<Channel>) {
-  const idx = db.channels.findIndex((c) => c.id === id);
-  if (idx === -1) return;
-  db.channels[idx] = { ...db.channels[idx], ...patch };
-  emit();
-}
 
 export function removeChannel(id: string) {
   const i = db.channels.findIndex((c) => c.id === id);
@@ -159,12 +153,6 @@ export function createProject(input: NewProjectInput): Project {
   return project;
 }
 
-export function removeProject(id: string) {
-  const i = db.projects.findIndex((p) => p.id === id);
-  if (i !== -1) db.projects.splice(i, 1);
-  emit();
-}
-
 /**
  * Mark a project's stage as complete and advance the pointer to the
  * next incomplete stage. Recomputes progress as (# done / total).
@@ -192,11 +180,4 @@ export function completeStage(projectId: string, stage: ProcessId) {
   p.progress = Math.round((doneCount / PROCESS_ORDER.length) * 100);
   p.updatedAt = "agora";
   emit();
-}
-
-export function resetDatabase() {
-  if (typeof window !== "undefined") {
-    window.localStorage.removeItem(STORAGE_KEY);
-    window.location.reload();
-  }
 }

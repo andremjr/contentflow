@@ -2,7 +2,7 @@ import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
-import { projects, channels, PROCESS_META } from "@/lib/mock-data";
+import { projects } from "@/lib/mock-data";
 import { Download } from "lucide-react";
 
 export const Route = createFileRoute("/project/$projectId/edit")({
@@ -18,8 +18,7 @@ export const Route = createFileRoute("/project/$projectId/edit")({
   loader: ({ params }) => {
     const project = projects.find((x) => x.id === params.projectId);
     if (!project) throw notFound();
-    const channel = channels.find((c) => c.id === project.channelId)!;
-    return { project, channel };
+    return { project };
   },
   notFoundComponent: () => (
     <AppShell>
@@ -35,8 +34,7 @@ export const Route = createFileRoute("/project/$projectId/edit")({
 });
 
 function ProjectEditPage() {
-  const { project, channel } = Route.useLoaderData();
-  const meta = PROCESS_META.editing;
+  const { project } = Route.useLoaderData();
   return (
     <>
       <ProcessRunner

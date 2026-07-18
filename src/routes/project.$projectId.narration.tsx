@@ -2,7 +2,7 @@ import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
-import { projects, channels, PROCESS_META } from "@/lib/mock-data";
+import { projects } from "@/lib/mock-data";
 import { Download } from "lucide-react";
 
 export const Route = createFileRoute("/project/$projectId/narration")({
@@ -18,8 +18,7 @@ export const Route = createFileRoute("/project/$projectId/narration")({
   loader: ({ params }) => {
     const project = projects.find((x) => x.id === params.projectId);
     if (!project) throw notFound();
-    const channel = channels.find((c) => c.id === project.channelId)!;
-    return { project, channel };
+    return { project };
   },
   notFoundComponent: () => (
     <AppShell>
@@ -35,8 +34,7 @@ export const Route = createFileRoute("/project/$projectId/narration")({
 });
 
 function ProjectNarrationPage() {
-  const { project, channel } = Route.useLoaderData();
-  const meta = PROCESS_META.narration;
+  const { project } = Route.useLoaderData();
   return (
     <>
       <ProcessRunner
