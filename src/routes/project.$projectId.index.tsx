@@ -62,7 +62,7 @@ import {
 } from "@/lib/mock-data";
 import { ChannelAvatar } from "@/components/channel-avatar";
 
-export const Route = createFileRoute("/project/$projectId")({
+export const Route = createFileRoute("/project/$projectId/")({
   head: ({ params }) => {
     const p = projects.find((x) => x.id === params.projectId);
     return {

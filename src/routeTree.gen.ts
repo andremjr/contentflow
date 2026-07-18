@@ -11,8 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ProjectProjectIdRouteImport } from './routes/project.$projectId'
-import { Route as ChannelChannelIdRouteImport } from './routes/channel.$channelId'
+import { Route as ProjectProjectIdIndexRouteImport } from './routes/project.$projectId.index'
+import { Route as ChannelChannelIdIndexRouteImport } from './routes/channel.$channelId.index'
 import { Route as ProjectProjectIdTitlesRouteImport } from './routes/project.$projectId.titles'
 import { Route as ProjectProjectIdThumbnailRouteImport } from './routes/project.$projectId.thumbnail'
 import { Route as ProjectProjectIdScriptRouteImport } from './routes/project.$projectId.script'
@@ -43,124 +43,122 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProjectProjectIdRoute = ProjectProjectIdRouteImport.update({
-  id: '/project/$projectId',
-  path: '/project/$projectId',
+const ProjectProjectIdIndexRoute = ProjectProjectIdIndexRouteImport.update({
+  id: '/project/$projectId/',
+  path: '/project/$projectId/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ChannelChannelIdRoute = ChannelChannelIdRouteImport.update({
-  id: '/channel/$channelId',
-  path: '/channel/$channelId',
+const ChannelChannelIdIndexRoute = ChannelChannelIdIndexRouteImport.update({
+  id: '/channel/$channelId/',
+  path: '/channel/$channelId/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectProjectIdTitlesRoute = ProjectProjectIdTitlesRouteImport.update({
-  id: '/titles',
-  path: '/titles',
-  getParentRoute: () => ProjectProjectIdRoute,
+  id: '/project/$projectId/titles',
+  path: '/project/$projectId/titles',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectProjectIdThumbnailRoute =
   ProjectProjectIdThumbnailRouteImport.update({
-    id: '/thumbnail',
-    path: '/thumbnail',
-    getParentRoute: () => ProjectProjectIdRoute,
+    id: '/project/$projectId/thumbnail',
+    path: '/project/$projectId/thumbnail',
+    getParentRoute: () => rootRouteImport,
   } as any)
 const ProjectProjectIdScriptRoute = ProjectProjectIdScriptRouteImport.update({
-  id: '/script',
-  path: '/script',
-  getParentRoute: () => ProjectProjectIdRoute,
+  id: '/project/$projectId/script',
+  path: '/project/$projectId/script',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectProjectIdResearchRoute =
   ProjectProjectIdResearchRouteImport.update({
-    id: '/research',
-    path: '/research',
-    getParentRoute: () => ProjectProjectIdRoute,
+    id: '/project/$projectId/research',
+    path: '/project/$projectId/research',
+    getParentRoute: () => rootRouteImport,
   } as any)
 const ProjectProjectIdPublishRoute = ProjectProjectIdPublishRouteImport.update({
-  id: '/publish',
-  path: '/publish',
-  getParentRoute: () => ProjectProjectIdRoute,
+  id: '/project/$projectId/publish',
+  path: '/project/$projectId/publish',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectProjectIdNarrationRoute =
   ProjectProjectIdNarrationRouteImport.update({
-    id: '/narration',
-    path: '/narration',
-    getParentRoute: () => ProjectProjectIdRoute,
+    id: '/project/$projectId/narration',
+    path: '/project/$projectId/narration',
+    getParentRoute: () => rootRouteImport,
   } as any)
 const ProjectProjectIdIdeasRoute = ProjectProjectIdIdeasRouteImport.update({
-  id: '/ideas',
-  path: '/ideas',
-  getParentRoute: () => ProjectProjectIdRoute,
+  id: '/project/$projectId/ideas',
+  path: '/project/$projectId/ideas',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectProjectIdEditRoute = ProjectProjectIdEditRouteImport.update({
-  id: '/edit',
-  path: '/edit',
-  getParentRoute: () => ProjectProjectIdRoute,
+  id: '/project/$projectId/edit',
+  path: '/project/$projectId/edit',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectProjectIdAssetsRoute = ProjectProjectIdAssetsRouteImport.update({
-  id: '/assets',
-  path: '/assets',
-  getParentRoute: () => ProjectProjectIdRoute,
+  id: '/project/$projectId/assets',
+  path: '/project/$projectId/assets',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ChannelChannelIdTitlesRoute = ChannelChannelIdTitlesRouteImport.update({
-  id: '/titles',
-  path: '/titles',
-  getParentRoute: () => ChannelChannelIdRoute,
+  id: '/channel/$channelId/titles',
+  path: '/channel/$channelId/titles',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ChannelChannelIdThumbnailRoute =
   ChannelChannelIdThumbnailRouteImport.update({
-    id: '/thumbnail',
-    path: '/thumbnail',
-    getParentRoute: () => ChannelChannelIdRoute,
+    id: '/channel/$channelId/thumbnail',
+    path: '/channel/$channelId/thumbnail',
+    getParentRoute: () => rootRouteImport,
   } as any)
 const ChannelChannelIdScriptRoute = ChannelChannelIdScriptRouteImport.update({
-  id: '/script',
-  path: '/script',
-  getParentRoute: () => ChannelChannelIdRoute,
+  id: '/channel/$channelId/script',
+  path: '/channel/$channelId/script',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ChannelChannelIdResearchRoute =
   ChannelChannelIdResearchRouteImport.update({
-    id: '/research',
-    path: '/research',
-    getParentRoute: () => ChannelChannelIdRoute,
+    id: '/channel/$channelId/research',
+    path: '/channel/$channelId/research',
+    getParentRoute: () => rootRouteImport,
   } as any)
 const ChannelChannelIdPublishRoute = ChannelChannelIdPublishRouteImport.update({
-  id: '/publish',
-  path: '/publish',
-  getParentRoute: () => ChannelChannelIdRoute,
+  id: '/channel/$channelId/publish',
+  path: '/channel/$channelId/publish',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ChannelChannelIdNarrationRoute =
   ChannelChannelIdNarrationRouteImport.update({
-    id: '/narration',
-    path: '/narration',
-    getParentRoute: () => ChannelChannelIdRoute,
+    id: '/channel/$channelId/narration',
+    path: '/channel/$channelId/narration',
+    getParentRoute: () => rootRouteImport,
   } as any)
 const ChannelChannelIdIdeasRoute = ChannelChannelIdIdeasRouteImport.update({
-  id: '/ideas',
-  path: '/ideas',
-  getParentRoute: () => ChannelChannelIdRoute,
+  id: '/channel/$channelId/ideas',
+  path: '/channel/$channelId/ideas',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ChannelChannelIdEditRoute = ChannelChannelIdEditRouteImport.update({
-  id: '/edit',
-  path: '/edit',
-  getParentRoute: () => ChannelChannelIdRoute,
+  id: '/channel/$channelId/edit',
+  path: '/channel/$channelId/edit',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ChannelChannelIdAssetsRoute = ChannelChannelIdAssetsRouteImport.update({
-  id: '/assets',
-  path: '/assets',
-  getParentRoute: () => ChannelChannelIdRoute,
+  id: '/channel/$channelId/assets',
+  path: '/channel/$channelId/assets',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ChannelChannelIdSettingsProcessesRoute =
   ChannelChannelIdSettingsProcessesRouteImport.update({
-    id: '/settings/processes',
-    path: '/settings/processes',
-    getParentRoute: () => ChannelChannelIdRoute,
+    id: '/channel/$channelId/settings/processes',
+    path: '/channel/$channelId/settings/processes',
+    getParentRoute: () => rootRouteImport,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
-  '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
-  '/project/$projectId': typeof ProjectProjectIdRouteWithChildren
   '/channel/$channelId/assets': typeof ChannelChannelIdAssetsRoute
   '/channel/$channelId/edit': typeof ChannelChannelIdEditRoute
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
@@ -179,13 +177,13 @@ export interface FileRoutesByFullPath {
   '/project/$projectId/script': typeof ProjectProjectIdScriptRoute
   '/project/$projectId/thumbnail': typeof ProjectProjectIdThumbnailRoute
   '/project/$projectId/titles': typeof ProjectProjectIdTitlesRoute
+  '/channel/$channelId/': typeof ChannelChannelIdIndexRoute
+  '/project/$projectId/': typeof ProjectProjectIdIndexRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
-  '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
-  '/project/$projectId': typeof ProjectProjectIdRouteWithChildren
   '/channel/$channelId/assets': typeof ChannelChannelIdAssetsRoute
   '/channel/$channelId/edit': typeof ChannelChannelIdEditRoute
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
@@ -204,14 +202,14 @@ export interface FileRoutesByTo {
   '/project/$projectId/script': typeof ProjectProjectIdScriptRoute
   '/project/$projectId/thumbnail': typeof ProjectProjectIdThumbnailRoute
   '/project/$projectId/titles': typeof ProjectProjectIdTitlesRoute
+  '/channel/$channelId': typeof ChannelChannelIdIndexRoute
+  '/project/$projectId': typeof ProjectProjectIdIndexRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
-  '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
-  '/project/$projectId': typeof ProjectProjectIdRouteWithChildren
   '/channel/$channelId/assets': typeof ChannelChannelIdAssetsRoute
   '/channel/$channelId/edit': typeof ChannelChannelIdEditRoute
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
@@ -230,6 +228,8 @@ export interface FileRoutesById {
   '/project/$projectId/script': typeof ProjectProjectIdScriptRoute
   '/project/$projectId/thumbnail': typeof ProjectProjectIdThumbnailRoute
   '/project/$projectId/titles': typeof ProjectProjectIdTitlesRoute
+  '/channel/$channelId/': typeof ChannelChannelIdIndexRoute
+  '/project/$projectId/': typeof ProjectProjectIdIndexRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRouteTypes {
@@ -237,8 +237,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
-    | '/channel/$channelId'
-    | '/project/$projectId'
     | '/channel/$channelId/assets'
     | '/channel/$channelId/edit'
     | '/channel/$channelId/ideas'
@@ -257,13 +255,13 @@ export interface FileRouteTypes {
     | '/project/$projectId/script'
     | '/project/$projectId/thumbnail'
     | '/project/$projectId/titles'
+    | '/channel/$channelId/'
+    | '/project/$projectId/'
     | '/channel/$channelId/settings/processes'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/dashboard'
-    | '/channel/$channelId'
-    | '/project/$projectId'
     | '/channel/$channelId/assets'
     | '/channel/$channelId/edit'
     | '/channel/$channelId/ideas'
@@ -282,13 +280,13 @@ export interface FileRouteTypes {
     | '/project/$projectId/script'
     | '/project/$projectId/thumbnail'
     | '/project/$projectId/titles'
+    | '/channel/$channelId'
+    | '/project/$projectId'
     | '/channel/$channelId/settings/processes'
   id:
     | '__root__'
     | '/'
     | '/dashboard'
-    | '/channel/$channelId'
-    | '/project/$projectId'
     | '/channel/$channelId/assets'
     | '/channel/$channelId/edit'
     | '/channel/$channelId/ideas'
@@ -307,14 +305,35 @@ export interface FileRouteTypes {
     | '/project/$projectId/script'
     | '/project/$projectId/thumbnail'
     | '/project/$projectId/titles'
+    | '/channel/$channelId/'
+    | '/project/$projectId/'
     | '/channel/$channelId/settings/processes'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
-  ChannelChannelIdRoute: typeof ChannelChannelIdRouteWithChildren
-  ProjectProjectIdRoute: typeof ProjectProjectIdRouteWithChildren
+  ChannelChannelIdAssetsRoute: typeof ChannelChannelIdAssetsRoute
+  ChannelChannelIdEditRoute: typeof ChannelChannelIdEditRoute
+  ChannelChannelIdIdeasRoute: typeof ChannelChannelIdIdeasRoute
+  ChannelChannelIdNarrationRoute: typeof ChannelChannelIdNarrationRoute
+  ChannelChannelIdPublishRoute: typeof ChannelChannelIdPublishRoute
+  ChannelChannelIdResearchRoute: typeof ChannelChannelIdResearchRoute
+  ChannelChannelIdScriptRoute: typeof ChannelChannelIdScriptRoute
+  ChannelChannelIdThumbnailRoute: typeof ChannelChannelIdThumbnailRoute
+  ChannelChannelIdTitlesRoute: typeof ChannelChannelIdTitlesRoute
+  ProjectProjectIdAssetsRoute: typeof ProjectProjectIdAssetsRoute
+  ProjectProjectIdEditRoute: typeof ProjectProjectIdEditRoute
+  ProjectProjectIdIdeasRoute: typeof ProjectProjectIdIdeasRoute
+  ProjectProjectIdNarrationRoute: typeof ProjectProjectIdNarrationRoute
+  ProjectProjectIdPublishRoute: typeof ProjectProjectIdPublishRoute
+  ProjectProjectIdResearchRoute: typeof ProjectProjectIdResearchRoute
+  ProjectProjectIdScriptRoute: typeof ProjectProjectIdScriptRoute
+  ProjectProjectIdThumbnailRoute: typeof ProjectProjectIdThumbnailRoute
+  ProjectProjectIdTitlesRoute: typeof ProjectProjectIdTitlesRoute
+  ChannelChannelIdIndexRoute: typeof ChannelChannelIdIndexRoute
+  ProjectProjectIdIndexRoute: typeof ProjectProjectIdIndexRoute
+  ChannelChannelIdSettingsProcessesRoute: typeof ChannelChannelIdSettingsProcessesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -333,170 +352,159 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/project/$projectId': {
-      id: '/project/$projectId'
+    '/project/$projectId/': {
+      id: '/project/$projectId/'
       path: '/project/$projectId'
-      fullPath: '/project/$projectId'
-      preLoaderRoute: typeof ProjectProjectIdRouteImport
+      fullPath: '/project/$projectId/'
+      preLoaderRoute: typeof ProjectProjectIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/channel/$channelId': {
-      id: '/channel/$channelId'
+    '/channel/$channelId/': {
+      id: '/channel/$channelId/'
       path: '/channel/$channelId'
-      fullPath: '/channel/$channelId'
-      preLoaderRoute: typeof ChannelChannelIdRouteImport
+      fullPath: '/channel/$channelId/'
+      preLoaderRoute: typeof ChannelChannelIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/project/$projectId/titles': {
       id: '/project/$projectId/titles'
-      path: '/titles'
+      path: '/project/$projectId/titles'
       fullPath: '/project/$projectId/titles'
       preLoaderRoute: typeof ProjectProjectIdTitlesRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/project/$projectId/thumbnail': {
       id: '/project/$projectId/thumbnail'
-      path: '/thumbnail'
+      path: '/project/$projectId/thumbnail'
       fullPath: '/project/$projectId/thumbnail'
       preLoaderRoute: typeof ProjectProjectIdThumbnailRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/project/$projectId/script': {
       id: '/project/$projectId/script'
-      path: '/script'
+      path: '/project/$projectId/script'
       fullPath: '/project/$projectId/script'
       preLoaderRoute: typeof ProjectProjectIdScriptRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/project/$projectId/research': {
       id: '/project/$projectId/research'
-      path: '/research'
+      path: '/project/$projectId/research'
       fullPath: '/project/$projectId/research'
       preLoaderRoute: typeof ProjectProjectIdResearchRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/project/$projectId/publish': {
       id: '/project/$projectId/publish'
-      path: '/publish'
+      path: '/project/$projectId/publish'
       fullPath: '/project/$projectId/publish'
       preLoaderRoute: typeof ProjectProjectIdPublishRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/project/$projectId/narration': {
       id: '/project/$projectId/narration'
-      path: '/narration'
+      path: '/project/$projectId/narration'
       fullPath: '/project/$projectId/narration'
       preLoaderRoute: typeof ProjectProjectIdNarrationRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/project/$projectId/ideas': {
       id: '/project/$projectId/ideas'
-      path: '/ideas'
+      path: '/project/$projectId/ideas'
       fullPath: '/project/$projectId/ideas'
       preLoaderRoute: typeof ProjectProjectIdIdeasRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/project/$projectId/edit': {
       id: '/project/$projectId/edit'
-      path: '/edit'
+      path: '/project/$projectId/edit'
       fullPath: '/project/$projectId/edit'
       preLoaderRoute: typeof ProjectProjectIdEditRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/project/$projectId/assets': {
       id: '/project/$projectId/assets'
-      path: '/assets'
+      path: '/project/$projectId/assets'
       fullPath: '/project/$projectId/assets'
       preLoaderRoute: typeof ProjectProjectIdAssetsRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId/titles': {
       id: '/channel/$channelId/titles'
-      path: '/titles'
+      path: '/channel/$channelId/titles'
       fullPath: '/channel/$channelId/titles'
       preLoaderRoute: typeof ChannelChannelIdTitlesRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId/thumbnail': {
       id: '/channel/$channelId/thumbnail'
-      path: '/thumbnail'
+      path: '/channel/$channelId/thumbnail'
       fullPath: '/channel/$channelId/thumbnail'
       preLoaderRoute: typeof ChannelChannelIdThumbnailRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId/script': {
       id: '/channel/$channelId/script'
-      path: '/script'
+      path: '/channel/$channelId/script'
       fullPath: '/channel/$channelId/script'
       preLoaderRoute: typeof ChannelChannelIdScriptRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId/research': {
       id: '/channel/$channelId/research'
-      path: '/research'
+      path: '/channel/$channelId/research'
       fullPath: '/channel/$channelId/research'
       preLoaderRoute: typeof ChannelChannelIdResearchRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId/publish': {
       id: '/channel/$channelId/publish'
-      path: '/publish'
+      path: '/channel/$channelId/publish'
       fullPath: '/channel/$channelId/publish'
       preLoaderRoute: typeof ChannelChannelIdPublishRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId/narration': {
       id: '/channel/$channelId/narration'
-      path: '/narration'
+      path: '/channel/$channelId/narration'
       fullPath: '/channel/$channelId/narration'
       preLoaderRoute: typeof ChannelChannelIdNarrationRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId/ideas': {
       id: '/channel/$channelId/ideas'
-      path: '/ideas'
+      path: '/channel/$channelId/ideas'
       fullPath: '/channel/$channelId/ideas'
       preLoaderRoute: typeof ChannelChannelIdIdeasRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId/edit': {
       id: '/channel/$channelId/edit'
-      path: '/edit'
+      path: '/channel/$channelId/edit'
       fullPath: '/channel/$channelId/edit'
       preLoaderRoute: typeof ChannelChannelIdEditRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId/assets': {
       id: '/channel/$channelId/assets'
-      path: '/assets'
+      path: '/channel/$channelId/assets'
       fullPath: '/channel/$channelId/assets'
       preLoaderRoute: typeof ChannelChannelIdAssetsRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+      parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId/settings/processes': {
       id: '/channel/$channelId/settings/processes'
-      path: '/settings/processes'
+      path: '/channel/$channelId/settings/processes'
       fullPath: '/channel/$channelId/settings/processes'
       preLoaderRoute: typeof ChannelChannelIdSettingsProcessesRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface ChannelChannelIdRouteChildren {
-  ChannelChannelIdAssetsRoute: typeof ChannelChannelIdAssetsRoute
-  ChannelChannelIdEditRoute: typeof ChannelChannelIdEditRoute
-  ChannelChannelIdIdeasRoute: typeof ChannelChannelIdIdeasRoute
-  ChannelChannelIdNarrationRoute: typeof ChannelChannelIdNarrationRoute
-  ChannelChannelIdPublishRoute: typeof ChannelChannelIdPublishRoute
-  ChannelChannelIdResearchRoute: typeof ChannelChannelIdResearchRoute
-  ChannelChannelIdScriptRoute: typeof ChannelChannelIdScriptRoute
-  ChannelChannelIdThumbnailRoute: typeof ChannelChannelIdThumbnailRoute
-  ChannelChannelIdTitlesRoute: typeof ChannelChannelIdTitlesRoute
-  ChannelChannelIdSettingsProcessesRoute: typeof ChannelChannelIdSettingsProcessesRoute
-}
-
-const ChannelChannelIdRouteChildren: ChannelChannelIdRouteChildren = {
+const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRoute,
   ChannelChannelIdAssetsRoute: ChannelChannelIdAssetsRoute,
   ChannelChannelIdEditRoute: ChannelChannelIdEditRoute,
   ChannelChannelIdIdeasRoute: ChannelChannelIdIdeasRoute,
@@ -506,26 +514,6 @@ const ChannelChannelIdRouteChildren: ChannelChannelIdRouteChildren = {
   ChannelChannelIdScriptRoute: ChannelChannelIdScriptRoute,
   ChannelChannelIdThumbnailRoute: ChannelChannelIdThumbnailRoute,
   ChannelChannelIdTitlesRoute: ChannelChannelIdTitlesRoute,
-  ChannelChannelIdSettingsProcessesRoute:
-    ChannelChannelIdSettingsProcessesRoute,
-}
-
-const ChannelChannelIdRouteWithChildren =
-  ChannelChannelIdRoute._addFileChildren(ChannelChannelIdRouteChildren)
-
-interface ProjectProjectIdRouteChildren {
-  ProjectProjectIdAssetsRoute: typeof ProjectProjectIdAssetsRoute
-  ProjectProjectIdEditRoute: typeof ProjectProjectIdEditRoute
-  ProjectProjectIdIdeasRoute: typeof ProjectProjectIdIdeasRoute
-  ProjectProjectIdNarrationRoute: typeof ProjectProjectIdNarrationRoute
-  ProjectProjectIdPublishRoute: typeof ProjectProjectIdPublishRoute
-  ProjectProjectIdResearchRoute: typeof ProjectProjectIdResearchRoute
-  ProjectProjectIdScriptRoute: typeof ProjectProjectIdScriptRoute
-  ProjectProjectIdThumbnailRoute: typeof ProjectProjectIdThumbnailRoute
-  ProjectProjectIdTitlesRoute: typeof ProjectProjectIdTitlesRoute
-}
-
-const ProjectProjectIdRouteChildren: ProjectProjectIdRouteChildren = {
   ProjectProjectIdAssetsRoute: ProjectProjectIdAssetsRoute,
   ProjectProjectIdEditRoute: ProjectProjectIdEditRoute,
   ProjectProjectIdIdeasRoute: ProjectProjectIdIdeasRoute,
@@ -535,16 +523,10 @@ const ProjectProjectIdRouteChildren: ProjectProjectIdRouteChildren = {
   ProjectProjectIdScriptRoute: ProjectProjectIdScriptRoute,
   ProjectProjectIdThumbnailRoute: ProjectProjectIdThumbnailRoute,
   ProjectProjectIdTitlesRoute: ProjectProjectIdTitlesRoute,
-}
-
-const ProjectProjectIdRouteWithChildren =
-  ProjectProjectIdRoute._addFileChildren(ProjectProjectIdRouteChildren)
-
-const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  DashboardRoute: DashboardRoute,
-  ChannelChannelIdRoute: ChannelChannelIdRouteWithChildren,
-  ProjectProjectIdRoute: ProjectProjectIdRouteWithChildren,
+  ChannelChannelIdIndexRoute: ChannelChannelIdIndexRoute,
+  ProjectProjectIdIndexRoute: ProjectProjectIdIndexRoute,
+  ChannelChannelIdSettingsProcessesRoute:
+    ChannelChannelIdSettingsProcessesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

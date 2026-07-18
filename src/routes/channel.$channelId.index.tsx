@@ -45,7 +45,7 @@ import {
 } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/channel/$channelId")({
+export const Route = createFileRoute("/channel/$channelId/")({
   head: ({ params }) => {
     const ch = channels.find((c) => c.id === params.channelId);
     const title = ch ? `${ch.name} — ContentFlow OS` : "Canal — ContentFlow OS";
