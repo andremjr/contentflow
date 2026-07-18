@@ -14,11 +14,9 @@ import {
   Plus,
   Trash2,
   Save,
-  RotateCcw,
   Sparkles,
   Info,
-  X,
-  Waves,
+
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
