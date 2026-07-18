@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NewChannelDialog } from "@/components/new-channel-dialog";
-import { type Channel } from "@/lib/mock-data";
+import type { Channel } from "@/lib/mock-data";
 import { useChannels, removeChannel } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
