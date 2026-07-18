@@ -178,7 +178,7 @@ function ChannelWorkspace() {
         </div>
 
         {filtered.length === 0 ? (
-          <EmptyProjects channelName={channel.name} />
+          <EmptyProjects channelId={channel.id} channelName={channel.name} />
         ) : view === "cards" ? (
           <ProjectGrid projects={filtered} channel={channel} />
         ) : (
