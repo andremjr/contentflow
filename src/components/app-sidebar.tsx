@@ -312,6 +312,39 @@ function ChannelNav({
         active={pathname === `/channel/${channelId}`}
         collapsed={collapsed}
       />
+      <NavItem
+        icon={Wrench}
+        label="Configurar processos"
+        to={`/channel/${channelId}/settings/processes`}
+        active={pathname === `/channel/${channelId}/settings/processes`}
+        collapsed={collapsed}
+      />
+
+      <SectionLabel collapsed={collapsed} className="mt-4">
+        Configuração dos processos
+      </SectionLabel>
+      {PROCESS_ORDER.map((pid, i) => {
+        const meta = PROCESS_META[pid];
+        const to = `/channel/${channelId}/${pid === "editing" ? "edit" : pid}`;
+        const active = pathname === to;
+        return (
+          <NavItem
+            key={pid}
+            icon={meta.icon}
+            label={meta.label}
+            to={to}
+            active={active}
+            collapsed={collapsed}
+            trailing={
+              !collapsed && (
+                <span className="font-mono text-[9px] text-muted-foreground">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+              )
+            }
+          />
+        );
+      })}
 
       {projects.length > 0 && (
         <>
