@@ -100,6 +100,7 @@ export function NewChannelDialog({
       trend: Array.from({ length: 12 }, () => Math.round(20 + Math.random() * 40)),
     };
 
+    createChannel(newChannel);
     onCreate?.(newChannel);
     toast.success("Canal criado", {
       description: `${newChannel.name} adicionado ao workspace.`,
