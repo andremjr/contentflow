@@ -144,7 +144,7 @@ function DashboardPage() {
                       params={{ channelId: c.id }}
                       className="flex items-center justify-between border-t border-border/50 bg-background/30 px-5 py-3 text-xs text-brand-soft transition hover:bg-brand/10"
                     >
-                      <span>Abrir workspace do canal</span>
+                      <span>Abrir canal</span>
                       <ArrowRight className="size-4" />
                     </Link>
                   </article>
