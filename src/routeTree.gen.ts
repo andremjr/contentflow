@@ -13,6 +13,8 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectProjectIdRouteImport } from './routes/project.$projectId'
 import { Route as ChannelChannelIdRouteImport } from './routes/channel.$channelId'
+import { Route as ProjectProjectIdIndexRouteImport } from './routes/project.$projectId.index'
+import { Route as ChannelChannelIdIndexRouteImport } from './routes/channel.$channelId.index'
 import { Route as ProjectProjectIdTitlesRouteImport } from './routes/project.$projectId.titles'
 import { Route as ProjectProjectIdThumbnailRouteImport } from './routes/project.$projectId.thumbnail'
 import { Route as ProjectProjectIdScriptRouteImport } from './routes/project.$projectId.script'
@@ -52,6 +54,16 @@ const ChannelChannelIdRoute = ChannelChannelIdRouteImport.update({
   id: '/channel/$channelId',
   path: '/channel/$channelId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectProjectIdIndexRoute = ProjectProjectIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProjectProjectIdRoute,
+} as any)
+const ChannelChannelIdIndexRoute = ChannelChannelIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ChannelChannelIdRoute,
 } as any)
 const ProjectProjectIdTitlesRoute = ProjectProjectIdTitlesRouteImport.update({
   id: '/titles',
@@ -179,13 +191,13 @@ export interface FileRoutesByFullPath {
   '/project/$projectId/script': typeof ProjectProjectIdScriptRoute
   '/project/$projectId/thumbnail': typeof ProjectProjectIdThumbnailRoute
   '/project/$projectId/titles': typeof ProjectProjectIdTitlesRoute
+  '/channel/$channelId/': typeof ChannelChannelIdIndexRoute
+  '/project/$projectId/': typeof ProjectProjectIdIndexRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
-  '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
-  '/project/$projectId': typeof ProjectProjectIdRouteWithChildren
   '/channel/$channelId/assets': typeof ChannelChannelIdAssetsRoute
   '/channel/$channelId/edit': typeof ChannelChannelIdEditRoute
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
@@ -204,6 +216,8 @@ export interface FileRoutesByTo {
   '/project/$projectId/script': typeof ProjectProjectIdScriptRoute
   '/project/$projectId/thumbnail': typeof ProjectProjectIdThumbnailRoute
   '/project/$projectId/titles': typeof ProjectProjectIdTitlesRoute
+  '/channel/$channelId': typeof ChannelChannelIdIndexRoute
+  '/project/$projectId': typeof ProjectProjectIdIndexRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRoutesById {
@@ -230,6 +244,8 @@ export interface FileRoutesById {
   '/project/$projectId/script': typeof ProjectProjectIdScriptRoute
   '/project/$projectId/thumbnail': typeof ProjectProjectIdThumbnailRoute
   '/project/$projectId/titles': typeof ProjectProjectIdTitlesRoute
+  '/channel/$channelId/': typeof ChannelChannelIdIndexRoute
+  '/project/$projectId/': typeof ProjectProjectIdIndexRoute
   '/channel/$channelId/settings/processes': typeof ChannelChannelIdSettingsProcessesRoute
 }
 export interface FileRouteTypes {
@@ -257,13 +273,13 @@ export interface FileRouteTypes {
     | '/project/$projectId/script'
     | '/project/$projectId/thumbnail'
     | '/project/$projectId/titles'
+    | '/channel/$channelId/'
+    | '/project/$projectId/'
     | '/channel/$channelId/settings/processes'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/dashboard'
-    | '/channel/$channelId'
-    | '/project/$projectId'
     | '/channel/$channelId/assets'
     | '/channel/$channelId/edit'
     | '/channel/$channelId/ideas'
@@ -282,6 +298,8 @@ export interface FileRouteTypes {
     | '/project/$projectId/script'
     | '/project/$projectId/thumbnail'
     | '/project/$projectId/titles'
+    | '/channel/$channelId'
+    | '/project/$projectId'
     | '/channel/$channelId/settings/processes'
   id:
     | '__root__'
@@ -307,6 +325,8 @@ export interface FileRouteTypes {
     | '/project/$projectId/script'
     | '/project/$projectId/thumbnail'
     | '/project/$projectId/titles'
+    | '/channel/$channelId/'
+    | '/project/$projectId/'
     | '/channel/$channelId/settings/processes'
   fileRoutesById: FileRoutesById
 }
@@ -346,6 +366,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/channel/$channelId'
       preLoaderRoute: typeof ChannelChannelIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/project/$projectId/': {
+      id: '/project/$projectId/'
+      path: '/'
+      fullPath: '/project/$projectId/'
+      preLoaderRoute: typeof ProjectProjectIdIndexRouteImport
+      parentRoute: typeof ProjectProjectIdRoute
+    }
+    '/channel/$channelId/': {
+      id: '/channel/$channelId/'
+      path: '/'
+      fullPath: '/channel/$channelId/'
+      preLoaderRoute: typeof ChannelChannelIdIndexRouteImport
+      parentRoute: typeof ChannelChannelIdRoute
     }
     '/project/$projectId/titles': {
       id: '/project/$projectId/titles'
@@ -493,6 +527,7 @@ interface ChannelChannelIdRouteChildren {
   ChannelChannelIdScriptRoute: typeof ChannelChannelIdScriptRoute
   ChannelChannelIdThumbnailRoute: typeof ChannelChannelIdThumbnailRoute
   ChannelChannelIdTitlesRoute: typeof ChannelChannelIdTitlesRoute
+  ChannelChannelIdIndexRoute: typeof ChannelChannelIdIndexRoute
   ChannelChannelIdSettingsProcessesRoute: typeof ChannelChannelIdSettingsProcessesRoute
 }
 
@@ -506,6 +541,7 @@ const ChannelChannelIdRouteChildren: ChannelChannelIdRouteChildren = {
   ChannelChannelIdScriptRoute: ChannelChannelIdScriptRoute,
   ChannelChannelIdThumbnailRoute: ChannelChannelIdThumbnailRoute,
   ChannelChannelIdTitlesRoute: ChannelChannelIdTitlesRoute,
+  ChannelChannelIdIndexRoute: ChannelChannelIdIndexRoute,
   ChannelChannelIdSettingsProcessesRoute:
     ChannelChannelIdSettingsProcessesRoute,
 }
@@ -523,6 +559,7 @@ interface ProjectProjectIdRouteChildren {
   ProjectProjectIdScriptRoute: typeof ProjectProjectIdScriptRoute
   ProjectProjectIdThumbnailRoute: typeof ProjectProjectIdThumbnailRoute
   ProjectProjectIdTitlesRoute: typeof ProjectProjectIdTitlesRoute
+  ProjectProjectIdIndexRoute: typeof ProjectProjectIdIndexRoute
 }
 
 const ProjectProjectIdRouteChildren: ProjectProjectIdRouteChildren = {
@@ -535,6 +572,7 @@ const ProjectProjectIdRouteChildren: ProjectProjectIdRouteChildren = {
   ProjectProjectIdScriptRoute: ProjectProjectIdScriptRoute,
   ProjectProjectIdThumbnailRoute: ProjectProjectIdThumbnailRoute,
   ProjectProjectIdTitlesRoute: ProjectProjectIdTitlesRoute,
+  ProjectProjectIdIndexRoute: ProjectProjectIdIndexRoute,
 }
 
 const ProjectProjectIdRouteWithChildren =
