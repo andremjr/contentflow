@@ -542,12 +542,15 @@ function ChannelTable() {
                 <TableCell>
                   <div className="flex items-center justify-end gap-1">
                     <Button
+                      asChild
                       variant="ghost"
                       size="sm"
                       className="h-8 gap-1 text-xs text-brand-soft"
                     >
-                      Abrir
-                      <ExternalLink className="size-3" />
+                      <Link to="/channel/$channelId" params={{ channelId: c.id }}>
+                        Abrir
+                        <ExternalLink className="size-3" />
+                      </Link>
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
