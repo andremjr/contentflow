@@ -8,6 +8,7 @@ import { PROCESS_META, type ProcessId, type Project } from "@/lib/mock-data";
 type RunState = "idle" | "running" | "done" | "error";
 
 export function ProcessRunner({
+  project,
   processId,
   description,
   result,
@@ -20,12 +21,15 @@ export function ProcessRunner({
   emptyHint?: string;
 }) {
   const meta = PROCESS_META[processId];
-  const [state, setState] = useState<RunState>("idle");
+  const stageState = project?.stages[processId];
+  const initial: RunState = stageState === "done" || stageState === "approved" ? "done" : "idle";
+  const [state, setState] = useState<RunState>(initial);
 
   const run = () => {
     setState("running");
     window.setTimeout(() => setState("done"), 1400);
   };
+
 
   return (
     <main className="flex-1 space-y-6 px-6 py-6">

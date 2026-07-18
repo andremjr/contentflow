@@ -81,69 +81,15 @@ export const Route = createFileRoute("/channel/$channelId/")({
   component: ChannelWorkspace,
 });
 
-// Build a richer list of projects for the channel from mock data
-function buildProjectsForChannel(channelId: string): Project[] {
-  const base = allProjects.filter((p) => p.channelId === channelId);
-  const extraTitles = [
-    "Os limites do universo observável",
-    "Como a inflação corrói silenciosamente sua carteira",
-    "A linguagem visual do neo-noir contemporâneo",
-    "Sistema de foco profundo em 4 blocos",
-    "Buracos de minhoca são realmente possíveis?",
-    "O colapso do sistema bancário sombra",
-  ];
-  const states: ProcessState[] = [
-    "processing",
-    "awaiting_review",
-    "configuring",
-    "approved",
-    "error",
-    "done",
-  ];
-  const assignees = [
-    { name: "Marina Costa", initials: "MC" },
-    { name: "Rafael Lima", initials: "RL" },
-    { name: "Ana Prado", initials: "AP" },
-    { name: "Bruno Reis", initials: "BR" },
-    { name: "Carla Nunes", initials: "CN" },
-    { name: "Lucas Andrade", initials: "LU" },
-  ];
-  const extras: Project[] = extraTitles.map((title, i) => {
-    const stage = PROCESS_ORDER[(i + 2) % PROCESS_ORDER.length];
-    const state = states[i % states.length];
-    const stages = {} as Record<ProcessId, ProcessState>;
-    const idx = PROCESS_ORDER.indexOf(stage);
-    PROCESS_ORDER.forEach((p, j) => {
-      if (j < idx) stages[p] = "done";
-      else if (j === idx) stages[p] = state;
-      else stages[p] = "not_started";
-    });
-    return {
-      id: `${channelId}-x-${i}`,
-      channelId,
-      title,
-      currentStage: stage,
-      state,
-      progress: 10 + ((i * 17) % 85),
-      deadline: `${10 + i} dez`,
-      duration: `${10 + i}:${(i * 7) % 60 < 10 ? "0" : ""}${(i * 7) % 60}`,
-      updatedAt: `há ${i + 1} h`,
-      stages,
-      assignee: assignees[i % assignees.length],
-      thumbHue: (i * 47) % 360,
-    };
-  });
-  return [...base, ...extras];
-}
-
 function ChannelWorkspace() {
   const { channel } = Route.useLoaderData();
   const projects = useMemo(
-    () => buildProjectsForChannel(channel.id),
+    () => allProjects.filter((p) => p.channelId === channel.id),
     [channel.id],
   );
   const [view, setView] = useState<"cards" | "table">("cards");
   const [search, setSearch] = useState("");
+
 
   const filtered = useMemo(() => {
     if (!search) return projects;
