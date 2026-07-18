@@ -2,7 +2,7 @@ import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
-import { projects, channels, PROCESS_META } from "@/lib/mock-data";
+import { projects } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/project/$projectId/script")({
   head: ({ params }) => {
@@ -17,8 +17,7 @@ export const Route = createFileRoute("/project/$projectId/script")({
   loader: ({ params }) => {
     const project = projects.find((x) => x.id === params.projectId);
     if (!project) throw notFound();
-    const channel = channels.find((c) => c.id === project.channelId)!;
-    return { project, channel };
+    return { project };
   },
   notFoundComponent: () => (
     <AppShell>
@@ -34,8 +33,7 @@ export const Route = createFileRoute("/project/$projectId/script")({
 });
 
 function ProjectScriptPage() {
-  const { project, channel } = Route.useLoaderData();
-  const meta = PROCESS_META.script;
+  const { project } = Route.useLoaderData();
   return (
     <>
       <ProcessRunner
