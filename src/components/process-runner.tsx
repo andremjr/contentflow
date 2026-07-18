@@ -1,10 +1,23 @@
 import { useState, type ReactNode } from "react";
-import { Play, RotateCcw, Check, Loader2, AlertTriangle } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Play, RotateCcw, Check, Loader2, AlertTriangle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { PROCESS_META, type ProcessId, type Project } from "@/lib/mock-data";
+import { PROCESS_META, PROCESS_ORDER, type ProcessId, type Project } from "@/lib/mock-data";
 import { completeStage } from "@/lib/store";
+
+const PROCESS_ROUTE_SEGMENT: Record<ProcessId, string> = {
+  research: "research",
+  ideas: "ideas",
+  titles: "titles",
+  thumbnail: "thumbnail",
+  script: "script",
+  narration: "narration",
+  assets: "assets",
+  editing: "edit",
+  publishing: "publish",
+};
 
 type RunState = "idle" | "running" | "done" | "error";
 
