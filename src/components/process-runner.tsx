@@ -79,15 +79,27 @@ export function ProcessRunner({
             <StatusPill state={state} />
 
             {state === "done" ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={run}
-                className="h-9 gap-1.5 border-border/60"
-              >
-                <RotateCcw className="size-3.5" />
-                Executar novamente
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={run}
+                  className="h-9 gap-1.5 border-border/60"
+                >
+                  <RotateCcw className="size-3.5" />
+                  Executar novamente
+                </Button>
+                {nextProcess && (
+                  <Button
+                    size="sm"
+                    onClick={goNext}
+                    className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
+                  >
+                    Próxima etapa: {PROCESS_META[nextProcess].label}
+                    <ArrowRight className="size-3.5" />
+                  </Button>
+                )}
+              </>
             ) : (
               <Button
                 size="sm"
