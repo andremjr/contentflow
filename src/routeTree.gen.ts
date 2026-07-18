@@ -18,6 +18,7 @@ import { Route as ChannelChannelIdScriptRouteImport } from './routes/channel.$ch
 import { Route as ChannelChannelIdResearchRouteImport } from './routes/channel.$channelId.research'
 import { Route as ChannelChannelIdNarrationRouteImport } from './routes/channel.$channelId.narration'
 import { Route as ChannelChannelIdIdeasRouteImport } from './routes/channel.$channelId.ideas'
+import { Route as ChannelChannelIdAssetsRouteImport } from './routes/channel.$channelId.assets'
 import { Route as ChannelChannelIdSettingsProcessesRouteImport } from './routes/channel.$channelId.settings.processes'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -68,6 +69,11 @@ const ChannelChannelIdIdeasRoute = ChannelChannelIdIdeasRouteImport.update({
   path: '/ideas',
   getParentRoute: () => ChannelChannelIdRoute,
 } as any)
+const ChannelChannelIdAssetsRoute = ChannelChannelIdAssetsRouteImport.update({
+  id: '/assets',
+  path: '/assets',
+  getParentRoute: () => ChannelChannelIdRoute,
+} as any)
 const ChannelChannelIdSettingsProcessesRoute =
   ChannelChannelIdSettingsProcessesRouteImport.update({
     id: '/settings/processes',
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
+  '/channel/$channelId/assets': typeof ChannelChannelIdAssetsRoute
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/narration': typeof ChannelChannelIdNarrationRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
@@ -91,6 +98,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
+  '/channel/$channelId/assets': typeof ChannelChannelIdAssetsRoute
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/narration': typeof ChannelChannelIdNarrationRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
@@ -104,6 +112,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
+  '/channel/$channelId/assets': typeof ChannelChannelIdAssetsRoute
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/narration': typeof ChannelChannelIdNarrationRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
@@ -118,6 +127,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/channel/$channelId'
+    | '/channel/$channelId/assets'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/narration'
     | '/channel/$channelId/research'
@@ -130,6 +140,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/channel/$channelId'
+    | '/channel/$channelId/assets'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/narration'
     | '/channel/$channelId/research'
@@ -142,6 +153,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/channel/$channelId'
+    | '/channel/$channelId/assets'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/narration'
     | '/channel/$channelId/research'
@@ -222,6 +234,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChannelChannelIdIdeasRouteImport
       parentRoute: typeof ChannelChannelIdRoute
     }
+    '/channel/$channelId/assets': {
+      id: '/channel/$channelId/assets'
+      path: '/assets'
+      fullPath: '/channel/$channelId/assets'
+      preLoaderRoute: typeof ChannelChannelIdAssetsRouteImport
+      parentRoute: typeof ChannelChannelIdRoute
+    }
     '/channel/$channelId/settings/processes': {
       id: '/channel/$channelId/settings/processes'
       path: '/settings/processes'
@@ -233,6 +252,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface ChannelChannelIdRouteChildren {
+  ChannelChannelIdAssetsRoute: typeof ChannelChannelIdAssetsRoute
   ChannelChannelIdIdeasRoute: typeof ChannelChannelIdIdeasRoute
   ChannelChannelIdNarrationRoute: typeof ChannelChannelIdNarrationRoute
   ChannelChannelIdResearchRoute: typeof ChannelChannelIdResearchRoute
@@ -243,6 +263,7 @@ interface ChannelChannelIdRouteChildren {
 }
 
 const ChannelChannelIdRouteChildren: ChannelChannelIdRouteChildren = {
+  ChannelChannelIdAssetsRoute: ChannelChannelIdAssetsRoute,
   ChannelChannelIdIdeasRoute: ChannelChannelIdIdeasRoute,
   ChannelChannelIdNarrationRoute: ChannelChannelIdNarrationRoute,
   ChannelChannelIdResearchRoute: ChannelChannelIdResearchRoute,
