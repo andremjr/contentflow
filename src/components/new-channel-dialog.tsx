@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Channel } from "@/lib/mock-data";
+import { createChannel } from "@/lib/store";
 
 const COLOR_PRESETS = [
   "#2563EB",
