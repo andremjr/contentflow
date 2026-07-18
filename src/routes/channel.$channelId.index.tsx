@@ -383,7 +383,13 @@ function ProjectTable({
   );
 }
 
-function EmptyProjects({ channelName }: { channelName: string }) {
+function EmptyProjects({
+  channelId,
+  channelName,
+}: {
+  channelId: string;
+  channelName: string;
+}) {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center py-16 text-center">
       <div className="grid size-14 place-items-center rounded-2xl border border-border/60 bg-card">
@@ -393,10 +399,17 @@ function EmptyProjects({ channelName }: { channelName: string }) {
       <p className="mt-1 text-sm text-muted-foreground">
         Comece a produção de {channelName} criando o primeiro projeto.
       </p>
-      <Button className="mt-5 gap-1.5 gradient-brand text-white">
-        <Plus className="size-4" />
-        Novo projeto
-      </Button>
+      <div className="mt-5">
+        <NewProjectDialog
+          channelId={channelId}
+          trigger={
+            <Button className="gap-1.5 gradient-brand text-white">
+              <Plus className="size-4" />
+              Novo projeto
+            </Button>
+          }
+        />
+      </div>
     </div>
   );
 }
