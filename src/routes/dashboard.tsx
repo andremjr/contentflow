@@ -616,8 +616,10 @@ function ProductionTimeline() {
           const channel = channels.find((c) => c.id === p.channelId)!;
           const stage = PROCESS_META[p.currentStage];
           return (
-            <article
+            <Link
               key={p.id}
+              to="/project/$projectId"
+              params={{ projectId: p.id }}
               className="group relative w-[300px] shrink-0 snap-start overflow-hidden rounded-xl border border-border/70 bg-card transition hover:border-brand/50"
             >
               {/* Thumbnail placeholder */}
