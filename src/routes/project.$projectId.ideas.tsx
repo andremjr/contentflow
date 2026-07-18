@@ -34,8 +34,7 @@ export const Route = createFileRoute("/project/$projectId/ideas")({
 });
 
 function ProjectIdeasPage() {
-  const { project, channel } = Route.useLoaderData();
-  const meta = PROCESS_META.ideas;
+  const { project } = Route.useLoaderData();
   return (
     <>
       <ProcessRunner
