@@ -203,7 +203,7 @@ function OverviewNav({
   const isActive = (to: string) => pathname === to || pathname.startsWith(to);
   return (
     <>
-      <SectionLabel collapsed={collapsed}>Workspace</SectionLabel>
+      <SectionLabel collapsed={collapsed}>Navegação</SectionLabel>
       <NavItem
         icon={LayoutDashboard}
         label="Visão geral"

@@ -27,7 +27,7 @@ export const Route = createFileRoute("/dashboard")({
       { title: "Visão geral — ContentFlow OS" },
       {
         name: "description",
-        content: "Seus canais do YouTube gerenciados em um único workspace.",
+        content: "Cada canal é um workspace independente de produção de conteúdo.",
       },
       { property: "og:title", content: "Visão geral — ContentFlow OS" },
       {
@@ -80,7 +80,7 @@ function DashboardPage() {
             <header className="mb-4">
               <h2 className="text-sm font-semibold">Seus canais</h2>
               <p className="text-xs text-muted-foreground">
-                {channels.length} canais gerenciados neste workspace
+                {channels.length} {channels.length === 1 ? "canal" : "canais"} · cada canal é um workspace
               </p>
             </header>
 
@@ -144,7 +144,7 @@ function DashboardPage() {
                       params={{ channelId: c.id }}
                       className="flex items-center justify-between border-t border-border/50 bg-background/30 px-5 py-3 text-xs text-brand-soft transition hover:bg-brand/10"
                     >
-                      <span>Abrir workspace do canal</span>
+                      <span>Abrir canal</span>
                       <ArrowRight className="size-4" />
                     </Link>
                   </article>
