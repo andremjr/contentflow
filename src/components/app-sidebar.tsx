@@ -39,6 +39,9 @@ import {
 } from "@/lib/mock-data";
 import { ChannelAvatar } from "@/components/channel-avatar";
 
+const processSlug = (pid: string) =>
+  pid === "editing" ? "edit" : pid === "publishing" ? "publish" : pid;
+
 type Level =
   | { kind: "overview" }
   | { kind: "channel"; channelId: string }
