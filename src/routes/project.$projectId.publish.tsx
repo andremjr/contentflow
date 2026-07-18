@@ -1,6 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
 import { projects, channels, PROCESS_META } from "@/lib/mock-data";
@@ -39,18 +38,7 @@ function ProjectPublishPage() {
   const { project, channel } = Route.useLoaderData();
   const meta = PROCESS_META.publishing;
   return (
-    <AppShell>
-      <TopBar
-        showNewProject={false}
-        breadcrumbs={[
-          { label: "ContentFlow OS", to: "/dashboard" },
-          { label: channel.name, to: "/dashboard" },
-          { label: project.title, to: "/dashboard" },
-          { label: meta.label },
-        ]}
-        title={`${meta.label} · ${project.title}`}
-        subtitle="Publica no YouTube com a agenda e metadados configurados no canal."
-      />
+    <>
       <ProcessRunner
         project={project}
         processId="publishing"
@@ -93,6 +81,6 @@ function ProjectPublishPage() {
           </div>
         }
       />
-    </AppShell>
+    </>
   );
 }

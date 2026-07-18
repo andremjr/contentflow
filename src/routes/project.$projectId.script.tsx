@@ -1,6 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
 import { projects, channels, PROCESS_META } from "@/lib/mock-data";
@@ -38,18 +37,7 @@ function ProjectScriptPage() {
   const { project, channel } = Route.useLoaderData();
   const meta = PROCESS_META.script;
   return (
-    <AppShell>
-      <TopBar
-        showNewProject={false}
-        breadcrumbs={[
-          { label: "ContentFlow OS", to: "/dashboard" },
-          { label: channel.name, to: "/dashboard" },
-          { label: project.title, to: "/dashboard" },
-          { label: meta.label },
-        ]}
-        title={`${meta.label} · ${project.title}`}
-        subtitle="Gera o roteiro seguindo a persona, tamanho e CTAs do canal."
-      />
+    <>
       <ProcessRunner
         project={project}
         processId="script"
@@ -77,6 +65,6 @@ function ProjectScriptPage() {
           </article>
         }
       />
-    </AppShell>
+    </>
   );
 }

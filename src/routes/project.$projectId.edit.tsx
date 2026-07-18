@@ -1,6 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
 import { projects, channels, PROCESS_META } from "@/lib/mock-data";
@@ -39,18 +38,7 @@ function ProjectEditPage() {
   const { project, channel } = Route.useLoaderData();
   const meta = PROCESS_META.editing;
   return (
-    <AppShell>
-      <TopBar
-        showNewProject={false}
-        breadcrumbs={[
-          { label: "ContentFlow OS", to: "/dashboard" },
-          { label: channel.name, to: "/dashboard" },
-          { label: project.title, to: "/dashboard" },
-          { label: meta.label },
-        ]}
-        title={`${meta.label} · ${project.title}`}
-        subtitle="Renderiza o vídeo final combinando narração, assets e trilhas."
-      />
+    <>
       <ProcessRunner
         project={project}
         processId="editing"
@@ -84,6 +72,6 @@ function ProjectEditPage() {
           </div>
         }
       />
-    </AppShell>
+    </>
   );
 }

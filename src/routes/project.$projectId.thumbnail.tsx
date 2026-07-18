@@ -1,6 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { ProcessRunner } from "@/components/process-runner";
 import { projects, channels, PROCESS_META } from "@/lib/mock-data";
@@ -39,18 +38,7 @@ function ProjectThumbnailPage() {
   const meta = PROCESS_META.thumbnail;
   const hues = [220, 12, 145, 285];
   return (
-    <AppShell>
-      <TopBar
-        showNewProject={false}
-        breadcrumbs={[
-          { label: "ContentFlow OS", to: "/dashboard" },
-          { label: channel.name, to: "/dashboard" },
-          { label: project.title, to: "/dashboard" },
-          { label: meta.label },
-        ]}
-        title={`${meta.label} · ${project.title}`}
-        subtitle="Gera variações de thumbnail seguindo o layout e a tipografia do canal."
-      />
+    <>
       <ProcessRunner
         project={project}
         processId="thumbnail"
@@ -83,6 +71,6 @@ function ProjectThumbnailPage() {
           </div>
         }
       />
-    </AppShell>
+    </>
   );
 }
