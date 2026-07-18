@@ -298,10 +298,6 @@ function IdeasScreen() {
                   <Save className="mr-1.5 h-3.5 w-3.5" />
                   Salvar
                 </Button>
-                <Button size="sm">
-                  <Play className="mr-1.5 h-3.5 w-3.5" />
-                  Gerar ideias
-                </Button>
               </div>
             </div>
 

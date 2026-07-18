@@ -480,10 +480,6 @@ function ScriptScreen() {
                   outline e o roteiro final.
                 </p>
               </div>
-              <Button size="sm">
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-                Gerar roteiro
-              </Button>
             </div>
 
             {/* Estrutura */}
