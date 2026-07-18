@@ -16,6 +16,7 @@ import { Route as ChannelChannelIdTitlesRouteImport } from './routes/channel.$ch
 import { Route as ChannelChannelIdThumbnailRouteImport } from './routes/channel.$channelId.thumbnail'
 import { Route as ChannelChannelIdScriptRouteImport } from './routes/channel.$channelId.script'
 import { Route as ChannelChannelIdResearchRouteImport } from './routes/channel.$channelId.research'
+import { Route as ChannelChannelIdPublishRouteImport } from './routes/channel.$channelId.publish'
 import { Route as ChannelChannelIdNarrationRouteImport } from './routes/channel.$channelId.narration'
 import { Route as ChannelChannelIdIdeasRouteImport } from './routes/channel.$channelId.ideas'
 import { Route as ChannelChannelIdEditRouteImport } from './routes/channel.$channelId.edit'
@@ -59,6 +60,11 @@ const ChannelChannelIdResearchRoute =
     path: '/research',
     getParentRoute: () => ChannelChannelIdRoute,
   } as any)
+const ChannelChannelIdPublishRoute = ChannelChannelIdPublishRouteImport.update({
+  id: '/publish',
+  path: '/publish',
+  getParentRoute: () => ChannelChannelIdRoute,
+} as any)
 const ChannelChannelIdNarrationRoute =
   ChannelChannelIdNarrationRouteImport.update({
     id: '/narration',
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/channel/$channelId/edit': typeof ChannelChannelIdEditRoute
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/narration': typeof ChannelChannelIdNarrationRoute
+  '/channel/$channelId/publish': typeof ChannelChannelIdPublishRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
   '/channel/$channelId/script': typeof ChannelChannelIdScriptRoute
   '/channel/$channelId/thumbnail': typeof ChannelChannelIdThumbnailRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/channel/$channelId/edit': typeof ChannelChannelIdEditRoute
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/narration': typeof ChannelChannelIdNarrationRoute
+  '/channel/$channelId/publish': typeof ChannelChannelIdPublishRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
   '/channel/$channelId/script': typeof ChannelChannelIdScriptRoute
   '/channel/$channelId/thumbnail': typeof ChannelChannelIdThumbnailRoute
@@ -124,6 +132,7 @@ export interface FileRoutesById {
   '/channel/$channelId/edit': typeof ChannelChannelIdEditRoute
   '/channel/$channelId/ideas': typeof ChannelChannelIdIdeasRoute
   '/channel/$channelId/narration': typeof ChannelChannelIdNarrationRoute
+  '/channel/$channelId/publish': typeof ChannelChannelIdPublishRoute
   '/channel/$channelId/research': typeof ChannelChannelIdResearchRoute
   '/channel/$channelId/script': typeof ChannelChannelIdScriptRoute
   '/channel/$channelId/thumbnail': typeof ChannelChannelIdThumbnailRoute
@@ -140,6 +149,7 @@ export interface FileRouteTypes {
     | '/channel/$channelId/edit'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/narration'
+    | '/channel/$channelId/publish'
     | '/channel/$channelId/research'
     | '/channel/$channelId/script'
     | '/channel/$channelId/thumbnail'
@@ -154,6 +164,7 @@ export interface FileRouteTypes {
     | '/channel/$channelId/edit'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/narration'
+    | '/channel/$channelId/publish'
     | '/channel/$channelId/research'
     | '/channel/$channelId/script'
     | '/channel/$channelId/thumbnail'
@@ -168,6 +179,7 @@ export interface FileRouteTypes {
     | '/channel/$channelId/edit'
     | '/channel/$channelId/ideas'
     | '/channel/$channelId/narration'
+    | '/channel/$channelId/publish'
     | '/channel/$channelId/research'
     | '/channel/$channelId/script'
     | '/channel/$channelId/thumbnail'
@@ -232,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChannelChannelIdResearchRouteImport
       parentRoute: typeof ChannelChannelIdRoute
     }
+    '/channel/$channelId/publish': {
+      id: '/channel/$channelId/publish'
+      path: '/publish'
+      fullPath: '/channel/$channelId/publish'
+      preLoaderRoute: typeof ChannelChannelIdPublishRouteImport
+      parentRoute: typeof ChannelChannelIdRoute
+    }
     '/channel/$channelId/narration': {
       id: '/channel/$channelId/narration'
       path: '/narration'
@@ -275,6 +294,7 @@ interface ChannelChannelIdRouteChildren {
   ChannelChannelIdEditRoute: typeof ChannelChannelIdEditRoute
   ChannelChannelIdIdeasRoute: typeof ChannelChannelIdIdeasRoute
   ChannelChannelIdNarrationRoute: typeof ChannelChannelIdNarrationRoute
+  ChannelChannelIdPublishRoute: typeof ChannelChannelIdPublishRoute
   ChannelChannelIdResearchRoute: typeof ChannelChannelIdResearchRoute
   ChannelChannelIdScriptRoute: typeof ChannelChannelIdScriptRoute
   ChannelChannelIdThumbnailRoute: typeof ChannelChannelIdThumbnailRoute
@@ -287,6 +307,7 @@ const ChannelChannelIdRouteChildren: ChannelChannelIdRouteChildren = {
   ChannelChannelIdEditRoute: ChannelChannelIdEditRoute,
   ChannelChannelIdIdeasRoute: ChannelChannelIdIdeasRoute,
   ChannelChannelIdNarrationRoute: ChannelChannelIdNarrationRoute,
+  ChannelChannelIdPublishRoute: ChannelChannelIdPublishRoute,
   ChannelChannelIdResearchRoute: ChannelChannelIdResearchRoute,
   ChannelChannelIdScriptRoute: ChannelChannelIdScriptRoute,
   ChannelChannelIdThumbnailRoute: ChannelChannelIdThumbnailRoute,
