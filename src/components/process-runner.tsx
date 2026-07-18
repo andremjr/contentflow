@@ -38,6 +38,10 @@ export function ProcessRunner({
   const stageState = project?.stages[processId];
   const initial: RunState = stageState === "done" || stageState === "approved" ? "done" : "idle";
   const [state, setState] = useState<RunState>(initial);
+  const navigate = useNavigate();
+
+  const currentIdx = PROCESS_ORDER.indexOf(processId);
+  const nextProcess = currentIdx >= 0 ? PROCESS_ORDER[currentIdx + 1] : undefined;
 
   const run = () => {
     setState("running");
@@ -45,6 +49,13 @@ export function ProcessRunner({
       setState("done");
       if (project) completeStage(project.id, processId);
     }, 1400);
+  };
+
+  const goNext = () => {
+    if (!project || !nextProcess) return;
+    navigate({
+      to: `/project/${project.id}/${PROCESS_ROUTE_SEGMENT[nextProcess]}`,
+    });
   };
 
 
