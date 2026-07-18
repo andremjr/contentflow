@@ -16,7 +16,7 @@ import {
   Plus,
   Trash2,
   Copy,
-  X,
+  
   Info,
   Save,
   Play,
