@@ -18,8 +18,7 @@ export const Route = createFileRoute("/project/$projectId/research")({
   loader: ({ params }) => {
     const project = projects.find((x) => x.id === params.projectId);
     if (!project) throw notFound();
-    const channel = channels.find((c) => c.id === project.channelId)!;
-    return { project, channel };
+    return { project };
   },
   notFoundComponent: () => (
     <AppShell>
