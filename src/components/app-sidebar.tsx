@@ -251,16 +251,6 @@ function OverviewNav({
         />
       ))}
 
-      <SectionLabel collapsed={collapsed} className="mt-4">
-        Sistema
-      </SectionLabel>
-      <NavItem
-        icon={Settings}
-        label="Configurações"
-        to="/dashboard"
-        active={false}
-        collapsed={collapsed}
-      />
     </>
   );
 }
