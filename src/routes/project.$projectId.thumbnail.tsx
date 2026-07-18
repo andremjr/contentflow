@@ -36,7 +36,7 @@ export const Route = createFileRoute("/project/$projectId/thumbnail")({
 function ProjectThumbnailPage() {
   const { project, channel } = Route.useLoaderData();
   const meta = PROCESS_META.thumbnail;
-  const hues = [220, 12, 145, 285];
+  const seeds = ["ocean", "forest", "city", "space"];
   return (
     <>
       <ProcessRunner
@@ -45,21 +45,18 @@ function ProjectThumbnailPage() {
         description="Renderiza variações usando os layouts e assets do canal."
         result={
           <div className="grid gap-4 sm:grid-cols-2">
-            {hues.map((h, i) => (
+            {seeds.map((seed, i) => (
               <div
-                key={h}
-                className="relative aspect-video overflow-hidden rounded-xl border border-border/60"
-                style={{
-                  background: `linear-gradient(135deg, oklch(0.4 0.18 ${h}), oklch(0.22 0.05 ${h}))`,
-                }}
+                key={seed}
+                className="relative aspect-video overflow-hidden rounded-xl border border-border/60 bg-black"
               >
-                <div
-                  className="absolute inset-0 opacity-40"
-                  style={{
-                    backgroundImage:
-                      "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), transparent 60%)",
-                  }}
+                <img
+                  src={`https://picsum.photos/seed/${project.id}-${seed}/1280/720`}
+                  alt={`Variação ${i + 1}`}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  loading="lazy"
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                 <div className="absolute inset-x-0 bottom-0 p-3 text-white">
                   <p className="text-xs uppercase tracking-widest opacity-80">Variação {i + 1}</p>
                   <p className="mt-1 text-lg font-extrabold leading-tight drop-shadow">
@@ -74,3 +71,4 @@ function ProjectThumbnailPage() {
     </>
   );
 }
+
