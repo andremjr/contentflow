@@ -155,7 +155,9 @@ function DashboardPage() {
             </div>
           </section>
         ) : (
-          <EmptyState />
+          <EmptyState
+            onCreate={(c) => setExtraChannels((prev) => [c, ...prev])}
+          />
         )}
       </main>
     </AppShell>
