@@ -61,8 +61,7 @@ const STATUS_META: Record<
 };
 
 function DashboardPage() {
-  const [extraChannels, setExtraChannels] = useState<Channel[]>([]);
-  const channels = [...extraChannels, ...mockChannels];
+  const channels = useChannels();
   const hasChannels = channels.length > 0;
 
   return (
@@ -72,11 +71,7 @@ function DashboardPage() {
         title="Visão geral"
         subtitle="Escolha um canal para abrir sua produção"
         showNewProject={false}
-        actions={
-          <NewChannelDialog
-            onCreate={(c) => setExtraChannels((prev) => [c, ...prev])}
-          />
-        }
+        actions={<NewChannelDialog />}
       />
 
       <main className="flex-1 px-6 py-6">
