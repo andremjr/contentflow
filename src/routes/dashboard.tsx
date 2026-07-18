@@ -128,7 +128,10 @@ function DashboardPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem>Duplicar</DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive">
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => removeChannel(c.id)}
+                            >
                               Remover
                             </DropdownMenuItem>
                           </DropdownMenuContent>
