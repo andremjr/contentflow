@@ -82,36 +82,21 @@ export function AppSidebar({
         collapsed ? "w-16" : "w-64",
       )}
     >
-      {/* Workspace switcher */}
-      <div className="flex items-center gap-2 px-3 py-3">
+      {/* Brand / home link */}
+      <Link
+        to="/dashboard"
+        className={cn(
+          "flex items-center gap-2 px-3 py-3 hover:bg-sidebar-accent/40",
+          collapsed && "justify-center px-0",
+        )}
+      >
         <div className="grid size-9 shrink-0 place-items-center rounded-lg gradient-brand shadow-[0_8px_24px_-8px_oklch(0.58_0.22_264/0.7)] ring-1 ring-white/10">
           <span className="font-mono text-sm font-bold text-white">CF</span>
         </div>
         {!collapsed && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex min-w-0 flex-1 items-center justify-between gap-1 rounded-md px-1.5 py-1 text-left hover:bg-sidebar-accent">
-                <div className="min-w-0">
-                  <p className="truncate text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Workspace
-                  </p>
-                  <p className="truncate text-sm font-semibold">
-                    ContentFlow OS
-                  </p>
-                </div>
-                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
-              <DropdownMenuItem>ContentFlow OS</DropdownMenuItem>
-              <DropdownMenuItem>Studio Interno</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Criar workspace…</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <span className="truncate text-sm font-semibold">ContentFlow OS</span>
         )}
-      </div>
+      </Link>
 
       {/* Command palette */}
       <div className="px-3 pb-2">
