@@ -153,16 +153,14 @@ function DashboardPage() {
             </div>
           </section>
         ) : (
-          <EmptyState
-            onCreate={(c) => setExtraChannels((prev) => [c, ...prev])}
-          />
+          <EmptyState />
         )}
       </main>
     </AppShell>
   );
 }
 
-function EmptyState({ onCreate }: { onCreate: (c: Channel) => void }) {
+function EmptyState() {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center py-24 text-center">
       <div className="grid size-14 place-items-center rounded-2xl border border-border/60 bg-card">
@@ -175,7 +173,6 @@ function EmptyState({ onCreate }: { onCreate: (c: Channel) => void }) {
       </p>
       <div className="mt-5">
         <NewChannelDialog
-          onCreate={onCreate}
           trigger={
             <Button className="gap-1.5 gradient-brand text-white">
               <Plus className="size-4" />
