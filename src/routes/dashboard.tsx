@@ -27,7 +27,7 @@ export const Route = createFileRoute("/dashboard")({
       { title: "Visão geral — ContentFlow OS" },
       {
         name: "description",
-        content: "Seus canais do YouTube gerenciados em um único workspace.",
+        content: "Cada canal é um workspace independente de produção de conteúdo.",
       },
       { property: "og:title", content: "Visão geral — ContentFlow OS" },
       {
