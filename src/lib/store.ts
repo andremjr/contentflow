@@ -181,10 +181,3 @@ export function completeStage(projectId: string, stage: ProcessId) {
   p.updatedAt = "agora";
   emit();
 }
-
-export function resetDatabase() {
-  if (typeof window !== "undefined") {
-    window.localStorage.removeItem(STORAGE_KEY);
-    window.location.reload();
-  }
-}
