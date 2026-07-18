@@ -278,9 +278,10 @@ function ResearchScreen() {
         />
 
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="mx-auto max-w-[1100px] p-6">
             {/* MAIN */}
             <div className="space-y-6">
+
               {/* Header */}
               <div className="flex items-start gap-4">
                 <ChannelAvatar channel={channel} size="lg" />
