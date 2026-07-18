@@ -153,12 +153,6 @@ export function createProject(input: NewProjectInput): Project {
   return project;
 }
 
-export function removeProject(id: string) {
-  const i = db.projects.findIndex((p) => p.id === id);
-  if (i !== -1) db.projects.splice(i, 1);
-  emit();
-}
-
 /**
  * Mark a project's stage as complete and advance the pointer to the
  * next incomplete stage. Recomputes progress as (# done / total).
