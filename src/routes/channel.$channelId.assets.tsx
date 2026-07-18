@@ -1,5 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
-import { useState, useRef, useMemo, type KeyboardEvent } from "react";
+import { useState, useRef, useMemo } from "react";
 import {
   Package,
   Clock,
