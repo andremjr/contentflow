@@ -370,9 +370,6 @@ function ResearchScreen() {
                 </div>
               </Section>
 
-              {/* YouTube-only sections */}
-              {isYT && (
-                <>
                   <Section
                     icon={<Timer className="h-4 w-4" />}
                     title="Características dos vídeos"
