@@ -253,49 +253,6 @@ function ResearchScreen() {
                 </Button>
               </div>
 
-              {/* Motor de busca */}
-              <Section
-                icon={<SearchIcon className="h-4 w-4" />}
-                title="Motor de busca"
-                description="Alguns parâmetros só se aplicam ao YouTube."
-              >
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  {SEARCH_ENGINES.map((e) => {
-                    const active = cfg.searchEngine === e.id;
-                    return (
-                      <button
-                        key={e.id}
-                        type="button"
-                        onClick={() => patch({ searchEngine: e.id })}
-                        className={cn(
-                          "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
-                          active
-                            ? "border-primary bg-primary/10"
-                            : "border-border bg-secondary/30 hover:border-border/80",
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            "flex h-8 w-8 items-center justify-center rounded-md",
-                            active
-                              ? "bg-primary/20 text-primary"
-                              : "bg-secondary text-muted-foreground",
-                          )}
-                        >
-                          {e.icon}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium">{e.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {e.description}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </Section>
-
               {/* Termos da pesquisa */}
               <Section
                 icon={<Tag className="h-4 w-4" />}
