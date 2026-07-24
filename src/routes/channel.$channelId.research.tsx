@@ -180,7 +180,6 @@ function ResearchScreen() {
   );
   const [durationUnit, setDurationUnit] = useState<"min" | "sec">("min");
 
-  const isYT = cfg.searchEngine === "youtube";
 
   const patch = (p: Partial<ResearchConfig>) =>
     setProcessConfig(channel.id, "research", p);
