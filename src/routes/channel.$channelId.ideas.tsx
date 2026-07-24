@@ -203,7 +203,7 @@ function IdeasScreen() {
     "titles",
     "performance",
   ]);
-  const [historyWeight, setHistoryWeight] = useState<[number]>([40]);
+  
   const [avoidRepeats, setAvoidRepeats] = useState(true);
 
   // Prompt
