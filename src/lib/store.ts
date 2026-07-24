@@ -58,6 +58,9 @@ function hydrate() {
     if (Array.isArray(parsed.projects)) {
       db.projects.splice(0, db.projects.length, ...parsed.projects);
     }
+    if (parsed.processConfigs && typeof parsed.processConfigs === "object") {
+      db.processConfigs = parsed.processConfigs as ProcessConfigStore;
+    }
   } catch {
     // ignore corrupted state
   }
@@ -68,7 +71,11 @@ function persist() {
   try {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ channels: db.channels, projects: db.projects }),
+      JSON.stringify({
+        channels: db.channels,
+        projects: db.projects,
+        processConfigs: db.processConfigs,
+      }),
     );
   } catch {
     // ignore quota errors
