@@ -387,20 +387,32 @@ function ProjectTable({
                   </span>
                 </TableCell>
                 <TableCell>
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1 text-xs text-brand-soft"
-                  >
-                    <Link
-                      to="/project/$projectId"
-                      params={{ projectId: p.id }}
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1 text-xs text-brand-soft"
                     >
-                      Abrir
-                      <ArrowRight className="size-3" />
-                    </Link>
-                  </Button>
+                      <Link
+                        to="/project/$projectId"
+                        params={{ projectId: p.id }}
+                      >
+                        Abrir
+                        <ArrowRight className="size-3" />
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        if (confirm(`Excluir "${p.title}"?`)) removeProject(p.id);
+                      }}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             );
