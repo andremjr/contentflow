@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   Table as TableIcon,
   FolderKanban,
+  Trash2,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
