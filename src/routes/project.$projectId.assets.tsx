@@ -34,31 +34,37 @@ export const Route = createFileRoute("/project/$projectId/assets")({
 
 function ProjectAssetsPage() {
   const { project } = Route.useLoaderData();
-  const hues = [200, 30, 120, 300, 60, 260, 180, 340];
+  void project;
   return (
-    <>
-      <ProcessRunner
-        project={project}
-        processId="assets"
-        description="Aplica as regras de inserção, estilo e referências visuais do canal."
-        result={
+    <ProcessRunner
+      project={project}
+      processId="assets"
+      description="Aplica as regras de inserção, estilo e referências visuais do canal."
+      renderResult={(data) => (
+        <div className="space-y-4">
+          <p className="text-[11px] text-muted-foreground">
+            {data.images.length} imagens · {data.clips.length} clipes
+          </p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {hues.map((h, i) => (
+            {data.images.map((src, i) => (
               <div
-                key={h}
+                key={src}
                 className="relative aspect-square overflow-hidden rounded-lg border border-border/60"
-                style={{
-                  background: `linear-gradient(135deg, oklch(0.45 0.15 ${h}), oklch(0.2 0.05 ${h}))`,
-                }}
               >
+                <img
+                  src={src}
+                  alt={`Asset ${i + 1}`}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  loading="lazy"
+                />
                 <div className="absolute inset-x-0 bottom-0 bg-black/40 px-2 py-1 text-[10px] text-white backdrop-blur">
                   Asset #{String(i + 1).padStart(2, "0")}
                 </div>
               </div>
             ))}
           </div>
-        }
-      />
-    </>
+        </div>
+      )}
+    />
   );
 }

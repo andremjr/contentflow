@@ -35,34 +35,25 @@ export const Route = createFileRoute("/project/$projectId/script")({
 function ProjectScriptPage() {
   const { project } = Route.useLoaderData();
   return (
-    <>
-      <ProcessRunner
-        project={project}
-        processId="script"
-        description="Executa o pipeline de outline + desenvolvimento configurado no canal."
-        result={
-          <article className="prose prose-invert max-w-none text-sm leading-relaxed">
-            <h3 className="text-base font-semibold text-foreground">Abertura</h3>
-            <p className="text-muted-foreground">
-              Tem um número que quase ninguém está olhando — e ele explica por que o seu
-              poder de compra continua caindo mesmo com a inflação oficial em queda. Nos
-              próximos minutos, você vai entender exatamente o que está acontecendo.
-            </p>
-            <h3 className="mt-4 text-base font-semibold text-foreground">Desenvolvimento</h3>
-            <p className="text-muted-foreground">
-              Nas últimas décadas, três forças convergiram para redesenhar a economia global:
-              a financeirização do crédito, a dependência dos bancos centrais e a
-              fragmentação das cadeias produtivas.
-            </p>
-            <h3 className="mt-4 text-base font-semibold text-foreground">CTA final</h3>
-            <p className="text-muted-foreground">
-              Se esse tipo de análise te ajuda a enxergar o que os grandes veículos ignoram,
-              se inscreva no canal — no próximo vídeo eu mostro os três indicadores que
-              o mercado está usando agora.
-            </p>
-          </article>
-        }
-      />
-    </>
+    <ProcessRunner
+      project={project}
+      processId="script"
+      description="Executa o pipeline de outline + desenvolvimento configurado no canal."
+      renderResult={(data) => (
+        <article className="prose prose-invert max-w-none text-sm leading-relaxed">
+          <p className="text-[11px] text-muted-foreground">
+            ~{data.wordCount.toLocaleString()} palavras alvo · {data.sections.length} seções
+          </p>
+          {data.sections.map((s) => (
+            <div key={s.heading}>
+              <h3 className="mt-4 text-base font-semibold text-foreground">
+                {s.heading}
+              </h3>
+              <p className="text-muted-foreground">{s.body}</p>
+            </div>
+          ))}
+        </article>
+      )}
+    />
   );
 }

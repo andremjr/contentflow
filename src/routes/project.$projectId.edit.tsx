@@ -36,36 +36,38 @@ export const Route = createFileRoute("/project/$projectId/edit")({
 function ProjectEditPage() {
   const { project } = Route.useLoaderData();
   return (
-    <>
-      <ProcessRunner
-        project={project}
-        processId="editing"
-        description="Executa a renderização usando o preset de edição do canal."
-        result={
-          <div className="space-y-4">
-            <div className="overflow-hidden rounded-xl border border-border/60 bg-black">
-              <video
-                controls
-                preload="metadata"
-                poster={`https://picsum.photos/seed/${project.id}-cover/1280/720`}
-                className="aspect-video w-full"
-                src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-              >
-                Seu navegador não suporta reprodução de vídeo.
-              </video>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/40 p-3 text-xs">
-              <span className="text-muted-foreground">
-                Render: <span className="font-mono text-foreground">1920×1080 · H.264 · 45MB</span> · Duração {project.duration}
-              </span>
-              <Button variant="outline" size="sm" className="h-8 gap-1.5 border-border/60">
-                <Download className="size-3.5" /> Baixar MP4
-              </Button>
-            </div>
+    <ProcessRunner
+      project={project}
+      processId="editing"
+      description="Executa a renderização usando o preset de edição do canal."
+      renderResult={(data) => (
+        <div className="space-y-4">
+          <div className="overflow-hidden rounded-xl border border-border/60 bg-black">
+            <video
+              key={data.videoUrl}
+              controls
+              preload="metadata"
+              poster={`https://picsum.photos/seed/${project.id}-cover/1280/720`}
+              className="aspect-video w-full"
+              src={data.videoUrl}
+            >
+              Seu navegador não suporta reprodução de vídeo.
+            </video>
           </div>
-        }
-
-      />
-    </>
+          <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/40 p-3 text-xs">
+            <span className="text-muted-foreground">
+              Render:{" "}
+              <span className="font-mono text-foreground">
+                {data.resolution} · template {data.template} ·
+                {data.captions ? " com legendas" : " sem legendas"}
+              </span>
+            </span>
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 border-border/60">
+              <Download className="size-3.5" /> Baixar MP4
+            </Button>
+          </div>
+        </div>
+      )}
+    />
   );
 }

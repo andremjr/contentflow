@@ -37,36 +37,46 @@ export const Route = createFileRoute("/project/$projectId/research")({
 
 function ProjectResearchPage() {
   const { project } = Route.useLoaderData();
-
   return (
-    <>
-      <ProcessRunner
-        project={project}
-        processId="research"
-        description="Roda a busca com os filtros e canais de referência do canal."
-        result={
+    <ProcessRunner
+      project={project}
+      processId="research"
+      description="Roda a busca com os filtros e canais de referência do canal."
+      renderResult={(data) => (
+        <div className="space-y-3">
+          <p className="text-[11px] text-muted-foreground">
+            {data.items.length} resultado{data.items.length === 1 ? "" : "s"} ·
+            idioma <span className="text-foreground">{data.meta.language}</span> ·
+            views mínimas{" "}
+            <span className="text-foreground">
+              {data.meta.minViews?.toLocaleString() ?? "—"}
+            </span>
+          </p>
           <ul className="divide-y divide-border/50 text-sm">
-            {mockResults.map((r) => (
-              <li key={r.title} className="flex items-center justify-between gap-4 py-3">
+            {data.items.map((r) => (
+              <li
+                key={r.url}
+                className="flex items-center justify-between gap-4 py-3"
+              >
                 <div className="min-w-0">
                   <p className="truncate font-medium">{r.title}</p>
-                  <p className="text-xs text-muted-foreground">{r.channel} · {r.views} · {r.date}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {r.channel} · {r.views} · {r.publishedAt}
+                  </p>
                 </div>
-                <a href="#" className="inline-flex items-center gap-1 text-xs text-brand-soft hover:underline">
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-brand-soft hover:underline"
+                >
                   Abrir <ExternalLink className="size-3" />
                 </a>
               </li>
             ))}
           </ul>
-        }
-      />
-    </>
+        </div>
+      )}
+    />
   );
 }
-
-const mockResults = [
-  { title: "O verdadeiro custo da dívida americana", channel: "Money Explained", views: "1,2M", date: "há 3 dias" },
-  { title: "Por que juros altos travam a economia", channel: "Economia Diária", views: "820k", date: "há 1 semana" },
-  { title: "A crise silenciosa dos bancos regionais", channel: "Cortex Finance", views: "450k", date: "há 2 semanas" },
-  { title: "O que ninguém te contou sobre inflação", channel: "Finance Simplified", views: "2,1M", date: "há 1 mês" },
-];

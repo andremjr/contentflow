@@ -36,35 +36,38 @@ export const Route = createFileRoute("/project/$projectId/narration")({
 function ProjectNarrationPage() {
   const { project } = Route.useLoaderData();
   return (
-    <>
-      <ProcessRunner
-        project={project}
-        processId="narration"
-        description="Sintetiza áudio a partir do roteiro com a voz padrão do canal."
-        result={
+    <ProcessRunner
+      project={project}
+      processId="narration"
+      description="Sintetiza áudio a partir do roteiro com a voz padrão do canal."
+      renderResult={(data) => {
+        const mins = Math.floor(data.durationSeconds / 60);
+        const secs = data.durationSeconds % 60;
+        return (
           <div className="space-y-4">
             <div className="rounded-lg border border-border/60 bg-background/40 p-4">
               <audio
                 controls
                 preload="metadata"
                 className="w-full"
-                src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+                src={data.audioUrl}
+                key={data.audioUrl}
               >
                 Seu navegador não suporta reprodução de áudio.
               </audio>
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/40 p-3 text-xs">
               <span className="text-muted-foreground">
-                Voz: <span className="text-foreground">Marcus (grave, cadência controlada)</span> · 1.0× · Estabilidade 78%
+                Voz: <span className="text-foreground">{data.voiceId}</span> ·
+                duração <span className="text-foreground">{mins}:{String(secs).padStart(2, "0")}</span>
               </span>
               <Button variant="outline" size="sm" className="h-8 gap-1.5 border-border/60">
-                <Download className="size-3.5" /> WAV
+                <Download className="size-3.5" /> Baixar
               </Button>
             </div>
           </div>
-        }
-      />
-    </>
+        );
+      }}
+    />
   );
 }
-
