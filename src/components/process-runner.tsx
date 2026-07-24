@@ -51,6 +51,11 @@ export function ProcessRunner({
     }, 1400);
   };
 
+  const clear = () => {
+    setState("idle");
+    if (project) resetStage(project.id, processId);
+  };
+
   const goNext = () => {
     if (!project || !nextProcess) return;
     navigate({
