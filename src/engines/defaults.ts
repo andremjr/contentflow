@@ -7,15 +7,25 @@ import type { ProcessConfigMap } from "./types";
 
 export const DEFAULT_CONFIGS: ProcessConfigMap = {
   research: {
+    searchEngine: "youtube",
+    keywordsEnabled: true,
     keywords: [],
+    negativesEnabled: true,
     negativeKeywords: ["shorts"],
+    languageEnabled: true,
     language: "pt-BR",
+    durationEnabled: true,
     durationMinMinutes: 5,
     durationMaxMinutes: 20,
+    publishedEnabled: true,
     publishedInLastDays: 30,
+    viewsEnabled: true,
     minViews: 100_000,
     maxViews: null,
+    commentsEnabled: false,
     minComments: 50,
+    maxComments: null,
+    referenceChannelsEnabled: true,
     referenceChannels: [],
   },
   ideas: {

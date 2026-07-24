@@ -67,16 +67,28 @@ export type ProcessEngine<C, I, R> = {
 
 // ---------- Per-process configuration types ----------
 
+export type ResearchSearchEngine = "youtube" | "google" | "web" | "tiktok";
+
 export type ResearchConfig = {
+  searchEngine: ResearchSearchEngine;
+  keywordsEnabled: boolean;
   keywords: string[];
+  negativesEnabled: boolean;
   negativeKeywords: string[];
+  languageEnabled: boolean;
   language: string;
+  durationEnabled: boolean;
   durationMinMinutes: number;
   durationMaxMinutes: number;
+  publishedEnabled: boolean;
   publishedInLastDays: number | null;
+  viewsEnabled: boolean;
   minViews: number | null;
   maxViews: number | null;
+  commentsEnabled: boolean;
   minComments: number | null;
+  maxComments: number | null;
+  referenceChannelsEnabled: boolean;
   referenceChannels: string[];
 };
 
