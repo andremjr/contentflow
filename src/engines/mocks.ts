@@ -63,37 +63,42 @@ function fmtCompact(n: number) {
 // ---------- research ----------
 
 export function runMockResearch(command: EngineCommand) {
-  const cfg = command.config as ResearchConfig;
+  const cfg = command.config as Partial<ResearchConfig> & {
+    searchEngine?: string;
+  };
   return wrap<ResultDataMap["research"]>(command, 700, () => {
-    const kws = cfg.keywords.length ? cfg.keywords : ["tema geral"];
+    const kws = cfg.keywords && cfg.keywords.length ? cfg.keywords : ["tema geral"];
     const baseViews = cfg.minViews ?? 100_000;
+    const lang = cfg.language ?? "pt-BR";
+    const refs = cfg.referenceChannels ?? [];
     const raw = kws.flatMap((kw, i) => [
       {
         title: `Como "${kw}" está mudando em 2025`,
-        channel: cfg.referenceChannels[0] ?? "Cortex Insights",
+        channel: refs[0] ?? "Cortex Insights",
         views: fmtCompact(Math.round(baseViews * (1 + i * 0.6))),
         publishedAt: `há ${(i % 4) + 1} dias`,
         url: `https://youtu.be/${slug(kw)}-a${i}`,
       },
       {
-        title: `${kw}: guia definitivo em ${cfg.language}`,
-        channel: cfg.referenceChannels[1] ?? "Deep Dive",
+        title: `${kw}: guia definitivo em ${lang}`,
+        channel: refs[1] ?? "Deep Dive",
         views: fmtCompact(Math.round(baseViews * (2 + i * 0.4))),
         publishedAt: `há ${(i % 3) + 2} semanas`,
         url: `https://youtu.be/${slug(kw)}-b${i}`,
       },
     ]);
+    const negatives = cfg.negativeKeywords ?? [];
     const filtered = raw.filter(
       (it) =>
-        !cfg.negativeKeywords.some(
+        !negatives.some(
           (n) => n && it.title.toLowerCase().includes(n.toLowerCase()),
         ),
     );
     return {
       items: filtered.slice(0, Math.max(4, kws.length * 2)),
       meta: {
-        language: cfg.language,
-        minViews: cfg.minViews,
+        language: lang,
+        minViews: cfg.minViews ?? null,
         totalMatched: filtered.length,
       },
     };

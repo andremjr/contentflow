@@ -51,22 +51,56 @@ function envelope<C, I>(
 // ---------- builders ----------
 
 export type ResearchInput = { extraKeywords?: string[] };
+/**
+ * Builds a research command that includes ONLY the parameters the user
+ * enabled. YouTube-specific groups (duration, views, comments,
+ * reference channels) are dropped entirely when `searchEngine` is not
+ * `"youtube"`.
+ */
 export function buildResearchCommand(args: {
   project: ProjectContext;
   config: ResearchConfig;
   input?: ResearchInput;
 }) {
-  const merged: ResearchConfig = {
-    ...args.config,
-    keywords: [
-      ...args.config.keywords,
+  const c = args.config;
+  const isYT = c.searchEngine === "youtube";
+  const payload: Record<string, unknown> = { searchEngine: c.searchEngine };
+
+  if (c.keywordsEnabled) {
+    payload.keywords = [
+      ...c.keywords,
       ...(args.input?.extraKeywords ?? []),
-    ].filter(Boolean),
-  };
-  return envelope<ResearchConfig, ResearchInput>(
+    ].filter(Boolean);
+  }
+  if (c.negativesEnabled) {
+    payload.negativeKeywords = c.negativeKeywords.filter(Boolean);
+  }
+  if (c.languageEnabled) {
+    payload.language = c.language;
+  }
+  if (c.publishedEnabled) {
+    payload.publishedInLastDays = c.publishedInLastDays;
+  }
+  if (isYT && c.durationEnabled) {
+    payload.durationMinMinutes = c.durationMinMinutes;
+    payload.durationMaxMinutes = c.durationMaxMinutes;
+  }
+  if (isYT && c.viewsEnabled) {
+    payload.minViews = c.minViews;
+    payload.maxViews = c.maxViews;
+  }
+  if (isYT && c.commentsEnabled) {
+    payload.minComments = c.minComments;
+    payload.maxComments = c.maxComments;
+  }
+  if (isYT && c.referenceChannelsEnabled) {
+    payload.referenceChannels = c.referenceChannels;
+  }
+
+  return envelope<Record<string, unknown>, ResearchInput>(
     "research",
     args.project,
-    merged,
+    payload,
     args.input,
   );
 }
