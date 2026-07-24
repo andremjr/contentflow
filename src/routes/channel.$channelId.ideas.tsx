@@ -347,26 +347,52 @@ function IdeasScreen() {
                 <div className="grid gap-6 md:grid-cols-2">
                   <FieldWrap
                     label="Período analisado"
-                    description="Janela retroativa de vídeos."
+                    description="Janela retroativa por tempo ou pela quantidade de vídeos."
                   >
-                    <Select
-                      value={historyPeriod}
-                      onValueChange={setHistoryPeriod}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="30d">Últimos 30 dias</SelectItem>
-                        <SelectItem value="90d">Últimos 90 dias</SelectItem>
-                        <SelectItem value="180d">Últimos 6 meses</SelectItem>
-                        <SelectItem value="365d">Último ano</SelectItem>
-                        <SelectItem value="all">Todo o histórico</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select
+                        value={historyMode}
+                        onValueChange={(v) =>
+                          setHistoryMode(v as "days" | "videos" | "all")
+                        }
+                      >
+                        <SelectTrigger className="w-40">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="days">Últimos dias</SelectItem>
+                          <SelectItem value="videos">Últimos vídeos</SelectItem>
+                          <SelectItem value="all">Todo o histórico</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {historyMode !== "all" && (
+                        <>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={historyMode === "days" ? 3650 : 10000}
+                            value={historyAmount}
+                            onChange={(e) => {
+                              const raw = Number(e.target.value);
+                              if (Number.isNaN(raw)) return;
+                              const max = historyMode === "days" ? 3650 : 10000;
+                              setHistoryAmount(
+                                Math.max(1, Math.min(max, Math.floor(raw))),
+                              );
+                            }}
+                            className="w-24"
+                            aria-label="Quantidade"
+                          />
+                          <span className="text-sm text-muted-foreground">
+                            {historyMode === "days" ? "dias" : "vídeos"}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </FieldWrap>
 
                 </div>
+
 
                 <FieldWrap
                   label="Sinais a considerar"
