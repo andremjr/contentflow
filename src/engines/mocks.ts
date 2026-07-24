@@ -55,12 +55,7 @@ export function runMockResearch(command: EngineCommand) {
 export type IdeaItem = { id: string; title: string; angle: string; score: number };
 
 export function runMockIdeas(command: EngineCommand) {
-  return wrap<{ ideas: IdeaItem[] }>(command, 800, () => [
-    { id: "i1", title: "A anatomia de uma bolha financeira", angle: "explainer", score: 87 },
-    { id: "i2", title: "Por que os bancos centrais estão perdendo o controle", angle: "provocative", score: 92 },
-    { id: "i3", title: "O colapso silencioso dos títulos longos", angle: "documentary", score: 78 },
-    { id: "i4", title: "Como a Nvidia ganhou a guerra da IA", angle: "story", score: 95 },
-  ]).then(() => ({
+  return wrap<{ ideas: IdeaItem[] }>(command, 800, () => ({
     ideas: [
       { id: "i1", title: "A anatomia de uma bolha financeira", angle: "explainer", score: 87 },
       { id: "i2", title: "Por que os bancos centrais estão perdendo o controle", angle: "provocative", score: 92 },
