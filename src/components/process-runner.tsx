@@ -8,11 +8,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Trash2,
-  ChevronDown,
-  ChevronRight,
-  Sliders,
   Code2,
-  RefreshCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,11 +23,9 @@ import {
   completeStage,
   resetStage,
   useProcessConfig,
-  resetProcessConfig,
 } from "@/lib/store";
 import { runProcess } from "@/engines";
 import type { EngineCommand, EngineResult, ResultData } from "@/engines/types";
-import { ProcessConfigEditor } from "@/components/process-config-editor";
 
 const PROCESS_ROUTE_SEGMENT: Record<ProcessId, string> = {
   research: "research",
@@ -68,7 +62,7 @@ export function ProcessRunner<P extends ProcessId>({
   const [command, setCommand] = useState<EngineCommand | null>(null);
   const [result, setResult] = useState<EngineResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showConfig, setShowConfig] = useState(true);
+  
   const [showCommand, setShowCommand] = useState(false);
   const navigate = useNavigate();
 
@@ -199,48 +193,6 @@ export function ProcessRunner<P extends ProcessId>({
         </div>
       </section>
 
-      {/* Config editor */}
-      {channelId && (
-        <section className="overflow-hidden rounded-xl border border-border/70 bg-card">
-          <header className="flex items-center justify-between border-b border-border/60 px-5 py-3">
-            <button
-              type="button"
-              onClick={() => setShowConfig((v) => !v)}
-              className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-            >
-              {showConfig ? (
-                <ChevronDown className="size-3.5" />
-              ) : (
-                <ChevronRight className="size-3.5" />
-              )}
-              <Sliders className="size-3.5" />
-              Configuração aplicada (canal)
-            </button>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground">
-                As mudanças valem para todos os projetos deste canal
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => resetProcessConfig(channelId, processId)}
-                className="h-7 gap-1 text-[10px] text-muted-foreground hover:text-foreground"
-              >
-                <RefreshCcw className="size-3" />
-                Restaurar padrão
-              </Button>
-            </div>
-          </header>
-          {showConfig && (
-            <div className="p-5">
-              <ProcessConfigEditor
-                channelId={channelId}
-                processId={processId}
-              />
-            </div>
-          )}
-        </section>
-      )}
 
       {/* Result */}
       <section className="rounded-xl border border-border/70 bg-card">
