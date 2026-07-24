@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   Table as TableIcon,
   FolderKanban,
+  Trash2,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
@@ -40,7 +41,7 @@ import {
   PROCESS_META,
   type Project,
 } from "@/lib/mock-data";
-import { useChannel, useProjects } from "@/lib/store";
+import { useChannel, useProjects, removeProject } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/channel/$channelId/")({
@@ -201,12 +202,38 @@ function ProjectGrid({
       {projects.map((p) => {
         const stage = PROCESS_META[p.currentStage];
         return (
-          <Link
+          <div
             key={p.id}
-            to="/project/$projectId"
-            params={{ projectId: p.id }}
             className="group relative overflow-hidden rounded-xl border border-border/70 bg-card transition hover:border-brand/50"
           >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-2 top-2 z-10 size-7 bg-black/50 text-white opacity-0 backdrop-blur transition group-hover:opacity-100 hover:bg-black/70"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onSelect={() => {
+                    if (confirm(`Excluir "${p.title}"?`)) removeProject(p.id);
+                  }}
+                >
+                  <Trash2 className="mr-2 size-3.5" />
+                  Excluir projeto
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Link
+              to="/project/$projectId"
+              params={{ projectId: p.id }}
+              className="block"
+            >
             <div
               className="relative aspect-video overflow-hidden"
               style={{
@@ -280,7 +307,8 @@ function ProjectGrid({
                 </span>
               </footer>
             </div>
-          </Link>
+            </Link>
+          </div>
         );
       })}
     </div>
@@ -359,20 +387,32 @@ function ProjectTable({
                   </span>
                 </TableCell>
                 <TableCell>
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1 text-xs text-brand-soft"
-                  >
-                    <Link
-                      to="/project/$projectId"
-                      params={{ projectId: p.id }}
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1 text-xs text-brand-soft"
                     >
-                      Abrir
-                      <ArrowRight className="size-3" />
-                    </Link>
-                  </Button>
+                      <Link
+                        to="/project/$projectId"
+                        params={{ projectId: p.id }}
+                      >
+                        Abrir
+                        <ArrowRight className="size-3" />
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        if (confirm(`Excluir "${p.title}"?`)) removeProject(p.id);
+                      }}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             );

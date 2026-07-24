@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Play, RotateCcw, Check, Loader2, AlertTriangle, ArrowRight } from "lucide-react";
+import { Play, RotateCcw, Check, Loader2, AlertTriangle, ArrowRight, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { PROCESS_META, PROCESS_ORDER, type ProcessId, type Project } from "@/lib/mock-data";
-import { completeStage } from "@/lib/store";
+import { completeStage, resetStage } from "@/lib/store";
 
 const PROCESS_ROUTE_SEGMENT: Record<ProcessId, string> = {
   research: "research",
@@ -51,6 +51,11 @@ export function ProcessRunner({
     }, 1400);
   };
 
+  const clear = () => {
+    setState("idle");
+    if (project) resetStage(project.id, processId);
+  };
+
   const goNext = () => {
     if (!project || !nextProcess) return;
     navigate({
@@ -80,6 +85,15 @@ export function ProcessRunner({
 
             {state === "done" ? (
               <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={clear}
+                  className="h-9 gap-1.5 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="size-3.5" />
+                  Limpar resultado
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
