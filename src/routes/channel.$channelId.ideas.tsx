@@ -192,22 +192,9 @@ function IdeasScreen() {
   ]);
 
   // Audience
-  const [emotions, setEmotions] = useState<EmotionId[]>([
-    "curiosity",
-    "transformation",
-  ]);
-  const [emotionCopy, setEmotionCopy] = useState<Record<EmotionId, string>>({
-    pain: "",
-    desire: "",
-    fear: "",
-    curiosity:
-      "Levantar perguntas que a audiência sempre quis fazer mas nunca teve resposta clara.",
-    aspiration: "",
-    identification: "",
-    urgency: "",
-    transformation:
-      "Mostrar antes/depois: como a ideia muda a forma como o espectador enxerga o tema.",
-  });
+  const [audienceDescription, setAudienceDescription] = useState<string>(
+    "Adultos entre 25 e 45 anos, curiosos, que buscam entender temas complexos de forma clara e aprofundada. Valorizam conteúdo autêntico e narrativas envolventes.",
+  );
 
   // History
   const [useHistory, setUseHistory] = useState(true);
@@ -224,11 +211,6 @@ function IdeasScreen() {
   const [expanded, setExpanded] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
-  const toggleEmotion = (id: EmotionId) => {
-    setEmotions((prev) =>
-      prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id],
-    );
-  };
 
   const toggleSource = (id: string) => {
     setTrendSources((prev) =>
@@ -326,98 +308,14 @@ function IdeasScreen() {
             <Section
               icon={<Users className="h-4 w-4" />}
               title="Conexão com o público"
-              description="Selecione as emoções que a ideia deve ativar."
+              description="Descreva quem é o público-alvo e como as ideias devem se conectar com ele."
             >
-              <div className="flex flex-wrap gap-2">
-                {EMOTIONS.map((e) => {
-                  const active = emotions.includes(e.id);
-                  return (
-                    <button
-                      key={e.id}
-                      type="button"
-                      onClick={() => toggleEmotion(e.id)}
-                      className={cn(
-                        "group inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors",
-                        active
-                          ? "border-primary bg-primary/15 text-primary"
-                          : "border-border bg-secondary/40 text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "flex h-3.5 w-3.5 items-center justify-center rounded-full border",
-                          active
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border/80",
-                        )}
-                      >
-                        {active && (
-                          <svg
-                            viewBox="0 0 12 12"
-                            className="h-2.5 w-2.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                          >
-                            <path d="M2 6l3 3 5-6" strokeLinecap="round" />
-                          </svg>
-                        )}
-                      </span>
-                      {e.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {emotions.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border bg-secondary/20 p-6 text-center text-xs text-muted-foreground">
-                  Selecione ao menos uma emoção para descrever a conexão.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {emotions.map((id) => {
-                    const meta = EMOTIONS.find((e) => e.id === id)!;
-                    return (
-                      <div
-                        key={id}
-                        className="rounded-lg border border-border bg-secondary/30 p-4"
-                      >
-                        <div className="mb-2 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              variant="secondary"
-                              className="bg-primary/15 text-primary"
-                            >
-                              {meta.label}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">
-                              {meta.hint}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => toggleEmotion(id)}
-                            className="text-xs text-muted-foreground hover:text-destructive"
-                          >
-                            Remover
-                          </button>
-                        </div>
-                        <Textarea
-                          value={emotionCopy[id]}
-                          onChange={(e) =>
-                            setEmotionCopy((prev) => ({
-                              ...prev,
-                              [id]: e.target.value,
-                            }))
-                          }
-                          placeholder={`Como o conteúdo deve trabalhar ${meta.label.toLowerCase()}...`}
-                          className="min-h-[72px] resize-none"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <Textarea
+                value={audienceDescription}
+                onChange={(e) => setAudienceDescription(e.target.value)}
+                placeholder="Ex: profissionais de tecnologia entre 25 e 40 anos, curiosos sobre IA, que valorizam explicações profundas e exemplos práticos..."
+                className="min-h-[180px] resize-y"
+              />
             </Section>
 
             {/* Histórico */}
