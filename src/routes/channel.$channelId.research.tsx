@@ -103,37 +103,6 @@ export const Route = createFileRoute("/channel/$channelId/research")({
 
 // ---------- mocks ----------
 
-const SEARCH_ENGINES: {
-  id: ResearchSearchEngine;
-  name: string;
-  icon: React.ReactNode;
-  description: string;
-}[] = [
-  {
-    id: "youtube",
-    name: "YouTube",
-    icon: <Youtube className="h-4 w-4" />,
-    description: "Vídeos e canais do YouTube",
-  },
-  {
-    id: "google",
-    name: "Google",
-    icon: <Globe className="h-4 w-4" />,
-    description: "Busca genérica na web",
-  },
-  {
-    id: "web",
-    name: "Web geral",
-    icon: <Globe className="h-4 w-4" />,
-    description: "Artigos, blogs e portais",
-  },
-  {
-    id: "tiktok",
-    name: "TikTok",
-    icon: <Music2 className="h-4 w-4" />,
-    description: "Conteúdo curto do TikTok",
-  },
-];
 
 const LANGUAGES = [
   { code: "pt-BR", name: "Português (Brasil)", flag: "🇧🇷" },
