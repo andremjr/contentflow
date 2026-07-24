@@ -140,13 +140,8 @@ const EMOTIONS: {
   { id: "transformation", label: "Transformação", hint: "Que mudança promete?" },
 ];
 
-const HISTORY_ITEMS = [
-  { id: "titles", label: "Títulos anteriores" },
-  { id: "themes", label: "Temas recorrentes" },
-  { id: "performance", label: "Desempenho dos vídeos" },
-  { id: "comments", label: "Comentários da audiência" },
-  { id: "frequency", label: "Frequência de publicação" },
-];
+
+
 
 const PROMPT_VARIABLES = [
   { key: "channel_name", label: "Nome do canal", desc: "Nome público do canal" },
@@ -202,11 +197,7 @@ function IdeasScreen() {
     "days",
   );
   const [historyAmount, setHistoryAmount] = useState<number>(90);
-  const [historyItems, setHistoryItems] = useState<string[]>([
-    "titles",
-    "performance",
-  ]);
-  
+
   const [avoidRepeats, setAvoidRepeats] = useState(true);
 
   // Prompt
@@ -221,11 +212,7 @@ function IdeasScreen() {
     );
   };
 
-  const toggleHistoryItem = (id: string) => {
-    setHistoryItems((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  };
+
 
   const insertVariable = (key: string) => {
     const token = `{{${key}}}`;
@@ -394,33 +381,6 @@ function IdeasScreen() {
                 </div>
 
 
-                <FieldWrap
-                  label="Sinais a considerar"
-                  description="Marque os dados históricos que devem alimentar as ideias."
-                >
-                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                    {HISTORY_ITEMS.map((item) => {
-                      const checked = historyItems.includes(item.id);
-                      return (
-                        <label
-                          key={item.id}
-                          className={cn(
-                            "flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm transition-colors",
-                            checked
-                              ? "border-primary/60 bg-primary/10"
-                              : "border-border bg-secondary/30 hover:border-border/80",
-                          )}
-                        >
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={() => toggleHistoryItem(item.id)}
-                          />
-                          <span>{item.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </FieldWrap>
 
                 <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-secondary/30 p-3">
                   <Checkbox
