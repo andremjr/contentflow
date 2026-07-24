@@ -18,8 +18,6 @@ import {
   Timer,
   BarChart3,
   Youtube,
-  Globe,
-  Music2,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
