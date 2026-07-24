@@ -87,6 +87,15 @@ export function ProcessRunner({
               <>
                 <Button
                   size="sm"
+                  variant="ghost"
+                  onClick={clear}
+                  className="h-9 gap-1.5 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="size-3.5" />
+                  Limpar resultado
+                </Button>
+                <Button
+                  size="sm"
                   variant="outline"
                   onClick={run}
                   className="h-9 gap-1.5 border-border/60"
