@@ -41,7 +41,7 @@ import {
   PROCESS_META,
   type Project,
 } from "@/lib/mock-data";
-import { useChannel, useProjects } from "@/lib/store";
+import { useChannel, useProjects, removeProject } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/channel/$channelId/")({
