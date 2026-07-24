@@ -198,7 +198,10 @@ function IdeasScreen() {
 
   // History
   const [useHistory, setUseHistory] = useState(true);
-  const [historyPeriod, setHistoryPeriod] = useState("90d");
+  const [historyMode, setHistoryMode] = useState<"days" | "videos" | "all">(
+    "days",
+  );
+  const [historyAmount, setHistoryAmount] = useState<number>(90);
   const [historyItems, setHistoryItems] = useState<string[]>([
     "titles",
     "performance",
