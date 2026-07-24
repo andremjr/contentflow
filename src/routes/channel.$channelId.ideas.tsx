@@ -394,33 +394,6 @@ function IdeasScreen() {
                 </div>
 
 
-                <FieldWrap
-                  label="Sinais a considerar"
-                  description="Marque os dados históricos que devem alimentar as ideias."
-                >
-                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                    {HISTORY_ITEMS.map((item) => {
-                      const checked = historyItems.includes(item.id);
-                      return (
-                        <label
-                          key={item.id}
-                          className={cn(
-                            "flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm transition-colors",
-                            checked
-                              ? "border-primary/60 bg-primary/10"
-                              : "border-border bg-secondary/30 hover:border-border/80",
-                          )}
-                        >
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={() => toggleHistoryItem(item.id)}
-                          />
-                          <span>{item.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </FieldWrap>
 
                 <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-secondary/30 p-3">
                   <Checkbox
