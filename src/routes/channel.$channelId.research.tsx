@@ -62,7 +62,7 @@ import {
   setProcessConfig,
   resetProcessConfig,
 } from "@/lib/store";
-import type { ResearchConfig, ResearchSearchEngine } from "@/engines/types";
+import type { ResearchConfig } from "@/engines/types";
 
 export const Route = createFileRoute("/channel/$channelId/research")({
   head: ({ params }) => {
