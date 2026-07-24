@@ -121,6 +121,37 @@ export function removeChannel(id: string) {
   emit();
 }
 
+export function removeProject(id: string) {
+  const i = db.projects.findIndex((p) => p.id === id);
+  if (i === -1) return;
+  const channelId = db.projects[i].channelId;
+  db.projects.splice(i, 1);
+  const ch = db.channels.find((c) => c.id === channelId);
+  if (ch && ch.activeProjects) ch.activeProjects = Math.max(0, ch.activeProjects - 1);
+  emit();
+}
+
+/**
+ * Clear a single stage's result — sets it back to not_started and
+ * recomputes progress / current stage pointer.
+ */
+export function resetStage(projectId: string, stage: ProcessId) {
+  const p = db.projects.find((x) => x.id === projectId);
+  if (!p) return;
+  p.stages = { ...p.stages, [stage]: "not_started" };
+  const nextIdx = PROCESS_ORDER.findIndex(
+    (s) => p.stages[s] !== "done" && p.stages[s] !== "approved",
+  );
+  p.currentStage = nextIdx === -1 ? "publishing" : PROCESS_ORDER[nextIdx];
+  p.state = p.stages[p.currentStage] ?? "not_started";
+  const doneCount = PROCESS_ORDER.filter(
+    (s) => p.stages[s] === "done" || p.stages[s] === "approved",
+  ).length;
+  p.progress = Math.round((doneCount / PROCESS_ORDER.length) * 100);
+  p.updatedAt = "agora";
+  emit();
+}
+
 export type NewProjectInput = {
   title: string;
   channelId: string;
