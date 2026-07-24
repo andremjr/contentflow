@@ -617,8 +617,11 @@ function ResearchScreen() {
                   </Section>
 
 
+              </div>
+
               <div className="h-4" />
             </div>
+
           </div>
         </div>
       </AppShell>
