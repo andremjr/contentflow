@@ -197,11 +197,7 @@ function IdeasScreen() {
     "days",
   );
   const [historyAmount, setHistoryAmount] = useState<number>(90);
-  const [historyItems, setHistoryItems] = useState<string[]>([
-    "titles",
-    "performance",
-  ]);
-  
+
   const [avoidRepeats, setAvoidRepeats] = useState(true);
 
   // Prompt
@@ -216,11 +212,7 @@ function IdeasScreen() {
     );
   };
 
-  const toggleHistoryItem = (id: string) => {
-    setHistoryItems((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  };
+
 
   const insertVariable = (key: string) => {
     const token = `{{${key}}}`;
