@@ -14,15 +14,31 @@ import {
   type ProcessId,
   type ProcessState,
 } from "@/lib/mock-data";
+import { DEFAULT_CONFIGS } from "@/engines/defaults";
+import type { ProcessConfigMap } from "@/engines/types";
 
-const STORAGE_KEY = "contentflow-db-v1";
+const STORAGE_KEY = "contentflow-db-v2";
 
-type DbShape = { channels: Channel[]; projects: Project[] };
+/** Per-channel overrides for each process configuration. */
+type ProcessConfigStore = Record<
+  string,
+  Partial<{ [P in ProcessId]: Partial<ProcessConfigMap[P]> }>
+>;
+
+type DbShape = {
+  channels: Channel[];
+  projects: Project[];
+  processConfigs: ProcessConfigStore;
+};
 
 // Live arrays — we mutate the same references exported from mock-data so
 // any code path that reads them (route loaders, memoized selectors)
 // always sees the current state.
-const db: DbShape = { channels: seedChannels, projects: seedProjects };
+const db: DbShape = {
+  channels: seedChannels,
+  projects: seedProjects,
+  processConfigs: {},
+};
 
 const listeners = new Set<() => void>();
 let version = 0;
@@ -42,6 +58,9 @@ function hydrate() {
     if (Array.isArray(parsed.projects)) {
       db.projects.splice(0, db.projects.length, ...parsed.projects);
     }
+    if (parsed.processConfigs && typeof parsed.processConfigs === "object") {
+      db.processConfigs = parsed.processConfigs as ProcessConfigStore;
+    }
   } catch {
     // ignore corrupted state
   }
@@ -52,7 +71,11 @@ function persist() {
   try {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ channels: db.channels, projects: db.projects }),
+      JSON.stringify({
+        channels: db.channels,
+        projects: db.projects,
+        processConfigs: db.processConfigs,
+      }),
     );
   } catch {
     // ignore quota errors
@@ -210,5 +233,54 @@ export function completeStage(projectId: string, stage: ProcessId) {
   ).length;
   p.progress = Math.round((doneCount / PROCESS_ORDER.length) * 100);
   p.updatedAt = "agora";
+  emit();
+}
+
+// ---------- Per-channel process configurations ----------
+
+/**
+ * Read the effective configuration for a process, on a given channel.
+ * Merges the DEFAULT_CONFIGS baseline with the channel-level patch
+ * saved in the store — this is exactly what the engine layer receives
+ * when building a command.
+ */
+export function useProcessConfig<P extends ProcessId>(
+  channelId: string | undefined,
+  processId: P,
+): ProcessConfigMap[P] {
+  useSyncExternalStore(subscribe, getVersion, getVersion);
+  const base = DEFAULT_CONFIGS[processId];
+  if (!channelId) return base;
+  const patch = db.processConfigs[channelId]?.[processId];
+  return { ...base, ...(patch ?? {}) } as ProcessConfigMap[P];
+}
+
+export function getProcessConfig<P extends ProcessId>(
+  channelId: string,
+  processId: P,
+): ProcessConfigMap[P] {
+  const base = DEFAULT_CONFIGS[processId];
+  const patch = db.processConfigs[channelId]?.[processId];
+  return { ...base, ...(patch ?? {}) } as ProcessConfigMap[P];
+}
+
+export function setProcessConfig<P extends ProcessId>(
+  channelId: string,
+  processId: P,
+  patch: Partial<ProcessConfigMap[P]>,
+) {
+  const forChannel = db.processConfigs[channelId] ?? {};
+  const prev = (forChannel[processId] ?? {}) as Partial<ProcessConfigMap[P]>;
+  db.processConfigs[channelId] = {
+    ...forChannel,
+    [processId]: { ...prev, ...patch },
+  };
+  emit();
+}
+
+export function resetProcessConfig(channelId: string, processId: ProcessId) {
+  const forChannel = db.processConfigs[channelId];
+  if (!forChannel) return;
+  delete forChannel[processId];
   emit();
 }

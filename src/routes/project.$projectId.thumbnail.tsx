@@ -34,29 +34,43 @@ export const Route = createFileRoute("/project/$projectId/thumbnail")({
 
 function ProjectThumbnailPage() {
   const { project } = Route.useLoaderData();
-  const seeds = ["ocean", "forest", "city", "space"];
   return (
-    <>
-      <ProcessRunner
-        project={project}
-        processId="thumbnail"
-        description="Renderiza variações usando os layouts e assets do canal."
-        result={
+    <ProcessRunner
+      project={project}
+      processId="thumbnail"
+      description="Renderiza variações usando os layouts e assets do canal."
+      renderResult={(data) => (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            {data.palette.map((c) => (
+              <span
+                key={c}
+                className="size-4 rounded border border-border/60"
+                style={{ background: c }}
+                title={c}
+              />
+            ))}
+            <span className="font-mono text-[10px] text-muted-foreground">
+              paleta do canal
+            </span>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {seeds.map((seed, i) => (
+            {data.images.map((src, i) => (
               <div
-                key={seed}
+                key={src}
                 className="relative aspect-video overflow-hidden rounded-xl border border-border/60 bg-black"
               >
                 <img
-                  src={`https://picsum.photos/seed/${project.id}-${seed}/1280/720`}
+                  src={src}
                   alt={`Variação ${i + 1}`}
                   className="absolute inset-0 h-full w-full object-cover"
                   loading="lazy"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                 <div className="absolute inset-x-0 bottom-0 p-3 text-white">
-                  <p className="text-xs uppercase tracking-widest opacity-80">Variação {i + 1}</p>
+                  <p className="text-xs uppercase tracking-widest opacity-80">
+                    Variação {i + 1}
+                  </p>
                   <p className="mt-1 text-lg font-extrabold leading-tight drop-shadow">
                     {project.title}
                   </p>
@@ -64,9 +78,8 @@ function ProjectThumbnailPage() {
               </div>
             ))}
           </div>
-        }
-      />
-    </>
+        </div>
+      )}
+    />
   );
 }
-
