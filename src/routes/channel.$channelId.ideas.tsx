@@ -407,131 +407,13 @@ function IdeasScreen() {
               title="Instruções avançadas"
               description="Prompt-mestre usado ao gerar ideias."
             >
-              <div
-                className={cn(
-                  "overflow-hidden rounded-xl border border-border bg-[#0A1220] font-mono text-sm shadow-inner transition-all",
-                  expanded ? "fixed inset-6 z-50 flex flex-col" : "relative",
-                )}
-              >
-                <div className="flex items-center justify-between border-b border-border/60 bg-secondary/20 px-3 py-2">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="flex h-2 w-2 rounded-full bg-destructive/70" />
-                    <span className="flex h-2 w-2 rounded-full bg-warning/70" />
-                    <span className="flex h-2 w-2 rounded-full bg-success/70" />
-                    <span className="ml-2 font-sans">prompt.ideas.md</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-7 px-2">
-                          <Braces className="mr-1 h-3.5 w-3.5" />
-                          Inserir variável
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-64">
-                        <DropdownMenuLabel>
-                          Variáveis disponíveis
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        {PROMPT_VARIABLES.map((v) => (
-                          <DropdownMenuItem
-                            key={v.key}
-                            onSelect={() => insertVariable(v.key)}
-                            className="flex-col items-start gap-0.5"
-                          >
-                            <span className="font-mono text-xs text-primary">
-                              {`{{${v.key}}}`}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {v.label} · {v.desc}
-                            </span>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={restorePrompt}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Restaurar prompt padrão</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => setExpanded((v) => !v)}
-                        >
-                          {expanded ? (
-                            <Minimize2 className="h-3.5 w-3.5" />
-                          ) : (
-                            <Maximize2 className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {expanded ? "Reduzir" : "Expandir"}
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                </div>
-
-                <Textarea
-                  ref={promptRef}
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  className={cn(
-                    "resize-none rounded-none border-0 bg-transparent font-mono text-sm leading-relaxed text-foreground focus-visible:ring-0",
-                    expanded ? "flex-1" : "min-h-[280px]",
-                  )}
-                  spellCheck={false}
-                />
-
-                <div className="flex items-center justify-between border-t border-border/60 bg-secondary/20 px-3 py-1.5 text-[11px] text-muted-foreground">
-                  <div className="flex items-center gap-3">
-                    <span>{prompt.length} caracteres</span>
-                    <span>·</span>
-                    <span>
-                      {prompt.split(/\s+/).filter(Boolean).length} palavras
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Info className="h-3 w-3" />
-                    Suporta variáveis {`{{ nome }}`}
-                  </div>
-                </div>
-              </div>
-              {expanded && (
-                <div
-                  className="fixed inset-0 z-40 bg-background/70 backdrop-blur-sm"
-                  onClick={() => setExpanded(false)}
-                />
-              )}
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className="text-xs text-muted-foreground">
-                  Atalhos:
-                </span>
-                {PROMPT_VARIABLES.slice(0, 4).map((v) => (
-                  <button
-                    key={v.key}
-                    type="button"
-                    onClick={() => insertVariable(v.key)}
-                    className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary/40 px-2 py-0.5 font-mono text-[11px] text-muted-foreground hover:border-primary/50 hover:text-primary"
-                  >
-                    <Plus className="h-2.5 w-2.5" />
-                    {v.key}
-                  </button>
-                ))}
-              </div>
+              <Textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Descreva as instruções que orientarão a geração das ideias..."
+                className="min-h-[240px] resize-y font-mono text-sm leading-relaxed"
+                spellCheck={false}
+              />
             </Section>
 
             <Separator />
