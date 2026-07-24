@@ -158,3 +158,53 @@ export type ProcessConfigMap = {
 };
 
 export type ProcessConfig<P extends ProcessId> = ProcessConfigMap[P];
+
+// ---------- Per-process result shapes ----------
+
+export type ResearchResultItem = {
+  title: string;
+  channel: string;
+  views: string;
+  publishedAt: string;
+  url: string;
+};
+
+export type IdeaItem = {
+  id: string;
+  title: string;
+  angle: string;
+  score: number;
+};
+
+export type ResultDataMap = {
+  research: {
+    items: ResearchResultItem[];
+    meta: { language: string; minViews: number | null; totalMatched: number };
+  };
+  ideas: { ideas: IdeaItem[] };
+  titles: { variants: string[] };
+  thumbnail: { images: string[]; palette: string[] };
+  script: {
+    text: string;
+    wordCount: number;
+    sections: { heading: string; body: string }[];
+  };
+  narration: { audioUrl: string; durationSeconds: number; voiceId: string };
+  assets: { images: string[]; clips: string[] };
+  editing: {
+    videoUrl: string;
+    durationSeconds: number;
+    resolution: string;
+    template: string;
+    captions: boolean;
+  };
+  publishing: {
+    videoId: string;
+    url: string;
+    visibility: string;
+    scheduledFor?: string;
+    tags: string[];
+  };
+};
+
+export type ResultData<P extends ProcessId> = ResultDataMap[P];
