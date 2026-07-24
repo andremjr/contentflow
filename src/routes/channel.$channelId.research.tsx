@@ -253,6 +253,65 @@ function ResearchScreen() {
                 </Button>
               </div>
 
+              {/* Global process toggle */}
+              <div
+                className={cn(
+                  "flex items-start gap-4 rounded-xl border p-5 transition-colors",
+                  cfg.processEnabled
+                    ? "border-primary/30 bg-primary/5"
+                    : "border-border bg-secondary/30",
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-lg",
+                    cfg.processEnabled
+                      ? "bg-primary/15 text-primary"
+                      : "bg-secondary text-muted-foreground",
+                  )}
+                >
+                  <SearchIcon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold">
+                      Usar Pesquisa neste canal
+                    </h2>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px]",
+                        cfg.processEnabled
+                          ? "border-primary/40 text-primary"
+                          : "border-border text-muted-foreground",
+                      )}
+                    >
+                      {cfg.processEnabled ? "Ativo" : "Desativado"}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {cfg.processEnabled
+                      ? "A etapa de Pesquisa será executada nos projetos deste canal."
+                      : "A etapa de Pesquisa será ignorada nos projetos deste canal. Nenhum comando será enviado ao motor."}
+                  </p>
+                </div>
+                <Switch
+                  checked={cfg.processEnabled}
+                  onCheckedChange={(v) => patch({ processEnabled: v })}
+                  aria-label="Ativar processo de pesquisa neste canal"
+                />
+              </div>
+
+              <div
+                className={cn(
+                  "space-y-6 transition-opacity",
+                  !cfg.processEnabled &&
+                    "pointer-events-none select-none opacity-50",
+                )}
+                aria-disabled={!cfg.processEnabled}
+              >
+
+
               {/* Termos da pesquisa */}
               <Section
                 icon={<Tag className="h-4 w-4" />}
@@ -558,8 +617,11 @@ function ResearchScreen() {
                   </Section>
 
 
+              </div>
+
               <div className="h-4" />
             </div>
+
           </div>
         </div>
       </AppShell>

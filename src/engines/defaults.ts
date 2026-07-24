@@ -7,6 +7,7 @@ import type { ProcessConfigMap } from "./types";
 
 export const DEFAULT_CONFIGS: ProcessConfigMap = {
   research: {
+    processEnabled: true,
     searchEngine: "youtube",
     keywordsEnabled: true,
     keywords: [],
