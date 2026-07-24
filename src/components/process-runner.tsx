@@ -9,6 +9,8 @@ import {
   ArrowRight,
   Trash2,
   Code2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
