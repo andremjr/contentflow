@@ -70,6 +70,7 @@ export type ProcessEngine<C, I, R> = {
 export type ResearchSearchEngine = "youtube" | "google" | "web" | "tiktok";
 
 export type ResearchConfig = {
+  processEnabled: boolean;
   searchEngine: ResearchSearchEngine;
   keywordsEnabled: boolean;
   keywords: string[];
