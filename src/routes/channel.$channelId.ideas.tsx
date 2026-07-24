@@ -192,22 +192,9 @@ function IdeasScreen() {
   ]);
 
   // Audience
-  const [emotions, setEmotions] = useState<EmotionId[]>([
-    "curiosity",
-    "transformation",
-  ]);
-  const [emotionCopy, setEmotionCopy] = useState<Record<EmotionId, string>>({
-    pain: "",
-    desire: "",
-    fear: "",
-    curiosity:
-      "Levantar perguntas que a audiência sempre quis fazer mas nunca teve resposta clara.",
-    aspiration: "",
-    identification: "",
-    urgency: "",
-    transformation:
-      "Mostrar antes/depois: como a ideia muda a forma como o espectador enxerga o tema.",
-  });
+  const [audienceDescription, setAudienceDescription] = useState<string>(
+    "Adultos entre 25 e 45 anos, curiosos, que buscam entender temas complexos de forma clara e aprofundada. Valorizam conteúdo autêntico e narrativas envolventes.",
+  );
 
   // History
   const [useHistory, setUseHistory] = useState(true);
