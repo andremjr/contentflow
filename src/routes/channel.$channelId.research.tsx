@@ -1,5 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
-import { useMemo, useState, useRef, useEffect, type KeyboardEvent } from "react";
+import { useState, useRef, useEffect, type KeyboardEvent } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -11,17 +11,15 @@ import {
   CalendarIcon,
   Eye,
   MessageSquare,
-  Users,
   Link as LinkIcon,
-  Play,
-  Save,
   RotateCcw,
   Info,
-  Sparkles,
   Tag,
   Timer,
   BarChart3,
   Youtube,
+  Globe,
+  Music2,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
@@ -30,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -61,6 +59,12 @@ import {
 import { cn } from "@/lib/utils";
 import { channels } from "@/lib/mock-data";
 import { ChannelAvatar } from "@/components/channel-avatar";
+import {
+  useProcessConfig,
+  setProcessConfig,
+  resetProcessConfig,
+} from "@/lib/store";
+import type { ResearchConfig, ResearchSearchEngine } from "@/engines/types";
 
 export const Route = createFileRoute("/channel/$channelId/research")({
   head: ({ params }) => {
@@ -100,6 +104,38 @@ export const Route = createFileRoute("/channel/$channelId/research")({
 });
 
 // ---------- mocks ----------
+
+const SEARCH_ENGINES: {
+  id: ResearchSearchEngine;
+  name: string;
+  icon: React.ReactNode;
+  description: string;
+}[] = [
+  {
+    id: "youtube",
+    name: "YouTube",
+    icon: <Youtube className="h-4 w-4" />,
+    description: "Vídeos e canais do YouTube",
+  },
+  {
+    id: "google",
+    name: "Google",
+    icon: <Globe className="h-4 w-4" />,
+    description: "Busca genérica na web",
+  },
+  {
+    id: "web",
+    name: "Web geral",
+    icon: <Globe className="h-4 w-4" />,
+    description: "Artigos, blogs e portais",
+  },
+  {
+    id: "tiktok",
+    name: "TikTok",
+    icon: <Music2 className="h-4 w-4" />,
+    description: "Conteúdo curto do TikTok",
+  },
+];
 
 const LANGUAGES = [
   { code: "pt-BR", name: "Português (Brasil)", flag: "🇧🇷" },
@@ -142,45 +178,12 @@ const VIEW_PRESETS = [
   { label: "10 mi+", min: 10_000_000, max: null },
 ];
 
-const CHANNEL_SIZE_PRESETS = [
-  { id: "small", label: "Pequeno", min: 1_000, max: 100_000 },
-  { id: "medium", label: "Médio", min: 100_000, max: 1_000_000 },
-  { id: "large", label: "Grande", min: 1_000_000, max: 100_000_000 },
-  { id: "custom", label: "Personalizado", min: 0, max: 100_000_000 },
-];
-
 const CHANNEL_SUGGESTIONS = [
-  {
-    id: "ch-nerdo",
-    name: "Nerdologia",
-    handle: "@nerdologia",
-    subs: 3_400_000,
-    color: "from-blue-500 to-indigo-600",
-  },
-  {
-    id: "ch-kurzg",
-    name: "Kurzgesagt",
-    handle: "@kurzgesagt",
-    subs: 22_500_000,
-    color: "from-teal-500 to-cyan-600",
-  },
-  {
-    id: "ch-mrwhy",
-    name: "Manual do Mundo",
-    handle: "@manualdomundo",
-    subs: 18_700_000,
-    color: "from-amber-500 to-orange-600",
-  },
-  {
-    id: "ch-hist",
-    name: "Foca na História",
-    handle: "@focanahistoria",
-    subs: 620_000,
-    color: "from-rose-500 to-pink-600",
-  },
+  { id: "ch-nerdo", name: "Nerdologia", handle: "@nerdologia", subs: 3_400_000, color: "from-blue-500 to-indigo-600" },
+  { id: "ch-kurzg", name: "Kurzgesagt", handle: "@kurzgesagt", subs: 22_500_000, color: "from-teal-500 to-cyan-600" },
+  { id: "ch-mrwhy", name: "Manual do Mundo", handle: "@manualdomundo", subs: 18_700_000, color: "from-amber-500 to-orange-600" },
+  { id: "ch-hist", name: "Foca na História", handle: "@focanahistoria", subs: 620_000, color: "from-rose-500 to-pink-600" },
 ];
-
-// ---------- helpers ----------
 
 function formatCompact(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)} mi`;
@@ -188,53 +191,32 @@ function formatCompact(n: number) {
   return String(n);
 }
 
-// ---------- component ----------
-
 type SelectedChannel = (typeof CHANNEL_SUGGESTIONS)[number];
 
 function ResearchScreen() {
   const { channel } = Route.useLoaderData();
+  const cfg = useProcessConfig(channel.id, "research");
 
-  // Keywords
-  const [keywords, setKeywords] = useState<string[]>(["inteligência artificial"]);
-  const [negatives, setNegatives] = useState<string[]>(["shorts"]);
-
-  // Language
-  const [language, setLanguage] = useState("pt-BR");
-
-  // Duration
-  const [durationUnit, setDurationUnit] = useState<"min" | "sec">("min");
-  const [durationRange, setDurationRange] = useState<[number, number]>([5, 20]);
-
-  // Date
-  const [datePreset, setDatePreset] = useState<string>("30d");
+  // Local UI-only state (not persisted): date preset id
+  const [datePreset, setDatePreset] = useState<string>(() => {
+    const d = DATE_PRESETS.find((p) => p.days === cfg.publishedInLastDays);
+    return d?.id ?? "custom";
+  });
   const [dateFrom, setDateFrom] = useState<Date | undefined>(() => {
+    if (cfg.publishedInLastDays == null) return undefined;
     const d = new Date();
-    d.setDate(d.getDate() - 30);
+    d.setDate(d.getDate() - cfg.publishedInLastDays);
     return d;
   });
-  const [dateTo, setDateTo] = useState<Date | undefined>(new Date());
+  const [dateTo, setDateTo] = useState<Date | undefined>(() =>
+    cfg.publishedInLastDays == null ? undefined : new Date(),
+  );
+  const [durationUnit, setDurationUnit] = useState<"min" | "sec">("min");
 
-  // Views
-  const [viewMin, setViewMin] = useState<number | null>(100_000);
-  const [viewMax, setViewMax] = useState<number | null>(null);
+  const isYT = cfg.searchEngine === "youtube";
 
-  // Comments
-  const [commentMin, setCommentMin] = useState<number | null>(50);
-  const [commentMax, setCommentMax] = useState<number | null>(null);
-
-  // Channel size
-  const [channelSizePreset, setChannelSizePreset] = useState<string>("medium");
-  const [channelSizeRange, setChannelSizeRange] = useState<[number, number]>([
-    100_000, 1_000_000,
-  ]);
-
-  // Reference channels
-  const [refChannels, setRefChannels] = useState<SelectedChannel[]>([
-    CHANNEL_SUGGESTIONS[0],
-  ]);
-
-  const activeLang = LANGUAGES.find((l) => l.code === language);
+  const patch = (p: Partial<ResearchConfig>) =>
+    setProcessConfig(channel.id, "research", p);
 
   const applyDatePreset = (id: string) => {
     setDatePreset(id);
@@ -243,32 +225,30 @@ function ResearchScreen() {
     if (p.days == null) {
       setDateFrom(undefined);
       setDateTo(undefined);
+      patch({ publishedInLastDays: null });
     } else {
       const to = new Date();
       const from = new Date();
       from.setDate(from.getDate() - p.days);
       setDateFrom(from);
       setDateTo(to);
+      patch({ publishedInLastDays: p.days });
     }
   };
 
-  const applyChannelSize = (id: string) => {
-    setChannelSizePreset(id);
-    const p = CHANNEL_SIZE_PRESETS.find((x) => x.id === id);
-    if (p && id !== "custom") setChannelSizeRange([p.min, p.max]);
-  };
+  const refChannels: SelectedChannel[] = cfg.referenceChannels
+    .map((id) => CHANNEL_SUGGESTIONS.find((c) => c.id === id))
+    .filter((c): c is SelectedChannel => !!c);
 
-  const addRefChannel = (c: SelectedChannel) => {
-    if (refChannels.some((r) => r.id === c.id)) return;
-    setRefChannels((prev) => [...prev, c]);
-  };
+  const setRefChannels = (list: SelectedChannel[]) =>
+    patch({ referenceChannels: list.map((c) => c.id) });
 
   return (
     <TooltipProvider delayDuration={200}>
       <AppShell>
         <TopBar
           title="Pesquisa"
-          subtitle={`Nova pesquisa · ${channel.name}`}
+          subtitle={`Configuração · ${channel.name}`}
           breadcrumbs={[
             { label: "ContentFlow OS" },
             { label: "Canais" },
@@ -279,9 +259,7 @@ function ResearchScreen() {
 
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[1100px] p-6">
-            {/* MAIN */}
             <div className="space-y-6">
-
               {/* Header */}
               <div className="flex items-start gap-4">
                 <ChannelAvatar channel={channel} size="lg" />
@@ -291,13 +269,66 @@ function ResearchScreen() {
                     Pesquisa · Etapa 1 do pipeline
                   </div>
                   <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-                    Nova pesquisa de referências
+                    Configurações de pesquisa
                   </h1>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Defina critérios para descobrir vídeos e canais alinhados ao {channel.name}.
+                    Cada parâmetro pode ser ativado ou desativado — apenas os
+                    ativos serão enviados ao motor.
                   </p>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => resetProcessConfig(channel.id, "research")}
+                  className="gap-2"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Restaurar padrão
+                </Button>
               </div>
+
+              {/* Motor de busca */}
+              <Section
+                icon={<SearchIcon className="h-4 w-4" />}
+                title="Motor de busca"
+                description="Alguns parâmetros só se aplicam ao YouTube."
+              >
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {SEARCH_ENGINES.map((e) => {
+                    const active = cfg.searchEngine === e.id;
+                    return (
+                      <button
+                        key={e.id}
+                        type="button"
+                        onClick={() => patch({ searchEngine: e.id })}
+                        className={cn(
+                          "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                          active
+                            ? "border-primary bg-primary/10"
+                            : "border-border bg-secondary/30 hover:border-border/80",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "flex h-8 w-8 items-center justify-center rounded-md",
+                            active
+                              ? "bg-primary/20 text-primary"
+                              : "bg-secondary text-muted-foreground",
+                          )}
+                        >
+                          {e.icon}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium">{e.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {e.description}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Section>
 
               {/* Termos da pesquisa */}
               <Section
@@ -306,306 +337,310 @@ function ResearchScreen() {
                 description="Palavras-chave, exclusões e idioma alvo."
               >
                 <div className="grid gap-6 md:grid-cols-2">
-                  <TagField
+                  <ParamGroup
                     label="Palavras-chave"
                     description="Escreva um termo e pressione Enter para adicionar."
-                    values={keywords}
-                    onChange={setKeywords}
-                    suggestions={KEYWORD_SUGGESTIONS}
-                    tone="primary"
-                  />
-                  <TagField
+                    enabled={cfg.keywordsEnabled}
+                    onToggle={(v) => patch({ keywordsEnabled: v })}
+                  >
+                    <TagFieldPlain
+                      values={cfg.keywords}
+                      onChange={(v) => patch({ keywords: v })}
+                      suggestions={KEYWORD_SUGGESTIONS}
+                      tone="primary"
+                    />
+                  </ParamGroup>
+                  <ParamGroup
                     label="Palavras negativas"
                     description="Termos que devem ser excluídos dos resultados."
-                    values={negatives}
-                    onChange={setNegatives}
-                    tone="destructive"
-                    icon={<Ban className="h-3 w-3" />}
-                  />
+                    enabled={cfg.negativesEnabled}
+                    onToggle={(v) => patch({ negativesEnabled: v })}
+                  >
+                    <TagFieldPlain
+                      values={cfg.negativeKeywords}
+                      onChange={(v) => patch({ negativeKeywords: v })}
+                      tone="destructive"
+                      icon={<Ban className="h-3 w-3" />}
+                    />
+                  </ParamGroup>
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2">
-                  <FieldWrap
+                  <ParamGroup
                     label="Idioma principal"
                     description="Apenas um idioma pode ser selecionado."
                     tooltip="A pesquisa usa este idioma para relevância semântica."
+                    enabled={cfg.languageEnabled}
+                    onToggle={(v) => patch({ languageEnabled: v })}
                   >
-                    <LanguageSelect value={language} onChange={setLanguage} />
-                  </FieldWrap>
-                </div>
-              </Section>
-
-              {/* Características */}
-              <Section
-                icon={<Timer className="h-4 w-4" />}
-                title="Características dos vídeos"
-                description="Duração e janela de publicação."
-              >
-                <FieldWrap
-                  label="Duração"
-                  description="Intervalo entre mínima e máxima."
-                >
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <NumberBox
-                        aria="Duração mínima"
-                        value={durationRange[0]}
-                        onChange={(v) =>
-                          setDurationRange([v, Math.max(v, durationRange[1])])
-                        }
-                        min={0}
-                        max={120}
-                      />
-                      <span className="text-sm text-muted-foreground">até</span>
-                      <NumberBox
-                        aria="Duração máxima"
-                        value={durationRange[1]}
-                        onChange={(v) =>
-                          setDurationRange([Math.min(durationRange[0], v), v])
-                        }
-                        min={0}
-                        max={120}
-                      />
-                      <Select
-                        value={durationUnit}
-                        onValueChange={(v) => setDurationUnit(v as "min" | "sec")}
-                      >
-                        <SelectTrigger className="w-28">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="min">Minutos</SelectItem>
-                          <SelectItem value="sec">Segundos</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Slider
-                      value={durationRange}
-                      min={0}
-                      max={120}
-                      step={1}
-                      onValueChange={(v) =>
-                        setDurationRange([v[0], v[1]] as [number, number])
-                      }
-                      className="pt-1"
+                    <LanguageSelect
+                      value={cfg.language}
+                      onChange={(v) => patch({ language: v })}
                     />
-                    <div className="flex justify-between text-[11px] text-muted-foreground">
-                      <span>0 {durationUnit}</span>
-                      <span>120 {durationUnit}</span>
-                    </div>
-                  </div>
-                </FieldWrap>
+                  </ParamGroup>
 
-                <FieldWrap
-                  label="Data de postagem"
-                  description="Selecione um preset ou informe um intervalo personalizado."
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {DATE_PRESETS.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => applyDatePreset(p.id)}
-                        className={cn(
-                          "rounded-full border px-3 py-1 text-xs transition-colors",
-                          datePreset === p.id
-                            ? "border-primary bg-primary/15 text-primary"
-                            : "border-border bg-secondary/40 text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="mt-3 w-full justify-start text-left font-normal"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateFrom && dateTo ? (
-                          <>
-                            {format(dateFrom, "d MMM yyyy", { locale: ptBR })} –{" "}
-                            {format(dateTo, "d MMM yyyy", { locale: ptBR })}
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            Qualquer data
-                          </span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      className="w-auto p-0 pointer-events-auto"
-                      align="start"
-                    >
-                      <Calendar
-                        mode="range"
-                        selected={{ from: dateFrom, to: dateTo }}
-                        onSelect={(r) => {
-                          setDateFrom(r?.from);
-                          setDateTo(r?.to);
-                          setDatePreset("custom");
-                        }}
-                        numberOfMonths={2}
-                        locale={ptBR}
-                        className="p-3 pointer-events-auto"
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </FieldWrap>
-              </Section>
-
-              {/* Métricas */}
-              <Section
-                icon={<BarChart3 className="h-4 w-4" />}
-                title="Métricas de desempenho"
-                description="Visualizações, comentários e tamanho do canal."
-              >
-                <div className="grid gap-6 md:grid-cols-2">
-                  <FieldWrap
-                    label="Quantidade de visualizações"
-                    description="Formato compacto: 10 mil, 100 mil, 1 mi."
-                    icon={<Eye className="h-3.5 w-3.5" />}
+                  <ParamGroup
+                    label="Data de postagem"
+                    description="Janela de tempo em que o conteúdo foi publicado."
+                    enabled={cfg.publishedEnabled}
+                    onToggle={(v) => patch({ publishedEnabled: v })}
                   >
-                    <div className="flex flex-wrap items-center gap-3">
-                      <NumberBox
-                        aria="Views mínimas"
-                        value={viewMin ?? 0}
-                        onChange={(v) => setViewMin(v || null)}
-                        min={0}
-                        max={1_000_000_000}
-                        step={1000}
-                        display={viewMin != null ? formatCompact(viewMin) : ""}
-                      />
-                      <span className="text-sm text-muted-foreground">até</span>
-                      <NumberBox
-                        aria="Views máximas"
-                        value={viewMax ?? 0}
-                        onChange={(v) => setViewMax(v || null)}
-                        min={0}
-                        max={1_000_000_000}
-                        step={1000}
-                        placeholder="Sem limite"
-                        display={viewMax != null ? formatCompact(viewMax) : ""}
-                      />
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {VIEW_PRESETS.map((p) => (
+                    <div className="flex flex-wrap gap-2">
+                      {DATE_PRESETS.map((p) => (
                         <Chip
-                          key={p.label}
-                          active={viewMin === p.min && viewMax === p.max}
-                          onClick={() => {
-                            setViewMin(p.min);
-                            setViewMax(p.max);
-                          }}
+                          key={p.id}
+                          active={datePreset === p.id}
+                          onClick={() => applyDatePreset(p.id)}
                         >
                           {p.label}
                         </Chip>
                       ))}
                     </div>
-                  </FieldWrap>
-
-                  <FieldWrap
-                    label="Quantidade de comentários"
-                    description="Intervalo mínimo e máximo."
-                    icon={<MessageSquare className="h-3.5 w-3.5" />}
-                  >
-                    <div className="flex flex-wrap items-center gap-3">
-                      <NumberBox
-                        aria="Comentários mínimos"
-                        value={commentMin ?? 0}
-                        onChange={(v) => setCommentMin(v || null)}
-                        min={0}
-                        max={1_000_000}
-                        step={10}
-                      />
-                      <span className="text-sm text-muted-foreground">até</span>
-                      <NumberBox
-                        aria="Comentários máximos"
-                        value={commentMax ?? 0}
-                        onChange={(v) => setCommentMax(v || null)}
-                        min={0}
-                        max={1_000_000}
-                        step={10}
-                        placeholder="Sem limite"
-                      />
-                    </div>
-                  </FieldWrap>
-                </div>
-
-                <FieldWrap
-                  label="Tamanho do canal"
-                  description="Faixa de inscritos dos canais publicando os vídeos."
-                  icon={<Users className="h-3.5 w-3.5" />}
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {CHANNEL_SIZE_PRESETS.map((p) => (
-                      <Chip
-                        key={p.id}
-                        active={channelSizePreset === p.id}
-                        onClick={() => applyChannelSize(p.id)}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="mt-3 w-full justify-start text-left font-normal"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {dateFrom && dateTo ? (
+                            <>
+                              {format(dateFrom, "d MMM yyyy", { locale: ptBR })} –{" "}
+                              {format(dateTo, "d MMM yyyy", { locale: ptBR })}
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              Qualquer data
+                            </span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-auto p-0 pointer-events-auto"
+                        align="start"
                       >
-                        {p.label}
-                        {p.id !== "custom" && (
-                          <span className="ml-1 text-[10px] text-muted-foreground">
-                            {formatCompact(p.min)}–{formatCompact(p.max)}
-                          </span>
-                        )}
-                      </Chip>
-                    ))}
-                  </div>
-                  <div className="mt-4">
-                    <Slider
-                      value={channelSizeRange}
-                      min={0}
-                      max={20_000_000}
-                      step={1000}
-                      onValueChange={(v) => {
-                        setChannelSizeRange([v[0], v[1]] as [number, number]);
-                        setChannelSizePreset("custom");
-                      }}
-                    />
-                    <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-                      <span>{formatCompact(channelSizeRange[0])} inscritos</span>
-                      <span>{formatCompact(channelSizeRange[1])} inscritos</span>
-                    </div>
-                  </div>
-                </FieldWrap>
+                        <Calendar
+                          mode="range"
+                          selected={{ from: dateFrom, to: dateTo }}
+                          onSelect={(r) => {
+                            setDateFrom(r?.from);
+                            setDateTo(r?.to);
+                            setDatePreset("custom");
+                            if (r?.from && r?.to) {
+                              const days = Math.max(
+                                1,
+                                Math.round(
+                                  (r.to.getTime() - r.from.getTime()) /
+                                    (1000 * 60 * 60 * 24),
+                                ),
+                              );
+                              patch({ publishedInLastDays: days });
+                            }
+                          }}
+                          numberOfMonths={2}
+                          locale={ptBR}
+                          className="p-3 pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </ParamGroup>
+                </div>
               </Section>
 
-              {/* Canais de referência */}
-              <Section
-                icon={<Youtube className="h-4 w-4" />}
-                title="Canais de referência"
-                description="Encontre vídeos com padrão semelhante a canais que você admira."
-              >
-                <ReferenceChannelPicker
-                  onPick={addRefChannel}
-                  excluded={refChannels.map((c) => c.id)}
-                />
-                {refChannels.length > 0 && (
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {refChannels.map((c) => (
-                      <ReferenceChannelCard
-                        key={c.id}
-                        channel={c}
-                        onRemove={() =>
-                          setRefChannels((prev) =>
-                            prev.filter((x) => x.id !== c.id),
-                          )
-                        }
+              {/* YouTube-only sections */}
+              {isYT && (
+                <>
+                  <Section
+                    icon={<Timer className="h-4 w-4" />}
+                    title="Características dos vídeos"
+                    description="Duração dos vídeos-alvo."
+                  >
+                    <ParamGroup
+                      label="Duração"
+                      description="Intervalo entre mínima e máxima."
+                      enabled={cfg.durationEnabled}
+                      onToggle={(v) => patch({ durationEnabled: v })}
+                    >
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <NumberBox
+                            aria="Duração mínima"
+                            value={cfg.durationMinMinutes}
+                            onChange={(v) =>
+                              patch({
+                                durationMinMinutes: v,
+                                durationMaxMinutes: Math.max(v, cfg.durationMaxMinutes),
+                              })
+                            }
+                            min={0}
+                            max={120}
+                          />
+                          <span className="text-sm text-muted-foreground">até</span>
+                          <NumberBox
+                            aria="Duração máxima"
+                            value={cfg.durationMaxMinutes}
+                            onChange={(v) =>
+                              patch({
+                                durationMaxMinutes: v,
+                                durationMinMinutes: Math.min(cfg.durationMinMinutes, v),
+                              })
+                            }
+                            min={0}
+                            max={120}
+                          />
+                          <Select
+                            value={durationUnit}
+                            onValueChange={(v) => setDurationUnit(v as "min" | "sec")}
+                          >
+                            <SelectTrigger className="w-28">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="min">Minutos</SelectItem>
+                              <SelectItem value="sec">Segundos</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Slider
+                          value={[cfg.durationMinMinutes, cfg.durationMaxMinutes]}
+                          min={0}
+                          max={120}
+                          step={1}
+                          onValueChange={(v) =>
+                            patch({
+                              durationMinMinutes: v[0],
+                              durationMaxMinutes: v[1],
+                            })
+                          }
+                          className="pt-1"
+                        />
+                        <div className="flex justify-between text-[11px] text-muted-foreground">
+                          <span>0 {durationUnit}</span>
+                          <span>120 {durationUnit}</span>
+                        </div>
+                      </div>
+                    </ParamGroup>
+                  </Section>
+
+                  <Section
+                    icon={<BarChart3 className="h-4 w-4" />}
+                    title="Métricas de desempenho"
+                    description="Visualizações e comentários."
+                  >
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <ParamGroup
+                        label="Quantidade de visualizações"
+                        description="Formato compacto: 10 mil, 100 mil, 1 mi."
+                        icon={<Eye className="h-3.5 w-3.5" />}
+                        enabled={cfg.viewsEnabled}
+                        onToggle={(v) => patch({ viewsEnabled: v })}
+                      >
+                        <div className="flex flex-wrap items-center gap-3">
+                          <NumberBox
+                            aria="Views mínimas"
+                            value={cfg.minViews ?? 0}
+                            onChange={(v) => patch({ minViews: v || null })}
+                            min={0}
+                            max={1_000_000_000}
+                            step={1000}
+                            display={cfg.minViews != null ? formatCompact(cfg.minViews) : ""}
+                          />
+                          <span className="text-sm text-muted-foreground">até</span>
+                          <NumberBox
+                            aria="Views máximas"
+                            value={cfg.maxViews ?? 0}
+                            onChange={(v) => patch({ maxViews: v || null })}
+                            min={0}
+                            max={1_000_000_000}
+                            step={1000}
+                            placeholder="Sem limite"
+                            display={cfg.maxViews != null ? formatCompact(cfg.maxViews) : ""}
+                          />
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {VIEW_PRESETS.map((p) => (
+                            <Chip
+                              key={p.label}
+                              active={cfg.minViews === p.min && cfg.maxViews === p.max}
+                              onClick={() => patch({ minViews: p.min, maxViews: p.max })}
+                            >
+                              {p.label}
+                            </Chip>
+                          ))}
+                        </div>
+                      </ParamGroup>
+
+                      <ParamGroup
+                        label="Quantidade de comentários"
+                        description="Intervalo mínimo e máximo."
+                        icon={<MessageSquare className="h-3.5 w-3.5" />}
+                        enabled={cfg.commentsEnabled}
+                        onToggle={(v) => patch({ commentsEnabled: v })}
+                      >
+                        <div className="flex flex-wrap items-center gap-3">
+                          <NumberBox
+                            aria="Comentários mínimos"
+                            value={cfg.minComments ?? 0}
+                            onChange={(v) => patch({ minComments: v || null })}
+                            min={0}
+                            max={1_000_000}
+                            step={10}
+                          />
+                          <span className="text-sm text-muted-foreground">até</span>
+                          <NumberBox
+                            aria="Comentários máximos"
+                            value={cfg.maxComments ?? 0}
+                            onChange={(v) => patch({ maxComments: v || null })}
+                            min={0}
+                            max={1_000_000}
+                            step={10}
+                            placeholder="Sem limite"
+                          />
+                        </div>
+                      </ParamGroup>
+                    </div>
+                  </Section>
+
+                  <Section
+                    icon={<Youtube className="h-4 w-4" />}
+                    title="Canais de referência"
+                    description="Encontre vídeos com padrão semelhante a canais que você admira."
+                  >
+                    <ParamGroup
+                      label="Lista de canais"
+                      description="Se desativar as palavras-chave, a pesquisa fica restrita a estes canais."
+                      enabled={cfg.referenceChannelsEnabled}
+                      onToggle={(v) => patch({ referenceChannelsEnabled: v })}
+                    >
+                      <ReferenceChannelPicker
+                        onPick={(c) => {
+                          if (!refChannels.some((r) => r.id === c.id))
+                            setRefChannels([...refChannels, c]);
+                        }}
+                        excluded={refChannels.map((c) => c.id)}
                       />
-                    ))}
-                  </div>
-                )}
-              </Section>
+                      {refChannels.length > 0 && (
+                        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                          {refChannels.map((c) => (
+                            <ReferenceChannelCard
+                              key={c.id}
+                              channel={c}
+                              onRemove={() =>
+                                setRefChannels(
+                                  refChannels.filter((x) => x.id !== c.id),
+                                )
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </ParamGroup>
+                  </Section>
+                </>
+              )}
 
               <div className="h-4" />
             </div>
-
-
           </div>
         </div>
       </AppShell>
@@ -632,7 +667,7 @@ function Section({
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
           {icon}
         </div>
-        <div>
+        <div className="flex-1">
           <h2 className="text-base font-semibold">{title}</h2>
           {description && (
             <p className="text-xs text-muted-foreground">{description}</p>
@@ -644,62 +679,67 @@ function Section({
   );
 }
 
-function FieldWrap({
+function ParamGroup({
   label,
   description,
   tooltip,
   icon,
+  enabled,
+  onToggle,
   children,
 }: {
   label: string;
   description?: string;
   tooltip?: string;
   icon?: React.ReactNode;
+  enabled: boolean;
+  onToggle: (v: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-1.5">
-        {icon && <span className="text-muted-foreground">{icon}</span>}
-        <Label className="text-sm font-medium">{label}</Label>
-        {tooltip && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Info className="h-3.5 w-3.5 cursor-help text-muted-foreground/70" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs text-xs">
-              {tooltip}
-            </TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-      {description && (
-        <p className="text-xs text-muted-foreground">{description}</p>
+    <div
+      className={cn(
+        "rounded-lg border border-border/60 bg-secondary/20 p-4 transition-opacity",
+        !enabled && "opacity-60",
       )}
-      {children}
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            {icon && <span className="text-muted-foreground">{icon}</span>}
+            <Label className="text-sm font-medium">{label}</Label>
+            {tooltip && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-3.5 w-3.5 cursor-help text-muted-foreground/70" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-xs">
+                  {tooltip}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+          {description && (
+            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+          )}
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={onToggle}
+          aria-label={`Ativar ${label}`}
+        />
+      </div>
+      <div
+        className={cn(
+          "space-y-3",
+          !enabled && "pointer-events-none select-none",
+        )}
+        aria-disabled={!enabled}
+      >
+        {children}
+      </div>
     </div>
   );
-}
-
-function PreviewRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="max-w-[60%] text-right text-xs">{children}</dd>
-    </div>
-  );
-}
-
-function Empty() {
-  return <span className="italic text-muted-foreground/70">nenhum</span>;
 }
 
 function Chip({
@@ -773,17 +813,13 @@ function NumberBox({
   );
 }
 
-function TagField({
-  label,
-  description,
+function TagFieldPlain({
   values,
   onChange,
   suggestions = [],
   tone = "primary",
   icon,
 }: {
-  label: string;
-  description?: string;
   values: string[];
   onChange: (v: string[]) => void;
   suggestions?: string[];
@@ -800,7 +836,6 @@ function TagField({
     onChange([...values, t]);
     setDraft("");
   };
-
   const remove = (v: string) => onChange(values.filter((x) => x !== v));
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -819,7 +854,7 @@ function TagField({
   );
 
   return (
-    <FieldWrap label={label} description={description}>
+    <div>
       <div
         onClick={() => inputRef.current?.focus()}
         className={cn(
@@ -883,7 +918,7 @@ function TagField({
           ))}
         </div>
       )}
-    </FieldWrap>
+    </div>
   );
 }
 
