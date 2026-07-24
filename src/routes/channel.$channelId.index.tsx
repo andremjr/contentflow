@@ -202,12 +202,38 @@ function ProjectGrid({
       {projects.map((p) => {
         const stage = PROCESS_META[p.currentStage];
         return (
-          <Link
+          <div
             key={p.id}
-            to="/project/$projectId"
-            params={{ projectId: p.id }}
             className="group relative overflow-hidden rounded-xl border border-border/70 bg-card transition hover:border-brand/50"
           >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-2 top-2 z-10 size-7 bg-black/50 text-white opacity-0 backdrop-blur transition group-hover:opacity-100 hover:bg-black/70"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onSelect={() => {
+                    if (confirm(`Excluir "${p.title}"?`)) removeProject(p.id);
+                  }}
+                >
+                  <Trash2 className="mr-2 size-3.5" />
+                  Excluir projeto
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Link
+              to="/project/$projectId"
+              params={{ projectId: p.id }}
+              className="block"
+            >
             <div
               className="relative aspect-video overflow-hidden"
               style={{
