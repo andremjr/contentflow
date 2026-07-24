@@ -286,7 +286,7 @@ function IdeasScreen() {
                   Ideias · Etapa 2 do pipeline
                 </div>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-                  Motor de ideias
+                  Configurações de ideias
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Combine tendências, conexão emocional e histórico para gerar
