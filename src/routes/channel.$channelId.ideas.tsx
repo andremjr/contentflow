@@ -8,16 +8,9 @@ import {
   Wand2,
   X,
   Plus,
-  Maximize2,
-  Minimize2,
-  RotateCcw,
   Info,
   Sparkles,
-  Ban,
-  Tag,
-  Play,
   Save,
-  Braces,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
