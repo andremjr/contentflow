@@ -187,9 +187,6 @@ function IdeasScreen() {
 
   // Prompt
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
-  const [expanded, setExpanded] = useState(false);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
-
 
   const toggleSource = (id: string) => {
     setTrendSources((prev) =>
@@ -197,26 +194,6 @@ function IdeasScreen() {
     );
   };
 
-
-
-  const insertVariable = (key: string) => {
-    const token = `{{${key}}}`;
-    const el = promptRef.current;
-    if (!el) {
-      setPrompt((p) => `${p}${token}`);
-      return;
-    }
-    const start = el.selectionStart ?? prompt.length;
-    const end = el.selectionEnd ?? prompt.length;
-    const next = prompt.slice(0, start) + token + prompt.slice(end);
-    setPrompt(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.selectionStart = el.selectionEnd = start + token.length;
-    });
-  };
-
-  const restorePrompt = () => setPrompt(DEFAULT_PROMPT);
 
   return (
     <TooltipProvider delayDuration={200}>
