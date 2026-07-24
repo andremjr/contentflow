@@ -211,11 +211,6 @@ function IdeasScreen() {
   const [expanded, setExpanded] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
-  const toggleEmotion = (id: EmotionId) => {
-    setEmotions((prev) =>
-      prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id],
-    );
-  };
 
   const toggleSource = (id: string) => {
     setTrendSources((prev) =>
