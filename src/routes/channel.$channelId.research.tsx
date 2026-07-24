@@ -556,8 +556,7 @@ function ResearchScreen() {
                       )}
                     </ParamGroup>
                   </Section>
-                </>
-              )}
+
 
               <div className="h-4" />
             </div>
