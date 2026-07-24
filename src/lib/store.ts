@@ -235,3 +235,52 @@ export function completeStage(projectId: string, stage: ProcessId) {
   p.updatedAt = "agora";
   emit();
 }
+
+// ---------- Per-channel process configurations ----------
+
+/**
+ * Read the effective configuration for a process, on a given channel.
+ * Merges the DEFAULT_CONFIGS baseline with the channel-level patch
+ * saved in the store — this is exactly what the engine layer receives
+ * when building a command.
+ */
+export function useProcessConfig<P extends ProcessId>(
+  channelId: string | undefined,
+  processId: P,
+): ProcessConfigMap[P] {
+  useSyncExternalStore(subscribe, getVersion, getVersion);
+  const base = DEFAULT_CONFIGS[processId];
+  if (!channelId) return base;
+  const patch = db.processConfigs[channelId]?.[processId];
+  return { ...base, ...(patch ?? {}) } as ProcessConfigMap[P];
+}
+
+export function getProcessConfig<P extends ProcessId>(
+  channelId: string,
+  processId: P,
+): ProcessConfigMap[P] {
+  const base = DEFAULT_CONFIGS[processId];
+  const patch = db.processConfigs[channelId]?.[processId];
+  return { ...base, ...(patch ?? {}) } as ProcessConfigMap[P];
+}
+
+export function setProcessConfig<P extends ProcessId>(
+  channelId: string,
+  processId: P,
+  patch: Partial<ProcessConfigMap[P]>,
+) {
+  const forChannel = db.processConfigs[channelId] ?? {};
+  const prev = (forChannel[processId] ?? {}) as Partial<ProcessConfigMap[P]>;
+  db.processConfigs[channelId] = {
+    ...forChannel,
+    [processId]: { ...prev, ...patch },
+  };
+  emit();
+}
+
+export function resetProcessConfig(channelId: string, processId: ProcessId) {
+  const forChannel = db.processConfigs[channelId];
+  if (!forChannel) return;
+  delete forChannel[processId];
+  emit();
+}
