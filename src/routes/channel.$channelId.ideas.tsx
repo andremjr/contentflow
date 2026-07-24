@@ -363,29 +363,6 @@ function IdeasScreen() {
                     </Select>
                   </FieldWrap>
 
-                  <FieldWrap
-                    label="Peso do histórico"
-                    description="Quanto o histórico influencia versus novidade."
-                  >
-                    <div className="space-y-2">
-                      <Slider
-                        value={historyWeight}
-                        min={0}
-                        max={100}
-                        step={5}
-                        onValueChange={(v) =>
-                          setHistoryWeight([v[0]] as [number])
-                        }
-                      />
-                      <div className="flex justify-between text-[11px] text-muted-foreground">
-                        <span>Novidade</span>
-                        <span className="font-medium text-foreground">
-                          {historyWeight[0]}%
-                        </span>
-                        <span>Continuidade</span>
-                      </div>
-                    </div>
-                  </FieldWrap>
                 </div>
 
                 <FieldWrap
