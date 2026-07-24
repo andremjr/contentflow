@@ -140,13 +140,8 @@ const EMOTIONS: {
   { id: "transformation", label: "Transformação", hint: "Que mudança promete?" },
 ];
 
-const HISTORY_ITEMS = [
-  { id: "titles", label: "Títulos anteriores" },
-  { id: "themes", label: "Temas recorrentes" },
-  { id: "performance", label: "Desempenho dos vídeos" },
-  { id: "comments", label: "Comentários da audiência" },
-  { id: "frequency", label: "Frequência de publicação" },
-];
+
+
 
 const PROMPT_VARIABLES = [
   { key: "channel_name", label: "Nome do canal", desc: "Nome público do canal" },
