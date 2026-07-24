@@ -286,7 +286,7 @@ function IdeasScreen() {
                   Ideias · Etapa 2 do pipeline
                 </div>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-                  Motor de ideias
+                  Configurações de ideias
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Combine tendências, conexão emocional e histórico para gerar
@@ -305,96 +305,21 @@ function IdeasScreen() {
             <Section
               icon={<TrendingUp className="h-4 w-4" />}
               title="Descoberta"
-              description="Temas em alta e delimitação do escopo."
+              description="Usar os resultados do processo de Pesquisa como base para gerar ideias."
               action={
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">
-                    Usar tendências
+                    {useTrends ? "Ativado" : "Desativado"}
                   </span>
                   <Switch checked={useTrends} onCheckedChange={setUseTrends} />
                 </div>
               }
             >
-              <div
-                className={cn(
-                  "space-y-6 transition-opacity",
-                  !useTrends && "pointer-events-none opacity-40",
-                )}
-              >
-                <div className="grid gap-6 md:grid-cols-2">
-                  <FieldWrap
-                    label="Fontes de tendência"
-                    description="Selecione uma ou mais fontes de dados."
-                  >
-                    <MultiSelectSources
-                      selected={trendSources}
-                      onToggle={toggleSource}
-                    />
-                  </FieldWrap>
-
-                  <FieldWrap
-                    label="Período da tendência"
-                    description="Janela de análise das tendências."
-                  >
-                    <Select value={trendPeriod} onValueChange={setTrendPeriod}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TREND_PERIODS.map((p) => (
-                          <SelectItem key={p.value} value={p.value}>
-                            {p.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FieldWrap>
-                </div>
-
-                <FieldWrap
-                  label="Intensidade da tendência"
-                  description="Quão viral um assunto deve estar para ser considerado."
-                  tooltip="Valores altos priorizam apenas picos virais recentes."
-                >
-                  <div className="space-y-2">
-                    <Slider
-                      value={trendIntensity}
-                      min={0}
-                      max={100}
-                      step={5}
-                      onValueChange={(v) =>
-                        setTrendIntensity([v[0]] as [number])
-                      }
-                    />
-                    <div className="flex justify-between text-[11px] text-muted-foreground">
-                      <span>Emergente</span>
-                      <span className="font-medium text-foreground">
-                        {trendIntensity[0]}%
-                      </span>
-                      <span>Viral</span>
-                    </div>
-                  </div>
-                </FieldWrap>
-
-                <div className="grid gap-6 md:grid-cols-2">
-                  <TagField
-                    label="Temas obrigatórios"
-                    description="Toda ideia deve tocar pelo menos um destes temas."
-                    values={requiredThemes}
-                    onChange={setRequiredThemes}
-                    tone="primary"
-                    icon={<Tag className="h-3 w-3" />}
-                  />
-                  <TagField
-                    label="Assuntos proibidos"
-                    description="Nenhuma ideia deve abordar estes assuntos."
-                    values={forbiddenThemes}
-                    onChange={setForbiddenThemes}
-                    tone="destructive"
-                    icon={<Ban className="h-3 w-3" />}
-                  />
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Quando ativado, as ideias serão geradas a partir dos resultados
+                da etapa anterior (Pesquisa). Desative para gerar ideias sem
+                usar essa base.
+              </p>
             </Section>
 
             {/* Conexão */}
