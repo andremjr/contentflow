@@ -14,15 +14,31 @@ import {
   type ProcessId,
   type ProcessState,
 } from "@/lib/mock-data";
+import { DEFAULT_CONFIGS } from "@/engines/defaults";
+import type { ProcessConfigMap } from "@/engines/types";
 
-const STORAGE_KEY = "contentflow-db-v1";
+const STORAGE_KEY = "contentflow-db-v2";
 
-type DbShape = { channels: Channel[]; projects: Project[] };
+/** Per-channel overrides for each process configuration. */
+type ProcessConfigStore = Record<
+  string,
+  Partial<{ [P in ProcessId]: Partial<ProcessConfigMap[P]> }>
+>;
+
+type DbShape = {
+  channels: Channel[];
+  projects: Project[];
+  processConfigs: ProcessConfigStore;
+};
 
 // Live arrays — we mutate the same references exported from mock-data so
 // any code path that reads them (route loaders, memoized selectors)
 // always sees the current state.
-const db: DbShape = { channels: seedChannels, projects: seedProjects };
+const db: DbShape = {
+  channels: seedChannels,
+  projects: seedProjects,
+  processConfigs: {},
+};
 
 const listeners = new Set<() => void>();
 let version = 0;
