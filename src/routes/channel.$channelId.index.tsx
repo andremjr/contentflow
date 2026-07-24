@@ -307,7 +307,8 @@ function ProjectGrid({
                 </span>
               </footer>
             </div>
-          </Link>
+            </Link>
+          </div>
         );
       })}
     </div>
