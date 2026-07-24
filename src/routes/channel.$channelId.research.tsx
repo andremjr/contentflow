@@ -18,8 +18,6 @@ import {
   Timer,
   BarChart3,
   Youtube,
-  Globe,
-  Music2,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
@@ -64,7 +62,7 @@ import {
   setProcessConfig,
   resetProcessConfig,
 } from "@/lib/store";
-import type { ResearchConfig, ResearchSearchEngine } from "@/engines/types";
+import type { ResearchConfig } from "@/engines/types";
 
 export const Route = createFileRoute("/channel/$channelId/research")({
   head: ({ params }) => {
@@ -105,37 +103,6 @@ export const Route = createFileRoute("/channel/$channelId/research")({
 
 // ---------- mocks ----------
 
-const SEARCH_ENGINES: {
-  id: ResearchSearchEngine;
-  name: string;
-  icon: React.ReactNode;
-  description: string;
-}[] = [
-  {
-    id: "youtube",
-    name: "YouTube",
-    icon: <Youtube className="h-4 w-4" />,
-    description: "Vídeos e canais do YouTube",
-  },
-  {
-    id: "google",
-    name: "Google",
-    icon: <Globe className="h-4 w-4" />,
-    description: "Busca genérica na web",
-  },
-  {
-    id: "web",
-    name: "Web geral",
-    icon: <Globe className="h-4 w-4" />,
-    description: "Artigos, blogs e portais",
-  },
-  {
-    id: "tiktok",
-    name: "TikTok",
-    icon: <Music2 className="h-4 w-4" />,
-    description: "Conteúdo curto do TikTok",
-  },
-];
 
 const LANGUAGES = [
   { code: "pt-BR", name: "Português (Brasil)", flag: "🇧🇷" },
@@ -213,7 +180,6 @@ function ResearchScreen() {
   );
   const [durationUnit, setDurationUnit] = useState<"min" | "sec">("min");
 
-  const isYT = cfg.searchEngine === "youtube";
 
   const patch = (p: Partial<ResearchConfig>) =>
     setProcessConfig(channel.id, "research", p);
@@ -286,49 +252,6 @@ function ResearchScreen() {
                   Restaurar padrão
                 </Button>
               </div>
-
-              {/* Motor de busca */}
-              <Section
-                icon={<SearchIcon className="h-4 w-4" />}
-                title="Motor de busca"
-                description="Alguns parâmetros só se aplicam ao YouTube."
-              >
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  {SEARCH_ENGINES.map((e) => {
-                    const active = cfg.searchEngine === e.id;
-                    return (
-                      <button
-                        key={e.id}
-                        type="button"
-                        onClick={() => patch({ searchEngine: e.id })}
-                        className={cn(
-                          "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
-                          active
-                            ? "border-primary bg-primary/10"
-                            : "border-border bg-secondary/30 hover:border-border/80",
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            "flex h-8 w-8 items-center justify-center rounded-md",
-                            active
-                              ? "bg-primary/20 text-primary"
-                              : "bg-secondary text-muted-foreground",
-                          )}
-                        >
-                          {e.icon}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium">{e.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {e.description}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </Section>
 
               {/* Termos da pesquisa */}
               <Section
@@ -447,9 +370,6 @@ function ResearchScreen() {
                 </div>
               </Section>
 
-              {/* YouTube-only sections */}
-              {isYT && (
-                <>
                   <Section
                     icon={<Timer className="h-4 w-4" />}
                     title="Características dos vídeos"
@@ -636,8 +556,7 @@ function ResearchScreen() {
                       )}
                     </ParamGroup>
                   </Section>
-                </>
-              )}
+
 
               <div className="h-4" />
             </div>
