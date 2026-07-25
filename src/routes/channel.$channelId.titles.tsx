@@ -100,64 +100,11 @@ export const Route = createFileRoute("/channel/$channelId/titles")({
 
 type Structure = {
   id: string;
-  name: string;
   formula: string;
-  example: string;
-  categories: string[];
-  usage: number; // 0-100
-  notes?: string;
+  examples: string[];
 };
 
-const INITIAL_STRUCTURES: Structure[] = [
-  {
-    id: "how-to",
-    name: "Como fazer",
-    formula: "Como [ação] em [tempo] sem [obstáculo]",
-    example: "Como aprender IA em 30 dias sem saber programar",
-    categories: ["Educacional", "Tutorial"],
-    usage: 87,
-  },
-  {
-    id: "list",
-    name: "Lista numerada",
-    formula: "[N] [temas] que [benefício/consequência]",
-    example: "7 hábitos que mudaram a rotina de quem trabalha com IA",
-    categories: ["Listicle", "Retenção"],
-    usage: 72,
-  },
-  {
-    id: "curiosity",
-    name: "Gap de curiosidade",
-    formula: "A verdade sobre [assunto] que ninguém te contou",
-    example: "A verdade sobre o ChatGPT que ninguém te contou",
-    categories: ["Curiosidade"],
-    usage: 64,
-  },
-  {
-    id: "contrast",
-    name: "Contraste antes/depois",
-    formula: "Eu era [antes] até descobrir [gatilho]",
-    example: "Eu perdia 4h por dia até descobrir esse fluxo com IA",
-    categories: ["Storytelling", "Aspiração"],
-    usage: 55,
-  },
-  {
-    id: "warning",
-    name: "Alerta / erro",
-    formula: "Pare de [erro comum] agora — faça isso no lugar",
-    example: "Pare de escrever prompts assim — faça isso no lugar",
-    categories: ["Alerta", "Curiosidade"],
-    usage: 41,
-  },
-  {
-    id: "vs",
-    name: "Confronto direto",
-    formula: "[A] vs [B]: qual realmente vale a pena?",
-    example: "Claude vs ChatGPT: qual realmente vale a pena em 2026?",
-    categories: ["Comparativo"],
-    usage: 38,
-  },
-];
+const INITIAL_STRUCTURES: Structure[] = [];
 
 const KEYWORD_SUGGESTIONS = [
   "IA",
