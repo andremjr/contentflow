@@ -189,9 +189,9 @@ function TitlesScreen() {
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
 
-  const addStructure = (s: Omit<Structure, "id" | "usage">) => {
-    const id = s.name.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now();
-    setStructures((prev) => [...prev, { ...s, id, usage: 0 }]);
+  const addStructure = (s: Omit<Structure, "id">) => {
+    const id = "struct-" + Date.now();
+    setStructures((prev) => [...prev, { ...s, id }]);
     setSelectedStructures((prev) => [...prev, id]);
   };
 
