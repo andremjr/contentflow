@@ -238,7 +238,7 @@ function IdeasScreen() {
             {/* Descoberta */}
             <Section
               icon={<TrendingUp className="h-4 w-4" />}
-              title="Descoberta"
+              title="Pesquisa"
               description="Usar os resultados do processo de Pesquisa como base para gerar ideias."
               action={
                 <div className="flex items-center gap-2">
