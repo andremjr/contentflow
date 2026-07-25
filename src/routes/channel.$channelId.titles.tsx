@@ -495,15 +495,9 @@ function StructureCard({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold">{structure.name}</h3>
-            <UsagePill usage={structure.usage} />
-          </div>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">
-            {structure.formula}
-          </p>
-        </div>
+        <p className="font-mono text-sm text-foreground/90">
+          {structure.formula}
+        </p>
         <Checkbox
           checked={selected}
           onCheckedChange={onToggle}
@@ -512,22 +506,19 @@ function StructureCard({
         />
       </div>
 
-      <div className="rounded-md border border-border/60 bg-background/40 p-2.5 text-xs italic text-foreground/90">
-        <ArrowRight className="mr-1 inline h-3 w-3 text-primary" />
-        {structure.example}
-      </div>
-
-      <div className="flex flex-wrap gap-1">
-        {structure.categories.map((c) => (
-          <Badge
-            key={c}
-            variant="secondary"
-            className="bg-secondary/60 text-[10px] text-muted-foreground"
-          >
-            {c}
-          </Badge>
-        ))}
-      </div>
+      {structure.examples.length > 0 && (
+        <div className="space-y-1.5">
+          {structure.examples.map((ex, i) => (
+            <div
+              key={i}
+              className="rounded-md border border-border/60 bg-background/40 p-2.5 text-xs italic text-foreground/90"
+            >
+              <ArrowRight className="mr-1 inline h-3 w-3 text-primary" />
+              {ex}
+            </div>
+          ))}
+        </div>
+      )}
     </button>
   );
 }
