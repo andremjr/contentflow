@@ -158,11 +158,7 @@ function TitlesScreen() {
   const { channel } = Route.useLoaderData();
 
   const [structures, setStructures] = useState<Structure[]>(INITIAL_STRUCTURES);
-  const [selectedStructures, setSelectedStructures] = useState<string[]>([
-    "how-to",
-    "list",
-    "curiosity",
-  ]);
+  const [selectedStructures, setSelectedStructures] = useState<string[]>([]);
 
   const [requiredKw, setRequiredKw] = useState<string[]>(["IA"]);
   const [recommendedKw, setRecommendedKw] = useState<string[]>([
