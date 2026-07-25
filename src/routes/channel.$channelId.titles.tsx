@@ -281,16 +281,23 @@ function TitlesScreen() {
                   </div>
                 }
               >
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {structures.map((s) => (
-                    <StructureCard
-                      key={s.id}
-                      structure={s}
-                      selected={selectedStructures.includes(s.id)}
-                      onToggle={() => toggleStructure(s.id)}
-                    />
-                  ))}
-                </div>
+                {structures.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border bg-secondary/20 p-6 text-center text-sm text-muted-foreground">
+                    Nenhuma estrutura cadastrada. Adicione modelos de título
+                    para este canal.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {structures.map((s) => (
+                      <StructureCard
+                        key={s.id}
+                        structure={s}
+                        selected={selectedStructures.includes(s.id)}
+                        onToggle={() => toggleStructure(s.id)}
+                      />
+                    ))}
+                  </div>
+                )}
               </Section>
 
               {/* Vocabulário */}
