@@ -215,7 +215,7 @@ function TitlesScreen() {
     // Deterministic filtered examples using selected structures
     const chosen = structures.filter((s) => selectedStructures.includes(s.id));
     const chosenNames =
-      chosen.length > 0 ? chosen.map((c) => c.name) : ["—"];
+      chosen.length > 0 ? chosen.map((c) => c.formula) : ["—"];
     return EXAMPLE_POOL.slice(0, 5).map((raw, i) => {
       const trimmed =
         raw.length > lengthRange[1]
