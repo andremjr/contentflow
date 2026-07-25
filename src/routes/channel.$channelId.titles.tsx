@@ -18,9 +18,7 @@ import {
   Save,
   Braces,
   Check,
-  Flame,
   ArrowRight,
-  Star,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
