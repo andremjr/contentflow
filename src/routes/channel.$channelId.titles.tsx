@@ -18,9 +18,7 @@ import {
   Save,
   Braces,
   Check,
-  Flame,
   ArrowRight,
-  Star,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
@@ -100,64 +98,11 @@ export const Route = createFileRoute("/channel/$channelId/titles")({
 
 type Structure = {
   id: string;
-  name: string;
   formula: string;
-  example: string;
-  categories: string[];
-  usage: number; // 0-100
-  notes?: string;
+  examples: string[];
 };
 
-const INITIAL_STRUCTURES: Structure[] = [
-  {
-    id: "how-to",
-    name: "Como fazer",
-    formula: "Como [ação] em [tempo] sem [obstáculo]",
-    example: "Como aprender IA em 30 dias sem saber programar",
-    categories: ["Educacional", "Tutorial"],
-    usage: 87,
-  },
-  {
-    id: "list",
-    name: "Lista numerada",
-    formula: "[N] [temas] que [benefício/consequência]",
-    example: "7 hábitos que mudaram a rotina de quem trabalha com IA",
-    categories: ["Listicle", "Retenção"],
-    usage: 72,
-  },
-  {
-    id: "curiosity",
-    name: "Gap de curiosidade",
-    formula: "A verdade sobre [assunto] que ninguém te contou",
-    example: "A verdade sobre o ChatGPT que ninguém te contou",
-    categories: ["Curiosidade"],
-    usage: 64,
-  },
-  {
-    id: "contrast",
-    name: "Contraste antes/depois",
-    formula: "Eu era [antes] até descobrir [gatilho]",
-    example: "Eu perdia 4h por dia até descobrir esse fluxo com IA",
-    categories: ["Storytelling", "Aspiração"],
-    usage: 55,
-  },
-  {
-    id: "warning",
-    name: "Alerta / erro",
-    formula: "Pare de [erro comum] agora — faça isso no lugar",
-    example: "Pare de escrever prompts assim — faça isso no lugar",
-    categories: ["Alerta", "Curiosidade"],
-    usage: 41,
-  },
-  {
-    id: "vs",
-    name: "Confronto direto",
-    formula: "[A] vs [B]: qual realmente vale a pena?",
-    example: "Claude vs ChatGPT: qual realmente vale a pena em 2026?",
-    categories: ["Comparativo"],
-    usage: 38,
-  },
-];
+const INITIAL_STRUCTURES: Structure[] = [];
 
 const KEYWORD_SUGGESTIONS = [
   "IA",
@@ -213,11 +158,7 @@ function TitlesScreen() {
   const { channel } = Route.useLoaderData();
 
   const [structures, setStructures] = useState<Structure[]>(INITIAL_STRUCTURES);
-  const [selectedStructures, setSelectedStructures] = useState<string[]>([
-    "how-to",
-    "list",
-    "curiosity",
-  ]);
+  const [selectedStructures, setSelectedStructures] = useState<string[]>([]);
 
   const [requiredKw, setRequiredKw] = useState<string[]>(["IA"]);
   const [recommendedKw, setRecommendedKw] = useState<string[]>([
@@ -242,9 +183,9 @@ function TitlesScreen() {
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
 
-  const addStructure = (s: Omit<Structure, "id" | "usage">) => {
-    const id = s.name.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now();
-    setStructures((prev) => [...prev, { ...s, id, usage: 0 }]);
+  const addStructure = (s: Omit<Structure, "id">) => {
+    const id = "struct-" + Date.now();
+    setStructures((prev) => [...prev, { ...s, id }]);
     setSelectedStructures((prev) => [...prev, id]);
   };
 
@@ -268,7 +209,7 @@ function TitlesScreen() {
     // Deterministic filtered examples using selected structures
     const chosen = structures.filter((s) => selectedStructures.includes(s.id));
     const chosenNames =
-      chosen.length > 0 ? chosen.map((c) => c.name) : ["—"];
+      chosen.length > 0 ? chosen.map((c) => c.formula) : ["—"];
     return EXAMPLE_POOL.slice(0, 5).map((raw, i) => {
       const trimmed =
         raw.length > lengthRange[1]
@@ -336,16 +277,23 @@ function TitlesScreen() {
                   </div>
                 }
               >
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {structures.map((s) => (
-                    <StructureCard
-                      key={s.id}
-                      structure={s}
-                      selected={selectedStructures.includes(s.id)}
-                      onToggle={() => toggleStructure(s.id)}
-                    />
-                  ))}
-                </div>
+                {structures.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border bg-secondary/20 p-6 text-center text-sm text-muted-foreground">
+                    Nenhuma estrutura cadastrada. Adicione modelos de título
+                    para este canal.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {structures.map((s) => (
+                      <StructureCard
+                        key={s.id}
+                        structure={s}
+                        selected={selectedStructures.includes(s.id)}
+                        onToggle={() => toggleStructure(s.id)}
+                      />
+                    ))}
+                  </div>
+                )}
               </Section>
 
               {/* Vocabulário */}
@@ -548,15 +496,9 @@ function StructureCard({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold">{structure.name}</h3>
-            <UsagePill usage={structure.usage} />
-          </div>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">
-            {structure.formula}
-          </p>
-        </div>
+        <p className="font-mono text-sm text-foreground/90">
+          {structure.formula}
+        </p>
         <Checkbox
           checked={selected}
           onCheckedChange={onToggle}
@@ -565,45 +507,20 @@ function StructureCard({
         />
       </div>
 
-      <div className="rounded-md border border-border/60 bg-background/40 p-2.5 text-xs italic text-foreground/90">
-        <ArrowRight className="mr-1 inline h-3 w-3 text-primary" />
-        {structure.example}
-      </div>
-
-      <div className="flex flex-wrap gap-1">
-        {structure.categories.map((c) => (
-          <Badge
-            key={c}
-            variant="secondary"
-            className="bg-secondary/60 text-[10px] text-muted-foreground"
-          >
-            {c}
-          </Badge>
-        ))}
-      </div>
-    </button>
-  );
-}
-
-function UsagePill({ usage }: { usage: number }) {
-  const level = usage >= 70 ? "high" : usage >= 40 ? "med" : "low";
-  const cls =
-    level === "high"
-      ? "text-success bg-success/10"
-      : level === "med"
-        ? "text-warning bg-warning/10"
-        : "text-muted-foreground bg-secondary/60";
-  const Icon = level === "high" ? Flame : level === "med" ? Star : Info;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-        cls,
+      {structure.examples.length > 0 && (
+        <div className="space-y-1.5">
+          {structure.examples.map((ex, i) => (
+            <div
+              key={i}
+              className="rounded-md border border-border/60 bg-background/40 p-2.5 text-xs italic text-foreground/90"
+            >
+              <ArrowRight className="mr-1 inline h-3 w-3 text-primary" />
+              {ex}
+            </div>
+          ))}
+        </div>
       )}
-    >
-      <Icon className="h-2.5 w-2.5" />
-      {usage}%
-    </span>
+    </button>
   );
 }
 
@@ -614,31 +531,26 @@ function NewStructureButton({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onCreate: (s: Omit<Structure, "id" | "usage">) => void;
+  onCreate: (s: Omit<Structure, "id">) => void;
 }) {
-  const [name, setName] = useState("");
   const [formula, setFormula] = useState("");
-  const [example, setExample] = useState("");
-  const [notes, setNotes] = useState("");
-  const [categories, setCategories] = useState("");
+  const [examples, setExamples] = useState<string[]>([""]);
+
+  const setExampleAt = (i: number, v: string) =>
+    setExamples((prev) => prev.map((e, idx) => (idx === i ? v : e)));
+
+  const reset = () => {
+    setFormula("");
+    setExamples([""]);
+  };
 
   const submit = () => {
-    if (!name.trim() || !formula.trim()) return;
+    if (!formula.trim()) return;
     onCreate({
-      name: name.trim(),
       formula: formula.trim(),
-      example: example.trim(),
-      notes: notes.trim() || undefined,
-      categories: categories
-        .split(",")
-        .map((c) => c.trim())
-        .filter(Boolean),
+      examples: examples.map((e) => e.trim()).filter(Boolean).slice(0, 5),
     });
-    setName("");
-    setFormula("");
-    setExample("");
-    setNotes("");
-    setCategories("");
+    reset();
     onOpenChange(false);
   };
 
@@ -659,14 +571,6 @@ function NewStructureButton({
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Nome</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Pergunta provocativa"
-            />
-          </div>
-          <div className="space-y-1.5">
             <Label>Fórmula</Label>
             <Input
               value={formula}
@@ -676,36 +580,53 @@ function NewStructureButton({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Exemplo</Label>
-            <Input
-              value={example}
-              onChange={(e) => setExample(e.target.value)}
-              placeholder="Ex.: A pergunta que muda como você vê IA"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Categorias</Label>
-            <Input
-              value={categories}
-              onChange={(e) => setCategories(e.target.value)}
-              placeholder="separadas por vírgula"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Observações</Label>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Quando usar, quando evitar..."
-              className="min-h-[80px]"
-            />
+            <div className="flex items-center justify-between">
+              <Label>Exemplos</Label>
+              <span className="text-xs text-muted-foreground">
+                {examples.length}/5
+              </span>
+            </div>
+            <div className="space-y-2">
+              {examples.map((ex, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    value={ex}
+                    onChange={(e) => setExampleAt(i, e.target.value)}
+                    placeholder={`Exemplo ${i + 1}`}
+                  />
+                  {examples.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() =>
+                        setExamples((prev) => prev.filter((_, idx) => idx !== i))
+                      }
+                      aria-label={`Remover exemplo ${i + 1}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {examples.length < 5 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-1"
+                onClick={() => setExamples((prev) => [...prev, ""])}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Adicionar exemplo
+              </Button>
+            )}
           </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button onClick={submit} disabled={!name.trim() || !formula.trim()}>
+          <Button onClick={submit} disabled={!formula.trim()}>
             <Check className="mr-1.5 h-3.5 w-3.5" />
             Criar estrutura
           </Button>
