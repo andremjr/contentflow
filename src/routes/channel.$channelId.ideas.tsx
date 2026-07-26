@@ -2,7 +2,6 @@ import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 import { useState, useRef, type KeyboardEvent } from "react";
 import {
   Lightbulb,
-  TrendingUp,
   Users,
   History,
   Wand2,
@@ -29,11 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -82,22 +76,6 @@ export const Route = createFileRoute("/channel/$channelId/ideas")({
 });
 
 // ---------- mocks ----------
-
-const TREND_SOURCES = [
-  { id: "youtube", label: "YouTube Trending" },
-  { id: "google", label: "Google Trends" },
-  { id: "tiktok", label: "TikTok" },
-  { id: "twitter", label: "X / Twitter" },
-  { id: "reddit", label: "Reddit" },
-  { id: "news", label: "Notícias" },
-];
-
-const TREND_PERIODS = [
-  { value: "24h", label: "Últimas 24 horas" },
-  { value: "7d", label: "Últimos 7 dias" },
-  { value: "30d", label: "Últimos 30 dias" },
-  { value: "90d", label: "Últimos 90 dias" },
-];
 
 type EmotionId =
   | "pain"
@@ -155,20 +133,6 @@ Para cada ideia, retorne:
 function IdeasScreen() {
   const { channel } = Route.useLoaderData();
 
-  // Discovery
-  const [useTrends, setUseTrends] = useState(true);
-  const [trendSources, setTrendSources] = useState<string[]>([
-    "youtube",
-    "google",
-  ]);
-  const [trendPeriod, setTrendPeriod] = useState("7d");
-  const [requiredThemes, setRequiredThemes] = useState<string[]>([
-    "IA generativa",
-  ]);
-  const [forbiddenThemes, setForbiddenThemes] = useState<string[]>([
-    "política",
-  ]);
-
   // Audience
   const [audienceDescription, setAudienceDescription] = useState<string>(
     "Adultos entre 25 e 45 anos, curiosos, que buscam entender temas complexos de forma clara e aprofundada. Valorizam conteúdo autêntico e narrativas envolventes.",
@@ -186,11 +150,6 @@ function IdeasScreen() {
   // Prompt
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
 
-  const toggleSource = (id: string) => {
-    setTrendSources((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
-    );
-  };
 
 
   return (
@@ -233,109 +192,6 @@ function IdeasScreen() {
               </div>
             </div>
 
-            {/* Pesquisa de conteúdo (sub-etapa) */}
-            <Section
-              icon={<TrendingUp className="h-4 w-4" />}
-              title="Pesquisa de conteúdo"
-              description="Sub-etapa opcional executada depois do tema definido, para aprofundar informações sobre o assunto."
-              action={
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    {useTrends ? "Ativada" : "Desativada"}
-                  </span>
-                  <Switch checked={useTrends} onCheckedChange={setUseTrends} />
-                </div>
-              }
-            >
-              <div
-                className={cn(
-                  "space-y-5 transition-opacity",
-                  !useTrends && "pointer-events-none opacity-40",
-                )}
-              >
-                <p className="text-sm text-muted-foreground">
-                  Quando ativada, o sistema busca informações, dados e
-                  referências sobre o tema da ideia nas fontes escolhidas.
-                  Desative para gerar ideias sem aprofundamento adicional.
-                </p>
-
-
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    Fontes de pesquisa
-                  </Label>
-                  <div className="flex flex-wrap gap-3">
-                    {TREND_SOURCES.map((s) => (
-                      <label
-                        key={s.id}
-                        className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-secondary/30 px-3 py-2 text-sm"
-                      >
-                        <Checkbox
-                          checked={trendSources.includes(s.id)}
-                          onCheckedChange={() => toggleSource(s.id)}
-                        />
-                        {s.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">
-                      Período analisado
-                    </Label>
-                    <Select value={trendPeriod} onValueChange={setTrendPeriod}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TREND_PERIODS.map((p) => (
-                          <SelectItem key={p.value} value={p.value}>
-                            {p.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">
-                      Temas obrigatórios
-                    </Label>
-                    <Input
-                      value={requiredThemes.join(", ")}
-                      onChange={(e) =>
-                        setRequiredThemes(
-                          e.target.value
-                            .split(",")
-                            .map((t) => t.trim())
-                            .filter(Boolean),
-                        )
-                      }
-                      placeholder="Separe por vírgula"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    Temas proibidos
-                  </Label>
-                  <Input
-                    value={forbiddenThemes.join(", ")}
-                    onChange={(e) =>
-                      setForbiddenThemes(
-                        e.target.value
-                          .split(",")
-                          .map((t) => t.trim())
-                          .filter(Boolean),
-                      )
-                    }
-                    placeholder="Separe por vírgula"
-                  />
-                </div>
-              </div>
-            </Section>
 
 
             {/* Conexão */}
@@ -550,75 +406,6 @@ function FieldWrap({
       )}
       {children}
     </div>
-  );
-}
-
-function MultiSelectSources({
-  selected,
-  onToggle,
-}: {
-  selected: string[];
-  onToggle: (id: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const activeLabels = TREND_SOURCES.filter((s) => selected.includes(s.id));
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className="w-full justify-between font-normal"
-        >
-          <span className="flex flex-wrap items-center gap-1">
-            {activeLabels.length === 0 ? (
-              <span className="text-muted-foreground">
-                Selecione as fontes
-              </span>
-            ) : (
-              activeLabels.map((s) => (
-                <Badge
-                  key={s.id}
-                  variant="secondary"
-                  className="bg-primary/15 text-primary"
-                >
-                  {s.label}
-                </Badge>
-              ))
-            )}
-          </span>
-          <Plus className="h-4 w-4 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-[--radix-popover-trigger-width] p-1"
-      >
-        {TREND_SOURCES.map((s) => {
-          const active = selected.includes(s.id);
-          return (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => onToggle(s.id)}
-              className="flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm hover:bg-secondary"
-            >
-              <span>{s.label}</span>
-              {active && (
-                <svg
-                  viewBox="0 0 12 12"
-                  className="h-3 w-3 text-primary"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M2 6l3 3 5-6" strokeLinecap="round" />
-                </svg>
-              )}
-            </button>
-          );
-        })}
-      </PopoverContent>
-    </Popover>
   );
 }
 
