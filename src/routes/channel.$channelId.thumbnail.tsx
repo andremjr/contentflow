@@ -1,5 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
-import { useState, useRef, useMemo, type KeyboardEvent } from "react";
+import { useState, useRef, type KeyboardEvent } from "react";
 import {
   Image as ImageIcon,
   Layout,
@@ -8,9 +8,7 @@ import {
   Type as TypeIcon,
   Wand2,
   Upload,
-  Link as LinkIcon,
   Star,
-  Filter,
   Plus,
   X,
   Ban,
@@ -114,77 +112,9 @@ export const Route = createFileRoute("/channel/$channelId/thumbnail")({
 
 type Reference = {
   id: string;
-  title: string;
-  channel: string;
-  style: string;
-  ctr: number;
-  favorite: boolean;
-  tags: string[];
-  gradient: string;
+  name: string;
+  url: string;
 };
-
-const INITIAL_REFERENCES: Reference[] = [
-  {
-    id: "r1",
-    title: "Como dominar IA em 30 dias",
-    channel: "Nerdologia",
-    style: "Face + texto",
-    ctr: 12.4,
-    favorite: true,
-    tags: ["contraste", "expressão"],
-    gradient: "from-blue-500 to-indigo-700",
-  },
-  {
-    id: "r2",
-    title: "O erro que TODO iniciante comete",
-    channel: "Manual do Mundo",
-    style: "Alerta",
-    ctr: 9.8,
-    favorite: false,
-    tags: ["alerta", "vermelho"],
-    gradient: "from-red-500 to-rose-700",
-  },
-  {
-    id: "r3",
-    title: "Antes vs Depois com Claude",
-    channel: "Kurzgesagt",
-    style: "Comparativo",
-    ctr: 11.1,
-    favorite: true,
-    tags: ["split", "antes/depois"],
-    gradient: "from-emerald-500 to-teal-700",
-  },
-  {
-    id: "r4",
-    title: "7 fluxos com IA que ninguém te contou",
-    channel: "Foca na História",
-    style: "Lista numerada",
-    ctr: 8.7,
-    favorite: false,
-    tags: ["número gigante"],
-    gradient: "from-amber-500 to-orange-700",
-  },
-  {
-    id: "r5",
-    title: "Claude vs ChatGPT",
-    channel: "Nerdologia",
-    style: "Comparativo",
-    ctr: 10.3,
-    favorite: false,
-    tags: ["duelo"],
-    gradient: "from-purple-500 to-fuchsia-700",
-  },
-  {
-    id: "r6",
-    title: "Método secreto revelado",
-    channel: "Manual do Mundo",
-    style: "Curiosidade",
-    ctr: 7.4,
-    favorite: false,
-    tags: ["mistério"],
-    gradient: "from-slate-600 to-slate-800",
-  },
-];
 
 type LayoutTemplate = {
   id: string;
@@ -309,11 +239,8 @@ function ThumbnailScreen() {
   const [useResearch, setUseResearch] = useState(true);
 
   // References
-  const [references, setReferences] = useState<Reference[]>(INITIAL_REFERENCES);
-  const [selectedRefs, setSelectedRefs] = useState<string[]>(["r1", "r3"]);
-  const [refFilterStyle, setRefFilterStyle] = useState("all");
-  const [refFilterChannel, setRefFilterChannel] = useState("all");
-  const [refFilterPerf, setRefFilterPerf] = useState("all");
+  const [references, setReferences] = useState<Reference[]>([]);
+  const refInputRef = useRef<HTMLInputElement>(null);
 
   // Layouts
   const [layoutId, setLayoutId] = useState("left-face");
@@ -379,28 +306,20 @@ function ThumbnailScreen() {
   const activeLayout = LAYOUTS.find((l) => l.id === layoutId)!;
   const activeFont = FONTS.find((f) => f.id === fontId)!;
 
-  const filteredRefs = useMemo(() => {
-    return references.filter((r) => {
-      if (refFilterStyle !== "all" && r.style !== refFilterStyle) return false;
-      if (refFilterChannel !== "all" && r.channel !== refFilterChannel)
-        return false;
-      if (refFilterPerf === "top" && r.ctr < 10) return false;
-      if (refFilterPerf === "low" && r.ctr >= 10) return false;
-      return true;
-    });
-  }, [references, refFilterStyle, refFilterChannel, refFilterPerf]);
+  const addReferenceFiles = (files: FileList | null) => {
+    if (!files) return;
+    const added: Reference[] = Array.from(files)
+      .filter((f) => f.type.startsWith("image/"))
+      .map((f) => ({
+        id: `${Date.now()}-${f.name}-${Math.random().toString(36).slice(2, 7)}`,
+        name: f.name,
+        url: URL.createObjectURL(f),
+      }));
+    if (added.length) setReferences((prev) => [...prev, ...added]);
+  };
 
-  const uniqueStyles = ["all", ...new Set(references.map((r) => r.style))];
-  const uniqueChannels = ["all", ...new Set(references.map((r) => r.channel))];
-
-  const toggleRef = (id: string) =>
-    setSelectedRefs((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  const toggleFav = (id: string) =>
-    setReferences((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, favorite: !r.favorite } : r)),
-    );
+  const removeReference = (id: string) =>
+    setReferences((prev) => prev.filter((r) => r.id !== id));
 
   const toggleSource = (id: string) =>
     setImageSources((prev) =>
@@ -485,133 +404,71 @@ function ThumbnailScreen() {
               <Section
                 icon={<Star className="h-4 w-4" />}
                 title="Referências validadas"
-                description="Thumbnails de alto desempenho usadas como inspiração."
+                description="Biblioteca própria de thumbnails usadas como referência nas gerações."
                 action={
-                  <div className="flex items-center gap-1.5">
-                    <Button variant="outline" size="sm">
-                      <Upload className="mr-1.5 h-3.5 w-3.5" />
-                      Upload
-                    </Button>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
-                          Por URL
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-80">
-                        <Label className="text-xs">URL da thumbnail</Label>
-                        <div className="mt-2 flex gap-2">
-                          <Input placeholder="https://..." />
-                          <Button size="sm">Adicionar</Button>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refInputRef.current?.click()}
+                  >
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
+                    Enviar imagens
+                  </Button>
                 }
               >
-                <div className="flex flex-wrap items-center gap-2">
-                  <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                  <FilterSelect
-                    value={refFilterStyle}
-                    onChange={setRefFilterStyle}
-                    label="Estilo"
-                    options={uniqueStyles}
-                  />
-                  <FilterSelect
-                    value={refFilterChannel}
-                    onChange={setRefFilterChannel}
-                    label="Canal"
-                    options={uniqueChannels}
-                  />
-                  <FilterSelect
-                    value={refFilterPerf}
-                    onChange={setRefFilterPerf}
-                    label="Desempenho"
-                    options={["all", "top", "low"]}
-                    display={{ all: "Todos", top: "CTR alto", low: "CTR baixo" }}
-                  />
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {selectedRefs.length} selecionadas
-                  </span>
-                </div>
+                <input
+                  ref={refInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    addReferenceFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
 
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                  {filteredRefs.map((r) => {
-                    const selected = selectedRefs.includes(r.id);
-                    return (
+                {references.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => refInputRef.current?.click()}
+                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-secondary/20 px-6 py-12 text-center transition hover:border-primary/50 hover:bg-secondary/30"
+                  >
+                    <Upload className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium">
+                      Nenhuma referência ainda
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Envie imagens para montar a biblioteca de referências deste canal.
+                    </span>
+                  </button>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                    {references.map((r) => (
                       <div
                         key={r.id}
-                        onClick={() => toggleRef(r.id)}
-                        className={cn(
-                          "group relative cursor-pointer overflow-hidden rounded-lg border transition-all",
-                          selected
-                            ? "border-primary ring-2 ring-primary/40"
-                            : "border-border hover:border-border/80",
-                        )}
+                        className="group relative overflow-hidden rounded-lg border border-border"
                       >
-                        <div
-                          className={cn(
-                            "relative aspect-video w-full bg-gradient-to-br",
-                            r.gradient,
-                          )}
+                        <img
+                          src={r.url}
+                          alt={r.name}
+                          className="aspect-video w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeReference(r.id)}
+                          aria-label="Remover referência"
+                          className="absolute right-1.5 top-1.5 rounded-full bg-black/50 p-1 text-white/80 opacity-0 backdrop-blur transition hover:text-white group-hover:opacity-100"
                         >
-                          <div className="absolute inset-0 flex items-end p-2">
-                            <div className="rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white backdrop-blur">
-                              CTR {r.ctr}%
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFav(r.id);
-                            }}
-                            aria-label="Favoritar"
-                            className={cn(
-                              "absolute right-1.5 top-1.5 rounded-full bg-black/40 p-1 backdrop-blur transition",
-                              r.favorite
-                                ? "text-amber-300"
-                                : "text-white/70 hover:text-white",
-                            )}
-                          >
-                            <Star
-                              className="h-3.5 w-3.5"
-                              fill={r.favorite ? "currentColor" : "none"}
-                            />
-                          </button>
-                          {selected && (
-                            <div className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                              <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M2 6l3 3 5-6" strokeLinecap="round" />
-                              </svg>
-                            </div>
-                          )}
-                        </div>
-                        <div className="p-2">
-                          <div className="truncate text-xs font-medium">
-                            {r.title}
-                          </div>
-                          <div className="mt-0.5 flex items-center justify-between text-[10px] text-muted-foreground">
-                            <span className="truncate">{r.channel}</span>
-                            <span>{r.style}</span>
-                          </div>
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {r.tags.map((t) => (
-                              <Badge
-                                key={t}
-                                variant="secondary"
-                                className="bg-secondary/60 text-[9px] text-muted-foreground"
-                              >
-                                {t}
-                              </Badge>
-                            ))}
-                          </div>
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                        <div className="truncate p-2 text-xs text-muted-foreground">
+                          {r.name}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                )}
               </Section>
 
               {/* Layouts */}
@@ -1047,36 +904,6 @@ function ToggleRow({
       <span>{label}</span>
       <Switch checked={checked} onCheckedChange={onChange} />
     </label>
-  );
-}
-
-function FilterSelect({
-  value,
-  onChange,
-  label,
-  options,
-  display,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  label: string;
-  options: string[];
-  display?: Record<string, string>;
-}) {
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-8 w-auto min-w-[140px] text-xs">
-        <span className="text-muted-foreground">{label}:</span>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => (
-          <SelectItem key={o} value={o}>
-            {display?.[o] ?? (o === "all" ? "Todos" : o)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 
