@@ -229,15 +229,6 @@ const FONT_WEIGHTS = [
   { value: "900", label: "Black" },
 ];
 
-const PROMPT_VARIABLES = [
-  { key: "channel_name", label: "Nome do canal" },
-  { key: "channel_niche", label: "Nicho" },
-  { key: "video_title", label: "Título do vídeo" },
-  { key: "keyword_focus", label: "Palavra-chave principal" },
-  { key: "layout_choice", label: "Layout escolhido" },
-  { key: "primary_color", label: "Cor principal" },
-];
-
 const DEFAULT_PROMPT = `Você é um diretor de arte criando thumbnails para YouTube — canal {{channel_name}}, nicho {{channel_niche}}.
 
 Gere descrições de thumbnails que:
@@ -292,21 +283,6 @@ function ThumbnailScreen() {
 
   // Prompt
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
-  const [expanded, setExpanded] = useState(false);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
-
-  const insertVariable = (key: string) => {
-    const token = `{{${key}}}`;
-    const el = promptRef.current;
-    if (!el) return setPrompt((p) => `${p}${token}`);
-    const start = el.selectionStart ?? prompt.length;
-    const end = el.selectionEnd ?? prompt.length;
-    setPrompt(prompt.slice(0, start) + token + prompt.slice(end));
-    requestAnimationFrame(() => {
-      el.focus();
-      el.selectionStart = el.selectionEnd = start + token.length;
-    });
-  };
 
   const activeLayout = LAYOUTS.find((l) => l.id === layoutId)!;
   const activeFont = FONTS.find((f) => f.id === fontId)!;
@@ -1260,135 +1236,6 @@ function ThumbnailPreview({
         </div>
       )}
     </div>
-  );
-}
-
-function PromptEditor({
-  value,
-  onChange,
-  refEl,
-  expanded,
-  onToggleExpanded,
-  onInsertVariable,
-  onRestore,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  refEl: React.RefObject<HTMLTextAreaElement | null>;
-  expanded: boolean;
-  onToggleExpanded: () => void;
-  onInsertVariable: (key: string) => void;
-  onRestore: () => void;
-}) {
-  return (
-    <>
-      <div
-        className={cn(
-          "overflow-hidden rounded-xl border border-border bg-[#0A1220] font-mono text-sm shadow-inner",
-          expanded ? "fixed inset-6 z-50 flex flex-col" : "relative",
-        )}
-      >
-        <div className="flex items-center justify-between border-b border-border/60 bg-secondary/20 px-3 py-2">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="flex h-2 w-2 rounded-full bg-destructive/70" />
-            <span className="flex h-2 w-2 rounded-full bg-warning/70" />
-            <span className="flex h-2 w-2 rounded-full bg-success/70" />
-            <span className="ml-2 font-sans">prompt.thumbnail.md</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 px-2">
-                  <Braces className="mr-1 h-3.5 w-3.5" />
-                  Inserir variável
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel>Variáveis disponíveis</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {PROMPT_VARIABLES.map((v) => (
-                  <DropdownMenuItem
-                    key={v.key}
-                    onSelect={() => onInsertVariable(v.key)}
-                    className="flex-col items-start gap-0.5"
-                  >
-                    <span className="font-mono text-xs text-primary">
-                      {`{{${v.key}}}`}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {v.label}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={onRestore}
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Restaurar prompt padrão</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={onToggleExpanded}
-                >
-                  {expanded ? (
-                    <Minimize2 className="h-3.5 w-3.5" />
-                  ) : (
-                    <Maximize2 className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {expanded ? "Reduzir" : "Expandir"}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-
-        <Textarea
-          ref={refEl}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={cn(
-            "resize-none rounded-none border-0 bg-transparent font-mono text-sm leading-relaxed text-foreground focus-visible:ring-0",
-            expanded ? "flex-1" : "min-h-[240px]",
-          )}
-          spellCheck={false}
-        />
-
-        <div className="flex items-center justify-between border-t border-border/60 bg-secondary/20 px-3 py-1.5 text-[11px] text-muted-foreground">
-          <div className="flex items-center gap-3">
-            <span>{value.length} caracteres</span>
-            <span>·</span>
-            <span>
-              {value.split(/\s+/).filter(Boolean).length} palavras
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Info className="h-3 w-3" />
-            Suporta variáveis {`{{ nome }}`}
-          </div>
-        </div>
-      </div>
-      {expanded && (
-        <div
-          className="fixed inset-0 z-40 bg-background/70 backdrop-blur-sm"
-          onClick={onToggleExpanded}
-        />
-      )}
-    </>
   );
 }
 
