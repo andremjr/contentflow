@@ -436,19 +436,8 @@ function TitlesScreen() {
                       caracteres
                     </span>
                   </div>
+                </div>
 
-                  <div>
-                    <Slider
-                      value={lengthRange}
-                      min={10}
-                      max={100}
-                      step={1}
-                      onValueChange={(v) =>
-                        setLengthRange([v[0], v[1]] as [number, number])
-                      }
-                    />
-                    <LengthRuler range={lengthRange} />
-                  </div>
                 </div>
               </Section>
 
