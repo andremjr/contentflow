@@ -332,7 +332,7 @@ function ThumbnailScreen() {
     const id = `comp-${Date.now()}`;
     setCompositions((prev) => [
       ...prev,
-      { id, name: `Composição ${prev.length + 1}`, layers: [] },
+      { id, name: `Composição ${prev.length + 1}`, boxes: [] },
     ]);
     setActiveCompId(id);
   };
@@ -349,43 +349,9 @@ function ThumbnailScreen() {
       return next;
     });
 
-  const addLayer = () =>
-    updateActiveComposition((c) => ({
-      ...c,
-      layers: [
-        ...c.layers,
-        {
-          id: `layer-${Date.now()}`,
-          label: `Camada ${c.layers.length + 1}`,
-        },
-      ],
-    }));
+  const setActiveBoxes = (boxes: CompositionBox[]) =>
+    updateActiveComposition((c) => ({ ...c, boxes }));
 
-  const renameLayer = (id: string, label: string) =>
-    updateActiveComposition((c) => ({
-      ...c,
-      layers: c.layers.map((l) => (l.id === id ? { ...l, label } : l)),
-    }));
-
-  const removeLayer = (id: string) =>
-    updateActiveComposition((c) => ({
-      ...c,
-      layers: c.layers.filter((l) => l.id !== id),
-    }));
-
-  const onLayerDragStart = (i: number) => setDragIndex(i);
-  const onLayerDragOver = (e: React.DragEvent, i: number) => {
-    e.preventDefault();
-    if (dragIndex === null || dragIndex === i) return;
-    updateActiveComposition((c) => {
-      const next = [...c.layers];
-      const [moved] = next.splice(dragIndex, 1);
-      next.splice(i, 0, moved);
-      return { ...c, layers: next };
-    });
-    setDragIndex(i);
-  };
-  const onLayerDragEnd = () => setDragIndex(null);
 
 
   return (
