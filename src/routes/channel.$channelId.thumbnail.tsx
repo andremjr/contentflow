@@ -67,6 +67,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { channels } from "@/lib/mock-data";
 import { ChannelAvatar } from "@/components/channel-avatar";
@@ -1545,5 +1553,134 @@ function TagField({
         />
       </div>
     </FieldWrap>
+  );
+}
+
+function NewElementDialog({
+  onAdd,
+}: {
+  onAdd: (item: { kind: LibraryKind; label: string; url?: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<LibraryKind>("character");
+  const [label, setLabel] = useState("");
+  const [file, setFile] = useState<{ name: string; url: string } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const reset = () => {
+    setKind("character");
+    setLabel("");
+    setFile(null);
+  };
+
+  const submit = () => {
+    if (!label.trim()) return;
+    onAdd({ kind, label: label.trim(), url: file?.url });
+    reset();
+    setOpen(false);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Novo elemento
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Novo elemento permanente</DialogTitle>
+        </DialogHeader>
+
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label>Tipo</Label>
+            <Select value={kind} onValueChange={(v) => setKind(v as LibraryKind)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(KIND_LABEL) as LibraryKind[]).map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {KIND_LABEL[k].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Nome</Label>
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Ex.: Logo do canal"
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Arquivo</Label>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) setFile({ name: f.name, url: URL.createObjectURL(f) });
+                e.target.value = "";
+              }}
+            />
+            {file ? (
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-2">
+                <img
+                  src={file.url}
+                  alt={file.name}
+                  className="h-12 w-12 rounded-md object-cover"
+                />
+                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                  {file.name}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Remover arquivo"
+                  onClick={() => setFile(null)}
+                  className="rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-border bg-secondary/20 px-4 py-6 text-center transition hover:border-primary/50"
+              >
+                <Upload className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">
+                  Enviar imagem (opcional)
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={submit} disabled={!label.trim()}>
+            Adicionar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
