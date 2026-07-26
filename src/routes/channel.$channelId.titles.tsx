@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -169,6 +170,12 @@ function TitlesScreen() {
     "URGENTE",
     "click aqui",
   ]);
+
+  const [keywordsEnabled, setKeywordsEnabled] = useState(true);
+  const [requiredKwEnabled, setRequiredKwEnabled] = useState(true);
+  const [recommendedKwEnabled, setRecommendedKwEnabled] = useState(true);
+  const [forbiddenKwEnabled, setForbiddenKwEnabled] = useState(true);
+
 
   const [lengthRange, setLengthRange] = useState<[number, number]>([45, 70]);
 
@@ -312,39 +319,71 @@ function TitlesScreen() {
                 )}
               </Section>
 
-              {/* Vocabulário */}
+              {/* Palavras-chave */}
               <Section
                 icon={<Tag className="h-4 w-4" />}
-                title="Vocabulário"
-                description="Palavras-chave que devem, podem ou não podem aparecer."
+                title="Palavras-chave"
+                description="Palavras que devem, podem ou não podem aparecer."
+                action={
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {keywordsEnabled ? "Ativado" : "Desativado"}
+                    </span>
+                    <Switch
+                      checked={keywordsEnabled}
+                      onCheckedChange={setKeywordsEnabled}
+                    />
+                  </div>
+                }
               >
-                <div className="grid gap-4 md:grid-cols-3">
-                  <TagField
-                    label="Obrigatórias"
-                    description="Aparecem em todos os títulos."
-                    values={requiredKw}
-                    onChange={setRequiredKw}
-                    suggestions={KEYWORD_SUGGESTIONS}
-                    tone="required"
-                  />
-                  <TagField
-                    label="Recomendadas"
-                    description="Priorizadas quando fizerem sentido."
-                    values={recommendedKw}
-                    onChange={setRecommendedKw}
-                    suggestions={KEYWORD_SUGGESTIONS}
-                    tone="recommended"
-                  />
-                  <TagField
-                    label="Proibidas"
-                    description="Nunca devem aparecer."
-                    values={forbiddenKw}
-                    onChange={setForbiddenKw}
-                    tone="forbidden"
-                    icon={<Ban className="h-3 w-3" />}
-                  />
+                <div
+                  className={cn(
+                    "grid gap-4 transition-opacity md:grid-cols-3",
+                    !keywordsEnabled && "pointer-events-none opacity-40",
+                  )}
+                >
+                  <KeywordGroup
+                    enabled={requiredKwEnabled}
+                    onEnabledChange={setRequiredKwEnabled}
+                  >
+                    <TagField
+                      label="Obrigatórias"
+                      description="Aparecem em todos os títulos."
+                      values={requiredKw}
+                      onChange={setRequiredKw}
+                      suggestions={KEYWORD_SUGGESTIONS}
+                      tone="required"
+                    />
+                  </KeywordGroup>
+                  <KeywordGroup
+                    enabled={recommendedKwEnabled}
+                    onEnabledChange={setRecommendedKwEnabled}
+                  >
+                    <TagField
+                      label="Recomendadas"
+                      description="Priorizadas quando fizerem sentido."
+                      values={recommendedKw}
+                      onChange={setRecommendedKw}
+                      suggestions={KEYWORD_SUGGESTIONS}
+                      tone="recommended"
+                    />
+                  </KeywordGroup>
+                  <KeywordGroup
+                    enabled={forbiddenKwEnabled}
+                    onEnabledChange={setForbiddenKwEnabled}
+                  >
+                    <TagField
+                      label="Proibidas"
+                      description="Nunca devem aparecer."
+                      values={forbiddenKw}
+                      onChange={setForbiddenKw}
+                      tone="forbidden"
+                      icon={<Ban className="h-3 w-3" />}
+                    />
+                  </KeywordGroup>
                 </div>
               </Section>
+
 
               {/* Comprimento */}
               <Section
@@ -454,6 +493,38 @@ function TitlesScreen() {
     </TooltipProvider>
   );
 }
+
+function KeywordGroup({
+  enabled,
+  onEnabledChange,
+  children,
+}: {
+  enabled: boolean;
+  onEnabledChange: (v: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-end">
+        <Switch
+          checked={enabled}
+          onCheckedChange={onEnabledChange}
+          aria-label="Ativar categoria"
+        />
+      </div>
+      <div
+        className={cn(
+          "transition-opacity",
+          !enabled && "pointer-events-none opacity-40",
+        )}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+
 
 // ---------- helpers ----------
 
