@@ -214,13 +214,18 @@ const IMAGE_SOURCES = [
   { id: "channel-assets", label: "Assets do canal" },
 ];
 
-const FONTS = [
-  { id: "inter", label: "Inter", css: "Inter, sans-serif", sample: "Aa Bb Cc" },
-  { id: "anton", label: "Anton", css: "Anton, sans-serif", sample: "Aa Bb Cc" },
-  { id: "bebas", label: "Bebas Neue", css: "'Bebas Neue', sans-serif", sample: "Aa Bb Cc" },
-  { id: "montserrat", label: "Montserrat", css: "Montserrat, sans-serif", sample: "Aa Bb Cc" },
-  { id: "poppins", label: "Poppins", css: "Poppins, sans-serif", sample: "Aa Bb Cc" },
-];
+type TextStyle = {
+  id: string;
+  name: string;
+  color: string;
+  size: number;
+  weight: string;
+  uppercase: boolean;
+  stroke: number;
+  strokeColor: string;
+  shadow: number;
+};
+
 
 const FONT_WEIGHTS = [
   { value: "400", label: "Regular" },
