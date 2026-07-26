@@ -359,19 +359,70 @@ function ThumbnailScreen() {
 
 
 
+  const updateActiveComposition = (patch: (c: Composition) => Composition) =>
+    setCompositions((prev) =>
+      prev.map((c) => (c.id === activeCompId ? patch(c) : c)),
+    );
+
+  const addComposition = () => {
+    const id = `comp-${Date.now()}`;
+    setCompositions((prev) => [
+      ...prev,
+      { id, name: `Composição ${prev.length + 1}`, layers: [] },
+    ]);
+    setActiveCompId(id);
+  };
+
+  const renameComposition = (id: string, name: string) =>
+    setCompositions((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, name } : c)),
+    );
+
+  const removeComposition = (id: string) =>
+    setCompositions((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      if (id === activeCompId && next[0]) setActiveCompId(next[0].id);
+      return next;
+    });
+
+  const addLayer = () =>
+    updateActiveComposition((c) => ({
+      ...c,
+      layers: [
+        ...c.layers,
+        {
+          id: `layer-${Date.now()}`,
+          label: `Camada ${c.layers.length + 1}`,
+        },
+      ],
+    }));
+
+  const renameLayer = (id: string, label: string) =>
+    updateActiveComposition((c) => ({
+      ...c,
+      layers: c.layers.map((l) => (l.id === id ? { ...l, label } : l)),
+    }));
+
+  const removeLayer = (id: string) =>
+    updateActiveComposition((c) => ({
+      ...c,
+      layers: c.layers.filter((l) => l.id !== id),
+    }));
+
   const onLayerDragStart = (i: number) => setDragIndex(i);
   const onLayerDragOver = (e: React.DragEvent, i: number) => {
     e.preventDefault();
     if (dragIndex === null || dragIndex === i) return;
-    setLayers((prev) => {
-      const next = [...prev];
+    updateActiveComposition((c) => {
+      const next = [...c.layers];
       const [moved] = next.splice(dragIndex, 1);
       next.splice(i, 0, moved);
-      return next;
+      return { ...c, layers: next };
     });
     setDragIndex(i);
   };
   const onLayerDragEnd = () => setDragIndex(null);
+
 
   return (
     <TooltipProvider delayDuration={200}>
