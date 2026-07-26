@@ -343,6 +343,28 @@ function ThumbnailScreen() {
       prev.map((l) => (l.id === id ? { ...l, required: !l.required } : l)),
     );
 
+  const addLibraryItem = (item: {
+    kind: LibraryKind;
+    label: string;
+    url?: string;
+  }) =>
+    setLibrary((prev) => [
+      ...prev,
+      {
+        id: `lib-${Date.now()}`,
+        label: item.label,
+        kind: item.kind,
+        url: item.url,
+        required: false,
+        gradient: KIND_GRADIENT[item.kind],
+      },
+    ]);
+
+  const removeLibraryItem = (id: string) =>
+    setLibrary((prev) => prev.filter((l) => l.id !== id));
+
+
+
   const onLayerDragStart = (i: number) => setDragIndex(i);
   const onLayerDragOver = (e: React.DragEvent, i: number) => {
     e.preventDefault();
