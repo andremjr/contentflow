@@ -26,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -744,52 +743,6 @@ function NewStructureButton({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function LengthRuler({ range }: { range: [number, number] }) {
-  // Zones over 0-100 characters
-  const zones = [
-    { from: 0, to: 30, label: "Curto", cls: "bg-muted-foreground/30" },
-    { from: 30, to: 60, label: "Recomendado", cls: "bg-primary/50" },
-    { from: 60, to: 70, label: "Longo", cls: "bg-warning/60" },
-    { from: 70, to: 100, label: "Corte no YouTube", cls: "bg-destructive/60" },
-  ];
-  const leftPct = range[0];
-  const widthPct = Math.max(0, range[1] - range[0]);
-  return (
-    <div className="mt-4">
-      <div className="relative h-2 overflow-hidden rounded-full bg-secondary/50">
-        {zones.map((z) => (
-          <div
-            key={z.label}
-            className={cn("absolute top-0 h-full", z.cls)}
-            style={{
-              left: `${z.from}%`,
-              width: `${z.to - z.from}%`,
-              opacity: 0.55,
-            }}
-          />
-        ))}
-        <div
-          className="absolute top-0 h-full rounded-full ring-2 ring-primary/70 bg-primary/30"
-          style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-        />
-      </div>
-      <div className="mt-2 grid grid-cols-4 text-[10px] uppercase tracking-wider text-muted-foreground">
-        <span>Curto</span>
-        <span>Recomendado</span>
-        <span>Longo</span>
-        <span className="text-destructive/80">Corte no YouTube</span>
-      </div>
-      <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-        <span>0</span>
-        <span>30</span>
-        <span>60</span>
-        <span>70</span>
-        <span>100</span>
-      </div>
-    </div>
   );
 }
 
