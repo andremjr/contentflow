@@ -1018,17 +1018,6 @@ function FieldWrap({
   );
 }
 
-function MetaRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-md bg-secondary/40 px-2 py-1.5">
-      <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="text-xs font-medium">{value}</dd>
-    </div>
-  );
-}
-
 function ToggleRow({
   label,
   checked,
@@ -1043,55 +1032,6 @@ function ToggleRow({
       <span>{label}</span>
       <Switch checked={checked} onCheckedChange={onChange} />
     </label>
-  );
-}
-
-function LayoutPreview({
-  layout,
-  large,
-}: {
-  layout: LayoutTemplate;
-  large?: boolean;
-}) {
-  // Simplified geometric preview per id
-  const char = layout.character;
-  const text = layout.text;
-  return (
-    <div
-      className={cn(
-        "relative aspect-video w-full overflow-hidden bg-gradient-to-br from-slate-800 via-slate-900 to-black",
-        large && "min-h-[220px]",
-      )}
-    >
-      {/* Character silhouette */}
-      <div
-        className={cn(
-          "absolute bottom-0 flex h-3/4 w-1/3 items-end justify-center bg-gradient-to-t from-primary/70 to-primary/30",
-          char === "esquerda" && "left-2",
-          char === "direita" && "right-2",
-          char === "centro" && "left-1/3",
-          char === "base" && "left-1/2 h-1/2 w-1/2 -translate-x-1/2",
-        )}
-        style={{
-          clipPath:
-            "polygon(50% 0, 80% 25%, 100% 100%, 0 100%, 20% 25%)",
-        }}
-      />
-      {/* Highlight blob */}
-      <div className="absolute right-4 top-4 h-8 w-8 rounded-full bg-warning/70 blur-[2px]" />
-      {/* Text block */}
-      <div
-        className={cn(
-          "absolute rounded bg-warning/90 px-1.5 py-0.5 text-[8px] font-black uppercase text-black",
-          text === "direita" && "right-2 top-1/3",
-          text === "esquerda" && "left-2 top-1/3",
-          text === "rodapé" && "bottom-2 left-1/2 -translate-x-1/2",
-          text === "topo" && "left-2 top-2",
-        )}
-      >
-        TEXTO
-      </div>
-    </div>
   );
 }
 
