@@ -1,5 +1,5 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
-import { useState, useRef, useMemo, type KeyboardEvent } from "react";
+import { useState, useRef, type KeyboardEvent } from "react";
 import {
   Image as ImageIcon,
   Layout,
@@ -8,9 +8,7 @@ import {
   Type as TypeIcon,
   Wand2,
   Upload,
-  Link as LinkIcon,
   Star,
-  Filter,
   Plus,
   X,
   Ban,
@@ -906,36 +904,6 @@ function ToggleRow({
       <span>{label}</span>
       <Switch checked={checked} onCheckedChange={onChange} />
     </label>
-  );
-}
-
-function FilterSelect({
-  value,
-  onChange,
-  label,
-  options,
-  display,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  label: string;
-  options: string[];
-  display?: Record<string, string>;
-}) {
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-8 w-auto min-w-[140px] text-xs">
-        <span className="text-muted-foreground">{label}:</span>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => (
-          <SelectItem key={o} value={o}>
-            {display?.[o] ?? (o === "all" ? "Todos" : o)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 
