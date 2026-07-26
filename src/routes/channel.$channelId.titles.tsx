@@ -170,6 +170,12 @@ function TitlesScreen() {
     "click aqui",
   ]);
 
+  const [keywordsEnabled, setKeywordsEnabled] = useState(true);
+  const [requiredKwEnabled, setRequiredKwEnabled] = useState(true);
+  const [recommendedKwEnabled, setRecommendedKwEnabled] = useState(true);
+  const [forbiddenKwEnabled, setForbiddenKwEnabled] = useState(true);
+
+
   const [lengthRange, setLengthRange] = useState<[number, number]>([45, 70]);
 
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
