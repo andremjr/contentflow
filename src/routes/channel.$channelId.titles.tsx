@@ -591,7 +591,7 @@ function NewStructureButton({
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label>Exemplos</Label>
+              <Label>Exemplos (opcional)</Label>
               <span className="text-xs text-muted-foreground">
                 {examples.length}/5
               </span>
