@@ -218,10 +218,10 @@ function ThumbnailScreen() {
 
   // Compositions
   const [compositions, setCompositions] = useState<Composition[]>([
-    { id: "comp-1", name: "Composição 1", layers: [] },
+    { id: "comp-1", name: "Composição 1", boxes: [] },
   ]);
   const [activeCompId, setActiveCompId] = useState("comp-1");
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
 
 
   // Library
