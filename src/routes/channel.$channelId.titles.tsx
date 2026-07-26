@@ -279,6 +279,11 @@ function TitlesScreen() {
                     <span className="text-xs text-muted-foreground">
                       {selectedStructures.length}/{structures.length} ativas
                     </span>
+                    <BulkStructuresButton
+                      open={bulkStructOpen}
+                      onOpenChange={setBulkStructOpen}
+                      onCreate={addStructuresBulk}
+                    />
                     <NewStructureButton
                       open={newStructOpen}
                       onOpenChange={setNewStructOpen}
