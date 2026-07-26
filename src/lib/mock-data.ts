@@ -48,10 +48,10 @@ export const PROCESS_META: Record<
 };
 
 export const PROCESS_ORDER: ProcessId[] = [
+  "research",
   "ideas",
   "titles",
   "thumbnail",
-  "research",
   "script",
   "narration",
   "assets",
