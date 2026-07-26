@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -42,6 +42,14 @@ export function CompositionCanvas({
     onChange(boxes.map((b) => (b.id === id ? { ...b, ...patch } : b)));
 
   const remove = (id: string) => onChange(boxes.filter((b) => b.id !== id));
+
+  const move = (from: number, to: number) => {
+    if (to < 0 || to >= boxes.length) return;
+    const next = [...boxes];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
+  };
 
   const addBox = () => {
     const id = `box-${Date.now()}`;
@@ -151,40 +159,67 @@ export function CompositionCanvas({
       </div>
 
       {boxes.length > 0 && (
-        <ul className="space-y-1.5">
-          {boxes.map((b) => (
-            <li
-              key={b.id}
-              onClick={() => setSelected(b.id)}
-              className={cn(
-                "flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2",
-                selected === b.id && "border-primary/60 bg-primary/5",
-              )}
-            >
-              <input
-                type="color"
-                aria-label={`Cor de ${b.label}`}
-                value={b.color}
-                onChange={(e) => update(b.id, { color: e.target.value })}
-                className="h-6 w-6 shrink-0 cursor-pointer rounded border border-border bg-transparent p-0"
-              />
-              <Input
-                value={b.label}
-                onChange={(e) => update(b.id, { label: e.target.value })}
-                className="h-8 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-              />
-              <button
-                type="button"
-                aria-label="Remover caixa"
-                onClick={() => remove(b.id)}
-                className="rounded-md p-1 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-1.5">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">
+            Camadas (topo → base)
+          </div>
+          <ul className="space-y-1.5">
+            {[...boxes].reverse().map((b, ri) => {
+              const index = boxes.length - 1 - ri;
+              return (
+                <li
+                  key={b.id}
+                  onClick={() => setSelected(b.id)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2",
+                    selected === b.id && "border-primary/60 bg-primary/5",
+                  )}
+                >
+                  <input
+                    type="color"
+                    aria-label={`Cor de ${b.label}`}
+                    value={b.color}
+                    onChange={(e) => update(b.id, { color: e.target.value })}
+                    className="h-6 w-6 shrink-0 cursor-pointer rounded border border-border bg-transparent p-0"
+                  />
+                  <Input
+                    value={b.label}
+                    onChange={(e) => update(b.id, { label: e.target.value })}
+                    className="h-8 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Mover para frente"
+                    disabled={index === boxes.length - 1}
+                    onClick={() => move(index, index + 1)}
+                    className="rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Mover para trás"
+                    disabled={index === 0}
+                    onClick={() => move(index, index - 1)}
+                    className="rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Remover caixa"
+                    onClick={() => remove(b.id)}
+                    className="rounded-md p-1 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
+
     </div>
   );
 }
