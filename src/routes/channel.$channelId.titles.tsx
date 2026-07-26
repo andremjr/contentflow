@@ -476,35 +476,6 @@ function TitlesScreen() {
   );
 }
 
-function KeywordGroup({
-  enabled,
-  onEnabledChange,
-  children,
-}: {
-  enabled: boolean;
-  onEnabledChange: (v: boolean) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-end">
-        <Switch
-          checked={enabled}
-          onCheckedChange={onEnabledChange}
-          aria-label="Ativar categoria"
-        />
-      </div>
-      <div
-        className={cn(
-          "transition-opacity",
-          !enabled && "pointer-events-none opacity-40",
-        )}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
 
 
 
