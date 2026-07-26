@@ -446,15 +446,12 @@ function TitlesScreen() {
                 title="Instruções avançadas"
                 description="Prompt-mestre usado ao gerar títulos."
               >
-                <PromptEditor
+                <Textarea
                   value={prompt}
-                  onChange={setPrompt}
-                  refEl={promptRef}
-                  expanded={expanded}
-                  onToggleExpanded={() => setExpanded((v) => !v)}
-                  onInsertVariable={insertVariable}
-                  onRestore={() => setPrompt(DEFAULT_PROMPT)}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  className="min-h-[220px] resize-y text-sm leading-relaxed"
                 />
+
               </Section>
 
               <Separator />
