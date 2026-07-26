@@ -635,117 +635,210 @@ function ThumbnailScreen() {
 
               </Section>
 
-              {/* Tipografia */}
+              {/* Composição */}
               <Section
-                icon={<TypeIcon className="h-4 w-4" />}
-                title="Tipografia"
-                description="Aparência do texto sobre a thumbnail."
+                icon={<Layout className="h-4 w-4" />}
+                title="Composição"
+                description="Layout base, hierarquia de camadas e tipografia."
+                action={
+                  <Switch
+                    checked={compositionEnabled}
+                    onCheckedChange={setCompositionEnabled}
+                  />
+                }
               >
-                <div className="grid gap-6 md:grid-cols-2">
-                  <FieldWrap label="Fonte">
-                    <FontSelect
-                      value={fontId}
-                      onChange={setFontId}
-                      options={FONTS}
-                    />
-                  </FieldWrap>
-                  <FieldWrap label="Cor do texto">
-                    <ColorField value={color} onChange={setColor} />
-                  </FieldWrap>
-                </div>
+                <div
+                  className={cn(
+                    "space-y-6 transition-opacity",
+                    !compositionEnabled && "pointer-events-none opacity-50",
+                  )}
+                >
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {LAYOUTS.map((l) => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => setLayoutId(l.id)}
+                        className={cn(
+                          "group overflow-hidden rounded-lg border text-left transition-all",
+                          layoutId === l.id
+                            ? "border-primary ring-2 ring-primary/40"
+                            : "border-border hover:border-border/80",
+                        )}
+                      >
+                        <LayoutPreview layout={l} />
+                        <div className="p-2">
+                          <div className="text-xs font-medium">{l.name}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
 
-                <FieldWrap label="Tamanho">
-                  <div className="space-y-2">
-                    <Slider
-                      value={size}
-                      min={24}
-                      max={140}
-                      step={2}
-                      onValueChange={(v) => setSize([v[0]] as [number])}
-                    />
-                    <div className="flex justify-between text-[11px] text-muted-foreground">
-                      <span>24 px</span>
-                      <span className="font-medium text-foreground">
-                        {size[0]} px
-                      </span>
-                      <span>140 px</span>
+                  <div className="grid gap-4 rounded-xl border border-border bg-secondary/20 p-4 md:grid-cols-[1.2fr_1fr]">
+                    <div>
+                      <div className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+                        Prévia do layout
+                      </div>
+                      <div className="overflow-hidden rounded-lg border border-border">
+                        <LayoutPreview layout={activeLayout} large />
+                      </div>
+                      <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                        <MetaRow label="Personagem" value={activeLayout.character} />
+                        <MetaRow label="Texto" value={activeLayout.text} />
+                        <MetaRow label="Destaque" value={activeLayout.focus} />
+                        <MetaRow label="Fundo" value={activeLayout.background} />
+                      </dl>
+                    </div>
+
+                    <div>
+                      <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wider text-muted-foreground">
+                        <span>Camadas (topo → base visual)</span>
+                        <Info className="h-3 w-3" />
+                      </div>
+                      <ul className="space-y-1.5">
+                        {layers.map((l, i) => (
+                          <li
+                            key={l.id}
+                            draggable
+                            onDragStart={() => onLayerDragStart(i)}
+                            onDragOver={(e) => onLayerDragOver(e, i)}
+                            onDragEnd={onLayerDragEnd}
+                            className={cn(
+                              "flex cursor-move items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2 text-sm transition-colors",
+                              dragIndex === i && "border-primary bg-primary/10",
+                            )}
+                          >
+                            <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="flex h-5 w-5 items-center justify-center rounded bg-secondary text-[10px] text-muted-foreground">
+                              {i + 1}
+                            </span>
+                            {l.label}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   </div>
-                </FieldWrap>
 
-                <div className="grid gap-6 md:grid-cols-3">
-                  <FieldWrap label="Alinhamento">
-                    <AlignPicker value={align} onChange={setAlign} />
-                  </FieldWrap>
-                  <FieldWrap label="Peso">
-                    <Select value={weight} onValueChange={setWeight}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FONT_WEIGHTS.map((w) => (
-                          <SelectItem key={w.value} value={w.value}>
-                            {w.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FieldWrap>
-                  <FieldWrap label="Caixa alta">
-                    <div className="flex h-10 items-center gap-2 rounded-md border border-border bg-secondary/30 px-3">
-                      <Switch
-                        checked={uppercase}
-                        onCheckedChange={setUppercase}
-                      />
-                      <span className="text-sm">TODO EM MAIÚSCULAS</span>
-                    </div>
-                  </FieldWrap>
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-2">
-                  <FieldWrap label="Contorno">
-                    <div className="space-y-2">
-                      <Slider
-                        value={stroke}
-                        min={0}
-                        max={12}
-                        step={1}
-                        onValueChange={(v) => setStroke([v[0]] as [number])}
-                      />
-                      <div className="flex items-center gap-2">
-                        <ColorField
-                          value={strokeColor}
-                          onChange={setStrokeColor}
-                          compact
-                        />
-                        <span className="text-[11px] text-muted-foreground">
-                          {stroke[0]} px
-                        </span>
+                  {/* Tipografia (subcampo) */}
+                  <div className="space-y-6 rounded-xl border border-border bg-secondary/10 p-4">
+                    <div className="flex items-center gap-2">
+                      <TypeIcon className="h-4 w-4 text-primary" />
+                      <div>
+                        <div className="text-sm font-medium">Tipografia</div>
+                        <div className="text-xs text-muted-foreground">
+                          Aparência do texto sobre a thumbnail.
+                        </div>
                       </div>
                     </div>
-                  </FieldWrap>
-                  <FieldWrap label="Sombra">
-                    <Slider
-                      value={shadow}
-                      min={0}
-                      max={40}
-                      step={1}
-                      onValueChange={(v) => setShadow([v[0]] as [number])}
-                    />
-                    <div className="text-right text-[11px] text-muted-foreground">
-                      Offset: {shadow[0]} px
-                    </div>
-                  </FieldWrap>
-                </div>
 
-                <ContrastPreview
-                  color={color}
-                  strokeColor={strokeColor}
-                  font={activeFont.css}
-                  weight={weight}
-                  uppercase={uppercase}
-                />
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <FieldWrap label="Fonte">
+                        <FontSelect
+                          value={fontId}
+                          onChange={setFontId}
+                          options={FONTS}
+                        />
+                      </FieldWrap>
+                      <FieldWrap label="Cor do texto">
+                        <ColorField value={color} onChange={setColor} />
+                      </FieldWrap>
+                    </div>
+
+                    <FieldWrap label="Tamanho">
+                      <div className="space-y-2">
+                        <Slider
+                          value={size}
+                          min={24}
+                          max={140}
+                          step={2}
+                          onValueChange={(v) => setSize([v[0]] as [number])}
+                        />
+                        <div className="flex justify-between text-[11px] text-muted-foreground">
+                          <span>24 px</span>
+                          <span className="font-medium text-foreground">
+                            {size[0]} px
+                          </span>
+                          <span>140 px</span>
+                        </div>
+                      </div>
+                    </FieldWrap>
+
+                    <div className="grid gap-6 md:grid-cols-3">
+                      <FieldWrap label="Alinhamento">
+                        <AlignPicker value={align} onChange={setAlign} />
+                      </FieldWrap>
+                      <FieldWrap label="Peso">
+                        <Select value={weight} onValueChange={setWeight}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FONT_WEIGHTS.map((w) => (
+                              <SelectItem key={w.value} value={w.value}>
+                                {w.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FieldWrap>
+                      <FieldWrap label="Caixa alta">
+                        <div className="flex h-10 items-center gap-2 rounded-md border border-border bg-secondary/30 px-3">
+                          <Switch
+                            checked={uppercase}
+                            onCheckedChange={setUppercase}
+                          />
+                          <span className="text-sm">TODO EM MAIÚSCULAS</span>
+                        </div>
+                      </FieldWrap>
+                    </div>
+
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <FieldWrap label="Contorno">
+                        <div className="space-y-2">
+                          <Slider
+                            value={stroke}
+                            min={0}
+                            max={12}
+                            step={1}
+                            onValueChange={(v) => setStroke([v[0]] as [number])}
+                          />
+                          <div className="flex items-center gap-2">
+                            <ColorField
+                              value={strokeColor}
+                              onChange={setStrokeColor}
+                              compact
+                            />
+                            <span className="text-[11px] text-muted-foreground">
+                              {stroke[0]} px
+                            </span>
+                          </div>
+                        </div>
+                      </FieldWrap>
+                      <FieldWrap label="Sombra">
+                        <Slider
+                          value={shadow}
+                          min={0}
+                          max={40}
+                          step={1}
+                          onValueChange={(v) => setShadow([v[0]] as [number])}
+                        />
+                        <div className="text-right text-[11px] text-muted-foreground">
+                          Offset: {shadow[0]} px
+                        </div>
+                      </FieldWrap>
+                    </div>
+
+                    <ContrastPreview
+                      color={color}
+                      strokeColor={strokeColor}
+                      font={activeFont.css}
+                      weight={weight}
+                      uppercase={uppercase}
+                    />
+                  </div>
+                </div>
               </Section>
+
 
               {/* Prompt */}
               <Section
