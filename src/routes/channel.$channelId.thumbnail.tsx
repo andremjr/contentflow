@@ -118,16 +118,12 @@ type Reference = {
   url: string;
 };
 
-type CompositionLayer = {
-  id: string;
-  label: string;
-};
-
 type Composition = {
   id: string;
   name: string;
-  layers: CompositionLayer[];
+  boxes: CompositionBox[];
 };
+
 
 
 type LibraryKind =
