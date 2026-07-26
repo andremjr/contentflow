@@ -7,16 +7,11 @@ import {
   Wand2,
   X,
   Plus,
-  Maximize2,
-  Minimize2,
-  RotateCcw,
-  Info,
   Sparkles,
   Ban,
   Tag,
   Play,
   Save,
-  Braces,
   Check,
   ArrowRight,
 } from "lucide-react";
@@ -119,15 +114,6 @@ const KEYWORD_SUGGESTIONS = [
   "definitivo",
 ];
 
-const PROMPT_VARIABLES = [
-  { key: "channel_name", label: "Nome do canal" },
-  { key: "channel_niche", label: "Nicho" },
-  { key: "target_audience", label: "Público" },
-  { key: "keyword_focus", label: "Palavra-chave principal" },
-  { key: "structure", label: "Estrutura escolhida" },
-  { key: "length_min", label: "Mín. caracteres" },
-  { key: "length_max", label: "Máx. caracteres" },
-];
 
 const DEFAULT_PROMPT = `Você é um copywriter especializado em títulos de YouTube para {{channel_name}}, nicho {{channel_niche}}.
 
