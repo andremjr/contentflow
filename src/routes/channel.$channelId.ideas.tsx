@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -163,7 +162,6 @@ function IdeasScreen() {
     "google",
   ]);
   const [trendPeriod, setTrendPeriod] = useState("7d");
-  const [trendIntensity, setTrendIntensity] = useState<[number]>([70]);
   const [requiredThemes, setRequiredThemes] = useState<string[]>([
     "IA generativa",
   ]);
@@ -217,7 +215,7 @@ function IdeasScreen() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
                   <Lightbulb className="h-3.5 w-3.5" />
-                  Ideias · Etapa 2 do pipeline
+                  Ideias · Etapa 1 do pipeline
                 </div>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight">
                   Configurações de ideias
@@ -235,26 +233,110 @@ function IdeasScreen() {
               </div>
             </div>
 
-            {/* Descoberta */}
+            {/* Pesquisa de temas (sub-etapa) */}
             <Section
               icon={<TrendingUp className="h-4 w-4" />}
-              title="Pesquisa"
-              description="Usar os resultados do processo de Pesquisa como base para gerar ideias."
+              title="Pesquisa de temas"
+              description="Sub-etapa opcional executada antes de gerar ideias, para descobrir temas com potencial."
               action={
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">
-                    {useTrends ? "Ativado" : "Desativado"}
+                    {useTrends ? "Ativada" : "Desativada"}
                   </span>
                   <Switch checked={useTrends} onCheckedChange={setUseTrends} />
                 </div>
               }
             >
-              <p className="text-sm text-muted-foreground">
-                Quando ativado, as ideias serão geradas a partir dos resultados
-                da etapa anterior (Pesquisa). Desative para gerar ideias sem
-                usar essa base.
-              </p>
+              <div
+                className={cn(
+                  "space-y-5 transition-opacity",
+                  !useTrends && "pointer-events-none opacity-40",
+                )}
+              >
+                <p className="text-sm text-muted-foreground">
+                  Quando ativada, o sistema pesquisa temas nas fontes escolhidas
+                  e usa esses resultados como base das ideias. Desative para
+                  gerar ideias apenas a partir do público e do histórico do
+                  canal.
+                </p>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Fontes de pesquisa
+                  </Label>
+                  <div className="flex flex-wrap gap-3">
+                    {TREND_SOURCES.map((s) => (
+                      <label
+                        key={s.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-secondary/30 px-3 py-2 text-sm"
+                      >
+                        <Checkbox
+                          checked={trendSources.includes(s.id)}
+                          onCheckedChange={() => toggleSource(s.id)}
+                        />
+                        {s.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Período analisado
+                    </Label>
+                    <Select value={trendPeriod} onValueChange={setTrendPeriod}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TREND_PERIODS.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>
+                            {p.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Temas obrigatórios
+                    </Label>
+                    <Input
+                      value={requiredThemes.join(", ")}
+                      onChange={(e) =>
+                        setRequiredThemes(
+                          e.target.value
+                            .split(",")
+                            .map((t) => t.trim())
+                            .filter(Boolean),
+                        )
+                      }
+                      placeholder="Separe por vírgula"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Temas proibidos
+                  </Label>
+                  <Input
+                    value={forbiddenThemes.join(", ")}
+                    onChange={(e) =>
+                      setForbiddenThemes(
+                        e.target.value
+                          .split(",")
+                          .map((t) => t.trim())
+                          .filter(Boolean),
+                      )
+                    }
+                    placeholder="Separe por vírgula"
+                  />
+                </div>
+              </div>
             </Section>
+
 
             {/* Conexão */}
             <Section
