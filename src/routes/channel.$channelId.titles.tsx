@@ -175,6 +175,8 @@ function TitlesScreen() {
 
 
   const [lengthRange, setLengthRange] = useState<[number, number]>([45, 70]);
+  const [lengthEnabled, setLengthEnabled] = useState(true);
+
 
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [expanded, setExpanded] = useState(false);
