@@ -277,22 +277,7 @@ function ThumbnailScreen() {
   const [library, setLibrary] = useState<LibraryItem[]>(LIBRARY);
 
   // Unique elements
-  const [imageDescription, setImageDescription] = useState(
-    "Cenas reais e humanas relacionadas a produtividade e tecnologia.",
-  );
-  const [imageSources, setImageSources] = useState<string[]>([
-    "unsplash",
-    "channel-assets",
-  ]);
-  const [searchTerms, setSearchTerms] = useState<string[]>([
-    "workspace",
-    "notebook",
-  ]);
-  const [excludeTerms, setExcludeTerms] = useState<string[]>(["stock", "meme"]);
-  const [allowPeople, setAllowPeople] = useState(true);
-  const [allowFaces, setAllowFaces] = useState(true);
-  const [allowText, setAllowText] = useState(false);
-  const [allowLogos, setAllowLogos] = useState(false);
+  const [specificEnabled, setSpecificEnabled] = useState(true);
 
   // Typography
   const [fontId, setFontId] = useState("anton");
@@ -341,10 +326,8 @@ function ThumbnailScreen() {
   const removeReference = (id: string) =>
     setReferences((prev) => prev.filter((r) => r.id !== id));
 
-  const toggleSource = (id: string) =>
-    setImageSources((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
-    );
+
+
 
   const toggleRequired = (id: string) =>
     setLibrary((prev) =>
@@ -668,69 +651,12 @@ function ThumbnailScreen() {
                 title="Elementos específicos"
                 description="Como buscar imagens únicas para cada thumbnail."
               >
-                <FieldWrap
-                  label="Descrição do tipo de imagem"
-                  description="Guia para o motor de busca ou geração."
-                >
-                  <Textarea
-                    value={imageDescription}
-                    onChange={(e) => setImageDescription(e.target.value)}
-                    className="min-h-[88px]"
-                  />
-                </FieldWrap>
+                <ToggleRow
+                  label="Usar elementos específicos por thumbnail"
+                  checked={specificEnabled}
+                  onChange={setSpecificEnabled}
+                />
 
-                <div className="grid gap-6 md:grid-cols-2">
-                  <FieldWrap
-                    label="Fontes de imagens"
-                    description="Uma ou mais fontes podem ser combinadas."
-                  >
-                    <MultiSelect
-                      selected={imageSources}
-                      onToggle={toggleSource}
-                      options={IMAGE_SOURCES}
-                    />
-                  </FieldWrap>
-                  <div className="grid gap-3">
-                    <ToggleRow
-                      label="Permitir pessoas"
-                      checked={allowPeople}
-                      onChange={setAllowPeople}
-                    />
-                    <ToggleRow
-                      label="Permitir rostos reconhecíveis"
-                      checked={allowFaces}
-                      onChange={setAllowFaces}
-                    />
-                    <ToggleRow
-                      label="Permitir texto externo na imagem"
-                      checked={allowText}
-                      onChange={setAllowText}
-                    />
-                    <ToggleRow
-                      label="Permitir logotipos externos"
-                      checked={allowLogos}
-                      onChange={setAllowLogos}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-2">
-                  <TagField
-                    label="Termos de busca"
-                    description="Palavras-chave usadas na busca."
-                    values={searchTerms}
-                    onChange={setSearchTerms}
-                    tone="primary"
-                  />
-                  <TagField
-                    label="Exclusões"
-                    description="Termos que nunca devem retornar."
-                    values={excludeTerms}
-                    onChange={setExcludeTerms}
-                    tone="destructive"
-                    icon={<Ban className="h-3 w-3" />}
-                  />
-                </div>
               </Section>
 
               {/* Tipografia */}
