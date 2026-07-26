@@ -177,6 +177,7 @@ function TitlesScreen() {
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
   const [newStructOpen, setNewStructOpen] = useState(false);
+  const [bulkStructOpen, setBulkStructOpen] = useState(false);
 
   const toggleStructure = (id: string) =>
     setSelectedStructures((prev) =>
@@ -187,6 +188,16 @@ function TitlesScreen() {
     const id = "struct-" + Date.now();
     setStructures((prev) => [...prev, { ...s, id }]);
     setSelectedStructures((prev) => [...prev, id]);
+  };
+
+  const addStructuresBulk = (formulas: string[]) => {
+    const created = formulas.map((formula, i) => ({
+      id: `struct-${Date.now()}-${i}`,
+      formula,
+      examples: [] as string[],
+    }));
+    setStructures((prev) => [...prev, ...created]);
+    setSelectedStructures((prev) => [...prev, ...created.map((c) => c.id)]);
   };
 
   const insertVariable = (key: string) => {
@@ -269,6 +280,11 @@ function TitlesScreen() {
                     <span className="text-xs text-muted-foreground">
                       {selectedStructures.length}/{structures.length} ativas
                     </span>
+                    <BulkStructuresButton
+                      open={bulkStructOpen}
+                      onOpenChange={setBulkStructOpen}
+                      onCreate={addStructuresBulk}
+                    />
                     <NewStructureButton
                       open={newStructOpen}
                       onOpenChange={setNewStructOpen}
@@ -524,6 +540,70 @@ function StructureCard({
   );
 }
 
+function BulkStructuresButton({
+  open,
+  onOpenChange,
+  onCreate,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onCreate: (formulas: string[]) => void;
+}) {
+  const [text, setText] = useState("");
+  const formulas = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const submit = () => {
+    if (formulas.length === 0) return;
+    onCreate(formulas);
+    setText("");
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Adicionar em lote
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Adicionar fórmulas em lote</DialogTitle>
+          <DialogDescription>
+            Cole uma fórmula por linha. Você pode adicionar exemplos depois.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={"[Número] formas de [resultado]\nComo [ação] sem [obstáculo]\nPor que [crença comum] está errada"}
+            className="min-h-[200px] resize-y font-mono text-sm"
+            spellCheck={false}
+          />
+          <p className="text-xs text-muted-foreground">
+            {formulas.length} fórmula{formulas.length === 1 ? "" : "s"} detectada
+            {formulas.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={submit} disabled={formulas.length === 0}>
+            <Check className="mr-1.5 h-3.5 w-3.5" />
+            Adicionar {formulas.length > 0 ? formulas.length : ""}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function NewStructureButton({
   open,
   onOpenChange,
@@ -581,7 +661,7 @@ function NewStructureButton({
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label>Exemplos</Label>
+              <Label>Exemplos (opcional)</Label>
               <span className="text-xs text-muted-foreground">
                 {examples.length}/5
               </span>
