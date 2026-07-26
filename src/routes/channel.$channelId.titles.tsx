@@ -342,45 +342,30 @@ function TitlesScreen() {
                     !keywordsEnabled && "pointer-events-none opacity-40",
                   )}
                 >
-                  <KeywordGroup
-                    enabled={requiredKwEnabled}
-                    onEnabledChange={setRequiredKwEnabled}
-                  >
-                    <TagField
-                      label="Obrigatórias"
-                      description="Aparecem em todos os títulos."
-                      values={requiredKw}
-                      onChange={setRequiredKw}
-                      suggestions={KEYWORD_SUGGESTIONS}
-                      tone="required"
-                    />
-                  </KeywordGroup>
-                  <KeywordGroup
-                    enabled={recommendedKwEnabled}
-                    onEnabledChange={setRecommendedKwEnabled}
-                  >
-                    <TagField
-                      label="Recomendadas"
-                      description="Priorizadas quando fizerem sentido."
-                      values={recommendedKw}
-                      onChange={setRecommendedKw}
-                      suggestions={KEYWORD_SUGGESTIONS}
-                      tone="recommended"
-                    />
-                  </KeywordGroup>
-                  <KeywordGroup
-                    enabled={forbiddenKwEnabled}
-                    onEnabledChange={setForbiddenKwEnabled}
-                  >
-                    <TagField
-                      label="Proibidas"
-                      description="Nunca devem aparecer."
-                      values={forbiddenKw}
-                      onChange={setForbiddenKw}
-                      tone="forbidden"
-                      icon={<Ban className="h-3 w-3" />}
-                    />
-                  </KeywordGroup>
+                  <TagField
+                    label="Obrigatórias"
+                    description="Aparecem em todos os títulos."
+                    values={requiredKw}
+                    onChange={setRequiredKw}
+                    suggestions={KEYWORD_SUGGESTIONS}
+                    tone="required"
+                  />
+                  <TagField
+                    label="Recomendadas"
+                    description="Priorizadas quando fizerem sentido."
+                    values={recommendedKw}
+                    onChange={setRecommendedKw}
+                    suggestions={KEYWORD_SUGGESTIONS}
+                    tone="recommended"
+                  />
+                  <TagField
+                    label="Proibidas"
+                    description="Nunca devem aparecer."
+                    values={forbiddenKw}
+                    onChange={setForbiddenKw}
+                    tone="forbidden"
+                    icon={<Ban className="h-3 w-3" />}
+                  />
                 </div>
               </Section>
 
