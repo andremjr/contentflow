@@ -272,21 +272,51 @@ function ThumbnailScreen() {
   const [compositionEnabled, setCompositionEnabled] = useState(true);
 
   // Typography
-  const [fontId, setFontId] = useState("anton");
-  const [color, setColor] = useState("#FACC15");
-  const [size, setSize] = useState<[number]>([64]);
-  const [align, setAlign] = useState<"left" | "center" | "right">("left");
-  const [weight, setWeight] = useState("700");
-  const [uppercase, setUppercase] = useState(true);
-  const [stroke, setStroke] = useState<[number]>([3]);
-  const [shadow, setShadow] = useState<[number]>([8]);
-  const [strokeColor, setStrokeColor] = useState("#08111F");
+  const [fontFile, setFontFile] = useState<string | null>(null);
+  const fontInputRef = useRef<HTMLInputElement>(null);
+  const [textStyles, setTextStyles] = useState<TextStyle[]>([
+    {
+      id: "text-1",
+      name: "Texto 1",
+      color: "#FACC15",
+      size: 64,
+      weight: "700",
+      uppercase: true,
+      stroke: 3,
+      strokeColor: "#08111F",
+      shadow: 8,
+    },
+  ]);
+
+  const addTextStyle = () =>
+    setTextStyles((prev) => [
+      ...prev,
+      {
+        id: `text-${Date.now()}`,
+        name: `Texto ${prev.length + 1}`,
+        color: "#FFFFFF",
+        size: 48,
+        weight: "700",
+        uppercase: false,
+        stroke: 0,
+        strokeColor: "#08111F",
+        shadow: 0,
+      },
+    ]);
+
+  const updateTextStyle = (id: string, patch: Partial<TextStyle>) =>
+    setTextStyles((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    );
+
+  const removeTextStyle = (id: string) =>
+    setTextStyles((prev) => prev.filter((t) => t.id !== id));
 
   // Prompt
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
 
   const activeLayout = LAYOUTS.find((l) => l.id === layoutId)!;
-  const activeFont = FONTS.find((f) => f.id === fontId)!;
+
 
   const addReferenceFiles = (files: FileList | null) => {
     if (!files) return;
