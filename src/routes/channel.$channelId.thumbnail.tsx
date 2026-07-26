@@ -118,49 +118,17 @@ type Reference = {
   url: string;
 };
 
-type LayoutTemplate = {
+type CompositionLayer = {
   id: string;
-  name: string;
-  character: string;
-  text: string;
-  focus: string;
-  background: string;
+  label: string;
 };
 
-const LAYOUTS: LayoutTemplate[] = [
-  {
-    id: "left-face",
-    name: "Rosto à esquerda + texto grande",
-    character: "esquerda",
-    text: "direita",
-    focus: "expressão do rosto",
-    background: "sólido com blur",
-  },
-  {
-    id: "right-face",
-    name: "Rosto à direita + palavra-âncora",
-    character: "direita",
-    text: "esquerda",
-    focus: "palavra em destaque",
-    background: "cena real",
-  },
-  {
-    id: "split",
-    name: "Split antes/depois",
-    character: "centro",
-    text: "rodapé",
-    focus: "contraste visual",
-    background: "duas cenas divididas",
-  },
-  {
-    id: "top-text",
-    name: "Texto no topo, cena embaixo",
-    character: "base",
-    text: "topo",
-    focus: "cena principal",
-    background: "gradiente escuro",
-  },
-];
+type Composition = {
+  id: string;
+  name: string;
+  layers: CompositionLayer[];
+};
+
 
 type LibraryKind =
   | "character"
