@@ -269,6 +269,7 @@ function ThumbnailScreen() {
 
   // Unique elements
   const [specificEnabled, setSpecificEnabled] = useState(true);
+  const [compositionEnabled, setCompositionEnabled] = useState(true);
 
   // Typography
   const [fontId, setFontId] = useState("anton");
