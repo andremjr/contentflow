@@ -372,8 +372,24 @@ function TitlesScreen() {
                 icon={<Ruler className="h-4 w-4" />}
                 title="Comprimento"
                 description="Faixa de caracteres aceita para o título."
+                action={
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {lengthEnabled ? "Ativo" : "Inativo"}
+                    </span>
+                    <Switch
+                      checked={lengthEnabled}
+                      onCheckedChange={setLengthEnabled}
+                    />
+                  </div>
+                }
               >
-                <div className="space-y-6">
+                <div
+                  className={cn(
+                    "space-y-6 transition-opacity",
+                    !lengthEnabled && "pointer-events-none opacity-40",
+                  )}
+                >
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">
@@ -433,6 +449,7 @@ function TitlesScreen() {
                   </div>
                 </div>
               </Section>
+
 
               {/* Prompt */}
               <Section
