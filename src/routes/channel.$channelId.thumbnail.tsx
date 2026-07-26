@@ -277,22 +277,7 @@ function ThumbnailScreen() {
   const [library, setLibrary] = useState<LibraryItem[]>(LIBRARY);
 
   // Unique elements
-  const [imageDescription, setImageDescription] = useState(
-    "Cenas reais e humanas relacionadas a produtividade e tecnologia.",
-  );
-  const [imageSources, setImageSources] = useState<string[]>([
-    "unsplash",
-    "channel-assets",
-  ]);
-  const [searchTerms, setSearchTerms] = useState<string[]>([
-    "workspace",
-    "notebook",
-  ]);
-  const [excludeTerms, setExcludeTerms] = useState<string[]>(["stock", "meme"]);
-  const [allowPeople, setAllowPeople] = useState(true);
-  const [allowFaces, setAllowFaces] = useState(true);
-  const [allowText, setAllowText] = useState(false);
-  const [allowLogos, setAllowLogos] = useState(false);
+  const [specificEnabled, setSpecificEnabled] = useState(true);
 
   // Typography
   const [fontId, setFontId] = useState("anton");
