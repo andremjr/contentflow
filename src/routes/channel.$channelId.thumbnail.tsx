@@ -114,77 +114,9 @@ export const Route = createFileRoute("/channel/$channelId/thumbnail")({
 
 type Reference = {
   id: string;
-  title: string;
-  channel: string;
-  style: string;
-  ctr: number;
-  favorite: boolean;
-  tags: string[];
-  gradient: string;
+  name: string;
+  url: string;
 };
-
-const INITIAL_REFERENCES: Reference[] = [
-  {
-    id: "r1",
-    title: "Como dominar IA em 30 dias",
-    channel: "Nerdologia",
-    style: "Face + texto",
-    ctr: 12.4,
-    favorite: true,
-    tags: ["contraste", "expressão"],
-    gradient: "from-blue-500 to-indigo-700",
-  },
-  {
-    id: "r2",
-    title: "O erro que TODO iniciante comete",
-    channel: "Manual do Mundo",
-    style: "Alerta",
-    ctr: 9.8,
-    favorite: false,
-    tags: ["alerta", "vermelho"],
-    gradient: "from-red-500 to-rose-700",
-  },
-  {
-    id: "r3",
-    title: "Antes vs Depois com Claude",
-    channel: "Kurzgesagt",
-    style: "Comparativo",
-    ctr: 11.1,
-    favorite: true,
-    tags: ["split", "antes/depois"],
-    gradient: "from-emerald-500 to-teal-700",
-  },
-  {
-    id: "r4",
-    title: "7 fluxos com IA que ninguém te contou",
-    channel: "Foca na História",
-    style: "Lista numerada",
-    ctr: 8.7,
-    favorite: false,
-    tags: ["número gigante"],
-    gradient: "from-amber-500 to-orange-700",
-  },
-  {
-    id: "r5",
-    title: "Claude vs ChatGPT",
-    channel: "Nerdologia",
-    style: "Comparativo",
-    ctr: 10.3,
-    favorite: false,
-    tags: ["duelo"],
-    gradient: "from-purple-500 to-fuchsia-700",
-  },
-  {
-    id: "r6",
-    title: "Método secreto revelado",
-    channel: "Manual do Mundo",
-    style: "Curiosidade",
-    ctr: 7.4,
-    favorite: false,
-    tags: ["mistério"],
-    gradient: "from-slate-600 to-slate-800",
-  },
-];
 
 type LayoutTemplate = {
   id: string;
@@ -309,11 +241,8 @@ function ThumbnailScreen() {
   const [useResearch, setUseResearch] = useState(true);
 
   // References
-  const [references, setReferences] = useState<Reference[]>(INITIAL_REFERENCES);
-  const [selectedRefs, setSelectedRefs] = useState<string[]>(["r1", "r3"]);
-  const [refFilterStyle, setRefFilterStyle] = useState("all");
-  const [refFilterChannel, setRefFilterChannel] = useState("all");
-  const [refFilterPerf, setRefFilterPerf] = useState("all");
+  const [references, setReferences] = useState<Reference[]>([]);
+  const refInputRef = useRef<HTMLInputElement>(null);
 
   // Layouts
   const [layoutId, setLayoutId] = useState("left-face");
@@ -379,28 +308,20 @@ function ThumbnailScreen() {
   const activeLayout = LAYOUTS.find((l) => l.id === layoutId)!;
   const activeFont = FONTS.find((f) => f.id === fontId)!;
 
-  const filteredRefs = useMemo(() => {
-    return references.filter((r) => {
-      if (refFilterStyle !== "all" && r.style !== refFilterStyle) return false;
-      if (refFilterChannel !== "all" && r.channel !== refFilterChannel)
-        return false;
-      if (refFilterPerf === "top" && r.ctr < 10) return false;
-      if (refFilterPerf === "low" && r.ctr >= 10) return false;
-      return true;
-    });
-  }, [references, refFilterStyle, refFilterChannel, refFilterPerf]);
+  const addReferenceFiles = (files: FileList | null) => {
+    if (!files) return;
+    const added: Reference[] = Array.from(files)
+      .filter((f) => f.type.startsWith("image/"))
+      .map((f) => ({
+        id: `${Date.now()}-${f.name}-${Math.random().toString(36).slice(2, 7)}`,
+        name: f.name,
+        url: URL.createObjectURL(f),
+      }));
+    if (added.length) setReferences((prev) => [...prev, ...added]);
+  };
 
-  const uniqueStyles = ["all", ...new Set(references.map((r) => r.style))];
-  const uniqueChannels = ["all", ...new Set(references.map((r) => r.channel))];
-
-  const toggleRef = (id: string) =>
-    setSelectedRefs((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  const toggleFav = (id: string) =>
-    setReferences((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, favorite: !r.favorite } : r)),
-    );
+  const removeReference = (id: string) =>
+    setReferences((prev) => prev.filter((r) => r.id !== id));
 
   const toggleSource = (id: string) =>
     setImageSources((prev) =>
