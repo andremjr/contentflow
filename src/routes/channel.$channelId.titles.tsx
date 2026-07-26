@@ -312,39 +312,71 @@ function TitlesScreen() {
                 )}
               </Section>
 
-              {/* Vocabulário */}
+              {/* Palavras-chave */}
               <Section
                 icon={<Tag className="h-4 w-4" />}
-                title="Vocabulário"
-                description="Palavras-chave que devem, podem ou não podem aparecer."
+                title="Palavras-chave"
+                description="Palavras que devem, podem ou não podem aparecer."
+                action={
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {keywordsEnabled ? "Ativado" : "Desativado"}
+                    </span>
+                    <Switch
+                      checked={keywordsEnabled}
+                      onCheckedChange={setKeywordsEnabled}
+                    />
+                  </div>
+                }
               >
-                <div className="grid gap-4 md:grid-cols-3">
-                  <TagField
-                    label="Obrigatórias"
-                    description="Aparecem em todos os títulos."
-                    values={requiredKw}
-                    onChange={setRequiredKw}
-                    suggestions={KEYWORD_SUGGESTIONS}
-                    tone="required"
-                  />
-                  <TagField
-                    label="Recomendadas"
-                    description="Priorizadas quando fizerem sentido."
-                    values={recommendedKw}
-                    onChange={setRecommendedKw}
-                    suggestions={KEYWORD_SUGGESTIONS}
-                    tone="recommended"
-                  />
-                  <TagField
-                    label="Proibidas"
-                    description="Nunca devem aparecer."
-                    values={forbiddenKw}
-                    onChange={setForbiddenKw}
-                    tone="forbidden"
-                    icon={<Ban className="h-3 w-3" />}
-                  />
+                <div
+                  className={cn(
+                    "grid gap-4 transition-opacity md:grid-cols-3",
+                    !keywordsEnabled && "pointer-events-none opacity-40",
+                  )}
+                >
+                  <KeywordGroup
+                    enabled={requiredKwEnabled}
+                    onEnabledChange={setRequiredKwEnabled}
+                  >
+                    <TagField
+                      label="Obrigatórias"
+                      description="Aparecem em todos os títulos."
+                      values={requiredKw}
+                      onChange={setRequiredKw}
+                      suggestions={KEYWORD_SUGGESTIONS}
+                      tone="required"
+                    />
+                  </KeywordGroup>
+                  <KeywordGroup
+                    enabled={recommendedKwEnabled}
+                    onEnabledChange={setRecommendedKwEnabled}
+                  >
+                    <TagField
+                      label="Recomendadas"
+                      description="Priorizadas quando fizerem sentido."
+                      values={recommendedKw}
+                      onChange={setRecommendedKw}
+                      suggestions={KEYWORD_SUGGESTIONS}
+                      tone="recommended"
+                    />
+                  </KeywordGroup>
+                  <KeywordGroup
+                    enabled={forbiddenKwEnabled}
+                    onEnabledChange={setForbiddenKwEnabled}
+                  >
+                    <TagField
+                      label="Proibidas"
+                      description="Nunca devem aparecer."
+                      values={forbiddenKw}
+                      onChange={setForbiddenKw}
+                      tone="forbidden"
+                      icon={<Ban className="h-3 w-3" />}
+                    />
+                  </KeywordGroup>
                 </div>
               </Section>
+
 
               {/* Comprimento */}
               <Section
