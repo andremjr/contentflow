@@ -160,22 +160,34 @@ const LAYOUTS: LayoutTemplate[] = [
   },
 ];
 
+type LibraryKind =
+  | "character"
+  | "logo"
+  | "frame"
+  | "lower_third"
+  | "seal"
+  | "identity";
+
 type LibraryItem = {
   id: string;
   label: string;
-  kind: "character" | "logo" | "frame" | "lower_third" | "seal" | "identity";
+  kind: LibraryKind;
   required: boolean;
   gradient: string;
+  url?: string;
 };
 
-const LIBRARY: LibraryItem[] = [
-  { id: "l1", label: "Apresentador", kind: "character", required: true, gradient: "from-blue-500 to-cyan-600" },
-  { id: "l2", label: "Logo do canal", kind: "logo", required: true, gradient: "from-slate-500 to-slate-700" },
-  { id: "l3", label: "Moldura vermelha", kind: "frame", required: false, gradient: "from-red-500 to-rose-700" },
-  { id: "l4", label: "Lower third padrão", kind: "lower_third", required: false, gradient: "from-primary to-blue-800" },
-  { id: "l5", label: "Selo 'Novo'", kind: "seal", required: false, gradient: "from-amber-500 to-orange-600" },
-  { id: "l6", label: "Cor da identidade", kind: "identity", required: true, gradient: "from-primary to-indigo-700" },
-];
+const KIND_GRADIENT: Record<LibraryKind, string> = {
+  character: "from-blue-500 to-cyan-600",
+  logo: "from-slate-500 to-slate-700",
+  frame: "from-red-500 to-rose-700",
+  lower_third: "from-primary to-blue-800",
+  seal: "from-amber-500 to-orange-600",
+  identity: "from-primary to-indigo-700",
+};
+
+const LIBRARY: LibraryItem[] = [];
+
 
 const KIND_LABEL: Record<LibraryItem["kind"], { label: string; Icon: typeof User }> = {
   character: { label: "Personagem", Icon: User },
