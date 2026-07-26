@@ -12,7 +12,6 @@ import {
   Plus,
   X,
   Ban,
-  
   Info,
   Sparkles,
   Play,
@@ -22,14 +21,10 @@ import {
   Minimize2,
   Braces,
   GripVertical,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
   User,
   Sticker,
   Frame,
   BadgeCheck,
-  Bold,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
@@ -37,7 +32,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -214,13 +208,18 @@ const IMAGE_SOURCES = [
   { id: "channel-assets", label: "Assets do canal" },
 ];
 
-const FONTS = [
-  { id: "inter", label: "Inter", css: "Inter, sans-serif", sample: "Aa Bb Cc" },
-  { id: "anton", label: "Anton", css: "Anton, sans-serif", sample: "Aa Bb Cc" },
-  { id: "bebas", label: "Bebas Neue", css: "'Bebas Neue', sans-serif", sample: "Aa Bb Cc" },
-  { id: "montserrat", label: "Montserrat", css: "Montserrat, sans-serif", sample: "Aa Bb Cc" },
-  { id: "poppins", label: "Poppins", css: "Poppins, sans-serif", sample: "Aa Bb Cc" },
-];
+type TextStyle = {
+  id: string;
+  name: string;
+  color: string;
+  size: number;
+  weight: string;
+  uppercase: boolean;
+  stroke: number;
+  strokeColor: string;
+  shadow: number;
+};
+
 
 const FONT_WEIGHTS = [
   { value: "400", label: "Regular" },
@@ -272,21 +271,51 @@ function ThumbnailScreen() {
   const [compositionEnabled, setCompositionEnabled] = useState(true);
 
   // Typography
-  const [fontId, setFontId] = useState("anton");
-  const [color, setColor] = useState("#FACC15");
-  const [size, setSize] = useState<[number]>([64]);
-  const [align, setAlign] = useState<"left" | "center" | "right">("left");
-  const [weight, setWeight] = useState("700");
-  const [uppercase, setUppercase] = useState(true);
-  const [stroke, setStroke] = useState<[number]>([3]);
-  const [shadow, setShadow] = useState<[number]>([8]);
-  const [strokeColor, setStrokeColor] = useState("#08111F");
+  const [fontFile, setFontFile] = useState<string | null>(null);
+  const fontInputRef = useRef<HTMLInputElement>(null);
+  const [textStyles, setTextStyles] = useState<TextStyle[]>([
+    {
+      id: "text-1",
+      name: "Texto 1",
+      color: "#FACC15",
+      size: 64,
+      weight: "700",
+      uppercase: true,
+      stroke: 3,
+      strokeColor: "#08111F",
+      shadow: 8,
+    },
+  ]);
+
+  const addTextStyle = () =>
+    setTextStyles((prev) => [
+      ...prev,
+      {
+        id: `text-${Date.now()}`,
+        name: `Texto ${prev.length + 1}`,
+        color: "#FFFFFF",
+        size: 48,
+        weight: "700",
+        uppercase: false,
+        stroke: 0,
+        strokeColor: "#08111F",
+        shadow: 0,
+      },
+    ]);
+
+  const updateTextStyle = (id: string, patch: Partial<TextStyle>) =>
+    setTextStyles((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    );
+
+  const removeTextStyle = (id: string) =>
+    setTextStyles((prev) => prev.filter((t) => t.id !== id));
 
   // Prompt
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
 
   const activeLayout = LAYOUTS.find((l) => l.id === layoutId)!;
-  const activeFont = FONTS.find((f) => f.id === fontId)!;
+
 
   const addReferenceFiles = (files: FileList | null) => {
     if (!files) return;
@@ -650,121 +679,184 @@ function ThumbnailScreen() {
 
                   {/* Tipografia (subcampo) */}
                   <div className="space-y-6 rounded-xl border border-border bg-secondary/10 p-4">
-                    <div className="flex items-center gap-2">
-                      <TypeIcon className="h-4 w-4 text-primary" />
-                      <div>
-                        <div className="text-sm font-medium">Tipografia</div>
-                        <div className="text-xs text-muted-foreground">
-                          Aparência do texto sobre a thumbnail.
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <TypeIcon className="h-4 w-4 text-primary" />
+                        <div>
+                          <div className="text-sm font-medium">Tipografia</div>
+                          <div className="text-xs text-muted-foreground">
+                            Fonte do canal e estilos de texto da thumbnail.
+                          </div>
                         </div>
                       </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={addTextStyle}
+                      >
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
+                        Adicionar texto
+                      </Button>
                     </div>
 
-                    <div className="grid gap-6 md:grid-cols-2">
-                      <FieldWrap label="Fonte">
-                        <FontSelect
-                          value={fontId}
-                          onChange={setFontId}
-                          options={FONTS}
+                    <FieldWrap label="Fonte (arquivo)">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          ref={fontInputRef}
+                          type="file"
+                          accept=".ttf,.otf,.woff,.woff2,font/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) setFontFile(f.name);
+                            e.target.value = "";
+                          }}
                         />
-                      </FieldWrap>
-                      <FieldWrap label="Cor do texto">
-                        <ColorField value={color} onChange={setColor} />
-                      </FieldWrap>
-                    </div>
-
-                    <FieldWrap label="Tamanho">
-                      <div className="space-y-2">
-                        <Slider
-                          value={size}
-                          min={24}
-                          max={140}
-                          step={2}
-                          onValueChange={(v) => setSize([v[0]] as [number])}
-                        />
-                        <div className="flex justify-between text-[11px] text-muted-foreground">
-                          <span>24 px</span>
-                          <span className="font-medium text-foreground">
-                            {size[0]} px
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fontInputRef.current?.click()}
+                        >
+                          <Upload className="mr-1.5 h-3.5 w-3.5" />
+                          Enviar fonte
+                        </Button>
+                        {fontFile ? (
+                          <span className="flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-2.5 py-1.5 text-xs">
+                            {fontFile}
+                            <button
+                              type="button"
+                              aria-label="Remover fonte"
+                              onClick={() => setFontFile(null)}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
                           </span>
-                          <span>140 px</span>
-                        </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            .ttf, .otf, .woff ou .woff2
+                          </span>
+                        )}
                       </div>
                     </FieldWrap>
 
-                    <div className="grid gap-6 md:grid-cols-3">
-                      <FieldWrap label="Alinhamento">
-                        <AlignPicker value={align} onChange={setAlign} />
-                      </FieldWrap>
-                      <FieldWrap label="Peso">
-                        <Select value={weight} onValueChange={setWeight}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {FONT_WEIGHTS.map((w) => (
-                              <SelectItem key={w.value} value={w.value}>
-                                {w.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldWrap>
-                      <FieldWrap label="Caixa alta">
-                        <div className="flex h-10 items-center gap-2 rounded-md border border-border bg-secondary/30 px-3">
-                          <Switch
-                            checked={uppercase}
-                            onCheckedChange={setUppercase}
-                          />
-                          <span className="text-sm">TODO EM MAIÚSCULAS</span>
-                        </div>
-                      </FieldWrap>
-                    </div>
-
-                    <div className="grid gap-6 md:grid-cols-2">
-                      <FieldWrap label="Contorno">
-                        <div className="space-y-2">
-                          <Slider
-                            value={stroke}
-                            min={0}
-                            max={12}
-                            step={1}
-                            onValueChange={(v) => setStroke([v[0]] as [number])}
-                          />
-                          <div className="flex items-center gap-2">
-                            <ColorField
-                              value={strokeColor}
-                              onChange={setStrokeColor}
-                              compact
+                    <div className="space-y-3">
+                      {textStyles.map((t, i) => (
+                        <div
+                          key={t.id}
+                          className="rounded-lg border border-border bg-card/60 p-3"
+                        >
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <Input
+                              value={t.name}
+                              onChange={(e) =>
+                                updateTextStyle(t.id, { name: e.target.value })
+                              }
+                              className="h-8 max-w-[200px] text-sm font-medium"
                             />
-                            <span className="text-[11px] text-muted-foreground">
-                              {stroke[0]} px
-                            </span>
+                            {textStyles.length > 1 && (
+                              <button
+                                type="button"
+                                aria-label={`Remover ${t.name}`}
+                                onClick={() => removeTextStyle(t.id)}
+                                className="rounded-md p-1 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      </FieldWrap>
-                      <FieldWrap label="Sombra">
-                        <Slider
-                          value={shadow}
-                          min={0}
-                          max={40}
-                          step={1}
-                          onValueChange={(v) => setShadow([v[0]] as [number])}
-                        />
-                        <div className="text-right text-[11px] text-muted-foreground">
-                          Offset: {shadow[0]} px
-                        </div>
-                      </FieldWrap>
-                    </div>
 
-                    <ContrastPreview
-                      color={color}
-                      strokeColor={strokeColor}
-                      font={activeFont.css}
-                      weight={weight}
-                      uppercase={uppercase}
-                    />
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            <FieldWrap label="Cor">
+                              <ColorField
+                                value={t.color}
+                                onChange={(v) => updateTextStyle(t.id, { color: v })}
+                              />
+                            </FieldWrap>
+                            <FieldWrap label="Tamanho (px)">
+                              <Input
+                                type="number"
+                                min={8}
+                                value={t.size}
+                                onChange={(e) =>
+                                  updateTextStyle(t.id, {
+                                    size: Number(e.target.value),
+                                  })
+                                }
+                              />
+                            </FieldWrap>
+                            <FieldWrap label="Peso">
+                              <Select
+                                value={t.weight}
+                                onValueChange={(v) =>
+                                  updateTextStyle(t.id, { weight: v })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {FONT_WEIGHTS.map((w) => (
+                                    <SelectItem key={w.value} value={w.value}>
+                                      {w.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </FieldWrap>
+                            <FieldWrap label="Contorno (px)">
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={t.stroke}
+                                  onChange={(e) =>
+                                    updateTextStyle(t.id, {
+                                      stroke: Number(e.target.value),
+                                    })
+                                  }
+                                />
+                                <ColorField
+                                  value={t.strokeColor}
+                                  onChange={(v) =>
+                                    updateTextStyle(t.id, { strokeColor: v })
+                                  }
+                                  compact
+                                />
+                              </div>
+                            </FieldWrap>
+                            <FieldWrap label="Sombra (px)">
+                              <Input
+                                type="number"
+                                min={0}
+                                value={t.shadow}
+                                onChange={(e) =>
+                                  updateTextStyle(t.id, {
+                                    shadow: Number(e.target.value),
+                                  })
+                                }
+                              />
+                            </FieldWrap>
+                            <FieldWrap label="Caixa alta">
+                              <div className="flex h-10 items-center gap-2 rounded-md border border-border bg-secondary/30 px-3">
+                                <Switch
+                                  checked={t.uppercase}
+                                  onCheckedChange={(v) =>
+                                    updateTextStyle(t.id, { uppercase: v })
+                                  }
+                                />
+                                <span className="text-xs">MAIÚSCULAS</span>
+                              </div>
+                            </FieldWrap>
+                          </div>
+                          <div className="sr-only">Estilo {i + 1}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+
                 </div>
               </Section>
 
@@ -1009,44 +1101,6 @@ function MultiSelect({
   );
 }
 
-function FontSelect({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: typeof FONTS;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-      {options.map((f) => (
-        <button
-          key={f.id}
-          type="button"
-          onClick={() => onChange(f.id)}
-          className={cn(
-            "rounded-lg border p-3 text-left transition-colors",
-            value === f.id
-              ? "border-primary bg-primary/10"
-              : "border-border bg-secondary/30 hover:border-border/80",
-          )}
-        >
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {f.label}
-          </div>
-          <div
-            className="mt-1 text-lg font-bold"
-            style={{ fontFamily: f.css }}
-          >
-            {f.sample}
-          </div>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function ColorField({
   value,
   onChange,
@@ -1079,187 +1133,6 @@ function ColorField({
   );
 }
 
-function AlignPicker({
-  value,
-  onChange,
-}: {
-  value: "left" | "center" | "right";
-  onChange: (v: "left" | "center" | "right") => void;
-}) {
-  const opts: { id: "left" | "center" | "right"; Icon: typeof AlignLeft }[] = [
-    { id: "left", Icon: AlignLeft },
-    { id: "center", Icon: AlignCenter },
-    { id: "right", Icon: AlignRight },
-  ];
-  return (
-    <div className="flex overflow-hidden rounded-md border border-border">
-      {opts.map(({ id, Icon }) => (
-        <button
-          key={id}
-          type="button"
-          onClick={() => onChange(id)}
-          className={cn(
-            "flex-1 py-2.5 text-muted-foreground transition-colors",
-            value === id
-              ? "bg-primary/15 text-primary"
-              : "hover:bg-secondary",
-          )}
-          aria-label={id}
-        >
-          <Icon className="mx-auto h-4 w-4" />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function ContrastPreview({
-  color,
-  strokeColor,
-  font,
-  weight,
-  uppercase,
-}: {
-  color: string;
-  strokeColor: string;
-  font: string;
-  weight: string;
-  uppercase: boolean;
-}) {
-  const bgs = ["#0F172A", "#FFFFFF", "#DC2626", "#16A34A"];
-  return (
-    <div className="rounded-xl border border-border bg-secondary/20 p-4">
-      <div className="mb-2 flex items-center gap-2 text-xs">
-        <Bold className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-muted-foreground">
-          Prévia de contraste em diferentes fundos
-        </span>
-      </div>
-      <div className="grid grid-cols-4 gap-2">
-        {bgs.map((bg) => (
-          <div
-            key={bg}
-            className="flex aspect-video items-center justify-center overflow-hidden rounded-md"
-            style={{ backgroundColor: bg }}
-          >
-            <span
-              style={{
-                fontFamily: font,
-                fontWeight: weight,
-                color,
-                WebkitTextStroke: `1px ${strokeColor}`,
-                textTransform: uppercase ? "uppercase" : "none",
-              }}
-              className="text-2xl leading-none"
-            >
-              Aa
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ThumbnailPreview({
-  layout,
-  color,
-  strokeColor,
-  stroke,
-  shadow,
-  size,
-  align,
-  weight,
-  font,
-  uppercase,
-  library,
-}: {
-  layout: LayoutTemplate;
-  color: string;
-  strokeColor: string;
-  stroke: number;
-  shadow: number;
-  size: number;
-  align: "left" | "center" | "right";
-  weight: string;
-  font: string;
-  uppercase: boolean;
-  library: LibraryItem[];
-}) {
-  const hasSeal = library.some((l) => l.kind === "seal" && l.required);
-  const hasFrame = library.some((l) => l.kind === "frame" && l.required);
-  const hasLogo = library.some((l) => l.kind === "logo" && l.required);
-
-  const textAlignClass =
-    align === "left"
-      ? "text-left items-start"
-      : align === "right"
-        ? "text-right items-end"
-        : "text-center items-center";
-
-  return (
-    <div
-      className={cn(
-        "relative aspect-video w-full overflow-hidden rounded-lg border shadow-xl",
-        hasFrame ? "border-4 border-red-500" : "border-border",
-      )}
-    >
-      {/* BG */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-950 to-black" />
-      {/* Character */}
-      <div
-        className={cn(
-          "absolute bottom-0 h-4/5 w-1/2 bg-gradient-to-t from-primary/80 to-primary/20",
-          layout.character === "esquerda" && "left-0",
-          layout.character === "direita" && "right-0",
-          layout.character === "centro" && "left-1/4",
-          layout.character === "base" && "left-1/4 w-1/2 h-1/2",
-        )}
-        style={{
-          clipPath:
-            "polygon(50% 0, 80% 25%, 100% 100%, 0 100%, 20% 25%)",
-        }}
-      />
-      {/* Highlight */}
-      <div className="absolute right-6 top-6 h-16 w-16 rounded-full bg-warning/50 blur-2xl" />
-      {/* Text */}
-      <div
-        className={cn(
-          "absolute inset-4 flex flex-col justify-center gap-2",
-          textAlignClass,
-        )}
-      >
-        <span
-          style={{
-            fontFamily: font,
-            fontWeight: weight,
-            color,
-            WebkitTextStroke: `${stroke}px ${strokeColor}`,
-            textShadow: `0 ${shadow / 3}px ${shadow}px rgba(0,0,0,0.7)`,
-            fontSize: `${Math.max(18, size / 3.2)}px`,
-            lineHeight: 1.05,
-            textTransform: uppercase ? "uppercase" : "none",
-          }}
-          className="max-w-[70%]"
-        >
-          Título de exemplo
-        </span>
-      </div>
-      {/* Seal */}
-      {hasSeal && (
-        <div className="absolute left-3 top-3 rounded-full bg-amber-400 px-2 py-1 text-[10px] font-black uppercase text-black shadow-md">
-          Novo
-        </div>
-      )}
-      {/* Logo */}
-      {hasLogo && (
-        <div className="absolute bottom-3 right-3 rounded-md bg-black/60 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur">
-          @{"{canal}"}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function TagField({
   label,
