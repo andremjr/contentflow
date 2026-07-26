@@ -118,49 +118,17 @@ type Reference = {
   url: string;
 };
 
-type LayoutTemplate = {
+type CompositionLayer = {
   id: string;
-  name: string;
-  character: string;
-  text: string;
-  focus: string;
-  background: string;
+  label: string;
 };
 
-const LAYOUTS: LayoutTemplate[] = [
-  {
-    id: "left-face",
-    name: "Rosto à esquerda + texto grande",
-    character: "esquerda",
-    text: "direita",
-    focus: "expressão do rosto",
-    background: "sólido com blur",
-  },
-  {
-    id: "right-face",
-    name: "Rosto à direita + palavra-âncora",
-    character: "direita",
-    text: "esquerda",
-    focus: "palavra em destaque",
-    background: "cena real",
-  },
-  {
-    id: "split",
-    name: "Split antes/depois",
-    character: "centro",
-    text: "rodapé",
-    focus: "contraste visual",
-    background: "duas cenas divididas",
-  },
-  {
-    id: "top-text",
-    name: "Texto no topo, cena embaixo",
-    character: "base",
-    text: "topo",
-    focus: "cena principal",
-    background: "gradiente escuro",
-  },
-];
+type Composition = {
+  id: string;
+  name: string;
+  layers: CompositionLayer[];
+};
+
 
 type LibraryKind =
   | "character"
@@ -252,16 +220,13 @@ function ThumbnailScreen() {
   const [references, setReferences] = useState<Reference[]>([]);
   const refInputRef = useRef<HTMLInputElement>(null);
 
-  // Layouts
-  const [layoutId, setLayoutId] = useState("left-face");
-  const [layers, setLayers] = useState([
-    { id: "bg", label: "Fundo" },
-    { id: "char", label: "Personagem" },
-    { id: "highlight", label: "Destaque" },
-    { id: "text", label: "Texto principal" },
-    { id: "seal", label: "Selo" },
+  // Compositions
+  const [compositions, setCompositions] = useState<Composition[]>([
+    { id: "comp-1", name: "Composição 1", layers: [] },
   ]);
+  const [activeCompId, setActiveCompId] = useState("comp-1");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+
 
   // Library
   const [library, setLibrary] = useState<LibraryItem[]>(LIBRARY);
@@ -314,7 +279,7 @@ function ThumbnailScreen() {
   // Prompt
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
 
-  const activeLayout = LAYOUTS.find((l) => l.id === layoutId)!;
+  const activeComposition = compositions.find((c) => c.id === activeCompId);
 
 
   const addReferenceFiles = (files: FileList | null) => {
@@ -362,19 +327,70 @@ function ThumbnailScreen() {
 
 
 
+  const updateActiveComposition = (patch: (c: Composition) => Composition) =>
+    setCompositions((prev) =>
+      prev.map((c) => (c.id === activeCompId ? patch(c) : c)),
+    );
+
+  const addComposition = () => {
+    const id = `comp-${Date.now()}`;
+    setCompositions((prev) => [
+      ...prev,
+      { id, name: `Composição ${prev.length + 1}`, layers: [] },
+    ]);
+    setActiveCompId(id);
+  };
+
+  const renameComposition = (id: string, name: string) =>
+    setCompositions((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, name } : c)),
+    );
+
+  const removeComposition = (id: string) =>
+    setCompositions((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      if (id === activeCompId && next[0]) setActiveCompId(next[0].id);
+      return next;
+    });
+
+  const addLayer = () =>
+    updateActiveComposition((c) => ({
+      ...c,
+      layers: [
+        ...c.layers,
+        {
+          id: `layer-${Date.now()}`,
+          label: `Camada ${c.layers.length + 1}`,
+        },
+      ],
+    }));
+
+  const renameLayer = (id: string, label: string) =>
+    updateActiveComposition((c) => ({
+      ...c,
+      layers: c.layers.map((l) => (l.id === id ? { ...l, label } : l)),
+    }));
+
+  const removeLayer = (id: string) =>
+    updateActiveComposition((c) => ({
+      ...c,
+      layers: c.layers.filter((l) => l.id !== id),
+    }));
+
   const onLayerDragStart = (i: number) => setDragIndex(i);
   const onLayerDragOver = (e: React.DragEvent, i: number) => {
     e.preventDefault();
     if (dragIndex === null || dragIndex === i) return;
-    setLayers((prev) => {
-      const next = [...prev];
+    updateActiveComposition((c) => {
+      const next = [...c.layers];
       const [moved] = next.splice(dragIndex, 1);
       next.splice(i, 0, moved);
-      return next;
+      return { ...c, layers: next };
     });
     setDragIndex(i);
   };
   const onLayerDragEnd = () => setDragIndex(null);
+
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -611,71 +627,118 @@ function ThumbnailScreen() {
                     !compositionEnabled && "pointer-events-none opacity-50",
                   )}
                 >
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {LAYOUTS.map((l) => (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {compositions.map((c) => (
                       <button
-                        key={l.id}
+                        key={c.id}
                         type="button"
-                        onClick={() => setLayoutId(l.id)}
+                        onClick={() => setActiveCompId(c.id)}
                         className={cn(
-                          "group overflow-hidden rounded-lg border text-left transition-all",
-                          layoutId === l.id
-                            ? "border-primary ring-2 ring-primary/40"
-                            : "border-border hover:border-border/80",
+                          "rounded-full border px-3 py-1.5 text-xs transition-colors",
+                          c.id === activeCompId
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border bg-secondary/30 hover:border-border/80",
                         )}
                       >
-                        <LayoutPreview layout={l} />
-                        <div className="p-2">
-                          <div className="text-xs font-medium">{l.name}</div>
-                        </div>
+                        {c.name}
                       </button>
                     ))}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={addComposition}
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Nova composição
+                    </Button>
                   </div>
 
-                  <div className="grid gap-4 rounded-xl border border-border bg-secondary/20 p-4 md:grid-cols-[1.2fr_1fr]">
-                    <div>
-                      <div className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
-                        Prévia do layout
-                      </div>
-                      <div className="overflow-hidden rounded-lg border border-border">
-                        <LayoutPreview layout={activeLayout} large />
-                      </div>
-                      <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                        <MetaRow label="Personagem" value={activeLayout.character} />
-                        <MetaRow label="Texto" value={activeLayout.text} />
-                        <MetaRow label="Destaque" value={activeLayout.focus} />
-                        <MetaRow label="Fundo" value={activeLayout.background} />
-                      </dl>
-                    </div>
-
-                    <div>
-                      <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wider text-muted-foreground">
-                        <span>Camadas (topo → base visual)</span>
-                        <Info className="h-3 w-3" />
-                      </div>
-                      <ul className="space-y-1.5">
-                        {layers.map((l, i) => (
-                          <li
-                            key={l.id}
-                            draggable
-                            onDragStart={() => onLayerDragStart(i)}
-                            onDragOver={(e) => onLayerDragOver(e, i)}
-                            onDragEnd={onLayerDragEnd}
-                            className={cn(
-                              "flex cursor-move items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2 text-sm transition-colors",
-                              dragIndex === i && "border-primary bg-primary/10",
-                            )}
+                  {activeComposition && (
+                    <div className="space-y-4 rounded-xl border border-border bg-secondary/20 p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <Input
+                          value={activeComposition.name}
+                          onChange={(e) =>
+                            renameComposition(activeComposition.id, e.target.value)
+                          }
+                          className="h-9 max-w-[240px] text-sm font-medium"
+                        />
+                        {compositions.length > 1 && (
+                          <button
+                            type="button"
+                            aria-label="Remover composição"
+                            onClick={() => removeComposition(activeComposition.id)}
+                            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
                           >
-                            <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="flex h-5 w-5 items-center justify-center rounded bg-secondary text-[10px] text-muted-foreground">
-                              {i + 1}
-                            </span>
-                            {l.label}
-                          </li>
-                        ))}
-                      </ul>
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wider text-muted-foreground">
+                          <span>Camadas e elementos (topo → base visual)</span>
+                          <Info className="h-3 w-3" />
+                        </div>
+
+                        {activeComposition.layers.length === 0 ? (
+                          <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
+                            Nenhuma camada ainda. Adicione os elementos desta
+                            composição.
+                          </div>
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {activeComposition.layers.map((l, i) => (
+                              <li
+                                key={l.id}
+                                draggable
+                                onDragStart={() => onLayerDragStart(i)}
+                                onDragOver={(e) => onLayerDragOver(e, i)}
+                                onDragEnd={onLayerDragEnd}
+                                className={cn(
+                                  "flex cursor-move items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2 transition-colors",
+                                  dragIndex === i && "border-primary bg-primary/10",
+                                )}
+                              >
+                                <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-secondary text-[10px] text-muted-foreground">
+                                  {i + 1}
+                                </span>
+                                <Input
+                                  value={l.label}
+                                  onChange={(e) =>
+                                    renameLayer(l.id, e.target.value)
+                                  }
+                                  className="h-8 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+                                />
+                                <button
+                                  type="button"
+                                  aria-label="Remover camada"
+                                  onClick={() => removeLayer(l.id)}
+                                  className="rounded-md p-1 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-3"
+                          onClick={addLayer}
+                        >
+                          <Plus className="mr-1.5 h-3.5 w-3.5" />
+                          Adicionar camada
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  )}
+
 
                   {/* Tipografia (subcampo) */}
                   <div className="space-y-6 rounded-xl border border-border bg-secondary/10 p-4">
@@ -955,17 +1018,6 @@ function FieldWrap({
   );
 }
 
-function MetaRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-md bg-secondary/40 px-2 py-1.5">
-      <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="text-xs font-medium">{value}</dd>
-    </div>
-  );
-}
-
 function ToggleRow({
   label,
   checked,
@@ -980,55 +1032,6 @@ function ToggleRow({
       <span>{label}</span>
       <Switch checked={checked} onCheckedChange={onChange} />
     </label>
-  );
-}
-
-function LayoutPreview({
-  layout,
-  large,
-}: {
-  layout: LayoutTemplate;
-  large?: boolean;
-}) {
-  // Simplified geometric preview per id
-  const char = layout.character;
-  const text = layout.text;
-  return (
-    <div
-      className={cn(
-        "relative aspect-video w-full overflow-hidden bg-gradient-to-br from-slate-800 via-slate-900 to-black",
-        large && "min-h-[220px]",
-      )}
-    >
-      {/* Character silhouette */}
-      <div
-        className={cn(
-          "absolute bottom-0 flex h-3/4 w-1/3 items-end justify-center bg-gradient-to-t from-primary/70 to-primary/30",
-          char === "esquerda" && "left-2",
-          char === "direita" && "right-2",
-          char === "centro" && "left-1/3",
-          char === "base" && "left-1/2 h-1/2 w-1/2 -translate-x-1/2",
-        )}
-        style={{
-          clipPath:
-            "polygon(50% 0, 80% 25%, 100% 100%, 0 100%, 20% 25%)",
-        }}
-      />
-      {/* Highlight blob */}
-      <div className="absolute right-4 top-4 h-8 w-8 rounded-full bg-warning/70 blur-[2px]" />
-      {/* Text block */}
-      <div
-        className={cn(
-          "absolute rounded bg-warning/90 px-1.5 py-0.5 text-[8px] font-black uppercase text-black",
-          text === "direita" && "right-2 top-1/3",
-          text === "esquerda" && "left-2 top-1/3",
-          text === "rodapé" && "bottom-2 left-1/2 -translate-x-1/2",
-          text === "topo" && "left-2 top-2",
-        )}
-      >
-        TEXTO
-      </div>
-    </div>
   );
 }
 
