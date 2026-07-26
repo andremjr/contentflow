@@ -650,121 +650,184 @@ function ThumbnailScreen() {
 
                   {/* Tipografia (subcampo) */}
                   <div className="space-y-6 rounded-xl border border-border bg-secondary/10 p-4">
-                    <div className="flex items-center gap-2">
-                      <TypeIcon className="h-4 w-4 text-primary" />
-                      <div>
-                        <div className="text-sm font-medium">Tipografia</div>
-                        <div className="text-xs text-muted-foreground">
-                          Aparência do texto sobre a thumbnail.
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <TypeIcon className="h-4 w-4 text-primary" />
+                        <div>
+                          <div className="text-sm font-medium">Tipografia</div>
+                          <div className="text-xs text-muted-foreground">
+                            Fonte do canal e estilos de texto da thumbnail.
+                          </div>
                         </div>
                       </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={addTextStyle}
+                      >
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
+                        Adicionar texto
+                      </Button>
                     </div>
 
-                    <div className="grid gap-6 md:grid-cols-2">
-                      <FieldWrap label="Fonte">
-                        <FontSelect
-                          value={fontId}
-                          onChange={setFontId}
-                          options={FONTS}
+                    <FieldWrap label="Fonte (arquivo)">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          ref={fontInputRef}
+                          type="file"
+                          accept=".ttf,.otf,.woff,.woff2,font/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) setFontFile(f.name);
+                            e.target.value = "";
+                          }}
                         />
-                      </FieldWrap>
-                      <FieldWrap label="Cor do texto">
-                        <ColorField value={color} onChange={setColor} />
-                      </FieldWrap>
-                    </div>
-
-                    <FieldWrap label="Tamanho">
-                      <div className="space-y-2">
-                        <Slider
-                          value={size}
-                          min={24}
-                          max={140}
-                          step={2}
-                          onValueChange={(v) => setSize([v[0]] as [number])}
-                        />
-                        <div className="flex justify-between text-[11px] text-muted-foreground">
-                          <span>24 px</span>
-                          <span className="font-medium text-foreground">
-                            {size[0]} px
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fontInputRef.current?.click()}
+                        >
+                          <Upload className="mr-1.5 h-3.5 w-3.5" />
+                          Enviar fonte
+                        </Button>
+                        {fontFile ? (
+                          <span className="flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-2.5 py-1.5 text-xs">
+                            {fontFile}
+                            <button
+                              type="button"
+                              aria-label="Remover fonte"
+                              onClick={() => setFontFile(null)}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
                           </span>
-                          <span>140 px</span>
-                        </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            .ttf, .otf, .woff ou .woff2
+                          </span>
+                        )}
                       </div>
                     </FieldWrap>
 
-                    <div className="grid gap-6 md:grid-cols-3">
-                      <FieldWrap label="Alinhamento">
-                        <AlignPicker value={align} onChange={setAlign} />
-                      </FieldWrap>
-                      <FieldWrap label="Peso">
-                        <Select value={weight} onValueChange={setWeight}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {FONT_WEIGHTS.map((w) => (
-                              <SelectItem key={w.value} value={w.value}>
-                                {w.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldWrap>
-                      <FieldWrap label="Caixa alta">
-                        <div className="flex h-10 items-center gap-2 rounded-md border border-border bg-secondary/30 px-3">
-                          <Switch
-                            checked={uppercase}
-                            onCheckedChange={setUppercase}
-                          />
-                          <span className="text-sm">TODO EM MAIÚSCULAS</span>
-                        </div>
-                      </FieldWrap>
-                    </div>
-
-                    <div className="grid gap-6 md:grid-cols-2">
-                      <FieldWrap label="Contorno">
-                        <div className="space-y-2">
-                          <Slider
-                            value={stroke}
-                            min={0}
-                            max={12}
-                            step={1}
-                            onValueChange={(v) => setStroke([v[0]] as [number])}
-                          />
-                          <div className="flex items-center gap-2">
-                            <ColorField
-                              value={strokeColor}
-                              onChange={setStrokeColor}
-                              compact
+                    <div className="space-y-3">
+                      {textStyles.map((t, i) => (
+                        <div
+                          key={t.id}
+                          className="rounded-lg border border-border bg-card/60 p-3"
+                        >
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <Input
+                              value={t.name}
+                              onChange={(e) =>
+                                updateTextStyle(t.id, { name: e.target.value })
+                              }
+                              className="h-8 max-w-[200px] text-sm font-medium"
                             />
-                            <span className="text-[11px] text-muted-foreground">
-                              {stroke[0]} px
-                            </span>
+                            {textStyles.length > 1 && (
+                              <button
+                                type="button"
+                                aria-label={`Remover ${t.name}`}
+                                onClick={() => removeTextStyle(t.id)}
+                                className="rounded-md p-1 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      </FieldWrap>
-                      <FieldWrap label="Sombra">
-                        <Slider
-                          value={shadow}
-                          min={0}
-                          max={40}
-                          step={1}
-                          onValueChange={(v) => setShadow([v[0]] as [number])}
-                        />
-                        <div className="text-right text-[11px] text-muted-foreground">
-                          Offset: {shadow[0]} px
-                        </div>
-                      </FieldWrap>
-                    </div>
 
-                    <ContrastPreview
-                      color={color}
-                      strokeColor={strokeColor}
-                      font={activeFont.css}
-                      weight={weight}
-                      uppercase={uppercase}
-                    />
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            <FieldWrap label="Cor">
+                              <ColorField
+                                value={t.color}
+                                onChange={(v) => updateTextStyle(t.id, { color: v })}
+                              />
+                            </FieldWrap>
+                            <FieldWrap label="Tamanho (px)">
+                              <Input
+                                type="number"
+                                min={8}
+                                value={t.size}
+                                onChange={(e) =>
+                                  updateTextStyle(t.id, {
+                                    size: Number(e.target.value),
+                                  })
+                                }
+                              />
+                            </FieldWrap>
+                            <FieldWrap label="Peso">
+                              <Select
+                                value={t.weight}
+                                onValueChange={(v) =>
+                                  updateTextStyle(t.id, { weight: v })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {FONT_WEIGHTS.map((w) => (
+                                    <SelectItem key={w.value} value={w.value}>
+                                      {w.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </FieldWrap>
+                            <FieldWrap label="Contorno (px)">
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={t.stroke}
+                                  onChange={(e) =>
+                                    updateTextStyle(t.id, {
+                                      stroke: Number(e.target.value),
+                                    })
+                                  }
+                                />
+                                <ColorField
+                                  value={t.strokeColor}
+                                  onChange={(v) =>
+                                    updateTextStyle(t.id, { strokeColor: v })
+                                  }
+                                  compact
+                                />
+                              </div>
+                            </FieldWrap>
+                            <FieldWrap label="Sombra (px)">
+                              <Input
+                                type="number"
+                                min={0}
+                                value={t.shadow}
+                                onChange={(e) =>
+                                  updateTextStyle(t.id, {
+                                    shadow: Number(e.target.value),
+                                  })
+                                }
+                              />
+                            </FieldWrap>
+                            <FieldWrap label="Caixa alta">
+                              <div className="flex h-10 items-center gap-2 rounded-md border border-border bg-secondary/30 px-3">
+                                <Switch
+                                  checked={t.uppercase}
+                                  onCheckedChange={(v) =>
+                                    updateTextStyle(t.id, { uppercase: v })
+                                  }
+                                />
+                                <span className="text-xs">MAIÚSCULAS</span>
+                              </div>
+                            </FieldWrap>
+                          </div>
+                          <div className="sr-only">Estilo {i + 1}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+
                 </div>
               </Section>
 
