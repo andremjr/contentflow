@@ -311,7 +311,7 @@ function ThumbnailScreen() {
   // Prompt
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
 
-  const activeLayout = LAYOUTS.find((l) => l.id === layoutId)!;
+  const activeComposition = compositions.find((c) => c.id === activeCompId);
 
 
   const addReferenceFiles = (files: FileList | null) => {
