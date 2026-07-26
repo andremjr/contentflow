@@ -178,8 +178,6 @@ function TitlesScreen() {
 
 
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
-  const [expanded, setExpanded] = useState(false);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
 
   const [newStructOpen, setNewStructOpen] = useState(false);
   const [bulkStructOpen, setBulkStructOpen] = useState(false);
@@ -205,21 +203,6 @@ function TitlesScreen() {
     setSelectedStructures((prev) => [...prev, ...created.map((c) => c.id)]);
   };
 
-  const insertVariable = (key: string) => {
-    const token = `{{${key}}}`;
-    const el = promptRef.current;
-    if (!el) {
-      setPrompt((p) => `${p}${token}`);
-      return;
-    }
-    const start = el.selectionStart ?? prompt.length;
-    const end = el.selectionEnd ?? prompt.length;
-    setPrompt(prompt.slice(0, start) + token + prompt.slice(end));
-    requestAnimationFrame(() => {
-      el.focus();
-      el.selectionStart = el.selectionEnd = start + token.length;
-    });
-  };
 
   const previewTitles = useMemo(() => {
     // Deterministic filtered examples using selected structures
