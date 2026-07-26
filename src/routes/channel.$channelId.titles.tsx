@@ -177,6 +177,7 @@ function TitlesScreen() {
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
   const [newStructOpen, setNewStructOpen] = useState(false);
+  const [bulkStructOpen, setBulkStructOpen] = useState(false);
 
   const toggleStructure = (id: string) =>
     setSelectedStructures((prev) =>
