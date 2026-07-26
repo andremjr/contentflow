@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -333,6 +334,16 @@ const WORDS_PER_MINUTE = 155;
 
 function ScriptScreen() {
   const { channel } = Route.useLoaderData();
+
+  // Pesquisa de conteúdo (sub-etapa)
+  const [useContentResearch, setUseContentResearch] = useState(true);
+  const [researchSources, setResearchSources] = useState<string[]>([
+    "google",
+    "news",
+  ]);
+  const [researchPeriod, setResearchPeriod] = useState("30d");
+  const [requiredSources, setRequiredSources] = useState("");
+  const [forbiddenSources, setForbiddenSources] = useState("");
 
   // Length
   const [lenMin, setLenMin] = useState(6000);
