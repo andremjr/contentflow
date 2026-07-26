@@ -14,6 +14,7 @@ import {
   Save,
   Check,
   ArrowRight,
+  Search,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
@@ -137,6 +138,8 @@ const EXAMPLE_POOL = [
 function TitlesScreen() {
   const { channel } = Route.useLoaderData();
 
+  const [useResearch, setUseResearch] = useState(true);
+
   const [structures, setStructures] = useState<Structure[]>(INITIAL_STRUCTURES);
   const [selectedStructures, setSelectedStructures] = useState<string[]>([]);
 
@@ -237,6 +240,25 @@ function TitlesScreen() {
                   </p>
                 </div>
               </div>
+
+              {/* Pesquisa */}
+              <Section
+                icon={<Search className="h-4 w-4" />}
+                title="Pesquisa"
+                description="Usar os resultados da etapa de Pesquisa como base."
+                action={
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {useResearch ? "Ativada" : "Desativada"}
+                    </span>
+                    <Switch checked={useResearch} onCheckedChange={setUseResearch} />
+                  </div>
+                }
+              >
+                <p className="text-sm text-muted-foreground">
+                  Quando ativada, os dados coletados na etapa de Pesquisa alimentam a geração de títulos.
+                </p>
+              </Section>
 
               {/* Estruturas */}
               <Section
