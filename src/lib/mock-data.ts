@@ -36,7 +36,7 @@ export const PROCESS_META: Record<
   ProcessId,
   { label: string; icon: LucideIcon }
 > = {
-  research: { label: "Pesquisa de conteúdo", icon: Search },
+  research: { label: "Pesquisa", icon: Search },
   ideas: { label: "Ideias", icon: Lightbulb },
   titles: { label: "Títulos", icon: Type },
   thumbnail: { label: "Thumbnail", icon: ImageIcon },

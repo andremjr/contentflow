@@ -10,7 +10,7 @@ export const Route = createFileRoute("/project/$projectId/research")({
     const p = projects.find((x) => x.id === params.projectId);
     return {
       meta: [
-        { title: p ? `Pesquisa de conteúdo · ${p.title}` : "Pesquisa de conteúdo · Projeto" },
+        { title: p ? `Pesquisa · ${p.title}` : "Pesquisa · Projeto" },
         { name: "description", content: "Executar pesquisa de vídeos de referência para este projeto." },
       ],
     };
