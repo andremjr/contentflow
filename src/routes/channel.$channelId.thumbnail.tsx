@@ -27,7 +27,12 @@ import {
   BadgeCheck,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import {
+  CompositionCanvas,
+  type CompositionBox,
+} from "@/components/composition-canvas";
 import { TopBar } from "@/components/top-bar";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -118,16 +123,12 @@ type Reference = {
   url: string;
 };
 
-type CompositionLayer = {
-  id: string;
-  label: string;
-};
-
 type Composition = {
   id: string;
   name: string;
-  layers: CompositionLayer[];
+  boxes: CompositionBox[];
 };
+
 
 
 type LibraryKind =
@@ -222,10 +223,10 @@ function ThumbnailScreen() {
 
   // Compositions
   const [compositions, setCompositions] = useState<Composition[]>([
-    { id: "comp-1", name: "Composição 1", layers: [] },
+    { id: "comp-1", name: "Composição 1", boxes: [] },
   ]);
   const [activeCompId, setActiveCompId] = useState("comp-1");
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
 
 
   // Library
@@ -336,7 +337,7 @@ function ThumbnailScreen() {
     const id = `comp-${Date.now()}`;
     setCompositions((prev) => [
       ...prev,
-      { id, name: `Composição ${prev.length + 1}`, layers: [] },
+      { id, name: `Composição ${prev.length + 1}`, boxes: [] },
     ]);
     setActiveCompId(id);
   };
@@ -353,43 +354,9 @@ function ThumbnailScreen() {
       return next;
     });
 
-  const addLayer = () =>
-    updateActiveComposition((c) => ({
-      ...c,
-      layers: [
-        ...c.layers,
-        {
-          id: `layer-${Date.now()}`,
-          label: `Camada ${c.layers.length + 1}`,
-        },
-      ],
-    }));
+  const setActiveBoxes = (boxes: CompositionBox[]) =>
+    updateActiveComposition((c) => ({ ...c, boxes }));
 
-  const renameLayer = (id: string, label: string) =>
-    updateActiveComposition((c) => ({
-      ...c,
-      layers: c.layers.map((l) => (l.id === id ? { ...l, label } : l)),
-    }));
-
-  const removeLayer = (id: string) =>
-    updateActiveComposition((c) => ({
-      ...c,
-      layers: c.layers.filter((l) => l.id !== id),
-    }));
-
-  const onLayerDragStart = (i: number) => setDragIndex(i);
-  const onLayerDragOver = (e: React.DragEvent, i: number) => {
-    e.preventDefault();
-    if (dragIndex === null || dragIndex === i) return;
-    updateActiveComposition((c) => {
-      const next = [...c.layers];
-      const [moved] = next.splice(dragIndex, 1);
-      next.splice(i, 0, moved);
-      return { ...c, layers: next };
-    });
-    setDragIndex(i);
-  };
-  const onLayerDragEnd = () => setDragIndex(null);
 
 
   return (
@@ -676,66 +643,11 @@ function ThumbnailScreen() {
                         )}
                       </div>
 
-                      <div>
-                        <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wider text-muted-foreground">
-                          <span>Camadas e elementos (topo → base visual)</span>
-                          <Info className="h-3 w-3" />
-                        </div>
+                      <CompositionCanvas
+                        boxes={activeComposition.boxes}
+                        onChange={setActiveBoxes}
+                      />
 
-                        {activeComposition.layers.length === 0 ? (
-                          <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
-                            Nenhuma camada ainda. Adicione os elementos desta
-                            composição.
-                          </div>
-                        ) : (
-                          <ul className="space-y-1.5">
-                            {activeComposition.layers.map((l, i) => (
-                              <li
-                                key={l.id}
-                                draggable
-                                onDragStart={() => onLayerDragStart(i)}
-                                onDragOver={(e) => onLayerDragOver(e, i)}
-                                onDragEnd={onLayerDragEnd}
-                                className={cn(
-                                  "flex cursor-move items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2 transition-colors",
-                                  dragIndex === i && "border-primary bg-primary/10",
-                                )}
-                              >
-                                <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-secondary text-[10px] text-muted-foreground">
-                                  {i + 1}
-                                </span>
-                                <Input
-                                  value={l.label}
-                                  onChange={(e) =>
-                                    renameLayer(l.id, e.target.value)
-                                  }
-                                  className="h-8 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-                                />
-                                <button
-                                  type="button"
-                                  aria-label="Remover camada"
-                                  onClick={() => removeLayer(l.id)}
-                                  className="rounded-md p-1 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-3"
-                          onClick={addLayer}
-                        >
-                          <Plus className="mr-1.5 h-3.5 w-3.5" />
-                          Adicionar camada
-                        </Button>
-                      </div>
                     </div>
                   )}
 
