@@ -172,9 +172,6 @@ function TitlesScreen() {
   ]);
 
   const [keywordsEnabled, setKeywordsEnabled] = useState(true);
-  const [requiredKwEnabled, setRequiredKwEnabled] = useState(true);
-  const [recommendedKwEnabled, setRecommendedKwEnabled] = useState(true);
-  const [forbiddenKwEnabled, setForbiddenKwEnabled] = useState(true);
 
 
   const [lengthRange, setLengthRange] = useState<[number, number]>([45, 70]);
