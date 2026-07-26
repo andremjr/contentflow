@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -163,7 +162,6 @@ function IdeasScreen() {
     "google",
   ]);
   const [trendPeriod, setTrendPeriod] = useState("7d");
-  const [trendIntensity, setTrendIntensity] = useState<[number]>([70]);
   const [requiredThemes, setRequiredThemes] = useState<string[]>([
     "IA generativa",
   ]);
@@ -217,7 +215,7 @@ function IdeasScreen() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
                   <Lightbulb className="h-3.5 w-3.5" />
-                  Ideias · Etapa 2 do pipeline
+                  Ideias · Etapa 1 do pipeline
                 </div>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight">
                   Configurações de ideias
