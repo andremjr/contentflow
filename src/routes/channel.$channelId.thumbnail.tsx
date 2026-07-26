@@ -777,14 +777,10 @@ function ThumbnailScreen() {
                 title="Instruções avançadas"
                 description="Prompt-mestre para o gerador de descrições de thumbnails."
               >
-                <PromptEditor
+                <Textarea
                   value={prompt}
-                  onChange={setPrompt}
-                  refEl={promptRef}
-                  expanded={expanded}
-                  onToggleExpanded={() => setExpanded((v) => !v)}
-                  onInsertVariable={insertVariable}
-                  onRestore={() => setPrompt(DEFAULT_PROMPT)}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  className="min-h-[220px] font-mono text-xs leading-relaxed"
                 />
               </Section>
 
