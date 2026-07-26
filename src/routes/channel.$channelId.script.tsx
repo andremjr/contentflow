@@ -106,6 +106,23 @@ export const Route = createFileRoute("/channel/$channelId/script")({
 
 // ---------- mocks ----------
 
+const RESEARCH_SOURCES = [
+  { id: "youtube", label: "YouTube" },
+  { id: "google", label: "Google" },
+  { id: "news", label: "Notícias" },
+  { id: "papers", label: "Artigos e estudos" },
+  { id: "reddit", label: "Reddit / fóruns" },
+  { id: "books", label: "Livros e documentos" },
+];
+
+const RESEARCH_PERIODS = [
+  { value: "24h", label: "Últimas 24 horas" },
+  { value: "7d", label: "Últimos 7 dias" },
+  { value: "30d", label: "Últimos 30 dias" },
+  { value: "90d", label: "Últimos 90 dias" },
+  { value: "all", label: "Sem limite de data" },
+];
+
 const POV_OPTIONS = [
   { value: "first", label: "Primeira pessoa (eu / nós)" },
   { value: "second", label: "Segunda pessoa (você)" },
@@ -481,6 +498,107 @@ function ScriptScreen() {
                 </p>
               </div>
             </div>
+
+            {/* Pesquisa de conteúdo (sub-etapa) */}
+            <Section
+              icon={<Sparkles className="h-4 w-4" />}
+              title="Pesquisa de conteúdo"
+              description="Sub-etapa opcional executada antes do roteiro, para aprofundar informações sobre o tema já definido."
+              action={
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {useContentResearch ? "Ativada" : "Desativada"}
+                  </span>
+                  <Switch
+                    checked={useContentResearch}
+                    onCheckedChange={setUseContentResearch}
+                  />
+                </div>
+              }
+            >
+              <div
+                className={cn(
+                  "space-y-5 transition-opacity",
+                  !useContentResearch && "pointer-events-none opacity-40",
+                )}
+              >
+                <p className="text-sm text-muted-foreground">
+                  Quando ativada, o sistema busca informações, dados e
+                  referências sobre o tema do vídeo nas fontes escolhidas e usa
+                  esse material como base do roteiro.
+                </p>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Fontes de pesquisa
+                  </Label>
+                  <div className="flex flex-wrap gap-3">
+                    {RESEARCH_SOURCES.map((s) => (
+                      <label
+                        key={s.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-secondary/30 px-3 py-2 text-sm"
+                      >
+                        <Checkbox
+                          checked={researchSources.includes(s.id)}
+                          onCheckedChange={() =>
+                            setResearchSources((prev) =>
+                              prev.includes(s.id)
+                                ? prev.filter((x) => x !== s.id)
+                                : [...prev, s.id],
+                            )
+                          }
+                        />
+                        {s.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Período analisado
+                    </Label>
+                    <Select
+                      value={researchPeriod}
+                      onValueChange={setResearchPeriod}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RESEARCH_PERIODS.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>
+                            {p.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Fontes obrigatórias
+                    </Label>
+                    <Input
+                      value={requiredSources}
+                      onChange={(e) => setRequiredSources(e.target.value)}
+                      placeholder="Separe por vírgula"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Fontes proibidas
+                  </Label>
+                  <Input
+                    value={forbiddenSources}
+                    onChange={(e) => setForbiddenSources(e.target.value)}
+                    placeholder="Separe por vírgula"
+                  />
+                </div>
+              </div>
+            </Section>
 
             {/* Estrutura */}
             <Section
