@@ -189,6 +189,16 @@ function TitlesScreen() {
     setSelectedStructures((prev) => [...prev, id]);
   };
 
+  const addStructuresBulk = (formulas: string[]) => {
+    const created = formulas.map((formula, i) => ({
+      id: `struct-${Date.now()}-${i}`,
+      formula,
+      examples: [] as string[],
+    }));
+    setStructures((prev) => [...prev, ...created]);
+    setSelectedStructures((prev) => [...prev, ...created.map((c) => c.id)]);
+  };
+
   const insertVariable = (key: string) => {
     const token = `{{${key}}}`;
     const el = promptRef.current;
