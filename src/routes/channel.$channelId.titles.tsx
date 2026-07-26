@@ -172,9 +172,6 @@ function TitlesScreen() {
   ]);
 
   const [keywordsEnabled, setKeywordsEnabled] = useState(true);
-  const [requiredKwEnabled, setRequiredKwEnabled] = useState(true);
-  const [recommendedKwEnabled, setRecommendedKwEnabled] = useState(true);
-  const [forbiddenKwEnabled, setForbiddenKwEnabled] = useState(true);
 
 
   const [lengthRange, setLengthRange] = useState<[number, number]>([45, 70]);
@@ -342,45 +339,30 @@ function TitlesScreen() {
                     !keywordsEnabled && "pointer-events-none opacity-40",
                   )}
                 >
-                  <KeywordGroup
-                    enabled={requiredKwEnabled}
-                    onEnabledChange={setRequiredKwEnabled}
-                  >
-                    <TagField
-                      label="Obrigatórias"
-                      description="Aparecem em todos os títulos."
-                      values={requiredKw}
-                      onChange={setRequiredKw}
-                      suggestions={KEYWORD_SUGGESTIONS}
-                      tone="required"
-                    />
-                  </KeywordGroup>
-                  <KeywordGroup
-                    enabled={recommendedKwEnabled}
-                    onEnabledChange={setRecommendedKwEnabled}
-                  >
-                    <TagField
-                      label="Recomendadas"
-                      description="Priorizadas quando fizerem sentido."
-                      values={recommendedKw}
-                      onChange={setRecommendedKw}
-                      suggestions={KEYWORD_SUGGESTIONS}
-                      tone="recommended"
-                    />
-                  </KeywordGroup>
-                  <KeywordGroup
-                    enabled={forbiddenKwEnabled}
-                    onEnabledChange={setForbiddenKwEnabled}
-                  >
-                    <TagField
-                      label="Proibidas"
-                      description="Nunca devem aparecer."
-                      values={forbiddenKw}
-                      onChange={setForbiddenKw}
-                      tone="forbidden"
-                      icon={<Ban className="h-3 w-3" />}
-                    />
-                  </KeywordGroup>
+                  <TagField
+                    label="Obrigatórias"
+                    description="Aparecem em todos os títulos."
+                    values={requiredKw}
+                    onChange={setRequiredKw}
+                    suggestions={KEYWORD_SUGGESTIONS}
+                    tone="required"
+                  />
+                  <TagField
+                    label="Recomendadas"
+                    description="Priorizadas quando fizerem sentido."
+                    values={recommendedKw}
+                    onChange={setRecommendedKw}
+                    suggestions={KEYWORD_SUGGESTIONS}
+                    tone="recommended"
+                  />
+                  <TagField
+                    label="Proibidas"
+                    description="Nunca devem aparecer."
+                    values={forbiddenKw}
+                    onChange={setForbiddenKw}
+                    tone="forbidden"
+                    icon={<Ban className="h-3 w-3" />}
+                  />
                 </div>
               </Section>
 
@@ -494,35 +476,6 @@ function TitlesScreen() {
   );
 }
 
-function KeywordGroup({
-  enabled,
-  onEnabledChange,
-  children,
-}: {
-  enabled: boolean;
-  onEnabledChange: (v: boolean) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-end">
-        <Switch
-          checked={enabled}
-          onCheckedChange={onEnabledChange}
-          aria-label="Ativar categoria"
-        />
-      </div>
-      <div
-        className={cn(
-          "transition-opacity",
-          !enabled && "pointer-events-none opacity-40",
-        )}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
 
 
 
