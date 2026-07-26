@@ -43,6 +43,14 @@ export function CompositionCanvas({
 
   const remove = (id: string) => onChange(boxes.filter((b) => b.id !== id));
 
+  const move = (from: number, to: number) => {
+    if (to < 0 || to >= boxes.length) return;
+    const next = [...boxes];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
+  };
+
   const addBox = () => {
     const id = `box-${Date.now()}`;
     onChange([
