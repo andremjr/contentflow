@@ -561,13 +561,17 @@ function ThumbnailScreen() {
                 icon={<Package className="h-4 w-4" />}
                 title="Elementos permanentes"
                 description="Biblioteca de assets reutilizáveis do canal."
-                action={
-                  <Button variant="outline" size="sm">
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    Novo elemento
-                  </Button>
-                }
+                action={<NewElementDialog onAdd={addLibraryItem} />}
               >
+                {library.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border bg-secondary/20 px-6 py-10 text-center">
+                    <p className="text-sm font-medium">Nenhum elemento ainda</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Use “Novo elemento” para montar a biblioteca de assets
+                      permanentes deste canal.
+                    </p>
+                  </div>
+                ) : (
                 <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                   {library.map((item) => {
                     const meta = KIND_LABEL[item.kind];
@@ -575,20 +579,28 @@ function ThumbnailScreen() {
                       <div
                         key={item.id}
                         className={cn(
-                          "flex items-start gap-3 rounded-lg border p-3 transition-colors",
+                          "group relative flex items-start gap-3 rounded-lg border p-3 transition-colors",
                           item.required
                             ? "border-primary/50 bg-primary/5"
                             : "border-border bg-secondary/30",
                         )}
                       >
-                        <div
-                          className={cn(
-                            "flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-white shadow-inner",
-                            item.gradient,
-                          )}
-                        >
-                          <meta.Icon className="h-5 w-5" />
-                        </div>
+                        {item.url ? (
+                          <img
+                            src={item.url}
+                            alt={item.label}
+                            className="h-14 w-14 shrink-0 rounded-md object-cover"
+                          />
+                        ) : (
+                          <div
+                            className={cn(
+                              "flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-white shadow-inner",
+                              item.gradient,
+                            )}
+                          >
+                            <meta.Icon className="h-5 w-5" />
+                          </div>
+                        )}
                         <div className="min-w-0 flex-1">
                           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                             {meta.label}
@@ -604,11 +616,21 @@ function ThumbnailScreen() {
                             Obrigatório em todas as thumbnails
                           </label>
                         </div>
+                        <button
+                          type="button"
+                          aria-label="Remover elemento"
+                          onClick={() => removeLibraryItem(item.id)}
+                          className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     );
                   })}
                 </div>
+                )}
               </Section>
+
 
               {/* Elementos únicos */}
               <Section
