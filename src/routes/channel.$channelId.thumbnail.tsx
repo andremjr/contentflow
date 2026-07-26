@@ -27,7 +27,12 @@ import {
   BadgeCheck,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import {
+  CompositionCanvas,
+  type CompositionBox,
+} from "@/components/composition-canvas";
 import { TopBar } from "@/components/top-bar";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
