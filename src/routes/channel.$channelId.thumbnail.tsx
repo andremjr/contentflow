@@ -252,16 +252,13 @@ function ThumbnailScreen() {
   const [references, setReferences] = useState<Reference[]>([]);
   const refInputRef = useRef<HTMLInputElement>(null);
 
-  // Layouts
-  const [layoutId, setLayoutId] = useState("left-face");
-  const [layers, setLayers] = useState([
-    { id: "bg", label: "Fundo" },
-    { id: "char", label: "Personagem" },
-    { id: "highlight", label: "Destaque" },
-    { id: "text", label: "Texto principal" },
-    { id: "seal", label: "Selo" },
+  // Compositions
+  const [compositions, setCompositions] = useState<Composition[]>([
+    { id: "comp-1", name: "Composição 1", layers: [] },
   ]);
+  const [activeCompId, setActiveCompId] = useState("comp-1");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+
 
   // Library
   const [library, setLibrary] = useState<LibraryItem[]>(LIBRARY);
