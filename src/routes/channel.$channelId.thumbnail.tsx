@@ -67,6 +67,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { channels } from "@/lib/mock-data";
 import { ChannelAvatar } from "@/components/channel-avatar";
@@ -160,22 +168,34 @@ const LAYOUTS: LayoutTemplate[] = [
   },
 ];
 
+type LibraryKind =
+  | "character"
+  | "logo"
+  | "frame"
+  | "lower_third"
+  | "seal"
+  | "identity";
+
 type LibraryItem = {
   id: string;
   label: string;
-  kind: "character" | "logo" | "frame" | "lower_third" | "seal" | "identity";
+  kind: LibraryKind;
   required: boolean;
   gradient: string;
+  url?: string;
 };
 
-const LIBRARY: LibraryItem[] = [
-  { id: "l1", label: "Apresentador", kind: "character", required: true, gradient: "from-blue-500 to-cyan-600" },
-  { id: "l2", label: "Logo do canal", kind: "logo", required: true, gradient: "from-slate-500 to-slate-700" },
-  { id: "l3", label: "Moldura vermelha", kind: "frame", required: false, gradient: "from-red-500 to-rose-700" },
-  { id: "l4", label: "Lower third padrão", kind: "lower_third", required: false, gradient: "from-primary to-blue-800" },
-  { id: "l5", label: "Selo 'Novo'", kind: "seal", required: false, gradient: "from-amber-500 to-orange-600" },
-  { id: "l6", label: "Cor da identidade", kind: "identity", required: true, gradient: "from-primary to-indigo-700" },
-];
+const KIND_GRADIENT: Record<LibraryKind, string> = {
+  character: "from-blue-500 to-cyan-600",
+  logo: "from-slate-500 to-slate-700",
+  frame: "from-red-500 to-rose-700",
+  lower_third: "from-primary to-blue-800",
+  seal: "from-amber-500 to-orange-600",
+  identity: "from-primary to-indigo-700",
+};
+
+const LIBRARY: LibraryItem[] = [];
+
 
 const KIND_LABEL: Record<LibraryItem["kind"], { label: string; Icon: typeof User }> = {
   character: { label: "Personagem", Icon: User },
@@ -330,6 +350,28 @@ function ThumbnailScreen() {
     setLibrary((prev) =>
       prev.map((l) => (l.id === id ? { ...l, required: !l.required } : l)),
     );
+
+  const addLibraryItem = (item: {
+    kind: LibraryKind;
+    label: string;
+    url?: string;
+  }) =>
+    setLibrary((prev) => [
+      ...prev,
+      {
+        id: `lib-${Date.now()}`,
+        label: item.label,
+        kind: item.kind,
+        url: item.url,
+        required: false,
+        gradient: KIND_GRADIENT[item.kind],
+      },
+    ]);
+
+  const removeLibraryItem = (id: string) =>
+    setLibrary((prev) => prev.filter((l) => l.id !== id));
+
+
 
   const onLayerDragStart = (i: number) => setDragIndex(i);
   const onLayerDragOver = (e: React.DragEvent, i: number) => {
@@ -549,13 +591,17 @@ function ThumbnailScreen() {
                 icon={<Package className="h-4 w-4" />}
                 title="Elementos permanentes"
                 description="Biblioteca de assets reutilizáveis do canal."
-                action={
-                  <Button variant="outline" size="sm">
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    Novo elemento
-                  </Button>
-                }
+                action={<NewElementDialog onAdd={addLibraryItem} />}
               >
+                {library.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border bg-secondary/20 px-6 py-10 text-center">
+                    <p className="text-sm font-medium">Nenhum elemento ainda</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Use “Novo elemento” para montar a biblioteca de assets
+                      permanentes deste canal.
+                    </p>
+                  </div>
+                ) : (
                 <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                   {library.map((item) => {
                     const meta = KIND_LABEL[item.kind];
@@ -563,20 +609,28 @@ function ThumbnailScreen() {
                       <div
                         key={item.id}
                         className={cn(
-                          "flex items-start gap-3 rounded-lg border p-3 transition-colors",
+                          "group relative flex items-start gap-3 rounded-lg border p-3 transition-colors",
                           item.required
                             ? "border-primary/50 bg-primary/5"
                             : "border-border bg-secondary/30",
                         )}
                       >
-                        <div
-                          className={cn(
-                            "flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-white shadow-inner",
-                            item.gradient,
-                          )}
-                        >
-                          <meta.Icon className="h-5 w-5" />
-                        </div>
+                        {item.url ? (
+                          <img
+                            src={item.url}
+                            alt={item.label}
+                            className="h-14 w-14 shrink-0 rounded-md object-cover"
+                          />
+                        ) : (
+                          <div
+                            className={cn(
+                              "flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-white shadow-inner",
+                              item.gradient,
+                            )}
+                          >
+                            <meta.Icon className="h-5 w-5" />
+                          </div>
+                        )}
                         <div className="min-w-0 flex-1">
                           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                             {meta.label}
@@ -592,11 +646,21 @@ function ThumbnailScreen() {
                             Obrigatório em todas as thumbnails
                           </label>
                         </div>
+                        <button
+                          type="button"
+                          aria-label="Remover elemento"
+                          onClick={() => removeLibraryItem(item.id)}
+                          className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     );
                   })}
                 </div>
+                )}
               </Section>
+
 
               {/* Elementos únicos */}
               <Section
@@ -1489,5 +1553,134 @@ function TagField({
         />
       </div>
     </FieldWrap>
+  );
+}
+
+function NewElementDialog({
+  onAdd,
+}: {
+  onAdd: (item: { kind: LibraryKind; label: string; url?: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<LibraryKind>("character");
+  const [label, setLabel] = useState("");
+  const [file, setFile] = useState<{ name: string; url: string } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const reset = () => {
+    setKind("character");
+    setLabel("");
+    setFile(null);
+  };
+
+  const submit = () => {
+    if (!label.trim()) return;
+    onAdd({ kind, label: label.trim(), url: file?.url });
+    reset();
+    setOpen(false);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Novo elemento
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Novo elemento permanente</DialogTitle>
+        </DialogHeader>
+
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label>Tipo</Label>
+            <Select value={kind} onValueChange={(v) => setKind(v as LibraryKind)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(KIND_LABEL) as LibraryKind[]).map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {KIND_LABEL[k].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Nome</Label>
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Ex.: Logo do canal"
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Arquivo</Label>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) setFile({ name: f.name, url: URL.createObjectURL(f) });
+                e.target.value = "";
+              }}
+            />
+            {file ? (
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-2">
+                <img
+                  src={file.url}
+                  alt={file.name}
+                  className="h-12 w-12 rounded-md object-cover"
+                />
+                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                  {file.name}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Remover arquivo"
+                  onClick={() => setFile(null)}
+                  className="rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-border bg-secondary/20 px-4 py-6 text-center transition hover:border-primary/50"
+              >
+                <Upload className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">
+                  Enviar imagem (opcional)
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={submit} disabled={!label.trim()}>
+            Adicionar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
