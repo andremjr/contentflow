@@ -438,7 +438,6 @@ function TitlesScreen() {
                   </div>
                 </div>
 
-                </div>
               </Section>
 
 
