@@ -215,7 +215,7 @@ function IdeasScreen() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
                   <Lightbulb className="h-3.5 w-3.5" />
-                  Ideias · Etapa 1 do pipeline
+                  Ideias · Etapa 2 do pipeline
                 </div>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight">
                   Configurações de ideias
@@ -233,11 +233,11 @@ function IdeasScreen() {
               </div>
             </div>
 
-            {/* Pesquisa de temas (sub-etapa) */}
+            {/* Pesquisa de conteúdo (sub-etapa) */}
             <Section
               icon={<TrendingUp className="h-4 w-4" />}
-              title="Pesquisa de temas"
-              description="Sub-etapa opcional executada antes de gerar ideias, para descobrir temas com potencial."
+              title="Pesquisa de conteúdo"
+              description="Sub-etapa opcional executada depois do tema definido, para aprofundar informações sobre o assunto."
               action={
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">
@@ -254,11 +254,11 @@ function IdeasScreen() {
                 )}
               >
                 <p className="text-sm text-muted-foreground">
-                  Quando ativada, o sistema pesquisa temas nas fontes escolhidas
-                  e usa esses resultados como base das ideias. Desative para
-                  gerar ideias apenas a partir do público e do histórico do
-                  canal.
+                  Quando ativada, o sistema busca informações, dados e
+                  referências sobre o tema da ideia nas fontes escolhidas.
+                  Desative para gerar ideias sem aprofundamento adicional.
                 </p>
+
 
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">

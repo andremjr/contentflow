@@ -68,8 +68,8 @@ export const Route = createFileRoute("/channel/$channelId/research")({
   head: ({ params }) => {
     const ch = channels.find((c) => c.id === params.channelId);
     const title = ch
-      ? `Pesquisa de conteúdo — ${ch.name} · ContentFlow OS`
-      : "Pesquisa de conteúdo — ContentFlow OS";
+      ? `Pesquisa — ${ch.name} · ContentFlow OS`
+      : "Pesquisa — ContentFlow OS";
     return {
       meta: [
         { title },
@@ -213,13 +213,13 @@ function ResearchScreen() {
     <TooltipProvider delayDuration={200}>
       <AppShell>
         <TopBar
-          title="Pesquisa de conteúdo"
+          title="Pesquisa"
           subtitle={`Configuração · ${channel.name}`}
           breadcrumbs={[
             { label: "ContentFlow OS" },
             { label: "Canais" },
             { label: channel.name, to: `/channel/${channel.id}` as never },
-            { label: "Pesquisa de conteúdo" },
+            { label: "Pesquisa" },
           ]}
         />
 
@@ -232,7 +232,7 @@ function ResearchScreen() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
                     <SearchIcon className="h-3.5 w-3.5" />
-                    Pesquisa de conteúdo · Etapa 4 do pipeline
+                    Pesquisa · Etapa 1 do pipeline
                   </div>
                   <h1 className="mt-1 text-2xl font-semibold tracking-tight">
                     Configurações de pesquisa de conteúdo
@@ -276,7 +276,7 @@ function ResearchScreen() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <h2 className="text-sm font-semibold">
-                      Usar Pesquisa de conteúdo neste canal
+                      Usar Pesquisa neste canal
                     </h2>
                     <Badge
                       variant="outline"
@@ -292,8 +292,8 @@ function ResearchScreen() {
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {cfg.processEnabled
-                      ? "A etapa de Pesquisa de conteúdo será executada nos projetos deste canal."
-                      : "A etapa de Pesquisa de conteúdo será ignorada nos projetos deste canal. Nenhum comando será enviado ao motor."}
+                      ? "A etapa de Pesquisa será executada nos projetos deste canal."
+                      : "A etapa de Pesquisa será ignorada nos projetos deste canal. Nenhum comando será enviado ao motor."}
                   </p>
                 </div>
                 <Switch
