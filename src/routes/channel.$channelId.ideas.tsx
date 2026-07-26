@@ -10,6 +10,7 @@ import {
   Info,
   Sparkles,
   Save,
+  Search,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
@@ -133,6 +134,8 @@ Para cada ideia, retorne:
 function IdeasScreen() {
   const { channel } = Route.useLoaderData();
 
+  const [useResearch, setUseResearch] = useState(true);
+
   // Audience
   const [audienceDescription, setAudienceDescription] = useState<string>(
     "Adultos entre 25 e 45 anos, curiosos, que buscam entender temas complexos de forma clara e aprofundada. Valorizam conteúdo autêntico e narrativas envolventes.",
@@ -193,6 +196,25 @@ function IdeasScreen() {
             </div>
 
 
+
+            {/* Pesquisa */}
+            <Section
+              icon={<Search className="h-4 w-4" />}
+              title="Pesquisa"
+              description="Usar os resultados da etapa de Pesquisa como base."
+              action={
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {useResearch ? "Ativada" : "Desativada"}
+                  </span>
+                  <Switch checked={useResearch} onCheckedChange={setUseResearch} />
+                </div>
+              }
+            >
+              <p className="text-sm text-muted-foreground">
+                Quando ativada, os dados coletados na etapa de Pesquisa alimentam a geração de ideias. Desative para gerar ideias apenas a partir do público e do histórico do canal.
+              </p>
+            </Section>
 
             {/* Conexão */}
             <Section

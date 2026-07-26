@@ -306,6 +306,8 @@ Cada descrição deve incluir:
 function ThumbnailScreen() {
   const { channel } = Route.useLoaderData();
 
+  const [useResearch, setUseResearch] = useState(true);
+
   // References
   const [references, setReferences] = useState<Reference[]>(INITIAL_REFERENCES);
   const [selectedRefs, setSelectedRefs] = useState<string[]>(["r1", "r3"]);
@@ -459,6 +461,25 @@ function ThumbnailScreen() {
                   </p>
                 </div>
               </div>
+
+              {/* Pesquisa */}
+              <Section
+                icon={<Search className="h-4 w-4" />}
+                title="Pesquisa"
+                description="Usar os resultados da etapa de Pesquisa como base."
+                action={
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {useResearch ? "Ativada" : "Desativada"}
+                    </span>
+                    <Switch checked={useResearch} onCheckedChange={setUseResearch} />
+                  </div>
+                }
+              >
+                <p className="text-sm text-muted-foreground">
+                  Quando ativada, os dados coletados na etapa de Pesquisa alimentam a geração de thumbnails.
+                </p>
+              </Section>
 
               {/* Referências */}
               <Section
