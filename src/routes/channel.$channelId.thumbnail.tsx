@@ -326,10 +326,8 @@ function ThumbnailScreen() {
   const removeReference = (id: string) =>
     setReferences((prev) => prev.filter((r) => r.id !== id));
 
-  const toggleSource = (id: string) =>
-    setImageSources((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
-    );
+
+
 
   const toggleRequired = (id: string) =>
     setLibrary((prev) =>
