@@ -1,6 +1,7 @@
 import { Plus, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { HumanTaskCenter } from "@/components/human-task-center";
 
 type Crumb = { label: string; to?: string };
 
@@ -35,6 +36,7 @@ export function TopBar({
         </div>
 
         <div className="flex items-center gap-2">
+          <HumanTaskCenter />
           {actions}
 
           {showNewProject && (

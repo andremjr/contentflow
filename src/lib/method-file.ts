@@ -22,10 +22,50 @@ const parameterSchema = z.object({
   options: z.array(z.string().max(500)).max(100).optional(),
 });
 
+const inputSchema = z.object({
+  id: z.string(),
+  label: z.string().max(200),
+  source: z.enum(["project", "previous_block", "channel_library", "static"]),
+  sourceKey: z.string().max(200).optional(),
+  blockId: z.string().optional(),
+  collection: z.string().max(200).optional(),
+  staticValue: z.string().max(10_000).optional(),
+});
+
+const outputSchema = z.object({
+  id: z.string(),
+  label: z.string().max(200),
+  key: z.string().max(200),
+  type: z.enum([
+    "text",
+    "number",
+    "select",
+    "boolean",
+    "textarea",
+    "multiselect",
+    "list",
+    "url",
+    "file",
+    "image",
+    "audio",
+    "video",
+    "approval",
+  ]),
+  required: z.boolean(),
+  placeholder: z.string().max(500).optional(),
+  helpText: z.string().max(2_000).optional(),
+  options: z.array(z.string().max(500)).max(100).optional(),
+  libraryCollection: z.string().max(200).optional(),
+});
+
 const actionBlockSchema = z.object({
   id: z.string(),
   type: z.enum(["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"]),
   operator: z.enum(["IA", "Humano", "Código"]),
+  name: z.string().max(200).optional(),
+  instructions: z.string().max(20_000).optional(),
+  inputs: z.array(inputSchema).max(100).optional(),
+  outputs: z.array(outputSchema).max(100).optional(),
   parameters: z.array(parameterSchema).max(100),
   order: z.number().int().nonnegative(),
 });
@@ -81,6 +121,14 @@ export function copyImportedBlocks(
     parameters: block.parameters.map((parameter) => ({
       ...parameter,
       id: createId(`${processType}-parameter`),
+    })),
+    inputs: block.inputs?.map((input) => ({
+      ...input,
+      id: createId(`${processType}-input`),
+    })),
+    outputs: block.outputs?.map((output) => ({
+      ...output,
+      id: createId(`${processType}-output`),
     })),
   }));
 }

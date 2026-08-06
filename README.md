@@ -20,3 +20,7 @@ Abra `http://127.0.0.1:8080`.
 Ao iniciar, o aplicativo cria automaticamente o banco SQLite em `data/contentflow-os.sqlite`. Essa pasta não é enviada ao GitHub, portanto cada pessoa mantém canais, projetos e métodos apenas na própria máquina.
 
 Não há login nem sincronização em nuvem nesta fase.
+
+## Documentação
+
+- [Arquitetura e visão de produto](docs/ARCHITECTURE.md)

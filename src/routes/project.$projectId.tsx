@@ -1,10 +1,10 @@
 import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
-import { LockKeyhole } from "lucide-react";
+import { LockKeyhole, UserRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { PROCESS_META, PROCESS_ORDER, type ProcessId } from "@/lib/domain";
-import { useChannel, useProject } from "@/lib/store";
+import { useChannel, useHumanTasks, useProject } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/project/$projectId")({ component: ProjectLayout });
@@ -24,6 +24,7 @@ function ProjectLayout() {
   const { projectId } = Route.useParams();
   const project = useProject(projectId);
   const channel = useChannel(project?.channelId ?? "");
+  const humanTasks = useHumanTasks();
   const pathname = useLocation({ select: (state) => state.pathname });
   if (!project || !channel) {
     return (
@@ -61,6 +62,9 @@ function ProjectLayout() {
             const Icon = meta.icon;
             const slug = SLUG[process];
             const blocked = !channel.methods[process]?.blocks.length;
+            const waitingHuman = humanTasks.some(
+              (task) => task.project.id === project.id && task.execution.processType === process,
+            );
             return (
               <Link
                 key={process}
@@ -81,6 +85,7 @@ function ProjectLayout() {
                 <Icon className="hidden size-3.5 sm:inline" />
                 <span className="whitespace-nowrap">{meta.label}</span>
                 {blocked && <LockKeyhole className="size-3 text-destructive/80" />}
+                {waitingHuman && <UserRound className="size-3 text-warning" />}
               </Link>
             );
           })}

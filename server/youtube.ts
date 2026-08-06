@@ -83,15 +83,27 @@ function readFirstGroup(html: string, pattern: RegExp) {
 
 function readSubscriberCount(html: string, handle: string) {
   const normalizedHandle = handle.toLocaleLowerCase();
-  const candidates = [...html.matchAll(/"subtitle":\{"content":"((?:\\.|[^"\\])*)"/g)]
-    .map((match) => decodeJsonString(match[1]))
+  const subtitleCandidates = [...html.matchAll(/"subtitle":\{"content":"((?:\\.|[^"\\])*)"/g)].map(
+    (match) => match[1],
+  );
+  const textCandidates = [
+    ...html.matchAll(/"(?:content|simpleText|accessibilityLabel)":"((?:\\.|[^"\\])*)"/g),
+  ].map((match) => match[1]);
+  const candidates = [...new Set([...subtitleCandidates, ...textCandidates])]
+    .map(decodeJsonString)
     .map(cleanDirectionalText)
     .filter((value) => /inscrito|subscriber/i.test(value));
 
   const exact = candidates.find((value) => value.toLocaleLowerCase().includes(normalizedHandle));
-  const value = exact ?? candidates[0] ?? "";
-  const parts = value.split(/\s*[•·]\s*/);
-  return parts.find((part) => /inscrito|subscriber/i.test(part))?.trim() ?? "Inscritos ocultos";
+  const orderedCandidates = exact ? [exact, ...candidates] : candidates;
+  const parts = orderedCandidates.flatMap((value) => value.split(/\s*[\u2022\u00b7]\s*/));
+  return parts.find(isPublicSubscriberCount)?.trim() ?? "0 inscritos";
+}
+
+function isPublicSubscriberCount(value: string) {
+  return /^\s*[\d.,]+\s*(?:(?:mil|mi|milh(?:ão|ões)|thousand|million|billion|[kmb])\s*)?(?:de\s+)?(?:inscritos?|subscribers?)\s*$/iu.test(
+    value,
+  );
 }
 
 function readBannerUrl(html: string) {

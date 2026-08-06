@@ -14,6 +14,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ChannelChannelIdRouteImport } from './routes/channel.$channelId'
 import { Route as ProjectProjectIdRouteImport } from './routes/project.$projectId'
 import { Route as ChannelChannelIdIndexRouteImport } from './routes/channel.$channelId.index'
+import { Route as ChannelChannelIdLibraryRouteImport } from './routes/channel.$channelId.library'
 import { Route as ChannelChannelIdMethodsRouteImport } from './routes/channel.$channelId.methods'
 import { Route as ProjectProjectIdIndexRouteImport } from './routes/project.$projectId.index'
 import { Route as ProjectProjectIdAssetsRouteImport } from './routes/project.$projectId.assets'
@@ -48,6 +49,11 @@ const ProjectProjectIdRoute = ProjectProjectIdRouteImport.update({
 const ChannelChannelIdIndexRoute = ChannelChannelIdIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => ChannelChannelIdRoute,
+} as any)
+const ChannelChannelIdLibraryRoute = ChannelChannelIdLibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
   getParentRoute: () => ChannelChannelIdRoute,
 } as any)
 const ChannelChannelIdMethodsRoute = ChannelChannelIdMethodsRouteImport.update({
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
   '/project/$projectId': typeof ProjectProjectIdRouteWithChildren
+  '/channel/$channelId/library': typeof ChannelChannelIdLibraryRoute
   '/channel/$channelId/methods': typeof ChannelChannelIdMethodsRoute
   '/project/$projectId/assets': typeof ProjectProjectIdAssetsRoute
   '/project/$projectId/edit': typeof ProjectProjectIdEditRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
+  '/channel/$channelId/library': typeof ChannelChannelIdLibraryRoute
   '/channel/$channelId/methods': typeof ChannelChannelIdMethodsRoute
   '/project/$projectId/assets': typeof ProjectProjectIdAssetsRoute
   '/project/$projectId/edit': typeof ProjectProjectIdEditRoute
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
   '/project/$projectId': typeof ProjectProjectIdRouteWithChildren
+  '/channel/$channelId/library': typeof ChannelChannelIdLibraryRoute
   '/channel/$channelId/methods': typeof ChannelChannelIdMethodsRoute
   '/project/$projectId/assets': typeof ProjectProjectIdAssetsRoute
   '/project/$projectId/edit': typeof ProjectProjectIdEditRoute
@@ -160,6 +169,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/channel/$channelId'
     | '/project/$projectId'
+    | '/channel/$channelId/library'
     | '/channel/$channelId/methods'
     | '/project/$projectId/assets'
     | '/project/$projectId/edit'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard'
+    | '/channel/$channelId/library'
     | '/channel/$channelId/methods'
     | '/project/$projectId/assets'
     | '/project/$projectId/edit'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/channel/$channelId'
     | '/project/$projectId'
+    | '/channel/$channelId/library'
     | '/channel/$channelId/methods'
     | '/project/$projectId/assets'
     | '/project/$projectId/edit'
@@ -247,6 +259,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/channel/$channelId/'
       preLoaderRoute: typeof ChannelChannelIdIndexRouteImport
+      parentRoute: typeof ChannelChannelIdRoute
+    }
+    '/channel/$channelId/library': {
+      id: '/channel/$channelId/library'
+      path: '/library'
+      fullPath: '/channel/$channelId/library'
+      preLoaderRoute: typeof ChannelChannelIdLibraryRouteImport
       parentRoute: typeof ChannelChannelIdRoute
     }
     '/channel/$channelId/methods': {
@@ -323,11 +342,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface ChannelChannelIdRouteChildren {
+  ChannelChannelIdLibraryRoute: typeof ChannelChannelIdLibraryRoute
   ChannelChannelIdMethodsRoute: typeof ChannelChannelIdMethodsRoute
   ChannelChannelIdIndexRoute: typeof ChannelChannelIdIndexRoute
 }
 
 const ChannelChannelIdRouteChildren: ChannelChannelIdRouteChildren = {
+  ChannelChannelIdLibraryRoute: ChannelChannelIdLibraryRoute,
   ChannelChannelIdMethodsRoute: ChannelChannelIdMethodsRoute,
   ChannelChannelIdIndexRoute: ChannelChannelIdIndexRoute,
 }

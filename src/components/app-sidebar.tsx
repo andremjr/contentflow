@@ -1,7 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Blocks, ChevronLeft, FolderKanban, LayoutDashboard } from "lucide-react";
+import { Blocks, BookOpen, ChevronLeft, FolderKanban, LayoutDashboard } from "lucide-react";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useHiddenChannelIds } from "@/lib/channel-privacy";
 import { PROCESS_META, PROCESS_ORDER } from "@/lib/domain";
 import { useChannels, useProject } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ const processSlug = (process: string) =>
 export function AppSidebar() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const channels = useChannels();
+  const hiddenChannelIds = useHiddenChannelIds();
   const projectMatch = pathname.match(/^\/project\/([^/]+)/);
   const project = useProject(projectMatch?.[1] ?? "");
   const channelMatch = pathname.match(/^\/channel\/([^/]+)/);
@@ -47,6 +49,7 @@ export function AppSidebar() {
                 to={`/channel/${item.id}`}
                 active={pathname.startsWith(`/channel/${item.id}`)}
                 leading={<ChannelAvatar channel={item} size="sm" className="!size-5 !text-[9px]" />}
+                contentHidden={hiddenChannelIds.has(item.id)}
               />
             ))}
           </>
@@ -67,6 +70,12 @@ export function AppSidebar() {
               label="Métodos de Criação"
               to={`/channel/${channel.id}/methods`}
               active={pathname === `/channel/${channel.id}/methods`}
+            />
+            <NavItem
+              icon={BookOpen}
+              label="Biblioteca estratégica"
+              to={`/channel/${channel.id}/library`}
+              active={pathname === `/channel/${channel.id}/library`}
             />
             <NavItem
               icon={FolderKanban}
@@ -100,6 +109,12 @@ export function AppSidebar() {
               to={`/channel/${channel.id}/methods`}
               active={pathname === `/channel/${channel.id}/methods`}
             />
+            <NavItem
+              icon={BookOpen}
+              label="Biblioteca estratégica"
+              to={`/channel/${channel.id}/library`}
+              active={pathname === `/channel/${channel.id}/library`}
+            />
           </>
         )}
       </nav>
@@ -123,17 +138,20 @@ function NavItem({
   to,
   active,
   leading,
+  contentHidden = false,
 }: {
   icon?: typeof LayoutDashboard;
   label: string;
   to: string;
   active: boolean;
   leading?: React.ReactNode;
+  contentHidden?: boolean;
 }) {
   return (
     <Link
       to={to}
-      title={label}
+      title={contentHidden ? "Canal protegido" : label}
+      aria-label={contentHidden ? "Canal protegido" : label}
       className={cn(
         "group flex items-center justify-center gap-2.5 rounded-md px-2 py-2 text-sm font-medium transition sm:justify-start sm:px-2.5 sm:py-1.5",
         active
@@ -141,16 +159,32 @@ function NavItem({
           : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
       )}
     >
-      {leading ??
-        (Icon && (
-          <Icon
-            className={cn(
-              "size-4 shrink-0",
-              active ? "text-brand-soft" : "text-muted-foreground group-hover:text-foreground",
-            )}
-          />
-        ))}
-      <span className="hidden min-w-0 flex-1 truncate sm:block">{label}</span>
+      <span
+        className={cn(
+          "grid shrink-0 place-items-center transition",
+          contentHidden && "select-none blur-sm",
+        )}
+        aria-hidden={contentHidden}
+      >
+        {leading ??
+          (Icon && (
+            <Icon
+              className={cn(
+                "size-4 shrink-0",
+                active ? "text-brand-soft" : "text-muted-foreground group-hover:text-foreground",
+              )}
+            />
+          ))}
+      </span>
+      <span
+        className={cn(
+          "hidden min-w-0 flex-1 truncate transition sm:block",
+          contentHidden && "select-none blur-sm",
+        )}
+        aria-hidden={contentHidden}
+      >
+        {label}
+      </span>
     </Link>
   );
 }

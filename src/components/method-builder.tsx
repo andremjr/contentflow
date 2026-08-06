@@ -46,12 +46,16 @@ import {
   PROCESS_META,
   PROCESS_ORDER,
   type ActionBlock,
+  type BlockFieldDefinition,
+  type BlockInputBinding,
   type BlockOperator,
   type BlockParameter,
   type BlockParameterType,
   type BlockType,
+  type HumanFieldType,
   type UniversalProcess,
 } from "@/lib/domain";
+import { createSuggestedHumanFields, normalizeActionBlock } from "@/lib/human-workflow";
 import {
   copyImportedBlocks,
   parseMethodFile,
@@ -102,13 +106,26 @@ const OPERATOR_META: Record<BlockOperator, { label: string; icon: typeof Bot }> 
   Código: { label: "Código", icon: Code2 },
 };
 
-const PARAMETER_TYPES: { value: BlockParameterType; label: string }[] = [
+const FIELD_TYPES: { value: HumanFieldType; label: string }[] = [
   { value: "text", label: "Texto" },
   { value: "number", label: "Número" },
   { value: "select", label: "Seleção" },
+  { value: "multiselect", label: "Seleção múltipla" },
   { value: "boolean", label: "Booleano" },
   { value: "textarea", label: "Área de texto" },
+  { value: "list", label: "Lista de itens" },
+  { value: "url", label: "URL" },
+  { value: "file", label: "Arquivo" },
+  { value: "image", label: "Imagem" },
+  { value: "audio", label: "Áudio" },
+  { value: "video", label: "Vídeo" },
+  { value: "approval", label: "Aprovar ou reprovar" },
 ];
+
+const PARAMETER_TYPES: { value: BlockParameterType; label: string }[] = FIELD_TYPES.filter(
+  (item): item is { value: BlockParameterType; label: string } =>
+    ["text", "number", "select", "boolean", "textarea"].includes(item.value),
+);
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -152,13 +169,21 @@ export function MethodBuilder({
   }, [blocks, selectedBlockId]);
 
   useEffect(() => {
-    setDraftBlocks(structuredClone(method?.blocks ?? []));
+    setDraftBlocks(
+      structuredClone(method?.blocks ?? []).map((block) =>
+        normalizeActionBlock(block, processType),
+      ),
+    );
     setIsDirty(false);
   }, [processType, method]);
 
   useEffect(() => {
     if (!pendingFileImport || pendingFileImport.method.processType !== processType) return;
-    const importedBlocks = copyImportedBlocks(processType, pendingFileImport.method.blocks, uid);
+    const importedBlocks = copyImportedBlocks(
+      processType,
+      pendingFileImport.method.blocks,
+      uid,
+    ).map((block) => normalizeActionBlock(block, processType));
     setDraftBlocks(importedBlocks);
     setSelectedBlockId(importedBlocks[0]?.id ?? null);
     setIsDirty(true);
@@ -182,7 +207,9 @@ export function MethodBuilder({
   };
 
   const importMethod = (sourceChannelName: string, sourceBlocks: ActionBlock[]) => {
-    const importedBlocks = copyImportedBlocks(processType, sourceBlocks, uid);
+    const importedBlocks = copyImportedBlocks(processType, sourceBlocks, uid).map((block) =>
+      normalizeActionBlock(block, processType),
+    );
     saveBlocks(importedBlocks);
     setSelectedBlockId(importedBlocks[0]?.id ?? null);
     setLibraryOpen(false);
@@ -225,7 +252,10 @@ export function MethodBuilder({
   const importSharedMethod = async (file: File) => {
     try {
       const sharedMethod = parseMethodFile(await file.text());
-      if (isDirty && !window.confirm("Importar substituirá as alterações ainda não salvas. Continuar?")) {
+      if (
+        isDirty &&
+        !window.confirm("Importar substituirá as alterações ainda não salvas. Continuar?")
+      ) {
         return;
       }
       setPendingFileImport(sharedMethod);
@@ -243,7 +273,11 @@ export function MethodBuilder({
     const newBlock: ActionBlock = {
       id: uid(`${processType}-${type.toLowerCase()}`),
       type,
-      operator: type === "ESCOLHER" || type === "VALIDAR" ? "Humano" : "IA",
+      operator: "Humano",
+      name: BLOCK_META[type].label,
+      instructions: "",
+      inputs: [],
+      outputs: createSuggestedHumanFields(processType, type),
       parameters: [],
       order: blocks.length,
     };
@@ -488,7 +522,7 @@ export function MethodBuilder({
                         {meta.label}
                       </span>
                       <span className="block truncate text-[11px] text-muted-foreground">
-                        {block.parameters.length} parâmetros configurados
+                        {block.outputs?.length ?? 0} entregas configuradas
                       </span>
                     </span>
                     <Badge variant="secondary" className="gap-1 text-[10px]">
@@ -511,6 +545,8 @@ export function MethodBuilder({
         {selectedBlock ? (
           <BlockEditor
             block={selectedBlock}
+            processType={processType}
+            previousBlocks={blocks.slice(0, blocks.indexOf(selectedBlock))}
             index={blocks.indexOf(selectedBlock)}
             total={blocks.length}
             onChange={(patch) => updateBlock(selectedBlock.id, patch)}
@@ -532,6 +568,8 @@ export function MethodBuilder({
 
 function BlockEditor({
   block,
+  processType,
+  previousBlocks,
   index,
   total,
   onChange,
@@ -539,6 +577,8 @@ function BlockEditor({
   onRemove,
 }: {
   block: ActionBlock;
+  processType: UniversalProcess;
+  previousBlocks: ActionBlock[];
   index: number;
   total: number;
   onChange: (patch: Partial<ActionBlock>) => void;
@@ -620,6 +660,25 @@ function BlockEditor({
       </p>
 
       <div className="mt-5 space-y-1.5">
+        <Label>Nome da ação</Label>
+        <Input
+          value={block.name ?? meta.label}
+          onChange={(event) => onChange({ name: event.target.value })}
+          placeholder={`Ex: ${meta.label} referências`}
+        />
+      </div>
+
+      <div className="mt-4 space-y-1.5">
+        <Label>Instruções para o operador</Label>
+        <Textarea
+          value={block.instructions ?? ""}
+          onChange={(event) => onChange({ instructions: event.target.value })}
+          placeholder="Explique o que deve ser feito e qual resultado é esperado."
+          rows={4}
+        />
+      </div>
+
+      <div className="mt-5 space-y-1.5">
         <Label>Operador responsável</Label>
         <Select
           value={block.operator}
@@ -644,35 +703,369 @@ function BlockEditor({
         </Select>
       </div>
 
+      {block.operator === "Humano" ? (
+        <HumanTaskDefinitionEditor
+          block={block}
+          processType={processType}
+          previousBlocks={previousBlocks}
+          onChange={onChange}
+        />
+      ) : (
+        <div className="mt-5 rounded-xl border border-warning/40 bg-warning/5 p-4 text-xs text-muted-foreground">
+          <p className="font-semibold text-warning">Executor ainda não configurado</p>
+          <p className="mt-1">
+            A opção {block.operator} foi preservada, mas dependerá de um plugin. Nesta versão,
+            somente blocos atribuídos ao operador Humano podem ser executados.
+          </p>
+        </div>
+      )}
+
+      {block.operator !== "Humano" && (
+        <div className="mt-6 flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold">Parâmetros</h3>
+            <p className="text-[11px] text-muted-foreground">Informações específicas desta ação.</p>
+          </div>
+          <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addParameter}>
+            <Plus className="size-3" /> Adicionar
+          </Button>
+        </div>
+      )}
+
+      {block.operator !== "Humano" && (
+        <div className="mt-3 space-y-3">
+          {block.parameters.map((parameter) => (
+            <ParameterEditor
+              key={parameter.id}
+              parameter={parameter}
+              onChange={(patch) => updateParameter(parameter.id, patch)}
+              onRemove={() =>
+                onChange({
+                  parameters: block.parameters.filter((item) => item.id !== parameter.id),
+                })
+              }
+            />
+          ))}
+          {block.parameters.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
+              Nenhum parâmetro. O bloco pode funcionar assim ou receber campos personalizados.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HumanTaskDefinitionEditor({
+  block,
+  processType,
+  previousBlocks,
+  onChange,
+}: {
+  block: ActionBlock;
+  processType: UniversalProcess;
+  previousBlocks: ActionBlock[];
+  onChange: (patch: Partial<ActionBlock>) => void;
+}) {
+  const inputs = block.inputs ?? [];
+  const outputs = block.outputs ?? [];
+  const addInput = () => {
+    const input: BlockInputBinding = {
+      id: uid(`${block.id}-input`),
+      label: "Contexto do projeto",
+      source: "project",
+      sourceKey: "title",
+    };
+    onChange({ inputs: [...inputs, input] });
+  };
+  const addOutput = () => {
+    const output: BlockFieldDefinition = {
+      id: uid(`${block.id}-output`),
+      label: "Nova entrega",
+      key: `output_${outputs.length + 1}`,
+      type: "text",
+      required: true,
+      placeholder: "Preencha a entrega",
+    };
+    onChange({ outputs: [...outputs, output] });
+  };
+  return (
+    <>
       <div className="mt-6 flex items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold">Parâmetros</h3>
-          <p className="text-[11px] text-muted-foreground">Informações específicas desta ação.</p>
+          <h3 className="text-sm font-semibold">Entradas e contexto</h3>
+          <p className="text-[11px] text-muted-foreground">O que o humano verá para trabalhar.</p>
         </div>
-        <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addParameter}>
+        <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
           <Plus className="size-3" /> Adicionar
         </Button>
       </div>
-
       <div className="mt-3 space-y-3">
-        {block.parameters.map((parameter) => (
-          <ParameterEditor
-            key={parameter.id}
-            parameter={parameter}
-            onChange={(patch) => updateParameter(parameter.id, patch)}
-            onRemove={() =>
+        {inputs.map((input) => (
+          <InputBindingEditor
+            key={input.id}
+            input={input}
+            previousBlocks={previousBlocks}
+            onChange={(patch) =>
               onChange({
-                parameters: block.parameters.filter((item) => item.id !== parameter.id),
+                inputs: inputs.map((item) => (item.id === input.id ? { ...item, ...patch } : item)),
               })
             }
+            onRemove={() => onChange({ inputs: inputs.filter((item) => item.id !== input.id) })}
           />
         ))}
-        {block.parameters.length === 0 && (
+        {inputs.length === 0 && (
           <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
-            Nenhum parâmetro. O bloco pode funcionar assim ou receber campos personalizados.
+            Saídas dos blocos anteriores aparecem automaticamente. Adicione aqui dados do projeto,
+            biblioteca ou orientações fixas que mereçam destaque.
           </div>
         )}
       </div>
+
+      <div className="mt-6 flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">Entrega esperada</h3>
+          <p className="text-[11px] text-muted-foreground">
+            Campos preenchidos durante a produção do vídeo.
+          </p>
+        </div>
+        <div className="flex gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 px-2 text-[10px]"
+            onClick={() =>
+              onChange({ outputs: createSuggestedHumanFields(processType, block.type) })
+            }
+          >
+            Usar sugestão
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addOutput}>
+            <Plus className="size-3" /> Adicionar
+          </Button>
+        </div>
+      </div>
+      <div className="mt-3 space-y-3">
+        {outputs.map((output) => (
+          <HumanFieldEditor
+            key={output.id}
+            field={output}
+            onChange={(patch) =>
+              onChange({
+                outputs: outputs.map((item) =>
+                  item.id === output.id ? { ...item, ...patch } : item,
+                ),
+              })
+            }
+            onRemove={() => onChange({ outputs: outputs.filter((item) => item.id !== output.id) })}
+          />
+        ))}
+        {outputs.length === 0 && (
+          <div className="rounded-lg border border-dashed border-destructive/50 p-4 text-center text-[11px] text-destructive">
+            Adicione ao menos uma entrega para concluir este bloco humano.
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function InputBindingEditor({
+  input,
+  previousBlocks,
+  onChange,
+  onRemove,
+}: {
+  input: BlockInputBinding;
+  previousBlocks: ActionBlock[];
+  onChange: (patch: Partial<BlockInputBinding>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
+      <div className="flex items-center gap-2">
+        <Input
+          value={input.label}
+          onChange={(event) => onChange({ label: event.target.value })}
+          className="h-8 text-xs"
+        />
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+        >
+          <Trash2 className="size-3" />
+        </Button>
+      </div>
+      <Select
+        value={input.source}
+        onValueChange={(source) => onChange({ source: source as BlockInputBinding["source"] })}
+      >
+        <SelectTrigger className="h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="project">Dado do projeto</SelectItem>
+          <SelectItem value="previous_block">Saída de bloco anterior</SelectItem>
+          <SelectItem value="channel_library">Biblioteca do canal</SelectItem>
+          <SelectItem value="static">Texto fixo</SelectItem>
+        </SelectContent>
+      </Select>
+      {input.source === "project" && (
+        <Select
+          value={input.sourceKey ?? "title"}
+          onValueChange={(sourceKey) => onChange({ sourceKey })}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="title">Nome do projeto/vídeo</SelectItem>
+            <SelectItem value="deadline">Prazo</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+      {input.source === "previous_block" && (
+        <div className="grid grid-cols-2 gap-2">
+          <Select value={input.blockId} onValueChange={(blockId) => onChange({ blockId })}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Bloco" />
+            </SelectTrigger>
+            <SelectContent>
+              {previousBlocks.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name ?? item.type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            value={input.sourceKey ?? ""}
+            onChange={(event) => onChange({ sourceKey: event.target.value })}
+            placeholder="Chave (opcional)"
+            className="h-8 text-xs"
+          />
+        </div>
+      )}
+      {input.source === "channel_library" && (
+        <Input
+          value={input.collection ?? ""}
+          onChange={(event) => onChange({ collection: event.target.value })}
+          placeholder="Coleção da biblioteca"
+          className="h-8 text-xs"
+        />
+      )}
+      {input.source === "static" && (
+        <Textarea
+          value={input.staticValue ?? ""}
+          onChange={(event) => onChange({ staticValue: event.target.value })}
+          placeholder="Texto exibido em todas as execuções"
+          rows={2}
+          className="text-xs"
+        />
+      )}
+    </div>
+  );
+}
+
+function HumanFieldEditor({
+  field,
+  onChange,
+  onRemove,
+}: {
+  field: BlockFieldDefinition;
+  onChange: (patch: Partial<BlockFieldDefinition>) => void;
+  onRemove: () => void;
+}) {
+  const usesOptions = field.type === "select" || field.type === "multiselect";
+  return (
+    <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {field.key}
+        </span>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-7 text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+        >
+          <Trash2 className="size-3" />
+        </Button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Input
+          value={field.label}
+          onChange={(event) => onChange({ label: event.target.value })}
+          placeholder="Nome"
+          className="h-8 text-xs"
+        />
+        <Input
+          value={field.key}
+          onChange={(event) => onChange({ key: event.target.value })}
+          placeholder="chave"
+          className="h-8 font-mono text-xs"
+        />
+      </div>
+      <Select
+        value={field.type}
+        onValueChange={(type) => onChange({ type: type as HumanFieldType })}
+      >
+        <SelectTrigger className="h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {FIELD_TYPES.map((type) => (
+            <SelectItem key={type.value} value={type.value}>
+              {type.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {usesOptions && (
+        <>
+          <Input
+            value={(field.options ?? []).join(", ")}
+            onChange={(event) =>
+              onChange({
+                options: event.target.value
+                  .split(",")
+                  .map((item) => item.trim())
+                  .filter(Boolean),
+              })
+            }
+            placeholder="Opções fixas separadas por vírgula"
+            className="h-8 text-xs"
+          />
+          <Input
+            value={field.libraryCollection ?? ""}
+            onChange={(event) => onChange({ libraryCollection: event.target.value })}
+            placeholder="Ou coleção da biblioteca"
+            className="h-8 text-xs"
+          />
+        </>
+      )}
+      <Input
+        value={field.placeholder ?? ""}
+        onChange={(event) => onChange({ placeholder: event.target.value })}
+        placeholder="Placeholder"
+        className="h-8 text-xs"
+      />
+      <Input
+        value={field.helpText ?? ""}
+        onChange={(event) => onChange({ helpText: event.target.value })}
+        placeholder="Orientação adicional"
+        className="h-8 text-xs"
+      />
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Checkbox
+          checked={field.required}
+          onCheckedChange={(checked) => onChange({ required: checked === true })}
+        />{" "}
+        Entrega obrigatória
+      </label>
     </div>
   );
 }

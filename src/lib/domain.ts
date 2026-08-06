@@ -28,6 +28,7 @@ export type ProcessState =
   | "not_started"
   | "configuring"
   | "processing"
+  | "awaiting_human"
   | "awaiting_review"
   | "approved"
   | "done"
@@ -37,6 +38,41 @@ export type ProcessState =
 export type BlockOperator = "IA" | "Humano" | "Código";
 export type BlockType = "BUSCAR" | "ESCOLHER" | "CRIAR" | "VALIDAR";
 export type BlockParameterType = "text" | "number" | "select" | "boolean" | "textarea";
+
+export type HumanFieldType =
+  | BlockParameterType
+  | "multiselect"
+  | "list"
+  | "url"
+  | "file"
+  | "image"
+  | "audio"
+  | "video"
+  | "approval";
+
+export type BlockInputSource = "project" | "previous_block" | "channel_library" | "static";
+
+export type BlockInputBinding = {
+  id: string;
+  label: string;
+  source: BlockInputSource;
+  sourceKey?: string;
+  blockId?: string;
+  collection?: string;
+  staticValue?: string;
+};
+
+export type BlockFieldDefinition = {
+  id: string;
+  label: string;
+  key: string;
+  type: HumanFieldType;
+  required: boolean;
+  placeholder?: string;
+  helpText?: string;
+  options?: string[];
+  libraryCollection?: string;
+};
 
 export type BlockParameter = {
   id: string;
@@ -52,6 +88,10 @@ export type ActionBlock = {
   id: string;
   type: BlockType;
   operator: BlockOperator;
+  name?: string;
+  instructions?: string;
+  inputs?: BlockInputBinding[];
+  outputs?: BlockFieldDefinition[];
   parameters: BlockParameter[];
   order: number;
 };
@@ -101,6 +141,52 @@ export type Project = {
   createdAt: string;
 };
 
+export type StoredFile = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+
+export type RuntimeValue = string | number | boolean | string[] | StoredFile | StoredFile[] | null;
+
+export type BlockExecutionStatus =
+  "pending" | "awaiting_human" | "in_progress" | "completed" | "blocked_executor" | "cancelled";
+
+export type BlockExecution = {
+  blockId: string;
+  status: BlockExecutionStatus;
+  values: Record<string, RuntimeValue>;
+  startedAt?: string;
+  completedAt?: string;
+};
+
+export type ProcessExecutionStatus =
+  "not_started" | "running" | "awaiting_human" | "blocked_executor" | "completed" | "cancelled";
+
+export type ProcessExecution = {
+  id: string;
+  projectId: string;
+  channelId: string;
+  processType: UniversalProcess;
+  methodSnapshot: ProcessMethod;
+  blocks: BlockExecution[];
+  status: ProcessExecutionStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ChannelLibraryItem = {
+  id: string;
+  channelId: string;
+  collection: string;
+  name: string;
+  value: string;
+  description?: string;
+  createdAt: string;
+};
+
 export const PROCESS_META: Record<ProcessId, { label: string; icon: LucideIcon }> = {
   theme: { label: "Tema", icon: Sparkles },
   title: { label: "Título", icon: Type },
@@ -123,6 +209,7 @@ export const STATE_META: Record<
   configuring: { label: "Configurando", tone: "info" },
   processing: { label: "Em processamento", tone: "brand" },
   awaiting_review: { label: "Aguardando revisão", tone: "warning" },
+  awaiting_human: { label: "Aguardando humano", tone: "warning" },
   approved: { label: "Aprovado", tone: "success" },
   done: { label: "Concluído", tone: "done" },
   error: { label: "Erro", tone: "error" },

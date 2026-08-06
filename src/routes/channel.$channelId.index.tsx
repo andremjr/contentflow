@@ -139,7 +139,7 @@ function ChannelWorkspace() {
                   <span>{channel.handle}</span>
                   <span className="inline-flex items-center gap-1">
                     <UsersRound className="size-3.5" />
-                    {channel.subscribers || "Inscritos ocultos"}
+                    {channel.subscribers || "0 inscritos"}
                   </span>
                 </div>
               </div>
