@@ -9,35 +9,30 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as ChannelChannelIdRouteImport } from './routes/channel.$channelId'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectProjectIdRouteImport } from './routes/project.$projectId'
-import { Route as ChannelChannelIdIndexRouteImport } from './routes/channel.$channelId.index'
-import { Route as ChannelChannelIdMethodsRouteImport } from './routes/channel.$channelId.methods'
+import { Route as ChannelChannelIdRouteImport } from './routes/channel.$channelId'
 import { Route as ProjectProjectIdIndexRouteImport } from './routes/project.$projectId.index'
-import { Route as ProjectProjectIdAssetsRouteImport } from './routes/project.$projectId.assets'
-import { Route as ProjectProjectIdEditRouteImport } from './routes/project.$projectId.edit'
-import { Route as ProjectProjectIdNarrationRouteImport } from './routes/project.$projectId.narration'
-import { Route as ProjectProjectIdPublishRouteImport } from './routes/project.$projectId.publish'
-import { Route as ProjectProjectIdScriptRouteImport } from './routes/project.$projectId.script'
-import { Route as ProjectProjectIdThemeRouteImport } from './routes/project.$projectId.theme'
-import { Route as ProjectProjectIdThumbnailRouteImport } from './routes/project.$projectId.thumbnail'
+import { Route as ChannelChannelIdIndexRouteImport } from './routes/channel.$channelId.index'
 import { Route as ProjectProjectIdTitleRouteImport } from './routes/project.$projectId.title'
+import { Route as ProjectProjectIdThumbnailRouteImport } from './routes/project.$projectId.thumbnail'
+import { Route as ProjectProjectIdThemeRouteImport } from './routes/project.$projectId.theme'
+import { Route as ProjectProjectIdScriptRouteImport } from './routes/project.$projectId.script'
+import { Route as ProjectProjectIdPublishRouteImport } from './routes/project.$projectId.publish'
+import { Route as ProjectProjectIdNarrationRouteImport } from './routes/project.$projectId.narration'
+import { Route as ProjectProjectIdEditRouteImport } from './routes/project.$projectId.edit'
+import { Route as ProjectProjectIdAssetsRouteImport } from './routes/project.$projectId.assets'
+import { Route as ChannelChannelIdMethodsRouteImport } from './routes/channel.$channelId.methods'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ChannelChannelIdRoute = ChannelChannelIdRouteImport.update({
-  id: '/channel/$channelId',
-  path: '/channel/$channelId',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectProjectIdRoute = ProjectProjectIdRouteImport.update({
@@ -45,50 +40,24 @@ const ProjectProjectIdRoute = ProjectProjectIdRouteImport.update({
   path: '/project/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ChannelChannelIdIndexRoute = ChannelChannelIdIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => ChannelChannelIdRoute,
-} as any)
-const ChannelChannelIdMethodsRoute = ChannelChannelIdMethodsRouteImport.update({
-  id: '/methods',
-  path: '/methods',
-  getParentRoute: () => ChannelChannelIdRoute,
+const ChannelChannelIdRoute = ChannelChannelIdRouteImport.update({
+  id: '/channel/$channelId',
+  path: '/channel/$channelId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectProjectIdIndexRoute = ProjectProjectIdIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ProjectProjectIdRoute,
 } as any)
-const ProjectProjectIdAssetsRoute = ProjectProjectIdAssetsRouteImport.update({
-  id: '/assets',
-  path: '/assets',
-  getParentRoute: () => ProjectProjectIdRoute,
+const ChannelChannelIdIndexRoute = ChannelChannelIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ChannelChannelIdRoute,
 } as any)
-const ProjectProjectIdEditRoute = ProjectProjectIdEditRouteImport.update({
-  id: '/edit',
-  path: '/edit',
-  getParentRoute: () => ProjectProjectIdRoute,
-} as any)
-const ProjectProjectIdNarrationRoute =
-  ProjectProjectIdNarrationRouteImport.update({
-    id: '/narration',
-    path: '/narration',
-    getParentRoute: () => ProjectProjectIdRoute,
-  } as any)
-const ProjectProjectIdPublishRoute = ProjectProjectIdPublishRouteImport.update({
-  id: '/publish',
-  path: '/publish',
-  getParentRoute: () => ProjectProjectIdRoute,
-} as any)
-const ProjectProjectIdScriptRoute = ProjectProjectIdScriptRouteImport.update({
-  id: '/script',
-  path: '/script',
-  getParentRoute: () => ProjectProjectIdRoute,
-} as any)
-const ProjectProjectIdThemeRoute = ProjectProjectIdThemeRouteImport.update({
-  id: '/theme',
-  path: '/theme',
+const ProjectProjectIdTitleRoute = ProjectProjectIdTitleRouteImport.update({
+  id: '/title',
+  path: '/title',
   getParentRoute: () => ProjectProjectIdRoute,
 } as any)
 const ProjectProjectIdThumbnailRoute =
@@ -97,10 +66,41 @@ const ProjectProjectIdThumbnailRoute =
     path: '/thumbnail',
     getParentRoute: () => ProjectProjectIdRoute,
   } as any)
-const ProjectProjectIdTitleRoute = ProjectProjectIdTitleRouteImport.update({
-  id: '/title',
-  path: '/title',
+const ProjectProjectIdThemeRoute = ProjectProjectIdThemeRouteImport.update({
+  id: '/theme',
+  path: '/theme',
   getParentRoute: () => ProjectProjectIdRoute,
+} as any)
+const ProjectProjectIdScriptRoute = ProjectProjectIdScriptRouteImport.update({
+  id: '/script',
+  path: '/script',
+  getParentRoute: () => ProjectProjectIdRoute,
+} as any)
+const ProjectProjectIdPublishRoute = ProjectProjectIdPublishRouteImport.update({
+  id: '/publish',
+  path: '/publish',
+  getParentRoute: () => ProjectProjectIdRoute,
+} as any)
+const ProjectProjectIdNarrationRoute =
+  ProjectProjectIdNarrationRouteImport.update({
+    id: '/narration',
+    path: '/narration',
+    getParentRoute: () => ProjectProjectIdRoute,
+  } as any)
+const ProjectProjectIdEditRoute = ProjectProjectIdEditRouteImport.update({
+  id: '/edit',
+  path: '/edit',
+  getParentRoute: () => ProjectProjectIdRoute,
+} as any)
+const ProjectProjectIdAssetsRoute = ProjectProjectIdAssetsRouteImport.update({
+  id: '/assets',
+  path: '/assets',
+  getParentRoute: () => ProjectProjectIdRoute,
+} as any)
+const ChannelChannelIdMethodsRoute = ChannelChannelIdMethodsRouteImport.update({
+  id: '/methods',
+  path: '/methods',
+  getParentRoute: () => ChannelChannelIdRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -214,13 +214,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -228,11 +221,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/channel/$channelId': {
-      id: '/channel/$channelId'
-      path: '/channel/$channelId'
-      fullPath: '/channel/$channelId'
-      preLoaderRoute: typeof ChannelChannelIdRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/project/$projectId': {
@@ -242,19 +235,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/channel/$channelId/': {
-      id: '/channel/$channelId/'
-      path: '/'
-      fullPath: '/channel/$channelId/'
-      preLoaderRoute: typeof ChannelChannelIdIndexRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
-    }
-    '/channel/$channelId/methods': {
-      id: '/channel/$channelId/methods'
-      path: '/methods'
-      fullPath: '/channel/$channelId/methods'
-      preLoaderRoute: typeof ChannelChannelIdMethodsRouteImport
-      parentRoute: typeof ChannelChannelIdRoute
+    '/channel/$channelId': {
+      id: '/channel/$channelId'
+      path: '/channel/$channelId'
+      fullPath: '/channel/$channelId'
+      preLoaderRoute: typeof ChannelChannelIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/project/$projectId/': {
       id: '/project/$projectId/'
@@ -263,46 +249,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectProjectIdIndexRouteImport
       parentRoute: typeof ProjectProjectIdRoute
     }
-    '/project/$projectId/assets': {
-      id: '/project/$projectId/assets'
-      path: '/assets'
-      fullPath: '/project/$projectId/assets'
-      preLoaderRoute: typeof ProjectProjectIdAssetsRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
+    '/channel/$channelId/': {
+      id: '/channel/$channelId/'
+      path: '/'
+      fullPath: '/channel/$channelId/'
+      preLoaderRoute: typeof ChannelChannelIdIndexRouteImport
+      parentRoute: typeof ChannelChannelIdRoute
     }
-    '/project/$projectId/edit': {
-      id: '/project/$projectId/edit'
-      path: '/edit'
-      fullPath: '/project/$projectId/edit'
-      preLoaderRoute: typeof ProjectProjectIdEditRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
-    }
-    '/project/$projectId/narration': {
-      id: '/project/$projectId/narration'
-      path: '/narration'
-      fullPath: '/project/$projectId/narration'
-      preLoaderRoute: typeof ProjectProjectIdNarrationRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
-    }
-    '/project/$projectId/publish': {
-      id: '/project/$projectId/publish'
-      path: '/publish'
-      fullPath: '/project/$projectId/publish'
-      preLoaderRoute: typeof ProjectProjectIdPublishRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
-    }
-    '/project/$projectId/script': {
-      id: '/project/$projectId/script'
-      path: '/script'
-      fullPath: '/project/$projectId/script'
-      preLoaderRoute: typeof ProjectProjectIdScriptRouteImport
-      parentRoute: typeof ProjectProjectIdRoute
-    }
-    '/project/$projectId/theme': {
-      id: '/project/$projectId/theme'
-      path: '/theme'
-      fullPath: '/project/$projectId/theme'
-      preLoaderRoute: typeof ProjectProjectIdThemeRouteImport
+    '/project/$projectId/title': {
+      id: '/project/$projectId/title'
+      path: '/title'
+      fullPath: '/project/$projectId/title'
+      preLoaderRoute: typeof ProjectProjectIdTitleRouteImport
       parentRoute: typeof ProjectProjectIdRoute
     }
     '/project/$projectId/thumbnail': {
@@ -312,12 +270,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectProjectIdThumbnailRouteImport
       parentRoute: typeof ProjectProjectIdRoute
     }
-    '/project/$projectId/title': {
-      id: '/project/$projectId/title'
-      path: '/title'
-      fullPath: '/project/$projectId/title'
-      preLoaderRoute: typeof ProjectProjectIdTitleRouteImport
+    '/project/$projectId/theme': {
+      id: '/project/$projectId/theme'
+      path: '/theme'
+      fullPath: '/project/$projectId/theme'
+      preLoaderRoute: typeof ProjectProjectIdThemeRouteImport
       parentRoute: typeof ProjectProjectIdRoute
+    }
+    '/project/$projectId/script': {
+      id: '/project/$projectId/script'
+      path: '/script'
+      fullPath: '/project/$projectId/script'
+      preLoaderRoute: typeof ProjectProjectIdScriptRouteImport
+      parentRoute: typeof ProjectProjectIdRoute
+    }
+    '/project/$projectId/publish': {
+      id: '/project/$projectId/publish'
+      path: '/publish'
+      fullPath: '/project/$projectId/publish'
+      preLoaderRoute: typeof ProjectProjectIdPublishRouteImport
+      parentRoute: typeof ProjectProjectIdRoute
+    }
+    '/project/$projectId/narration': {
+      id: '/project/$projectId/narration'
+      path: '/narration'
+      fullPath: '/project/$projectId/narration'
+      preLoaderRoute: typeof ProjectProjectIdNarrationRouteImport
+      parentRoute: typeof ProjectProjectIdRoute
+    }
+    '/project/$projectId/edit': {
+      id: '/project/$projectId/edit'
+      path: '/edit'
+      fullPath: '/project/$projectId/edit'
+      preLoaderRoute: typeof ProjectProjectIdEditRouteImport
+      parentRoute: typeof ProjectProjectIdRoute
+    }
+    '/project/$projectId/assets': {
+      id: '/project/$projectId/assets'
+      path: '/assets'
+      fullPath: '/project/$projectId/assets'
+      preLoaderRoute: typeof ProjectProjectIdAssetsRouteImport
+      parentRoute: typeof ProjectProjectIdRoute
+    }
+    '/channel/$channelId/methods': {
+      id: '/channel/$channelId/methods'
+      path: '/methods'
+      fullPath: '/channel/$channelId/methods'
+      preLoaderRoute: typeof ChannelChannelIdMethodsRouteImport
+      parentRoute: typeof ChannelChannelIdRoute
     }
   }
 }
