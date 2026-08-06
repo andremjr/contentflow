@@ -4,10 +4,10 @@ Aplicativo local para organizar a produção de vídeos. O frontend roda no nave
 
 ## Como usar
 
-Você precisa ter Node.js 20 ou mais recente instalado.
+Você precisa ter Node.js 22.12 ou mais recente instalado.
 
 ```sh
-git clone <url-do-repositorio>
+git clone https://github.com/andremjr/contentflow-os.git
 cd contentflow-os
 npm install
 npm run dev
