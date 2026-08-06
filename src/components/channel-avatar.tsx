@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { Channel } from "@/lib/mock-data";
+import type { Channel } from "@/lib/domain";
 
 const SIZE = {
   sm: "size-6 text-[10px]",
@@ -12,7 +12,7 @@ export function ChannelAvatar({
   size = "md",
   className,
 }: {
-  channel: Pick<Channel, "name" | "color">;
+  channel: Pick<Channel, "name" | "color" | "avatarUrl">;
   size?: keyof typeof SIZE;
   className?: string;
 }) {
@@ -23,14 +23,28 @@ export function ChannelAvatar({
     .join("")
     .toUpperCase();
 
+  const sharedClassName = cn(
+    "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold text-white ring-1 ring-white/15",
+    SIZE[size],
+    className,
+  );
+
+  if (channel.avatarUrl) {
+    return (
+      <img
+        src={channel.avatarUrl}
+        alt={`Foto do canal ${channel.name}`}
+        className={cn(sharedClassName, "object-cover")}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
+
   return (
     <span
       aria-hidden
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-lg font-semibold text-white ring-1 ring-white/10",
-        SIZE[size],
-        className,
-      )}
+      className={sharedClassName}
       style={{
         background: `linear-gradient(135deg, ${channel.color}, color-mix(in oklab, ${channel.color} 55%, #0F172A))`,
       }}

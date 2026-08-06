@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { createProject } from "@/lib/store";
-import type { Project } from "@/lib/mock-data";
+import type { Project } from "@/lib/domain";
 
 export function NewProjectDialog({
   channelId,
@@ -73,9 +73,7 @@ export function NewProjectDialog({
             </div>
             <div>
               <DialogTitle>Novo projeto</DialogTitle>
-              <DialogDescription>
-                O projeto começará na etapa de Pesquisa.
-              </DialogDescription>
+              <DialogDescription>O projeto inicia na etapa de Tema.</DialogDescription>
             </div>
           </div>
         </DialogHeader>

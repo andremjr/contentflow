@@ -81,7 +81,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "Sistema operacional para gerenciar a produção completa de canais do YouTube: pesquisa, roteiro, narração, edição e publicação.",
+          "Sistema operacional para gerenciar a produção completa de canais do YouTube: tema, roteiro, narração, edição e publicação.",
       },
       { name: "author", content: "ContentFlow OS" },
       { name: "theme-color", content: "#08111F" },

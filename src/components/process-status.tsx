@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { STATE_META, type ProcessState } from "@/lib/mock-data";
+import { STATE_META, type ProcessState } from "@/lib/domain";
 
 const TONE_CLASS: Record<
   (typeof STATE_META)[ProcessState]["tone"],

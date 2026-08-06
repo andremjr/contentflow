@@ -1,24 +1,22 @@
 # ContentFlow OS
 
-crie uma página em branco
+Aplicativo local para organizar a produção de vídeos. O frontend roda no navegador e a API roda localmente na máquina do usuário.
 
-This project was built with [Lovable](https://lovable.dev).
+## Como usar
 
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/a654b1e4-70a5-4c34-ae5c-41346efe29d7).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Você precisa ter Node.js 20 ou mais recente instalado.
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+git clone <url-do-repositorio>
+cd contentflow-os
+npm install
 npm run dev
 ```
+
+Abra `http://127.0.0.1:8080`.
+
+## Dados locais
+
+Ao iniciar, o aplicativo cria automaticamente o banco SQLite em `data/contentflow-os.sqlite`. Essa pasta não é enviada ao GitHub, portanto cada pessoa mantém canais, projetos e métodos apenas na própria máquina.
+
+Não há login nem sincronização em nuvem nesta fase.

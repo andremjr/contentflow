@@ -1,10 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  Plus,
-  MoreHorizontal,
-  ArrowRight,
-  Radio,
-} from "lucide-react";
+import { ArrowRight, LoaderCircle, MoreHorizontal, Plus, Radio, UsersRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { ChannelAvatar } from "@/components/channel-avatar";
@@ -17,8 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NewChannelDialog } from "@/components/new-channel-dialog";
-import type { Channel } from "@/lib/mock-data";
-import { useChannels, removeChannel } from "@/lib/store";
+import type { Channel } from "@/lib/domain";
+import { removeChannel, useChannels, useDatabaseReady } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard")({
@@ -39,10 +34,7 @@ export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
 });
 
-const STATUS_META: Record<
-  Channel["status"],
-  { label: string; class: string; dot: string }
-> = {
+const STATUS_META: Record<Channel["status"], { label: string; class: string; dot: string }> = {
   healthy: {
     label: "Saudável",
     class: "bg-success/10 text-success border-success/40",
@@ -62,6 +54,7 @@ const STATUS_META: Record<
 
 function DashboardPage() {
   const channels = useChannels();
+  const databaseReady = useDatabaseReady();
   const hasChannels = channels.length > 0;
 
   return (
@@ -74,8 +67,15 @@ function DashboardPage() {
         actions={<NewChannelDialog />}
       />
 
-      <main className="flex-1 px-6 py-6">
-        {hasChannels ? (
+      <main className="flex-1 px-4 py-4 sm:px-6 sm:py-6">
+        {!databaseReady ? (
+          <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-2">
+              <LoaderCircle className="size-4 animate-spin" />
+              Carregando seus canais...
+            </span>
+          </div>
+        ) : hasChannels ? (
           <section>
             <header className="mb-4">
               <h2 className="text-sm font-semibold">Seus canais</h2>
@@ -98,14 +98,18 @@ function DashboardPage() {
                     <div className="p-5">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
-                          <ChannelAvatar channel={c} size="lg" />
+                          <ChannelAvatar channel={c} size="lg" className="!size-12" />
                           <div className="min-w-0">
-                            <h3 className="truncate text-base font-semibold">
-                              {c.name}
-                            </h3>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {c.handle} · {c.niche} · {c.language}
-                            </p>
+                            <h3 className="truncate text-base font-semibold">{c.name}</h3>
+                            <p className="truncate text-xs text-muted-foreground">{c.handle}</p>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                              <span className="inline-flex items-center gap-1">
+                                <UsersRound className="size-3" />
+                                {c.subscribers || "Inscritos ocultos"}
+                              </span>
+                              {c.niche && <span>{c.niche}</span>}
+                              <span>{c.language}</span>
+                            </div>
                           </div>
                         </div>
                         <DropdownMenu>
@@ -120,9 +124,7 @@ function DashboardPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem>Editar canal</DropdownMenuItem>
-                            <DropdownMenuItem>
-                              Pausar produção
-                            </DropdownMenuItem>
+                            <DropdownMenuItem>Pausar produção</DropdownMenuItem>
                             <DropdownMenuItem>Duplicar</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -165,8 +167,7 @@ function EmptyState() {
       </div>
       <h2 className="mt-4 text-lg font-semibold">Nenhum canal ainda</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Adicione seu primeiro canal para começar a organizar a produção de
-        conteúdo.
+        Adicione seu primeiro canal para começar a organizar a produção de conteúdo.
       </p>
       <div className="mt-5">
         <NewChannelDialog

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Radio, Check } from "lucide-react";
+import { Check, LoaderCircle, Plus, Youtube } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,8 +22,8 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import type { Channel } from "@/lib/mock-data";
-import { createChannel } from "@/lib/store";
+import { createEmptyMethods, type Channel } from "@/lib/domain";
+import { createChannel, resolveYouTubeChannel } from "@/lib/store";
 
 const COLOR_PRESETS = [
   "#2563EB",
@@ -37,17 +37,7 @@ const COLOR_PRESETS = [
 ];
 
 const LANGUAGES = ["PT-BR", "EN", "ES", "FR", "DE"];
-const FREQUENCIES = [
-  "1x / semana",
-  "2x / semana",
-  "3x / semana",
-  "Diário",
-  "Quinzenal",
-];
-
-export type NewChannelInput = Omit<Channel, "id" | "trend" | "currentProjectProgress" | "activeProjects" | "nextPublish"> & {
-  description?: string;
-};
+const FREQUENCIES = ["1x / semana", "2x / semana", "3x / semana", "Diário", "Quinzenal"];
 
 export function NewChannelDialog({
   trigger,
@@ -57,56 +47,62 @@ export function NewChannelDialog({
   onCreate?: (channel: Channel) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [niche, setNiche] = useState("");
   const [language, setLanguage] = useState("PT-BR");
   const [frequency, setFrequency] = useState("1x / semana");
-  const [subscribers, setSubscribers] = useState("");
   const [color, setColor] = useState(COLOR_PRESETS[0]);
   const [description, setDescription] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const canSubmit = name.trim().length > 0 && handle.trim().length > 0;
+  const canSubmit = handle.trim().length >= 3 && !isLoading;
 
   function reset() {
-    setName("");
     setHandle("");
     setNiche("");
     setLanguage("PT-BR");
     setFrequency("1x / semana");
-    setSubscribers("");
     setColor(COLOR_PRESETS[0]);
     setDescription("");
+    setIsLoading(false);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
 
-    const normalizedHandle = handle.startsWith("@") ? handle : `@${handle}`;
-    const newChannel: Channel = {
-      id: `ch-new-${Date.now()}`,
-      name: name.trim(),
-      handle: normalizedHandle,
-      color,
-      subscribers: subscribers.trim() || "—",
-      niche: niche.trim() || "Geral",
-      language,
-      activeProjects: 0,
-      frequency,
-      nextPublish: "—",
-      currentProjectProgress: 0,
-      status: "healthy",
-      trend: Array.from({ length: 12 }, () => Math.round(20 + Math.random() * 40)),
-    };
+    setIsLoading(true);
+    try {
+      const youtube = await resolveYouTubeChannel(handle);
+      const newChannel: Omit<Channel, "createdAt"> = {
+        id: `ch-${crypto.randomUUID()}`,
+        ...youtube,
+        color,
+        description: description.trim(),
+        niche: niche.trim(),
+        language,
+        activeProjects: 0,
+        frequency,
+        nextPublish: "",
+        currentProjectProgress: 0,
+        status: "healthy",
+        trend: [],
+        methods: createEmptyMethods(),
+      };
 
-    createChannel(newChannel);
-    onCreate?.(newChannel);
-    toast.success("Canal criado", {
-      description: `${newChannel.name} criado como novo workspace.`,
-    });
-    reset();
-    setOpen(false);
+      const persistedChannel = createChannel(newChannel);
+      onCreate?.(persistedChannel);
+      toast.success("Canal conectado", {
+        description: `${newChannel.name} foi identificado pelo YouTube.`,
+      });
+      reset();
+      setOpen(false);
+    } catch (error) {
+      toast.error("Não foi possível conectar o canal", {
+        description: error instanceof Error ? error.message : "Confira o @ e tente novamente.",
+      });
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -135,12 +131,12 @@ export function NewChannelDialog({
               className="grid size-10 place-items-center rounded-xl border border-border/60"
               style={{ background: `${color}20`, borderColor: `${color}66` }}
             >
-              <Radio className="size-5" style={{ color }} />
+              <Youtube className="size-5" style={{ color }} />
             </div>
             <div>
               <DialogTitle>Novo canal</DialogTitle>
               <DialogDescription>
-                Cadastre um canal do YouTube para começar a produção.
+                Informe o @. Nome, inscritos e imagens serão buscados automaticamente.
               </DialogDescription>
             </div>
           </div>
@@ -149,34 +145,19 @@ export function NewChannelDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="ch-name">Nome do canal *</Label>
-              <Input
-                id="ch-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex.: Deep Space Docs"
-                autoFocus
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="ch-handle">Handle *</Label>
+              <Label htmlFor="ch-handle">@ do canal *</Label>
               <Input
                 id="ch-handle"
                 value={handle}
                 onChange={(e) => setHandle(e.target.value)}
                 placeholder="@meucanal"
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect="off"
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="ch-subs">Inscritos</Label>
-              <Input
-                id="ch-subs"
-                value={subscribers}
-                onChange={(e) => setSubscribers(e.target.value)}
-                placeholder="Ex.: 120K"
-              />
+              <p className="text-[11px] text-muted-foreground">
+                Você também pode colar a URL completa do canal.
+              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -239,9 +220,7 @@ export function NewChannelDialog({
                     }}
                     aria-label={`Cor ${c}`}
                   >
-                    {color === c && (
-                      <Check className="absolute inset-0 m-auto size-4 text-white" />
-                    )}
+                    {color === c && <Check className="absolute inset-0 m-auto size-4 text-white" />}
                   </button>
                 ))}
               </div>
@@ -264,6 +243,7 @@ export function NewChannelDialog({
               type="button"
               variant="ghost"
               onClick={() => setOpen(false)}
+              disabled={isLoading}
             >
               Cancelar
             </Button>
@@ -272,8 +252,12 @@ export function NewChannelDialog({
               disabled={!canSubmit}
               className="gap-1.5 gradient-brand text-white"
             >
-              <Plus className="size-4" />
-              Criar canal
+              {isLoading ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Plus className="size-4" />
+              )}
+              {isLoading ? "Buscando no YouTube..." : "Conectar canal"}
             </Button>
           </DialogFooter>
         </form>

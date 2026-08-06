@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ProjectProcessPage } from "@/components/project-process-page";
-export const Route = createFileRoute("/project/$projectId/assets")({
+export const Route = createFileRoute("/project/$projectId/title")({
   component: () => (
     <ProjectProcessPage
       projectId={Route.useParams().projectId}
-      processId="assets"
-      description="Organiza os assets visuais conforme o método salvo."
+      processId="title"
+      description="Cria títulos conforme o método salvo do canal."
     />
   ),
 });

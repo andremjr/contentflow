@@ -1,4 +1,4 @@
-import { createFileRoute, notFound, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
   Plus,
@@ -10,8 +10,11 @@ import {
   LayoutGrid,
   Table as TableIcon,
   FolderKanban,
+  RefreshCw,
   Trash2,
+  UsersRound,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { ChannelAvatar } from "@/components/channel-avatar";
@@ -36,63 +39,41 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  channels,
-  PROCESS_META,
-  type Project,
-} from "@/lib/mock-data";
-import { useChannel, useProjects, removeProject } from "@/lib/store";
+import { PROCESS_META, type Channel, type Project } from "@/lib/domain";
+import { removeProject, syncChannelFromYouTube, useChannel, useProjects } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/channel/$channelId/")({
-  head: ({ params }) => {
-    const ch = channels.find((c) => c.id === params.channelId);
-    const title = ch ? `${ch.name} — ContentFlow OS` : "Canal — ContentFlow OS";
-    return {
-      meta: [
-        { title },
-        {
-          name: "description",
-          content: ch
-            ? `Projetos do canal ${ch.name}.`
-            : "Projetos do canal.",
-        },
-      ],
-    };
-  },
-  loader: ({ params }) => {
-    const channel = channels.find((c) => c.id === params.channelId);
-    if (!channel) throw notFound();
-    return { channel };
-  },
-  notFoundComponent: () => (
-    <AppShell>
-      <div className="flex flex-1 items-center justify-center p-10">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold">Canal não encontrado</h2>
-          <Button asChild className="mt-4">
-            <Link to="/dashboard">Ir para a visão geral</Link>
-          </Button>
-        </div>
-      </div>
-    </AppShell>
-  ),
-  component: ChannelWorkspace,
-});
+export const Route = createFileRoute("/channel/$channelId/")({ component: ChannelWorkspace });
 
 function ChannelWorkspace() {
-  const { channel: loaderChannel } = Route.useLoaderData();
-  const liveChannel = useChannel(loaderChannel.id);
-  const channel = liveChannel ?? loaderChannel;
-  const projects = useProjects(channel.id);
+  const { channelId } = Route.useParams();
+  const channel = useChannel(channelId);
+  const projects = useProjects(channelId);
   const [view, setView] = useState<"cards" | "table">("cards");
   const [search, setSearch] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const filtered = useMemo(() => {
     if (!search) return projects;
     const q = search.toLowerCase();
     return projects.filter((p) => p.title.toLowerCase().includes(q));
   }, [projects, search]);
+
+  if (!channel) return null;
+
+  async function syncYouTube() {
+    setIsSyncing(true);
+    try {
+      await syncChannelFromYouTube(channelId);
+      toast.success("Canal atualizado com os dados públicos do YouTube.");
+    } catch (error) {
+      toast.error("Não foi possível atualizar o canal", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  }
 
   return (
     <AppShell>
@@ -110,11 +91,7 @@ function ChannelWorkspace() {
             <NewProjectDialog channelId={channel.id} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-9 text-muted-foreground"
-                >
+                <Button variant="ghost" size="icon" className="size-9 text-muted-foreground">
                   <MoreHorizontal className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -124,16 +101,63 @@ function ChannelWorkspace() {
                 <DropdownMenuItem>Editar canal</DropdownMenuItem>
                 <DropdownMenuItem>Duplicar configurações</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive">
-                  Arquivar canal
-                </DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive">Arquivar canal</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </>
         }
       />
 
-      <main className="flex-1 space-y-4 px-6 py-6">
+      <main className="flex-1 space-y-4 px-4 py-4 sm:px-6 sm:py-6">
+        <section className="relative isolate min-h-36 overflow-hidden rounded-2xl border border-border/70 bg-card sm:min-h-44">
+          {channel.bannerUrl ? (
+            <img
+              src={channel.bannerUrl}
+              alt={`Banner do canal ${channel.name}`}
+              className="absolute inset-0 size-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div
+              className="absolute inset-0"
+              style={{
+                background: `radial-gradient(circle at 20% 20%, ${channel.color}88, transparent 45%), linear-gradient(135deg, ${channel.color}55, #090f1c 70%)`,
+              }}
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-black/15" />
+          <div className="relative flex min-h-36 items-end justify-between gap-4 p-4 sm:min-h-44 sm:p-5">
+            <div className="flex min-w-0 items-center gap-3 text-white">
+              <ChannelAvatar
+                channel={channel}
+                size="lg"
+                className="!size-14 ring-2 ring-white/50 sm:!size-16"
+              />
+              <div className="min-w-0 drop-shadow">
+                <h2 className="truncate text-lg font-semibold sm:text-xl">{channel.name}</h2>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/80">
+                  <span>{channel.handle}</span>
+                  <span className="inline-flex items-center gap-1">
+                    <UsersRound className="size-3.5" />
+                    {channel.subscribers || "Inscritos ocultos"}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="shrink-0 gap-1.5 bg-black/45 text-white backdrop-blur hover:bg-black/60"
+              onClick={syncYouTube}
+              disabled={isSyncing}
+            >
+              <RefreshCw className={cn("size-3.5", isSyncing && "animate-spin")} />
+              <span className="hidden sm:inline">Atualizar YouTube</span>
+            </Button>
+          </div>
+        </section>
+
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold">Projetos</h2>
@@ -190,13 +214,7 @@ function ChannelWorkspace() {
   );
 }
 
-function ProjectGrid({
-  projects,
-  channel,
-}: {
-  projects: Project[];
-  channel: (typeof channels)[number];
-}) {
+function ProjectGrid({ projects, channel }: { projects: Project[]; channel: Channel }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {projects.map((p) => {
@@ -229,84 +247,73 @@ function ProjectGrid({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Link
-              to="/project/$projectId"
-              params={{ projectId: p.id }}
-              className="block"
-            >
-            <div
-              className="relative aspect-video overflow-hidden"
-              style={{
-                background: `linear-gradient(135deg, oklch(0.4 0.18 ${p.thumbHue}), oklch(0.22 0.05 ${p.thumbHue}))`,
-              }}
-            >
+            <Link to="/project/$projectId" params={{ projectId: p.id }} className="block">
               <div
-                className="absolute inset-0 opacity-40"
+                className="relative aspect-video overflow-hidden"
                 style={{
-                  backgroundImage:
-                    "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25), transparent 60%)",
+                  background: `linear-gradient(135deg, oklch(0.4 0.18 ${p.thumbHue}), oklch(0.22 0.05 ${p.thumbHue}))`,
                 }}
-              />
-              <div className="absolute left-2 top-2">
-                <ChannelAvatar channel={channel} size="sm" />
-              </div>
-              <div className="absolute bottom-2 right-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] text-white backdrop-blur">
-                {p.duration}
-              </div>
-              {p.isLate && (
-                <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/20 px-2 py-0.5 text-[10px] text-destructive backdrop-blur">
-                  <AlertTriangle className="size-3" />
-                  Atrasado
+              >
+                <div
+                  className="absolute inset-0 opacity-40"
+                  style={{
+                    backgroundImage:
+                      "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25), transparent 60%)",
+                  }}
+                />
+                <div className="absolute left-2 top-2">
+                  <ChannelAvatar channel={channel} size="sm" />
                 </div>
-              )}
-            </div>
-
-            <div className="p-3">
-              <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-tight">
-                {p.title}
-              </h3>
-
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-1.5 text-xs">
-                  <stage.icon className="size-3.5 text-brand-soft" />
-                  <span className="truncate">{stage.label}</span>
+                <div className="absolute bottom-2 right-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] text-white backdrop-blur">
+                  {p.duration}
                 </div>
-                <ProcessStatus state={p.state} />
+                {p.isLate && (
+                  <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/20 px-2 py-0.5 text-[10px] text-destructive backdrop-blur">
+                    <AlertTriangle className="size-3" />
+                    Atrasado
+                  </div>
+                )}
               </div>
 
-              <div className="mt-3">
-                <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
-                  <span>Progresso</span>
-                  <span className="font-mono text-foreground">
-                    {p.progress}%
+              <div className="p-3">
+                <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-tight">
+                  {p.title}
+                </h3>
+
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5 text-xs">
+                    <stage.icon className="size-3.5 text-brand-soft" />
+                    <span className="truncate">{stage.label}</span>
+                  </div>
+                  <ProcessStatus state={p.state} />
+                </div>
+
+                <div className="mt-3">
+                  <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+                    <span>Progresso</span>
+                    <span className="font-mono text-foreground">{p.progress}%</span>
+                  </div>
+                  <Progress value={p.progress} className="h-1" />
+                </div>
+
+                <footer className="mt-3 flex items-center justify-between border-t border-border/50 pt-2.5 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className="grid size-5 place-items-center rounded-full bg-gradient-to-br from-brand to-brand-soft font-mono text-[9px] font-bold text-white"
+                      title={p.assignee.name}
+                    >
+                      {p.assignee.initials}
+                    </span>
+                    <span className="truncate">{p.assignee.name.split(" ")[0]}</span>
                   </span>
-                </div>
-                <Progress value={p.progress} className="h-1" />
-              </div>
-
-              <footer className="mt-3 flex items-center justify-between border-t border-border/50 pt-2.5 text-[11px] text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
                   <span
-                    className="grid size-5 place-items-center rounded-full bg-gradient-to-br from-brand to-brand-soft font-mono text-[9px] font-bold text-white"
-                    title={p.assignee.name}
+                    className={cn("inline-flex items-center gap-1", p.isLate && "text-destructive")}
                   >
-                    {p.assignee.initials}
+                    <Calendar className="size-3" />
+                    {p.deadline}
                   </span>
-                  <span className="truncate">
-                    {p.assignee.name.split(" ")[0]}
-                  </span>
-                </span>
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1",
-                    p.isLate && "text-destructive",
-                  )}
-                >
-                  <Calendar className="size-3" />
-                  {p.deadline}
-                </span>
-              </footer>
-            </div>
+                </footer>
+              </div>
             </Link>
           </div>
         );
@@ -315,33 +322,17 @@ function ProjectGrid({
   );
 }
 
-function ProjectTable({
-  projects,
-  channel,
-}: {
-  projects: Project[];
-  channel: (typeof channels)[number];
-}) {
+function ProjectTable({ projects, channel }: { projects: Project[]; channel: Channel }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
       <Table>
         <TableHeader>
           <TableRow className="border-border/60 hover:bg-transparent">
-            <TableHead className="text-[11px] uppercase tracking-wider">
-              Projeto
-            </TableHead>
-            <TableHead className="text-[11px] uppercase tracking-wider">
-              Etapa
-            </TableHead>
-            <TableHead className="text-[11px] uppercase tracking-wider">
-              Progresso
-            </TableHead>
-            <TableHead className="text-[11px] uppercase tracking-wider">
-              Prazo
-            </TableHead>
-            <TableHead className="text-[11px] uppercase tracking-wider">
-              Responsável
-            </TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider">Projeto</TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider">Etapa</TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider">Progresso</TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider">Prazo</TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider">Responsável</TableHead>
             <TableHead className="w-16" />
           </TableRow>
         </TableHeader>
@@ -365,16 +356,11 @@ function ProjectTable({
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Progress value={p.progress} className="h-1.5 w-24" />
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {p.progress}%
-                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">{p.progress}%</span>
                   </div>
                 </TableCell>
                 <TableCell
-                  className={cn(
-                    "text-xs",
-                    p.isLate ? "text-destructive" : "text-muted-foreground",
-                  )}
+                  className={cn("text-xs", p.isLate ? "text-destructive" : "text-muted-foreground")}
                 >
                   {p.deadline}
                 </TableCell>
@@ -394,10 +380,7 @@ function ProjectTable({
                       size="sm"
                       className="h-8 gap-1 text-xs text-brand-soft"
                     >
-                      <Link
-                        to="/project/$projectId"
-                        params={{ projectId: p.id }}
-                      >
+                      <Link to="/project/$projectId" params={{ projectId: p.id }}>
                         Abrir
                         <ArrowRight className="size-3" />
                       </Link>
@@ -423,13 +406,7 @@ function ProjectTable({
   );
 }
 
-function EmptyProjects({
-  channelId,
-  channelName,
-}: {
-  channelId: string;
-  channelName: string;
-}) {
+function EmptyProjects({ channelId, channelName }: { channelId: string; channelName: string }) {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center py-16 text-center">
       <div className="grid size-14 place-items-center rounded-2xl border border-border/60 bg-card">

@@ -1,108 +1,75 @@
-/**
- * Simulated "backend" — an in-memory + localStorage-backed store that
- * mirrors what a real API would expose. Keeps all UI state persistent
- * across reloads so you can test create/update flows end-to-end
- * without wiring a real backend.
- */
 import { useSyncExternalStore } from "react";
 import {
-  channels as seedChannels,
-  projects as seedProjects,
+  createEmptyMethods,
   PROCESS_ORDER,
   type Channel,
-  type Project,
   type ProcessId,
+  type ProcessMethod,
   type ProcessState,
-} from "@/lib/mock-data";
-import { DEFAULT_CONFIGS } from "@/engines/defaults";
-import type { ProcessConfigMap } from "@/engines/types";
+  type Project,
+  type UniversalProcess,
+} from "@/lib/domain";
 
-const STORAGE_KEY = "contentflow-db-v2";
-
-/** Per-channel overrides for each process configuration. */
-type ProcessConfigStore = Record<
-  string,
-  Partial<{ [P in ProcessId]: Partial<ProcessConfigMap[P]> }>
+export type YouTubeChannelProfile = Pick<
+  Channel,
+  | "youtubeChannelId"
+  | "name"
+  | "handle"
+  | "subscribers"
+  | "avatarUrl"
+  | "bannerUrl"
+  | "lastSyncedAt"
 >;
 
-type DbShape = {
-  channels: Channel[];
-  projects: Project[];
-  processConfigs: ProcessConfigStore;
-};
-
-// Live arrays — we mutate the same references exported from mock-data so
-// any code path that reads them (route loaders, memoized selectors)
-// always sees the current state.
-const db: DbShape = {
-  channels: seedChannels,
-  projects: seedProjects,
-  processConfigs: {},
-};
-
+const db = { channels: [] as Channel[], projects: [] as Project[], ready: false };
 const listeners = new Set<() => void>();
 let version = 0;
 
-function hydrate() {
-  if (typeof window === "undefined") return;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      persist();
-      return;
-    }
-    const parsed = JSON.parse(raw) as Partial<DbShape>;
-    if (Array.isArray(parsed.channels)) {
-      db.channels.splice(0, db.channels.length, ...parsed.channels);
-    }
-    if (Array.isArray(parsed.projects)) {
-      db.projects.splice(0, db.projects.length, ...parsed.projects);
-    }
-    if (parsed.processConfigs && typeof parsed.processConfigs === "object") {
-      db.processConfigs = parsed.processConfigs as ProcessConfigStore;
-    }
-  } catch {
-    // ignore corrupted state
-  }
-}
-
-function persist() {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        channels: db.channels,
-        projects: db.projects,
-        processConfigs: db.processConfigs,
-      }),
-    );
-  } catch {
-    // ignore quota errors
-  }
-}
-
 function emit() {
   version += 1;
-  persist();
-  listeners.forEach((l) => l());
+  listeners.forEach((listener) => listener());
 }
 
-// Hydrate on module load (client only).
-hydrate();
-
-function subscribe(cb: () => void) {
-  listeners.add(cb);
-  return () => {
-    listeners.delete(cb);
-  };
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 function getVersion() {
   return version;
 }
 
-// ---------- Hooks ----------
+async function hydrate() {
+  if (typeof window === "undefined" || db.ready) return;
+  try {
+    const [channelsResponse, projectsResponse] = await Promise.all([
+      fetch("/api/channels"),
+      fetch("/api/projects"),
+    ]);
+    if (!channelsResponse.ok || !projectsResponse.ok) {
+      throw new Error("Não foi possível conectar à API local.");
+    }
+    const [channels, projects] = (await Promise.all([
+      channelsResponse.json(),
+      projectsResponse.json(),
+    ])) as [Channel[], Project[]];
+    db.channels.splice(0, db.channels.length, ...channels);
+    db.projects.splice(0, db.projects.length, ...projects);
+    void syncAllChannelsFromYouTube();
+  } catch (error) {
+    console.error(error);
+  } finally {
+    db.ready = true;
+    emit();
+  }
+}
+
+void hydrate();
+
+export function useDatabaseReady() {
+  useSyncExternalStore(subscribe, getVersion, getVersion);
+  return db.ready;
+}
 
 export function useChannels(): Channel[] {
   useSyncExternalStore(subscribe, getVersion, getVersion);
@@ -111,176 +78,174 @@ export function useChannels(): Channel[] {
 
 export function useChannel(id: string): Channel | undefined {
   useSyncExternalStore(subscribe, getVersion, getVersion);
-  return db.channels.find((c) => c.id === id);
+  return db.channels.find((channel) => channel.id === id);
 }
 
 export function useProjects(channelId?: string): Project[] {
   useSyncExternalStore(subscribe, getVersion, getVersion);
-  return channelId
-    ? db.projects.filter((p) => p.channelId === channelId)
-    : db.projects;
+  return channelId ? db.projects.filter((project) => project.channelId === channelId) : db.projects;
 }
 
 export function useProject(id: string): Project | undefined {
   useSyncExternalStore(subscribe, getVersion, getVersion);
-  return db.projects.find((p) => p.id === id);
+  return db.projects.find((project) => project.id === id);
 }
 
-// ---------- Mutations ----------
-
-export function createChannel(channel: Channel) {
-  db.channels.unshift(channel);
+export function createChannel(channel: Omit<Channel, "createdAt">) {
+  const next: Channel = { ...channel, createdAt: new Date().toISOString() };
+  db.channels.unshift(next);
   emit();
+  void request("/api/channels", "POST", next);
+  return next;
 }
 
+export async function resolveYouTubeChannel(handle: string): Promise<YouTubeChannelProfile> {
+  const response = await fetch(`/api/youtube/channel?handle=${encodeURIComponent(handle)}`);
+  if (!response.ok) throw new Error(await readApiError(response));
+  return response.json() as Promise<YouTubeChannelProfile>;
+}
+
+export async function syncChannelFromYouTube(channelId: string) {
+  const response = await fetch(`/api/channels/${channelId}/sync-youtube`, { method: "POST" });
+  if (!response.ok) throw new Error(await readApiError(response));
+  const updated = (await response.json()) as Channel;
+  const index = db.channels.findIndex((channel) => channel.id === channelId);
+  if (index >= 0) {
+    db.channels[index] = updated;
+    emit();
+  }
+  return updated;
+}
+
+async function syncAllChannelsFromYouTube() {
+  const channelIds = db.channels.map((channel) => channel.id);
+  for (let index = 0; index < channelIds.length; index += 3) {
+    await Promise.allSettled(channelIds.slice(index, index + 3).map(syncChannelFromYouTube));
+  }
+}
+
+export function setChannelMethod(
+  channelId: string,
+  processType: UniversalProcess,
+  method: ProcessMethod,
+) {
+  const channel = db.channels.find((item) => item.id === channelId);
+  if (!channel) return;
+  channel.methods = {
+    ...channel.methods,
+    [processType]: {
+      processType,
+      blocks: method.blocks.map((block, order) => ({ ...block, order })),
+    },
+  };
+  emit();
+  void request(`/api/channels/${channel.id}`, "PUT", channel);
+}
 
 export function removeChannel(id: string) {
-  const i = db.channels.findIndex((c) => c.id === id);
-  if (i !== -1) db.channels.splice(i, 1);
-  // cascade: drop projects of that channel
-  for (let j = db.projects.length - 1; j >= 0; j--) {
-    if (db.projects[j].channelId === id) db.projects.splice(j, 1);
-  }
+  db.channels.splice(0, db.channels.length, ...db.channels.filter((channel) => channel.id !== id));
+  db.projects.splice(
+    0,
+    db.projects.length,
+    ...db.projects.filter((project) => project.channelId !== id),
+  );
   emit();
+  void request(`/api/channels/${id}`, "DELETE");
 }
 
 export function removeProject(id: string) {
-  const i = db.projects.findIndex((p) => p.id === id);
-  if (i === -1) return;
-  const channelId = db.projects[i].channelId;
-  db.projects.splice(i, 1);
-  const ch = db.channels.find((c) => c.id === channelId);
-  if (ch && ch.activeProjects) ch.activeProjects = Math.max(0, ch.activeProjects - 1);
+  const project = db.projects.find((item) => item.id === id);
+  if (!project) return;
+  db.projects.splice(db.projects.indexOf(project), 1);
+  const channel = db.channels.find((item) => item.id === project.channelId);
+  if (channel) {
+    channel.activeProjects = Math.max(0, channel.activeProjects - 1);
+    void request(`/api/channels/${channel.id}`, "PUT", channel);
+  }
   emit();
+  void request(`/api/projects/${id}`, "DELETE");
 }
 
-/**
- * Clear a single stage's result — sets it back to not_started and
- * recomputes progress / current stage pointer.
- */
-export function resetStage(projectId: string, stage: ProcessId) {
-  const p = db.projects.find((x) => x.id === projectId);
-  if (!p) return;
-  p.stages = { ...p.stages, [stage]: "not_started" };
-  const nextIdx = PROCESS_ORDER.findIndex(
-    (s) => p.stages[s] !== "done" && p.stages[s] !== "approved",
-  );
-  p.currentStage = nextIdx === -1 ? "publishing" : PROCESS_ORDER[nextIdx];
-  p.state = p.stages[p.currentStage] ?? "not_started";
-  const doneCount = PROCESS_ORDER.filter(
-    (s) => p.stages[s] === "done" || p.stages[s] === "approved",
-  ).length;
-  p.progress = Math.round((doneCount / PROCESS_ORDER.length) * 100);
-  p.updatedAt = "agora";
-  emit();
-}
-
-export type NewProjectInput = {
-  title: string;
-  channelId: string;
-  deadline?: string;
-  assignee?: { name: string; initials: string };
-};
+export type NewProjectInput = { title: string; channelId: string; deadline?: string };
 
 export function createProject(input: NewProjectInput): Project {
-  const stages = {} as Record<ProcessId, ProcessState>;
-  PROCESS_ORDER.forEach((p) => (stages[p] = "not_started"));
+  const stages = Object.fromEntries(
+    PROCESS_ORDER.map((process) => [process, "not_started"]),
+  ) as Record<ProcessId, ProcessState>;
+  const now = new Date().toISOString();
   const project: Project = {
-    id: `p-new-${Date.now()}`,
+    id: crypto.randomUUID(),
     title: input.title.trim(),
     channelId: input.channelId,
-    currentStage: "research",
+    currentStage: "theme",
     state: "not_started",
     progress: 0,
-    deadline: input.deadline?.trim() || "—",
+    deadline: input.deadline?.trim() || "Sem prazo",
     duration: "—",
-    updatedAt: "agora",
+    updatedAt: "Agora",
+    createdAt: now,
     stages,
-    assignee: input.assignee ?? { name: "Você", initials: "VC" },
+    assignee: { name: "Não atribuído", initials: "—" },
     thumbHue: Math.round(Math.random() * 360),
   };
   db.projects.unshift(project);
-  // bump channel's active projects counter
-  const ch = db.channels.find((c) => c.id === input.channelId);
-  if (ch) ch.activeProjects = (ch.activeProjects ?? 0) + 1;
+  const channel = db.channels.find((item) => item.id === input.channelId);
+  if (channel) {
+    channel.activeProjects += 1;
+    void request(`/api/channels/${channel.id}`, "PUT", channel);
+  }
   emit();
+  void request("/api/projects", "POST", project);
   return project;
 }
 
-/**
- * Mark a project's stage as complete and advance the pointer to the
- * next incomplete stage. Recomputes progress as (# done / total).
- */
 export function completeStage(projectId: string, stage: ProcessId) {
-  const p = db.projects.find((x) => x.id === projectId);
-  if (!p) return;
-  p.stages = { ...p.stages, [stage]: "done" };
-
-  // find next not-done stage
-  const nextIdx = PROCESS_ORDER.findIndex(
-    (s) => p.stages[s] !== "done" && p.stages[s] !== "approved",
+  const project = db.projects.find((item) => item.id === projectId);
+  const channel = project ? db.channels.find((item) => item.id === project.channelId) : undefined;
+  if (!project || !channel?.methods[stage]?.blocks.length) return false;
+  project.stages = { ...project.stages, [stage]: "done" };
+  const next = PROCESS_ORDER.find(
+    (process) => project.stages[process] !== "done" && project.stages[process] !== "approved",
   );
-  if (nextIdx === -1) {
-    p.currentStage = "publishing";
-    p.state = "done";
-  } else {
-    p.currentStage = PROCESS_ORDER[nextIdx];
-    p.state = p.stages[p.currentStage] ?? "not_started";
-  }
-
-  const doneCount = PROCESS_ORDER.filter(
-    (s) => p.stages[s] === "done" || p.stages[s] === "approved",
+  project.currentStage = next ?? "publishing";
+  project.state = next ? project.stages[next] : "done";
+  const completed = PROCESS_ORDER.filter(
+    (process) => project.stages[process] === "done" || project.stages[process] === "approved",
   ).length;
-  p.progress = Math.round((doneCount / PROCESS_ORDER.length) * 100);
-  p.updatedAt = "agora";
+  project.progress = Math.round((completed / PROCESS_ORDER.length) * 100);
+  project.updatedAt = "Agora";
   emit();
+  void request(`/api/projects/${project.id}`, "PUT", project);
+  return true;
 }
 
-// ---------- Per-channel process configurations ----------
-
-/**
- * Read the effective configuration for a process, on a given channel.
- * Merges the DEFAULT_CONFIGS baseline with the channel-level patch
- * saved in the store — this is exactly what the engine layer receives
- * when building a command.
- */
-export function useProcessConfig<P extends ProcessId>(
-  channelId: string | undefined,
-  processId: P,
-): ProcessConfigMap[P] {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
-  const base = DEFAULT_CONFIGS[processId];
-  if (!channelId) return base;
-  const patch = db.processConfigs[channelId]?.[processId];
-  return { ...base, ...(patch ?? {}) } as ProcessConfigMap[P];
-}
-
-export function getProcessConfig<P extends ProcessId>(
-  channelId: string,
-  processId: P,
-): ProcessConfigMap[P] {
-  const base = DEFAULT_CONFIGS[processId];
-  const patch = db.processConfigs[channelId]?.[processId];
-  return { ...base, ...(patch ?? {}) } as ProcessConfigMap[P];
-}
-
-export function setProcessConfig<P extends ProcessId>(
-  channelId: string,
-  processId: P,
-  patch: Partial<ProcessConfigMap[P]>,
-) {
-  const forChannel = db.processConfigs[channelId] ?? {};
-  const prev = (forChannel[processId] ?? {}) as Partial<ProcessConfigMap[P]>;
-  db.processConfigs[channelId] = {
-    ...forChannel,
-    [processId]: { ...prev, ...patch },
-  };
+export function resetStage(projectId: string, stage: ProcessId) {
+  const project = db.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  project.stages = { ...project.stages, [stage]: "not_started" };
+  project.currentStage = stage;
+  project.state = "not_started";
+  project.updatedAt = "Agora";
   emit();
+  void request(`/api/projects/${project.id}`, "PUT", project);
 }
 
-export function resetProcessConfig(channelId: string, processId: ProcessId) {
-  const forChannel = db.processConfigs[channelId];
-  if (!forChannel) return;
-  delete forChannel[processId];
-  emit();
+export { createEmptyMethods };
+
+async function request(url: string, method: "POST" | "PUT" | "DELETE", body?: unknown) {
+  const response = await fetch(url, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) throw new Error("A API local não conseguiu salvar os dados.");
+}
+
+async function readApiError(response: Response) {
+  try {
+    const body = (await response.json()) as { error?: string };
+    return body.error ?? "Não foi possível concluir a operação.";
+  } catch {
+    return "Não foi possível concluir a operação.";
+  }
 }

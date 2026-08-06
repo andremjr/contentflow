@@ -1,0 +1,818 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Bot,
+  Braces,
+  CheckCircle2,
+  ChevronRight,
+  CircleUserRound,
+  Code2,
+  Copy,
+  Database,
+  Library,
+  ListChecks,
+  Plus,
+  Search,
+  Share2,
+  Sparkles,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { toast } from "sonner";
+import { ChannelAvatar } from "@/components/channel-avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  PROCESS_META,
+  PROCESS_ORDER,
+  type ActionBlock,
+  type BlockOperator,
+  type BlockParameter,
+  type BlockParameterType,
+  type BlockType,
+  type UniversalProcess,
+} from "@/lib/domain";
+import {
+  copyImportedBlocks,
+  parseMethodFile,
+  serializeMethodFile,
+  type SharedMethodFile,
+} from "@/lib/method-file";
+import { setChannelMethod, useChannel, useChannels } from "@/lib/store";
+import { cn } from "@/lib/utils";
+
+const BLOCK_META: Record<
+  BlockType,
+  {
+    label: string;
+    description: string;
+    icon: typeof Search;
+    className: string;
+  }
+> = {
+  BUSCAR: {
+    label: "Buscar",
+    description: "Coletar informações ou mídias externas.",
+    icon: Search,
+    className: "border-blue-500/35 bg-blue-500/10 text-blue-300",
+  },
+  ESCOLHER: {
+    label: "Escolher",
+    description: "Tomar decisões, aplicar regras e diretrizes.",
+    icon: ListChecks,
+    className: "border-violet-500/35 bg-violet-500/10 text-violet-300",
+  },
+  CRIAR: {
+    label: "Criar",
+    description: "Gerar conteúdo, arquivos ou executar código.",
+    icon: Sparkles,
+    className: "border-emerald-500/35 bg-emerald-500/10 text-emerald-300",
+  },
+  VALIDAR: {
+    label: "Validar",
+    description: "Testar qualidade, regras ou pedir aprovação.",
+    icon: CheckCircle2,
+    className: "border-amber-500/35 bg-amber-500/10 text-amber-300",
+  },
+};
+
+const OPERATOR_META: Record<BlockOperator, { label: string; icon: typeof Bot }> = {
+  IA: { label: "IA", icon: Bot },
+  Humano: { label: "Humano", icon: CircleUserRound },
+  Código: { label: "Código", icon: Code2 },
+};
+
+const PARAMETER_TYPES: { value: BlockParameterType; label: string }[] = [
+  { value: "text", label: "Texto" },
+  { value: "number", label: "Número" },
+  { value: "select", label: "Seleção" },
+  { value: "boolean", label: "Booleano" },
+  { value: "textarea", label: "Área de texto" },
+];
+
+function uid(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function MethodBuilder({
+  channelId,
+  initialProcess,
+}: {
+  channelId: string;
+  initialProcess?: UniversalProcess;
+}) {
+  const channel = useChannel(channelId);
+  const channels = useChannels();
+  const [processType, setProcessType] = useState<UniversalProcess>(initialProcess ?? "title");
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [draftBlocks, setDraftBlocks] = useState<ActionBlock[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [pendingFileImport, setPendingFileImport] = useState<SharedMethodFile | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const method = channel?.methods[processType];
+  const blocks = useMemo(() => [...draftBlocks].sort((a, b) => a.order - b.order), [draftBlocks]);
+  const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
+  const reusableMethods = channels
+    .filter((candidate) => candidate.id !== channelId)
+    .map((candidate) => ({
+      channel: candidate,
+      blocks: candidate.methods?.[processType]?.blocks ?? [],
+    }))
+    .filter((candidate) => candidate.blocks.length > 0);
+
+  useEffect(() => {
+    if (initialProcess) setProcessType(initialProcess);
+  }, [initialProcess]);
+
+  useEffect(() => {
+    if (!blocks.some((block) => block.id === selectedBlockId)) {
+      setSelectedBlockId(blocks[0]?.id ?? null);
+    }
+  }, [blocks, selectedBlockId]);
+
+  useEffect(() => {
+    setDraftBlocks(structuredClone(method?.blocks ?? []));
+    setIsDirty(false);
+  }, [processType, method]);
+
+  useEffect(() => {
+    if (!pendingFileImport || pendingFileImport.method.processType !== processType) return;
+    const importedBlocks = copyImportedBlocks(processType, pendingFileImport.method.blocks, uid);
+    setDraftBlocks(importedBlocks);
+    setSelectedBlockId(importedBlocks[0]?.id ?? null);
+    setIsDirty(true);
+    setPendingFileImport(null);
+    toast.success(`${pendingFileImport.name} importado`, {
+      description: "Revise a cópia e clique em Salvar método para mantê-la neste canal.",
+    });
+  }, [pendingFileImport, processType]);
+
+  if (!channel || !method) return null;
+
+  const saveBlocks = (nextBlocks: ActionBlock[]) => {
+    setDraftBlocks(nextBlocks.map((block, order) => ({ ...block, order })));
+    setIsDirty(true);
+  };
+
+  const saveMethod = () => {
+    setChannelMethod(channel.id, processType, { processType, blocks });
+    setIsDirty(false);
+    toast.success(`Método de ${PROCESS_META[processType].label} salvo.`);
+  };
+
+  const importMethod = (sourceChannelName: string, sourceBlocks: ActionBlock[]) => {
+    const importedBlocks = copyImportedBlocks(processType, sourceBlocks, uid);
+    saveBlocks(importedBlocks);
+    setSelectedBlockId(importedBlocks[0]?.id ?? null);
+    setLibraryOpen(false);
+    toast.info(`Base importada de ${sourceChannelName}`, {
+      description: "Revise as configurações e clique em Salvar método.",
+    });
+  };
+
+  const shareMethod = async () => {
+    if (!blocks.length) return;
+    const processLabel = PROCESS_META[processType].label;
+    const fileName = `metodo-${processType}.contentflow-method.json`;
+    const contents = serializeMethodFile(`Método de ${processLabel}`, { processType, blocks });
+    const file = new File([contents], fileName, { type: "application/json" });
+
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: `Método de ${processLabel} — ContentFlow OS`,
+          text: `Método de ${processLabel} criado no ContentFlow OS.`,
+          files: [file],
+        });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Arquivo do método criado", {
+      description: "Envie o arquivo baixado para quem quiser usar esta base.",
+    });
+  };
+
+  const importSharedMethod = async (file: File) => {
+    try {
+      const sharedMethod = parseMethodFile(await file.text());
+      if (isDirty && !window.confirm("Importar substituirá as alterações ainda não salvas. Continuar?")) {
+        return;
+      }
+      setPendingFileImport(sharedMethod);
+      setProcessType(sharedMethod.method.processType);
+    } catch (error) {
+      toast.error("Não foi possível importar o método", {
+        description: error instanceof Error ? error.message : "O arquivo é inválido.",
+      });
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const addBlock = (type: BlockType) => {
+    const newBlock: ActionBlock = {
+      id: uid(`${processType}-${type.toLowerCase()}`),
+      type,
+      operator: type === "ESCOLHER" || type === "VALIDAR" ? "Humano" : "IA",
+      parameters: [],
+      order: blocks.length,
+    };
+    saveBlocks([...blocks, newBlock]);
+    setSelectedBlockId(newBlock.id);
+  };
+
+  const updateBlock = (blockId: string, patch: Partial<ActionBlock>) => {
+    saveBlocks(blocks.map((block) => (block.id === blockId ? { ...block, ...patch } : block)));
+  };
+
+  const moveBlock = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= blocks.length) return;
+    const next = [...blocks];
+    [next[index], next[target]] = [next[target], next[index]];
+    saveBlocks(next);
+  };
+
+  const removeBlock = (blockId: string) => {
+    saveBlocks(blocks.filter((block) => block.id !== blockId));
+  };
+
+  return (
+    <div className="grid min-h-0 flex-1 lg:grid-cols-[240px_minmax(360px,1fr)_minmax(320px,420px)]">
+      <aside className="border-b border-border/70 bg-card/35 p-4 lg:border-b-0 lg:border-r">
+        <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Processos universais
+        </p>
+        <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-1">
+          {PROCESS_ORDER.map((process, index) => {
+            const meta = PROCESS_META[process];
+            const Icon = meta.icon;
+            const active = process === processType;
+            const count =
+              process === processType ? blocks.length : channel.methods[process].blocks.length;
+            return (
+              <button
+                key={process}
+                type="button"
+                onClick={() => setProcessType(process)}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition",
+                  active
+                    ? "border-brand/40 bg-brand/15 text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-secondary/50 hover:text-foreground",
+                )}
+              >
+                <span className="font-mono text-[10px] opacity-60">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <Icon className="size-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{meta.label}</span>
+                <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[9px]">
+                  {count}
+                </Badge>
+              </button>
+            );
+          })}
+        </div>
+      </aside>
+
+      <section className="border-b border-border/70 p-4 sm:p-6 lg:border-b-0 lg:border-r">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">Método de {PROCESS_META[processType].label}</h2>
+              <Badge variant="outline" className="border-brand/30 text-brand-soft">
+                {blocks.length} {blocks.length === 1 ? "bloco" : "blocos"}
+              </Badge>
+            </div>
+            <p className="mt-1 max-w-xl text-xs text-muted-foreground">
+              Organize as ações na ordem em que devem acontecer em todos os vídeos deste canal.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.contentflow-method.json,application/json"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importSharedMethod(file);
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="size-3.5" />
+              Importar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={!blocks.length}
+              onClick={() => void shareMethod()}
+            >
+              <Share2 className="size-3.5" />
+              Compartilhar
+            </Button>
+            <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1.5">
+                  <Library className="size-3.5" />
+                  Usar da biblioteca
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-xl">
+                <DialogHeader>
+                  <DialogTitle>
+                    Biblioteca de métodos de {PROCESS_META[processType].label}
+                  </DialogTitle>
+                  <DialogDescription>
+                    Escolha uma base salva em outro canal. Uma cópia será criada neste canal para
+                    você reconfigurar livremente.
+                  </DialogDescription>
+                </DialogHeader>
+                {reusableMethods.length ? (
+                  <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+                    {reusableMethods.map(({ channel: sourceChannel, blocks: sourceBlocks }) => (
+                      <button
+                        key={sourceChannel.id}
+                        type="button"
+                        onClick={() => importMethod(sourceChannel.name, sourceBlocks)}
+                        className="flex w-full items-center gap-3 rounded-xl border border-border/70 bg-card p-3 text-left transition hover:border-brand/50 hover:bg-brand/5"
+                      >
+                        <ChannelAvatar channel={sourceChannel} size="md" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold">
+                            {sourceChannel.name}
+                          </span>
+                          <span className="mt-1 flex flex-wrap gap-1">
+                            {sourceBlocks.map((block, index) => (
+                              <Badge key={block.id} variant="secondary" className="text-[9px]">
+                                {index + 1}. {BLOCK_META[block.type].label}
+                              </Badge>
+                            ))}
+                          </span>
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-xs text-brand-soft">
+                          <Copy className="size-3.5" /> Copiar
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border p-8 text-center">
+                    <Library className="mx-auto size-6 text-muted-foreground" />
+                    <p className="mt-3 text-sm font-medium">Nenhuma base disponível ainda</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Quando outro canal tiver um método de {PROCESS_META[processType].label} salvo,
+                      ele aparecerá aqui.
+                    </p>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
+            <Button
+              size="sm"
+              onClick={saveMethod}
+              disabled={!isDirty}
+              className="gradient-brand text-white"
+            >
+              Salvar método
+            </Button>
+          </div>
+        </div>
+
+        <div className="mb-5 grid grid-cols-2 gap-2 xl:grid-cols-4">
+          {(Object.keys(BLOCK_META) as BlockType[]).map((type) => {
+            const item = BLOCK_META[type];
+            const Icon = item.icon;
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => addBlock(type)}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition hover:brightness-125",
+                  item.className,
+                )}
+              >
+                <Plus className="size-3" />
+                <Icon className="size-3.5" />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {blocks.length === 0 ? (
+          <div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-border bg-card/25 p-8 text-center">
+            <div>
+              <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand/10 text-brand-soft">
+                <Braces className="size-5" />
+              </div>
+              <h3 className="mt-3 text-sm font-medium">Este método está vazio</h3>
+              <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+                Adicione a primeira ação. Um método pode ser simples ou combinar quantos blocos
+                forem necessários.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {blocks.map((block, index) => {
+              const meta = BLOCK_META[block.type];
+              const operator = OPERATOR_META[block.operator];
+              const Icon = meta.icon;
+              const OperatorIcon = operator.icon;
+              const active = block.id === selectedBlockId;
+              return (
+                <div key={block.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBlockId(block.id)}
+                    className={cn(
+                      "group flex w-full items-center gap-3 rounded-xl border bg-card p-3 text-left transition",
+                      active
+                        ? "border-brand/50 shadow-[0_0_0_1px_oklch(0.62_0.2_260/0.18)]"
+                        : "border-border/70 hover:border-border",
+                    )}
+                  >
+                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary font-mono text-[10px] text-muted-foreground">
+                      {index + 1}
+                    </span>
+                    <span
+                      className={cn(
+                        "grid size-9 shrink-0 place-items-center rounded-lg border",
+                        meta.className,
+                      )}
+                    >
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold uppercase tracking-wide">
+                        {meta.label}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {block.parameters.length} parâmetros configurados
+                      </span>
+                    </span>
+                    <Badge variant="secondary" className="gap-1 text-[10px]">
+                      <OperatorIcon className="size-3" />
+                      {operator.label}
+                    </Badge>
+                    <ChevronRight className="size-4 text-muted-foreground" />
+                  </button>
+                  {index < blocks.length - 1 && (
+                    <div className="ml-6 h-2 border-l border-dashed border-border" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <aside className="bg-card/25 p-4 sm:p-6">
+        {selectedBlock ? (
+          <BlockEditor
+            block={selectedBlock}
+            index={blocks.indexOf(selectedBlock)}
+            total={blocks.length}
+            onChange={(patch) => updateBlock(selectedBlock.id, patch)}
+            onMove={(direction) => moveBlock(blocks.indexOf(selectedBlock), direction)}
+            onRemove={() => removeBlock(selectedBlock.id)}
+          />
+        ) : (
+          <div className="grid min-h-64 place-items-center text-center text-xs text-muted-foreground">
+            <div>
+              <Database className="mx-auto mb-2 size-5" />
+              Selecione um bloco para configurar operador e parâmetros.
+            </div>
+          </div>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+function BlockEditor({
+  block,
+  index,
+  total,
+  onChange,
+  onMove,
+  onRemove,
+}: {
+  block: ActionBlock;
+  index: number;
+  total: number;
+  onChange: (patch: Partial<ActionBlock>) => void;
+  onMove: (direction: -1 | 1) => void;
+  onRemove: () => void;
+}) {
+  const meta = BLOCK_META[block.type];
+  const Icon = meta.icon;
+
+  const addParameter = () => {
+    const parameter: BlockParameter = {
+      id: uid(`${block.id}-parameter`),
+      label: "Novo parâmetro",
+      key: `parameter_${block.parameters.length + 1}`,
+      type: "text",
+      value: "",
+      placeholder: "Digite um valor",
+    };
+    onChange({ parameters: [...block.parameters, parameter] });
+  };
+
+  const updateParameter = (parameterId: string, patch: Partial<BlockParameter>) => {
+    onChange({
+      parameters: block.parameters.map((parameter) =>
+        parameter.id === parameterId ? { ...parameter, ...patch } : parameter,
+      ),
+    });
+  };
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className={cn("grid size-10 place-items-center rounded-xl border", meta.className)}>
+            <Icon className="size-4" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide">{meta.label}</p>
+            <p className="text-[11px] text-muted-foreground">
+              Bloco {index + 1} de {total}
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            disabled={index === 0}
+            onClick={() => onMove(-1)}
+            aria-label="Mover para cima"
+          >
+            <ArrowUp className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            disabled={index === total - 1}
+            onClick={() => onMove(1)}
+            aria-label="Mover para baixo"
+          >
+            <ArrowDown className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:text-destructive"
+            onClick={onRemove}
+            aria-label="Remover bloco"
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      <p className="mt-3 rounded-lg border border-border/60 bg-background/40 p-3 text-xs text-muted-foreground">
+        {meta.description}
+      </p>
+
+      <div className="mt-5 space-y-1.5">
+        <Label>Operador responsável</Label>
+        <Select
+          value={block.operator}
+          onValueChange={(value) => onChange({ operator: value as BlockOperator })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(OPERATOR_META) as BlockOperator[]).map((operator) => {
+              const item = OPERATOR_META[operator];
+              const OperatorIcon = item.icon;
+              return (
+                <SelectItem key={operator} value={operator}>
+                  <span className="flex items-center gap-2">
+                    <OperatorIcon className="size-3.5" /> {item.label}
+                  </span>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="mt-6 flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">Parâmetros</h3>
+          <p className="text-[11px] text-muted-foreground">Informações específicas desta ação.</p>
+        </div>
+        <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addParameter}>
+          <Plus className="size-3" /> Adicionar
+        </Button>
+      </div>
+
+      <div className="mt-3 space-y-3">
+        {block.parameters.map((parameter) => (
+          <ParameterEditor
+            key={parameter.id}
+            parameter={parameter}
+            onChange={(patch) => updateParameter(parameter.id, patch)}
+            onRemove={() =>
+              onChange({
+                parameters: block.parameters.filter((item) => item.id !== parameter.id),
+              })
+            }
+          />
+        ))}
+        {block.parameters.length === 0 && (
+          <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
+            Nenhum parâmetro. O bloco pode funcionar assim ou receber campos personalizados.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ParameterEditor({
+  parameter,
+  onChange,
+  onRemove,
+}: {
+  parameter: BlockParameter;
+  onChange: (patch: Partial<BlockParameter>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {parameter.key}
+        </span>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-7 text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+          aria-label="Remover parâmetro"
+        >
+          <Trash2 className="size-3" />
+        </Button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-[11px]">Nome</Label>
+          <Input
+            value={parameter.label}
+            onChange={(event) => onChange({ label: event.target.value })}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px]">Chave</Label>
+          <Input
+            value={parameter.key}
+            onChange={(event) => onChange({ key: event.target.value })}
+            className="h-8 font-mono text-xs"
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-[11px]">Tipo</Label>
+        <Select
+          value={parameter.type}
+          onValueChange={(value) => {
+            const type = value as BlockParameterType;
+            onChange({
+              type,
+              value: type === "boolean" ? false : type === "number" ? 0 : "",
+            });
+          }}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PARAMETER_TYPES.map((type) => (
+              <SelectItem key={type.value} value={type.value}>
+                {type.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-[11px]">Valor</Label>
+        {parameter.type === "textarea" ? (
+          <Textarea
+            value={String(parameter.value)}
+            placeholder={parameter.placeholder}
+            onChange={(event) => onChange({ value: event.target.value })}
+            rows={3}
+            className="text-xs"
+          />
+        ) : parameter.type === "boolean" ? (
+          <label className="flex h-9 items-center gap-2 rounded-md border border-input px-3 text-xs">
+            <Checkbox
+              checked={Boolean(parameter.value)}
+              onCheckedChange={(checked) => onChange({ value: checked === true })}
+            />
+            {parameter.value ? "Ativado" : "Desativado"}
+          </label>
+        ) : parameter.type === "select" ? (
+          <div className="space-y-2">
+            <Select value={String(parameter.value)} onValueChange={(value) => onChange({ value })}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder={parameter.placeholder} />
+              </SelectTrigger>
+              <SelectContent>
+                {(parameter.options ?? []).map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              value={(parameter.options ?? []).join(", ")}
+              onChange={(event) =>
+                onChange({
+                  options: event.target.value
+                    .split(",")
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                })
+              }
+              placeholder="Opções separadas por vírgula"
+              className="h-8 text-xs"
+            />
+          </div>
+        ) : (
+          <Input
+            type={parameter.type === "number" ? "number" : "text"}
+            value={String(parameter.value)}
+            placeholder={parameter.placeholder}
+            onChange={(event) =>
+              onChange({
+                value:
+                  parameter.type === "number" ? Number(event.target.value) : event.target.value,
+              })
+            }
+            className="h-8 text-xs"
+          />
+        )}
+      </div>
+      <div className="space-y-1">
+        <Label className="text-[11px]">Placeholder</Label>
+        <Input
+          value={parameter.placeholder ?? ""}
+          onChange={(event) => onChange({ placeholder: event.target.value })}
+          className="h-8 text-xs"
+        />
+      </div>
+    </div>
+  );
+}
