@@ -281,6 +281,16 @@ export function createChannel(channel: Omit<Channel, "createdAt">) {
   return next;
 }
 
+export function updateChannel(channel: Channel) {
+  const index = db.channels.findIndex((item) => item.id === channel.id);
+  if (index < 0) return;
+  const updated = normalizeChannel(channel);
+  db.channels[index] = updated;
+  emit();
+  void request(`/api/channels/${updated.id}`, "PUT", updated);
+  return updated;
+}
+
 export async function resolveYouTubeChannel(handle: string): Promise<YouTubeChannelProfile> {
   const response = await fetch(`/api/youtube/channel?handle=${encodeURIComponent(handle)}`);
   if (!response.ok) throw new Error(await readApiError(response));

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, LoaderCircle, Plus, Youtube } from "lucide-react";
 import {
   Dialog,
@@ -23,7 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { createEmptyMethods, type Channel } from "@/lib/domain";
-import { createChannel, resolveYouTubeChannel } from "@/lib/store";
+import { createChannel, resolveYouTubeChannel, updateChannel } from "@/lib/store";
 
 const COLOR_PRESETS = [
   "#2563EB",
@@ -42,11 +42,17 @@ const FREQUENCIES = ["1x / semana", "2x / semana", "3x / semana", "Diário", "Qu
 export function NewChannelDialog({
   trigger,
   onCreate,
+  channel,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   trigger?: React.ReactNode;
   onCreate?: (channel: Channel) => void;
+  channel?: Channel;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [handle, setHandle] = useState("");
   const [niche, setNiche] = useState("");
   const [language, setLanguage] = useState("PT-BR");
@@ -55,21 +61,53 @@ export function NewChannelDialog({
   const [description, setDescription] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const isEditing = Boolean(channel);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (value: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(value);
+    onOpenChange?.(value);
+  };
+
   const canSubmit = handle.trim().length >= 3 && !isLoading;
 
   function reset() {
-    setHandle("");
-    setNiche("");
-    setLanguage("PT-BR");
-    setFrequency("1x / semana");
-    setColor(COLOR_PRESETS[0]);
-    setDescription("");
+    setHandle(channel?.handle ?? "");
+    setNiche(channel?.niche ?? "");
+    setLanguage(channel?.language ?? "PT-BR");
+    setFrequency(channel?.frequency ?? "1x / semana");
+    setColor(channel?.color ?? COLOR_PRESETS[0]);
+    setDescription(channel?.description ?? "");
     setIsLoading(false);
   }
+
+  useEffect(() => {
+    if (!open) return;
+    setHandle(channel?.handle ?? "");
+    setNiche(channel?.niche ?? "");
+    setLanguage(channel?.language ?? "PT-BR");
+    setFrequency(channel?.frequency ?? "1x / semana");
+    setColor(channel?.color ?? COLOR_PRESETS[0]);
+    setDescription(channel?.description ?? "");
+    setIsLoading(false);
+  }, [open, channel]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
+
+    if (channel) {
+      const updated = updateChannel({
+        ...channel,
+        niche: niche.trim(),
+        language,
+        frequency,
+        color,
+        description: description.trim(),
+      });
+      if (updated) toast.success("Canal atualizado");
+      setOpen(false);
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -113,17 +151,19 @@ export function NewChannelDialog({
         if (!v) reset();
       }}
     >
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button
-            size="sm"
-            className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
-          >
-            <Plus className="size-4" />
-            Novo canal
-          </Button>
-        )}
-      </DialogTrigger>
+      {trigger !== null && (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button
+              size="sm"
+              className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
+            >
+              <Plus className="size-4" />
+              Novo canal
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <div className="flex items-center gap-3">
@@ -134,7 +174,7 @@ export function NewChannelDialog({
               <Youtube className="size-5" style={{ color }} />
             </div>
             <div>
-              <DialogTitle>Novo canal</DialogTitle>
+              <DialogTitle>{isEditing ? "Editar canal" : "Novo canal"}</DialogTitle>
               <DialogDescription>
                 Informe o @. Nome, inscritos e imagens serão buscados automaticamente.
               </DialogDescription>
@@ -154,6 +194,7 @@ export function NewChannelDialog({
                 autoFocus
                 autoCapitalize="none"
                 autoCorrect="off"
+                disabled={isEditing}
               />
               <p className="text-[11px] text-muted-foreground">
                 Você também pode colar a URL completa do canal.
@@ -257,7 +298,11 @@ export function NewChannelDialog({
               ) : (
                 <Plus className="size-4" />
               )}
-              {isLoading ? "Buscando no YouTube..." : "Conectar canal"}
+              {isLoading
+                ? "Buscando no YouTube..."
+                : isEditing
+                  ? "Salvar alterações"
+                  : "Conectar canal"}
             </Button>
           </DialogFooter>
         </form>

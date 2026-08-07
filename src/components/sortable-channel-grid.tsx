@@ -21,7 +21,16 @@ import { CSS } from "@dnd-kit/utilities";
 import { useState } from "react";
 import { ArrowRight, Eye, EyeOff, GripVertical, MoreHorizontal, UsersRound } from "lucide-react";
 import { ChannelAvatar } from "@/components/channel-avatar";
+import { NewChannelDialog } from "@/components/new-channel-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +42,8 @@ import { toggleChannelPrivacy } from "@/lib/channel-privacy";
 import type { Channel } from "@/lib/domain";
 import { removeChannel, reorderChannels } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type InsertionSide = "before" | "after";
 
@@ -44,6 +55,9 @@ export function SortableChannelGrid({
   hiddenChannelIds: Set<string>;
 }) {
   const [activeId, setActiveId] = useState<string>();
+  const [editingChannel, setEditingChannel] = useState<Channel>();
+  const [removingChannel, setRemovingChannel] = useState<Channel>();
+  const [removalConfirmation, setRemovalConfirmation] = useState("");
   const channelIds = channels.map((channel) => channel.id);
   const activeChannel = channels.find((channel) => channel.id === activeId);
   const activeIndex = activeId ? channelIds.indexOf(activeId) : -1;
@@ -94,6 +108,8 @@ export function SortableChannelGrid({
               isHidden={hiddenChannelIds.has(channel.id)}
               index={index}
               activeIndex={activeIndex}
+              onEdit={setEditingChannel}
+              onRemove={setRemovingChannel}
             />
           ))}
         </div>
@@ -110,6 +126,66 @@ export function SortableChannelGrid({
           />
         ) : null}
       </DragOverlay>
+
+      <NewChannelDialog
+        channel={editingChannel}
+        open={Boolean(editingChannel)}
+        onOpenChange={(open) => !open && setEditingChannel(undefined)}
+        trigger={null}
+      />
+
+      <Dialog
+        open={Boolean(removingChannel)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRemovingChannel(undefined);
+            setRemovalConfirmation("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remover canal?</DialogTitle>
+            <DialogDescription>
+              Esta ação excluirá permanentemente o canal, seus projetos, métodos e itens da
+              biblioteca.
+            </DialogDescription>
+          </DialogHeader>
+          {removingChannel && (
+            <div className="space-y-2">
+              <Label htmlFor="remove-channel-confirmation">
+                Digite o nome do canal abaixo para confirmar:
+              </Label>
+              <p className="rounded-md bg-muted px-3 py-2 text-sm font-medium">
+                {removingChannel.name}
+              </p>
+              <Input
+                id="remove-channel-confirmation"
+                value={removalConfirmation}
+                onChange={(event) => setRemovalConfirmation(event.target.value)}
+                placeholder={removingChannel.name}
+                autoFocus
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRemovingChannel(undefined)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={removalConfirmation !== removingChannel?.name}
+              onClick={() => {
+                if (removingChannel) removeChannel(removingChannel.id);
+                setRemovingChannel(undefined);
+                setRemovalConfirmation("");
+              }}
+            >
+              Remover canal
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DndContext>
   );
 }
@@ -119,11 +195,15 @@ function SortableChannelCard({
   isHidden,
   index,
   activeIndex,
+  onEdit,
+  onRemove,
 }: {
   channel: Channel;
   isHidden: boolean;
   index: number;
   activeIndex: number;
+  onEdit: (channel: Channel) => void;
+  onRemove: (channel: Channel) => void;
 }) {
   const {
     attributes,
@@ -215,14 +295,10 @@ function SortableChannelCard({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem>Editar canal</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onEdit(channel)}>Editar canal</DropdownMenuItem>
                   <DropdownMenuItem>Pausar produção</DropdownMenuItem>
-                  <DropdownMenuItem>Duplicar</DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive"
-                    onClick={() => removeChannel(channel.id)}
-                  >
+                  <DropdownMenuItem className="text-destructive" onSelect={() => onRemove(channel)}>
                     Remover
                   </DropdownMenuItem>
                 </DropdownMenuContent>
