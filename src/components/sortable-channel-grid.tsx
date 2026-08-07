@@ -257,13 +257,13 @@ function ChannelIdentity({ channel, isHidden }: { channel: Channel; isHidden: bo
       <div className="min-w-0">
         <h3 className="truncate text-base font-semibold">{channel.name}</h3>
         <p className="truncate text-xs text-muted-foreground">{channel.handle}</p>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
+        <div className="mt-1 flex flex-col items-start gap-0.5 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1 whitespace-nowrap">
             <UsersRound className="size-3" />
             {channel.subscribers || "0 inscritos"}
           </span>
-          {channel.niche && <span>{channel.niche}</span>}
-          <span>{channel.language}</span>
+          <span className="whitespace-nowrap">{channel.language}</span>
+          {channel.niche && <span className="truncate">{channel.niche}</span>}
         </div>
       </div>
     </div>

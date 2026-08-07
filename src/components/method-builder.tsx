@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -12,6 +12,7 @@ import {
   Database,
   Library,
   ListChecks,
+  LoaderCircle,
   Plus,
   Search,
   Share2,
@@ -127,6 +128,10 @@ const PARAMETER_TYPES: { value: BlockParameterType; label: string }[] = FIELD_TY
     ["text", "number", "select", "boolean", "textarea"].includes(item.value),
 );
 
+// Mantemos os dados avançados no modelo para não destruir configurações já salvas.
+// A interface será reativada somente quando o formato definitivo dos plugins for definido.
+const ADVANCED_METHOD_CONFIGURATION_ENABLED = false;
+
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -144,9 +149,16 @@ export function MethodBuilder({
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [draftBlocks, setDraftBlocks] = useState<ActionBlock[]>([]);
   const [isDirty, setIsDirty] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">(
+    "idle",
+  );
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [pendingFileImport, setPendingFileImport] = useState<SharedMethodFile | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadedProcessRef = useRef<UniversalProcess | null>(null);
+  const editVersionRef = useRef(0);
+  const currentProcessRef = useRef(processType);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const method = channel?.methods[processType];
   const blocks = useMemo(() => [...draftBlocks].sort((a, b) => a.order - b.order), [draftBlocks]);
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
@@ -158,9 +170,7 @@ export function MethodBuilder({
     }))
     .filter((candidate) => candidate.blocks.length > 0);
 
-  useEffect(() => {
-    if (initialProcess) setProcessType(initialProcess);
-  }, [initialProcess]);
+  currentProcessRef.current = processType;
 
   useEffect(() => {
     if (!blocks.some((block) => block.id === selectedBlockId)) {
@@ -169,13 +179,68 @@ export function MethodBuilder({
   }, [blocks, selectedBlockId]);
 
   useEffect(() => {
+    const changedProcess = loadedProcessRef.current !== processType;
+    if (!changedProcess && isDirty) return;
+
     setDraftBlocks(
       structuredClone(method?.blocks ?? []).map((block) =>
         normalizeActionBlock(block, processType),
       ),
     );
+    loadedProcessRef.current = processType;
     setIsDirty(false);
-  }, [processType, method]);
+    setSaveStatus(method?.blocks.length ? "saved" : "idle");
+  }, [isDirty, processType, method]);
+
+  const persistMethod = useCallback(
+    async (showConfirmation = false) => {
+      if (!channel) return;
+      const savingProcess = processType;
+      const savingBlocks = blocks;
+      const savingVersion = editVersionRef.current;
+      setSaveStatus("saving");
+
+      const queuedSave = saveQueueRef.current
+        .catch(() => undefined)
+        .then(() =>
+          setChannelMethod(channel.id, savingProcess, {
+            processType: savingProcess,
+            blocks: savingBlocks,
+          }),
+        );
+      saveQueueRef.current = queuedSave;
+
+      try {
+        await queuedSave;
+        if (
+          currentProcessRef.current === savingProcess &&
+          editVersionRef.current === savingVersion
+        ) {
+          setIsDirty(false);
+          setSaveStatus("saved");
+        }
+        if (showConfirmation) {
+          toast.success(`MÃ©todo de ${PROCESS_META[savingProcess].label} salvo.`);
+        }
+      } catch (error) {
+        if (currentProcessRef.current === savingProcess) {
+          setSaveStatus("error");
+          setIsDirty(true);
+        }
+        toast.error("NÃ£o foi possÃ­vel salvar o mÃ©todo", {
+          description: error instanceof Error ? error.message : undefined,
+        });
+      }
+    },
+    [blocks, channel, processType],
+  );
+
+  useEffect(() => {
+    if (!isDirty) return;
+    setSaveStatus("pending");
+    const timer = window.setTimeout(() => void persistMethod(), 700);
+    return () => window.clearTimeout(timer);
+  }, [isDirty, persistMethod]);
 
   useEffect(() => {
     if (!pendingFileImport || pendingFileImport.method.processType !== processType) return;
@@ -189,21 +254,24 @@ export function MethodBuilder({
     setIsDirty(true);
     setPendingFileImport(null);
     toast.success(`${pendingFileImport.name} importado`, {
-      description: "Revise a cópia e clique em Salvar método para mantê-la neste canal.",
+      description: "Revise a cópia. As alterações serão salvas automaticamente.",
     });
   }, [pendingFileImport, processType]);
 
   if (!channel || !method) return null;
 
   const saveBlocks = (nextBlocks: ActionBlock[]) => {
+    editVersionRef.current += 1;
     setDraftBlocks(nextBlocks.map((block, order) => ({ ...block, order })));
     setIsDirty(true);
+    setSaveStatus("pending");
   };
 
-  const saveMethod = () => {
-    setChannelMethod(channel.id, processType, { processType, blocks });
-    setIsDirty(false);
-    toast.success(`Método de ${PROCESS_META[processType].label} salvo.`);
+  const selectProcess = (nextProcess: UniversalProcess) => {
+    if (nextProcess === processType) return;
+    if (isDirty) void persistMethod();
+    loadedProcessRef.current = null;
+    setProcessType(nextProcess);
   };
 
   const importMethod = (sourceChannelName: string, sourceBlocks: ActionBlock[]) => {
@@ -214,7 +282,7 @@ export function MethodBuilder({
     setSelectedBlockId(importedBlocks[0]?.id ?? null);
     setLibraryOpen(false);
     toast.info(`Base importada de ${sourceChannelName}`, {
-      description: "Revise as configurações e clique em Salvar método.",
+      description: "Revise as configurações. A cópia será salva automaticamente.",
     });
   };
 
@@ -318,7 +386,7 @@ export function MethodBuilder({
               <button
                 key={process}
                 type="button"
-                onClick={() => setProcessType(process)}
+                onClick={() => selectProcess(process)}
                 className={cn(
                   "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition",
                   active
@@ -440,13 +508,38 @@ export function MethodBuilder({
                 )}
               </DialogContent>
             </Dialog>
+            <div
+              className={cn(
+                "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs",
+                saveStatus === "error"
+                  ? "border-destructive/40 text-destructive"
+                  : "border-border text-muted-foreground",
+              )}
+              role="status"
+              aria-live="polite"
+            >
+              {saveStatus === "saving" ? (
+                <LoaderCircle className="size-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="size-3.5" />
+              )}
+              {saveStatus === "pending"
+                ? "Alterações pendentes"
+                : saveStatus === "saving"
+                  ? "Salvando..."
+                  : saveStatus === "error"
+                    ? "Erro ao salvar"
+                    : saveStatus === "saved"
+                      ? "Salvo automaticamente"
+                      : "Salvamento automático"}
+            </div>
             <Button
               size="sm"
-              onClick={saveMethod}
-              disabled={!isDirty}
+              onClick={() => void persistMethod(true)}
+              disabled={!isDirty || saveStatus === "saving"}
               className="gradient-brand text-white"
             >
-              Salvar método
+              Salvar agora
             </Button>
           </div>
         </div>
@@ -557,7 +650,7 @@ export function MethodBuilder({
           <div className="grid min-h-64 place-items-center text-center text-xs text-muted-foreground">
             <div>
               <Database className="mx-auto mb-2 size-5" />
-              Selecione um bloco para configurar operador e parâmetros.
+              Selecione um bloco para configurar a ação.
             </div>
           </div>
         )}
@@ -655,10 +748,6 @@ function BlockEditor({
         </div>
       </div>
 
-      <p className="mt-3 rounded-lg border border-border/60 bg-background/40 p-3 text-xs text-muted-foreground">
-        {meta.description}
-      </p>
-
       <div className="mt-5 space-y-1.5">
         <Label>Nome da ação</Label>
         <Input
@@ -703,55 +792,61 @@ function BlockEditor({
         </Select>
       </div>
 
-      {block.operator === "Humano" ? (
-        <HumanTaskDefinitionEditor
-          block={block}
-          processType={processType}
-          previousBlocks={previousBlocks}
-          onChange={onChange}
-        />
-      ) : (
-        <div className="mt-5 rounded-xl border border-warning/40 bg-warning/5 p-4 text-xs text-muted-foreground">
-          <p className="font-semibold text-warning">Executor ainda não configurado</p>
-          <p className="mt-1">
-            A opção {block.operator} foi preservada, mas dependerá de um plugin. Nesta versão,
-            somente blocos atribuídos ao operador Humano podem ser executados.
-          </p>
-        </div>
-      )}
-
-      {block.operator !== "Humano" && (
-        <div className="mt-6 flex items-center justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-semibold">Parâmetros</h3>
-            <p className="text-[11px] text-muted-foreground">Informações específicas desta ação.</p>
-          </div>
-          <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addParameter}>
-            <Plus className="size-3" /> Adicionar
-          </Button>
-        </div>
-      )}
-
-      {block.operator !== "Humano" && (
-        <div className="mt-3 space-y-3">
-          {block.parameters.map((parameter) => (
-            <ParameterEditor
-              key={parameter.id}
-              parameter={parameter}
-              onChange={(patch) => updateParameter(parameter.id, patch)}
-              onRemove={() =>
-                onChange({
-                  parameters: block.parameters.filter((item) => item.id !== parameter.id),
-                })
-              }
+      {ADVANCED_METHOD_CONFIGURATION_ENABLED && (
+        <>
+          {block.operator === "Humano" ? (
+            <HumanTaskDefinitionEditor
+              block={block}
+              processType={processType}
+              previousBlocks={previousBlocks}
+              onChange={onChange}
             />
-          ))}
-          {block.parameters.length === 0 && (
-            <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
-              Nenhum parâmetro. O bloco pode funcionar assim ou receber campos personalizados.
+          ) : (
+            <div className="mt-5 rounded-xl border border-warning/40 bg-warning/5 p-4 text-xs text-muted-foreground">
+              <p className="font-semibold text-warning">Executor ainda não configurado</p>
+              <p className="mt-1">
+                A opção {block.operator} foi preservada, mas dependerá de um plugin. Nesta versão,
+                somente blocos atribuídos ao operador Humano podem ser executados.
+              </p>
             </div>
           )}
-        </div>
+
+          {block.operator !== "Humano" && (
+            <div className="mt-6 flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">Parâmetros</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  Informações específicas desta ação.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addParameter}>
+                <Plus className="size-3" /> Adicionar
+              </Button>
+            </div>
+          )}
+
+          {block.operator !== "Humano" && (
+            <div className="mt-3 space-y-3">
+              {block.parameters.map((parameter) => (
+                <ParameterEditor
+                  key={parameter.id}
+                  parameter={parameter}
+                  onChange={(patch) => updateParameter(parameter.id, patch)}
+                  onRemove={() =>
+                    onChange({
+                      parameters: block.parameters.filter((item) => item.id !== parameter.id),
+                    })
+                  }
+                />
+              ))}
+              {block.parameters.length === 0 && (
+                <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
+                  Nenhum parâmetro. O bloco pode funcionar assim ou receber campos personalizados.
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

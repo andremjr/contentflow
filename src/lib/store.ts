@@ -225,7 +225,7 @@ async function syncAllChannelsFromYouTube() {
   }
 }
 
-export function setChannelMethod(
+export async function setChannelMethod(
   channelId: string,
   processType: UniversalProcess,
   method: ProcessMethod,
@@ -243,7 +243,7 @@ export function setChannelMethod(
     },
   };
   emit();
-  void request(`/api/channels/${channel.id}`, "PUT", channel);
+  await request(`/api/channels/${channel.id}`, "PUT", channel);
 }
 
 export function removeChannel(id: string) {
@@ -366,8 +366,6 @@ export function startProcessExecution(projectId: string, processType: ProcessId)
       order,
     })),
   };
-  const firstBlock = methodSnapshot.blocks[0];
-  const firstStatus = firstBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
   const execution: ProcessExecution = {
     id: crypto.randomUUID(),
     projectId,
@@ -376,18 +374,18 @@ export function startProcessExecution(projectId: string, processType: ProcessId)
     methodSnapshot,
     blocks: methodSnapshot.blocks.map((block, index) => ({
       blockId: block.id,
-      status: index === 0 ? firstStatus : "pending",
+      status: index === 0 ? "in_progress" : "pending",
       values: {},
       startedAt: index === 0 ? now : undefined,
     })),
-    status: firstStatus === "awaiting_human" ? "awaiting_human" : "blocked_executor",
+    status: "running",
     createdAt: now,
     updatedAt: now,
   };
   db.executions.unshift(execution);
   project.stages = {
     ...project.stages,
-    [processType]: firstStatus === "awaiting_human" ? "awaiting_human" : "blocked",
+    [processType]: "processing",
   };
   project.currentStage = processType;
   project.state = project.stages[processType];
@@ -395,6 +393,91 @@ export function startProcessExecution(projectId: string, processType: ProcessId)
   persistExecution(execution, true);
   emit();
   return execution;
+}
+
+export function advanceSimulatedExecution(executionId: string) {
+  const execution = db.executions.find((item) => item.id === executionId);
+  if (!execution || execution.status === "completed" || execution.status === "cancelled") {
+    return execution;
+  }
+
+  const activeIndex = execution.blocks.findIndex((item) => item.status !== "completed");
+  const activeExecution = execution.blocks[activeIndex];
+  const activeBlock = activeExecution
+    ? execution.methodSnapshot.blocks.find((item) => item.id === activeExecution.blockId)
+    : undefined;
+  if (!activeExecution || !activeBlock) return execution;
+
+  const isLastBlock = activeIndex === execution.blocks.length - 1;
+  const requiresHumanValidation =
+    isLastBlock && activeBlock.type === "VALIDAR" && activeBlock.operator === "Humano";
+  const project = db.projects.find((item) => item.id === execution.projectId);
+  const now = new Date().toISOString();
+
+  if (requiresHumanValidation) {
+    activeExecution.status = "awaiting_human";
+    activeExecution.startedAt ??= now;
+    execution.status = "awaiting_human";
+    if (project) {
+      project.stages = { ...project.stages, [execution.processType]: "awaiting_review" };
+      project.currentStage = execution.processType;
+      project.state = "awaiting_review";
+      persistProject(project);
+    }
+    persistExecution(execution);
+    emit();
+    return execution;
+  }
+
+  activeExecution.status = "completed";
+  activeExecution.startedAt ??= now;
+  activeExecution.completedAt = now;
+  const nextExecution = execution.blocks[activeIndex + 1];
+
+  if (nextExecution) {
+    nextExecution.status = "in_progress";
+    nextExecution.startedAt = now;
+    execution.status = "running";
+    if (project) {
+      project.stages = { ...project.stages, [execution.processType]: "processing" };
+      project.currentStage = execution.processType;
+      project.state = "processing";
+      persistProject(project);
+    }
+  } else {
+    execution.status = "completed";
+    if (project) completeProjectStage(project, execution.processType);
+  }
+
+  persistExecution(execution);
+  emit();
+  return execution;
+}
+
+export function confirmSimulatedValidation(executionId: string) {
+  const execution = db.executions.find((item) => item.id === executionId);
+  if (!execution) return false;
+  const finalExecution = execution.blocks.at(-1);
+  const finalBlock = execution.methodSnapshot.blocks.at(-1);
+  if (
+    !finalExecution ||
+    !finalBlock ||
+    finalExecution.status !== "awaiting_human" ||
+    finalBlock.type !== "VALIDAR" ||
+    finalBlock.operator !== "Humano"
+  ) {
+    return false;
+  }
+
+  const now = new Date().toISOString();
+  finalExecution.status = "completed";
+  finalExecution.completedAt = now;
+  execution.status = "completed";
+  const project = db.projects.find((item) => item.id === execution.projectId);
+  if (project) completeProjectStage(project, execution.processType);
+  persistExecution(execution);
+  emit();
+  return true;
 }
 
 export function saveHumanBlockDraft(
