@@ -1,5 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Blocks, BookOpen, ChevronLeft, FolderKanban, LayoutDashboard } from "lucide-react";
+import {
+  Blocks,
+  BookOpen,
+  ChevronLeft,
+  FolderKanban,
+  LayoutDashboard,
+  Plug,
+  Workflow,
+} from "lucide-react";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useHiddenChannelIds } from "@/lib/channel-privacy";
@@ -41,6 +49,13 @@ export function AppSidebar() {
               to="/dashboard"
               active={pathname === "/dashboard" || pathname === "/"}
             />
+            <NavItem
+              icon={Workflow}
+              label="Métodos"
+              to="/methods"
+              active={pathname === "/methods" || pathname === "/metodos"}
+            />
+            <NavItem icon={Plug} label="Plugins" to="/plugins" active={pathname === "/plugins"} />
             <SectionLabel>Seus canais</SectionLabel>
             {channels.map((item) => (
               <NavItem

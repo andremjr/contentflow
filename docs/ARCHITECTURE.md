@@ -43,6 +43,12 @@ A experiência do usuário no ContentFlow OS apoia-se em 3 camadas de interface 
    - **Objetivo**: Gestão de ferramentas e conexões técnicas.
    - **Funcionamento**: Cadastro e gerenciamento de plugins (oficiais, de código aberto ou webhooks), centralização de chaves de API globais e credenciais.
 
+No nível global, a navegação principal possui três áreas:
+
+- `/dashboard`: visão geral dos canais.
+- `/methods`: Biblioteca de Métodos, derivada dos métodos salvos nos canais, com busca, reutilização, importação e compartilhamento.
+- `/plugins`: Gerenciador de Plugins locais, responsável por descobrir e apresentar manifestos reais instalados no aplicativo.
+
 ---
 
 ## 3. Os 8 Processos Universais de Conteúdo
@@ -132,6 +138,8 @@ O ContentFlow OS apoia-se em dois tipos de compartilhamento comunitário:
 
 1. **Templates de Métodos (Caixa-Aberta)**: Exportação e importação de sequências de blocos com prompts e regras prontas via código/link. Ao importar, o sistema detecta e instala os plugins necessários na conta do usuário de forma transparente.
 2. **Plugins de Código Aberto & Webhooks**: Suporte a plugins comunitários hospedados no GitHub ou via conexões HTTP Webhook (n8n/Make/FastAPI).
+
+A Biblioteca de Métodos global não cria uma segunda cópia independente no banco. Ela agrega os métodos existentes nos canais. Uma cópia só é criada quando o usuário escolhe usar um método em outro canal ou importa um arquivo compartilhado.
 
 ---
 

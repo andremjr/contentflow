@@ -11,6 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as MethodsRouteImport } from './routes/methods'
+import { Route as MetodosRouteImport } from './routes/metodos'
+import { Route as PluginsRouteImport } from './routes/plugins'
 import { Route as ChannelChannelIdRouteImport } from './routes/channel.$channelId'
 import { Route as ProjectProjectIdRouteImport } from './routes/project.$projectId'
 import { Route as ChannelChannelIdIndexRouteImport } from './routes/channel.$channelId.index'
@@ -34,6 +37,21 @@ const IndexRoute = IndexRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MethodsRoute = MethodsRouteImport.update({
+  id: '/methods',
+  path: '/methods',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MetodosRoute = MetodosRouteImport.update({
+  id: '/metodos',
+  path: '/metodos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PluginsRoute = PluginsRouteImport.update({
+  id: '/plugins',
+  path: '/plugins',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChannelChannelIdRoute = ChannelChannelIdRouteImport.update({
@@ -112,6 +130,9 @@ const ProjectProjectIdTitleRoute = ProjectProjectIdTitleRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
+  '/methods': typeof MethodsRoute
+  '/metodos': typeof MetodosRoute
+  '/plugins': typeof PluginsRoute
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
   '/project/$projectId': typeof ProjectProjectIdRouteWithChildren
   '/channel/$channelId/library': typeof ChannelChannelIdLibraryRoute
@@ -130,6 +151,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
+  '/methods': typeof MethodsRoute
+  '/metodos': typeof MetodosRoute
+  '/plugins': typeof PluginsRoute
   '/channel/$channelId/library': typeof ChannelChannelIdLibraryRoute
   '/channel/$channelId/methods': typeof ChannelChannelIdMethodsRoute
   '/project/$projectId/assets': typeof ProjectProjectIdAssetsRoute
@@ -147,6 +171,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
+  '/methods': typeof MethodsRoute
+  '/metodos': typeof MetodosRoute
+  '/plugins': typeof PluginsRoute
   '/channel/$channelId': typeof ChannelChannelIdRouteWithChildren
   '/project/$projectId': typeof ProjectProjectIdRouteWithChildren
   '/channel/$channelId/library': typeof ChannelChannelIdLibraryRoute
@@ -167,6 +194,9 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
+    | '/methods'
+    | '/metodos'
+    | '/plugins'
     | '/channel/$channelId'
     | '/project/$projectId'
     | '/channel/$channelId/library'
@@ -185,6 +215,9 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard'
+    | '/methods'
+    | '/metodos'
+    | '/plugins'
     | '/channel/$channelId/library'
     | '/channel/$channelId/methods'
     | '/project/$projectId/assets'
@@ -201,6 +234,9 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/dashboard'
+    | '/methods'
+    | '/metodos'
+    | '/plugins'
     | '/channel/$channelId'
     | '/project/$projectId'
     | '/channel/$channelId/library'
@@ -220,6 +256,9 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
+  MethodsRoute: typeof MethodsRoute
+  MetodosRoute: typeof MetodosRoute
+  PluginsRoute: typeof PluginsRoute
   ChannelChannelIdRoute: typeof ChannelChannelIdRouteWithChildren
   ProjectProjectIdRoute: typeof ProjectProjectIdRouteWithChildren
 }
@@ -238,6 +277,27 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/methods': {
+      id: '/methods'
+      path: '/methods'
+      fullPath: '/methods'
+      preLoaderRoute: typeof MethodsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/metodos': {
+      id: '/metodos'
+      path: '/metodos'
+      fullPath: '/metodos'
+      preLoaderRoute: typeof MetodosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/plugins': {
+      id: '/plugins'
+      path: '/plugins'
+      fullPath: '/plugins'
+      preLoaderRoute: typeof PluginsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/channel/$channelId': {
@@ -386,6 +446,9 @@ const ProjectProjectIdRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
+  MethodsRoute: MethodsRoute,
+  MetodosRoute: MetodosRoute,
+  PluginsRoute: PluginsRoute,
   ChannelChannelIdRoute: ChannelChannelIdRouteWithChildren,
   ProjectProjectIdRoute: ProjectProjectIdRouteWithChildren,
 }

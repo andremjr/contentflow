@@ -1,6 +1,6 @@
 import express from "express";
 import Database from "better-sqlite3";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fetchYouTubeChannel } from "./youtube";
@@ -9,6 +9,7 @@ const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
 const dataDirectory = path.join(process.cwd(), "data");
 const uploadsDirectory = path.join(dataDirectory, "uploads");
 const installedPluginsDirectory = path.join(dataDirectory, "plugins", "installed");
+const bundledPluginsDirectory = path.join(process.cwd(), "plugins", "bundled");
 mkdirSync(dataDirectory, { recursive: true });
 mkdirSync(uploadsDirectory, { recursive: true });
 mkdirSync(installedPluginsDirectory, { recursive: true });
@@ -74,6 +75,44 @@ type StoredPayload = {
 
 function parseRows(rows: { payload: string }[]) {
   return rows.map((row) => JSON.parse(row.payload));
+}
+
+type PluginSource = "bundled" | "installed";
+
+function discoverPlugins(root: string, source: PluginSource, relativeRoot: string) {
+  if (!existsSync(root)) return { plugins: [], issues: [] };
+  const plugins: Array<{
+    id: string;
+    source: PluginSource;
+    directory: string;
+    manifest: Record<string, unknown>;
+  }> = [];
+  const issues: Array<{ directory: string; message: string }> = [];
+
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const manifestPath = path.join(root, entry.name, "contentflow.plugin.json");
+    if (!existsSync(manifestPath)) continue;
+    const directory = `${relativeRoot}/${entry.name}`;
+    try {
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+      if (
+        typeof manifest.id !== "string" ||
+        typeof manifest.name !== "string" ||
+        typeof manifest.version !== "string" ||
+        !Array.isArray(manifest.capabilities)
+      ) {
+        throw new Error("Manifesto incompleto ou incompatível.");
+      }
+      plugins.push({ id: manifest.id, source, directory, manifest });
+    } catch (error) {
+      issues.push({
+        directory,
+        message: error instanceof Error ? error.message : "Manifesto inválido.",
+      });
+    }
+  }
+  return { plugins, issues };
 }
 
 function migrateLegacyLibraryItems() {
@@ -188,6 +227,19 @@ app.post(
 
 app.get("/api/health", (_request, response) => {
   response.json({ ok: true });
+});
+
+app.get("/api/plugins", (_request, response) => {
+  const bundled = discoverPlugins(bundledPluginsDirectory, "bundled", "plugins/bundled");
+  const installed = discoverPlugins(
+    installedPluginsDirectory,
+    "installed",
+    "data/plugins/installed",
+  );
+  response.json({
+    plugins: [...bundled.plugins, ...installed.plugins],
+    issues: [...bundled.issues, ...installed.issues],
+  });
 });
 
 app.get("/api/youtube/channel", async (request, response) => {

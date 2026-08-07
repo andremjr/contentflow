@@ -32,6 +32,8 @@ data/plugins/installed/   Plugins instalados somente na máquina do usuário
 
 Plugins comunitários são código executável. A implementação do carregador deverá validar manifesto e versão, pedir consentimento para permissões e executar o plugin isolado do processo principal, com timeout e contexto limitado.
 
+A rota global `/plugins` descobre manifestos chamados `contentflow.plugin.json` nas subpastas desses dois diretórios. A API retorna somente caminhos relativos e nunca expõe diretórios específicos da máquina do usuário. A presença do manifesto permite gerenciamento e compatibilidade visual; a execução isolada permanece uma etapa posterior do carregador.
+
 ## Credenciais
 
 Segredos são configurações locais globais identificadas pelas chaves declaradas em `secretKeys`. Eles nunca fazem parte do Método, de arquivos compartilhados ou do repositório Git.
