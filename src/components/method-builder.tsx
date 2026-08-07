@@ -84,7 +84,7 @@ const BLOCK_META: Record<
   },
   ESCOLHER: {
     label: "Escolher",
-    description: "Tomar decisões, aplicar regras e diretrizes.",
+    description: "Selecionar itens preexistentes da Biblioteca Estratégica.",
     icon: ListChecks,
     className: "border-violet-500/35 bg-violet-500/10 text-violet-300",
   },
@@ -109,29 +109,26 @@ const OPERATOR_META: Record<BlockOperator, { label: string; icon: typeof Bot }> 
 };
 
 const FIELD_TYPES: { value: HumanFieldType; label: string }[] = [
-  { value: "text", label: "Texto" },
+  { value: "text", label: "Texto curto" },
+  { value: "textarea", label: "Texto longo" },
   { value: "number", label: "Número" },
+  { value: "boolean", label: "Sim ou não" },
+  { value: "list", label: "Lista de textos" },
   { value: "select", label: "Seleção" },
   { value: "multiselect", label: "Seleção múltipla" },
-  { value: "boolean", label: "Booleano" },
-  { value: "textarea", label: "Área de texto" },
-  { value: "list", label: "Lista de itens" },
   { value: "url", label: "URL" },
   { value: "file", label: "Arquivo" },
+  { value: "files", label: "Vários arquivos" },
   { value: "image", label: "Imagem" },
   { value: "audio", label: "Áudio" },
   { value: "video", label: "Vídeo" },
-  { value: "approval", label: "Aprovar ou reprovar" },
+  { value: "approval", label: "Decisão" },
 ];
 
 const PARAMETER_TYPES: { value: BlockParameterType; label: string }[] = FIELD_TYPES.filter(
   (item): item is { value: BlockParameterType; label: string } =>
     ["text", "number", "select", "boolean", "textarea"].includes(item.value),
 );
-
-// Mantemos os dados avançados no modelo para não destruir configurações já salvas.
-// A interface será reativada somente quando o formato definitivo dos plugins for definido.
-const ADVANCED_METHOD_CONFIGURATION_ENABLED = false;
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -645,7 +642,6 @@ export function MethodBuilder({
             channelId={channelId}
             collections={collections}
             processType={processType}
-            previousBlocks={blocks.slice(0, blocks.indexOf(selectedBlock))}
             index={blocks.indexOf(selectedBlock)}
             total={blocks.length}
             onChange={(patch) => updateBlock(selectedBlock.id, patch)}
@@ -670,7 +666,6 @@ function BlockEditor({
   channelId,
   collections,
   processType,
-  previousBlocks,
   index,
   total,
   onChange,
@@ -681,7 +676,6 @@ function BlockEditor({
   channelId: string;
   collections: StrategicCollection[];
   processType: UniversalProcess;
-  previousBlocks: ActionBlock[];
   index: number;
   total: number;
   onChange: (patch: Partial<ActionBlock>) => void;
@@ -690,26 +684,6 @@ function BlockEditor({
 }) {
   const meta = BLOCK_META[block.type];
   const Icon = meta.icon;
-
-  const addParameter = () => {
-    const parameter: BlockParameter = {
-      id: uid(`${block.id}-parameter`),
-      label: "Novo parâmetro",
-      key: `parameter_${block.parameters.length + 1}`,
-      type: "text",
-      value: "",
-      placeholder: "Digite um valor",
-    };
-    onChange({ parameters: [...block.parameters, parameter] });
-  };
-
-  const updateParameter = (parameterId: string, patch: Partial<BlockParameter>) => {
-    onChange({
-      parameters: block.parameters.map((parameter) =>
-        parameter.id === parameterId ? { ...parameter, ...patch } : parameter,
-      ),
-    });
-  };
 
   return (
     <div>
@@ -834,80 +808,36 @@ function BlockEditor({
             </div>
           )}
           <p className="text-[11px] text-muted-foreground">
-            Os itens desta coleção serão as opções disponíveis durante a execução do bloco.
+            Obrigatório: Escolher sempre seleciona entre itens preexistentes desta coleção. Para
+            decidir entre resultados produzidos durante o método, use um bloco Validar.
           </p>
         </div>
       )}
 
-      {ADVANCED_METHOD_CONFIGURATION_ENABLED && (
-        <>
-          {block.operator === "Humano" ? (
-            <HumanTaskDefinitionEditor
-              block={block}
-              processType={processType}
-              previousBlocks={previousBlocks}
-              onChange={onChange}
-            />
-          ) : (
-            <div className="mt-5 rounded-xl border border-warning/40 bg-warning/5 p-4 text-xs text-muted-foreground">
-              <p className="font-semibold text-warning">Executor ainda não configurado</p>
-              <p className="mt-1">
-                A opção {block.operator} foi preservada, mas dependerá de um plugin. Nesta versão,
-                somente blocos atribuídos ao operador Humano podem ser executados.
-              </p>
-            </div>
-          )}
+      {block.type !== "ESCOLHER" && (
+        <DataContractEditor block={block} processType={processType} onChange={onChange} />
+      )}
 
-          {block.operator !== "Humano" && (
-            <div className="mt-6 flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold">Parâmetros</h3>
-                <p className="text-[11px] text-muted-foreground">
-                  Informações específicas desta ação.
-                </p>
-              </div>
-              <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addParameter}>
-                <Plus className="size-3" /> Adicionar
-              </Button>
-            </div>
-          )}
-
-          {block.operator !== "Humano" && (
-            <div className="mt-3 space-y-3">
-              {block.parameters.map((parameter) => (
-                <ParameterEditor
-                  key={parameter.id}
-                  parameter={parameter}
-                  onChange={(patch) => updateParameter(parameter.id, patch)}
-                  onRemove={() =>
-                    onChange({
-                      parameters: block.parameters.filter((item) => item.id !== parameter.id),
-                    })
-                  }
-                />
-              ))}
-              {block.parameters.length === 0 && (
-                <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
-                  Nenhum parâmetro. O bloco pode funcionar assim ou receber campos personalizados.
-                </div>
-              )}
-            </div>
-          )}
-        </>
+      {block.operator !== "Humano" && (
+        <div className="mt-5 rounded-xl border border-warning/40 bg-warning/5 p-4 text-xs text-muted-foreground">
+          <p className="font-semibold text-warning">Plugin necessário</p>
+          <p className="mt-1">
+            Quando houver plugins compatíveis com esta ação e seus formatos, eles aparecerão aqui.
+            Até lá, este bloco ficará bloqueado durante a produção.
+          </p>
+        </div>
       )}
     </div>
   );
 }
 
-function HumanTaskDefinitionEditor({
+function DataContractEditor({
   block,
   processType,
-  previousBlocks,
   onChange,
 }: {
   block: ActionBlock;
   processType: UniversalProcess;
-  previousBlocks: ActionBlock[];
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const inputs = block.inputs ?? [];
@@ -915,9 +845,9 @@ function HumanTaskDefinitionEditor({
   const addInput = () => {
     const input: BlockInputBinding = {
       id: uid(`${block.id}-input`),
-      label: "Contexto do projeto",
-      source: "project",
-      sourceKey: "title",
+      label: "Nova entrada",
+      type: "text",
+      source: "previous_block",
     };
     onChange({ inputs: [...inputs, input] });
   };
@@ -928,7 +858,6 @@ function HumanTaskDefinitionEditor({
       key: `output_${outputs.length + 1}`,
       type: "text",
       required: true,
-      placeholder: "Preencha a entrega",
     };
     onChange({ outputs: [...outputs, output] });
   };
@@ -936,8 +865,8 @@ function HumanTaskDefinitionEditor({
     <>
       <div className="mt-6 flex items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold">Entradas e contexto</h3>
-          <p className="text-[11px] text-muted-foreground">O que o humano verá para trabalhar.</p>
+          <h3 className="text-sm font-semibold">Dados de entrada</h3>
+          <p className="text-[11px] text-muted-foreground">O que esta ação precisa receber.</p>
         </div>
         <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
           <Plus className="size-3" /> Adicionar
@@ -948,7 +877,6 @@ function HumanTaskDefinitionEditor({
           <InputBindingEditor
             key={input.id}
             input={input}
-            previousBlocks={previousBlocks}
             onChange={(patch) =>
               onChange({
                 inputs: inputs.map((item) => (item.id === input.id ? { ...item, ...patch } : item)),
@@ -959,17 +887,17 @@ function HumanTaskDefinitionEditor({
         ))}
         {inputs.length === 0 && (
           <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
-            Saídas dos blocos anteriores aparecem automaticamente. Adicione aqui dados do projeto,
-            biblioteca ou orientações fixas que mereçam destaque.
+            Nenhuma entrada específica. Os resultados anteriores continuam disponíveis como contexto
+            durante a produção.
           </div>
         )}
       </div>
 
       <div className="mt-6 flex items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold">Entrega esperada</h3>
+          <h3 className="text-sm font-semibold">Dados de saída</h3>
           <p className="text-[11px] text-muted-foreground">
-            Campos preenchidos durante a produção do vídeo.
+            O que esta ação deve entregar para o método continuar.
           </p>
         </div>
         <div className="flex gap-1">
@@ -990,7 +918,7 @@ function HumanTaskDefinitionEditor({
       </div>
       <div className="mt-3 space-y-3">
         {outputs.map((output) => (
-          <HumanFieldEditor
+          <OutputFieldEditor
             key={output.id}
             field={output}
             onChange={(patch) =>
@@ -1005,7 +933,7 @@ function HumanTaskDefinitionEditor({
         ))}
         {outputs.length === 0 && (
           <div className="rounded-lg border border-dashed border-destructive/50 p-4 text-center text-[11px] text-destructive">
-            Adicione ao menos uma entrega para concluir este bloco humano.
+            Adicione ao menos uma saída para concluir esta ação.
           </div>
         )}
       </div>
@@ -1015,23 +943,37 @@ function HumanTaskDefinitionEditor({
 
 function InputBindingEditor({
   input,
-  previousBlocks,
   onChange,
   onRemove,
 }: {
   input: BlockInputBinding;
-  previousBlocks: ActionBlock[];
   onChange: (patch: Partial<BlockInputBinding>) => void;
   onRemove: () => void;
 }) {
   return (
-    <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
-      <div className="flex items-center gap-2">
+    <div className="rounded-xl border border-border/70 bg-card p-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)_32px] items-center gap-2">
         <Input
           value={input.label}
           onChange={(event) => onChange({ label: event.target.value })}
+          placeholder="Nome da entrada"
           className="h-8 text-xs"
         />
+        <Select
+          value={input.type ?? "text"}
+          onValueChange={(type) => onChange({ type: type as HumanFieldType })}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FIELD_TYPES.map((type) => (
+              <SelectItem key={type.value} value={type.value}>
+                {type.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button
           size="icon"
           variant="ghost"
@@ -1041,78 +983,11 @@ function InputBindingEditor({
           <Trash2 className="size-3" />
         </Button>
       </div>
-      <Select
-        value={input.source}
-        onValueChange={(source) => onChange({ source: source as BlockInputBinding["source"] })}
-      >
-        <SelectTrigger className="h-8 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="project">Dado do projeto</SelectItem>
-          <SelectItem value="previous_block">Saída de bloco anterior</SelectItem>
-          <SelectItem value="channel_library">Biblioteca do canal</SelectItem>
-          <SelectItem value="static">Texto fixo</SelectItem>
-        </SelectContent>
-      </Select>
-      {input.source === "project" && (
-        <Select
-          value={input.sourceKey ?? "title"}
-          onValueChange={(sourceKey) => onChange({ sourceKey })}
-        >
-          <SelectTrigger className="h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="title">Nome do projeto/vídeo</SelectItem>
-            <SelectItem value="deadline">Prazo</SelectItem>
-          </SelectContent>
-        </Select>
-      )}
-      {input.source === "previous_block" && (
-        <div className="grid grid-cols-2 gap-2">
-          <Select value={input.blockId} onValueChange={(blockId) => onChange({ blockId })}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Bloco" />
-            </SelectTrigger>
-            <SelectContent>
-              {previousBlocks.map((item) => (
-                <SelectItem key={item.id} value={item.id}>
-                  {item.name ?? item.type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            value={input.sourceKey ?? ""}
-            onChange={(event) => onChange({ sourceKey: event.target.value })}
-            placeholder="Chave (opcional)"
-            className="h-8 text-xs"
-          />
-        </div>
-      )}
-      {input.source === "channel_library" && (
-        <Input
-          value={input.collection ?? ""}
-          onChange={(event) => onChange({ collection: event.target.value })}
-          placeholder="Coleção da biblioteca"
-          className="h-8 text-xs"
-        />
-      )}
-      {input.source === "static" && (
-        <Textarea
-          value={input.staticValue ?? ""}
-          onChange={(event) => onChange({ staticValue: event.target.value })}
-          placeholder="Texto exibido em todas as execuções"
-          rows={2}
-          className="text-xs"
-        />
-      )}
     </div>
   );
 }
 
-function HumanFieldEditor({
+function OutputFieldEditor({
   field,
   onChange,
   onRemove,
@@ -1124,10 +999,28 @@ function HumanFieldEditor({
   const usesOptions = field.type === "select" || field.type === "multiselect";
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          {field.key}
-        </span>
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)_32px] items-center gap-2">
+        <Input
+          value={field.label}
+          onChange={(event) => onChange({ label: event.target.value })}
+          placeholder="Nome da saída"
+          className="h-8 text-xs"
+        />
+        <Select
+          value={field.type}
+          onValueChange={(type) => onChange({ type: type as HumanFieldType })}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FIELD_TYPES.map((type) => (
+              <SelectItem key={type.value} value={type.value}>
+                {type.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button
           size="icon"
           variant="ghost"
@@ -1137,77 +1030,28 @@ function HumanFieldEditor({
           <Trash2 className="size-3" />
         </Button>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Input
-          value={field.label}
-          onChange={(event) => onChange({ label: event.target.value })}
-          placeholder="Nome"
-          className="h-8 text-xs"
-        />
-        <Input
-          value={field.key}
-          onChange={(event) => onChange({ key: event.target.value })}
-          placeholder="chave"
-          className="h-8 font-mono text-xs"
-        />
-      </div>
-      <Select
-        value={field.type}
-        onValueChange={(type) => onChange({ type: type as HumanFieldType })}
-      >
-        <SelectTrigger className="h-8 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {FIELD_TYPES.map((type) => (
-            <SelectItem key={type.value} value={type.value}>
-              {type.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
       {usesOptions && (
-        <>
-          <Input
-            value={(field.options ?? []).join(", ")}
+        <div>
+          <Textarea
+            value={(field.options ?? []).join("\n")}
             onChange={(event) =>
               onChange({
                 options: event.target.value
-                  .split(",")
+                  .split("\n")
                   .map((item) => item.trim())
                   .filter(Boolean),
               })
             }
-            placeholder="Opções fixas separadas por vírgula"
-            className="h-8 text-xs"
+            placeholder="Opções fixas, uma por linha (opcional)"
+            rows={3}
+            className="text-xs"
           />
-          <Input
-            value={field.libraryCollection ?? ""}
-            onChange={(event) => onChange({ libraryCollection: event.target.value })}
-            placeholder="Ou coleção da biblioteca"
-            className="h-8 text-xs"
-          />
-        </>
+          <p className="mt-1.5 text-[10px] text-muted-foreground">
+            Se ficar vazio, o sistema usa automaticamente a lista mais recente produzida pelo
+            método.
+          </p>
+        </div>
       )}
-      <Input
-        value={field.placeholder ?? ""}
-        onChange={(event) => onChange({ placeholder: event.target.value })}
-        placeholder="Placeholder"
-        className="h-8 text-xs"
-      />
-      <Input
-        value={field.helpText ?? ""}
-        onChange={(event) => onChange({ helpText: event.target.value })}
-        placeholder="Orientação adicional"
-        className="h-8 text-xs"
-      />
-      <label className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Checkbox
-          checked={field.required}
-          onCheckedChange={(checked) => onChange({ required: checked === true })}
-        />{" "}
-        Entrega obrigatória
-      </label>
     </div>
   );
 }

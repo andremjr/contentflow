@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import {
   createEmptyMethods,
+  PROCESS_META,
   PROCESS_ORDER,
   type ActionBlock,
   type BlockExecution,
@@ -9,6 +10,7 @@ import {
   type ProcessExecution,
   type ProcessId,
   type ProcessMethod,
+  type ProcessOutput,
   type ProcessState,
   type Project,
   type RuntimeValue,
@@ -16,7 +18,12 @@ import {
   type StoredFile,
   type UniversalProcess,
 } from "@/lib/domain";
-import { isEmptyRuntimeValue, normalizeActionBlock } from "@/lib/human-workflow";
+import {
+  createProcessOutputFields,
+  getMethodConfigurationIssue,
+  isEmptyRuntimeValue,
+  normalizeActionBlock,
+} from "@/lib/human-workflow";
 
 export type YouTubeChannelProfile = Pick<
   Channel,
@@ -38,6 +45,7 @@ const db = {
   ready: false,
 };
 const listeners = new Set<() => void>();
+const executionPersistenceQueues = new Map<string, Promise<void>>();
 let version = 0;
 
 function emit() {
@@ -74,6 +82,15 @@ function normalizeChannel(channel: Channel): Channel {
   return { ...channel, methods };
 }
 
+function normalizeExecution(execution: ProcessExecution): ProcessExecution {
+  return {
+    ...execution,
+    blocks: execution.blocks.map((block) => ({ attempt: 1, ...block })),
+    outputStatus:
+      execution.outputStatus ?? (execution.status === "completed" ? "completed" : "pending"),
+  };
+}
+
 async function hydrate() {
   if (typeof window === "undefined" || db.ready) return;
   try {
@@ -92,7 +109,7 @@ async function hydrate() {
     )) as [Channel[], Project[], ProcessExecution[], ChannelLibraryItem[], StrategicCollection[]];
     db.channels.splice(0, db.channels.length, ...channels.map(normalizeChannel));
     db.projects.splice(0, db.projects.length, ...projects);
-    db.executions.splice(0, db.executions.length, ...executions);
+    db.executions.splice(0, db.executions.length, ...executions.map(normalizeExecution));
     db.libraryItems.splice(0, db.libraryItems.length, ...libraryItems);
     db.libraryCollections.splice(0, db.libraryCollections.length, ...libraryCollections);
     for (const channel of db.channels) {
@@ -164,6 +181,11 @@ export function useProcessExecution(projectId: string, processType: ProcessId) {
   );
 }
 
+export function useProjectExecutions(projectId: string) {
+  useSyncExternalStore(subscribe, getVersion, getVersion);
+  return db.executions.filter((execution) => execution.projectId === projectId);
+}
+
 export function useLibraryItems(channelId?: string) {
   useSyncExternalStore(subscribe, getVersion, getVersion);
   return channelId
@@ -193,7 +215,7 @@ export function useHumanTasks(): HumanTask[] {
       const project = db.projects.find((item) => item.id === execution.projectId);
       const channel = db.channels.find((item) => item.id === execution.channelId);
       if (!project || !channel) return [];
-      return execution.blocks.flatMap((blockExecution) => {
+      const tasks = execution.blocks.flatMap<HumanTask>((blockExecution) => {
         if (blockExecution.status !== "awaiting_human") return [];
         const block = execution.methodSnapshot.blocks.find(
           (item) => item.id === blockExecution.blockId,
@@ -202,6 +224,32 @@ export function useHumanTasks(): HumanTask[] {
           ? [{ execution, block, blockExecution, project, channel }]
           : [];
       });
+      if (execution.status === "awaiting_output") {
+        const outputBlock: ActionBlock = {
+          id: `${execution.id}-process-output`,
+          type: "CRIAR",
+          operator: "Humano",
+          name: `Entregar resultado final de ${PROCESS_META[execution.processType].label}`,
+          instructions: "Registre o resultado universal deste processo para concluir a etapa.",
+          inputs: [],
+          outputs: createProcessOutputFields(execution.processType),
+          parameters: [],
+          order: execution.blocks.length,
+        };
+        tasks.push({
+          execution,
+          block: outputBlock,
+          blockExecution: {
+            blockId: outputBlock.id,
+            status: "awaiting_human",
+            values: execution.output?.values ?? {},
+            startedAt: execution.updatedAt,
+          },
+          project,
+          channel,
+        });
+      }
+      return tasks;
     })
     .sort(
       (a, b) =>
@@ -303,15 +351,11 @@ function synchronizeOpenExecutionsWithMethod(
 
       if (!activeAssigned) {
         activeAssigned = true;
-        const humanActionCompleted =
-          block.type === "ESCOLHER"
-            ? Boolean(values.selectedItemId)
-            : values.humanConfirmed === true;
-        const awaitsHuman = block.operator === "Humano" && !humanActionCompleted;
         return {
           blockId: block.id,
-          status: awaitsHuman ? "awaiting_human" : "in_progress",
+          status: block.operator === "Humano" ? "awaiting_human" : "blocked_executor",
           values,
+          attempt: previousExecution?.attempt ?? 1,
           startedAt: previousExecution?.startedAt ?? new Date().toISOString(),
         };
       }
@@ -321,9 +365,15 @@ function synchronizeOpenExecutionsWithMethod(
 
     const activeExecution = execution.blocks.find((block) => block.status !== "completed");
     if (!activeExecution) {
-      execution.status = method.blocks.length ? "completed" : "cancelled";
+      execution.status =
+        execution.outputStatus === "completed"
+          ? "completed"
+          : method.blocks.length
+            ? "awaiting_output"
+            : "cancelled";
     } else {
-      execution.status = activeExecution.status === "awaiting_human" ? "awaiting_human" : "running";
+      execution.status =
+        activeExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
     }
 
     const project = db.projects.find((item) => item.id === execution.projectId);
@@ -428,11 +478,40 @@ function persistProject(project: Project) {
 
 function persistExecution(execution: ProcessExecution, create = false) {
   execution.updatedAt = new Date().toISOString();
-  void request(
-    create ? "/api/executions" : `/api/executions/${execution.id}`,
-    create ? "POST" : "PUT",
-    execution,
-  );
+  const snapshot = structuredClone(execution);
+  const previous = executionPersistenceQueues.get(execution.id) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(() =>
+      request(
+        create ? "/api/executions" : `/api/executions/${execution.id}`,
+        create ? "POST" : "PUT",
+        snapshot,
+      ),
+    );
+  executionPersistenceQueues.set(execution.id, next);
+  void next
+    .catch((error) => console.error("Falha ao persistir execução", error))
+    .finally(() => {
+      if (executionPersistenceQueues.get(execution.id) === next) {
+        executionPersistenceQueues.delete(execution.id);
+      }
+    });
+}
+
+function deletePersistedExecution(executionId: string) {
+  const previous = executionPersistenceQueues.get(executionId) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(() => request(`/api/executions/${executionId}`, "DELETE"));
+  executionPersistenceQueues.set(executionId, next);
+  void next
+    .catch((error) => console.error("Falha ao remover execução", error))
+    .finally(() => {
+      if (executionPersistenceQueues.get(executionId) === next) {
+        executionPersistenceQueues.delete(executionId);
+      }
+    });
 }
 
 function completeProjectStage(project: Project, stage: ProcessId) {
@@ -457,7 +536,9 @@ export function startProcessExecution(projectId: string, processType: ProcessId)
   const project = db.projects.find((item) => item.id === projectId);
   const channel = project ? db.channels.find((item) => item.id === project.channelId) : undefined;
   const method = channel?.methods[processType];
-  if (!project || !channel || !method?.blocks.length) return undefined;
+  if (!project || !channel || !method || getMethodConfigurationIssue(method)) {
+    return undefined;
+  }
   const now = new Date().toISOString();
   const methodSnapshot: ProcessMethod = {
     processType,
@@ -475,11 +556,17 @@ export function startProcessExecution(projectId: string, processType: ProcessId)
     blocks: methodSnapshot.blocks.map((block, index) => ({
       blockId: block.id,
       status:
-        index === 0 ? (block.operator === "Humano" ? "awaiting_human" : "in_progress") : "pending",
+        index === 0
+          ? block.operator === "Humano"
+            ? "awaiting_human"
+            : "blocked_executor"
+          : "pending",
       values: {},
+      attempt: 1,
       startedAt: index === 0 ? now : undefined,
     })),
-    status: methodSnapshot.blocks[0]?.operator === "Humano" ? "awaiting_human" : "running",
+    status: methodSnapshot.blocks[0]?.operator === "Humano" ? "awaiting_human" : "blocked_executor",
+    outputStatus: "pending",
     createdAt: now,
     updatedAt: now,
   };
@@ -496,28 +583,92 @@ export function startProcessExecution(projectId: string, processType: ProcessId)
   return execution;
 }
 
+function deriveProcessOutput(execution: ProcessExecution): ProcessOutput | undefined {
+  const [definition] = createProcessOutputFields(execution.processType);
+  const legacyKey = `final_${execution.processType}`;
+  for (let index = execution.methodSnapshot.blocks.length - 1; index >= 0; index -= 1) {
+    const block = execution.methodSnapshot.blocks[index];
+    if (block.type === "VALIDAR" || block.type === "ESCOLHER") continue;
+    const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
+    const value = blockExecution?.values[definition.key] ?? blockExecution?.values[legacyKey];
+    if (value === undefined || isEmptyRuntimeValue(value)) continue;
+    return {
+      processType: execution.processType,
+      values: { [definition.key]: structuredClone(value) },
+      sourceBlockId: block.id,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  return undefined;
+}
+
+function finalizeOrRequestOutput(execution: ProcessExecution) {
+  const project = db.projects.find((item) => item.id === execution.projectId);
+  const output = deriveProcessOutput(execution);
+  if (output) {
+    execution.output = output;
+    execution.outputStatus = "completed";
+    execution.status = "completed";
+    if (project) completeProjectStage(project, execution.processType);
+  } else {
+    execution.outputStatus = "awaiting_human";
+    execution.status = "awaiting_output";
+    if (project) {
+      project.stages = { ...project.stages, [execution.processType]: "awaiting_human" };
+      project.currentStage = execution.processType;
+      project.state = "awaiting_human";
+      persistProject(project);
+    }
+  }
+  persistExecution(execution);
+  emit();
+  return execution;
+}
+
+function activateNextBlock(execution: ProcessExecution, completedIndex: number) {
+  const nextExecution = execution.blocks[completedIndex + 1];
+  const nextBlock = execution.methodSnapshot.blocks[completedIndex + 1];
+  if (!nextExecution || !nextBlock) return finalizeOrRequestOutput(execution);
+
+  const now = new Date().toISOString();
+  nextExecution.startedAt = now;
+  nextExecution.attempt = Math.max(1, nextExecution.attempt ?? 1);
+  nextExecution.error = undefined;
+  nextExecution.status = nextBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
+  execution.status =
+    nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
+  const project = db.projects.find((item) => item.id === execution.projectId);
+  if (project) {
+    project.stages = {
+      ...project.stages,
+      [execution.processType]:
+        nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked",
+    };
+    project.currentStage = execution.processType;
+    project.state = project.stages[execution.processType];
+    persistProject(project);
+  }
+  persistExecution(execution);
+  emit();
+  return execution;
+}
+
 export function advanceProcessExecution(executionId: string) {
   const execution = db.executions.find((item) => item.id === executionId);
   if (!execution || execution.status === "completed" || execution.status === "cancelled") {
     return execution;
   }
 
-  const activeIndex = execution.blocks.findIndex((item) => item.status !== "completed");
-  const activeExecution = execution.blocks[activeIndex];
+  const activeExecution = execution.blocks.find((item) => item.status !== "completed");
   const activeBlock = activeExecution
     ? execution.methodSnapshot.blocks.find((item) => item.id === activeExecution.blockId)
     : undefined;
   if (!activeExecution || !activeBlock) return execution;
 
-  const humanActionCompleted =
-    activeBlock.type === "ESCOLHER"
-      ? Boolean(activeExecution.values.selectedItemId)
-      : activeExecution.values.humanConfirmed === true;
-  const requiresHumanAction = activeBlock.operator === "Humano" && !humanActionCompleted;
   const project = db.projects.find((item) => item.id === execution.projectId);
   const now = new Date().toISOString();
 
-  if (requiresHumanAction) {
+  if (activeBlock.operator === "Humano") {
     activeExecution.status = "awaiting_human";
     activeExecution.startedAt ??= now;
     execution.status = "awaiting_human";
@@ -535,32 +686,15 @@ export function advanceProcessExecution(executionId: string) {
     emit();
     return execution;
   }
-
-  activeExecution.status = "completed";
+  activeExecution.status = "blocked_executor";
   activeExecution.startedAt ??= now;
-  activeExecution.completedAt = now;
-  const nextExecution = execution.blocks[activeIndex + 1];
-  const nextBlock = execution.methodSnapshot.blocks[activeIndex + 1];
-
-  if (nextExecution) {
-    nextExecution.status = nextBlock?.operator === "Humano" ? "awaiting_human" : "in_progress";
-    nextExecution.startedAt = now;
-    execution.status = nextExecution.status === "awaiting_human" ? "awaiting_human" : "running";
-    if (project) {
-      project.stages = {
-        ...project.stages,
-        [execution.processType]:
-          nextExecution.status === "awaiting_human" ? "awaiting_human" : "processing",
-      };
-      project.currentStage = execution.processType;
-      project.state = project.stages[execution.processType];
-      persistProject(project);
-    }
-  } else {
-    execution.status = "completed";
-    if (project) completeProjectStage(project, execution.processType);
+  execution.status = "blocked_executor";
+  if (project) {
+    project.stages = { ...project.stages, [execution.processType]: "blocked" };
+    project.currentStage = execution.processType;
+    project.state = "blocked";
+    persistProject(project);
   }
-
   persistExecution(execution);
   emit();
   return execution;
@@ -575,6 +709,7 @@ export function chooseCollectionItem(executionId: string, blockId: string, itemI
     !execution ||
     !block ||
     !blockExecution ||
+    blockExecution.status !== "awaiting_human" ||
     block.type !== "ESCOLHER" ||
     block.operator !== "Humano" ||
     !block.collectionId ||
@@ -583,32 +718,12 @@ export function chooseCollectionItem(executionId: string, blockId: string, itemI
     return false;
   }
 
+  const now = new Date().toISOString();
   blockExecution.values = { selectedItemId: itemId };
-  blockExecution.status = "in_progress";
-  execution.status = "running";
-  advanceProcessExecution(executionId);
+  blockExecution.status = "completed";
+  blockExecution.completedAt = now;
+  activateNextBlock(execution, execution.blocks.indexOf(blockExecution));
   return true;
-}
-
-export function confirmHumanAction(executionId: string, blockId: string) {
-  const execution = db.executions.find((item) => item.id === executionId);
-  const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
-  const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
-  if (
-    !execution ||
-    !blockExecution ||
-    !block ||
-    blockExecution.status !== "awaiting_human" ||
-    block.operator !== "Humano" ||
-    block.type === "ESCOLHER"
-  ) {
-    return undefined;
-  }
-
-  blockExecution.values = { ...blockExecution.values, humanConfirmed: true };
-  blockExecution.status = "in_progress";
-  execution.status = "running";
-  return advanceProcessExecution(executionId);
 }
 
 export function saveHumanBlockDraft(
@@ -620,7 +735,7 @@ export function saveHumanBlockDraft(
   const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
   if (!execution || !blockExecution) return false;
   blockExecution.values = structuredClone(values);
-  blockExecution.status = "in_progress";
+  blockExecution.status = "awaiting_human";
   execution.status = "awaiting_human";
   persistExecution(execution);
   emit();
@@ -635,47 +750,131 @@ export function completeHumanBlock(
   const execution = db.executions.find((item) => item.id === executionId);
   const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
   const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
-  if (!execution || !block || !blockExecution || block.operator !== "Humano") {
+  if (
+    !execution ||
+    !block ||
+    !blockExecution ||
+    block.operator !== "Humano" ||
+    block.type === "ESCOLHER" ||
+    blockExecution.status !== "awaiting_human"
+  ) {
     return { ok: false, missing: ["Executor humano indisponível"] };
   }
   const missing = (block.outputs ?? [])
     .filter((output) => output.required && isEmptyRuntimeValue(values[output.key]))
     .map((output) => output.label);
   if (missing.length) return { ok: false, missing };
+  const rejected = (block.outputs ?? []).some(
+    (output) => output.type === "approval" && values[output.key] === "rejected",
+  );
+  if (rejected) {
+    return {
+      ok: false,
+      missing: ["A validação está reprovada. Revise o resultado ou altere a decisão para Aprovar."],
+    };
+  }
   const now = new Date().toISOString();
   blockExecution.values = structuredClone(values);
   blockExecution.status = "completed";
   blockExecution.completedAt = now;
-  const index = execution.blocks.indexOf(blockExecution);
-  const nextExecution = execution.blocks[index + 1];
-  const nextBlock = nextExecution
-    ? execution.methodSnapshot.blocks.find((item) => item.id === nextExecution.blockId)
-    : undefined;
-  if (nextExecution && nextBlock) {
-    nextExecution.startedAt = now;
-    nextExecution.status = nextBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
-    execution.status =
-      nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
-    const project = db.projects.find((item) => item.id === execution.projectId);
-    if (project) {
-      project.stages = {
-        ...project.stages,
-        [execution.processType]:
-          nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked",
-      };
-      project.state = project.stages[execution.processType];
-      persistProject(project);
-    }
-    persistExecution(execution);
-    emit();
-    return { ok: true, completedProcess: false };
+  const updated = activateNextBlock(execution, execution.blocks.indexOf(blockExecution));
+  return { ok: true, completedProcess: updated.status === "completed" };
+}
+
+export function completeProcessOutput(
+  executionId: string,
+  values: Record<string, RuntimeValue>,
+): { ok: true } | { ok: false; missing: string[] } {
+  const execution = db.executions.find((item) => item.id === executionId);
+  if (!execution || execution.status !== "awaiting_output") {
+    return { ok: false, missing: ["Execução indisponível para receber o resultado final"] };
   }
+  const missing = createProcessOutputFields(execution.processType)
+    .filter((field) => field.required && isEmptyRuntimeValue(values[field.key]))
+    .map((field) => field.label);
+  if (missing.length) return { ok: false, missing };
+
+  execution.output = {
+    processType: execution.processType,
+    values: structuredClone(values),
+    createdAt: new Date().toISOString(),
+  };
+  execution.outputStatus = "completed";
   execution.status = "completed";
   const project = db.projects.find((item) => item.id === execution.projectId);
   if (project) completeProjectStage(project, execution.processType);
   persistExecution(execution);
   emit();
-  return { ok: true, completedProcess: true };
+  return { ok: true };
+}
+
+export function cancelProcessExecution(executionId: string) {
+  const execution = db.executions.find((item) => item.id === executionId);
+  if (!execution || execution.status === "completed" || execution.status === "cancelled") {
+    return false;
+  }
+  execution.status = "cancelled";
+  execution.blocks = execution.blocks.map((block) =>
+    block.status === "completed" ? block : { ...block, status: "cancelled" },
+  );
+  const project = db.projects.find((item) => item.id === execution.projectId);
+  if (project) {
+    project.stages = { ...project.stages, [execution.processType]: "not_started" };
+    project.currentStage = execution.processType;
+    project.state = "not_started";
+    persistProject(project);
+  }
+  persistExecution(execution);
+  emit();
+  return true;
+}
+
+export function failBlockExecution(executionId: string, blockId: string, message: string) {
+  const execution = db.executions.find((item) => item.id === executionId);
+  const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
+  if (!execution || !blockExecution || blockExecution.status === "completed") return false;
+  blockExecution.status = "failed";
+  blockExecution.error = message;
+  blockExecution.logs = [...(blockExecution.logs ?? []), message];
+  execution.status = "failed";
+  execution.error = message;
+  const project = db.projects.find((item) => item.id === execution.projectId);
+  if (project) {
+    project.stages = { ...project.stages, [execution.processType]: "error" };
+    project.currentStage = execution.processType;
+    project.state = "error";
+    persistProject(project);
+  }
+  persistExecution(execution);
+  emit();
+  return true;
+}
+
+export function retryBlockExecution(executionId: string, blockId: string) {
+  const execution = db.executions.find((item) => item.id === executionId);
+  const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
+  const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
+  if (!execution || !blockExecution || !block || blockExecution.status !== "failed") return false;
+  blockExecution.attempt = (blockExecution.attempt ?? 1) + 1;
+  blockExecution.error = undefined;
+  blockExecution.status = block.operator === "Humano" ? "awaiting_human" : "blocked_executor";
+  execution.error = undefined;
+  execution.status =
+    blockExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
+  const project = db.projects.find((item) => item.id === execution.projectId);
+  if (project) {
+    project.stages = {
+      ...project.stages,
+      [execution.processType]:
+        blockExecution.status === "awaiting_human" ? "awaiting_human" : "blocked",
+    };
+    project.currentStage = execution.processType;
+    project.state = project.stages[execution.processType];
+    persistProject(project);
+  }
+  persistExecution(execution);
+  emit();
+  return true;
 }
 
 export function resetStage(projectId: string, stage: ProcessId) {
@@ -686,7 +885,7 @@ export function resetStage(projectId: string, stage: ProcessId) {
   );
   if (execution) {
     db.executions.splice(db.executions.indexOf(execution), 1);
-    void request(`/api/executions/${execution.id}`, "DELETE");
+    deletePersistedExecution(execution.id);
   }
   project.stages = { ...project.stages, [stage]: "not_started" };
   project.currentStage = stage;

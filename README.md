@@ -24,3 +24,4 @@ Não há login nem sincronização em nuvem nesta fase.
 ## Documentação
 
 - [Arquitetura e visão de produto](docs/ARCHITECTURE.md)
+- [Protocolo de plugins](docs/PLUGIN_PROTOCOL.md)

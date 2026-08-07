@@ -48,13 +48,16 @@ export type HumanFieldType =
   | "image"
   | "audio"
   | "video"
+  | "files"
   | "approval";
 
-export type BlockInputSource = "project" | "previous_block" | "channel_library" | "static";
+export type BlockInputSource =
+  "project" | "previous_process" | "previous_block" | "channel_library" | "static";
 
 export type BlockInputBinding = {
   id: string;
   label: string;
+  type: HumanFieldType;
   source: BlockInputSource;
   sourceKey?: string;
   blockId?: string;
@@ -71,7 +74,8 @@ export type BlockFieldDefinition = {
   placeholder?: string;
   helpText?: string;
   options?: string[];
-  libraryCollection?: string;
+  optionsSourceBlockId?: string;
+  optionsSourceKey?: string;
 };
 
 export type BlockParameter = {
@@ -153,18 +157,41 @@ export type StoredFile = {
 export type RuntimeValue = string | number | boolean | string[] | StoredFile | StoredFile[] | null;
 
 export type BlockExecutionStatus =
-  "pending" | "awaiting_human" | "in_progress" | "completed" | "blocked_executor" | "cancelled";
+  | "pending"
+  | "awaiting_human"
+  | "in_progress"
+  | "completed"
+  | "blocked_executor"
+  | "failed"
+  | "cancelled";
 
 export type BlockExecution = {
   blockId: string;
   status: BlockExecutionStatus;
   values: Record<string, RuntimeValue>;
+  attempt?: number;
+  error?: string;
+  logs?: string[];
   startedAt?: string;
   completedAt?: string;
 };
 
 export type ProcessExecutionStatus =
-  "not_started" | "running" | "awaiting_human" | "blocked_executor" | "completed" | "cancelled";
+  | "not_started"
+  | "running"
+  | "awaiting_human"
+  | "awaiting_output"
+  | "blocked_executor"
+  | "failed"
+  | "completed"
+  | "cancelled";
+
+export type ProcessOutput = {
+  processType: UniversalProcess;
+  values: Record<string, RuntimeValue>;
+  sourceBlockId?: string;
+  createdAt: string;
+};
 
 export type ProcessExecution = {
   id: string;
@@ -174,6 +201,9 @@ export type ProcessExecution = {
   methodSnapshot: ProcessMethod;
   blocks: BlockExecution[];
   status: ProcessExecutionStatus;
+  outputStatus: "pending" | "awaiting_human" | "completed";
+  output?: ProcessOutput;
+  error?: string;
   createdAt: string;
   updatedAt: string;
 };

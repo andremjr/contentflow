@@ -5,8 +5,26 @@ import {
   type BlockType,
   type HumanFieldType,
   type ProcessId,
+  type ProcessMethod,
   type RuntimeValue,
 } from "@/lib/domain";
+
+export function getMethodConfigurationIssue(method?: ProcessMethod) {
+  if (!method?.blocks.length) return "O processo ainda não possui um método.";
+  for (const block of method.blocks) {
+    if (block.type === "ESCOLHER" && !block.collectionId) {
+      return `Vincule uma coleção da Biblioteca Estratégica ao bloco “${block.name ?? "Escolher"}”.`;
+    }
+    const keys = (block.outputs ?? []).map((output) => output.key.trim()).filter(Boolean);
+    if (keys.length !== (block.outputs ?? []).length) {
+      return `Defina uma chave para todas as entregas do bloco “${block.name ?? block.type}”.`;
+    }
+    if (new Set(keys).size !== keys.length) {
+      return `As chaves das entregas do bloco “${block.name ?? block.type}” precisam ser únicas.`;
+    }
+  }
+  return undefined;
+}
 
 export const PROCESS_ROUTE_SEGMENT: Record<ProcessId, string> = {
   theme: "theme",
@@ -25,10 +43,48 @@ const FINAL_FIELD_TYPE: Record<ProcessId, HumanFieldType> = {
   thumbnail: "image",
   script: "textarea",
   narration: "audio",
-  assets: "file",
+  assets: "files",
   editing: "video",
   publishing: "url",
 };
+
+const FINAL_FIELD_KEY: Record<ProcessId, string> = {
+  theme: "theme",
+  title: "title",
+  thumbnail: "thumbnail",
+  script: "script",
+  narration: "audio",
+  assets: "assets",
+  editing: "video",
+  publishing: "url",
+};
+
+const FINAL_FIELD_LABEL: Record<ProcessId, string> = {
+  theme: "Tema final",
+  title: "Título final",
+  thumbnail: "Thumbnail final",
+  script: "Roteiro final",
+  narration: "Narração final",
+  assets: "Assets visuais finais",
+  editing: "Vídeo final",
+  publishing: "URL da publicação",
+};
+
+export function createProcessOutputFields(processType: ProcessId): BlockFieldDefinition[] {
+  return [
+    {
+      id: `process-output-${processType}`,
+      label: FINAL_FIELD_LABEL[processType],
+      key: FINAL_FIELD_KEY[processType],
+      type: FINAL_FIELD_TYPE[processType],
+      required: true,
+      placeholder:
+        processType === "publishing"
+          ? "https://youtube.com/watch?v=..."
+          : `Informe o resultado final de ${PROCESS_META[processType].label}`,
+    },
+  ];
+}
 
 function field(
   prefix: string,
@@ -62,7 +118,7 @@ export function createSuggestedHumanFields(
     ];
   }
   if (blockType === "ESCOLHER") {
-    return [field(prefix, "Escolha", "selected_option", "select", "Selecione uma opção")];
+    return [];
   }
   if (blockType === "VALIDAR") {
     return [
@@ -77,7 +133,7 @@ export function createSuggestedHumanFields(
     field(
       prefix,
       `${PROCESS_META[processType].label} produzido`,
-      `final_${processType}`,
+      FINAL_FIELD_KEY[processType],
       FINAL_FIELD_TYPE[processType],
       "Entregue o resultado deste bloco",
     ),
@@ -98,11 +154,18 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
     ...block,
     name: block.name || `${block.type.charAt(0)}${block.type.slice(1).toLowerCase()}`,
     instructions: block.instructions ?? "",
-    inputs: block.inputs ?? [],
+    inputs:
+      block.type === "ESCOLHER"
+        ? []
+        : (block.inputs ?? [])
+            .filter((input) => input.source !== "channel_library")
+            .map((input) => ({ ...input, type: input.type ?? "text" })),
     outputs:
-      block.outputs?.length || legacyOutputs.length
-        ? (block.outputs ?? legacyOutputs)
-        : createSuggestedHumanFields(processType, block.type),
+      block.type === "ESCOLHER"
+        ? []
+        : block.outputs?.length || legacyOutputs.length
+          ? (block.outputs ?? legacyOutputs)
+          : createSuggestedHumanFields(processType, block.type),
     parameters: block.parameters ?? [],
   };
 }

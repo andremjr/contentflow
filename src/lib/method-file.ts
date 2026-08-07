@@ -25,7 +25,25 @@ const parameterSchema = z.object({
 const inputSchema = z.object({
   id: z.string(),
   label: z.string().max(200),
-  source: z.enum(["project", "previous_block", "channel_library", "static"]),
+  type: z
+    .enum([
+      "text",
+      "number",
+      "select",
+      "boolean",
+      "textarea",
+      "multiselect",
+      "list",
+      "url",
+      "file",
+      "image",
+      "audio",
+      "video",
+      "files",
+      "approval",
+    ])
+    .default("text"),
+  source: z.enum(["project", "previous_process", "previous_block", "channel_library", "static"]),
   sourceKey: z.string().max(200).optional(),
   blockId: z.string().optional(),
   collection: z.string().max(200).optional(),
@@ -49,13 +67,15 @@ const outputSchema = z.object({
     "image",
     "audio",
     "video",
+    "files",
     "approval",
   ]),
   required: z.boolean(),
   placeholder: z.string().max(500).optional(),
   helpText: z.string().max(2_000).optional(),
   options: z.array(z.string().max(500)).max(100).optional(),
-  libraryCollection: z.string().max(200).optional(),
+  optionsSourceBlockId: z.string().optional(),
+  optionsSourceKey: z.string().max(200).optional(),
 });
 
 const actionBlockSchema = z.object({
@@ -115,10 +135,14 @@ export function copyImportedBlocks(
   sourceBlocks: ActionBlock[],
   createId: (prefix: string) => string,
 ) {
-  return structuredClone(sourceBlocks).map((block, order) => ({
+  const copied = structuredClone(sourceBlocks);
+  const blockIds = new Map(
+    copied.map((block) => [block.id, createId(`${processType}-${block.type.toLowerCase()}`)]),
+  );
+  return copied.map((block, order) => ({
     ...block,
     collectionId: undefined,
-    id: createId(`${processType}-${block.type.toLowerCase()}`),
+    id: blockIds.get(block.id)!,
     order,
     parameters: block.parameters.map((parameter) => ({
       ...parameter,
@@ -127,10 +151,14 @@ export function copyImportedBlocks(
     inputs: block.inputs?.map((input) => ({
       ...input,
       id: createId(`${processType}-input`),
+      blockId: input.blockId ? blockIds.get(input.blockId) : undefined,
     })),
     outputs: block.outputs?.map((output) => ({
       ...output,
       id: createId(`${processType}-output`),
+      optionsSourceBlockId: output.optionsSourceBlockId
+        ? blockIds.get(output.optionsSourceBlockId)
+        : undefined,
     })),
   }));
 }

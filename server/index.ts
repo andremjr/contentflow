@@ -8,8 +8,10 @@ import { fetchYouTubeChannel } from "./youtube";
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
 const dataDirectory = path.join(process.cwd(), "data");
 const uploadsDirectory = path.join(dataDirectory, "uploads");
+const installedPluginsDirectory = path.join(dataDirectory, "plugins", "installed");
 mkdirSync(dataDirectory, { recursive: true });
 mkdirSync(uploadsDirectory, { recursive: true });
+mkdirSync(installedPluginsDirectory, { recursive: true });
 
 const database = new Database(path.join(dataDirectory, "contentflow-os.sqlite"));
 database.pragma("journal_mode = WAL");

@@ -94,13 +94,18 @@ Os parâmetros funcionais vivem **dentro dos Plugins**.
 
 Dentro dos campos do plugin no bloco, o usuário insere placeholders dinâmicos (ex: `{{video.topic}}`, `{{block_01.output}}`). Na execução do vídeo, o motor substitui as variáveis pelos valores reais.
 
-### C. Contrato do Operador Humano
+### C. Contrato Universal de Dados do Bloco
 
-O operador `Humano` é um executor nativo e não depende de plugin. Na definição do Método, cada bloco humano guarda:
+Entradas e saídas pertencem ao bloco e não ao operador. Na definição do Método, cada bloco guarda:
 
 - Nome e instruções da ação.
-- Entradas e contextos provenientes do projeto, da biblioteca do canal, de textos fixos ou de blocos anteriores.
-- O esquema das entregas esperadas, incluindo tipo do campo, obrigatoriedade e orientações.
+- Dados de entrada, definidos visualmente apenas por nome e formato.
+- Dados de saída, definidos visualmente apenas por nome e formato.
+- O operador responsável pela execução.
+
+As chaves técnicas, a persistência e a conexão padrão com resultados anteriores são administradas internamente pelo núcleo. Para o usuário, os formatos universais são: texto curto, texto longo, número, sim ou não, lista de textos, seleção, seleção múltipla, URL, arquivo, vários arquivos, imagem, áudio, vídeo e decisão.
+
+O operador `Humano` é o executor nativo desse mesmo contrato e não depende de plugin. Um futuro plugin de `IA` ou `Código` deverá consumir as mesmas entradas e produzir as mesmas saídas; seus parâmetros particulares aparecem somente depois que o plugin for selecionado.
 
 O Método armazena apenas esse esquema. Os valores efetivamente preenchidos pertencem à execução do Projeto/Vídeo e nunca são gravados como parte do Método.
 
@@ -114,7 +119,8 @@ O orquestrador do sistema funciona em modelo de **Máquina de Estados Concorrent
 
 1. Lê o JSON do Método do Canal para o processo atual.
 2. Executa os blocos sequencialmente injetando as saídas do bloco anterior no bloco seguinte.
-3. **Pausa e Retomada para Operador Humano**: Se um bloco for atribuído ao operador `Humano`, o motor pausa o estado da execução (`PENDING_HUMAN_INPUT`), gera uma notificação e um cartão interativo no Projeto, e aguarda o clique/seleção do usuário para continuar a esteira.
+3. **Pausa e Retomada para Operador Humano**: Se um bloco for atribuído ao operador `Humano`, o motor pausa o estado da execução (`awaiting_human`), gera uma notificação e um cartão interativo no Projeto, e aguarda a entrega ou seleção do usuário para continuar a esteira.
+4. **Bloqueio de executores ausentes**: Blocos `IA` e `Código` entram em `blocked_executor` enquanto não houver um plugin compatível configurado. Eles nunca são concluídos de forma fictícia.
 
 Cada execução mantém um snapshot do Método utilizado, o estado individual dos blocos, rascunhos, entregas concluídas e referências a arquivos armazenados localmente. As saídas concluídas tornam-se contexto para os blocos seguintes.
 
@@ -131,7 +137,7 @@ O ContentFlow OS apoia-se em dois tipos de compartilhamento comunitário:
 
 ## 9. Central Global de Pendências Humanas
 
-O aplicativo possui uma central global que lista todo bloco nos estados `awaiting_human` ou `in_progress`, independentemente do canal ou projeto.
+O aplicativo possui uma central global que lista todo bloco no estado `awaiting_human` e toda entrega de output universal pendente, independentemente do canal ou projeto.
 
 - O contador global representa tarefas ainda pendentes, não apenas notificações não lidas.
 - Abrir uma notificação marca o aviso como visualizado, mas não elimina a pendência.
@@ -145,6 +151,35 @@ A central é uma visão derivada do estado real das execuções; ela não manté
 
 ## 10. Biblioteca Estratégica do Canal
 
-Cada Canal possui uma biblioteca de elementos pré-existentes, como estruturas de título, estilos de thumbnail, modelos narrativos, regras editoriais e critérios de validação. Esses itens podem ser apresentados como contexto ou opções de escolha dentro de blocos humanos, especialmente no bloco `ESCOLHER`.
+Cada Canal possui uma biblioteca de elementos pré-existentes, como estruturas de título, estilos de thumbnail, modelos narrativos e regras editoriais.
+
+O bloco `ESCOLHER` é o único bloco cuja função é selecionar elementos preexistentes da Biblioteca Estratégica. Todo bloco `ESCOLHER` deve estar obrigatoriamente vinculado a uma coleção do mesmo canal. Selecionar, aprovar ou reprovar resultados produzidos durante a execução pertence ao bloco `VALIDAR`.
 
 A Biblioteca Estratégica é diferente da Biblioteca de Métodos: a primeira contém peças utilizadas dentro das ações; a segunda permite reutilizar sequências completas de ações entre canais.
+
+---
+
+## 11. Resultados Intermediários e Outputs Universais
+
+Cada bloco pode produzir resultados intermediários tipados. Eles pertencem exclusivamente à execução do Projeto, são persistidos no snapshot da execução e ficam disponíveis como contexto para blocos posteriores.
+
+Separadamente, cada Processo Universal possui um output oficial, independente do método e do executor utilizado:
+
+1. `Tema`: texto.
+2. `Título`: texto.
+3. `Thumbnail`: imagem.
+4. `Roteiro`: texto.
+5. `Narração e Áudio`: áudio.
+6. `Assets Visuais`: lista de imagens e vídeos.
+7. `Edição`: vídeo.
+8. `Publicação`: URL ou registro da publicação.
+
+Quando um bloco `CRIAR` entrega o campo universal esperado, o motor promove esse valor automaticamente a output do processo após o término e a eventual validação. Se nenhum bloco entregar um valor compatível, o processo pausa para que o operador humano registre o resultado final.
+
+Os outputs concluídos dos processos anteriores são injetados automaticamente como contexto nos processos seguintes.
+
+---
+
+## 12. Protocolo de Plugins
+
+O contrato técnico da próxima fase está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local.

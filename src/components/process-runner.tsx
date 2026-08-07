@@ -9,8 +9,10 @@ import {
   LoaderCircle,
   Play,
   RotateCcw,
+  Square,
   UserRound,
 } from "lucide-react";
+import { RuntimeFieldsForm } from "@/components/runtime-fields-form";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,19 +25,29 @@ import {
   type ProcessExecution,
   type ProcessId,
   type Project,
+  type RuntimeValue,
   type StrategicCollection,
 } from "@/lib/domain";
-import { PROCESS_ROUTE_SEGMENT } from "@/lib/human-workflow";
 import {
-  advanceProcessExecution,
+  createProcessOutputFields,
+  formatRuntimeValue,
+  getMethodConfigurationIssue,
+  PROCESS_ROUTE_SEGMENT,
+} from "@/lib/human-workflow";
+import {
+  cancelProcessExecution,
   chooseCollectionItem,
-  confirmHumanAction,
+  completeHumanBlock,
+  completeProcessOutput,
   resetStage,
+  retryBlockExecution,
+  saveHumanBlockDraft,
   startProcessExecution,
   useChannel,
   useLibraryCollections,
   useLibraryItems,
   useProcessExecution,
+  useProjectExecutions,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -45,10 +57,10 @@ const STATUS_LABEL: Record<BlockExecution["status"], string> = {
   in_progress: "Em execução",
   completed: "Concluído",
   blocked_executor: "Preparando execução",
+  failed: "Falhou",
   cancelled: "Cancelado",
 };
 
-const EXECUTION_STEP_DELAY = 850;
 const NEXT_PROCESS_DELAY = 1100;
 
 export function ProcessRunner({
@@ -65,6 +77,7 @@ export function ProcessRunner({
   const collections = useLibraryCollections(project?.channelId);
   const libraryItems = useLibraryItems(project?.channelId);
   const execution = useProcessExecution(project?.id ?? "", processId);
+  const projectExecutions = useProjectExecutions(project?.id ?? "");
   const method = channel?.methods[processId];
   const meta = PROCESS_META[processId];
   const completed = execution?.status === "completed";
@@ -79,6 +92,10 @@ export function ProcessRunner({
     activeExecution?.status === "awaiting_human" && activeBlock?.operator === "Humano";
   const waitingForHumanChoice =
     waitingForHumanAction && activeBlock?.type === "ESCOLHER" && activeBlock.operator === "Humano";
+  const blockedByMissingPlugin =
+    activeExecution?.status === "blocked_executor" && activeBlock?.operator !== "Humano";
+  const awaitingOutput = execution?.status === "awaiting_output";
+  const methodIssue = getMethodConfigurationIssue(method);
 
   const scheduleNextProcess = useCallback(() => {
     if (!project || !channel || !nextProcess || nextNavigationTimer.current) return;
@@ -98,15 +115,6 @@ export function ProcessRunner({
     [],
   );
 
-  useEffect(() => {
-    if (!execution || completed || waitingForHumanAction) return;
-    const timer = window.setTimeout(() => {
-      const updatedExecution = advanceProcessExecution(execution.id);
-      if (updatedExecution?.status === "completed") scheduleNextProcess();
-    }, EXECUTION_STEP_DELAY);
-    return () => window.clearTimeout(timer);
-  }, [completed, execution, execution?.updatedAt, scheduleNextProcess, waitingForHumanAction]);
-
   if (!project || !channel) return null;
   const projectId = project.id;
   const channelId = channel.id;
@@ -121,27 +129,12 @@ export function ProcessRunner({
   function start() {
     const started = startProcessExecution(projectId, processId);
     if (!started) {
-      toast.error(`Crie um método de ${meta.label} antes de iniciar.`);
+      toast.error(methodIssue ?? `Crie um método de ${meta.label} antes de iniciar.`);
       return;
     }
     toast.success(`Processo de ${meta.label} iniciado`, {
       description: "Os blocos serão executados na ordem definida no método.",
     });
-  }
-
-  function completeHumanAction() {
-    if (!execution || !activeBlock) return;
-    const updatedExecution = confirmHumanAction(execution.id, activeBlock.id);
-    if (!updatedExecution) {
-      toast.error("Não foi possível concluir esta ação humana.");
-      return;
-    }
-    if (updatedExecution.status === "completed") {
-      toast.success("Ação humana concluída. O processo foi finalizado.");
-      scheduleNextProcess();
-      return;
-    }
-    toast.success("Ação humana concluída. O processo continuará.");
   }
 
   function chooseItem(itemId: string) {
@@ -158,6 +151,21 @@ export function ProcessRunner({
     toast.success("Opção escolhida. O processo continuará.");
   }
 
+  function cancel() {
+    if (!execution || !cancelProcessExecution(execution.id)) return;
+    toast.info("Execução cancelada.");
+  }
+
+  function retry() {
+    if (
+      !execution ||
+      !activeExecution ||
+      !retryBlockExecution(execution.id, activeExecution.blockId)
+    )
+      return;
+    toast.success("Bloco preparado para uma nova tentativa.");
+  }
+
   return (
     <main className="flex-1 space-y-5 px-4 py-5 sm:px-6 sm:py-6">
       <section className="rounded-xl border border-border/70 bg-card p-5">
@@ -171,24 +179,32 @@ export function ProcessRunner({
               <p className="text-xs text-muted-foreground">{description}</p>
             </div>
           </div>
-          {completed ? (
+          {completed || execution?.status === "cancelled" ? (
             <Button variant="outline" size="sm" onClick={() => resetStage(project.id, processId)}>
               <RotateCcw className="mr-1.5 size-3.5" /> Executar novamente
             </Button>
-          ) : !method?.blocks.length ? (
+          ) : methodIssue ? (
             <Button size="sm" variant="destructive" onClick={openMethodBuilder}>
-              <AlertTriangle className="mr-1.5 size-3.5" /> Método necessário
+              <AlertTriangle className="mr-1.5 size-3.5" /> Configurar método
             </Button>
           ) : !execution ? (
             <Button size="sm" onClick={start} className="gradient-brand text-white">
               <Play className="mr-1.5 size-3.5 fill-current" /> Executar processo
             </Button>
-          ) : null}
+          ) : (
+            <Button size="sm" variant="outline" onClick={cancel}>
+              <Square className="mr-1.5 size-3.5 fill-current" /> Cancelar execução
+            </Button>
+          )}
         </div>
       </section>
 
-      {!method?.blocks.length ? (
-        <MissingMethod processLabel={meta.label} onOpenMethodBuilder={openMethodBuilder} />
+      {methodIssue ? (
+        <MissingMethod
+          processLabel={meta.label}
+          configurationIssue={methodIssue}
+          onOpenMethodBuilder={openMethodBuilder}
+        />
       ) : execution ? (
         <>
           <ExecutionTimeline execution={execution} />
@@ -201,19 +217,41 @@ export function ProcessRunner({
               onChoose={chooseItem}
             />
           ) : waitingForHumanAction && activeBlock ? (
-            <HumanActionGate block={activeBlock} onConfirm={completeHumanAction} />
+            <HumanBlockGate
+              key={activeBlock.id}
+              block={activeBlock}
+              execution={execution}
+              project={project}
+              projectExecutions={projectExecutions}
+              collections={collections}
+              libraryItems={libraryItems}
+              onProcessCompleted={scheduleNextProcess}
+            />
+          ) : awaitingOutput ? (
+            <ProcessOutputGate execution={execution} onCompleted={scheduleNextProcess} />
+          ) : blockedByMissingPlugin && activeBlock ? (
+            <MissingPluginGate block={activeBlock} />
+          ) : execution.status === "failed" && activeBlock && activeExecution ? (
+            <FailedExecutionGate
+              block={activeBlock}
+              error={activeExecution.error ?? execution.error}
+              onRetry={retry}
+            />
+          ) : execution.status === "cancelled" ? (
+            <ExecutionCancelled />
           ) : completed ? (
             <ProcessCompleted
               processLabel={meta.label}
               advancesAutomatically={isAdvancing}
               isPublishing={!nextProcess}
+              output={execution.output?.values}
             />
           ) : activeBlock ? (
             <ActiveExecutionBlock block={activeBlock} />
           ) : null}
         </>
       ) : (
-        <MethodPreview method={method.blocks} />
+        <MethodPreview method={method?.blocks ?? []} />
       )}
     </main>
   );
@@ -221,17 +259,19 @@ export function ProcessRunner({
 
 function MissingMethod({
   processLabel,
+  configurationIssue,
   onOpenMethodBuilder,
 }: {
   processLabel: string;
+  configurationIssue?: string;
   onOpenMethodBuilder: () => void;
 }) {
   return (
     <section className="rounded-xl border border-destructive/35 bg-destructive/5 px-5 py-12 text-center">
       <AlertTriangle className="mx-auto size-7 text-destructive" />
-      <p className="mt-3 text-sm font-medium">Nenhum método salvo para este processo.</p>
+      <p className="mt-3 text-sm font-medium">{configurationIssue}</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Crie ou importe um método de {processLabel} para liberar a execução.
+        Revise o método de {processLabel} para liberar a execução.
       </p>
       <Button className="mt-4" variant="destructive" size="sm" onClick={onOpenMethodBuilder}>
         Criar ou importar método
@@ -444,22 +484,293 @@ function HumanChoiceGate({
   );
 }
 
-function HumanActionGate({ block, onConfirm }: { block: ActionBlock; onConfirm: () => void }) {
-  const isValidation = block.type === "VALIDAR";
+function valuesAsOptions(value: RuntimeValue | undefined) {
+  if (Array.isArray(value)) {
+    return value.map((item) => (typeof item === "string" ? item : item.name)).filter(Boolean);
+  }
+  if (typeof value === "string")
+    return value
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  return [];
+}
+
+function HumanBlockGate({
+  block,
+  execution,
+  project,
+  projectExecutions,
+  collections,
+  libraryItems,
+  onProcessCompleted,
+}: {
+  block: ActionBlock;
+  execution: ProcessExecution;
+  project: Project;
+  projectExecutions: ProcessExecution[];
+  collections: StrategicCollection[];
+  libraryItems: ChannelLibraryItem[];
+  onProcessCompleted: () => void;
+}) {
+  const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
+  const [values, setValues] = useState<Record<string, RuntimeValue>>(
+    structuredClone(blockExecution?.values ?? {}),
+  );
+  const blockIndex = execution.methodSnapshot.blocks.findIndex((item) => item.id === block.id);
+  const previousExecutions = execution.blocks
+    .slice(0, blockIndex)
+    .filter((item) => item.status === "completed");
+  const context: { label: string; value: string }[] = [];
+
+  for (const previousProcess of projectExecutions
+    .filter(
+      (item) => item.processType !== execution.processType && item.outputStatus === "completed",
+    )
+    .sort((a, b) => PROCESS_ORDER.indexOf(a.processType) - PROCESS_ORDER.indexOf(b.processType))) {
+    for (const [key, value] of Object.entries(previousProcess.output?.values ?? {})) {
+      context.push({
+        label: `${PROCESS_META[previousProcess.processType].label} · ${key}`,
+        value: formatRuntimeValue(value),
+      });
+    }
+  }
+
+  for (const previous of previousExecutions) {
+    const previousBlock = execution.methodSnapshot.blocks.find(
+      (item) => item.id === previous.blockId,
+    );
+    if (previousBlock?.type === "ESCOLHER" && typeof previous.values.selectedItemId === "string") {
+      const selectedItem = libraryItems.find((item) => item.id === previous.values.selectedItemId);
+      const collection = collections.find((item) => item.id === selectedItem?.collectionId);
+      for (const field of collection?.fields ?? []) {
+        const value = selectedItem?.values[field.id];
+        if (value !== undefined) {
+          context.push({
+            label: `${previousBlock.name ?? "Escolher"} · ${field.label}`,
+            value: formatRuntimeValue(value),
+          });
+        }
+      }
+      continue;
+    }
+    for (const [key, value] of Object.entries(previous.values)) {
+      context.push({
+        label: `${previousBlock?.name ?? previousBlock?.type} · ${key}`,
+        value: formatRuntimeValue(value),
+      });
+    }
+  }
+
+  for (const input of block.inputs ?? []) {
+    if (input.source === "static" && input.staticValue) {
+      context.push({ label: input.label, value: input.staticValue });
+    } else if (input.source === "project") {
+      const value = input.sourceKey === "deadline" ? project.deadline : project.title;
+      context.push({ label: input.label, value });
+    } else if (input.source === "previous_block" && input.blockId) {
+      const source = execution.blocks.find((item) => item.blockId === input.blockId);
+      const value = input.sourceKey
+        ? source?.values[input.sourceKey]
+        : Object.values(source?.values ?? {})[0];
+      if (!isEmptyDisplayValue(value))
+        context.push({ label: input.label, value: formatRuntimeValue(value) });
+    } else if (input.source === "previous_process" && input.sourceKey) {
+      const source = projectExecutions.find((item) => item.output?.values[input.sourceKey!]);
+      const value = source?.output?.values[input.sourceKey];
+      if (!isEmptyDisplayValue(value))
+        context.push({ label: input.label, value: formatRuntimeValue(value) });
+    }
+  }
+
+  const latestListOptions =
+    [...previousExecutions]
+      .reverse()
+      .map((previous) => {
+        const definition = execution.methodSnapshot.blocks.find(
+          (item) => item.id === previous.blockId,
+        );
+        return (definition?.outputs ?? [])
+          .filter((output) => output.type === "list")
+          .flatMap((output) => valuesAsOptions(previous.values[output.key]));
+      })
+      .find((options) => options.length > 0) ?? [];
+  const dynamicOptions = Object.fromEntries(
+    (block.outputs ?? []).map((field) => {
+      const source = execution.blocks.find((item) => item.blockId === field.optionsSourceBlockId);
+      const configured = valuesAsOptions(source?.values[field.optionsSourceKey ?? ""]);
+      return [field.id, configured.length ? configured : latestListOptions] as const;
+    }),
+  );
+
+  function updateValues(nextValues: Record<string, RuntimeValue>) {
+    setValues(nextValues);
+    if (blockExecution) saveHumanBlockDraft(execution.id, block.id, nextValues);
+  }
+
+  function submit() {
+    const result = completeHumanBlock(execution.id, block.id, values);
+    if (!result.ok) {
+      toast.error("A ação ainda não pode ser concluída", {
+        description: result.missing.join(", "),
+      });
+      return;
+    }
+    if (result.completedProcess) {
+      toast.success("Processo concluído.");
+      onProcessCompleted();
+    } else if (execution.status === "awaiting_output") {
+      toast.success("Ação concluída", {
+        description: "Registre agora o resultado final do processo.",
+      });
+    } else {
+      toast.success("Ação concluída. O próximo bloco está pronto.");
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-warning/40 bg-warning/5 p-5 sm:p-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Badge variant="outline" className="border-warning/40 text-warning">
+            <UserRound className="mr-1 size-3" /> Aguardando operador humano
+          </Badge>
+          <h3 className="mt-3 text-base font-semibold">{block.name ?? block.type}</h3>
+          <p className="mt-1 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">
+            {block.instructions || "Realize esta ação e registre as entregas para continuar."}
+          </p>
+        </div>
+        <OperatorBadge block={block} />
+      </header>
+
+      {context.length > 0 && (
+        <div className="mt-5 rounded-xl border border-border/70 bg-background/30 p-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Contexto disponível
+          </h4>
+          <dl className="mt-3 grid gap-3 md:grid-cols-2">
+            {context.map((item, index) => (
+              <div key={`${item.label}-${index}`}>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {item.label}
+                </dt>
+                <dd className="mt-1 whitespace-pre-wrap text-sm">{item.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      <div className="mt-5 rounded-xl border border-border/70 bg-card p-4 sm:p-5">
+        <h4 className="mb-4 text-sm font-semibold">Entrega desta ação</h4>
+        {(block.outputs ?? []).length ? (
+          <RuntimeFieldsForm
+            fields={block.outputs ?? []}
+            values={values}
+            dynamicOptions={dynamicOptions}
+            onChange={updateValues}
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground">Esta ação não exige campos adicionais.</p>
+        )}
+        <Button className="mt-5" onClick={submit}>
+          <CheckCircle2 className="mr-1.5 size-4" /> Concluir ação humana
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function isEmptyDisplayValue(value: RuntimeValue | undefined) {
+  return value == null || value === "" || (Array.isArray(value) && value.length === 0);
+}
+
+function ProcessOutputGate({
+  execution,
+  onCompleted,
+}: {
+  execution: ProcessExecution;
+  onCompleted: () => void;
+}) {
+  const fields = createProcessOutputFields(execution.processType);
+  const [values, setValues] = useState<Record<string, RuntimeValue>>(
+    execution.output?.values ?? {},
+  );
+
+  function submit() {
+    const result = completeProcessOutput(execution.id, values);
+    if (!result.ok) {
+      toast.error("Informe o resultado final", { description: result.missing.join(", ") });
+      return;
+    }
+    toast.success("Resultado salvo. Processo concluído.");
+    onCompleted();
+  }
+
+  return (
+    <section className="rounded-xl border border-brand/40 bg-brand/5 p-5 sm:p-6">
+      <Badge variant="outline" className="border-brand/40 text-brand-soft">
+        Resultado universal
+      </Badge>
+      <h3 className="mt-3 text-base font-semibold">Entregue o resultado final deste processo</h3>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Os blocos do método terminaram. Este resultado será salvo no projeto e poderá alimentar os
+        próximos processos.
+      </p>
+      <div className="mt-5 rounded-xl border border-border/70 bg-card p-4 sm:p-5">
+        <RuntimeFieldsForm fields={fields} values={values} onChange={setValues} />
+        <Button className="mt-5" onClick={submit}>
+          <CheckCircle2 className="mr-1.5 size-4" /> Salvar resultado e concluir
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function MissingPluginGate({ block }: { block: ActionBlock }) {
   return (
     <section className="rounded-xl border border-warning/40 bg-warning/5 p-8 text-center">
-      <UserRound className="mx-auto size-7 text-warning" />
-      <Badge variant="outline" className="mt-3 border-warning/40 text-warning">
-        Aguardando operador humano
-      </Badge>
-      <h3 className="mt-3 text-base font-semibold">{block.name ?? block.type}</h3>
-      <p className="mx-auto mt-1 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">
-        {block.instructions ||
-          "Realize esta ação conforme o método e confirme para permitir que o processo continue."}
+      <AlertTriangle className="mx-auto size-7 text-warning" />
+      <h3 className="mt-3 text-base font-semibold">Plugin necessário para continuar</h3>
+      <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
+        O bloco “{block.name ?? block.type}” está atribuído ao operador {block.operator}, mas ainda
+        não existe um executor configurado. Para testar a produção humana, altere o operador para
+        Humano.
       </p>
-      <Button className="mt-5" onClick={onConfirm}>
-        <CheckCircle2 className="mr-1.5 size-4" />
-        {isValidation ? "Confirmar validação" : "Concluir ação humana"}
+    </section>
+  );
+}
+
+function ExecutionCancelled() {
+  return (
+    <section className="rounded-xl border border-border/70 bg-card p-8 text-center">
+      <Square className="mx-auto size-7 text-muted-foreground" />
+      <h3 className="mt-3 text-base font-semibold">Execução cancelada</h3>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Use “Executar novamente” para iniciar uma nova execução deste processo.
+      </p>
+    </section>
+  );
+}
+
+function FailedExecutionGate({
+  block,
+  error,
+  onRetry,
+}: {
+  block: ActionBlock;
+  error?: string;
+  onRetry: () => void;
+}) {
+  return (
+    <section className="rounded-xl border border-destructive/40 bg-destructive/5 p-8 text-center">
+      <AlertTriangle className="mx-auto size-7 text-destructive" />
+      <h3 className="mt-3 text-base font-semibold">O bloco “{block.name ?? block.type}” falhou</h3>
+      <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
+        {error ?? "A execução não pôde ser concluída."}
+      </p>
+      <Button className="mt-5" variant="destructive" onClick={onRetry}>
+        <RotateCcw className="mr-1.5 size-4" /> Tentar novamente
       </Button>
     </section>
   );
@@ -469,10 +780,12 @@ function ProcessCompleted({
   processLabel,
   advancesAutomatically,
   isPublishing,
+  output,
 }: {
   processLabel: string;
   advancesAutomatically: boolean;
   isPublishing: boolean;
+  output?: Record<string, RuntimeValue>;
 }) {
   return (
     <section className="rounded-xl border border-success/40 bg-success/5 p-10 text-center">
@@ -487,6 +800,18 @@ function ProcessCompleted({
       </p>
       {advancesAutomatically && (
         <LoaderCircle className="mx-auto mt-4 size-4 animate-spin text-success" />
+      )}
+      {output && Object.keys(output).length > 0 && (
+        <dl className="mx-auto mt-5 max-w-2xl rounded-xl border border-success/25 bg-background/30 p-4 text-left">
+          {Object.entries(output).map(([key, value]) => (
+            <div key={key} className="py-1.5">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {key}
+              </dt>
+              <dd className="mt-1 whitespace-pre-wrap text-sm">{formatRuntimeValue(value)}</dd>
+            </div>
+          ))}
+        </dl>
       )}
     </section>
   );
