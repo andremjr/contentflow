@@ -154,7 +154,23 @@ export type StoredFile = {
   url: string;
 };
 
-export type RuntimeValue = string | number | boolean | string[] | StoredFile | StoredFile[] | null;
+export type ThumbnailLayoutBox = {
+  id: string;
+  label: string;
+  color: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+export type ThumbnailLayout = {
+  aspectRatio: "16:9";
+  boxes: ThumbnailLayoutBox[];
+};
+
+export type RuntimeValue =
+  string | number | boolean | string[] | StoredFile | StoredFile[] | ThumbnailLayout | null;
 
 export type BlockExecutionStatus =
   | "pending"
@@ -211,7 +227,7 @@ export type ProcessExecution = {
 export type StrategicCollectionField = {
   id: string;
   label: string;
-  type: "text" | "textarea" | "number" | "image" | "url";
+  type: "text" | "textarea" | "number" | "image" | "url" | "thumbnail_layout";
   required: boolean;
 };
 
@@ -227,7 +243,7 @@ export type ChannelLibraryItem = {
   id: string;
   channelId: string;
   collectionId: string;
-  values: Record<string, string | number | StoredFile>;
+  values: Record<string, string | number | StoredFile | ThumbnailLayout>;
   createdAt: string;
 };
 

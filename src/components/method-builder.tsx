@@ -24,7 +24,6 @@ import { toast } from "sonner";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -50,8 +49,6 @@ import {
   type BlockFieldDefinition,
   type BlockInputBinding,
   type BlockOperator,
-  type BlockParameter,
-  type BlockParameterType,
   type BlockType,
   type HumanFieldType,
   type StrategicCollection,
@@ -124,11 +121,6 @@ const FIELD_TYPES: { value: HumanFieldType; label: string }[] = [
   { value: "video", label: "Vídeo" },
   { value: "approval", label: "Decisão" },
 ];
-
-const PARAMETER_TYPES: { value: BlockParameterType; label: string }[] = FIELD_TYPES.filter(
-  (item): item is { value: BlockParameterType; label: string } =>
-    ["text", "number", "select", "boolean", "textarea"].includes(item.value),
-);
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -866,7 +858,9 @@ function DataContractEditor({
       <div className="mt-6 flex items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">Dados de entrada</h3>
-          <p className="text-[11px] text-muted-foreground">O que esta ação precisa receber.</p>
+          <p className="text-[11px] text-muted-foreground">
+            O que esta ação recebe. A saída compatível mais recente é conectada automaticamente.
+          </p>
         </div>
         <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
           <Plus className="size-3" /> Adicionar
@@ -1052,146 +1046,6 @@ function OutputFieldEditor({
           </p>
         </div>
       )}
-    </div>
-  );
-}
-
-function ParameterEditor({
-  parameter,
-  onChange,
-  onRemove,
-}: {
-  parameter: BlockParameter;
-  onChange: (patch: Partial<BlockParameter>) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          {parameter.key}
-        </span>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="size-7 text-muted-foreground hover:text-destructive"
-          onClick={onRemove}
-          aria-label="Remover parâmetro"
-        >
-          <Trash2 className="size-3" />
-        </Button>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <Label className="text-[11px]">Nome</Label>
-          <Input
-            value={parameter.label}
-            onChange={(event) => onChange({ label: event.target.value })}
-            className="h-8 text-xs"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[11px]">Chave</Label>
-          <Input
-            value={parameter.key}
-            onChange={(event) => onChange({ key: event.target.value })}
-            className="h-8 font-mono text-xs"
-          />
-        </div>
-      </div>
-      <div className="space-y-1">
-        <Label className="text-[11px]">Tipo</Label>
-        <Select
-          value={parameter.type}
-          onValueChange={(value) => {
-            const type = value as BlockParameterType;
-            onChange({
-              type,
-              value: type === "boolean" ? false : type === "number" ? 0 : "",
-            });
-          }}
-        >
-          <SelectTrigger className="h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PARAMETER_TYPES.map((type) => (
-              <SelectItem key={type.value} value={type.value}>
-                {type.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1">
-        <Label className="text-[11px]">Valor</Label>
-        {parameter.type === "textarea" ? (
-          <Textarea
-            value={String(parameter.value)}
-            placeholder={parameter.placeholder}
-            onChange={(event) => onChange({ value: event.target.value })}
-            rows={3}
-            className="text-xs"
-          />
-        ) : parameter.type === "boolean" ? (
-          <label className="flex h-9 items-center gap-2 rounded-md border border-input px-3 text-xs">
-            <Checkbox
-              checked={Boolean(parameter.value)}
-              onCheckedChange={(checked) => onChange({ value: checked === true })}
-            />
-            {parameter.value ? "Ativado" : "Desativado"}
-          </label>
-        ) : parameter.type === "select" ? (
-          <div className="space-y-2">
-            <Select value={String(parameter.value)} onValueChange={(value) => onChange({ value })}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder={parameter.placeholder} />
-              </SelectTrigger>
-              <SelectContent>
-                {(parameter.options ?? []).map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              value={(parameter.options ?? []).join(", ")}
-              onChange={(event) =>
-                onChange({
-                  options: event.target.value
-                    .split(",")
-                    .map((item) => item.trim())
-                    .filter(Boolean),
-                })
-              }
-              placeholder="Opções separadas por vírgula"
-              className="h-8 text-xs"
-            />
-          </div>
-        ) : (
-          <Input
-            type={parameter.type === "number" ? "number" : "text"}
-            value={String(parameter.value)}
-            placeholder={parameter.placeholder}
-            onChange={(event) =>
-              onChange({
-                value:
-                  parameter.type === "number" ? Number(event.target.value) : event.target.value,
-              })
-            }
-            className="h-8 text-xs"
-          />
-        )}
-      </div>
-      <div className="space-y-1">
-        <Label className="text-[11px]">Placeholder</Label>
-        <Input
-          value={parameter.placeholder ?? ""}
-          onChange={(event) => onChange({ placeholder: event.target.value })}
-          className="h-8 text-xs"
-        />
-      </div>
     </div>
   );
 }

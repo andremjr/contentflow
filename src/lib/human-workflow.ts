@@ -174,16 +174,3 @@ export function isEmptyRuntimeValue(value: RuntimeValue | undefined) {
   if (value == null || value === "") return true;
   return Array.isArray(value) && value.length === 0;
 }
-
-export function formatRuntimeValue(value: RuntimeValue | undefined) {
-  if (value == null || value === "") return "Não informado";
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => (typeof item === "string" ? item : item.name))
-      .filter(Boolean)
-      .join(", ");
-  }
-  if (typeof value === "object") return value.name;
-  if (typeof value === "boolean") return value ? "Sim" : "Não";
-  return String(value);
-}

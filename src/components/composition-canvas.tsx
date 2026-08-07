@@ -2,31 +2,14 @@ import { useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { ThumbnailLayoutBox } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
-export type CompositionBox = {
-  id: string;
-  label: string;
-  color: string;
-  /** all values in percent of the frame */
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-};
+export type CompositionBox = ThumbnailLayoutBox;
 
-export const BOX_COLORS = [
-  "#2563EB",
-  "#F59E0B",
-  "#10B981",
-  "#EF4444",
-  "#A855F7",
-  "#06B6D4",
-  "#EC4899",
-];
+const BOX_COLORS = ["#2563EB", "#F59E0B", "#10B981", "#EF4444", "#A855F7", "#06B6D4", "#EC4899"];
 
-const clamp = (v: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, v));
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
 export function CompositionCanvas({
   boxes,
@@ -68,11 +51,7 @@ export function CompositionCanvas({
     setSelected(id);
   };
 
-  const startDrag = (
-    e: React.PointerEvent,
-    box: CompositionBox,
-    mode: "move" | "resize",
-  ) => {
+  const startDrag = (e: React.PointerEvent, box: CompositionBox, mode: "move" | "resize") => {
     e.preventDefault();
     e.stopPropagation();
     setSelected(box.id);
@@ -219,7 +198,47 @@ export function CompositionCanvas({
           </ul>
         </div>
       )}
+    </div>
+  );
+}
 
+export function CompositionPreview({
+  boxes,
+  className,
+}: {
+  boxes: CompositionBox[];
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative aspect-video w-full overflow-hidden rounded-lg border border-border bg-secondary/30",
+        className,
+      )}
+    >
+      {boxes.map((box) => (
+        <div
+          key={box.id}
+          className="absolute overflow-hidden rounded border"
+          style={{
+            left: `${box.x}%`,
+            top: `${box.y}%`,
+            width: `${box.w}%`,
+            height: `${box.h}%`,
+            backgroundColor: `${box.color}59`,
+            borderColor: box.color,
+          }}
+        >
+          <span className="absolute left-1 top-1 max-w-[90%] truncate rounded bg-background/70 px-1 text-[8px] font-medium">
+            {box.label}
+          </span>
+        </div>
+      ))}
+      {!boxes.length && (
+        <span className="absolute inset-0 grid place-items-center text-[10px] text-muted-foreground">
+          Layout vazio
+        </span>
+      )}
     </div>
   );
 }

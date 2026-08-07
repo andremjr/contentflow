@@ -11,7 +11,7 @@ export type YouTubeChannelProfile = {
 const YOUTUBE_ORIGIN = "https://www.youtube.com";
 const HANDLE_PATTERN = /^[\p{L}\p{N}._-]{3,100}$/u;
 
-export function normalizeYouTubeHandle(input: string) {
+function normalizeYouTubeHandle(input: string) {
   let value = input.trim();
 
   if (/^https?:\/\//i.test(value)) {

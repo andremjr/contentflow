@@ -1,8 +1,17 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { BookOpen, FolderOpen, Image as ImageIcon, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  FolderOpen,
+  Image as ImageIcon,
+  LayoutTemplate,
+  LoaderCircle,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
+import { CompositionCanvas, CompositionPreview } from "@/components/composition-canvas";
 import { TopBar } from "@/components/top-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +34,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { StoredFile, StrategicCollection, StrategicCollectionField } from "@/lib/domain";
+import type {
+  StoredFile,
+  StrategicCollection,
+  StrategicCollectionField,
+  ThumbnailLayout,
+} from "@/lib/domain";
 import {
   createLibraryCollection,
   createLibraryItem,
@@ -37,10 +51,21 @@ import {
   useLibraryItems,
 } from "@/lib/store";
 
-type CollectionItemValue = string | number | StoredFile;
+type CollectionItemValue = string | number | StoredFile | ThumbnailLayout;
 
 function isStoredFile(value: CollectionItemValue | undefined): value is StoredFile {
   return typeof value === "object" && value !== null && "url" in value;
+}
+
+function isThumbnailLayout(value: CollectionItemValue | undefined): value is ThumbnailLayout {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "aspectRatio" in value &&
+    value.aspectRatio === "16:9" &&
+    "boxes" in value &&
+    Array.isArray(value.boxes),
+  );
 }
 
 function isValidHttpUrl(value: string) {
@@ -63,6 +88,18 @@ function newField(index: number): StrategicCollectionField {
     type: index === 0 ? "text" : "textarea",
     required: index === 0,
   };
+}
+
+function thumbnailLayoutFields(): StrategicCollectionField[] {
+  return [
+    { id: crypto.randomUUID(), label: "Nome", type: "text", required: true },
+    {
+      id: crypto.randomUUID(),
+      label: "Composição",
+      type: "thumbnail_layout",
+      required: true,
+    },
+  ];
 }
 
 function ChannelLibraryPage() {
@@ -179,7 +216,9 @@ function CollectionSection({
                           {field.label}
                         </dt>
                         <dd className="mt-1 text-sm text-foreground">
-                          {field.type === "image" && isStoredFile(value) ? (
+                          {field.type === "thumbnail_layout" && isThumbnailLayout(value) ? (
+                            <CompositionPreview boxes={value.boxes} />
+                          ) : field.type === "image" && isStoredFile(value) ? (
                             <img
                               src={value.url}
                               alt={value.name}
@@ -229,6 +268,7 @@ function CollectionSection({
 
 function NewCollection({ channelId }: { channelId: string }) {
   const [open, setOpen] = useState(false);
+  const [collectionKind, setCollectionKind] = useState<"custom" | "thumbnail_layout">("custom");
   const [name, setName] = useState("");
   const [fields, setFields] = useState<StrategicCollectionField[]>([newField(0)]);
   const valid =
@@ -241,6 +281,18 @@ function NewCollection({ channelId }: { channelId: string }) {
   }
 
   function reset() {
+    setCollectionKind("custom");
+    setName("");
+    setFields([newField(0)]);
+  }
+
+  function selectCollectionKind(kind: "custom" | "thumbnail_layout") {
+    setCollectionKind(kind);
+    if (kind === "thumbnail_layout") {
+      setName("Layouts de thumbnail");
+      setFields(thumbnailLayoutFields());
+      return;
+    }
     setName("");
     setFields([newField(0)]);
   }
@@ -278,6 +330,39 @@ function NewCollection({ channelId }: { channelId: string }) {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-5">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => selectCollectionKind("custom")}
+              className={`rounded-xl border p-3 text-left transition ${
+                collectionKind === "custom"
+                  ? "border-brand/60 bg-brand/10"
+                  : "border-border/70 hover:border-brand/35"
+              }`}
+            >
+              <FolderOpen className="size-4 text-brand-soft" />
+              <span className="mt-2 block text-sm font-medium">Coleção personalizada</span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                Defina livremente os campos de cada item.
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => selectCollectionKind("thumbnail_layout")}
+              className={`rounded-xl border p-3 text-left transition ${
+                collectionKind === "thumbnail_layout"
+                  ? "border-brand/60 bg-brand/10"
+                  : "border-border/70 hover:border-brand/35"
+              }`}
+            >
+              <LayoutTemplate className="size-4 text-brand-soft" />
+              <span className="mt-2 block text-sm font-medium">Layouts de thumbnail</span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                Use o canvas 16:9 para salvar composições programáticas.
+              </span>
+            </button>
+          </div>
+
           <div className="space-y-1.5">
             <Label>Nome da coleção</Label>
             <Input
@@ -330,6 +415,7 @@ function NewCollection({ channelId }: { channelId: string }) {
                       <SelectItem value="number">Número</SelectItem>
                       <SelectItem value="image">Imagem</SelectItem>
                       <SelectItem value="url">Link</SelectItem>
+                      <SelectItem value="thumbnail_layout">Layout de thumbnail</SelectItem>
                     </SelectContent>
                   </Select>
                   <label className="flex items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
@@ -373,7 +459,12 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
   const [uploadingFieldId, setUploadingFieldId] = useState<string | null>(null);
   const valid = collection.fields.every((field) => {
     const value = values[field.id];
-    const hasValue = typeof value === "string" ? Boolean(value.trim()) : value !== undefined;
+    const hasValue =
+      typeof value === "string"
+        ? Boolean(value.trim())
+        : isThumbnailLayout(value)
+          ? value.boxes.length > 0
+          : value !== undefined;
     if (field.required && !hasValue) return false;
     if (field.type === "url" && hasValue) {
       return typeof value === "string" && isValidHttpUrl(value.trim());
@@ -455,6 +546,22 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
                     }
                     rows={4}
                   />
+                ) : field.type === "thumbnail_layout" ? (
+                  <div className="rounded-xl border border-border/70 bg-background/30 p-3">
+                    <CompositionCanvas
+                      boxes={isThumbnailLayout(fieldValue) ? fieldValue.boxes : []}
+                      onChange={(boxes) =>
+                        setValues((current) => ({
+                          ...current,
+                          [field.id]: { aspectRatio: "16:9", boxes },
+                        }))
+                      }
+                    />
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      As posições e dimensões são salvas em porcentagens para funcionar em qualquer
+                      resolução 16:9.
+                    </p>
+                  </div>
                 ) : field.type === "image" ? (
                   <div className="rounded-xl border border-dashed border-input p-4">
                     {isStoredFile(fieldValue) ? (

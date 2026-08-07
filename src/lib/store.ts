@@ -24,6 +24,7 @@ import {
   isEmptyRuntimeValue,
   normalizeActionBlock,
 } from "@/lib/human-workflow";
+import { resolveBlockInputs } from "@/lib/runtime-contract";
 
 export type YouTubeChannelProfile = Pick<
   Channel,
@@ -60,6 +61,14 @@ function subscribe(listener: () => void) {
 
 function getVersion() {
   return version;
+}
+
+function getServerVersion() {
+  return -1;
+}
+
+function useClientStoreVersion() {
+  return useSyncExternalStore(subscribe, getVersion, getServerVersion);
 }
 
 function normalizeChannel(channel: Channel): Channel {
@@ -129,18 +138,18 @@ async function hydrate() {
 void hydrate();
 
 export function useDatabaseReady() {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
-  return db.ready;
+  const storeVersion = useClientStoreVersion();
+  return storeVersion >= 0 && db.ready;
 }
 
 export function useChannels(): Channel[] {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
-  return db.channels;
+  const storeVersion = useClientStoreVersion();
+  return storeVersion >= 0 ? db.channels : [];
 }
 
 export function useChannel(id: string): Channel | undefined {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
-  return db.channels.find((channel) => channel.id === id);
+  const storeVersion = useClientStoreVersion();
+  return storeVersion >= 0 ? db.channels.find((channel) => channel.id === id) : undefined;
 }
 
 export function reorderChannels(channelIds: string[]) {
@@ -165,36 +174,41 @@ export function reorderChannels(channelIds: string[]) {
 }
 
 export function useProjects(channelId?: string): Project[] {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
+  const storeVersion = useClientStoreVersion();
+  if (storeVersion < 0) return [];
   return channelId ? db.projects.filter((project) => project.channelId === channelId) : db.projects;
 }
 
 export function useProject(id: string): Project | undefined {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
-  return db.projects.find((project) => project.id === id);
+  const storeVersion = useClientStoreVersion();
+  return storeVersion >= 0 ? db.projects.find((project) => project.id === id) : undefined;
 }
 
 export function useProcessExecution(projectId: string, processType: ProcessId) {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
+  const storeVersion = useClientStoreVersion();
+  if (storeVersion < 0) return undefined;
   return db.executions.find(
     (execution) => execution.projectId === projectId && execution.processType === processType,
   );
 }
 
 export function useProjectExecutions(projectId: string) {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
+  const storeVersion = useClientStoreVersion();
+  if (storeVersion < 0) return [];
   return db.executions.filter((execution) => execution.projectId === projectId);
 }
 
 export function useLibraryItems(channelId?: string) {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
+  const storeVersion = useClientStoreVersion();
+  if (storeVersion < 0) return [];
   return channelId
     ? db.libraryItems.filter((item) => item.channelId === channelId)
     : db.libraryItems;
 }
 
 export function useLibraryCollections(channelId?: string) {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
+  const storeVersion = useClientStoreVersion();
+  if (storeVersion < 0) return [];
   return channelId
     ? db.libraryCollections.filter((collection) => collection.channelId === channelId)
     : db.libraryCollections;
@@ -209,7 +223,8 @@ export type HumanTask = {
 };
 
 export function useHumanTasks(): HumanTask[] {
-  useSyncExternalStore(subscribe, getVersion, getVersion);
+  const storeVersion = useClientStoreVersion();
+  if (storeVersion < 0) return [];
   return db.executions
     .flatMap<HumanTask>((execution) => {
       const project = db.projects.find((item) => item.id === execution.projectId);
@@ -760,6 +775,22 @@ export function completeHumanBlock(
   ) {
     return { ok: false, missing: ["Executor humano indisponível"] };
   }
+  const project = db.projects.find((item) => item.id === execution.projectId);
+  if (!project) return { ok: false, missing: ["Projeto não encontrado"] };
+  const unresolvedInputs = resolveBlockInputs({
+    block,
+    execution,
+    project,
+    projectExecutions: db.executions.filter((item) => item.projectId === execution.projectId),
+    collections: db.libraryCollections.filter((item) => item.channelId === execution.channelId),
+    libraryItems: db.libraryItems.filter((item) => item.channelId === execution.channelId),
+  }).filter((item) => !item.resolved);
+  if (unresolvedInputs.length) {
+    return {
+      ok: false,
+      missing: unresolvedInputs.map((item) => `Entrada: ${item.input.label}`),
+    };
+  }
   const missing = (block.outputs ?? [])
     .filter((output) => output.required && isEmptyRuntimeValue(values[output.key]))
     .map((output) => output.label);
@@ -968,8 +999,6 @@ export async function uploadLocalFile(file: File): Promise<StoredFile> {
   if (!response.ok) throw new Error(await readApiError(response));
   return response.json() as Promise<StoredFile>;
 }
-
-export { createEmptyMethods };
 
 async function request(url: string, method: "POST" | "PUT" | "DELETE", body?: unknown) {
   const response = await fetch(url, {

@@ -9,7 +9,6 @@ import {
   Workflow,
 } from "lucide-react";
 import { ChannelAvatar } from "@/components/channel-avatar";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useHiddenChannelIds } from "@/lib/channel-privacy";
 import { PROCESS_META, PROCESS_ORDER } from "@/lib/domain";
 import { useChannels, useProject } from "@/lib/store";

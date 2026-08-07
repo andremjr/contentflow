@@ -111,6 +111,8 @@ Entradas e saídas pertencem ao bloco e não ao operador. Na definição do Mét
 
 As chaves técnicas, a persistência e a conexão padrão com resultados anteriores são administradas internamente pelo núcleo. Para o usuário, os formatos universais são: texto curto, texto longo, número, sim ou não, lista de textos, seleção, seleção múltipla, URL, arquivo, vários arquivos, imagem, áudio, vídeo e decisão.
 
+Cada entrada declarada é conectada automaticamente a uma saída compatível já produzida. O motor prioriza os blocos anteriores mais próximos, depois os outputs dos Processos Universais anteriores, considera a semelhança entre os nomes e não reutiliza a mesma saída em duas entradas do mesmo bloco. Conexões explícitas legadas continuam sendo respeitadas. Se uma entrada não puder ser resolvida, o bloco permanece pausado e informa claramente qual dado está ausente.
+
 O operador `Humano` é o executor nativo desse mesmo contrato e não depende de plugin. Um futuro plugin de `IA` ou `Código` deverá consumir as mesmas entradas e produzir as mesmas saídas; seus parâmetros particulares aparecem somente depois que o plugin for selecionado.
 
 O Método armazena apenas esse esquema. Os valores efetivamente preenchidos pertencem à execução do Projeto/Vídeo e nunca são gravados como parte do Método.
@@ -129,6 +131,8 @@ O orquestrador do sistema funciona em modelo de **Máquina de Estados Concorrent
 4. **Bloqueio de executores ausentes**: Blocos `IA` e `Código` entram em `blocked_executor` enquanto não houver um plugin compatível configurado. Eles nunca são concluídos de forma fictícia.
 
 Cada execução mantém um snapshot do Método utilizado, o estado individual dos blocos, rascunhos, entregas concluídas e referências a arquivos armazenados localmente. As saídas concluídas tornam-se contexto para os blocos seguintes.
+
+A página do processo mantém um painel expansível de resultados concluídos. Cada valor é apresentado conforme seu formato: textos e listas, links clicáveis, imagens, players de áudio e vídeo, arquivos, valores booleanos e decisões de aprovação ou reprovação.
 
 ---
 
@@ -165,6 +169,8 @@ O bloco `ESCOLHER` é o único bloco cuja função é selecionar elementos preex
 
 A Biblioteca Estratégica é diferente da Biblioteca de Métodos: a primeira contém peças utilizadas dentro das ações; a segunda permite reutilizar sequências completas de ações entre canais.
 
+Além dos campos simples, uma coleção pode usar o formato especializado `Layout de thumbnail`. Cada item desse tipo armazena uma composição 16:9 criada no canvas visual, com caixas posicionadas em coordenadas percentuais. Esses layouts continuam sendo dados internos da Biblioteca Estratégica e podem ser escolhidos por um bloco `ESCOLHER` para orientar um futuro plugin de montagem programática.
+
 ---
 
 ## 11. Resultados Intermediários e Outputs Universais
@@ -191,3 +197,11 @@ Os outputs concluídos dos processos anteriores são injetados automaticamente c
 ## 12. Protocolo de Plugins
 
 O contrato técnico da próxima fase está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local.
+
+---
+
+## 13. Layouts Programáticos de Thumbnail
+
+O núcleo preserva um canvas de composição visual para a futura Biblioteca de Layouts de Thumbnail. Cada layout descreve caixas, posições, dimensões, ordem de camadas e cores em coordenadas relativas a um quadro 16:9.
+
+Esse canvas é infraestrutura intencional, mesmo enquanto ainda não estiver exposto na navegação principal. Plugins de operador `Código` poderão consumir esses layouts para posicionar textos, pessoas, objetos e demais elementos durante a montagem programática de thumbnails. Ele não deve ser tratado como código legado ou removido apenas por ainda não possuir uma tela pública.

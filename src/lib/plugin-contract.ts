@@ -3,6 +3,7 @@ import type {
   ProcessOutput,
   RuntimeValue,
   StoredFile,
+  ThumbnailLayout,
   UniversalProcess,
 } from "@/lib/domain";
 
@@ -56,7 +57,10 @@ export type PluginExecutionContext = {
   previousBlockOutputs: Array<{ blockId: string; values: Record<string, RuntimeValue> }>;
   selectedCollection?: {
     collectionId: string;
-    items: Array<{ id: string; values: Record<string, string | number | StoredFile> }>;
+    items: Array<{
+      id: string;
+      values: Record<string, string | number | StoredFile | ThumbnailLayout>;
+    }>;
   };
 };
 

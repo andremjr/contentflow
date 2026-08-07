@@ -13,6 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { RuntimeFieldsForm } from "@/components/runtime-fields-form";
+import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,10 +31,10 @@ import {
 } from "@/lib/domain";
 import {
   createProcessOutputFields,
-  formatRuntimeValue,
   getMethodConfigurationIssue,
   PROCESS_ROUTE_SEGMENT,
 } from "@/lib/human-workflow";
+import { resolveBlockInputs } from "@/lib/runtime-contract";
 import {
   cancelProcessExecution,
   chooseCollectionItem,
@@ -208,6 +209,11 @@ export function ProcessRunner({
       ) : execution ? (
         <>
           <ExecutionTimeline execution={execution} />
+          <ExecutionResults
+            execution={execution}
+            collections={collections}
+            libraryItems={libraryItems}
+          />
           {waitingForHumanChoice && activeBlock ? (
             <HumanChoiceGate
               block={activeBlock}
@@ -241,6 +247,7 @@ export function ProcessRunner({
             <ExecutionCancelled />
           ) : completed ? (
             <ProcessCompleted
+              processType={processId}
               processLabel={meta.label}
               advancesAutomatically={isAdvancing}
               isPublishing={!nextProcess}
@@ -346,6 +353,119 @@ function ExecutionTimeline({ execution }: { execution: ProcessExecution }) {
   );
 }
 
+function ExecutionResults({
+  execution,
+  collections,
+  libraryItems,
+}: {
+  execution: ProcessExecution;
+  collections: StrategicCollection[];
+  libraryItems: ChannelLibraryItem[];
+}) {
+  const completed = execution.blocks.filter((item) => item.status === "completed");
+  if (!completed.length) return null;
+
+  return (
+    <section className="rounded-xl border border-border/70 bg-card p-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Resultados produzidos
+      </h3>
+      <div className="mt-3 space-y-2">
+        {completed.map((blockExecution, index) => {
+          const block = execution.methodSnapshot.blocks.find(
+            (candidate) => candidate.id === blockExecution.blockId,
+          );
+          if (!block) return null;
+          const selectedItemId = blockExecution.values.selectedItemId;
+          const selectedItem =
+            block.type === "ESCOLHER" && typeof selectedItemId === "string"
+              ? libraryItems.find((item) => item.id === selectedItemId)
+              : undefined;
+          const collection = collections.find(
+            (candidate) => candidate.id === selectedItem?.collectionId,
+          );
+          const outputs = (block.outputs ?? []).filter(
+            (output) => !isEmptyDisplayValue(blockExecution.values[output.key]),
+          );
+
+          return (
+            <details
+              key={blockExecution.blockId}
+              className="group rounded-lg border border-border/60 bg-background/30"
+              open={index === completed.length - 1}
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium">
+                <CheckCircle2 className="size-4 text-success" />
+                <span className="min-w-0 flex-1 truncate">{block.name ?? block.type}</span>
+                <Badge variant="outline" className="text-[9px] text-success">
+                  Concluído
+                </Badge>
+              </summary>
+              <div className="border-t border-border/60 p-3">
+                {selectedItem && collection ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {collection.fields.map((field) => (
+                      <ResultValue
+                        key={field.id}
+                        label={field.label}
+                        type={field.type}
+                        value={selectedItem.values[field.id]}
+                      />
+                    ))}
+                  </div>
+                ) : outputs.length ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {outputs.map((output) => (
+                      <ResultValue
+                        key={output.id}
+                        label={output.label}
+                        type={output.type}
+                        value={blockExecution.values[output.key]}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Esta ação foi concluída sem uma entrega visual.
+                  </p>
+                )}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ResultValue({
+  label,
+  type,
+  value,
+  source,
+}: {
+  label: string;
+  type: Parameters<typeof RuntimeValueViewer>[0]["type"];
+  value: RuntimeValue | undefined;
+  source?: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-border/50 bg-card/60 p-3">
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        {source && (
+          <Badge variant="secondary" className="text-[9px]">
+            de {source}
+          </Badge>
+        )}
+      </div>
+      <RuntimeValueViewer type={type} value={value} compact />
+    </div>
+  );
+}
+
 function MethodPreview({ method }: { method: ActionBlock[] }) {
   return (
     <section className="rounded-xl border border-border/70 bg-card p-5">
@@ -446,16 +566,8 @@ function HumanChoiceGate({
                       <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                         {field.label}
                       </dt>
-                      <dd className="mt-0.5 text-sm">
-                        {field.type === "image" && typeof value === "object" ? (
-                          <img
-                            src={value.url}
-                            alt={value.name}
-                            className="max-h-48 w-full rounded-lg border border-border/60 object-cover"
-                          />
-                        ) : (
-                          <span className="whitespace-pre-wrap">{String(value)}</span>
-                        )}
+                      <dd className="mt-1 text-sm">
+                        <RuntimeValueViewer type={field.type} value={value} compact />
                       </dd>
                     </div>
                   );
@@ -521,18 +633,37 @@ function HumanBlockGate({
   const previousExecutions = execution.blocks
     .slice(0, blockIndex)
     .filter((item) => item.status === "completed");
-  const context: { label: string; value: string }[] = [];
+  const resolvedInputs = resolveBlockInputs({
+    block,
+    execution,
+    project,
+    projectExecutions,
+    collections,
+    libraryItems,
+  });
+  const missingInputs = resolvedInputs.filter((item) => !item.resolved);
+  const context: Array<{
+    label: string;
+    type: Parameters<typeof RuntimeValueViewer>[0]["type"];
+    value: RuntimeValue;
+    source?: string;
+  }> = [];
 
   for (const previousProcess of projectExecutions
     .filter(
       (item) => item.processType !== execution.processType && item.outputStatus === "completed",
     )
     .sort((a, b) => PROCESS_ORDER.indexOf(a.processType) - PROCESS_ORDER.indexOf(b.processType))) {
-    for (const [key, value] of Object.entries(previousProcess.output?.values ?? {})) {
-      context.push({
-        label: `${PROCESS_META[previousProcess.processType].label} · ${key}`,
-        value: formatRuntimeValue(value),
-      });
+    for (const output of createProcessOutputFields(previousProcess.processType)) {
+      const value = previousProcess.output?.values[output.key];
+      if (!isEmptyDisplayValue(value)) {
+        context.push({
+          label: output.label,
+          type: output.type,
+          value: value!,
+          source: `Processo ${PROCESS_META[previousProcess.processType].label}`,
+        });
+      }
     }
   }
 
@@ -547,39 +678,25 @@ function HumanBlockGate({
         const value = selectedItem?.values[field.id];
         if (value !== undefined) {
           context.push({
-            label: `${previousBlock.name ?? "Escolher"} · ${field.label}`,
-            value: formatRuntimeValue(value),
+            label: field.label,
+            type: field.type,
+            value,
+            source: previousBlock.name ?? "Escolher",
           });
         }
       }
       continue;
     }
-    for (const [key, value] of Object.entries(previous.values)) {
-      context.push({
-        label: `${previousBlock?.name ?? previousBlock?.type} · ${key}`,
-        value: formatRuntimeValue(value),
-      });
-    }
-  }
-
-  for (const input of block.inputs ?? []) {
-    if (input.source === "static" && input.staticValue) {
-      context.push({ label: input.label, value: input.staticValue });
-    } else if (input.source === "project") {
-      const value = input.sourceKey === "deadline" ? project.deadline : project.title;
-      context.push({ label: input.label, value });
-    } else if (input.source === "previous_block" && input.blockId) {
-      const source = execution.blocks.find((item) => item.blockId === input.blockId);
-      const value = input.sourceKey
-        ? source?.values[input.sourceKey]
-        : Object.values(source?.values ?? {})[0];
-      if (!isEmptyDisplayValue(value))
-        context.push({ label: input.label, value: formatRuntimeValue(value) });
-    } else if (input.source === "previous_process" && input.sourceKey) {
-      const source = projectExecutions.find((item) => item.output?.values[input.sourceKey!]);
-      const value = source?.output?.values[input.sourceKey];
-      if (!isEmptyDisplayValue(value))
-        context.push({ label: input.label, value: formatRuntimeValue(value) });
+    for (const output of previousBlock?.outputs ?? []) {
+      const value = previous.values[output.key];
+      if (!isEmptyDisplayValue(value)) {
+        context.push({
+          label: output.label,
+          type: output.type,
+          value: value!,
+          source: previousBlock?.name ?? previousBlock?.type,
+        });
+      }
     }
   }
 
@@ -609,6 +726,12 @@ function HumanBlockGate({
   }
 
   function submit() {
+    if (missingInputs.length) {
+      toast.error("Existem entradas sem conexão", {
+        description: missingInputs.map((item) => item.input.label).join(", "),
+      });
+      return;
+    }
     const result = completeHumanBlock(execution.id, block.id, values);
     if (!result.ok) {
       toast.error("A ação ainda não pode ser concluída", {
@@ -643,21 +766,47 @@ function HumanBlockGate({
         <OperatorBadge block={block} />
       </header>
 
-      {context.length > 0 && (
+      {resolvedInputs.length > 0 && (
+        <div className="mt-5 rounded-xl border border-border/70 bg-background/30 p-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Entradas recebidas
+          </h4>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {resolvedInputs.map((item) =>
+              item.resolved ? (
+                <ResultValue
+                  key={item.input.id}
+                  label={item.input.label}
+                  type={item.input.type}
+                  value={item.value}
+                  source={item.sourceLabel}
+                />
+              ) : (
+                <div
+                  key={item.input.id}
+                  className="rounded-lg border border-destructive/35 bg-destructive/5 p-3"
+                >
+                  <p className="text-xs font-semibold text-destructive">{item.input.label}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Nenhuma saída anterior compatível com este formato foi encontrada.
+                  </p>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      )}
+
+      {resolvedInputs.length === 0 && context.length > 0 && (
         <div className="mt-5 rounded-xl border border-border/70 bg-background/30 p-4">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Contexto disponível
           </h4>
-          <dl className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
             {context.map((item, index) => (
-              <div key={`${item.label}-${index}`}>
-                <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {item.label}
-                </dt>
-                <dd className="mt-1 whitespace-pre-wrap text-sm">{item.value}</dd>
-              </div>
+              <ResultValue key={`${item.label}-${index}`} {...item} />
             ))}
-          </dl>
+          </div>
         </div>
       )}
 
@@ -673,7 +822,7 @@ function HumanBlockGate({
         ) : (
           <p className="text-xs text-muted-foreground">Esta ação não exige campos adicionais.</p>
         )}
-        <Button className="mt-5" onClick={submit}>
+        <Button className="mt-5" disabled={missingInputs.length > 0} onClick={submit}>
           <CheckCircle2 className="mr-1.5 size-4" /> Concluir ação humana
         </Button>
       </div>
@@ -777,11 +926,13 @@ function FailedExecutionGate({
 }
 
 function ProcessCompleted({
+  processType,
   processLabel,
   advancesAutomatically,
   isPublishing,
   output,
 }: {
+  processType: ProcessId;
   processLabel: string;
   advancesAutomatically: boolean;
   isPublishing: boolean;
@@ -802,16 +953,16 @@ function ProcessCompleted({
         <LoaderCircle className="mx-auto mt-4 size-4 animate-spin text-success" />
       )}
       {output && Object.keys(output).length > 0 && (
-        <dl className="mx-auto mt-5 max-w-2xl rounded-xl border border-success/25 bg-background/30 p-4 text-left">
-          {Object.entries(output).map(([key, value]) => (
-            <div key={key} className="py-1.5">
-              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {key}
-              </dt>
-              <dd className="mt-1 whitespace-pre-wrap text-sm">{formatRuntimeValue(value)}</dd>
-            </div>
+        <div className="mx-auto mt-5 max-w-2xl rounded-xl border border-success/25 bg-background/30 p-4 text-left">
+          {createProcessOutputFields(processType).map((field) => (
+            <ResultValue
+              key={field.id}
+              label={field.label}
+              type={field.type}
+              value={output[field.key]}
+            />
           ))}
-        </dl>
+        </div>
       )}
     </section>
   );

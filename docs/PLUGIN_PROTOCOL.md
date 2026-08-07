@@ -12,12 +12,16 @@ Um plugin declara capacidades para os operadores `IA` ou `Código`, os tipos de 
 
 O contrato de dados é independente do executor: trocar `Humano` por um plugin não altera as entradas e saídas definidas no Método.
 
+Antes de chamar qualquer executor, o núcleo resolve as entradas tipadas do bloco e deve entregar ao plugin somente os valores conectados. Se alguma entrada declarada estiver ausente, o executor não é chamado. A política de conexão é responsabilidade do núcleo e permanece igual para `Humano`, `IA` e `Código`.
+
 ## Regra dos blocos
 
 - `BUSCAR`: recebe contexto e devolve dados ou mídias externas.
 - `ESCOLHER`: sempre recebe os itens da coleção da Biblioteca Estratégica vinculada pelo núcleo e devolve o ID do item escolhido. Nunca escolhe resultados de blocos anteriores.
 - `CRIAR`: produz um novo texto, arquivo, ativo ou dado.
 - `VALIDAR`: avalia resultados produzidos durante a execução. Pode aprovar, reprovar ou selecionar um ou mais resultados.
+
+Coleções estratégicas podem conter valores estruturados próprios do núcleo, como layouts 16:9 de thumbnail. Quando um item desse tipo for escolhido, o contexto controlado entregue ao plugin inclui caixas, posições, dimensões, ordem e cores do layout. O plugin não precisa interpretar HTML nem acessar a interface para reproduzir a composição.
 
 ## Manifesto
 
