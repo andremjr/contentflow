@@ -1,8 +1,7 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
-  ArrowRight,
   Bot,
   Check,
   CheckCircle2,
@@ -20,37 +19,37 @@ import {
   PROCESS_ORDER,
   type ActionBlock,
   type BlockExecution,
+  type ChannelLibraryItem,
   type ProcessExecution,
   type ProcessId,
   type Project,
+  type StrategicCollection,
 } from "@/lib/domain";
 import { PROCESS_ROUTE_SEGMENT } from "@/lib/human-workflow";
 import {
-  advanceSimulatedExecution,
-  confirmSimulatedValidation,
+  advanceProcessExecution,
+  chooseCollectionItem,
+  confirmHumanAction,
   resetStage,
   startProcessExecution,
   useChannel,
+  useLibraryCollections,
+  useLibraryItems,
   useProcessExecution,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<BlockExecution["status"], string> = {
   pending: "Aguardando a etapa anterior",
-  awaiting_human: "Aguardando validação humana",
-  in_progress: "Simulando execução",
+  awaiting_human: "Aguardando ação humana",
+  in_progress: "Em execução",
   completed: "Concluído",
-  blocked_executor: "Entrando na simulação",
+  blocked_executor: "Preparando execução",
   cancelled: "Cancelado",
 };
 
-const SIMULATION_STEP_DELAY = 850;
+const EXECUTION_STEP_DELAY = 850;
 const NEXT_PROCESS_DELAY = 1100;
-
-function hasFinalHumanValidation(blocks: ActionBlock[]) {
-  const finalBlock = blocks.at(-1);
-  return finalBlock?.type === "VALIDAR" && finalBlock.operator === "Humano";
-}
 
 export function ProcessRunner({
   project,
@@ -63,45 +62,50 @@ export function ProcessRunner({
 }) {
   const navigate = useNavigate();
   const channel = useChannel(project?.channelId ?? "");
+  const collections = useLibraryCollections(project?.channelId);
+  const libraryItems = useLibraryItems(project?.channelId);
   const execution = useProcessExecution(project?.id ?? "", processId);
   const method = channel?.methods[processId];
   const meta = PROCESS_META[processId];
   const completed = execution?.status === "completed";
   const nextProcess = PROCESS_ORDER[PROCESS_ORDER.indexOf(processId) + 1];
-  const executionBlocks = execution?.methodSnapshot.blocks ?? [];
-  const finalHumanValidation = hasFinalHumanValidation(executionBlocks);
+  const nextNavigationTimer = useRef<number | undefined>(undefined);
+  const [isAdvancing, setIsAdvancing] = useState(false);
   const activeExecution = execution?.blocks.find((item) => item.status !== "completed");
   const activeBlock = activeExecution
     ? execution?.methodSnapshot.blocks.find((item) => item.id === activeExecution.blockId)
     : undefined;
-  const waitingForFinalValidation =
-    activeExecution?.status === "awaiting_human" &&
-    activeBlock?.type === "VALIDAR" &&
-    activeBlock.operator === "Humano" &&
-    execution?.methodSnapshot.blocks.at(-1)?.id === activeBlock.id;
+  const waitingForHumanAction =
+    activeExecution?.status === "awaiting_human" && activeBlock?.operator === "Humano";
+  const waitingForHumanChoice =
+    waitingForHumanAction && activeBlock?.type === "ESCOLHER" && activeBlock.operator === "Humano";
 
-  useEffect(() => {
-    if (!execution || completed || waitingForFinalValidation) return;
-    const timer = window.setTimeout(
-      () => advanceSimulatedExecution(execution.id),
-      SIMULATION_STEP_DELAY,
-    );
-    return () => window.clearTimeout(timer);
-  }, [completed, execution, execution?.updatedAt, waitingForFinalValidation]);
-
-  useEffect(() => {
-    if (!project || !channel || !execution || !completed || finalHumanValidation || !nextProcess) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
+  const scheduleNextProcess = useCallback(() => {
+    if (!project || !channel || !nextProcess || nextNavigationTimer.current) return;
+    setIsAdvancing(true);
+    nextNavigationTimer.current = window.setTimeout(() => {
       if (channel.methods[nextProcess].blocks.length) {
         startProcessExecution(project.id, nextProcess);
       }
       navigate({ to: `/project/${project.id}/${PROCESS_ROUTE_SEGMENT[nextProcess]}` });
     }, NEXT_PROCESS_DELAY);
+  }, [channel, navigate, nextProcess, project]);
+
+  useEffect(
+    () => () => {
+      if (nextNavigationTimer.current) window.clearTimeout(nextNavigationTimer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!execution || completed || waitingForHumanAction) return;
+    const timer = window.setTimeout(() => {
+      const updatedExecution = advanceProcessExecution(execution.id);
+      if (updatedExecution?.status === "completed") scheduleNextProcess();
+    }, EXECUTION_STEP_DELAY);
     return () => window.clearTimeout(timer);
-  }, [channel, completed, execution, finalHumanValidation, navigate, nextProcess, project]);
+  }, [completed, execution, execution?.updatedAt, scheduleNextProcess, waitingForHumanAction]);
 
   if (!project || !channel) return null;
   const projectId = project.id;
@@ -120,21 +124,38 @@ export function ProcessRunner({
       toast.error(`Crie um método de ${meta.label} antes de iniciar.`);
       return;
     }
-    toast.success(`Simulação de ${meta.label} iniciada`, {
-      description: "Os blocos serão percorridos na ordem definida no método.",
+    toast.success(`Processo de ${meta.label} iniciado`, {
+      description: "Os blocos serão executados na ordem definida no método.",
     });
   }
 
-  function confirmValidation() {
-    if (!execution || !confirmSimulatedValidation(execution.id)) return;
-    toast.success("Validação humana confirmada", {
-      description: "O processo foi concluído. Você pode avançar quando estiver pronto.",
-    });
+  function completeHumanAction() {
+    if (!execution || !activeBlock) return;
+    const updatedExecution = confirmHumanAction(execution.id, activeBlock.id);
+    if (!updatedExecution) {
+      toast.error("Não foi possível concluir esta ação humana.");
+      return;
+    }
+    if (updatedExecution.status === "completed") {
+      toast.success("Ação humana concluída. O processo foi finalizado.");
+      scheduleNextProcess();
+      return;
+    }
+    toast.success("Ação humana concluída. O processo continuará.");
   }
 
-  function goToNextProcess() {
-    if (!nextProcess) return;
-    navigate({ to: `/project/${projectId}/${PROCESS_ROUTE_SEGMENT[nextProcess]}` });
+  function chooseItem(itemId: string) {
+    if (!execution || !activeBlock) return;
+    if (!chooseCollectionItem(execution.id, activeBlock.id, itemId)) {
+      toast.error("Não foi possível registrar esta escolha.");
+      return;
+    }
+    if (execution.status === "completed") {
+      toast.success("Opção escolhida. O processo foi concluído.");
+      scheduleNextProcess();
+      return;
+    }
+    toast.success("Opção escolhida. O processo continuará.");
   }
 
   return (
@@ -151,23 +172,16 @@ export function ProcessRunner({
             </div>
           </div>
           {completed ? (
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => resetStage(project.id, processId)}>
-                <RotateCcw className="mr-1.5 size-3.5" /> Reiniciar simulação
-              </Button>
-              {finalHumanValidation && nextProcess && (
-                <Button size="sm" onClick={goToNextProcess}>
-                  Próximo processo <ArrowRight className="ml-1.5 size-3.5" />
-                </Button>
-              )}
-            </div>
+            <Button variant="outline" size="sm" onClick={() => resetStage(project.id, processId)}>
+              <RotateCcw className="mr-1.5 size-3.5" /> Executar novamente
+            </Button>
           ) : !method?.blocks.length ? (
             <Button size="sm" variant="destructive" onClick={openMethodBuilder}>
               <AlertTriangle className="mr-1.5 size-3.5" /> Método necessário
             </Button>
           ) : !execution ? (
             <Button size="sm" onClick={start} className="gradient-brand text-white">
-              <Play className="mr-1.5 size-3.5 fill-current" /> Simular processo
+              <Play className="mr-1.5 size-3.5 fill-current" /> Executar processo
             </Button>
           ) : null}
         </div>
@@ -178,16 +192,24 @@ export function ProcessRunner({
       ) : execution ? (
         <>
           <ExecutionTimeline execution={execution} />
-          {waitingForFinalValidation && activeBlock ? (
-            <FinalValidationGate block={activeBlock} onConfirm={confirmValidation} />
+          {waitingForHumanChoice && activeBlock ? (
+            <HumanChoiceGate
+              block={activeBlock}
+              collection={collections.find((item) => item.id === activeBlock.collectionId)}
+              items={libraryItems.filter((item) => item.collectionId === activeBlock.collectionId)}
+              libraryUrl={`/channel/${channelId}/library`}
+              onChoose={chooseItem}
+            />
+          ) : waitingForHumanAction && activeBlock ? (
+            <HumanActionGate block={activeBlock} onConfirm={completeHumanAction} />
           ) : completed ? (
-            <SimulationCompleted
+            <ProcessCompleted
               processLabel={meta.label}
-              advancesAutomatically={!finalHumanValidation && Boolean(nextProcess)}
+              advancesAutomatically={isAdvancing}
               isPublishing={!nextProcess}
             />
           ) : activeBlock ? (
-            <ActiveSimulationBlock block={activeBlock} />
+            <ActiveExecutionBlock block={activeBlock} />
           ) : null}
         </>
       ) : (
@@ -209,7 +231,7 @@ function MissingMethod({
       <AlertTriangle className="mx-auto size-7 text-destructive" />
       <p className="mt-3 text-sm font-medium">Nenhum método salvo para este processo.</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Crie ou importe um método de {processLabel} para liberar a simulação.
+        Crie ou importe um método de {processLabel} para liberar a execução.
       </p>
       <Button className="mt-4" variant="destructive" size="sm" onClick={onOpenMethodBuilder}>
         Criar ou importar método
@@ -223,7 +245,7 @@ function ExecutionTimeline({ execution }: { execution: ProcessExecution }) {
     <section className="rounded-xl border border-border/70 bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Simulação do método
+          Execução do método
         </h3>
         <Badge variant="outline">
           {execution.blocks.filter((item) => item.status === "completed").length}/
@@ -287,9 +309,10 @@ function ExecutionTimeline({ execution }: { execution: ProcessExecution }) {
 function MethodPreview({ method }: { method: ActionBlock[] }) {
   return (
     <section className="rounded-xl border border-border/70 bg-card p-5">
-      <h3 className="text-sm font-semibold">Método pronto para simular</h3>
+      <h3 className="text-sm font-semibold">Método pronto para executar</h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        A simulação percorrerá os blocos abaixo sem solicitar entradas ou entregas.
+        Os blocos serão executados na ordem abaixo. A execução pausará sempre que o operador for
+        humano.
       </p>
       <ol className="mt-4 space-y-2">
         {method.map((block, index) => (
@@ -314,16 +337,16 @@ function MethodPreview({ method }: { method: ActionBlock[] }) {
   );
 }
 
-function ActiveSimulationBlock({ block }: { block: ActionBlock }) {
+function ActiveExecutionBlock({ block }: { block: ActionBlock }) {
   return (
     <section className="rounded-xl border border-brand/35 bg-brand/5 p-8 text-center">
       <LoaderCircle className="mx-auto size-7 animate-spin text-brand-soft" />
       <Badge variant="outline" className="mt-3 border-brand/35 text-brand-soft">
-        Execução simulada
+        Em execução
       </Badge>
       <h3 className="mt-3 text-base font-semibold">{block.name ?? block.type}</h3>
       <p className="mx-auto mt-1 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">
-        {block.instructions || "Simulando esta ação conforme a posição definida no método."}
+        {block.instructions || "Executando esta ação conforme a posição definida no método."}
       </p>
       <div className="mt-4 flex justify-center">
         <OperatorBadge block={block} />
@@ -332,26 +355,117 @@ function ActiveSimulationBlock({ block }: { block: ActionBlock }) {
   );
 }
 
-function FinalValidationGate({ block, onConfirm }: { block: ActionBlock; onConfirm: () => void }) {
+function HumanChoiceGate({
+  block,
+  collection,
+  items,
+  libraryUrl,
+  onChoose,
+}: {
+  block: ActionBlock;
+  collection?: StrategicCollection;
+  items: ChannelLibraryItem[];
+  libraryUrl: string;
+  onChoose: (itemId: string) => void;
+}) {
+  return (
+    <section className="rounded-xl border border-violet-500/40 bg-violet-500/5 p-5 sm:p-6">
+      <div className="text-center">
+        <UserRound className="mx-auto size-7 text-violet-300" />
+        <Badge variant="outline" className="mt-3 border-violet-500/40 text-violet-300">
+          Escolha humana
+        </Badge>
+        <h3 className="mt-3 text-base font-semibold">{block.name ?? "Escolher opção"}</h3>
+        <p className="mx-auto mt-1 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">
+          {block.instructions || "Escolha um dos itens da coleção para continuar o método."}
+        </p>
+      </div>
+
+      {!collection ? (
+        <div className="mx-auto mt-5 max-w-xl rounded-xl border border-destructive/35 bg-destructive/5 p-5 text-center">
+          <p className="text-sm font-medium text-destructive">Nenhuma coleção vinculada</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Volte ao método e selecione qual coleção pertence a este bloco Escolher.
+          </p>
+        </div>
+      ) : items.length ? (
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onChoose(item.id)}
+              className="rounded-xl border border-border/70 bg-card p-4 text-left transition hover:border-violet-500/50 hover:bg-violet-500/5"
+            >
+              <dl className="space-y-2.5">
+                {collection.fields.map((field) => {
+                  const value = item.values[field.id];
+                  if (!value) return null;
+                  return (
+                    <div key={field.id}>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {field.label}
+                      </dt>
+                      <dd className="mt-0.5 text-sm">
+                        {field.type === "image" && typeof value === "object" ? (
+                          <img
+                            src={value.url}
+                            alt={value.name}
+                            className="max-h-48 w-full rounded-lg border border-border/60 object-cover"
+                          />
+                        ) : (
+                          <span className="whitespace-pre-wrap">{String(value)}</span>
+                        )}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="mx-auto mt-5 max-w-xl rounded-xl border border-warning/35 bg-warning/5 p-5 text-center">
+          <p className="text-sm font-medium">A coleção “{collection.name}” está vazia</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Adicione ao menos um item antes de continuar esta escolha.
+          </p>
+        </div>
+      )}
+
+      {(!collection || !items.length) && (
+        <div className="mt-4 text-center">
+          <Button asChild size="sm" variant="outline">
+            <a href={libraryUrl}>Abrir Biblioteca Estratégica</a>
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HumanActionGate({ block, onConfirm }: { block: ActionBlock; onConfirm: () => void }) {
+  const isValidation = block.type === "VALIDAR";
   return (
     <section className="rounded-xl border border-warning/40 bg-warning/5 p-8 text-center">
       <UserRound className="mx-auto size-7 text-warning" />
       <Badge variant="outline" className="mt-3 border-warning/40 text-warning">
-        Validação humana final
+        Aguardando operador humano
       </Badge>
-      <h3 className="mt-3 text-base font-semibold">{block.name ?? "Validar processo"}</h3>
+      <h3 className="mt-3 text-base font-semibold">{block.name ?? block.type}</h3>
       <p className="mx-auto mt-1 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">
         {block.instructions ||
-          "Confirme a validação para concluir este processo. Nenhuma entrega é necessária nesta simulação."}
+          "Realize esta ação conforme o método e confirme para permitir que o processo continue."}
       </p>
       <Button className="mt-5" onClick={onConfirm}>
-        <CheckCircle2 className="mr-1.5 size-4" /> Confirmar validação
+        <CheckCircle2 className="mr-1.5 size-4" />
+        {isValidation ? "Confirmar validação" : "Concluir ação humana"}
       </Button>
     </section>
   );
 }
 
-function SimulationCompleted({
+function ProcessCompleted({
   processLabel,
   advancesAutomatically,
   isPublishing,
@@ -368,8 +482,8 @@ function SimulationCompleted({
         {advancesAutomatically
           ? "Avançando automaticamente para o próximo processo..."
           : isPublishing
-            ? "A simulação chegou ao final do fluxo de publicação."
-            : "A validação foi confirmada. Avance manualmente quando estiver pronto."}
+            ? "A execução chegou ao final do fluxo de publicação."
+            : "Este processo já foi concluído e permanece disponível para consulta."}
       </p>
       {advancesAutomatically && (
         <LoaderCircle className="mx-auto mt-4 size-4 animate-spin text-success" />

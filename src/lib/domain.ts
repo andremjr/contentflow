@@ -88,6 +88,7 @@ export type ActionBlock = {
   id: string;
   type: BlockType;
   operator: BlockOperator;
+  collectionId?: string;
   name?: string;
   instructions?: string;
   inputs?: BlockInputBinding[];
@@ -177,13 +178,26 @@ export type ProcessExecution = {
   updatedAt: string;
 };
 
+export type StrategicCollectionField = {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "number" | "image" | "url";
+  required: boolean;
+};
+
+export type StrategicCollection = {
+  id: string;
+  channelId: string;
+  name: string;
+  fields: StrategicCollectionField[];
+  createdAt: string;
+};
+
 export type ChannelLibraryItem = {
   id: string;
   channelId: string;
-  collection: string;
-  name: string;
-  value: string;
-  description?: string;
+  collectionId: string;
+  values: Record<string, string | number | StoredFile>;
   createdAt: string;
 };
 

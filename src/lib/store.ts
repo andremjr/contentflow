@@ -12,6 +12,7 @@ import {
   type ProcessState,
   type Project,
   type RuntimeValue,
+  type StrategicCollection,
   type StoredFile,
   type UniversalProcess,
 } from "@/lib/domain";
@@ -33,6 +34,7 @@ const db = {
   projects: [] as Project[],
   executions: [] as ProcessExecution[],
   libraryItems: [] as ChannelLibraryItem[],
+  libraryCollections: [] as StrategicCollection[],
   ready: false,
 };
 const listeners = new Set<() => void>();
@@ -80,17 +82,24 @@ async function hydrate() {
       fetch("/api/projects"),
       fetch("/api/executions"),
       fetch("/api/library"),
+      fetch("/api/library/collections"),
     ]);
     if (responses.some((response) => !response.ok)) {
       throw new Error("Não foi possível conectar à API local.");
     }
-    const [channels, projects, executions, libraryItems] = (await Promise.all(
+    const [channels, projects, executions, libraryItems, libraryCollections] = (await Promise.all(
       responses.map((response) => response.json()),
-    )) as [Channel[], Project[], ProcessExecution[], ChannelLibraryItem[]];
+    )) as [Channel[], Project[], ProcessExecution[], ChannelLibraryItem[], StrategicCollection[]];
     db.channels.splice(0, db.channels.length, ...channels.map(normalizeChannel));
     db.projects.splice(0, db.projects.length, ...projects);
     db.executions.splice(0, db.executions.length, ...executions);
     db.libraryItems.splice(0, db.libraryItems.length, ...libraryItems);
+    db.libraryCollections.splice(0, db.libraryCollections.length, ...libraryCollections);
+    for (const channel of db.channels) {
+      for (const processType of PROCESS_ORDER) {
+        synchronizeOpenExecutionsWithMethod(channel.id, processType, channel.methods[processType]);
+      }
+    }
     void syncAllChannelsFromYouTube();
   } catch (error) {
     console.error(error);
@@ -162,6 +171,13 @@ export function useLibraryItems(channelId?: string) {
     : db.libraryItems;
 }
 
+export function useLibraryCollections(channelId?: string) {
+  useSyncExternalStore(subscribe, getVersion, getVersion);
+  return channelId
+    ? db.libraryCollections.filter((collection) => collection.channelId === channelId)
+    : db.libraryCollections;
+}
+
 export type HumanTask = {
   execution: ProcessExecution;
   block: ActionBlock;
@@ -178,11 +194,13 @@ export function useHumanTasks(): HumanTask[] {
       const channel = db.channels.find((item) => item.id === execution.channelId);
       if (!project || !channel) return [];
       return execution.blocks.flatMap((blockExecution) => {
-        if (!["awaiting_human", "in_progress"].includes(blockExecution.status)) return [];
+        if (blockExecution.status !== "awaiting_human") return [];
         const block = execution.methodSnapshot.blocks.find(
           (item) => item.id === blockExecution.blockId,
         );
-        return block ? [{ execution, block, blockExecution, project, channel }] : [];
+        return block?.operator === "Humano"
+          ? [{ execution, block, blockExecution, project, channel }]
+          : [];
       });
     })
     .sort(
@@ -232,18 +250,95 @@ export async function setChannelMethod(
 ) {
   const channel = db.channels.find((item) => item.id === channelId);
   if (!channel) return;
+  const normalizedMethod: ProcessMethod = {
+    processType,
+    blocks: method.blocks.map((block, order) => ({
+      ...normalizeActionBlock(block, processType),
+      order,
+    })),
+  };
   channel.methods = {
     ...channel.methods,
-    [processType]: {
-      processType,
-      blocks: method.blocks.map((block, order) => ({
-        ...normalizeActionBlock(block, processType),
-        order,
-      })),
-    },
+    [processType]: normalizedMethod,
   };
+  synchronizeOpenExecutionsWithMethod(channel.id, processType, normalizedMethod);
   emit();
   await request(`/api/channels/${channel.id}`, "PUT", channel);
+}
+
+function synchronizeOpenExecutionsWithMethod(
+  channelId: string,
+  processType: UniversalProcess,
+  method: ProcessMethod,
+) {
+  const executions = db.executions.filter(
+    (execution) =>
+      execution.channelId === channelId &&
+      execution.processType === processType &&
+      execution.status !== "completed" &&
+      execution.status !== "cancelled",
+  );
+
+  for (const execution of executions) {
+    const previousExecutions = new Map(execution.blocks.map((block) => [block.blockId, block]));
+    const previousBlocks = new Map(
+      execution.methodSnapshot.blocks.map((block) => [block.id, block]),
+    );
+    const nextBlocks = structuredClone(method.blocks);
+    let preservingCompletedPrefix = true;
+    let activeAssigned = false;
+
+    execution.methodSnapshot = { processType, blocks: nextBlocks };
+    execution.blocks = nextBlocks.map((block) => {
+      const previousExecution = previousExecutions.get(block.id);
+      const previousBlock = previousBlocks.get(block.id);
+      const collectionChanged = previousBlock?.collectionId !== block.collectionId;
+      const values = structuredClone(previousExecution?.values ?? {});
+      if (collectionChanged) delete values.selectedItemId;
+
+      if (preservingCompletedPrefix && previousExecution?.status === "completed") {
+        return { ...previousExecution, values };
+      }
+      preservingCompletedPrefix = false;
+
+      if (!activeAssigned) {
+        activeAssigned = true;
+        const humanActionCompleted =
+          block.type === "ESCOLHER"
+            ? Boolean(values.selectedItemId)
+            : values.humanConfirmed === true;
+        const awaitsHuman = block.operator === "Humano" && !humanActionCompleted;
+        return {
+          blockId: block.id,
+          status: awaitsHuman ? "awaiting_human" : "in_progress",
+          values,
+          startedAt: previousExecution?.startedAt ?? new Date().toISOString(),
+        };
+      }
+
+      return { blockId: block.id, status: "pending", values: {} };
+    });
+
+    const activeExecution = execution.blocks.find((block) => block.status !== "completed");
+    if (!activeExecution) {
+      execution.status = method.blocks.length ? "completed" : "cancelled";
+    } else {
+      execution.status = activeExecution.status === "awaiting_human" ? "awaiting_human" : "running";
+    }
+
+    const project = db.projects.find((item) => item.id === execution.projectId);
+    if (project && activeExecution) {
+      project.stages = {
+        ...project.stages,
+        [processType]:
+          activeExecution.status === "awaiting_human" ? "awaiting_human" : "processing",
+      };
+      project.currentStage = processType;
+      project.state = project.stages[processType];
+      persistProject(project);
+    }
+    persistExecution(execution);
+  }
 }
 
 export function removeChannel(id: string) {
@@ -265,6 +360,11 @@ export function removeChannel(id: string) {
     0,
     db.libraryItems.length,
     ...db.libraryItems.filter((item) => item.channelId !== id),
+  );
+  db.libraryCollections.splice(
+    0,
+    db.libraryCollections.length,
+    ...db.libraryCollections.filter((collection) => collection.channelId !== id),
   );
   emit();
   void request(`/api/channels/${id}`, "DELETE");
@@ -374,18 +474,19 @@ export function startProcessExecution(projectId: string, processType: ProcessId)
     methodSnapshot,
     blocks: methodSnapshot.blocks.map((block, index) => ({
       blockId: block.id,
-      status: index === 0 ? "in_progress" : "pending",
+      status:
+        index === 0 ? (block.operator === "Humano" ? "awaiting_human" : "in_progress") : "pending",
       values: {},
       startedAt: index === 0 ? now : undefined,
     })),
-    status: "running",
+    status: methodSnapshot.blocks[0]?.operator === "Humano" ? "awaiting_human" : "running",
     createdAt: now,
     updatedAt: now,
   };
   db.executions.unshift(execution);
   project.stages = {
     ...project.stages,
-    [processType]: "processing",
+    [processType]: execution.status === "awaiting_human" ? "awaiting_human" : "processing",
   };
   project.currentStage = processType;
   project.state = project.stages[processType];
@@ -395,7 +496,7 @@ export function startProcessExecution(projectId: string, processType: ProcessId)
   return execution;
 }
 
-export function advanceSimulatedExecution(executionId: string) {
+export function advanceProcessExecution(executionId: string) {
   const execution = db.executions.find((item) => item.id === executionId);
   if (!execution || execution.status === "completed" || execution.status === "cancelled") {
     return execution;
@@ -408,20 +509,26 @@ export function advanceSimulatedExecution(executionId: string) {
     : undefined;
   if (!activeExecution || !activeBlock) return execution;
 
-  const isLastBlock = activeIndex === execution.blocks.length - 1;
-  const requiresHumanValidation =
-    isLastBlock && activeBlock.type === "VALIDAR" && activeBlock.operator === "Humano";
+  const humanActionCompleted =
+    activeBlock.type === "ESCOLHER"
+      ? Boolean(activeExecution.values.selectedItemId)
+      : activeExecution.values.humanConfirmed === true;
+  const requiresHumanAction = activeBlock.operator === "Humano" && !humanActionCompleted;
   const project = db.projects.find((item) => item.id === execution.projectId);
   const now = new Date().toISOString();
 
-  if (requiresHumanValidation) {
+  if (requiresHumanAction) {
     activeExecution.status = "awaiting_human";
     activeExecution.startedAt ??= now;
     execution.status = "awaiting_human";
     if (project) {
-      project.stages = { ...project.stages, [execution.processType]: "awaiting_review" };
+      project.stages = {
+        ...project.stages,
+        [execution.processType]:
+          activeBlock.type === "VALIDAR" ? "awaiting_review" : "awaiting_human",
+      };
       project.currentStage = execution.processType;
-      project.state = "awaiting_review";
+      project.state = project.stages[execution.processType];
       persistProject(project);
     }
     persistExecution(execution);
@@ -433,15 +540,20 @@ export function advanceSimulatedExecution(executionId: string) {
   activeExecution.startedAt ??= now;
   activeExecution.completedAt = now;
   const nextExecution = execution.blocks[activeIndex + 1];
+  const nextBlock = execution.methodSnapshot.blocks[activeIndex + 1];
 
   if (nextExecution) {
-    nextExecution.status = "in_progress";
+    nextExecution.status = nextBlock?.operator === "Humano" ? "awaiting_human" : "in_progress";
     nextExecution.startedAt = now;
-    execution.status = "running";
+    execution.status = nextExecution.status === "awaiting_human" ? "awaiting_human" : "running";
     if (project) {
-      project.stages = { ...project.stages, [execution.processType]: "processing" };
+      project.stages = {
+        ...project.stages,
+        [execution.processType]:
+          nextExecution.status === "awaiting_human" ? "awaiting_human" : "processing",
+      };
       project.currentStage = execution.processType;
-      project.state = "processing";
+      project.state = project.stages[execution.processType];
       persistProject(project);
     }
   } else {
@@ -454,30 +566,49 @@ export function advanceSimulatedExecution(executionId: string) {
   return execution;
 }
 
-export function confirmSimulatedValidation(executionId: string) {
+export function chooseCollectionItem(executionId: string, blockId: string, itemId: string) {
   const execution = db.executions.find((item) => item.id === executionId);
-  if (!execution) return false;
-  const finalExecution = execution.blocks.at(-1);
-  const finalBlock = execution.methodSnapshot.blocks.at(-1);
+  const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
+  const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
+  const item = db.libraryItems.find((candidate) => candidate.id === itemId);
   if (
-    !finalExecution ||
-    !finalBlock ||
-    finalExecution.status !== "awaiting_human" ||
-    finalBlock.type !== "VALIDAR" ||
-    finalBlock.operator !== "Humano"
+    !execution ||
+    !block ||
+    !blockExecution ||
+    block.type !== "ESCOLHER" ||
+    block.operator !== "Humano" ||
+    !block.collectionId ||
+    item?.collectionId !== block.collectionId
   ) {
     return false;
   }
 
-  const now = new Date().toISOString();
-  finalExecution.status = "completed";
-  finalExecution.completedAt = now;
-  execution.status = "completed";
-  const project = db.projects.find((item) => item.id === execution.projectId);
-  if (project) completeProjectStage(project, execution.processType);
-  persistExecution(execution);
-  emit();
+  blockExecution.values = { selectedItemId: itemId };
+  blockExecution.status = "in_progress";
+  execution.status = "running";
+  advanceProcessExecution(executionId);
   return true;
+}
+
+export function confirmHumanAction(executionId: string, blockId: string) {
+  const execution = db.executions.find((item) => item.id === executionId);
+  const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
+  const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
+  if (
+    !execution ||
+    !blockExecution ||
+    !block ||
+    blockExecution.status !== "awaiting_human" ||
+    block.operator !== "Humano" ||
+    block.type === "ESCOLHER"
+  ) {
+    return undefined;
+  }
+
+  blockExecution.values = { ...blockExecution.values, humanConfirmed: true };
+  blockExecution.status = "in_progress";
+  execution.status = "running";
+  return advanceProcessExecution(executionId);
 }
 
 export function saveHumanBlockDraft(
@@ -576,6 +707,35 @@ export function createLibraryItem(
   emit();
   void request("/api/library", "POST", item);
   return item;
+}
+
+export function createLibraryCollection(
+  input: Omit<StrategicCollection, "id" | "createdAt">,
+): StrategicCollection {
+  const collection: StrategicCollection = {
+    ...input,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+  };
+  db.libraryCollections.push(collection);
+  emit();
+  void request("/api/library/collections", "POST", collection);
+  return collection;
+}
+
+export function removeLibraryCollection(id: string) {
+  db.libraryCollections.splice(
+    0,
+    db.libraryCollections.length,
+    ...db.libraryCollections.filter((collection) => collection.id !== id),
+  );
+  db.libraryItems.splice(
+    0,
+    db.libraryItems.length,
+    ...db.libraryItems.filter((item) => item.collectionId !== id),
+  );
+  emit();
+  void request(`/api/library/collections/${id}`, "DELETE");
 }
 
 export function updateLibraryItem(item: ChannelLibraryItem) {

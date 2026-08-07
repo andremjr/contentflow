@@ -72,7 +72,7 @@ export function HumanTaskCenter() {
           <div>
             <h2 className="text-sm font-semibold">Pendências humanas</h2>
             <p className="text-[11px] text-muted-foreground">
-              A leitura não remove uma tarefa. Ela sai daqui somente após a entrega.
+              A tarefa sai daqui somente depois que o operador conclui a ação.
             </p>
           </div>
           <Badge variant="outline" className="border-warning/40 text-warning">
@@ -114,7 +114,7 @@ export function HumanTaskCenter() {
                     <span className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
                       {task.block.instructions ||
                         task.block.outputs?.map((field) => field.label).join(", ") ||
-                        "Entrega humana necessária"}
+                        "Ação humana necessária"}
                     </span>
                   </span>
                   <ChevronRight className="mt-3 size-4 shrink-0 text-muted-foreground transition group-hover:text-foreground" />
@@ -125,7 +125,7 @@ export function HumanTaskCenter() {
         ) : (
           <div className="px-6 py-12 text-center">
             <Inbox className="mx-auto size-7 text-muted-foreground" />
-            <p className="mt-3 text-sm font-medium">Nenhuma entrega aguardando</p>
+            <p className="mt-3 text-sm font-medium">Nenhuma ação humana aguardando</p>
             <p className="mt-1 text-xs text-muted-foreground">
               As tarefas aparecerão aqui quando um processo chegar a um bloco Humano.
             </p>

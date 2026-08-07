@@ -54,6 +54,7 @@ import {
   type BlockParameterType,
   type BlockType,
   type HumanFieldType,
+  type StrategicCollection,
   type UniversalProcess,
 } from "@/lib/domain";
 import { createSuggestedHumanFields, normalizeActionBlock } from "@/lib/human-workflow";
@@ -63,7 +64,7 @@ import {
   serializeMethodFile,
   type SharedMethodFile,
 } from "@/lib/method-file";
-import { setChannelMethod, useChannel, useChannels } from "@/lib/store";
+import { setChannelMethod, useChannel, useChannels, useLibraryCollections } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const BLOCK_META: Record<
@@ -145,6 +146,7 @@ export function MethodBuilder({
 }) {
   const channel = useChannel(channelId);
   const channels = useChannels();
+  const collections = useLibraryCollections(channelId);
   const [processType, setProcessType] = useState<UniversalProcess>(initialProcess ?? "title");
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [draftBlocks, setDraftBlocks] = useState<ActionBlock[]>([]);
@@ -615,7 +617,9 @@ export function MethodBuilder({
                         {meta.label}
                       </span>
                       <span className="block truncate text-[11px] text-muted-foreground">
-                        {block.outputs?.length ?? 0} entregas configuradas
+                        {block.type === "ESCOLHER" && block.collectionId
+                          ? `Coleção: ${collections.find((item) => item.id === block.collectionId)?.name ?? "não encontrada"}`
+                          : block.instructions || "Sem instruções"}
                       </span>
                     </span>
                     <Badge variant="secondary" className="gap-1 text-[10px]">
@@ -638,6 +642,8 @@ export function MethodBuilder({
         {selectedBlock ? (
           <BlockEditor
             block={selectedBlock}
+            channelId={channelId}
+            collections={collections}
             processType={processType}
             previousBlocks={blocks.slice(0, blocks.indexOf(selectedBlock))}
             index={blocks.indexOf(selectedBlock)}
@@ -661,6 +667,8 @@ export function MethodBuilder({
 
 function BlockEditor({
   block,
+  channelId,
+  collections,
   processType,
   previousBlocks,
   index,
@@ -670,6 +678,8 @@ function BlockEditor({
   onRemove,
 }: {
   block: ActionBlock;
+  channelId: string;
+  collections: StrategicCollection[];
   processType: UniversalProcess;
   previousBlocks: ActionBlock[];
   index: number;
@@ -791,6 +801,43 @@ function BlockEditor({
           </SelectContent>
         </Select>
       </div>
+
+      {block.type === "ESCOLHER" && (
+        <div className="mt-5 space-y-1.5">
+          <Label>Coleção estratégica</Label>
+          {collections.length ? (
+            <Select
+              value={block.collectionId}
+              onValueChange={(collectionId) => onChange({ collectionId })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a coleção deste bloco" />
+              </SelectTrigger>
+              <SelectContent>
+                {collections.map((collection) => (
+                  <SelectItem key={collection.id} value={collection.id}>
+                    {collection.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+              Nenhuma coleção criada. Acesse a{" "}
+              <a
+                href={`/channel/${channelId}/library`}
+                className="font-medium text-brand-soft hover:underline"
+              >
+                Biblioteca Estratégica
+              </a>{" "}
+              para criar a primeira.
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            Os itens desta coleção serão as opções disponíveis durante a execução do bloco.
+          </p>
+        </div>
+      )}
 
       {ADVANCED_METHOD_CONFIGURATION_ENABLED && (
         <>

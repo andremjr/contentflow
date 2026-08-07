@@ -62,6 +62,7 @@ const actionBlockSchema = z.object({
   id: z.string(),
   type: z.enum(["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"]),
   operator: z.enum(["IA", "Humano", "Código"]),
+  collectionId: z.string().optional(),
   name: z.string().max(200).optional(),
   instructions: z.string().max(20_000).optional(),
   inputs: z.array(inputSchema).max(100).optional(),
@@ -116,6 +117,7 @@ export function copyImportedBlocks(
 ) {
   return structuredClone(sourceBlocks).map((block, order) => ({
     ...block,
+    collectionId: undefined,
     id: createId(`${processType}-${block.type.toLowerCase()}`),
     order,
     parameters: block.parameters.map((parameter) => ({

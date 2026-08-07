@@ -46,6 +46,13 @@ database.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS library_channel_id ON library_items(channel_id);
+  CREATE TABLE IF NOT EXISTS library_collections (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS library_collections_channel_id ON library_collections(channel_id);
 `);
 
 type StoredPayload = {
@@ -57,11 +64,94 @@ type StoredPayload = {
   processType?: string;
   updatedAt?: string;
   collection?: string;
+  collectionId?: string;
+  name?: string;
+  fields?: unknown[];
+  values?: Record<string, unknown>;
 };
 
 function parseRows(rows: { payload: string }[]) {
   return rows.map((row) => JSON.parse(row.payload));
 }
+
+function migrateLegacyLibraryItems() {
+  const rows = database.prepare("SELECT id, payload FROM library_items").all() as {
+    id: string;
+    payload: string;
+  }[];
+  const legacyItems = rows
+    .map((row) => ({ id: row.id, item: JSON.parse(row.payload) as StoredPayload }))
+    .filter(({ item }) => !item.collectionId && item.collection && item.channelId);
+  if (!legacyItems.length) return;
+
+  const existingCollections = (
+    database.prepare("SELECT payload FROM library_collections").all() as { payload: string }[]
+  ).map((row) => JSON.parse(row.payload) as StoredPayload);
+
+  const migrate = database.transaction(() => {
+    const grouped = new Map<string, typeof legacyItems>();
+    for (const legacy of legacyItems) {
+      const key = `${legacy.item.channelId}::${legacy.item.collection}`;
+      grouped.set(key, [...(grouped.get(key) ?? []), legacy]);
+    }
+
+    for (const group of grouped.values()) {
+      const first = group[0].item;
+      let collection = existingCollections.find(
+        (candidate) =>
+          candidate.channelId === first.channelId && candidate.name === first.collection,
+      );
+      if (!collection) {
+        const fields = [
+          { id: randomUUID(), label: "Nome", type: "text", required: true },
+          { id: randomUUID(), label: "Conteúdo", type: "textarea", required: true },
+          { id: randomUUID(), label: "Descrição", type: "textarea", required: false },
+        ];
+        collection = {
+          id: randomUUID(),
+          channelId: first.channelId,
+          name: first.collection,
+          fields,
+          createdAt: new Date().toISOString(),
+        };
+        existingCollections.push(collection);
+        database
+          .prepare(
+            "INSERT INTO library_collections (id, channel_id, payload, created_at) VALUES (?, ?, ?, ?)",
+          )
+          .run(
+            collection.id,
+            collection.channelId,
+            JSON.stringify(collection),
+            collection.createdAt,
+          );
+      }
+
+      const fields = collection.fields as { id: string }[];
+      for (const { id, item } of group) {
+        const migrated = {
+          id,
+          channelId: item.channelId,
+          collectionId: collection.id,
+          values: {
+            [fields[0].id]: String(item.name ?? ""),
+            [fields[1].id]: String((item as StoredPayload & { value?: string }).value ?? ""),
+            [fields[2].id]: String(
+              (item as StoredPayload & { description?: string }).description ?? "",
+            ),
+          },
+          createdAt: item.createdAt,
+        };
+        database
+          .prepare("UPDATE library_items SET payload = ? WHERE id = ?")
+          .run(JSON.stringify(migrated), id);
+      }
+    }
+  });
+  migrate();
+}
+
+migrateLegacyLibraryItems();
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -228,6 +318,7 @@ app.delete("/api/channels/:id", (request, response) => {
     }
     database.prepare("DELETE FROM projects WHERE channel_id = ?").run(channelId);
     database.prepare("DELETE FROM library_items WHERE channel_id = ?").run(channelId);
+    database.prepare("DELETE FROM library_collections WHERE channel_id = ?").run(channelId);
     database.prepare("DELETE FROM channel_order WHERE channel_id = ?").run(channelId);
     return database.prepare("DELETE FROM channels WHERE id = ?").run(channelId);
   });
@@ -344,6 +435,61 @@ app.delete("/api/executions/:id", (request, response) => {
   response.status(result.changes ? 204 : 404).end();
 });
 
+app.get("/api/library/collections", (request, response) => {
+  const channelId =
+    typeof request.query.channelId === "string" ? request.query.channelId : undefined;
+  const rows = channelId
+    ? (database
+        .prepare(
+          "SELECT payload FROM library_collections WHERE channel_id = ? ORDER BY created_at ASC",
+        )
+        .all(channelId) as { payload: string }[])
+    : (database
+        .prepare("SELECT payload FROM library_collections ORDER BY created_at ASC")
+        .all() as {
+        payload: string;
+      }[]);
+  response.json(parseRows(rows));
+});
+
+app.post("/api/library/collections", (request, response) => {
+  const collection = request.body as StoredPayload;
+  if (
+    !collection?.id ||
+    !collection.channelId ||
+    !collection.name ||
+    !collection.createdAt ||
+    !Array.isArray(collection.fields) ||
+    collection.fields.length === 0
+  ) {
+    response.status(400).json({ error: "Coleção estratégica inválida." });
+    return;
+  }
+  database
+    .prepare(
+      "INSERT INTO library_collections (id, channel_id, payload, created_at) VALUES (?, ?, ?, ?)",
+    )
+    .run(collection.id, collection.channelId, JSON.stringify(collection), collection.createdAt);
+  response.status(201).json(collection);
+});
+
+app.delete("/api/library/collections/:id", (request, response) => {
+  const remove = database.transaction((collectionId: string) => {
+    const itemRows = database.prepare("SELECT id, payload FROM library_items").all() as {
+      id: string;
+      payload: string;
+    }[];
+    const deleteItem = database.prepare("DELETE FROM library_items WHERE id = ?");
+    for (const row of itemRows) {
+      const item = JSON.parse(row.payload) as StoredPayload;
+      if (item.collectionId === collectionId) deleteItem.run(row.id);
+    }
+    return database.prepare("DELETE FROM library_collections WHERE id = ?").run(collectionId);
+  });
+  const result = remove(request.params.id) as { changes: number };
+  response.status(result.changes ? 204 : 404).end();
+});
+
 app.get("/api/library", (request, response) => {
   const channelId =
     typeof request.query.channelId === "string" ? request.query.channelId : undefined;
@@ -359,7 +505,7 @@ app.get("/api/library", (request, response) => {
 
 app.post("/api/library", (request, response) => {
   const item = request.body as StoredPayload;
-  if (!item?.id || !item.channelId || !item.collection || !item.createdAt) {
+  if (!item?.id || !item.channelId || !item.collectionId || !item.values || !item.createdAt) {
     response.status(400).json({ error: "Item de biblioteca inválido." });
     return;
   }
