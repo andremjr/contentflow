@@ -527,6 +527,30 @@ app.post("/api/library/collections", (request, response) => {
   response.status(201).json(collection);
 });
 
+app.put("/api/library/collections/:id", (request, response) => {
+  const collection = request.body as StoredPayload;
+  if (
+    !collection?.id ||
+    collection.id !== request.params.id ||
+    !collection.channelId ||
+    !collection.name ||
+    !collection.createdAt ||
+    !Array.isArray(collection.fields) ||
+    collection.fields.length === 0
+  ) {
+    response.status(400).json({ error: "Coleção estratégica inválida." });
+    return;
+  }
+  const result = database
+    .prepare("UPDATE library_collections SET channel_id = ?, payload = ? WHERE id = ?")
+    .run(collection.channelId, JSON.stringify(collection), collection.id);
+  if (!result.changes) {
+    response.status(404).json({ error: "Coleção não encontrada." });
+    return;
+  }
+  response.json(collection);
+});
+
 app.delete("/api/library/collections/:id", (request, response) => {
   const remove = database.transaction((collectionId: string) => {
     const itemRows = database.prepare("SELECT id, payload FROM library_items").all() as {

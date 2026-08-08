@@ -17,17 +17,22 @@ import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   PROCESS_META,
   PROCESS_ORDER,
   type ActionBlock,
   type BlockExecution,
   type ChannelLibraryItem,
+  type HumanFieldType,
   type ProcessExecution,
   type ProcessId,
   type Project,
   type RuntimeValue,
+  type StoredFile,
   type StrategicCollection,
+  type StructuredRecord,
+  type ThumbnailLayout,
 } from "@/lib/domain";
 import {
   createProcessOutputFields,
@@ -598,7 +603,9 @@ function HumanChoiceGate({
 
 function valuesAsOptions(value: RuntimeValue | undefined) {
   if (Array.isArray(value)) {
-    return value.map((item) => (typeof item === "string" ? item : item.name)).filter(Boolean);
+    return value.flatMap((item) =>
+      typeof item === "string" ? [item] : isStoredFileOption(item) ? [item.name] : [],
+    );
   }
   if (typeof value === "string")
     return value
@@ -606,6 +613,159 @@ function valuesAsOptions(value: RuntimeValue | undefined) {
       .map((item) => item.trim())
       .filter(Boolean);
   return [];
+}
+
+type ValidationOption =
+  string | number | boolean | StoredFile | StructuredRecord | ThumbnailLayout | null;
+
+function isStoredFileOption(value: unknown): value is StoredFile {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && "url" in value);
+}
+
+function validationOptionKey(value: ValidationOption) {
+  if (isStoredFileOption(value)) return value.id;
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function validationOptions(value: RuntimeValue | undefined): ValidationOption[] {
+  if (Array.isArray(value)) return value as ValidationOption[];
+  if (typeof value === "string") {
+    const lines = value
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return lines.length ? lines : [value];
+  }
+  return value === undefined || value === null ? [] : [value];
+}
+
+function validationOptionType(value: ValidationOption, sourceType: HumanFieldType): HumanFieldType {
+  if (!isStoredFileOption(value)) return typeof value === "string" ? "text" : sourceType;
+  if (value.mimeType.startsWith("image/")) return "image";
+  if (value.mimeType.startsWith("audio/")) return "audio";
+  if (value.mimeType.startsWith("video/")) return "video";
+  return "file";
+}
+
+function ValidationChoiceField({
+  block,
+  execution,
+  values,
+  onChange,
+}: {
+  block: ActionBlock;
+  execution: ProcessExecution;
+  values: Record<string, RuntimeValue>;
+  onChange: (values: Record<string, RuntimeValue>) => void;
+}) {
+  const config = block.validation;
+  const targetBlock = execution.methodSnapshot.blocks.find(
+    (candidate) => candidate.id === config?.targetBlockId,
+  );
+  const targetOutput = targetBlock?.outputs?.find(
+    (output) => output.key === config?.targetOutputKey,
+  );
+  const targetExecution = execution.blocks.find(
+    (candidate) => candidate.blockId === config?.targetBlockId,
+  );
+  const options = validationOptions(targetExecution?.values[config?.targetOutputKey ?? ""]);
+  const field = (block.outputs ?? []).find((output) =>
+    ["selected_value", "selected_values"].includes(output.key),
+  );
+  if (!field || !targetOutput) {
+    return (
+      <div className="mb-4 rounded-lg border border-destructive/35 bg-destructive/5 p-3 text-xs text-destructive">
+        A saída usada nesta escolha não está configurada.
+      </div>
+    );
+  }
+
+  const multiple = config?.mode === "select_many";
+  const fieldKey = field.key;
+  const fieldLabel = field.label;
+  const fieldRequired = field.required;
+  const targetOutputType = targetOutput.type;
+  const storedValue = values[fieldKey];
+  const current: ValidationOption[] = multiple
+    ? Array.isArray(storedValue)
+      ? (storedValue as ValidationOption[])
+      : []
+    : targetOutputType === "records" && Array.isArray(storedValue)
+      ? (storedValue.slice(0, 1) as ValidationOption[])
+      : storedValue === undefined || storedValue === null
+        ? []
+        : [storedValue as ValidationOption];
+  const selectedKeys = new Set(current.map(validationOptionKey));
+
+  function toggle(option: ValidationOption) {
+    const key = validationOptionKey(option);
+    if (!multiple) {
+      onChange({
+        ...values,
+        [fieldKey]:
+          targetOutputType === "records" ? ([option] as RuntimeValue) : (option as RuntimeValue),
+      });
+      return;
+    }
+    const next = selectedKeys.has(key)
+      ? current.filter((item) => validationOptionKey(item) !== key)
+      : [...current, option];
+    onChange({ ...values, [fieldKey]: next as RuntimeValue });
+  }
+
+  return (
+    <div className="mb-4 space-y-2">
+      <Label>
+        {fieldLabel}
+        {fieldRequired && <span className="ml-1 text-destructive">*</span>}
+      </Label>
+      {options.length ? (
+        <div className="grid gap-2 md:grid-cols-2">
+          {options.map((option) => {
+            const key = validationOptionKey(option);
+            const selected = selectedKeys.has(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggle(option)}
+                className={cn(
+                  "rounded-xl border p-3 text-left transition",
+                  selected
+                    ? "border-brand/60 bg-brand/10"
+                    : "border-border/70 bg-background/30 hover:border-brand/35",
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <span
+                    className={cn(
+                      "mt-0.5 grid size-4 shrink-0 place-items-center border",
+                      multiple ? "rounded" : "rounded-full",
+                      selected ? "border-brand bg-brand text-white" : "border-border",
+                    )}
+                  >
+                    {selected && <Check className="size-3" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <RuntimeValueViewer
+                      type={validationOptionType(option, targetOutputType)}
+                      value={option}
+                      compact
+                    />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+          O bloco validado não produziu opções nesta saída.
+        </p>
+      )}
+    </div>
+  );
 }
 
 function HumanBlockGate({
@@ -626,6 +786,7 @@ function HumanBlockGate({
   onProcessCompleted: () => void;
 }) {
   const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
+  const retryFeedback = blockExecution?.retryFeedback;
   const [values, setValues] = useState<Record<string, RuntimeValue>>(
     structuredClone(blockExecution?.values ?? {}),
   );
@@ -739,7 +900,13 @@ function HumanBlockGate({
       });
       return;
     }
-    if (result.completedProcess) {
+    if (result.retriedBlock) {
+      toast.info(`Nova tentativa iniciada em “${result.retriedBlock}”.`, {
+        description: "Os blocos seguintes serão executados novamente com o novo resultado.",
+      });
+    } else if (result.pausedValidation) {
+      toast.info("Resultado reprovado. A validação permanece pausada para revisão.");
+    } else if (result.completedProcess) {
       toast.success("Processo concluído.");
       onProcessCompleted();
     } else if (execution.status === "awaiting_output") {
@@ -765,6 +932,19 @@ function HumanBlockGate({
         </div>
         <OperatorBadge block={block} />
       </header>
+
+      {retryFeedback && (
+        <div className="mt-5 rounded-xl border border-amber-500/35 bg-amber-500/5 p-4">
+          <p className="text-xs font-semibold text-amber-300">
+            Nova tentativa solicitada pela validação
+          </p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+            {typeof retryFeedback.feedback === "string" && retryFeedback.feedback.trim()
+              ? retryFeedback.feedback
+              : "O resultado anterior foi reprovado. Produza uma nova versão antes de continuar."}
+          </p>
+        </div>
+      )}
 
       {resolvedInputs.length > 0 && (
         <div className="mt-5 rounded-xl border border-border/70 bg-background/30 p-4">
@@ -812,9 +992,22 @@ function HumanBlockGate({
 
       <div className="mt-5 rounded-xl border border-border/70 bg-card p-4 sm:p-5">
         <h4 className="mb-4 text-sm font-semibold">Entrega desta ação</h4>
+        {block.type === "VALIDAR" && block.validation?.mode !== "approval" && (
+          <ValidationChoiceField
+            block={block}
+            execution={execution}
+            values={values}
+            onChange={updateValues}
+          />
+        )}
         {(block.outputs ?? []).length ? (
           <RuntimeFieldsForm
-            fields={block.outputs ?? []}
+            fields={(block.outputs ?? []).filter(
+              (field) =>
+                block.type !== "VALIDAR" ||
+                block.validation?.mode === "approval" ||
+                !["selected_value", "selected_values"].includes(field.key),
+            )}
             values={values}
             dynamicOptions={dynamicOptions}
             onChange={updateValues}

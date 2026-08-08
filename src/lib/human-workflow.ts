@@ -7,11 +7,12 @@ import {
   type ProcessId,
   type ProcessMethod,
   type RuntimeValue,
+  type ValidationMode,
 } from "@/lib/domain";
 
 export function getMethodConfigurationIssue(method?: ProcessMethod) {
   if (!method?.blocks.length) return "O processo ainda não possui um método.";
-  for (const block of method.blocks) {
+  for (const [blockIndex, block] of method.blocks.entries()) {
     if (block.type === "ESCOLHER" && !block.collectionId) {
       return `Vincule uma coleção da Biblioteca Estratégica ao bloco “${block.name ?? "Escolher"}”.`;
     }
@@ -21,6 +22,42 @@ export function getMethodConfigurationIssue(method?: ProcessMethod) {
     }
     if (new Set(keys).size !== keys.length) {
       return `As chaves das entregas do bloco “${block.name ?? block.type}” precisam ser únicas.`;
+    }
+    for (const structuredField of [...(block.inputs ?? []), ...(block.outputs ?? [])].filter(
+      (field) => field.type === "records",
+    )) {
+      const recordKeys = (structuredField.recordFields ?? [])
+        .map((field) => field.key.trim())
+        .filter(Boolean);
+      if (!recordKeys.length || recordKeys.length !== structuredField.recordFields?.length) {
+        return `Defina a chave de todos os campos da lista de registros “${structuredField.label}”.`;
+      }
+      if (new Set(recordKeys).size !== recordKeys.length) {
+        return `As chaves da lista de registros “${structuredField.label}” precisam ser únicas.`;
+      }
+    }
+    if (block.type === "VALIDAR") {
+      const targetIndex = block.validation?.targetBlockId
+        ? method.blocks.findIndex((candidate) => candidate.id === block.validation?.targetBlockId)
+        : (method.blocks
+            .slice(0, blockIndex)
+            .map((candidate, index) => ({ candidate, index }))
+            .reverse()
+            .find(({ candidate }) => candidate.type !== "VALIDAR")?.index ?? -1);
+      if (targetIndex < 0 || targetIndex >= blockIndex) {
+        return `Selecione um bloco anterior para a validação “${block.name ?? "Validar"}”.`;
+      }
+      if (method.blocks[targetIndex].type === "VALIDAR") {
+        return `A validação “${block.name ?? "Validar"}” deve apontar para um bloco Buscar, Escolher ou Criar.`;
+      }
+      if (
+        block.validation?.mode !== "approval" &&
+        !method.blocks[targetIndex].outputs?.some(
+          (output) => output.key === block.validation?.targetOutputKey,
+        )
+      ) {
+        return `Selecione qual saída será apresentada pela validação “${block.name ?? "Validar"}”.`;
+      }
     }
   }
   return undefined;
@@ -121,13 +158,7 @@ export function createSuggestedHumanFields(
     return [];
   }
   if (blockType === "VALIDAR") {
-    return [
-      field(prefix, "Decisão", "decision", "approval"),
-      {
-        ...field(prefix, "Observações", "feedback", "textarea", "Explique sua decisão"),
-        required: false,
-      },
-    ];
+    return createValidationFields("approval");
   }
   return [
     field(
@@ -137,6 +168,45 @@ export function createSuggestedHumanFields(
       FINAL_FIELD_TYPE[processType],
       "Entregue o resultado deste bloco",
     ),
+  ];
+}
+
+export function createValidationFields(
+  mode: ValidationMode,
+  targetBlockId?: string,
+  targetOutputKey?: string,
+  targetOutputType?: HumanFieldType,
+): BlockFieldDefinition[] {
+  const prefix = `validation-${mode}`;
+  const feedback = {
+    ...field(prefix, "Observações", "feedback", "textarea", "Explique sua decisão"),
+    required: false,
+  };
+  if (mode === "approval") {
+    return [field(prefix, "Decisão", "decision", "approval"), feedback];
+  }
+  const selectedType: HumanFieldType =
+    mode === "select_many"
+      ? targetOutputType === "files"
+        ? "files"
+        : "list"
+      : targetOutputType === "files"
+        ? "file"
+        : targetOutputType === "list" || targetOutputType === "multiselect"
+          ? "text"
+          : (targetOutputType ?? "text");
+  return [
+    {
+      ...field(
+        prefix,
+        mode === "select_many" ? "Opções escolhidas" : "Opção escolhida",
+        mode === "select_many" ? "selected_values" : "selected_value",
+        selectedType,
+      ),
+      optionsSourceBlockId: targetBlockId,
+      optionsSourceKey: targetOutputKey,
+    },
+    feedback,
   ];
 }
 
@@ -166,8 +236,57 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
         : block.outputs?.length || legacyOutputs.length
           ? (block.outputs ?? legacyOutputs)
           : createSuggestedHumanFields(processType, block.type),
+    validation:
+      block.type === "VALIDAR"
+        ? {
+            mode: block.validation?.mode ?? "approval",
+            onReject: block.validation?.onReject ?? "retry_target",
+            maxAttempts: Math.max(1, block.validation?.maxAttempts ?? 3),
+            targetBlockId: block.validation?.targetBlockId,
+            targetOutputKey: block.validation?.targetOutputKey,
+          }
+        : undefined,
     parameters: block.parameters ?? [],
   };
+}
+
+export function normalizeMethodBlocks(blocks: ActionBlock[], processType: ProcessId) {
+  const normalized: ActionBlock[] = [];
+  for (const [order, sourceBlock] of blocks.entries()) {
+    const block = { ...normalizeActionBlock(sourceBlock, processType), order };
+    if (block.type === "VALIDAR") {
+      const target =
+        normalized.find((candidate) => candidate.id === block.validation?.targetBlockId) ??
+        [...normalized].reverse().find((candidate) => candidate.type !== "VALIDAR");
+      const mode = block.validation?.mode ?? "approval";
+      const targetOutput =
+        target?.outputs?.find((output) => output.key === block.validation?.targetOutputKey) ??
+        target?.outputs?.find((output) => ["list", "files", "multiselect"].includes(output.type)) ??
+        target?.outputs?.[0];
+      block.validation = {
+        mode,
+        targetBlockId: target?.id,
+        targetOutputKey: mode === "approval" ? undefined : targetOutput?.key,
+        onReject: block.validation?.onReject ?? "retry_target",
+        maxAttempts: Math.max(1, block.validation?.maxAttempts ?? 3),
+      };
+      const hasExpectedOutput = (block.outputs ?? []).some((output) =>
+        mode === "approval"
+          ? output.key === "decision"
+          : ["selected_value", "selected_values"].includes(output.key),
+      );
+      if (!hasExpectedOutput) {
+        block.outputs = createValidationFields(
+          mode,
+          target?.id,
+          block.validation.targetOutputKey,
+          targetOutput?.type,
+        );
+      }
+    }
+    normalized.push(block);
+  }
+  return normalized;
 }
 
 export function isEmptyRuntimeValue(value: RuntimeValue | undefined) {

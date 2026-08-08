@@ -109,7 +109,11 @@ Entradas e saídas pertencem ao bloco e não ao operador. Na definição do Mét
 - Dados de saída, definidos visualmente apenas por nome e formato.
 - O operador responsável pela execução.
 
-As chaves técnicas, a persistência e a conexão padrão com resultados anteriores são administradas internamente pelo núcleo. Para o usuário, os formatos universais são: texto curto, texto longo, número, sim ou não, lista de textos, seleção, seleção múltipla, URL, arquivo, vários arquivos, imagem, áudio, vídeo e decisão.
+As chaves técnicas, a persistência e a conexão padrão com resultados anteriores são administradas internamente pelo núcleo. Para o usuário, os formatos universais são: texto curto, texto longo, número, sim ou não, lista de textos, lista de registros, seleção, seleção múltipla, data e hora, URL, arquivo, vários arquivos, imagem, áudio, vídeo, decisão e layout de thumbnail.
+
+- `Lista de registros` representa uma coleção ordenada de objetos com esquema próprio, como cenas de roteiro, CTAs ou planos de edição. Cada campo interno tem chave, formato e obrigatoriedade.
+- `Data e hora` é persistida e trocada com plugins em ISO 8601, incluindo o instante normalizado em UTC.
+- `Layout de thumbnail` transporta a composição 16:9 do canvas — caixas, posições, dimensões, ordem e cores — sem converter o layout em imagem.
 
 Cada entrada declarada é conectada automaticamente a uma saída compatível já produzida. O motor prioriza os blocos anteriores mais próximos, depois os outputs dos Processos Universais anteriores, considera a semelhança entre os nomes e não reutiliza a mesma saída em duas entradas do mesmo bloco. Conexões explícitas legadas continuam sendo respeitadas. Se uma entrada não puder ser resolvida, o bloco permanece pausado e informa claramente qual dado está ausente.
 
@@ -130,9 +134,13 @@ O orquestrador do sistema funciona em modelo de **Máquina de Estados Concorrent
 3. **Pausa e Retomada para Operador Humano**: Se um bloco for atribuído ao operador `Humano`, o motor pausa o estado da execução (`awaiting_human`), gera uma notificação e um cartão interativo no Projeto, e aguarda a entrega ou seleção do usuário para continuar a esteira.
 4. **Bloqueio de executores ausentes**: Blocos `IA` e `Código` entram em `blocked_executor` enquanto não houver um plugin compatível configurado. Eles nunca são concluídos de forma fictícia.
 
+Os métodos permanecem lineares: não existem ramificações, junções, paralelismo ou loops genéricos no canvas. Uma entrada pode apontar explicitamente para a saída de qualquer bloco anterior ou processo universal anterior, e um bloco pode declarar várias entradas.
+
+Todo bloco `VALIDAR` referencia um bloco anterior específico e opera em um de três modos: aprovar ou reprovar, escolher uma opção, ou escolher várias opções. Uma reprovação pode pausar a execução ou solicitar uma nova tentativa do bloco validado. Nesse último caso, o motor invalida e executa novamente o trecho linear entre o bloco-alvo e a validação, preservando o feedback da reprovação como contexto da nova tentativa e respeitando o limite configurado. Uma escolha concluída torna-se uma saída tipada do próprio bloco `VALIDAR`, disponível para os blocos seguintes.
+
 Cada execução mantém um snapshot do Método utilizado, o estado individual dos blocos, rascunhos, entregas concluídas e referências a arquivos armazenados localmente. As saídas concluídas tornam-se contexto para os blocos seguintes.
 
-A página do processo mantém um painel expansível de resultados concluídos. Cada valor é apresentado conforme seu formato: textos e listas, links clicáveis, imagens, players de áudio e vídeo, arquivos, valores booleanos e decisões de aprovação ou reprovação.
+A página do processo mantém um painel expansível de resultados concluídos. Cada valor é apresentado conforme seu formato: textos e listas, registros em tabela, datas localizadas, links clicáveis, imagens, players de áudio e vídeo, arquivos, layouts 16:9, valores booleanos e decisões de aprovação ou reprovação.
 
 ---
 
@@ -169,7 +177,7 @@ O bloco `ESCOLHER` é o único bloco cuja função é selecionar elementos preex
 
 A Biblioteca Estratégica é diferente da Biblioteca de Métodos: a primeira contém peças utilizadas dentro das ações; a segunda permite reutilizar sequências completas de ações entre canais.
 
-Além dos campos simples, uma coleção pode usar o formato especializado `Layout de thumbnail`. Cada item desse tipo armazena uma composição 16:9 criada no canvas visual, com caixas posicionadas em coordenadas percentuais. Esses layouts continuam sendo dados internos da Biblioteca Estratégica e podem ser escolhidos por um bloco `ESCOLHER` para orientar um futuro plugin de montagem programática.
+Além dos campos simples, uma coleção pode usar o formato especializado `Layout de thumbnail`. Cada item desse tipo armazena uma composição 16:9 criada no canvas visual, com caixas posicionadas em coordenadas percentuais. O mesmo formato faz parte do contrato universal de blocos, portanto o layout escolhido pode atravessar conexões tipadas e orientar um plugin de montagem programática sem perder sua estrutura.
 
 ---
 

@@ -2,10 +2,11 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   BookOpen,
+  ChevronDown,
   FolderOpen,
   Image as ImageIcon,
-  LayoutTemplate,
   LoaderCircle,
+  Pencil,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -49,6 +50,7 @@ import {
   useChannel,
   useLibraryCollections,
   useLibraryItems,
+  updateLibraryCollection,
 } from "@/lib/store";
 
 type CollectionItemValue = string | number | StoredFile | ThumbnailLayout;
@@ -90,23 +92,12 @@ function newField(index: number): StrategicCollectionField {
   };
 }
 
-function thumbnailLayoutFields(): StrategicCollectionField[] {
-  return [
-    { id: crypto.randomUUID(), label: "Nome", type: "text", required: true },
-    {
-      id: crypto.randomUUID(),
-      label: "Composição",
-      type: "thumbnail_layout",
-      required: true,
-    },
-  ];
-}
-
 function ChannelLibraryPage() {
   const { channelId } = Route.useParams();
   const channel = useChannel(channelId);
   const collections = useLibraryCollections(channelId);
   const items = useLibraryItems(channelId);
+  const totalItems = items.length;
   if (!channel) return null;
 
   return (
@@ -120,7 +111,14 @@ function ChannelLibraryPage() {
       />
       <main className="flex-1 px-4 py-5 sm:px-6 sm:py-6">
         {collections.length ? (
-          <div className="space-y-6">
+          <div className="mx-auto max-w-6xl space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-1 text-xs text-muted-foreground">
+              <span>
+                {collections.length} {collections.length === 1 ? "coleção" : "coleções"} e{" "}
+                {totalItems} {totalItems === 1 ? "item" : "itens"}
+              </span>
+              <span>Abra uma coleção para consultar ou administrar seus itens.</span>
+            </div>
             {collections.map((collection) => (
               <CollectionSection
                 key={collection.id}
@@ -155,6 +153,8 @@ function CollectionSection({
   collection: StrategicCollection;
   items: ReturnType<typeof useLibraryItems>;
 }) {
+  const [open, setOpen] = useState(false);
+
   function removeCollection() {
     if (
       !window.confirm(
@@ -169,26 +169,40 @@ function CollectionSection({
 
   return (
     <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/40">
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border/60 bg-card p-4 sm:p-5">
-        <div>
-          <div className="flex items-center gap-2">
+      <header className="flex items-center gap-2 bg-card p-3 sm:p-4">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-1 py-1.5 text-left outline-none transition hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setOpen((current) => !current)}
+          aria-expanded={open}
+          aria-controls={`collection-${collection.id}`}
+        >
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-border/70 bg-background">
             <FolderOpen className="size-4 text-brand-soft" />
-            <h2 className="text-base font-semibold">{collection.name}</h2>
-            <Badge variant="secondary">
-              {items.length} {items.length === 1 ? "item" : "itens"}
-            </Badge>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {collection.fields.map((field) => (
-              <Badge key={field.id} variant="outline" className="text-[10px] font-normal">
-                {field.label}
-                {!field.required && " · opcional"}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-sm font-semibold">{collection.name}</span>
+              <Badge variant="secondary">
+                {items.length} {items.length === 1 ? "item" : "itens"}
               </Badge>
-            ))}
-          </div>
-        </div>
-        <div className="flex gap-2">
+            </span>
+            <span className="mt-1.5 flex flex-wrap gap-1.5">
+              {collection.fields.map((field) => (
+                <Badge key={field.id} variant="outline" className="text-[10px] font-normal">
+                  {field.label}
+                  {!field.required && " · opcional"}
+                </Badge>
+              ))}
+            </span>
+          </span>
+          <ChevronDown
+            className={`mr-1 size-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+        <div className="flex shrink-0 gap-1">
           <NewCollectionItem collection={collection} />
+          <EditCollection collection={collection} />
           <Button
             size="icon"
             variant="ghost"
@@ -201,74 +215,178 @@ function CollectionSection({
         </div>
       </header>
 
-      {items.length ? (
-        <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3 sm:p-5">
-          {items.map((item) => (
-            <article key={item.id} className="group rounded-xl border border-border/70 bg-card p-4">
-              <div className="flex items-start justify-between gap-3">
-                <dl className="min-w-0 flex-1 space-y-3">
-                  {collection.fields.map((field) => {
-                    const value = item.values[field.id];
-                    if (!value) return null;
-                    return (
-                      <div key={field.id}>
-                        <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          {field.label}
-                        </dt>
-                        <dd className="mt-1 text-sm text-foreground">
-                          {field.type === "thumbnail_layout" && isThumbnailLayout(value) ? (
-                            <CompositionPreview boxes={value.boxes} />
-                          ) : field.type === "image" && isStoredFile(value) ? (
-                            <img
-                              src={value.url}
-                              alt={value.name}
-                              className="max-h-48 w-full rounded-lg border border-border/60 object-cover"
-                            />
-                          ) : field.type === "url" ? (
-                            <a
-                              href={String(value)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="break-all text-brand-soft hover:underline"
-                            >
-                              {String(value)}
-                            </a>
-                          ) : (
-                            <span className="whitespace-pre-wrap">{String(value)}</span>
-                          )}
-                        </dd>
-                      </div>
-                    );
-                  })}
-                </dl>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="size-8 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive"
-                  onClick={() => removeLibraryItem(item.id)}
-                  aria-label="Excluir item"
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div className="p-8 text-center">
-          <p className="text-sm font-medium">Esta coleção ainda não possui itens.</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Use “Adicionar item” para preencher os campos definidos na coleção.
-          </p>
+      {open && (
+        <div id={`collection-${collection.id}`} className="border-t border-border/60">
+          {items.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead className="bg-secondary/35 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    {collection.fields.map((field) => (
+                      <th key={field.id} className="px-4 py-3 font-semibold sm:px-5">
+                        {field.label}
+                      </th>
+                    ))}
+                    <th className="w-12 px-3 py-3" aria-label="Ações" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {items.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="group align-top transition-colors hover:bg-secondary/20"
+                    >
+                      {collection.fields.map((field) => (
+                        <td key={field.id} className="max-w-sm px-4 py-3 sm:px-5">
+                          <CollectionValueCell field={field} value={item.values[field.id]} />
+                        </td>
+                      ))}
+                      <td className="px-2 py-3 text-right">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeLibraryItem(item.id)}
+                          aria-label="Excluir item"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-8 text-center">
+              <p className="text-sm font-medium">Esta coleção ainda não possui itens.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Use “Adicionar item” para preencher os campos definidos na coleção.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </section>
   );
 }
 
+function CollectionValueCell({
+  field,
+  value,
+}: {
+  field: StrategicCollectionField;
+  value: CollectionItemValue | undefined;
+}) {
+  if (value === undefined || value === null || value === "") {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  if (field.type === "thumbnail_layout" && isThumbnailLayout(value)) {
+    return <CompositionPreview boxes={value.boxes} className="w-44 min-w-44" />;
+  }
+
+  if (field.type === "image" && isStoredFile(value)) {
+    return (
+      <img
+        src={value.url}
+        alt={value.name}
+        className="size-16 rounded-lg border border-border/60 object-cover"
+      />
+    );
+  }
+
+  if (field.type === "url") {
+    return (
+      <a
+        href={String(value)}
+        target="_blank"
+        rel="noreferrer"
+        className="block max-w-sm break-all text-brand-soft hover:underline"
+      >
+        {String(value)}
+      </a>
+    );
+  }
+
+  return (
+    <span className="block max-w-sm whitespace-pre-wrap text-foreground">{String(value)}</span>
+  );
+}
+
+function EditCollection({ collection }: { collection: StrategicCollection }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(collection.name);
+  const [fields, setFields] = useState<StrategicCollectionField[]>(collection.fields);
+  const valid =
+    Boolean(name.trim()) && fields.length > 0 && fields.every((field) => field.label.trim());
+
+  function prepare() {
+    setName(collection.name);
+    setFields(collection.fields.map((field) => ({ ...field })));
+  }
+
+  function updateField(id: string, patch: Partial<StrategicCollectionField>) {
+    setFields((current) =>
+      current.map((field) => (field.id === id ? { ...field, ...patch } : field)),
+    );
+  }
+
+  function save() {
+    if (!valid) return;
+    updateLibraryCollection({
+      ...collection,
+      name: name.trim(),
+      fields: fields.map((field) => ({ ...field, label: field.label.trim() })),
+    });
+    toast.success(`Coleção “${name.trim()}” atualizada.`);
+    setOpen(false);
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) prepare();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-8"
+          aria-label={`Editar coleção ${collection.name}`}
+        >
+          <Pencil className="size-3.5" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Editar coleção</DialogTitle>
+          <DialogDescription>
+            Atualize o nome e os campos usados pelos itens desta coleção.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-5">
+          <div className="space-y-1.5">
+            <Label>Nome da coleção</Label>
+            <Input value={name} onChange={(event) => setName(event.target.value)} />
+          </div>
+
+          <CollectionFieldEditor fields={fields} onChange={setFields} onUpdate={updateField} />
+
+          <Button className="w-full gradient-brand text-white" disabled={!valid} onClick={save}>
+            Salvar alterações
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function NewCollection({ channelId }: { channelId: string }) {
   const [open, setOpen] = useState(false);
-  const [collectionKind, setCollectionKind] = useState<"custom" | "thumbnail_layout">("custom");
   const [name, setName] = useState("");
   const [fields, setFields] = useState<StrategicCollectionField[]>([newField(0)]);
   const valid =
@@ -281,18 +399,6 @@ function NewCollection({ channelId }: { channelId: string }) {
   }
 
   function reset() {
-    setCollectionKind("custom");
-    setName("");
-    setFields([newField(0)]);
-  }
-
-  function selectCollectionKind(kind: "custom" | "thumbnail_layout") {
-    setCollectionKind(kind);
-    if (kind === "thumbnail_layout") {
-      setName("Layouts de thumbnail");
-      setFields(thumbnailLayoutFields());
-      return;
-    }
     setName("");
     setFields([newField(0)]);
   }
@@ -330,39 +436,6 @@ function NewCollection({ channelId }: { channelId: string }) {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-5">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => selectCollectionKind("custom")}
-              className={`rounded-xl border p-3 text-left transition ${
-                collectionKind === "custom"
-                  ? "border-brand/60 bg-brand/10"
-                  : "border-border/70 hover:border-brand/35"
-              }`}
-            >
-              <FolderOpen className="size-4 text-brand-soft" />
-              <span className="mt-2 block text-sm font-medium">Coleção personalizada</span>
-              <span className="mt-1 block text-[11px] text-muted-foreground">
-                Defina livremente os campos de cada item.
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => selectCollectionKind("thumbnail_layout")}
-              className={`rounded-xl border p-3 text-left transition ${
-                collectionKind === "thumbnail_layout"
-                  ? "border-brand/60 bg-brand/10"
-                  : "border-border/70 hover:border-brand/35"
-              }`}
-            >
-              <LayoutTemplate className="size-4 text-brand-soft" />
-              <span className="mt-2 block text-sm font-medium">Layouts de thumbnail</span>
-              <span className="mt-1 block text-[11px] text-muted-foreground">
-                Use o canvas 16:9 para salvar composições programáticas.
-              </span>
-            </button>
-          </div>
-
           <div className="space-y-1.5">
             <Label>Nome da coleção</Label>
             <Input
@@ -450,6 +523,86 @@ function NewCollection({ channelId }: { channelId: string }) {
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CollectionFieldEditor({
+  fields,
+  onChange,
+  onUpdate,
+}: {
+  fields: StrategicCollectionField[];
+  onChange: (fields: StrategicCollectionField[]) => void;
+  onUpdate: (id: string, patch: Partial<StrategicCollectionField>) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <Label>Campos de cada item</Label>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Adicione quantos campos forem necessários para representar cada opção.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1"
+          onClick={() => onChange([...fields, newField(fields.length)])}
+        >
+          <Plus className="size-3.5" /> Campo
+        </Button>
+      </div>
+      <div className="mt-3 space-y-2">
+        {fields.map((field, index) => (
+          <div
+            key={field.id}
+            className="grid gap-2 rounded-xl border border-border/70 bg-background/30 p-3 sm:grid-cols-[minmax(0,1fr)_150px_auto_auto] sm:items-center"
+          >
+            <Input
+              value={field.label}
+              onChange={(event) => onUpdate(field.id, { label: event.target.value })}
+              placeholder={`Nome do campo ${index + 1}`}
+            />
+            <Select
+              value={field.type}
+              onValueChange={(type) =>
+                onUpdate(field.id, { type: type as StrategicCollectionField["type"] })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="text">Texto curto</SelectItem>
+                <SelectItem value="textarea">Texto longo</SelectItem>
+                <SelectItem value="number">Número</SelectItem>
+                <SelectItem value="image">Imagem</SelectItem>
+                <SelectItem value="url">Link</SelectItem>
+                <SelectItem value="thumbnail_layout">Layout de thumbnail</SelectItem>
+              </SelectContent>
+            </Select>
+            <label className="flex items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
+              <Checkbox
+                checked={field.required}
+                onCheckedChange={(checked) => onUpdate(field.id, { required: checked === true })}
+              />
+              Obrigatório
+            </label>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-8 text-muted-foreground hover:text-destructive"
+              disabled={fields.length === 1}
+              onClick={() => onChange(fields.filter((item) => item.id !== field.id))}
+              aria-label="Remover campo"
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

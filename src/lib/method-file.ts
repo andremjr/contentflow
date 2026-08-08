@@ -22,6 +22,27 @@ const parameterSchema = z.object({
   options: z.array(z.string().max(500)).max(100).optional(),
 });
 
+const recordFieldSchema = z.object({
+  id: z.string(),
+  label: z.string().max(200),
+  key: z.string().max(200),
+  type: z.enum([
+    "text",
+    "textarea",
+    "number",
+    "boolean",
+    "select",
+    "datetime",
+    "url",
+    "file",
+    "image",
+    "audio",
+    "video",
+  ]),
+  required: z.boolean(),
+  options: z.array(z.string().max(500)).max(100).optional(),
+});
+
 const inputSchema = z.object({
   id: z.string(),
   label: z.string().max(200),
@@ -34,6 +55,8 @@ const inputSchema = z.object({
       "textarea",
       "multiselect",
       "list",
+      "records",
+      "datetime",
       "url",
       "file",
       "image",
@@ -41,6 +64,7 @@ const inputSchema = z.object({
       "video",
       "files",
       "approval",
+      "thumbnail_layout",
     ])
     .default("text"),
   source: z.enum(["project", "previous_process", "previous_block", "channel_library", "static"]),
@@ -48,6 +72,7 @@ const inputSchema = z.object({
   blockId: z.string().optional(),
   collection: z.string().max(200).optional(),
   staticValue: z.string().max(10_000).optional(),
+  recordFields: z.array(recordFieldSchema).max(100).optional(),
 });
 
 const outputSchema = z.object({
@@ -62,6 +87,8 @@ const outputSchema = z.object({
     "textarea",
     "multiselect",
     "list",
+    "records",
+    "datetime",
     "url",
     "file",
     "image",
@@ -69,6 +96,7 @@ const outputSchema = z.object({
     "video",
     "files",
     "approval",
+    "thumbnail_layout",
   ]),
   required: z.boolean(),
   placeholder: z.string().max(500).optional(),
@@ -76,6 +104,15 @@ const outputSchema = z.object({
   options: z.array(z.string().max(500)).max(100).optional(),
   optionsSourceBlockId: z.string().optional(),
   optionsSourceKey: z.string().max(200).optional(),
+  recordFields: z.array(recordFieldSchema).max(100).optional(),
+});
+
+const validationSchema = z.object({
+  targetBlockId: z.string().optional(),
+  targetOutputKey: z.string().max(200).optional(),
+  mode: z.enum(["approval", "select_one", "select_many"]),
+  onReject: z.enum(["retry_target", "pause"]),
+  maxAttempts: z.number().int().min(1).max(20),
 });
 
 const actionBlockSchema = z.object({
@@ -87,6 +124,7 @@ const actionBlockSchema = z.object({
   instructions: z.string().max(20_000).optional(),
   inputs: z.array(inputSchema).max(100).optional(),
   outputs: z.array(outputSchema).max(100).optional(),
+  validation: validationSchema.optional(),
   parameters: z.array(parameterSchema).max(100),
   order: z.number().int().nonnegative(),
 });
@@ -151,14 +189,30 @@ export function copyImportedBlocks(
     inputs: block.inputs?.map((input) => ({
       ...input,
       id: createId(`${processType}-input`),
+      recordFields: input.recordFields?.map((field) => ({
+        ...field,
+        id: createId(`${processType}-record-field`),
+      })),
       blockId: input.blockId ? blockIds.get(input.blockId) : undefined,
     })),
     outputs: block.outputs?.map((output) => ({
       ...output,
       id: createId(`${processType}-output`),
+      recordFields: output.recordFields?.map((field) => ({
+        ...field,
+        id: createId(`${processType}-record-field`),
+      })),
       optionsSourceBlockId: output.optionsSourceBlockId
         ? blockIds.get(output.optionsSourceBlockId)
         : undefined,
     })),
+    validation: block.validation
+      ? {
+          ...block.validation,
+          targetBlockId: block.validation.targetBlockId
+            ? blockIds.get(block.validation.targetBlockId)
+            : undefined,
+        }
+      : undefined,
   }));
 }

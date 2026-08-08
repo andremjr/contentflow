@@ -43,13 +43,38 @@ export type HumanFieldType =
   | BlockParameterType
   | "multiselect"
   | "list"
+  | "records"
+  | "datetime"
   | "url"
   | "file"
   | "image"
   | "audio"
   | "video"
   | "files"
-  | "approval";
+  | "approval"
+  | "thumbnail_layout";
+
+export type RecordFieldType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "boolean"
+  | "select"
+  | "datetime"
+  | "url"
+  | "file"
+  | "image"
+  | "audio"
+  | "video";
+
+export type RecordFieldDefinition = {
+  id: string;
+  label: string;
+  key: string;
+  type: RecordFieldType;
+  required: boolean;
+  options?: string[];
+};
 
 export type BlockInputSource =
   "project" | "previous_process" | "previous_block" | "channel_library" | "static";
@@ -63,6 +88,7 @@ export type BlockInputBinding = {
   blockId?: string;
   collection?: string;
   staticValue?: string;
+  recordFields?: RecordFieldDefinition[];
 };
 
 export type BlockFieldDefinition = {
@@ -76,6 +102,7 @@ export type BlockFieldDefinition = {
   options?: string[];
   optionsSourceBlockId?: string;
   optionsSourceKey?: string;
+  recordFields?: RecordFieldDefinition[];
 };
 
 export type BlockParameter = {
@@ -88,6 +115,16 @@ export type BlockParameter = {
   options?: string[];
 };
 
+export type ValidationMode = "approval" | "select_one" | "select_many";
+
+export type BlockValidationConfig = {
+  targetBlockId?: string;
+  targetOutputKey?: string;
+  mode: ValidationMode;
+  onReject: "retry_target" | "pause";
+  maxAttempts: number;
+};
+
 export type ActionBlock = {
   id: string;
   type: BlockType;
@@ -97,6 +134,7 @@ export type ActionBlock = {
   instructions?: string;
   inputs?: BlockInputBinding[];
   outputs?: BlockFieldDefinition[];
+  validation?: BlockValidationConfig;
   parameters: BlockParameter[];
   order: number;
 };
@@ -169,8 +207,18 @@ export type ThumbnailLayout = {
   boxes: ThumbnailLayoutBox[];
 };
 
+export type StructuredRecord = Record<string, string | number | boolean | StoredFile | null>;
+
 export type RuntimeValue =
-  string | number | boolean | string[] | StoredFile | StoredFile[] | ThumbnailLayout | null;
+  | string
+  | number
+  | boolean
+  | string[]
+  | StoredFile
+  | StoredFile[]
+  | StructuredRecord[]
+  | ThumbnailLayout
+  | null;
 
 export type BlockExecutionStatus =
   | "pending"
@@ -186,6 +234,7 @@ export type BlockExecution = {
   status: BlockExecutionStatus;
   values: Record<string, RuntimeValue>;
   attempt?: number;
+  retryFeedback?: Record<string, RuntimeValue>;
   error?: string;
   logs?: string[];
   startedAt?: string;

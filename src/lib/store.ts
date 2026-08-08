@@ -23,6 +23,7 @@ import {
   getMethodConfigurationIssue,
   isEmptyRuntimeValue,
   normalizeActionBlock,
+  normalizeMethodBlocks,
 } from "@/lib/human-workflow";
 import { resolveBlockInputs } from "@/lib/runtime-contract";
 
@@ -325,10 +326,7 @@ export async function setChannelMethod(
   if (!channel) return;
   const normalizedMethod: ProcessMethod = {
     processType,
-    blocks: method.blocks.map((block, order) => ({
-      ...normalizeActionBlock(block, processType),
-      order,
-    })),
+    blocks: normalizeMethodBlocks(method.blocks, processType),
   };
   channel.methods = {
     ...channel.methods,
@@ -561,16 +559,16 @@ export function startProcessExecution(projectId: string, processType: ProcessId)
   const project = db.projects.find((item) => item.id === projectId);
   const channel = project ? db.channels.find((item) => item.id === project.channelId) : undefined;
   const method = channel?.methods[processType];
-  if (!project || !channel || !method || getMethodConfigurationIssue(method)) {
+  const normalizedMethod = method
+    ? { processType, blocks: normalizeMethodBlocks(method.blocks, processType) }
+    : undefined;
+  if (!project || !channel || !normalizedMethod || getMethodConfigurationIssue(normalizedMethod)) {
     return undefined;
   }
   const now = new Date().toISOString();
   const methodSnapshot: ProcessMethod = {
     processType,
-    blocks: method.blocks.map((block, order) => ({
-      ...structuredClone(normalizeActionBlock(block, processType)),
-      order,
-    })),
+    blocks: structuredClone(normalizedMethod.blocks),
   };
   const execution: ProcessExecution = {
     id: crypto.randomUUID(),
@@ -613,8 +611,21 @@ function deriveProcessOutput(execution: ProcessExecution): ProcessOutput | undef
   const legacyKey = `final_${execution.processType}`;
   for (let index = execution.methodSnapshot.blocks.length - 1; index >= 0; index -= 1) {
     const block = execution.methodSnapshot.blocks[index];
-    if (block.type === "VALIDAR" || block.type === "ESCOLHER") continue;
     const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
+    if (block.type === "VALIDAR") {
+      if (block.validation?.mode === "approval") continue;
+      const selectionKey =
+        block.validation?.mode === "select_many" ? "selected_values" : "selected_value";
+      const selectedValue = blockExecution?.values[selectionKey];
+      if (selectedValue === undefined || isEmptyRuntimeValue(selectedValue)) continue;
+      return {
+        processType: execution.processType,
+        values: { [definition.key]: structuredClone(selectedValue) },
+        sourceBlockId: block.id,
+        createdAt: new Date().toISOString(),
+      };
+    }
+    if (block.type === "ESCOLHER") continue;
     const value = blockExecution?.values[definition.key] ?? blockExecution?.values[legacyKey];
     if (value === undefined || isEmptyRuntimeValue(value)) continue;
     return {
@@ -767,11 +778,83 @@ export function saveHumanBlockDraft(
   return true;
 }
 
+function retryValidatedBlock(
+  execution: ProcessExecution,
+  validationBlock: ActionBlock,
+  validationValues: Record<string, RuntimeValue>,
+) {
+  const targetBlockId = validationBlock.validation?.targetBlockId;
+  const targetIndex = execution.methodSnapshot.blocks.findIndex(
+    (candidate) => candidate.id === targetBlockId,
+  );
+  const validationIndex = execution.methodSnapshot.blocks.findIndex(
+    (candidate) => candidate.id === validationBlock.id,
+  );
+  if (targetIndex < 0 || targetIndex >= validationIndex) {
+    return {
+      ok: false as const,
+      message: "O bloco validado não está disponível para nova tentativa.",
+    };
+  }
+
+  const targetBlock = execution.methodSnapshot.blocks[targetIndex];
+  const targetExecution = execution.blocks[targetIndex];
+  const maxAttempts = Math.max(1, validationBlock.validation?.maxAttempts ?? 3);
+  if ((targetExecution.attempt ?? 1) >= maxAttempts) {
+    return {
+      ok: false as const,
+      message: `O limite de ${maxAttempts} tentativas foi atingido. Revise o método ou aprove manualmente o resultado atual.`,
+    };
+  }
+
+  const now = new Date().toISOString();
+  for (let index = targetIndex; index < execution.blocks.length; index += 1) {
+    const blockExecution = execution.blocks[index];
+    blockExecution.values = {};
+    blockExecution.error = undefined;
+    blockExecution.logs = undefined;
+    blockExecution.completedAt = undefined;
+    blockExecution.retryFeedback = undefined;
+    if (index === targetIndex) {
+      blockExecution.attempt = (blockExecution.attempt ?? 1) + 1;
+      blockExecution.startedAt = now;
+      blockExecution.retryFeedback = structuredClone(validationValues);
+      blockExecution.status =
+        targetBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
+    } else {
+      blockExecution.startedAt = undefined;
+      blockExecution.status = "pending";
+    }
+  }
+
+  execution.output = undefined;
+  execution.outputStatus = "pending";
+  execution.error = undefined;
+  execution.status =
+    targetExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
+  const project = db.projects.find((candidate) => candidate.id === execution.projectId);
+  if (project) {
+    project.stages = {
+      ...project.stages,
+      [execution.processType]:
+        targetExecution.status === "awaiting_human" ? "awaiting_human" : "blocked",
+    };
+    project.currentStage = execution.processType;
+    project.state = project.stages[execution.processType];
+    persistProject(project);
+  }
+  persistExecution(execution);
+  emit();
+  return { ok: true as const, blockName: targetBlock.name ?? targetBlock.type };
+}
+
 export function completeHumanBlock(
   executionId: string,
   blockId: string,
   values: Record<string, RuntimeValue>,
-): { ok: true; completedProcess: boolean } | { ok: false; missing: string[] } {
+):
+  | { ok: true; completedProcess: boolean; retriedBlock?: string; pausedValidation?: boolean }
+  | { ok: false; missing: string[] } {
   const execution = db.executions.find((item) => item.id === executionId);
   const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
   const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
@@ -804,15 +887,32 @@ export function completeHumanBlock(
   const missing = (block.outputs ?? [])
     .filter((output) => output.required && isEmptyRuntimeValue(values[output.key]))
     .map((output) => output.label);
+  for (const output of (block.outputs ?? []).filter((field) => field.type === "records")) {
+    const storedRecords = values[output.key];
+    const records = Array.isArray(storedRecords) ? storedRecords : [];
+    records.forEach((record, index) => {
+      if (!record || typeof record !== "object" || Array.isArray(record) || "url" in record) return;
+      for (const recordField of (output.recordFields ?? []).filter((field) => field.required)) {
+        if (isEmptyRuntimeValue(record[recordField.key] as RuntimeValue | undefined)) {
+          missing.push(`${output.label} · registro ${index + 1} · ${recordField.label}`);
+        }
+      }
+    });
+  }
   if (missing.length) return { ok: false, missing };
   const rejected = (block.outputs ?? []).some(
     (output) => output.type === "approval" && values[output.key] === "rejected",
   );
   if (rejected) {
-    return {
-      ok: false,
-      missing: ["A validação está reprovada. Revise o resultado ou altere a decisão para Aprovar."],
-    };
+    blockExecution.values = structuredClone(values);
+    if (block.type === "VALIDAR" && block.validation?.onReject === "retry_target") {
+      const retry = retryValidatedBlock(execution, block, values);
+      if (!retry.ok) return { ok: false, missing: [retry.message] };
+      return { ok: true, completedProcess: false, retriedBlock: retry.blockName };
+    }
+    persistExecution(execution);
+    emit();
+    return { ok: true, completedProcess: false, pausedValidation: true };
   }
   const now = new Date().toISOString();
   blockExecution.values = structuredClone(values);
@@ -961,6 +1061,14 @@ export function createLibraryCollection(
   emit();
   void request("/api/library/collections", "POST", collection);
   return collection;
+}
+
+export function updateLibraryCollection(collection: StrategicCollection) {
+  const index = db.libraryCollections.findIndex((candidate) => candidate.id === collection.id);
+  if (index < 0) return;
+  db.libraryCollections[index] = collection;
+  emit();
+  void request(`/api/library/collections/${collection.id}`, "PUT", collection);
 }
 
 export function removeLibraryCollection(id: string) {

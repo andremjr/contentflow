@@ -9,7 +9,13 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CompositionPreview } from "@/components/composition-canvas";
-import type { HumanFieldType, RuntimeValue, StoredFile, ThumbnailLayout } from "@/lib/domain";
+import type {
+  HumanFieldType,
+  RuntimeValue,
+  StoredFile,
+  StructuredRecord,
+  ThumbnailLayout,
+} from "@/lib/domain";
 
 export function RuntimeValueViewer({
   type,
@@ -17,11 +23,16 @@ export function RuntimeValueViewer({
   compact = false,
 }: {
   type: HumanFieldType | "thumbnail_layout";
-  value: RuntimeValue | undefined;
+  value: RuntimeValue | StructuredRecord | undefined;
   compact?: boolean;
 }) {
   if (value == null || value === "" || (Array.isArray(value) && value.length === 0)) {
     return <span className="text-xs text-muted-foreground">Não informado</span>;
+  }
+
+  if (type === "records" && (Array.isArray(value) || isStructuredRecord(value))) {
+    const records = Array.isArray(value) ? value.filter(isStructuredRecord) : [value];
+    return <RecordsValue records={records} compact={compact} />;
   }
 
   if (Array.isArray(value)) {
@@ -69,6 +80,15 @@ export function RuntimeValueViewer({
     );
   }
 
+  if (type === "datetime" && typeof value === "string") {
+    const date = new Date(value);
+    return (
+      <time dateTime={value} className={compact ? "text-xs" : "text-sm"}>
+        {Number.isNaN(date.getTime()) ? value : date.toLocaleString("pt-BR")}
+      </time>
+    );
+  }
+
   if (typeof value === "boolean") {
     return <span className="text-sm">{value ? "Sim" : "Não"}</span>;
   }
@@ -113,6 +133,45 @@ export function RuntimeValueViewer({
       {String(value)}
     </p>
   );
+}
+
+function RecordsValue({ records, compact }: { records: StructuredRecord[]; compact: boolean }) {
+  if (!records.length)
+    return <span className="text-xs text-muted-foreground">Nenhum registro</span>;
+  const columns = Array.from(new Set(records.flatMap((record) => Object.keys(record))));
+  return (
+    <div className="max-w-full overflow-x-auto rounded-lg border border-border/60">
+      <table className={compact ? "min-w-full text-[10px]" : "min-w-full text-xs"}>
+        <thead className="bg-muted/50 text-left text-muted-foreground">
+          <tr>
+            {columns.map((column) => (
+              <th key={column} className="whitespace-nowrap px-3 py-2 font-medium">
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((record, index) => (
+            <tr key={index} className="border-t border-border/60 align-top">
+              {columns.map((column) => (
+                <td key={column} className="max-w-72 px-3 py-2">
+                  <RecordCell value={record[column]} compact={compact} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RecordCell({ value, compact }: { value: StructuredRecord[string]; compact: boolean }) {
+  if (value == null || value === "") return <span className="text-muted-foreground">—</span>;
+  if (isStoredFile(value)) return <FileValue file={value} compact={compact} />;
+  if (typeof value === "boolean") return <span>{value ? "Sim" : "Não"}</span>;
+  return <span className="whitespace-pre-wrap break-words">{String(value)}</span>;
 }
 
 function FileValue({ file, compact }: { file: StoredFile; compact: boolean }) {
@@ -189,6 +248,12 @@ function isThumbnailLayout(value: unknown): value is ThumbnailLayout {
     value.aspectRatio === "16:9" &&
     "boxes" in value &&
     Array.isArray(value.boxes),
+  );
+}
+
+function isStructuredRecord(value: unknown): value is StructuredRecord {
+  return Boolean(
+    value && typeof value === "object" && !Array.isArray(value) && !isStoredFile(value),
   );
 }
 

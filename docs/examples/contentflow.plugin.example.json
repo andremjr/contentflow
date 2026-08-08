@@ -1,0 +1,39 @@
+{
+  "apiVersion": "1",
+  "id": "com.exemplo.thumbnail-renderer",
+  "name": "Thumbnail Renderer",
+  "version": "1.0.0",
+  "description": "Renderiza uma thumbnail a partir de um layout 16:9.",
+  "author": "Exemplo",
+  "entrypoint": "dist/index.js",
+  "permissions": ["network"],
+  "secretKeys": ["IMAGE_PROVIDER_API_KEY"],
+  "capabilities": [
+    {
+      "id": "render-thumbnail",
+      "operator": "Código",
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["thumbnail"],
+      "acceptedInputTypes": ["text", "image", "thumbnail_layout"],
+      "producedOutputTypes": ["image"],
+      "blockConfigSchema": {
+        "type": "object",
+        "properties": {
+          "quality": {
+            "type": "string",
+            "enum": ["draft", "final"],
+            "default": "final"
+          }
+        },
+        "required": ["quality"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "thumbnail": { "type": "object" }
+        },
+        "required": ["thumbnail"]
+      }
+    }
+  ]
+}

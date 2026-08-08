@@ -1,0 +1,43 @@
+{
+  "executionId": "exec-example",
+  "blockId": "thumbnail-create",
+  "capabilityId": "render-thumbnail",
+  "attempt": 1,
+  "configuration": { "quality": "final" },
+  "inputs": {
+    "input-title": "Uma promessa impossível?",
+    "input-layout": {
+      "aspectRatio": "16:9",
+      "boxes": [
+        {
+          "id": "headline",
+          "label": "Headline",
+          "color": "#2563eb",
+          "x": 5,
+          "y": 15,
+          "w": 50,
+          "h": 28
+        }
+      ]
+    }
+  },
+  "inputContract": [
+    { "id": "input-title", "label": "Título", "type": "text" },
+    { "id": "input-layout", "label": "Composição", "type": "thumbnail_layout" }
+  ],
+  "outputContract": [
+    { "label": "Thumbnail", "key": "thumbnail", "type": "image", "required": true }
+  ],
+  "context": {
+    "channel": {
+      "id": "channel-example",
+      "name": "Canal exemplo",
+      "language": "pt-BR",
+      "niche": "Educação"
+    },
+    "project": { "id": "project-example", "title": "Vídeo exemplo" },
+    "processType": "thumbnail",
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

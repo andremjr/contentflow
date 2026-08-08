@@ -1,9 +1,11 @@
 import type {
+  BlockFieldDefinition,
+  BlockInputBinding,
   BlockType,
+  BlockValidationConfig,
+  HumanFieldType,
   ProcessOutput,
   RuntimeValue,
-  StoredFile,
-  ThumbnailLayout,
   UniversalProcess,
 } from "@/lib/domain";
 
@@ -24,13 +26,25 @@ export type JsonSchema = {
   format?: string;
   minimum?: number;
   maximum?: number;
+  const?: unknown;
+  anyOf?: JsonSchema[];
+  additionalProperties?: boolean | JsonSchema;
 };
+
+export type PluginDataType = HumanFieldType;
+
+export type PluginFieldContract = Pick<
+  BlockFieldDefinition,
+  "label" | "key" | "type" | "required" | "options" | "recordFields"
+>;
 
 export type PluginCapability = {
   id: string;
   operator: PluginOperator;
   blockTypes: BlockType[];
   processTypes?: UniversalProcess[];
+  acceptedInputTypes?: PluginDataType[];
+  producedOutputTypes?: PluginDataType[];
   blockConfigSchema: JsonSchema;
   outputSchema: JsonSchema;
 };
@@ -59,7 +73,7 @@ export type PluginExecutionContext = {
     collectionId: string;
     items: Array<{
       id: string;
-      values: Record<string, string | number | StoredFile | ThumbnailLayout>;
+      values: Record<string, RuntimeValue>;
     }>;
   };
 };
@@ -68,7 +82,14 @@ export type PluginExecutionRequest = {
   executionId: string;
   blockId: string;
   capabilityId: string;
+  attempt: number;
   configuration: Record<string, unknown>;
+  inputs: Record<string, RuntimeValue>;
+  /** `inputs` is keyed by this contract's stable `id`. */
+  inputContract: Array<Pick<BlockInputBinding, "id" | "label" | "type" | "recordFields">>;
+  outputContract: PluginFieldContract[];
+  validation?: BlockValidationConfig;
+  retryFeedback?: Record<string, RuntimeValue>;
   context: PluginExecutionContext;
 };
 

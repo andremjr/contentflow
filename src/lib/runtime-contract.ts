@@ -124,7 +124,6 @@ function collectCandidates({
           : undefined;
       const collection = collections.find((candidate) => candidate.id === item?.collectionId);
       for (const field of collection?.fields ?? []) {
-        if (field.type === "thumbnail_layout") continue;
         const value = item?.values[field.id];
         if (value === undefined || isEmptyRuntimeValue(value)) continue;
         candidates.push({
