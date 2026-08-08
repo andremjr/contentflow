@@ -16,6 +16,7 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
+mini-curso-contentflow-os/
 
 # Wrangler / Cloudflare
 .wrangler/
