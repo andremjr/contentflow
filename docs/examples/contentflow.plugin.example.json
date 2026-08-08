@@ -5,6 +5,12 @@
   "version": "1.0.0",
   "description": "Renderiza uma thumbnail a partir de um layout 16:9.",
   "author": "Exemplo",
+  "runtime": {
+    "kind": "node",
+    "version": ">=22",
+    "module": "esm"
+  },
+  "minCoreVersion": "1.0.0",
   "entrypoint": "dist/index.js",
   "permissions": ["network"],
   "secretKeys": ["IMAGE_PROVIDER_API_KEY"],
@@ -14,8 +20,35 @@
       "operator": "Código",
       "blockTypes": ["CRIAR"],
       "processTypes": ["thumbnail"],
+      "inputPorts": [
+        {
+          "key": "title",
+          "label": "Título",
+          "acceptedTypes": ["text", "textarea"],
+          "required": true
+        },
+        {
+          "key": "layout",
+          "label": "Layout",
+          "acceptedTypes": ["thumbnail_layout"],
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "thumbnail",
+          "label": "Thumbnail renderizada",
+          "producedTypes": ["image"],
+          "required": true
+        }
+      ],
       "acceptedInputTypes": ["text", "image", "thumbnail_layout"],
       "producedOutputTypes": ["image"],
+      "execution": {
+        "mode": "async",
+        "defaultTimeoutMs": 30000,
+        "supportsCancellation": true
+      },
       "blockConfigSchema": {
         "type": "object",
         "properties": {

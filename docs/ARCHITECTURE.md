@@ -204,7 +204,7 @@ Os outputs concluídos dos processos anteriores são injetados automaticamente c
 
 ## 12. Protocolo de Plugins
 
-O contrato técnico da próxima fase está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local.
+O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local.
 
 ---
 

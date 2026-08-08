@@ -79,6 +79,45 @@ function parseRows(rows: { payload: string }[]) {
 
 type PluginSource = "bundled" | "installed";
 
+function isPluginManifest(manifest: Record<string, unknown>) {
+  const runtime = manifest.runtime as Record<string, unknown> | undefined;
+  const capabilities = manifest.capabilities;
+  return Boolean(
+    manifest.apiVersion === "1" &&
+    typeof manifest.id === "string" &&
+    typeof manifest.name === "string" &&
+    typeof manifest.version === "string" &&
+    typeof manifest.description === "string" &&
+    typeof manifest.author === "string" &&
+    typeof manifest.entrypoint === "string" &&
+    !path.isAbsolute(manifest.entrypoint) &&
+    !manifest.entrypoint.includes("..") &&
+    Array.isArray(manifest.permissions) &&
+    runtime?.kind === "node" &&
+    runtime.module === "esm" &&
+    typeof runtime.version === "string" &&
+    Array.isArray(capabilities) &&
+    capabilities.length > 0 &&
+    capabilities.every((value) => {
+      if (!value || typeof value !== "object") return false;
+      const capability = value as Record<string, unknown>;
+      const execution = capability.execution as Record<string, unknown> | undefined;
+      return (
+        typeof capability.id === "string" &&
+        ["IA", "Código"].includes(String(capability.operator)) &&
+        Array.isArray(capability.blockTypes) &&
+        Array.isArray(capability.inputPorts) &&
+        Array.isArray(capability.outputPorts) &&
+        ["immediate", "async"].includes(String(execution?.mode)) &&
+        capability.blockConfigSchema !== null &&
+        typeof capability.blockConfigSchema === "object" &&
+        capability.outputSchema !== null &&
+        typeof capability.outputSchema === "object"
+      );
+    }),
+  );
+}
+
 function discoverPlugins(root: string, source: PluginSource, relativeRoot: string) {
   if (!existsSync(root)) return { plugins: [], issues: [] };
   const plugins: Array<{
@@ -96,15 +135,18 @@ function discoverPlugins(root: string, source: PluginSource, relativeRoot: strin
     const directory = `${relativeRoot}/${entry.name}`;
     try {
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
-      if (
-        typeof manifest.id !== "string" ||
-        typeof manifest.name !== "string" ||
-        typeof manifest.version !== "string" ||
-        !Array.isArray(manifest.capabilities)
-      ) {
+      if (!isPluginManifest(manifest)) {
         throw new Error("Manifesto incompleto ou incompatível.");
       }
-      plugins.push({ id: manifest.id, source, directory, manifest });
+      const pluginDirectory = path.resolve(root, entry.name);
+      const entrypointPath = path.resolve(pluginDirectory, String(manifest.entrypoint));
+      if (
+        !entrypointPath.startsWith(`${pluginDirectory}${path.sep}`) ||
+        !existsSync(entrypointPath)
+      ) {
+        throw new Error("O entrypoint declarado não existe dentro da pasta do plugin.");
+      }
+      plugins.push({ id: String(manifest.id), source, directory, manifest });
     } catch (error) {
       issues.push({
         directory,

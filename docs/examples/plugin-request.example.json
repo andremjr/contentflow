@@ -3,10 +3,12 @@
   "blockId": "thumbnail-create",
   "capabilityId": "render-thumbnail",
   "attempt": 1,
+  "invocation": { "mode": "start" },
   "configuration": { "quality": "final" },
+  "settings": {},
   "inputs": {
-    "input-title": "Uma promessa impossível?",
-    "input-layout": {
+    "title": "Uma promessa impossível?",
+    "layout": {
       "aspectRatio": "16:9",
       "boxes": [
         {
@@ -22,11 +24,22 @@
     }
   },
   "inputContract": [
-    { "id": "input-title", "label": "Título", "type": "text" },
-    { "id": "input-layout", "label": "Composição", "type": "thumbnail_layout" }
+    { "id": "input-title", "portKey": "title", "label": "Título", "type": "text" },
+    {
+      "id": "input-layout",
+      "portKey": "layout",
+      "label": "Composição",
+      "type": "thumbnail_layout"
+    }
   ],
   "outputContract": [
-    { "label": "Thumbnail", "key": "thumbnail", "type": "image", "required": true }
+    {
+      "portKey": "thumbnail",
+      "label": "Thumbnail",
+      "key": "thumbnail",
+      "type": "image",
+      "required": true
+    }
   ],
   "context": {
     "channel": {
