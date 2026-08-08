@@ -79,42 +79,157 @@ function parseRows(rows: { payload: string }[]) {
 
 type PluginSource = "bundled" | "installed";
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isUniqueStringArray(value: unknown, allowed?: readonly string[]): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => isNonEmptyString(item) && (!allowed || allowed.includes(item))) &&
+    new Set(value).size === value.length
+  );
+}
+
+function isOptionalHttpsUrl(value: unknown) {
+  if (value === undefined) return true;
+  if (!isNonEmptyString(value)) return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function isPluginManifest(manifest: Record<string, unknown>) {
   const runtime = manifest.runtime as Record<string, unknown> | undefined;
   const capabilities = manifest.capabilities;
+  const permissions = ["network", "filesystem:read", "filesystem:write", "process"] as const;
+  const blockTypes = ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"] as const;
+  const processTypes = [
+    "theme",
+    "title",
+    "thumbnail",
+    "script",
+    "narration",
+    "assets",
+    "editing",
+    "publishing",
+  ] as const;
+  const dataTypes = [
+    "text",
+    "textarea",
+    "number",
+    "boolean",
+    "list",
+    "records",
+    "select",
+    "multiselect",
+    "datetime",
+    "url",
+    "file",
+    "files",
+    "image",
+    "audio",
+    "video",
+    "approval",
+    "thumbnail_layout",
+  ] as const;
+  const sideEffects = [
+    "external_read",
+    "external_write",
+    "public_publish",
+    "local_artifact",
+    "subprocess",
+  ] as const;
+
+  const manifestPermissions = isUniqueStringArray(manifest.permissions, permissions)
+    ? manifest.permissions
+    : [];
+
   return Boolean(
     manifest.apiVersion === "1" &&
-    typeof manifest.id === "string" &&
-    typeof manifest.name === "string" &&
-    typeof manifest.version === "string" &&
-    typeof manifest.description === "string" &&
-    typeof manifest.author === "string" &&
-    typeof manifest.entrypoint === "string" &&
+    isNonEmptyString(manifest.id) &&
+    isNonEmptyString(manifest.name) &&
+    isNonEmptyString(manifest.version) &&
+    isNonEmptyString(manifest.description) &&
+    isNonEmptyString(manifest.author) &&
+    isNonEmptyString(manifest.license) &&
+    isOptionalHttpsUrl(manifest.homepage) &&
+    isOptionalHttpsUrl(manifest.repository) &&
+    isNonEmptyString(manifest.entrypoint) &&
     !path.isAbsolute(manifest.entrypoint) &&
     !manifest.entrypoint.includes("..") &&
-    Array.isArray(manifest.permissions) &&
+    isUniqueStringArray(manifest.permissions, permissions) &&
+    (manifest.secretKeys === undefined || isUniqueStringArray(manifest.secretKeys)) &&
     runtime?.kind === "node" &&
     runtime.module === "esm" &&
-    typeof runtime.version === "string" &&
+    isNonEmptyString(runtime.version) &&
     Array.isArray(capabilities) &&
     capabilities.length > 0 &&
     capabilities.every((value) => {
       if (!value || typeof value !== "object") return false;
       const capability = value as Record<string, unknown>;
       const execution = capability.execution as Record<string, unknown> | undefined;
+      const cost = capability.cost as Record<string, unknown> | undefined;
+      const dataPolicy = capability.dataPolicy as Record<string, unknown> | undefined;
+      const capabilitySideEffects = capability.sideEffects;
+      const portsAreValid = (ports: unknown, typeKey: "acceptedTypes" | "producedTypes") =>
+        Array.isArray(ports) &&
+        ports.every((portValue) => {
+          if (!portValue || typeof portValue !== "object") return false;
+          const port = portValue as Record<string, unknown>;
+          return (
+            isNonEmptyString(port.key) &&
+            isNonEmptyString(port.label) &&
+            typeof port.required === "boolean" &&
+            isUniqueStringArray(port[typeKey], dataTypes)
+          );
+        }) &&
+        new Set(ports.map((port) => String((port as Record<string, unknown>).key))).size ===
+          ports.length;
+      const sendsData = dataPolicy?.sendsDataToThirdParties === true;
+      const usesNetwork =
+        Array.isArray(capabilitySideEffects) &&
+        capabilitySideEffects.some((effect) =>
+          ["external_read", "external_write", "public_publish"].includes(String(effect)),
+        );
+
       return (
-        typeof capability.id === "string" &&
+        isNonEmptyString(capability.id) &&
         ["IA", "Código"].includes(String(capability.operator)) &&
-        Array.isArray(capability.blockTypes) &&
-        Array.isArray(capability.inputPorts) &&
-        Array.isArray(capability.outputPorts) &&
+        isUniqueStringArray(capability.blockTypes, blockTypes) &&
+        capability.blockTypes.length > 0 &&
+        (capability.processTypes === undefined ||
+          isUniqueStringArray(capability.processTypes, processTypes)) &&
+        portsAreValid(capability.inputPorts, "acceptedTypes") &&
+        portsAreValid(capability.outputPorts, "producedTypes") &&
+        capability.outputPorts.length > 0 &&
         ["immediate", "async"].includes(String(execution?.mode)) &&
+        (execution?.maxConcurrency === undefined ||
+          (Number.isInteger(execution.maxConcurrency) &&
+            Number(execution.maxConcurrency) >= 1 &&
+            Number(execution.maxConcurrency) <= 100)) &&
+        isUniqueStringArray(capabilitySideEffects, sideEffects) &&
+        (!usesNetwork || manifestPermissions.includes("network")) &&
+        (!capabilitySideEffects.includes("local_artifact") ||
+          manifestPermissions.includes("filesystem:write")) &&
+        (!capabilitySideEffects.includes("subprocess") ||
+          manifestPermissions.includes("process")) &&
+        ["free", "metered", "unknown"].includes(String(cost?.model)) &&
+        typeof cost?.estimateSupported === "boolean" &&
+        typeof dataPolicy?.sendsDataToThirdParties === "boolean" &&
+        (!sendsData || isUniqueStringArray(dataPolicy?.providers)) &&
+        isOptionalHttpsUrl(dataPolicy?.retentionPolicyUrl) &&
+        isOptionalHttpsUrl(dataPolicy?.trainingPolicyUrl) &&
         capability.blockConfigSchema !== null &&
         typeof capability.blockConfigSchema === "object" &&
         capability.outputSchema !== null &&
         typeof capability.outputSchema === "object"
       );
-    }),
+    }) &&
+    new Set(capabilities.map((capability) => String((capability as Record<string, unknown>).id)))
+      .size === capabilities.length,
   );
 }
 

@@ -8,7 +8,11 @@ Documentos relacionados:
 
 - [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md): tutorial de implementação.
 - [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md): ordem estratégica e catálogo por processo.
+- [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md): modelo de ameaças e requisitos do executor.
+- [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md): publicação, revisão e governança do catálogo.
+- [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json): schema validável do manifesto v1.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): domínio, processos, blocos e operadores.
+- [`LEGAL_AND_LICENSING.md`](LEGAL_AND_LICENSING.md): limites jurídicos e política de licenciamento.
 
 ## 1. Objetivos do protocolo
 
@@ -130,12 +134,16 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 
 ```json
 {
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow-os/main/docs/schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
   "id": "com.exemplo.gerador-texto",
   "name": "Gerador de texto",
   "version": "1.0.0",
   "description": "Cria textos usando um provedor externo.",
   "author": "Exemplo",
+  "license": "MIT",
+  "homepage": "https://example.com/contentflow-plugin",
+  "repository": "https://github.com/example/contentflow-plugin",
   "runtime": {
     "kind": "node",
     "version": ">=22",
@@ -179,7 +187,19 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 60000,
-        "supportsCancellation": false
+        "supportsCancellation": false,
+        "maxConcurrency": 2
+      },
+      "sideEffects": ["external_write"],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": true
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["Exemplo AI"],
+        "retentionPolicyUrl": "https://example.com/retention",
+        "trainingPolicyUrl": "https://example.com/training"
       },
       "blockConfigSchema": {
         "type": "object",
@@ -202,6 +222,9 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 - `version` segue SemVer.
 - `minCoreVersion` impede instalação em núcleos incompatíveis.
 - `capability.id` é único dentro do plugin e não muda depois de publicado.
+- `license` identifica a licença do pacote com expressão SPDX quando existir; licenças personalizadas usam um identificador estável e incluem o arquivo integral no pacote.
+- `homepage` e `repository`, quando informados, usam URLs HTTPS e apontam para páginas controladas pelo publicador.
+- Nome, descrição, autor, licença e URLs são metadados não confiáveis: a interface escapa o conteúdo e nunca renderiza HTML fornecido pelo manifesto.
 
 ### Runtime
 
@@ -217,6 +240,10 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 - `inputPorts` e `outputPorts` descrevem os papéis semânticos.
 - `acceptedInputTypes` e `producedOutputTypes` são resumos para descoberta rápida; portas são a autoridade para binding.
 - `execution` declara comportamento imediato ou assíncrono.
+- `execution.maxConcurrency` informa o teto seguro declarado pelo autor; o núcleo pode impor um valor menor.
+- `sideEffects` declara todos os efeitos observáveis fora da resposta do bloco.
+- `cost` informa se a capacidade é gratuita, tarifada ou de custo desconhecido e se consegue estimar o uso antes da confirmação.
+- `dataPolicy` informa se dados deixam a máquina, para quais provedores e onde consultar retenção e uso para treinamento.
 - `blockConfigSchema` descreve parâmetros salvos no bloco.
 - `outputSchema` adiciona validação específica da capacidade sem substituir `outputContract`.
 
@@ -340,6 +367,7 @@ Forma canônica simplificada:
 ```ts
 type PluginExecutionRequest = {
   executionId: string;
+  traceId: string;
   blockId: string;
   capabilityId: string;
   attempt: number;
@@ -376,6 +404,7 @@ O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContrac
 
 `context` contém:
 
+- localidade (`locale`) e fuso horário IANA (`timeZone`) da execução;
 - canal: `id`, nome, idioma e nicho;
 - projeto: `id` e título;
 - Processo Universal atual;
@@ -391,6 +420,8 @@ Princípios:
 - nenhum secret dentro do objeto serializável;
 - conteúdo de outros canais nunca é incluído;
 - logs não devem repetir contexto sensível integralmente.
+
+`traceId` correlaciona uma chamada entre núcleo, plugin e provedor sem revelar dados do usuário. Ele permanece o mesmo em `start`, `resume` e `cancel` do mesmo job; uma nova tentativa editorial recebe novo `traceId`. Datas continuam sendo transmitidas em ISO 8601: `timeZone` serve apenas para apresentação ou regras explicitamente dependentes do calendário local.
 
 ## 12. Formatos universais
 
@@ -698,15 +729,193 @@ Alterações que exigem nova `apiVersion` do ContentFlow OS:
 
 O Método deve salvar `pluginId`, `pluginVersion`, `capabilityId` e bindings. A execução salva um snapshot desses dados para ser reproduzível.
 
-## 21. Conformidade mínima
+## 21. Subconjunto de JSON Schema e validação
+
+`settingsSchema`, `blockConfigSchema` e `outputSchema` usam JSON Schema Draft 2020-12, limitado aos recursos que o núcleo consegue validar e renderizar de forma idêntica em todas as plataformas.
+
+O schema canônico do manifesto fica versionado em [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json). Durante o desenvolvimento, `$schema` pode apontar para a cópia local ou para a futura URL oficial; esse campo ajuda editores, mas não substitui a validação feita pelo núcleo.
+
+Recursos aceitos na API v1:
+
+- `type`, `properties`, `required`, `additionalProperties`;
+- `title`, `description`, `default`, `examples`;
+- `enum`, `const`;
+- `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`;
+- `minLength`, `maxLength`, `pattern`, `format`;
+- `minItems`, `maxItems`, `uniqueItems`, `items`;
+- `allOf`, `anyOf`, `oneOf` e `not`, desde que a interface consiga representar o resultado sem código customizado.
+
+Regras adicionais:
+
+- o schema raiz de configurações é sempre `object`;
+- `additionalProperties` deve ser `false`, salvo justificativa expressa no protocolo de uma versão futura;
+- referências remotas (`$ref` por HTTP), schemas recursivos, funções, expressões e código embutido são proibidos;
+- `format` é validado, não apenas exibido; os formatos inicialmente suportados são `uri`, `email`, `date`, `date-time` e `duration`;
+- defaults precisam satisfazer o próprio schema;
+- valores desconhecidos são rejeitados antes de chamar o plugin;
+- limites do executor prevalecem sobre limites mais permissivos do manifesto.
+
+O manifesto é validado em duas etapas: primeiro contra o schema estrutural da `apiVersion`; depois por regras semânticas, como unicidade de IDs, compatibilidade entre portas e tipos, coerência entre permissões e efeitos colaterais e existência do entrypoint.
+
+## 22. Concorrência, isolamento e limpeza
+
+Cada invocação deve ser tratada como independente. Plugins não podem depender de variáveis globais mutáveis, arquivos temporários compartilhados ou ordem entre execuções diferentes.
+
+- `maxConcurrency` declara quantas invocações da capacidade podem coexistir com segurança. Ausência não significa ilimitado: o núcleo escolhe um padrão conservador.
+- O núcleo aplica limites globais, por plugin, capacidade, provedor e usuário. O menor limite vence.
+- Duas invocações com chaves de idempotência diferentes podem executar ao mesmo tempo; a mesma chave nunca recebe dois `start` concorrentes.
+- O diretório de staging e saída é exclusivo por invocação e tentativa.
+- Ao terminar, falhar ou cancelar, o plugin fecha streams, sockets, processos filhos e handles. O executor elimina recursos restantes após o prazo de encerramento.
+- Cache só pode existir em área concedida pelo núcleo, deve ser descartável, não pode conter secrets e nunca substitui persistência do job.
+- Estado necessário para `resume` deve estar no provedor externo, no `jobId` opaco ou em armazenamento futuro explicitamente mediado pelo SDK.
+
+Uma capacidade não deve implementar mutex global para serializar silenciosamente todo o aplicativo. Se o provedor só permite uma operação por vez, declare `maxConcurrency: 1` e documente o limite.
+
+## 23. Efeitos externos, custos e confirmação
+
+`sideEffects` usa os seguintes valores:
+
+| Valor            | Significado                                                 |
+| ---------------- | ----------------------------------------------------------- |
+| `external_read`  | Consulta ou download em serviço externo.                    |
+| `external_write` | Criação, alteração ou exclusão em conta/serviço externo.    |
+| `public_publish` | Conteúdo pode se tornar público ou ser enviado a audiência. |
+| `local_artifact` | Geração de arquivo importado pelo ContentFlow OS.           |
+| `subprocess`     | Execução de programa permitido pelo executor.               |
+
+O array vazio significa que a capacidade é computacional e não produz efeitos fora de `values`. Permissões e efeitos são complementares: `network` autoriza o meio técnico; `external_write` declara a consequência.
+
+Regras:
+
+- todo efeito precisa ser declarado, descrito no README e coerente com as permissões;
+- `public_publish`, exclusão remota, compra, contratação, cobrança ou alteração irreversível exigem confirmação humana imediatamente antes do primeiro efeito, com destino e resumo visíveis;
+- confirmação não pode ser escondida em termos gerais de instalação nem reutilizada para outro destino;
+- simulação ou estimativa deve ocorrer antes da confirmação quando o provedor permitir;
+- retries automáticos não podem repetir efeitos não idempotentes;
+- o plugin registra identificadores externos necessários à reconciliação e deixa claro quando uma operação ficou em estado incerto;
+- `cancel` não promete desfazer um efeito já concluído; deve informar o que permaneceu externo.
+
+`cost.model` aceita:
+
+- `free`: a capacidade não cobra por uso, sem contar infraestrutura própria do usuário;
+- `metered`: o provedor cobra por unidade, operação, tempo ou assinatura;
+- `unknown`: o plugin não consegue afirmar o modelo de cobrança.
+
+`estimateSupported: true` obriga o plugin a fornecer uma estimativa pelo mecanismo que o SDK definir antes de iniciar operações tarifadas. Estimativas são informativas, incluem moeda/unidade e nunca são apresentadas como preço garantido. Mudança de custo ou efeito externo significativo exige major version do plugin e novo consentimento.
+
+## 24. Privacidade, dados externos e conteúdo não confiável
+
+`dataPolicy.sendsDataToThirdParties` é `true` quando qualquer entrada, contexto, metadado ou arquivo pode sair da máquina do usuário. Nesse caso:
+
+- `providers` lista empresas ou serviços que recebem dados diretamente;
+- URLs de retenção e treinamento devem apontar para políticas públicas atuais quando existirem;
+- a instalação e a configuração do bloco exibem quais dados podem sair e para qual finalidade;
+- o plugin envia somente os campos necessários para a capacidade;
+- dados de um canal não podem ser combinados com outro canal;
+- secrets de provedor nunca são encaminhados a outro provedor;
+- o plugin não pode usar conteúdo do usuário para treinamento, analytics de conteúdo ou finalidade secundária sem consentimento separado e explícito;
+- mudança de provedor ou finalidade exige atualização do manifesto e novo consentimento.
+
+Todo conteúdo externo e todo conteúdo gerado por IA são não confiáveis. O plugin deve tratar páginas, legendas, documentos, prompts, nomes de arquivos e metadados como dados, nunca como instruções do sistema. Em especial:
+
+- instruções encontradas dentro de uma entrada não ampliam permissões;
+- URLs são validadas contra SSRF, esquemas inseguros, redirecionamentos e destinos locais;
+- HTML é sanitizado e scripts não são executados;
+- arquivos são verificados por tipo real, tamanho, descompressão excessiva e conteúdo ativo;
+- valores externos não são interpolados em shell, SQL, caminhos ou templates executáveis;
+- logs e mensagens de erro minimizam dados pessoais e permitem redaction.
+
+O núcleo deve oferecer ao usuário uma forma de inspecionar e revogar consentimentos, apagar settings/secrets locais e identificar o provedor que processou cada execução.
+
+## 25. Proveniência, direitos e mídia gerada
+
+Capacidades que buscam ou geram mídia preservam, quando disponíveis:
+
+- URL e identificador da fonte;
+- autor ou titular informado;
+- licença e URL da licença;
+- data de obtenção;
+- termos ou restrições relevantes;
+- provedor, modelo e parâmetros necessários à rastreabilidade;
+- indicação de conteúdo sintético quando fornecida pelo provedor;
+- hash do arquivo importado.
+
+Um resultado tecnicamente válido não implica autorização jurídica de uso. O plugin não deve rotular um asset como “livre” ou “comercial” sem base verificável. Quando a licença estiver ausente ou ambígua, deve marcar a condição como desconhecida para decisão humana.
+
+O README do plugin informa quem é responsável por contas, termos do provedor, direitos de imagem, voz, música, marcas, dados pessoais e publicação. Metadados de proveniência devem acompanhar `records` ou artifacts por campos definidos na capacidade; o núcleo poderá padronizar um envelope de proveniência em versão compatível futura.
+
+Plugins e conteúdos de terceiros possuem suas próprias licenças. A licença do ContentFlow OS não relicencia automaticamente plugins independentes, e a licença de um plugin não concede direito de copiar o núcleo.
+
+## 26. Dependências, snapshots e ausência de plugin
+
+Um Método referencia exatamente `pluginId`, `pluginVersion`, `capabilityId`, configuração e bindings. Na execução, o snapshot registra também hash do pacote e `apiVersion`.
+
+- Um plugin não pode importar código ou chamar capacidades de outro plugin diretamente.
+- Composição entre capacidades ocorre no Método, por blocos e contratos universais, mantendo dependências visíveis.
+- Se a versão exata não estiver instalada, o núcleo não substitui silenciosamente por outra versão.
+- Uma versão patch ou minor compatível pode ser proposta ao usuário; a decisão e a versão efetiva ficam no snapshot.
+- Plugin ausente, desativado, revogado ou incompatível gera `blocked_executor` com instrução de resolução, nunca sucesso fictício.
+- Outputs já produzidos continuam acessíveis após remoção do plugin.
+- Importação de Método apresenta dependências, permissões, provedores, custos e versões antes de instalar qualquer pacote.
+
+Para reprodutibilidade, o catálogo deve manter o pacote ou hash das versões usadas durante o período de suporte. Se um provedor remoto mudar o comportamento do modelo, o plugin registra a versão/modelo efetivamente usados sempre que a API permitir.
+
+## 27. Atualização, migração e descontinuação
+
+O plugin pode declarar futuramente migrações de configuração, mas a API v1 não executa scripts arbitrários de migração. Alterações de schema devem ser compatíveis ou exigir uma nova major com migração mediada pelo núcleo e confirmação do usuário.
+
+Política mínima de descontinuação:
+
+- marcar a versão/capacidade como `deprecated` no catálogo sem removê-la imediatamente;
+- explicar substituto e prazo de suporte;
+- preservar documentação e verificação de integridade das versões ainda referenciadas;
+- impedir novas seleções somente após aviso adequado;
+- não alterar um pacote publicado sob o mesmo número de versão;
+- usar revogação imediata apenas para malware, credencial comprometida, violação grave ou risco material.
+
+Atualizações são instaladas lado a lado ou de modo atomicamente reversível. Falha de validação mantém a versão anterior. Jobs assíncronos continuam presos à versão que iniciou a operação.
+
+## 28. Diagnóstico, telemetria e suporte
+
+O executor associa logs, métricas e eventos a `traceId`, `executionId`, bloco, tentativa, plugin, capacidade e versão, sem incluir secrets ou conteúdo integral.
+
+Telemetria do plugin:
+
+- é desativada por padrão quando não for indispensável ao serviço contratado;
+- requer declaração de provedor e finalidade;
+- não pode capturar prompts, arquivos ou outputs para analytics sem consentimento separado;
+- respeita exclusão e preferências locais;
+- não envia identificadores estáveis desnecessários.
+
+O pacote deve documentar canal de suporte e de vulnerabilidades. Diagnósticos exportáveis passam por redaction, mostram previamente o que será compartilhado e dependem de ação humana. Health checks não usam secrets nem realizam cobrança, publicação ou escrita externa.
+
+## 29. Governança e distribuição do ecossistema
+
+O catálogo diferencia plugins `official`, `verified` e `community`:
+
+- `official`: mantido e assinado pelo ContentFlow OS;
+- `verified`: identidade, pacote e requisitos mínimos revisados, sem garantia de ausência de falhas;
+- `community`: distribuído pelo autor e ainda não verificado pelo projeto.
+
+Todo anúncio exibe autor, licença, versão, origem, hash/assinatura quando disponível, permissões, efeitos externos, provedores, política de dados, custos, suporte e histórico de segurança. “Verified” não equivale a endosso do conteúdo gerado ou dos termos do provedor.
+
+O processo de publicação, revisão, denúncia, revogação e recurso está detalhado em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md). Requisitos técnicos de ameaça e resposta a incidentes estão em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
+
+Plugins podem ser gratuitos, pagos, proprietários ou de código aberto conforme a licença de cada autor, desde que sejam integrações independentes construídas sobre o protocolo público. Não podem incorporar código protegido do núcleo nem se apresentar como clone, edição white-label ou substituto rebatizado do ContentFlow OS. A exceção para plugins e os limites de uso do código principal estão no [`LICENSE`](../LICENSE).
+
+## 30. Conformidade mínima
 
 Antes de publicar um plugin:
 
 - [ ] Manifesto válido e IDs estáveis.
+- [ ] Licença, autoria, origem e suporte documentados.
 - [ ] Runtime e entrypoint compatíveis.
 - [ ] Portas obrigatórias e opcionais declaradas.
 - [ ] Configuração validada e defaults visíveis.
 - [ ] Permissões mínimas.
+- [ ] Efeitos externos, custos, provedores e políticas de dados declarados.
+- [ ] Confirmação humana testada para publicação e ações irreversíveis.
+- [ ] Concorrência, idempotência e limpeza de recursos testadas.
 - [ ] Secrets ausentes de método, resposta e logs.
 - [ ] Sucesso validado para todos os formatos declarados.
 - [ ] Entrada ausente e tipo incorreto testados.
@@ -717,6 +926,9 @@ Antes de publicar um plugin:
 - [ ] Rate limit e falha do provedor tratados.
 - [ ] Retry com `retryFeedback` testado.
 - [ ] Uso e logs não expõem conteúdo sensível.
+- [ ] Conteúdo externo tratado como não confiável e resistência a prompt injection testada.
+- [ ] Proveniência e situação de licença de mídia preservadas quando disponíveis.
+- [ ] Ausência, atualização e descontinuação do plugin não corrompem Métodos ou outputs.
 - [ ] README documenta custos, limites, licenças e efeitos externos.
 
 O ContentFlow Reference Plugin será a implementação executável de conformidade para este protocolo.

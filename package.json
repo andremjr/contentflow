@@ -1,6 +1,7 @@
 {
   "name": "contentflow-os",
   "private": true,
+  "license": "LicenseRef-ContentFlow-Source-Available-1.0",
   "sideEffects": false,
   "type": "module",
   "scripts": {

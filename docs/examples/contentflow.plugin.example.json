@@ -1,10 +1,14 @@
 {
+  "$schema": "../schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
   "id": "com.exemplo.thumbnail-renderer",
   "name": "Thumbnail Renderer",
   "version": "1.0.0",
   "description": "Renderiza uma thumbnail a partir de um layout 16:9.",
   "author": "Exemplo",
+  "license": "MIT",
+  "homepage": "https://example.com/contentflow-thumbnail-renderer",
+  "repository": "https://github.com/example/contentflow-thumbnail-renderer",
   "runtime": {
     "kind": "node",
     "version": ">=22",
@@ -12,7 +16,7 @@
   },
   "minCoreVersion": "1.0.0",
   "entrypoint": "dist/index.js",
-  "permissions": ["network"],
+  "permissions": ["network", "filesystem:write"],
   "secretKeys": ["IMAGE_PROVIDER_API_KEY"],
   "capabilities": [
     {
@@ -47,7 +51,19 @@
       "execution": {
         "mode": "async",
         "defaultTimeoutMs": 30000,
-        "supportsCancellation": true
+        "supportsCancellation": true,
+        "maxConcurrency": 2
+      },
+      "sideEffects": ["external_write", "local_artifact"],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": true
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["Example Image Provider"],
+        "retentionPolicyUrl": "https://example.com/privacy",
+        "trainingPolicyUrl": "https://example.com/ai-data-policy"
       },
       "blockConfigSchema": {
         "type": "object",

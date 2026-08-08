@@ -28,13 +28,26 @@ export type JsonSchema = {
   properties?: Record<string, JsonSchema>;
   required?: string[];
   enum?: Array<string | number | boolean>;
+  examples?: unknown[];
   items?: JsonSchema;
   default?: unknown;
   format?: string;
   minimum?: number;
   maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+  multipleOf?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
   const?: unknown;
+  allOf?: JsonSchema[];
   anyOf?: JsonSchema[];
+  oneOf?: JsonSchema[];
+  not?: JsonSchema;
   additionalProperties?: boolean | JsonSchema;
 };
 
@@ -61,6 +74,22 @@ export type PluginExecutionPolicy = {
   mode: "immediate" | "async";
   defaultTimeoutMs?: number;
   supportsCancellation?: boolean;
+  maxConcurrency?: number;
+};
+
+export type PluginSideEffect =
+  "external_read" | "external_write" | "public_publish" | "local_artifact" | "subprocess";
+
+export type PluginCostPolicy = {
+  model: "free" | "metered" | "unknown";
+  estimateSupported: boolean;
+};
+
+export type PluginDataPolicy = {
+  sendsDataToThirdParties: boolean;
+  providers?: string[];
+  retentionPolicyUrl?: string;
+  trainingPolicyUrl?: string;
 };
 
 export type PluginFieldContract = Pick<
@@ -80,17 +109,24 @@ export type PluginCapability = {
   acceptedInputTypes?: PluginDataType[];
   producedOutputTypes?: PluginDataType[];
   execution: PluginExecutionPolicy;
+  sideEffects: PluginSideEffect[];
+  cost: PluginCostPolicy;
+  dataPolicy: PluginDataPolicy;
   blockConfigSchema: JsonSchema;
   outputSchema: JsonSchema;
 };
 
 export type PluginManifest = {
+  $schema?: string;
   apiVersion: typeof CONTENTFLOW_PLUGIN_API_VERSION;
   id: string;
   name: string;
   version: string;
   description: string;
   author: string;
+  license: string;
+  homepage?: string;
+  repository?: string;
   runtime: PluginRuntime;
   minCoreVersion?: string;
   entrypoint: string;
@@ -101,6 +137,8 @@ export type PluginManifest = {
 };
 
 export type PluginExecutionContext = {
+  locale: string;
+  timeZone: string;
   channel: { id: string; name: string; language: string; niche: string };
   project: { id: string; title: string };
   processType: UniversalProcess;
@@ -146,6 +184,7 @@ export type PluginUsage = {
 
 export type PluginExecutionRequest = {
   executionId: string;
+  traceId: string;
   blockId: string;
   capabilityId: string;
   attempt: number;

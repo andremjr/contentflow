@@ -6,4 +6,6 @@ O primeiro plugin será adicionado somente depois da validação completa da pro
 
 O passo a passo, exemplos de manifesto e fixtures estão em [`docs/PLUGIN_DEVELOPMENT.md`](../../docs/PLUGIN_DEVELOPMENT.md).
 
+Os requisitos obrigatórios de isolamento e publicação estão em [`docs/PLUGIN_SECURITY.md`](../../docs/PLUGIN_SECURITY.md) e [`docs/PLUGIN_ECOSYSTEM.md`](../../docs/PLUGIN_ECOSYSTEM.md).
+
 A sequência recomendada dos plugins oficiais está em [`docs/PLUGIN_ROADMAP.md`](../../docs/PLUGIN_ROADMAP.md).

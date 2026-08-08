@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/andremjr/contentflow-os/main/docs/schemas/contentflow-plugin-v1.schema.json",
+  "title": "ContentFlow OS Plugin Manifest API v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "id",
+    "name",
+    "version",
+    "description",
+    "author",
+    "license",
+    "runtime",
+    "entrypoint",
+    "permissions",
+    "capabilities"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri-reference" },
+    "apiVersion": { "const": "1" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+$",
+      "minLength": 3,
+      "maxLength": 160
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "version": { "$ref": "#/$defs/semver" },
+    "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "author": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "license": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "homepage": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "repository": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "version", "module"],
+      "properties": {
+        "kind": { "const": "node" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "module": { "const": "esm" }
+      }
+    },
+    "minCoreVersion": { "$ref": "#/$defs/semver" },
+    "entrypoint": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 260,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["network", "filesystem:read", "filesystem:write", "process"]
+      }
+    },
+    "secretKeys": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]*$",
+        "maxLength": 100
+      }
+    },
+    "settingsSchema": { "$ref": "#/$defs/jsonSchema" },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/capability" }
+    }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "dataType": {
+      "enum": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "file",
+        "files",
+        "image",
+        "audio",
+        "video",
+        "approval",
+        "thumbnail_layout"
+      ]
+    },
+    "jsonSchema": {
+      "type": "object",
+      "description": "JSON Schema Draft 2020-12 restricted by the protocol.",
+      "additionalProperties": true
+    },
+    "inputPort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "acceptedTypes", "required"],
+      "properties": {
+        "key": { "$ref": "#/$defs/identifier" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "acceptedTypes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/dataType" }
+        },
+        "required": { "type": "boolean" },
+        "multiple": { "type": "boolean" }
+      }
+    },
+    "outputPort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "producedTypes", "required"],
+      "properties": {
+        "key": { "$ref": "#/$defs/identifier" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "producedTypes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/dataType" }
+        },
+        "required": { "type": "boolean" }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "operator",
+        "blockTypes",
+        "inputPorts",
+        "outputPorts",
+        "execution",
+        "sideEffects",
+        "cost",
+        "dataPolicy",
+        "blockConfigSchema",
+        "outputSchema"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "operator": { "enum": ["IA", "Código"] },
+        "blockTypes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"] }
+        },
+        "processTypes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "theme",
+              "title",
+              "thumbnail",
+              "script",
+              "narration",
+              "assets",
+              "editing",
+              "publishing"
+            ]
+          }
+        },
+        "inputPorts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/inputPort" }
+        },
+        "outputPorts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/outputPort" }
+        },
+        "acceptedInputTypes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/dataType" }
+        },
+        "producedOutputTypes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/dataType" }
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "enum": ["immediate", "async"] },
+            "defaultTimeoutMs": { "type": "integer", "minimum": 100, "maximum": 3600000 },
+            "supportsCancellation": { "type": "boolean" },
+            "maxConcurrency": { "type": "integer", "minimum": 1, "maximum": 100 }
+          }
+        },
+        "sideEffects": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "external_read",
+              "external_write",
+              "public_publish",
+              "local_artifact",
+              "subprocess"
+            ]
+          }
+        },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model", "estimateSupported"],
+          "properties": {
+            "model": { "enum": ["free", "metered", "unknown"] },
+            "estimateSupported": { "type": "boolean" }
+          }
+        },
+        "dataPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sendsDataToThirdParties"],
+          "properties": {
+            "sendsDataToThirdParties": { "type": "boolean" },
+            "providers": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+            },
+            "retentionPolicyUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+            "trainingPolicyUrl": { "type": "string", "format": "uri", "pattern": "^https://" }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": { "sendsDataToThirdParties": { "const": true } },
+                "required": ["sendsDataToThirdParties"]
+              },
+              "then": { "required": ["providers"] }
+            }
+          ]
+        },
+        "blockConfigSchema": { "$ref": "#/$defs/jsonSchema" },
+        "outputSchema": { "$ref": "#/$defs/jsonSchema" }
+      }
+    }
+  }
+}

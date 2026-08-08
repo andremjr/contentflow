@@ -25,3 +25,14 @@ Não há login nem sincronização em nuvem nesta fase.
 
 - [Arquitetura e visão de produto](docs/ARCHITECTURE.md)
 - [Protocolo de plugins](docs/PLUGIN_PROTOCOL.md)
+- [Guia de desenvolvimento de plugins](docs/PLUGIN_DEVELOPMENT.md)
+- [Roadmap estratégico de plugins](docs/PLUGIN_ROADMAP.md)
+- [Segurança de plugins](docs/PLUGIN_SECURITY.md)
+- [Governança do ecossistema](docs/PLUGIN_ECOSYSTEM.md)
+- [Proteção jurídica e licenciamento](docs/LEGAL_AND_LICENSING.md)
+
+## Licença
+
+Copyright © 2026 André Marinho Jr. O ContentFlow OS é distribuído sob uma [licença proprietária source-available](LICENSE), não sob uma licença open source.
+
+É permitido usar o produto original e desenvolver plugins independentes pelo protocolo público. Não é concedida autorização para clones, versões modificadas distribuídas, produtos concorrentes, white-label, rebranding ou reskins. Consulte também a [política para ferramentas de IA](AI_USAGE_POLICY.md).

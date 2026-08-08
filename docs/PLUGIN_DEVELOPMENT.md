@@ -1,6 +1,6 @@
 # Desenvolvimento de plugins
 
-Este guia leva um plugin do manifesto ao resultado validado. O protocolo normativo é [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), a referência TypeScript é [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e a ordem estratégica está em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md).
+Este guia leva um plugin do manifesto ao resultado validado. O protocolo normativo é [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), a referência TypeScript é [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e a ordem estratégica está em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Antes de distribuir, consulte também [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md) e [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md).
 
 > Estado atual: o ContentFlow OS já descobre e apresenta manifestos. O carregamento isolado do `entrypoint` ainda não está disponível. Este guia define o alvo de implementação para que plugins possam ser preparados sem inventar contratos paralelos.
 
@@ -33,7 +33,7 @@ O pacote distribuído precisa conter o manifesto e o arquivo indicado por `entry
 
 ## 3. Declare o manifesto
 
-Comece pelo exemplo completo em [`examples/contentflow.plugin.example.json`](examples/contentflow.plugin.example.json). Defina:
+Comece pelo exemplo completo em [`examples/contentflow.plugin.example.json`](examples/contentflow.plugin.example.json) e valide-o com [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json). Defina:
 
 1. identidade estável e versão semântica;
 2. menor conjunto possível de permissões;
@@ -43,6 +43,9 @@ Comece pelo exemplo completo em [`examples/contentflow.plugin.example.json`](exa
 6. portas semânticas de entrada e saída;
 7. política imediata ou assíncrona;
 8. blocos, processos e formatos realmente suportados.
+9. licença, autoria, repositório e suporte;
+10. efeitos externos, modelo de custo e política de dados;
+11. limite seguro de concorrência.
 
 `blockConfigSchema` descreve opções escolhidas no método, como modelo, temperatura ou endpoint. `settingsSchema` descreve preferências locais reutilizadas entre métodos. Credenciais ficam apenas em `secretKeys`.
 
@@ -104,6 +107,8 @@ Boas propriedades do handler:
 - abortável pelo executor e com timeout próprio para chamadas externas;
 - sem efeitos colaterais fora das permissões declaradas;
 - retorna erros tipados em vez de lançar detalhes internos ao usuário.
+- usa `request.traceId` apenas para correlação segura e respeita `context.locale`/`context.timeZone` sem alterar instantes ISO 8601;
+- trata entradas, páginas, arquivos e outputs de IA como dados não confiáveis, nunca como autorização para ampliar permissões.
 
 ## 5. Leia entradas pelo contrato
 
@@ -263,7 +268,20 @@ return {
 
 Erros de autenticação, configuração ou formato de entrada normalmente não são repetíveis. Timeout, rate limit e indisponibilidade temporária normalmente são. Nunca coloque segredo, prompt privado completo ou resposta sensível em `message` ou `logs`.
 
-## 11. Teste antes de distribuir
+## 11. Declare custos, dados e efeitos com precisão
+
+Permissão técnica não descreve a consequência para o usuário. Uma capacidade com `network` pode apenas ler uma página, criar um job tarifado ou publicar um vídeo. Por isso, declare também:
+
+- `sideEffects`: leitura/escrita externa, publicação pública, artifact local e subprocesso;
+- `cost.model`: gratuito, tarifado ou desconhecido;
+- `cost.estimateSupported`: se é possível estimar antes da operação;
+- `dataPolicy`: terceiros que recebem dados e links de retenção/treinamento.
+
+Se a capacidade publica, compra, exclui ou realiza uma ação externa irreversível, prepare-a para confirmação humana imediatamente antes do efeito. Não repita automaticamente uma operação cujo estado ficou incerto; primeiro consulte o provedor usando a chave de idempotência ou identificador externo.
+
+Se buscar mídia, preserve origem, autor, licença, URL da licença e identificador quando disponíveis. Licença ausente deve ser informada como desconhecida, não presumida como livre.
+
+## 12. Teste antes de distribuir
 
 Teste no mínimo:
 
@@ -281,21 +299,29 @@ Teste no mínimo:
 - artifact ausente, inválido, grande demais ou fora do diretório permitido;
 - segunda tentativa usando `retryFeedback`;
 - ausência de segredos nos logs.
+- concorrência até `maxConcurrency`, limpeza após cancelamento e ausência de estado compartilhado entre canais;
+- conteúdo externo com prompt injection, URL privada, redirect inseguro e nome de arquivo hostil;
+- confirmação e reconciliação de efeitos externos;
+- coerência entre tráfego real, providers e política de dados declarada.
 
 Fixtures de requisição e resposta podem seguir [`examples/plugin-request.example.json`](examples/plugin-request.example.json).
 
-## 12. Checklist de publicação
+## 13. Checklist de publicação
 
 - [ ] `apiVersion` é `"1"`.
 - [ ] `id` não mudou desde a primeira publicação.
 - [ ] A versão foi incrementada de acordo com a mudança.
 - [ ] Permissões e segredos estão completos e mínimos.
+- [ ] Licença, autoria, origem e suporte estão declarados.
+- [ ] Efeitos externos, custos e política de dados correspondem ao comportamento real.
+- [ ] `maxConcurrency` foi medido e testado.
 - [ ] Portas possuem chaves semânticas estáveis e bindings testados.
 - [ ] Capacidades não prometem processos ou formatos não testados.
 - [ ] Jobs demorados usam o lifecycle assíncrono.
 - [ ] Arquivos são entregues por artifacts controlados.
 - [ ] O build de produção está no caminho do `entrypoint`.
 - [ ] README explica configuração, custos externos e limitações.
+- [ ] README explica terceiros, retenção, treinamento, proveniência e efeitos irreversíveis.
 - [ ] LICENSE acompanha o pacote.
 - [ ] Nenhum segredo ou dado local foi incluído.
 - [ ] Testes cobrem sucesso, erro e nova tentativa.

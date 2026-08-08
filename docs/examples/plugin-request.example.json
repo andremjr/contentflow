@@ -1,5 +1,6 @@
 {
   "executionId": "exec-example",
+  "traceId": "trace-example",
   "blockId": "thumbnail-create",
   "capabilityId": "render-thumbnail",
   "attempt": 1,
@@ -42,6 +43,8 @@
     }
   ],
   "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
     "channel": {
       "id": "channel-example",
       "name": "Canal exemplo",
