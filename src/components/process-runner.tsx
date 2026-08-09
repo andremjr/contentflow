@@ -17,6 +17,7 @@ import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   PROCESS_META,
@@ -45,6 +46,7 @@ import {
   chooseCollectionItem,
   completeHumanBlock,
   completeProcessOutput,
+  executePluginBlock,
   resetStage,
   retryBlockExecution,
   saveHumanBlockDraft,
@@ -98,7 +100,7 @@ export function ProcessRunner({
     activeExecution?.status === "awaiting_human" && activeBlock?.operator === "Humano";
   const waitingForHumanChoice =
     waitingForHumanAction && activeBlock?.type === "ESCOLHER" && activeBlock.operator === "Humano";
-  const blockedByMissingPlugin =
+  const blockedByPluginExecutor =
     activeExecution?.status === "blocked_executor" && activeBlock?.operator !== "Humano";
   const awaitingOutput = execution?.status === "awaiting_output";
   const methodIssue = getMethodConfigurationIssue(method);
@@ -240,8 +242,17 @@ export function ProcessRunner({
             />
           ) : awaitingOutput ? (
             <ProcessOutputGate execution={execution} onCompleted={scheduleNextProcess} />
-          ) : blockedByMissingPlugin && activeBlock ? (
-            <MissingPluginGate block={activeBlock} />
+          ) : blockedByPluginExecutor && activeBlock ? (
+            activeBlock.plugin ? (
+              <PluginExecutionGate
+                block={activeBlock}
+                project={project}
+                processType={processId}
+                onProcessCompleted={scheduleNextProcess}
+              />
+            ) : (
+              <MissingPluginGate block={activeBlock} />
+            )
           ) : execution.status === "failed" && activeBlock && activeExecution ? (
             <FailedExecutionGate
               block={activeBlock}
@@ -1079,6 +1090,129 @@ function MissingPluginGate({ block }: { block: ActionBlock }) {
         não existe um executor configurado. Para testar a produção humana, altere o operador para
         Humano.
       </p>
+    </section>
+  );
+}
+
+function PluginExecutionGate({
+  block,
+  project,
+  processType,
+  onProcessCompleted,
+}: {
+  block: ActionBlock;
+  project: Project;
+  processType: ProcessId;
+  onProcessCompleted: () => void;
+}) {
+  const [apiKey, setApiKey] = useState("");
+  const [isRunning, setIsRunning] = useState(false);
+  const [openAIConnected, setOpenAIConnected] = useState(false);
+  const plugin = block.plugin;
+
+  useEffect(() => {
+    if (plugin?.pluginId !== "official-openai-gpt") return;
+    let active = true;
+    void fetch("/api/plugins/official-openai-gpt/connection")
+      .then((response) => response.json() as Promise<{ connected?: boolean }>)
+      .then((result) => {
+        if (active) setOpenAIConnected(result.connected === true);
+      })
+      .catch(() => {
+        if (active) setOpenAIConnected(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [plugin?.pluginId]);
+
+  async function run() {
+    if (!plugin || isRunning) return;
+    if (plugin.pluginId === "official-openai-gpt" && !openAIConnected && !apiKey.trim()) {
+      toast.error("Informe a chave da API da OpenAI para executar este bloco.");
+      return;
+    }
+    setIsRunning(true);
+    try {
+      const result = await executePluginBlock({
+        projectId: project.id,
+        processType,
+        blockId: block.id,
+        pluginId: plugin.pluginId,
+        parameters: apiKey.trim() ? { api_key: apiKey.trim() } : {},
+      });
+      setApiKey("");
+      if (result.execution?.status === "completed") {
+        toast.success("Plugin executado. Processo concluído.");
+        onProcessCompleted();
+      } else {
+        toast.success("Plugin executado. O próximo bloco está pronto.");
+      }
+    } catch (error) {
+      toast.error("O plugin não conseguiu concluir o bloco", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-brand/35 bg-brand/5 p-5 sm:p-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Badge variant="outline" className="border-brand/35 text-brand-soft">
+            {block.operator === "IA" ? (
+              <Bot className="mr-1 size-3" />
+            ) : (
+              <Code2 className="mr-1 size-3" />
+            )}
+            Plugin pronto
+          </Badge>
+          <h3 className="mt-3 text-base font-semibold">{block.name ?? block.type}</h3>
+          <p className="mt-1 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">
+            {block.instructions || "Execute este bloco usando o plugin configurado no Método."}
+          </p>
+        </div>
+        <OperatorBadge block={block} />
+      </header>
+
+      <div className="mt-5 rounded-xl border border-border/70 bg-card p-4">
+        <p className="text-xs font-semibold">Plugin</p>
+        <p className="mt-1 font-mono text-xs text-muted-foreground">{plugin?.pluginId}</p>
+        {plugin?.pluginId === "official-openai-gpt" && (
+          <div className="mt-4 space-y-1.5">
+            {openAIConnected ? (
+              <p className="flex items-center gap-1.5 text-xs text-emerald-400">
+                <CheckCircle2 className="size-3.5" /> OpenAI conectada pela Central de Plugins
+              </p>
+            ) : (
+              <>
+                <Label htmlFor={`api-key-${block.id}`}>Chave da API da OpenAI</Label>
+                <Input
+                  id={`api-key-${block.id}`}
+                  type="password"
+                  autoComplete="off"
+                  value={apiKey}
+                  placeholder="sk-..."
+                  onChange={(event) => setApiKey(event.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Conecte em Plugins para reutilizar a chave durante toda a sessão local.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+        <Button className="mt-5" disabled={isRunning} onClick={() => void run()}>
+          {isRunning ? (
+            <LoaderCircle className="mr-1.5 size-4 animate-spin" />
+          ) : (
+            <Play className="mr-1.5 size-4 fill-current" />
+          )}
+          {isRunning ? "Processando..." : "Rodar Bloco / Testar Execução"}
+        </Button>
+      </div>
     </section>
   );
 }

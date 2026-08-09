@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { ChannelAvatar } from "@/components/channel-avatar";
+import { MethodAgentCta } from "@/components/method-agent-cta";
 import { TopBar } from "@/components/top-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -182,6 +183,8 @@ function MethodsLibraryPage() {
       />
 
       <main className="flex-1 px-4 py-5 sm:px-6">
+        <MethodAgentCta className="mb-5" />
+
         <section className="grid gap-3 sm:grid-cols-3">
           <Stat label="Métodos salvos" value={entries.length} />
           <Stat

@@ -142,6 +142,7 @@ export type PluginExecutionContext = {
   channel: { id: string; name: string; language: string; niche: string };
   project: { id: string; title: string };
   processType: UniversalProcess;
+  block: { type: BlockType; name: string; instructions: string };
   previousProcessOutputs: ProcessOutput[];
   previousBlockOutputs: Array<{ blockId: string; values: Record<string, RuntimeValue> }>;
   selectedCollection?: {

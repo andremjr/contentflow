@@ -2,7 +2,7 @@
 
 Este documento define o modelo de ameaças e os controles mínimos para executar plugins no ContentFlow OS. Ele complementa o contrato normativo de [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md).
 
-> Estado atual: o executor isolado ainda não foi implementado. Plugins comunitários não devem executar dentro do processo principal até que os controles obrigatórios deste documento existam e tenham testes automatizados.
+> Estado atual: plugins oficiais incluídos em `plugins/bundled` executam fora do processo principal, com timeout, ambiente mínimo e resposta limitada. Esse estágio não libera plugins comunitários: pacotes locais ou instalados continuam bloqueados até que todos os controles obrigatórios deste documento existam e tenham testes automatizados.
 
 ## 1. Objetivos
 

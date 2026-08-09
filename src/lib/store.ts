@@ -1018,6 +1018,41 @@ export function retryBlockExecution(executionId: string, blockId: string) {
   return true;
 }
 
+export async function executePluginBlock(input: {
+  projectId: string;
+  processType: UniversalProcess;
+  blockId: string;
+  pluginId: string;
+  parameters: Record<string, unknown>;
+}) {
+  const response = await fetch("/api/execute-block", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = (await response.json()) as {
+    ok?: boolean;
+    error?: string;
+    execution?: ProcessExecution;
+    project?: Project;
+    values?: Record<string, RuntimeValue>;
+    usage?: Record<string, unknown>;
+  };
+  if (body.execution) {
+    const index = db.executions.findIndex((item) => item.id === body.execution?.id);
+    if (index >= 0) db.executions[index] = normalizeExecution(body.execution);
+  }
+  if (body.project) {
+    const index = db.projects.findIndex((item) => item.id === body.project?.id);
+    if (index >= 0) db.projects[index] = body.project;
+  }
+  if (body.execution || body.project) emit();
+  if (!response.ok || !body.ok) {
+    throw new Error(body.error ?? "Não foi possível executar o plugin.");
+  }
+  return body;
+}
+
 export function resetStage(projectId: string, stage: ProcessId) {
   const project = db.projects.find((item) => item.id === projectId);
   if (!project) return;

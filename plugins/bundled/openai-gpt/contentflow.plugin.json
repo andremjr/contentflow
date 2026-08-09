@@ -1,0 +1,165 @@
+{
+  "$schema": "../../../docs/schemas/contentflow-plugin-v1.schema.json",
+  "apiVersion": "1",
+  "id": "official-openai-gpt",
+  "name": "OpenAI Models",
+  "version": "1.1.0",
+  "description": "Executa qualquer bloco baseado em linguagem com um modelo de texto compatível com a Responses API da OpenAI.",
+  "author": "ContentFlow OS",
+  "license": "LicenseRef-ContentFlow-Source-Available-1.0",
+  "homepage": "https://github.com/andremjr/contentflow-os",
+  "repository": "https://github.com/andremjr/contentflow-os",
+  "runtime": {
+    "kind": "node",
+    "version": ">=22",
+    "module": "esm"
+  },
+  "entrypoint": "handler.ts",
+  "permissions": ["network"],
+  "capabilities": [
+    {
+      "id": "generate-or-validate-text",
+      "operator": "IA",
+      "blockTypes": ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
+      "processTypes": [
+        "theme",
+        "title",
+        "thumbnail",
+        "script",
+        "narration",
+        "assets",
+        "editing",
+        "publishing"
+      ],
+      "inputPorts": [
+        {
+          "key": "context",
+          "label": "Contexto",
+          "acceptedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "file",
+            "files",
+            "image",
+            "audio",
+            "video",
+            "approval",
+            "thumbnail_layout"
+          ],
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Resultado",
+          "producedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "approval"
+          ],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "file",
+        "files",
+        "image",
+        "audio",
+        "video",
+        "approval",
+        "thumbnail_layout"
+      ],
+      "producedOutputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "approval"
+      ],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 120000,
+        "supportsCancellation": false,
+        "maxConcurrency": 1
+      },
+      "sideEffects": ["external_read", "external_write"],
+      "cost": { "model": "metered", "estimateSupported": false },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["OpenAI"],
+        "retentionPolicyUrl": "https://openai.com/enterprise-privacy/",
+        "trainingPolicyUrl": "https://openai.com/enterprise-privacy/"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Modelo OpenAI",
+            "description": "Escolha o equilíbrio desejado entre qualidade e custo. A disponibilidade depende da sua conta OpenAI.",
+            "default": "gpt-5.6-terra",
+            "oneOf": [
+              { "const": "gpt-5.6-sol", "title": "GPT-5.6 Sol — máxima qualidade" },
+              { "const": "gpt-5.6-terra", "title": "GPT-5.6 Terra — equilibrado" },
+              { "const": "gpt-5.6-luna", "title": "GPT-5.6 Luna — econômico" },
+              { "const": "gpt-5.5", "title": "GPT-5.5" },
+              { "const": "gpt-5.4", "title": "GPT-5.4" },
+              { "const": "gpt-5.4-mini", "title": "GPT-5.4 mini" },
+              { "const": "gpt-5.4-nano", "title": "GPT-5.4 nano" },
+              { "const": "gpt-5-mini", "title": "GPT-5 mini — geração anterior" }
+            ]
+          },
+          "system_prompt": {
+            "type": "string",
+            "title": "Prompt de sistema",
+            "format": "textarea",
+            "default": "Execute as instruções do bloco usando o contexto disponível e respeite exatamente o contrato de saída."
+          },
+          "temperature": {
+            "type": "number",
+            "title": "Temperatura",
+            "description": "Quando o modelo não aceitar temperatura, o plugin tentará novamente sem este parâmetro.",
+            "minimum": 0,
+            "maximum": 2,
+            "default": 0.7
+          }
+        }
+      },
+      "outputSchema": { "type": "object" }
+    }
+  ]
+}

@@ -3,6 +3,33 @@ import Database from "better-sqlite3";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import type {
+  ActionBlock,
+  BlockExecution,
+  Channel,
+  ChannelLibraryItem,
+  ProcessExecution,
+  Project,
+  RuntimeValue,
+  StrategicCollection,
+  UniversalProcess,
+} from "../src/lib/domain";
+import { PROCESS_ORDER } from "../src/lib/domain";
+import { createProcessOutputFields, isEmptyRuntimeValue } from "../src/lib/human-workflow";
+import type { PluginExecutionRequest, PluginFieldContract } from "../src/lib/plugin-contract";
+import { resolveBlockInputs } from "../src/lib/runtime-contract";
+import {
+  executeRegisteredPlugin,
+  getRegisteredPlugin,
+  initializePluginRunner,
+} from "./plugin-runner";
+import {
+  connectOpenAI,
+  disconnectOpenAI,
+  getOpenAIApiKey,
+  getOpenAIConnection,
+  refreshOpenAIModels,
+} from "./openai-connection";
 import { fetchYouTubeChannel } from "./youtube";
 
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
@@ -76,6 +103,119 @@ type StoredPayload = {
 function parseRows(rows: { payload: string }[]) {
   return rows.map((row) => JSON.parse(row.payload));
 }
+
+function readPayload<T>(table: string, id: string): T | undefined {
+  const allowedTables = new Set(["channels", "projects", "process_executions"]);
+  if (!allowedTables.has(table)) throw new Error("Tabela de leitura não permitida.");
+  const row = database.prepare(`SELECT payload FROM ${table} WHERE id = ?`).get(id) as
+    { payload: string } | undefined;
+  return row ? (JSON.parse(row.payload) as T) : undefined;
+}
+
+function executionFor(projectId: string, processType: string) {
+  const row = database
+    .prepare("SELECT payload FROM process_executions WHERE project_id = ? AND process_type = ?")
+    .get(projectId, processType) as { payload: string } | undefined;
+  return row ? (JSON.parse(row.payload) as ProcessExecution) : undefined;
+}
+
+function valuesForPluginResponse(
+  block: ActionBlock,
+  responseValues: Record<string, RuntimeValue>,
+  outputContract: PluginFieldContract[],
+) {
+  const values: Record<string, RuntimeValue> = {};
+  for (const field of block.outputs ?? []) {
+    const contract = outputContract.find((item) => item.key === field.key);
+    const value =
+      responseValues[field.key] ??
+      (contract ? responseValues[contract.portKey] : undefined) ??
+      responseValues.result;
+    if (value !== undefined) values[field.key] = value;
+  }
+  return values;
+}
+
+function updateProjectAfterPluginBlock(project: Project, execution: ProcessExecution) {
+  project.currentStage = execution.processType;
+  project.state =
+    execution.status === "awaiting_human"
+      ? "awaiting_human"
+      : execution.status === "failed"
+        ? "error"
+        : execution.status === "completed"
+          ? "done"
+          : execution.status === "blocked_executor"
+            ? "blocked"
+            : "processing";
+  project.stages = { ...project.stages, [execution.processType]: project.state };
+  if (execution.status === "completed") {
+    const completed = PROCESS_ORDER.filter(
+      (process) => project.stages[process] === "done" || project.stages[process] === "approved",
+    ).length;
+    project.progress = Math.round((completed / PROCESS_ORDER.length) * 100);
+    const next = PROCESS_ORDER.find(
+      (process) => project.stages[process] !== "done" && project.stages[process] !== "approved",
+    );
+    project.currentStage = next ?? "publishing";
+    project.state = next ? project.stages[next] : "done";
+  }
+  project.updatedAt = "Agora";
+}
+
+function finishPluginBlock(
+  execution: ProcessExecution,
+  block: ActionBlock,
+  blockExecution: BlockExecution,
+  values: Record<string, RuntimeValue>,
+) {
+  const now = new Date().toISOString();
+  blockExecution.values = values;
+  blockExecution.status = "completed";
+  blockExecution.completedAt = now;
+  blockExecution.error = undefined;
+  const completedIndex = execution.blocks.indexOf(blockExecution);
+  const nextExecution = execution.blocks[completedIndex + 1];
+  const nextBlock = execution.methodSnapshot.blocks[completedIndex + 1];
+
+  if (nextExecution && nextBlock) {
+    nextExecution.status = nextBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
+    nextExecution.startedAt = now;
+    execution.status =
+      nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
+  } else {
+    const [finalField] = createProcessOutputFields(execution.processType);
+    let finalValue: RuntimeValue | undefined;
+    let sourceBlockId: string | undefined;
+    for (let index = execution.methodSnapshot.blocks.length - 1; index >= 0; index -= 1) {
+      const candidate = execution.methodSnapshot.blocks[index];
+      if (candidate.type === "VALIDAR" || candidate.type === "ESCOLHER") continue;
+      const candidateExecution = execution.blocks.find((item) => item.blockId === candidate.id);
+      const value = candidateExecution?.values[finalField.key];
+      if (!isEmptyRuntimeValue(value)) {
+        finalValue = value;
+        sourceBlockId = candidate.id;
+        break;
+      }
+    }
+    if (finalValue !== undefined) {
+      execution.output = {
+        processType: execution.processType,
+        values: { [finalField.key]: finalValue },
+        sourceBlockId,
+        createdAt: now,
+      };
+      execution.outputStatus = "completed";
+      execution.status = "completed";
+    } else {
+      execution.outputStatus = "awaiting_human";
+      execution.status = "awaiting_output";
+    }
+  }
+  execution.updatedAt = now;
+}
+
+initializePluginRunner();
 
 type PluginSource = "bundled" | "installed";
 
@@ -387,16 +527,373 @@ app.get("/api/health", (_request, response) => {
 });
 
 app.get("/api/plugins", (_request, response) => {
+  initializePluginRunner();
   const bundled = discoverPlugins(bundledPluginsDirectory, "bundled", "plugins/bundled");
+  const local = discoverPlugins(path.join(process.cwd(), "plugins"), "installed", "plugins");
   const installed = discoverPlugins(
     installedPluginsDirectory,
     "installed",
     "data/plugins/installed",
   );
   response.json({
-    plugins: [...bundled.plugins, ...installed.plugins],
-    issues: [...bundled.issues, ...installed.issues],
+    plugins: [...bundled.plugins, ...local.plugins, ...installed.plugins],
+    issues: [...bundled.issues, ...local.issues, ...installed.issues],
   });
+});
+
+app.get("/api/plugins/official-openai-gpt/connection", (_request, response) => {
+  response.json(getOpenAIConnection());
+});
+
+app.post("/api/plugins/official-openai-gpt/connection", async (request, response) => {
+  const apiKey = typeof request.body?.apiKey === "string" ? request.body.apiKey : "";
+  try {
+    response.json(await connectOpenAI(apiKey));
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível conectar à OpenAI.",
+    });
+  }
+});
+
+app.post("/api/plugins/official-openai-gpt/models/refresh", async (_request, response) => {
+  try {
+    response.json(await refreshOpenAIModels());
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível atualizar os modelos.",
+    });
+  }
+});
+
+app.delete("/api/plugins/official-openai-gpt/connection", (_request, response) => {
+  disconnectOpenAI();
+  response.json(getOpenAIConnection());
+});
+
+app.get("/api/plugins/:pluginId/source", (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Plugin não encontrado." });
+    return;
+  }
+  if (plugin.source !== "bundled") {
+    response.status(403).json({ error: "O código de plugins externos não é exposto pela API." });
+    return;
+  }
+  const allowedExtensions = new Set([".ts", ".js", ".json", ".md"]);
+  const files = readdirSync(plugin.absoluteDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && allowedExtensions.has(path.extname(entry.name)))
+    .map((entry) => {
+      const absolutePath = path.join(plugin.absoluteDirectory, entry.name);
+      const content = readFileSync(absolutePath, "utf8");
+      return {
+        path: entry.name,
+        content: content.length > 200_000 ? `${content.slice(0, 200_000)}\n…` : content,
+      };
+    })
+    .sort((left, right) => left.path.localeCompare(right.path));
+  response.json({ root: plugin.directory, files });
+});
+
+app.post("/api/execute-block", async (request, response) => {
+  const body = request.body as {
+    projectId?: string;
+    processType?: UniversalProcess;
+    blockId?: string;
+    pluginId?: string;
+    parameters?: Record<string, unknown>;
+  };
+  if (
+    !body.projectId ||
+    !body.processType ||
+    !PROCESS_ORDER.includes(body.processType) ||
+    !body.blockId ||
+    !body.pluginId ||
+    !body.parameters ||
+    typeof body.parameters !== "object" ||
+    Array.isArray(body.parameters)
+  ) {
+    response.status(400).json({ error: "Solicitação de execução inválida." });
+    return;
+  }
+
+  const plugin = getRegisteredPlugin(body.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Plugin não encontrado no registro local." });
+    return;
+  }
+  if (!plugin.executable) {
+    response.status(403).json({
+      error: "Plugins externos ainda não podem executar sem o sandbox comunitário.",
+    });
+    return;
+  }
+
+  const project = readPayload<Project>("projects", body.projectId);
+  const execution = executionFor(body.projectId, body.processType);
+  const channel = project ? readPayload<Channel>("channels", project.channelId) : undefined;
+  if (!project || !execution || !channel) {
+    response.status(404).json({ error: "Projeto ou execução não encontrados." });
+    return;
+  }
+  const block = execution.methodSnapshot.blocks.find((item) => item.id === body.blockId);
+  const blockExecution = execution.blocks.find((item) => item.blockId === body.blockId);
+  if (!block || !blockExecution) {
+    response.status(404).json({ error: "Bloco não encontrado no snapshot desta execução." });
+    return;
+  }
+  if (
+    block.operator === "Humano" ||
+    blockExecution.status !== "blocked_executor" ||
+    block.plugin?.pluginId !== plugin.id
+  ) {
+    response.status(409).json({
+      error: "Este bloco não está pronto ou não está vinculado ao plugin informado.",
+    });
+    return;
+  }
+
+  const capability = plugin.manifest.capabilities.find(
+    (item) => item.id === block.plugin?.capabilityId,
+  );
+  if (
+    !capability ||
+    capability.operator !== block.operator ||
+    !capability.blockTypes.includes(block.type) ||
+    (capability.processTypes && !capability.processTypes.includes(body.processType))
+  ) {
+    response.status(422).json({ error: "A capacidade não é compatível com este bloco." });
+    return;
+  }
+
+  const projectExecutions = (
+    database
+      .prepare("SELECT payload FROM process_executions WHERE project_id = ?")
+      .all(project.id) as { payload: string }[]
+  ).map((row) => JSON.parse(row.payload) as ProcessExecution);
+  const collections = (
+    database
+      .prepare("SELECT payload FROM library_collections WHERE channel_id = ?")
+      .all(channel.id) as { payload: string }[]
+  ).map((row) => JSON.parse(row.payload) as StrategicCollection);
+  const libraryItems = (
+    database.prepare("SELECT payload FROM library_items WHERE channel_id = ?").all(channel.id) as {
+      payload: string;
+    }[]
+  ).map((row) => JSON.parse(row.payload) as ChannelLibraryItem);
+  const resolvedInputs = resolveBlockInputs({
+    block,
+    execution,
+    project,
+    projectExecutions,
+    collections,
+    libraryItems,
+  });
+  const missingInputs = resolvedInputs.filter((item) => !item.resolved);
+  if (missingInputs.length) {
+    response.status(422).json({
+      error: `Entradas ausentes: ${missingInputs.map((item) => item.input.label).join(", ")}.`,
+    });
+    return;
+  }
+
+  const contextPort = capability.inputPorts[0];
+  const inputContract = resolvedInputs.map((item) => ({
+    id: item.input.id,
+    portKey: contextPort?.key ?? item.input.id,
+    label: item.input.label,
+    type: item.input.type,
+    recordFields: item.input.recordFields,
+  }));
+  const serializedContext = resolvedInputs
+    .map((item) => `${item.input.label}: ${JSON.stringify(item.value)}`)
+    .join("\n");
+  const inputs: Record<string, RuntimeValue> = contextPort
+    ? { [contextPort.key]: serializedContext }
+    : {};
+  const selectedCollection =
+    block.type === "ESCOLHER"
+      ? collections.find((item) => item.id === block.collectionId)
+      : undefined;
+  const selectedCollectionItems = selectedCollection
+    ? libraryItems.filter((item) => item.collectionId === selectedCollection.id)
+    : [];
+  if (block.type === "ESCOLHER" && (!selectedCollection || !selectedCollectionItems.length)) {
+    response.status(422).json({
+      error: selectedCollection
+        ? "A coleção vinculada ao bloco não possui itens para escolher."
+        : "O bloco Escolher precisa estar vinculado a uma coleção do canal.",
+    });
+    return;
+  }
+
+  const outputContract: PluginFieldContract[] =
+    block.type === "ESCOLHER"
+      ? [
+          {
+            label: "Item escolhido",
+            key: "selectedItemId",
+            type: "text",
+            required: true,
+            portKey: capability.outputPorts[0]?.key ?? "result",
+          },
+        ]
+      : (block.outputs ?? []).map((field) => ({
+          label: field.label,
+          key: field.key,
+          type: field.type,
+          required: field.required,
+          options: field.options,
+          recordFields: field.recordFields,
+          portKey:
+            capability.outputPorts.find((port) => port.producedTypes.includes(field.type))?.key ??
+            capability.outputPorts[0]?.key ??
+            field.key,
+        }));
+  const pluginRequest: PluginExecutionRequest = {
+    executionId: execution.id,
+    traceId: randomUUID(),
+    blockId: block.id,
+    capabilityId: capability.id,
+    attempt: blockExecution.attempt ?? 1,
+    invocation: { mode: "start" },
+    configuration: {
+      ...block.plugin.configuration,
+      ...body.parameters,
+      ...(plugin.id === "official-openai-gpt" && !body.parameters.api_key && getOpenAIApiKey()
+        ? { api_key: getOpenAIApiKey() }
+        : {}),
+    },
+    settings: {},
+    inputs,
+    inputContract,
+    outputContract,
+    validation: block.validation,
+    retryFeedback: blockExecution.retryFeedback,
+    context: {
+      locale: channel.language || "pt-BR",
+      timeZone: "America/Sao_Paulo",
+      channel: {
+        id: channel.id,
+        name: channel.name,
+        language: channel.language,
+        niche: channel.niche,
+      },
+      project: { id: project.id, title: project.title },
+      processType: body.processType,
+      block: {
+        type: block.type,
+        name: block.name ?? block.type,
+        instructions: block.instructions ?? "",
+      },
+      selectedCollection: selectedCollection
+        ? {
+            collectionId: selectedCollection.id,
+            items: selectedCollectionItems.map((item) => ({
+              id: item.id,
+              values: item.values,
+            })),
+          }
+        : undefined,
+      previousProcessOutputs: projectExecutions
+        .filter(
+          (item) => item.outputStatus === "completed" && item.processType !== body.processType,
+        )
+        .map((item) => item.output!)
+        .filter(Boolean),
+      previousBlockOutputs: execution.blocks
+        .filter((item) => item.status === "completed")
+        .map((item) => ({ blockId: item.blockId, values: item.values })),
+    },
+  };
+
+  blockExecution.status = "in_progress";
+  execution.status = "running";
+  execution.updatedAt = new Date().toISOString();
+  database
+    .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
+    .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+
+  try {
+    const pluginResponse = await executeRegisteredPlugin(
+      plugin,
+      pluginRequest,
+      capability.execution.defaultTimeoutMs ?? 60_000,
+    );
+    if (pluginResponse.status !== "success") {
+      const message =
+        pluginResponse.status === "error"
+          ? pluginResponse.message
+          : "O plugin iniciou um job assíncrono, ainda não suportado por esta versão.";
+      blockExecution.status = "failed";
+      blockExecution.error = message;
+      blockExecution.logs = pluginResponse.logs;
+      execution.status = "failed";
+      execution.error = message;
+      execution.updatedAt = new Date().toISOString();
+      updateProjectAfterPluginBlock(project, execution);
+      database.transaction(() => {
+        database
+          .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
+          .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+        database
+          .prepare("UPDATE projects SET payload = ? WHERE id = ?")
+          .run(JSON.stringify(project), project.id);
+      })();
+      response.status(422).json({ error: message, execution, project });
+      return;
+    }
+
+    const values =
+      block.type === "ESCOLHER"
+        ? {
+            selectedItemId: pluginResponse.values.selectedItemId ?? pluginResponse.values.result,
+          }
+        : valuesForPluginResponse(block, pluginResponse.values, outputContract);
+    if (
+      block.type === "ESCOLHER" &&
+      !selectedCollectionItems.some((item) => item.id === values.selectedItemId)
+    ) {
+      throw new Error("O plugin não escolheu um item válido da coleção vinculada.");
+    }
+    const missingOutputs = (block.outputs ?? [])
+      .filter((field) => field.required && isEmptyRuntimeValue(values[field.key]))
+      .map((field) => field.label);
+    if (missingOutputs.length) {
+      throw new Error(`O plugin não entregou: ${missingOutputs.join(", ")}.`);
+    }
+    finishPluginBlock(execution, block, blockExecution, values);
+    blockExecution.logs = pluginResponse.logs;
+    updateProjectAfterPluginBlock(project, execution);
+    database.transaction(() => {
+      database
+        .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
+        .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+      database
+        .prepare("UPDATE projects SET payload = ? WHERE id = ?")
+        .run(JSON.stringify(project), project.id);
+    })();
+    response.json({ ok: true, execution, project, values, usage: pluginResponse.usage });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Não foi possível executar o plugin.";
+    blockExecution.status = "failed";
+    blockExecution.error = message;
+    execution.status = "failed";
+    execution.error = message;
+    execution.updatedAt = new Date().toISOString();
+    updateProjectAfterPluginBlock(project, execution);
+    database.transaction(() => {
+      database
+        .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
+        .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+      database
+        .prepare("UPDATE projects SET payload = ? WHERE id = ?")
+        .run(JSON.stringify(project), project.id);
+    })();
+    response.status(500).json({ error: message, execution, project });
+  }
 });
 
 app.get("/api/youtube/channel", async (request, response) => {

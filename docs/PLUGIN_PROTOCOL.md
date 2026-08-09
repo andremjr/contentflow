@@ -2,7 +2,7 @@
 
 Este documento é o contrato normativo entre o núcleo do ContentFlow OS e plugins dos operadores `IA` e `Código`. Em caso de divergência, a tipagem em [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e este documento devem ser atualizados juntos.
 
-O executor isolado ainda não foi implementado. Como ainda não existem plugins públicos, a API v1 pode ser refinada antes da primeira distribuição. Depois da publicação do primeiro plugin, qualquer alteração incompatível exigirá nova `apiVersion`.
+O primeiro executor isolado está implementado para plugins oficiais incluídos em `plugins/bundled`, com processo separado, timeout, ambiente mínimo, validação da resposta e persistência controlada pelo núcleo. Plugins locais ou comunitários podem ser descobertos, mas permanecem não executáveis até a conclusão dos gates de segurança. Depois da publicação do primeiro plugin, qualquer alteração incompatível exigirá nova `apiVersion`.
 
 Documentos relacionados:
 

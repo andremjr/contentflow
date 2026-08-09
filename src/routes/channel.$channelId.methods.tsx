@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
+import { MethodAgentCta } from "@/components/method-agent-cta";
 import { MethodBuilder } from "@/components/method-builder";
 import { TopBar } from "@/components/top-bar";
 import { PROCESS_ORDER, type UniversalProcess } from "@/lib/domain";
@@ -30,6 +31,7 @@ function ChannelMethodsPage() {
           { label: "Métodos de Criação" },
         ]}
       />
+      <MethodAgentCta className="px-4 pt-4 sm:px-6" />
       <MethodBuilder channelId={channel.id} initialProcess={process} />
     </AppShell>
   );

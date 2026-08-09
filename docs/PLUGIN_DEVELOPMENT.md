@@ -2,7 +2,7 @@
 
 Este guia leva um plugin do manifesto ao resultado validado. O protocolo normativo é [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), a referência TypeScript é [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e a ordem estratégica está em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Antes de distribuir, consulte também [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md) e [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md).
 
-> Estado atual: o ContentFlow OS já descobre e apresenta manifestos. O carregamento isolado do `entrypoint` ainda não está disponível. Este guia define o alvo de implementação para que plugins possam ser preparados sem inventar contratos paralelos.
+> Estado atual: o ContentFlow OS descobre manifestos e já executa entrypoints oficiais incluídos em `plugins/bundled` por um processo separado. Plugins locais e comunitários continuam apenas visíveis até a conclusão dos gates de sandbox, permissões e instalação segura.
 
 ## 1. Escolha uma capacidade pequena
 

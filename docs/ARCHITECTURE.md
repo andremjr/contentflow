@@ -93,7 +93,7 @@ Cada Bloco de Ação em um Método é atribuído a um Operador:
 
 Os parâmetros funcionais vivem **dentro dos Plugins**.
 
-- Quando o usuário adiciona um Bloco no Método (ex: `CRIAR`), ele seleciona o Operador (ex: `IA`) e o **Plugin** desejado (ex: `OpenAI GPT-4`).
+- Quando o usuário adiciona um Bloco no Método (ex: `CRIAR`), ele seleciona o Operador (ex: `IA`) e o **Plugin** desejado (ex: `OpenAI Models`).
 - A interface do Bloco lê o manifesto do Plugin e renderiza automaticamente na tela os campos que AQUELE plugin precisa (ex: `System Prompt`, `Temperatura`, `Modelo`).
 
 ### B. Variáveis Dinâmicas do Projeto
@@ -121,7 +121,7 @@ O operador `Humano` é o executor nativo desse mesmo contrato e não depende de 
 
 O Método armazena apenas esse esquema. Os valores efetivamente preenchidos pertencem à execução do Projeto/Vídeo e nunca são gravados como parte do Método.
 
-Na primeira versão funcional, métodos compostos integralmente por blocos humanos podem ser executados de ponta a ponta. `IA` e `Código` permanecem disponíveis no modelo e na interface, mas dependem de plugins futuros e devem ficar explicitamente bloqueados enquanto não houver executor configurado.
+Métodos compostos integralmente por blocos humanos podem ser executados de ponta a ponta. Blocos `IA` e `Código` são liberados quando possuem um plugin oficial compatível configurado. A configuração funcional permanece no Método. Secrets como chaves de API nunca são serializados no Método ou no SQLite: nesta primeira implementação, a chave OpenAI pode ser conectada na Central de Plugins e permanece somente na memória da sessão local, com preenchimento transitório na execução como alternativa. Sem plugin configurado, o bloco permanece explicitamente bloqueado.
 
 ---
 
@@ -132,7 +132,8 @@ O orquestrador do sistema funciona em modelo de **Máquina de Estados Concorrent
 1. Lê o JSON do Método do Canal para o processo atual.
 2. Executa os blocos sequencialmente injetando as saídas do bloco anterior no bloco seguinte.
 3. **Pausa e Retomada para Operador Humano**: Se um bloco for atribuído ao operador `Humano`, o motor pausa o estado da execução (`awaiting_human`), gera uma notificação e um cartão interativo no Projeto, e aguarda a entrega ou seleção do usuário para continuar a esteira.
-4. **Bloqueio de executores ausentes**: Blocos `IA` e `Código` entram em `blocked_executor` enquanto não houver um plugin compatível configurado. Eles nunca são concluídos de forma fictícia.
+4. **Execução por plugin**: Blocos `IA` e `Código` entram em `blocked_executor` até o usuário disparar o plugin compatível configurado. O servidor resolve as entradas, executa plugins oficiais incluídos em um processo separado, valida a resposta, persiste os valores no snapshot do bloco e ativa a próxima etapa.
+5. **Bloqueio de executores ausentes**: Blocos sem plugin compatível permanecem em `blocked_executor`. Eles nunca são concluídos de forma fictícia.
 
 Os métodos permanecem lineares: não existem ramificações, junções, paralelismo ou loops genéricos no canvas. Uma entrada pode apontar explicitamente para a saída de qualquer bloco anterior ou processo universal anterior, e um bloco pode declarar várias entradas.
 
@@ -175,6 +176,8 @@ Cada Canal possui uma biblioteca de elementos pré-existentes, como estruturas d
 
 O bloco `ESCOLHER` é o único bloco cuja função é selecionar elementos preexistentes da Biblioteca Estratégica. Todo bloco `ESCOLHER` deve estar obrigatoriamente vinculado a uma coleção do mesmo canal. Selecionar, aprovar ou reprovar resultados produzidos durante a execução pertence ao bloco `VALIDAR`.
 
+O operador do bloco `ESCOLHER` pode ser Humano, IA ou Código. Quando executado por plugin, o núcleo entrega somente os itens da coleção vinculada e só aceita como resultado o identificador de um item real dessa coleção; o plugin não pode criar uma opção nova nesse bloco.
+
 A Biblioteca Estratégica é diferente da Biblioteca de Métodos: a primeira contém peças utilizadas dentro das ações; a segunda permite reutilizar sequências completas de ações entre canais.
 
 Além dos campos simples, uma coleção pode usar o formato especializado `Layout de thumbnail`. Cada item desse tipo armazena uma composição 16:9 criada no canvas visual, com caixas posicionadas em coordenadas percentuais. O mesmo formato faz parte do contrato universal de blocos, portanto o layout escolhido pode atravessar conexões tipadas e orientar um plugin de montagem programática sem perder sua estrutura.
@@ -204,7 +207,9 @@ Os outputs concluídos dos processos anteriores são injetados automaticamente c
 
 ## 12. Protocolo de Plugins
 
-O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local.
+O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. A primeira implementação executa somente plugins oficiais de `plugins/bundled`; plugins locais ou comunitários são descobertos, mas continuam bloqueados até a conclusão dos gates de sandbox comunitária.
+
+O plugin oficial `OpenAI Models` usa a Responses API e pode operar ações baseadas em linguagem nos quatro Blocos Essenciais e nos oito Processos Universais. Depois da conexão local, o servidor consulta `GET /v1/models` com a chave da sessão e o construtor substitui o catálogo de fallback pelos modelos de linguagem realmente disponíveis nessa conta. Os parâmetros declarados em `blockConfigSchema` aparecem imediatamente após a vinculação do plugin ao bloco. Modelos especializados de imagem, áudio, vídeo, transcrição ou embeddings continuam exigindo plugins próprios, pois usam contratos de mídia e APIs diferentes de um LLM com saída textual.
 
 ---
 

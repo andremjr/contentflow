@@ -125,6 +125,12 @@ export type BlockValidationConfig = {
   maxAttempts: number;
 };
 
+export type BlockPluginBinding = {
+  pluginId: string;
+  capabilityId: string;
+  configuration: Record<string, string | number | boolean>;
+};
+
 export type ActionBlock = {
   id: string;
   type: BlockType;
@@ -135,6 +141,7 @@ export type ActionBlock = {
   inputs?: BlockInputBinding[];
   outputs?: BlockFieldDefinition[];
   validation?: BlockValidationConfig;
+  plugin?: BlockPluginBinding;
   parameters: BlockParameter[];
   order: number;
 };

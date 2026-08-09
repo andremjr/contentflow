@@ -3,7 +3,9 @@ import {
   Blocks,
   BookOpen,
   ChevronLeft,
+  ExternalLink,
   FolderKanban,
+  HeartHandshake,
   LayoutDashboard,
   Plug,
   Workflow,
@@ -132,6 +134,22 @@ export function AppSidebar() {
           </>
         )}
       </nav>
+      <div className="border-t border-sidebar-border p-2 sm:p-3">
+        <a
+          href="https://contentflow-vip.netlify.app/"
+          target="_blank"
+          rel="noreferrer"
+          title="Quer participar do desenvolvimento do ContentFlow OS?"
+          aria-label="Quer participar do desenvolvimento do ContentFlow OS? Abrir página em uma nova aba"
+          className="group flex items-center justify-center gap-2 rounded-lg border border-brand/25 bg-brand/10 px-2 py-2.5 text-brand-soft transition hover:border-brand/40 hover:bg-brand/15 sm:justify-start sm:px-3"
+        >
+          <HeartHandshake className="size-4 shrink-0" />
+          <span className="hidden min-w-0 flex-1 text-xs font-medium leading-snug sm:block">
+            Quer participar do desenvolvimento do ContentFlow OS?
+          </span>
+          <ExternalLink className="hidden size-3.5 shrink-0 opacity-60 transition group-hover:opacity-100 sm:block" />
+        </a>
+      </div>
       <div className="hidden border-t border-sidebar-border p-3 text-xs text-muted-foreground sm:block">
         Dados locais deste dispositivo
       </div>

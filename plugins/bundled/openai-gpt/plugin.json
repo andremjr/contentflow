@@ -1,0 +1,13 @@
+{
+  "id": "official-openai-gpt",
+  "name": "OpenAI Models",
+  "operator": "ia",
+  "compatible_blocks": ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
+  "parameters_schema": {
+    "api_key": { "type": "text", "required": true },
+    "model": { "type": "text", "default": "gpt-5.6-terra" },
+    "system_prompt": { "type": "textarea" },
+    "temperature": { "type": "number", "default": 0.7 }
+  },
+  "canonical_manifest": "contentflow.plugin.json"
+}

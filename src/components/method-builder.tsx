@@ -70,8 +70,16 @@ import {
   serializeMethodFile,
   type SharedMethodFile,
 } from "@/lib/method-file";
+import type { JsonSchema, PluginManifest } from "@/lib/plugin-contract";
 import { setChannelMethod, useChannel, useChannels, useLibraryCollections } from "@/lib/store";
 import { cn } from "@/lib/utils";
+
+type DiscoveredPlugin = {
+  id: string;
+  source: "bundled" | "installed";
+  directory: string;
+  manifest: PluginManifest;
+};
 
 const BLOCK_META: Record<
   BlockType,
@@ -181,6 +189,8 @@ export function MethodBuilder({
   );
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [pendingFileImport, setPendingFileImport] = useState<SharedMethodFile | null>(null);
+  const [availablePlugins, setAvailablePlugins] = useState<DiscoveredPlugin[]>([]);
+  const [openAIModels, setOpenAIModels] = useState<Array<{ id: string; name: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadedProcessRef = useRef<UniversalProcess | null>(null);
   const editVersionRef = useRef(0);
@@ -204,6 +214,35 @@ export function MethodBuilder({
       setSelectedBlockId(blocks[0]?.id ?? null);
     }
   }, [blocks, selectedBlockId]);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/plugins")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Falha ao consultar plugins.");
+        return response.json() as Promise<{ plugins: DiscoveredPlugin[] }>;
+      })
+      .then((result) => {
+        if (active) setAvailablePlugins(result.plugins);
+      })
+      .catch(() => {
+        if (active) setAvailablePlugins([]);
+      });
+    void fetch("/api/plugins/official-openai-gpt/connection")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Falha ao consultar a conexão OpenAI.");
+        return response.json() as Promise<{ models: Array<{ id: string; name: string }> }>;
+      })
+      .then((result) => {
+        if (active) setOpenAIModels(result.models);
+      })
+      .catch(() => {
+        if (active) setOpenAIModels([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const changedProcess = loadedProcessRef.current !== processType;
@@ -687,6 +726,8 @@ export function MethodBuilder({
             channelId={channelId}
             collections={collections}
             processType={processType}
+            plugins={availablePlugins}
+            openAIModels={openAIModels}
             index={blocks.indexOf(selectedBlock)}
             total={blocks.length}
             onChange={(patch) => updateBlock(selectedBlock.id, patch)}
@@ -712,6 +753,8 @@ function BlockEditor({
   channelId,
   collections,
   processType,
+  plugins,
+  openAIModels,
   index,
   total,
   onChange,
@@ -723,6 +766,8 @@ function BlockEditor({
   channelId: string;
   collections: StrategicCollection[];
   processType: UniversalProcess;
+  plugins: DiscoveredPlugin[];
+  openAIModels: Array<{ id: string; name: string }>;
   index: number;
   total: number;
   onChange: (patch: Partial<ActionBlock>) => void;
@@ -731,6 +776,24 @@ function BlockEditor({
 }) {
   const meta = BLOCK_META[block.type];
   const Icon = meta.icon;
+  const compatibleCapabilities = plugins.flatMap((plugin) =>
+    plugin.manifest.capabilities
+      .filter(
+        (capability) =>
+          capability.operator === block.operator &&
+          capability.blockTypes.includes(block.type) &&
+          (!capability.processTypes || capability.processTypes.includes(processType)) &&
+          (block.outputs ?? []).every((field) =>
+            capability.outputPorts.some((port) => port.producedTypes.includes(field.type)),
+          ),
+      )
+      .map((capability) => ({ plugin, capability })),
+  );
+  const selectedPlugin = plugins.find((plugin) => plugin.id === block.plugin?.pluginId);
+  const selectedCapability = selectedPlugin?.manifest.capabilities.find(
+    (capability) => capability.id === block.plugin?.capabilityId,
+  );
+  const configProperties = selectedCapability?.blockConfigSchema.properties ?? {};
 
   return (
     <div>
@@ -802,7 +865,9 @@ function BlockEditor({
         <Label>Operador responsável</Label>
         <Select
           value={block.operator}
-          onValueChange={(value) => onChange({ operator: value as BlockOperator })}
+          onValueChange={(value) =>
+            onChange({ operator: value as BlockOperator, plugin: undefined })
+          }
         >
           <SelectTrigger>
             <SelectValue />
@@ -881,13 +946,192 @@ function BlockEditor({
       )}
 
       {block.operator !== "Humano" && (
-        <div className="mt-5 rounded-xl border border-warning/40 bg-warning/5 p-4 text-xs text-muted-foreground">
-          <p className="font-semibold text-warning">Plugin necessário</p>
-          <p className="mt-1">
-            Quando houver plugins compatíveis com esta ação e seus formatos, eles aparecerão aqui.
-            Até lá, este bloco ficará bloqueado durante a produção.
-          </p>
+        <div className="mt-5 space-y-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="space-y-1.5">
+            <Label>Plugin executor</Label>
+            {compatibleCapabilities.length ? (
+              <Select
+                value={block.plugin ? `${block.plugin.pluginId}::${block.plugin.capabilityId}` : ""}
+                onValueChange={(value) => {
+                  const [pluginId, capabilityId] = value.split("::");
+                  const selection = compatibleCapabilities.find(
+                    (item) => item.plugin.id === pluginId && item.capability.id === capabilityId,
+                  );
+                  const properties = selection?.capability.blockConfigSchema.properties ?? {};
+                  const configuration = Object.fromEntries(
+                    Object.entries(properties)
+                      .filter(([, schema]) => schema.default !== undefined)
+                      .map(([key, schema]) => [key, schema.default as string | number | boolean]),
+                  );
+                  onChange({ plugin: { pluginId, capabilityId, configuration } });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um plugin compatível" />
+                </SelectTrigger>
+                <SelectContent>
+                  {compatibleCapabilities.map(({ plugin, capability }) => (
+                    <SelectItem
+                      key={`${plugin.id}::${capability.id}`}
+                      value={`${plugin.id}::${capability.id}`}
+                    >
+                      {plugin.manifest.name} · {capability.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                Nenhum plugin instalado é compatível com este bloco, processo e contrato de saída.
+              </p>
+            )}
+          </div>
+
+          {selectedCapability && (
+            <div className="space-y-3">
+              {Object.entries(configProperties).map(([key, schema]) => (
+                <PluginConfigurationField
+                  key={key}
+                  propertyKey={key}
+                  schema={schema}
+                  value={block.plugin?.configuration[key]}
+                  options={
+                    selectedPlugin?.id === "official-openai-gpt" &&
+                    key === "model" &&
+                    openAIModels.length
+                      ? openAIModels.map((model) => ({ value: model.id, label: model.name }))
+                      : undefined
+                  }
+                  onChange={(value) =>
+                    onChange({
+                      plugin: {
+                        pluginId: block.plugin!.pluginId,
+                        capabilityId: block.plugin!.capabilityId,
+                        configuration: { ...block.plugin!.configuration, [key]: value },
+                      },
+                    })
+                  }
+                />
+              ))}
+              {selectedPlugin?.id === "official-openai-gpt" && (
+                <p className="text-[11px] text-muted-foreground">
+                  {openAIModels.length
+                    ? `${openAIModels.length} modelos disponíveis foram consultados na sua conta OpenAI.`
+                    : "Conecte sua chave em Plugins para atualizar os modelos disponíveis. A chave não é salva no Método."}
+                </p>
+              )}
+            </div>
+          )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function PluginConfigurationField({
+  propertyKey,
+  schema,
+  value,
+  options,
+  onChange,
+}: {
+  propertyKey: string;
+  schema: JsonSchema;
+  value: string | number | boolean | undefined;
+  options?: Array<{ value: string; label: string }>;
+  onChange: (value: string | number | boolean) => void;
+}) {
+  const label = schema.title ?? propertyKey;
+  const choices =
+    options ??
+    (schema.oneOf ?? []).flatMap((option) =>
+      typeof option.const === "string" || typeof option.const === "number"
+        ? [{ value: String(option.const), label: option.title ?? String(option.const) }]
+        : [],
+    );
+  if (schema.type === "boolean") {
+    return (
+      <label className="flex items-center gap-2 text-xs">
+        <Checkbox
+          checked={Boolean(value)}
+          onCheckedChange={(checked) => onChange(checked === true)}
+        />
+        {label}
+      </label>
+    );
+  }
+  if (choices.length) {
+    return (
+      <div className="space-y-1.5">
+        <Label>{label}</Label>
+        <Select value={String(value ?? "")} onValueChange={onChange}>
+          <SelectTrigger>
+            <SelectValue placeholder={`Selecione ${label.toLowerCase()}`} />
+          </SelectTrigger>
+          <SelectContent>
+            {choices.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {schema.description && (
+          <p className="text-[11px] text-muted-foreground">{schema.description}</p>
+        )}
+      </div>
+    );
+  }
+  if (schema.enum?.length) {
+    return (
+      <div className="space-y-1.5">
+        <Label>{label}</Label>
+        <Select value={String(value ?? "")} onValueChange={onChange}>
+          <SelectTrigger>
+            <SelectValue placeholder={`Selecione ${label.toLowerCase()}`} />
+          </SelectTrigger>
+          <SelectContent>
+            {schema.enum.map((option) => (
+              <SelectItem key={String(option)} value={String(option)}>
+                {String(option)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
+  if (schema.format === "textarea") {
+    return (
+      <div className="space-y-1.5">
+        <Label>{label}</Label>
+        <Textarea
+          value={String(value ?? "")}
+          rows={4}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <Input
+        type={schema.type === "number" || schema.type === "integer" ? "number" : "text"}
+        min={schema.minimum}
+        max={schema.maximum}
+        step={schema.type === "number" ? "0.1" : undefined}
+        value={String(value ?? "")}
+        onChange={(event) =>
+          onChange(
+            schema.type === "number" || schema.type === "integer"
+              ? Number(event.target.value)
+              : event.target.value,
+          )
+        }
+      />
+      {schema.description && (
+        <p className="text-[11px] text-muted-foreground">{schema.description}</p>
       )}
     </div>
   );

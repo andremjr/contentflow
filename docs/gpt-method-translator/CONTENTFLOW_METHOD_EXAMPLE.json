@@ -1,0 +1,82 @@
+{
+  "format": "contentflow-method",
+  "version": 1,
+  "name": "Tema validado a partir de pesquisa",
+  "exportedAt": "2026-08-08T12:00:00.000Z",
+  "method": {
+    "processType": "theme",
+    "blocks": [
+      {
+        "id": "theme-search-candidates",
+        "type": "BUSCAR",
+        "operator": "IA",
+        "name": "Pesquisar temas candidatos",
+        "instructions": "Pesquise canais brasileiros, vídeos recentes e comentários. Liste temas com alto engajamento, incluindo o ângulo e a fonte de cada item.",
+        "inputs": [
+          {
+            "id": "theme-input-project-title",
+            "label": "Ponto de partida",
+            "type": "text",
+            "source": "project",
+            "sourceKey": "title"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "theme-output-candidates",
+            "label": "Temas candidatos",
+            "key": "theme_candidates",
+            "type": "list",
+            "required": true,
+            "helpText": "Uma linha por tema, com ângulo e fonte."
+          }
+        ],
+        "parameters": [
+          {
+            "id": "theme-candidate-limit",
+            "label": "Quantidade mínima de temas",
+            "key": "candidate_limit",
+            "type": "number",
+            "value": 10,
+            "placeholder": "Ex.: 10"
+          }
+        ],
+        "order": 0
+      },
+      {
+        "id": "theme-validate-selection",
+        "type": "VALIDAR",
+        "operator": "Humano",
+        "name": "Selecionar tema pesquisado",
+        "instructions": "Escolha um tema entre os resultados pesquisados, considerando relevância ao público, potencial de promessa e possibilidade de entrega no vídeo.",
+        "outputs": [
+          {
+            "id": "theme-output-selected-value",
+            "label": "Tema escolhido",
+            "key": "selected_value",
+            "type": "text",
+            "required": true,
+            "optionsSourceBlockId": "theme-search-candidates",
+            "optionsSourceKey": "theme_candidates"
+          },
+          {
+            "id": "theme-output-feedback",
+            "label": "Observações",
+            "key": "feedback",
+            "type": "textarea",
+            "required": false
+          }
+        ],
+        "validation": {
+          "targetBlockId": "theme-search-candidates",
+          "targetOutputKey": "theme_candidates",
+          "mode": "select_one",
+          "onReject": "retry_target",
+          "maxAttempts": 2
+        },
+        "parameters": [],
+        "order": 1
+      }
+    ]
+  }
+}
