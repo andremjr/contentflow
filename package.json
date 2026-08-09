@@ -35,8 +35,8 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/react-query": "^5.101.4",
-    "@tanstack/react-router": "^1.170.16",
-    "@tanstack/react-start": "^1.168.26",
+    "@tanstack/react-router": "^1.170.21",
+    "@tanstack/react-start": "^1.168.38",
     "better-sqlite3": "12.4.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -63,12 +63,12 @@
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.20",
+    "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^15.15.0",
     "prettier": "^3.7.3",
     "tsx": "^4.23.9",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^8.0.16"
+    "vite": "^8.2.1"
   }
 }
