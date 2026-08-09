@@ -190,6 +190,7 @@ export async function execute(request: PluginRequest, services: { signal: AbortS
     model,
     instructions: systemPrompt,
     input: userPrompt,
+    store: false,
   };
   if (Number.isFinite(temperature)) payload.temperature = Math.min(2, Math.max(0, temperature));
   if (request.context.block.type === "BUSCAR") payload.tools = [{ type: "web_search" }];

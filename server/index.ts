@@ -1,6 +1,6 @@
-import express from "express";
+import express, { type ErrorRequestHandler } from "express";
 import Database from "better-sqlite3";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type {
@@ -37,6 +37,35 @@ const dataDirectory = path.join(process.cwd(), "data");
 const uploadsDirectory = path.join(dataDirectory, "uploads");
 const installedPluginsDirectory = path.join(dataDirectory, "plugins", "installed");
 const bundledPluginsDirectory = path.join(process.cwd(), "plugins", "bundled");
+const maxUploadMb = boundedEnvironmentNumber("CONTENTFLOW_MAX_UPLOAD_MB", 256, 1, 1_024);
+const maxUploadStorageGb = boundedEnvironmentNumber(
+  "CONTENTFLOW_MAX_UPLOAD_STORAGE_GB",
+  10,
+  1,
+  1_024,
+);
+const maxUploadBytes = maxUploadMb * 1024 * 1024;
+const maxUploadStorageBytes = maxUploadStorageGb * 1024 * 1024 * 1024;
+const activeUploadExtensions = new Set([
+  ".css",
+  ".htm",
+  ".html",
+  ".js",
+  ".mjs",
+  ".svg",
+  ".xhtml",
+  ".xml",
+]);
+const activeUploadMimeTypes = new Set([
+  "application/javascript",
+  "application/xhtml+xml",
+  "application/xml",
+  "image/svg+xml",
+  "text/css",
+  "text/html",
+  "text/javascript",
+  "text/xml",
+]);
 mkdirSync(dataDirectory, { recursive: true });
 mkdirSync(uploadsDirectory, { recursive: true });
 mkdirSync(installedPluginsDirectory, { recursive: true });
@@ -493,14 +522,29 @@ migrateLegacyLibraryItems();
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
-app.use("/api/files", express.static(uploadsDirectory));
+app.use(
+  "/api/files",
+  express.static(uploadsDirectory, {
+    dotfiles: "deny",
+    setHeaders(response, filePath) {
+      response.setHeader("X-Content-Type-Options", "nosniff");
+      response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+      if (activeUploadExtensions.has(path.extname(filePath).toLowerCase())) {
+        response.setHeader("Content-Disposition", "attachment");
+      }
+    },
+  }),
+);
 
 app.post(
   "/api/uploads",
-  express.raw({ type: "application/octet-stream", limit: "512mb" }),
+  express.raw({ type: "application/octet-stream", limit: maxUploadBytes }),
   (request, response) => {
-    const originalName = decodeURIComponent(String(request.headers["x-file-name"] ?? "arquivo"));
-    const mimeType = String(request.headers["x-file-type"] ?? "application/octet-stream");
+    const originalName = decodeUploadName(request.headers["x-file-name"]);
+    const mimeType = String(request.headers["x-file-type"] ?? "application/octet-stream")
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase();
     if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
       response.status(400).json({ error: "Arquivo vazio ou inválido." });
       return;
@@ -508,7 +552,20 @@ app.post(
     const extension = path
       .extname(originalName)
       .replace(/[^a-zA-Z0-9.]/g, "")
-      .slice(0, 12);
+      .slice(0, 12)
+      .toLowerCase();
+    if (activeUploadExtensions.has(extension) || activeUploadMimeTypes.has(mimeType)) {
+      response.status(415).json({
+        error: "Esse formato ativo não pode ser armazenado. Envie uma mídia ou arquivo de dados.",
+      });
+      return;
+    }
+    if (uploadDirectorySize() + request.body.length > maxUploadStorageBytes) {
+      response.status(507).json({
+        error: `O armazenamento local de uploads atingiu o limite de ${maxUploadStorageGb} GB.`,
+      });
+      return;
+    }
     const id = randomUUID();
     const storedName = `${id}${extension}`;
     writeFileSync(path.join(uploadsDirectory, storedName), request.body);
@@ -1266,6 +1323,47 @@ app.delete("/api/library/:id", (request, response) => {
   response.status(result.changes ? 204 : 404).end();
 });
 
+const payloadErrorHandler: ErrorRequestHandler = (error, _request, response, next) => {
+  if (error && typeof error === "object" && "type" in error && error.type === "entity.too.large") {
+    response.status(413).json({
+      error: `O arquivo excede o limite local de ${maxUploadMb} MB.`,
+    });
+    return;
+  }
+  next(error);
+};
+
+app.use(payloadErrorHandler);
+
 app.listen(port, "127.0.0.1", () => {
   console.log(`ContentFlow OS API local pronta em http://127.0.0.1:${port}`);
 });
+
+function boundedEnvironmentNumber(
+  name: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+) {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
+}
+
+function decodeUploadName(value: string | string[] | undefined) {
+  try {
+    return decodeURIComponent(String(value ?? "arquivo"));
+  } catch {
+    return "arquivo";
+  }
+}
+
+function uploadDirectorySize() {
+  return readdirSync(uploadsDirectory, { withFileTypes: true }).reduce((total, entry) => {
+    if (!entry.isFile()) return total;
+    try {
+      return total + statSync(path.join(uploadsDirectory, entry.name)).size;
+    } catch {
+      return total;
+    }
+  }, 0);
+}

@@ -46,11 +46,6 @@
             "multiselect",
             "datetime",
             "url",
-            "file",
-            "files",
-            "image",
-            "audio",
-            "video",
             "approval",
             "thumbnail_layout"
           ],
@@ -89,11 +84,6 @@
         "multiselect",
         "datetime",
         "url",
-        "file",
-        "files",
-        "image",
-        "audio",
-        "video",
         "approval",
         "thumbnail_layout"
       ],
@@ -121,8 +111,8 @@
       "dataPolicy": {
         "sendsDataToThirdParties": true,
         "providers": ["OpenAI"],
-        "retentionPolicyUrl": "https://openai.com/enterprise-privacy/",
-        "trainingPolicyUrl": "https://openai.com/enterprise-privacy/"
+        "retentionPolicyUrl": "https://platform.openai.com/docs/guides/your-data",
+        "trainingPolicyUrl": "https://platform.openai.com/docs/guides/your-data"
       },
       "blockConfigSchema": {
         "type": "object",

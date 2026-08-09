@@ -286,14 +286,14 @@ export function MethodBuilder({
           setSaveStatus("saved");
         }
         if (showConfirmation) {
-          toast.success(`MÃ©todo de ${PROCESS_META[savingProcess].label} salvo.`);
+          toast.success(`Método de ${PROCESS_META[savingProcess].label} salvo.`);
         }
       } catch (error) {
         if (currentProcessRef.current === savingProcess) {
           setSaveStatus("error");
           setIsDirty(true);
         }
-        toast.error("NÃ£o foi possÃ­vel salvar o mÃ©todo", {
+        toast.error("Não foi possível salvar o método", {
           description: error instanceof Error ? error.message : undefined,
         });
       }
