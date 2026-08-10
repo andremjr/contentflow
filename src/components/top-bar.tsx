@@ -19,8 +19,8 @@ export function TopBar({
   showNewProject?: boolean;
 }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-border/60 bg-background/70 backdrop-blur-xl">
-      <div className="hidden items-center gap-3 px-6 pt-3 text-xs text-muted-foreground sm:flex">
+    <header className="sticky top-0 z-20 border-b border-border bg-background">
+      <div className="hidden items-center gap-3 px-6 pt-4 text-[11px] text-muted-foreground sm:flex lg:px-8">
         {breadcrumbs.map((c, i) => (
           <div key={i} className="flex items-center gap-2">
             {i > 0 && <ChevronRight className="size-3 opacity-60" />}
@@ -29,10 +29,12 @@ export function TopBar({
         ))}
       </div>
 
-      <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <div className="flex min-h-20 items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold tracking-tight">{title}</h1>
-          {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
+          <h1 className="truncate text-2xl font-semibold leading-tight sm:text-[1.75rem]">
+            {title}
+          </h1>
+          {subtitle && <p className="mt-1 truncate text-xs text-muted-foreground">{subtitle}</p>}
         </div>
 
         <div className="flex items-center gap-2">
@@ -40,10 +42,7 @@ export function TopBar({
           {actions}
 
           {showNewProject && (
-            <Button
-              size="sm"
-              className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
-            >
+            <Button size="sm" className="h-9 gap-1.5 text-white">
               <Plus className="size-4" />
               Novo projeto
             </Button>

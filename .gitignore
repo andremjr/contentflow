@@ -17,6 +17,7 @@ dist-ssr
 .nitro
 *.local
 mini-curso-contentflow-os/
+app-screenshots-local/
 
 # Wrangler / Cloudflare
 .wrangler/

@@ -97,7 +97,7 @@ export function SortableChannelGrid({
       <SortableContext items={channelIds} strategy={rectSortingStrategy}>
         <div
           className={cn(
-            "grid gap-4 md:grid-cols-2 xl:grid-cols-4",
+            "grid gap-3 md:grid-cols-2 xl:grid-cols-3",
             activeId && "!cursor-grabbing [&_*]:!cursor-grabbing",
           )}
         >
@@ -238,28 +238,21 @@ function SortableChannelCard({
       {insertionSide && !isDragging && (
         <span
           className={cn(
-            "pointer-events-none absolute -top-1 -bottom-1 z-40 w-[3px] rounded-full bg-blue-400 shadow-[0_0_14px_rgb(96_165_250/0.9)]",
+            "pointer-events-none absolute -top-px -bottom-px z-40 w-0.5 bg-brand",
             insertionSide === "before" ? "-left-[10px]" : "-right-[10px]",
           )}
         >
-          <span className="absolute -left-[5px] top-1/2 size-[13px] -translate-y-1/2 rounded-full border-[3px] border-background bg-blue-400" />
+          <span className="absolute -left-1 top-1/2 size-2 -translate-y-1/2 rounded-full bg-brand" />
         </span>
       )}
 
       <article
         className={cn(
-          "group relative overflow-hidden rounded-2xl border border-border/70 bg-card transition-[border-color,box-shadow,opacity] duration-200 hover:border-brand/50",
+          "group relative flex min-h-48 flex-col overflow-hidden rounded-lg border border-border bg-card transition-colors duration-150 hover:border-foreground/20 hover:bg-surface-1",
           isDragging && "opacity-20",
         )}
       >
-        <div
-          className="pointer-events-none absolute inset-x-0 -top-px h-px opacity-70"
-          style={{
-            background: `linear-gradient(90deg, transparent, ${channel.color}, transparent)`,
-          }}
-        />
-
-        <div className="p-5">
+        <div className="min-w-0 flex-1 p-5">
           <div className="flex items-start justify-between gap-3">
             <ChannelIdentity channel={channel} isHidden={isHidden} />
             <div className="flex shrink-0 items-center gap-1">
@@ -310,7 +303,7 @@ function SortableChannelCard({
         <Link
           to="/channel/$channelId"
           params={{ channelId: channel.id }}
-          className="flex items-center justify-between border-t border-border/50 bg-background/30 px-5 py-3 text-xs text-brand-soft transition hover:bg-brand/10"
+          className="flex min-h-11 w-full shrink-0 items-center justify-between gap-2 border-t border-border px-5 text-xs font-semibold text-muted-foreground transition hover:bg-brand hover:text-white"
         >
           <span>Abrir canal</span>
           <ArrowRight className="size-4" />
@@ -324,16 +317,18 @@ function ChannelIdentity({ channel, isHidden }: { channel: Channel; isHidden: bo
   return (
     <div
       className={cn(
-        "flex min-w-0 items-center gap-3 transition duration-200",
+        "flex min-w-0 items-center gap-4 transition duration-200",
         isHidden && "pointer-events-none select-none blur-md",
       )}
       aria-hidden={isHidden}
     >
       <ChannelAvatar channel={channel} size="lg" className="!size-12" />
-      <div className="min-w-0">
-        <h3 className="truncate text-base font-semibold">{channel.name}</h3>
-        <p className="truncate text-xs text-muted-foreground">{channel.handle}</p>
-        <div className="mt-1 flex flex-col items-start gap-0.5 text-[11px] text-muted-foreground">
+      <div className="min-w-0 flex-1">
+        <div className="min-w-0">
+          <h3 className="truncate text-base font-semibold">{channel.name}</h3>
+          <p className="truncate text-xs text-muted-foreground">{channel.handle}</p>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1 whitespace-nowrap">
             <UsersRound className="size-3" />
             {channel.subscribers || "0 inscritos"}
@@ -348,7 +343,7 @@ function ChannelIdentity({ channel, isHidden }: { channel: Channel; isHidden: bo
 
 function ChannelDragPreview({ channel, isHidden }: { channel: Channel; isHidden: boolean }) {
   return (
-    <div className="pointer-events-none w-full overflow-hidden rounded-2xl border border-brand/70 bg-card shadow-2xl shadow-black/40 ring-1 ring-brand/25">
+    <div className="pointer-events-none w-full overflow-hidden rounded-md border border-brand bg-card">
       <div className="p-5">
         <ChannelIdentity channel={channel} isHidden={isHidden} />
       </div>

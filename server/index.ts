@@ -112,7 +112,27 @@ database.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS library_collections_channel_id ON library_collections(channel_id);
+  CREATE TABLE IF NOT EXISTS app_preferences (
+    id TEXT PRIMARY KEY,
+    theme TEXT NOT NULL,
+    language TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
+
+type AppPreferences = {
+  theme: "light" | "dark";
+  language: "pt-BR" | "en" | "es";
+};
+
+const defaultPreferences: AppPreferences = { theme: "dark", language: "pt-BR" };
+
+function readPreferences(): AppPreferences {
+  const row = database
+    .prepare("SELECT theme, language FROM app_preferences WHERE id = 'global'")
+    .get() as AppPreferences | undefined;
+  return row ?? defaultPreferences;
+}
 
 type StoredPayload = {
   id: string;
@@ -581,6 +601,33 @@ app.post(
 
 app.get("/api/health", (_request, response) => {
   response.json({ ok: true });
+});
+
+app.get("/api/preferences", (_request, response) => {
+  response.json(readPreferences());
+});
+
+app.put("/api/preferences", (request, response) => {
+  const theme = request.body?.theme;
+  const language = request.body?.language;
+  if (
+    !(["light", "dark"] as const).includes(theme) ||
+    !(["pt-BR", "en", "es"] as const).includes(language)
+  ) {
+    response.status(400).json({ error: "PreferÃªncias invÃ¡lidas." });
+    return;
+  }
+  database
+    .prepare(
+      `INSERT INTO app_preferences (id, theme, language, updated_at)
+       VALUES ('global', ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         theme = excluded.theme,
+         language = excluded.language,
+         updated_at = excluded.updated_at`,
+    )
+    .run(theme, language, new Date().toISOString());
+  response.json(readPreferences());
 });
 
 app.get("/api/plugins", (_request, response) => {

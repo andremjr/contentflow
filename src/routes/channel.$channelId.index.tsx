@@ -108,8 +108,8 @@ function ChannelWorkspace() {
         }
       />
 
-      <main className="flex-1 space-y-4 px-4 py-4 sm:px-6 sm:py-6">
-        <section className="relative isolate min-h-36 overflow-hidden rounded-2xl border border-border/70 bg-card sm:min-h-44">
+      <main className="flex-1 space-y-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <section className="relative isolate min-h-36 overflow-hidden rounded-lg bg-card sm:min-h-44">
           {channel.bannerUrl ? (
             <img
               src={channel.bannerUrl}
@@ -119,13 +119,11 @@ function ChannelWorkspace() {
             />
           ) : (
             <div
-              className="absolute inset-0"
-              style={{
-                background: `radial-gradient(circle at 20% 20%, ${channel.color}88, transparent 45%), linear-gradient(135deg, ${channel.color}55, #090f1c 70%)`,
-              }}
+              className="absolute inset-0 border-l-4"
+              style={{ backgroundColor: "var(--surface-2)", borderLeftColor: channel.color }}
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-black/15" />
+          <div className="absolute inset-0 bg-black/55" />
           <div className="relative flex min-h-36 items-end justify-between gap-4 p-4 sm:min-h-44 sm:p-5">
             <div className="flex min-w-0 items-center gap-3 text-white">
               <ChannelAvatar
@@ -148,7 +146,7 @@ function ChannelWorkspace() {
               type="button"
               size="sm"
               variant="secondary"
-              className="shrink-0 gap-1.5 bg-black/45 text-white backdrop-blur hover:bg-black/60"
+              className="shrink-0 gap-1.5 bg-black/55 text-white hover:bg-black/70"
               onClick={syncYouTube}
               disabled={isSyncing}
             >
@@ -222,14 +220,14 @@ function ProjectGrid({ projects, channel }: { projects: Project[]; channel: Chan
         return (
           <div
             key={p.id}
-            className="group relative overflow-hidden rounded-xl border border-border/70 bg-card transition hover:border-brand/50"
+            className="group relative overflow-hidden rounded-lg bg-card transition-colors hover:bg-surface-2"
           >
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute right-2 top-2 z-10 size-7 bg-black/50 text-white opacity-0 backdrop-blur transition group-hover:opacity-100 hover:bg-black/70"
+                  className="absolute right-2 top-2 z-10 size-7 bg-black/50 text-white opacity-0 transition group-hover:opacity-100 hover:bg-black/70"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <MoreHorizontal className="size-4" />
@@ -250,25 +248,16 @@ function ProjectGrid({ projects, channel }: { projects: Project[]; channel: Chan
             <Link to="/project/$projectId" params={{ projectId: p.id }} className="block">
               <div
                 className="relative aspect-video overflow-hidden"
-                style={{
-                  background: `linear-gradient(135deg, oklch(0.4 0.18 ${p.thumbHue}), oklch(0.22 0.05 ${p.thumbHue}))`,
-                }}
+                style={{ backgroundColor: `oklch(0.28 0.025 ${p.thumbHue})` }}
               >
-                <div
-                  className="absolute inset-0 opacity-40"
-                  style={{
-                    backgroundImage:
-                      "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25), transparent 60%)",
-                  }}
-                />
                 <div className="absolute left-2 top-2">
                   <ChannelAvatar channel={channel} size="sm" />
                 </div>
-                <div className="absolute bottom-2 right-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] text-white backdrop-blur">
+                <div className="absolute bottom-2 right-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white">
                   {p.duration}
                 </div>
                 {p.isLate && (
-                  <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/20 px-2 py-0.5 text-[10px] text-destructive backdrop-blur">
+                  <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-sm bg-destructive/15 px-2 py-0.5 text-[10px] text-destructive">
                     <AlertTriangle className="size-3" />
                     Atrasado
                   </div>
@@ -299,7 +288,7 @@ function ProjectGrid({ projects, channel }: { projects: Project[]; channel: Chan
                 <footer className="mt-3 flex items-center justify-between border-t border-border/50 pt-2.5 text-[11px] text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5">
                     <span
-                      className="grid size-5 place-items-center rounded-full bg-gradient-to-br from-brand to-brand-soft font-mono text-[9px] font-bold text-white"
+                      className="grid size-5 place-items-center rounded-full bg-secondary font-mono text-[9px] font-bold text-foreground"
                       title={p.assignee.name}
                     >
                       {p.assignee.initials}
@@ -366,7 +355,7 @@ function ProjectTable({ projects, channel }: { projects: Project[]; channel: Cha
                 </TableCell>
                 <TableCell>
                   <span className="inline-flex items-center gap-1.5 text-xs">
-                    <span className="grid size-5 place-items-center rounded-full bg-gradient-to-br from-brand to-brand-soft font-mono text-[9px] font-bold text-white">
+                    <span className="grid size-5 place-items-center rounded-full bg-secondary font-mono text-[9px] font-bold text-foreground">
                       {p.assignee.initials}
                     </span>
                     {p.assignee.name.split(" ")[0]}

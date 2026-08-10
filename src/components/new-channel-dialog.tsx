@@ -25,16 +25,7 @@ import { toast } from "sonner";
 import { createEmptyMethods, type Channel } from "@/lib/domain";
 import { createChannel, resolveYouTubeChannel, updateChannel } from "@/lib/store";
 
-const COLOR_PRESETS = [
-  "#2563EB",
-  "#3B82F6",
-  "#60A5FA",
-  "#8B5CF6",
-  "#EC4899",
-  "#F59E0B",
-  "#10B981",
-  "#EF4444",
-];
+const COLOR_PRESETS = ["#2563EB", "#4F6B8F", "#60727A", "#6B7080"];
 
 const LANGUAGES = ["PT-BR", "EN", "ES", "FR", "DE"];
 const FREQUENCIES = ["1x / semana", "2x / semana", "3x / semana", "Diário", "Quinzenal"];
@@ -156,10 +147,11 @@ export function NewChannelDialog({
           {trigger ?? (
             <Button
               size="sm"
-              className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
+              className="h-9 gap-1.5 px-2.5 text-white sm:px-3"
+              aria-label="Novo canal"
             >
               <Plus className="size-4" />
-              Novo canal
+              <span className="hidden sm:inline">Novo canal</span>
             </Button>
           )}
         </DialogTrigger>
@@ -167,10 +159,7 @@ export function NewChannelDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div
-              className="grid size-10 place-items-center rounded-xl border border-border/60"
-              style={{ background: `${color}20`, borderColor: `${color}66` }}
-            >
+            <div className="grid size-10 place-items-center rounded-md bg-secondary">
               <Youtube className="size-5" style={{ color }} />
             </div>
             <div>
@@ -252,12 +241,11 @@ export function NewChannelDialog({
                     type="button"
                     onClick={() => setColor(c)}
                     className={cn(
-                      "relative size-8 rounded-lg border border-border/60 transition",
-                      color === c && "ring-2 ring-offset-2 ring-offset-background",
+                      "relative size-8 rounded-md border border-white/10 transition hover:border-white/30",
+                      color === c && "ring-2 ring-brand ring-offset-2 ring-offset-popover",
                     )}
                     style={{
                       background: c,
-                      ...(color === c ? { boxShadow: `0 0 0 2px ${c}` } : {}),
                     }}
                     aria-label={`Cor ${c}`}
                   >

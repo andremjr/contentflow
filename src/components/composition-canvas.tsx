@@ -113,7 +113,7 @@ export function CompositionCanvas({
             key={b.id}
             onPointerDown={(e) => startDrag(e, b, "move")}
             className={cn(
-              "absolute cursor-move rounded-md border-2 backdrop-blur-[1px] transition-shadow",
+              "absolute cursor-move rounded-md border-2 transition-colors",
               selected === b.id && "ring-2 ring-primary ring-offset-0",
             )}
             style={{

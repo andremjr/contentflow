@@ -182,10 +182,10 @@ function MethodsLibraryPage() {
         }
       />
 
-      <main className="flex-1 px-4 py-5 sm:px-6">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <MethodAgentCta className="mb-5" />
 
-        <section className="grid gap-3 sm:grid-cols-3">
+        <section className="grid divide-y divide-border border-y border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           <Stat label="Métodos salvos" value={entries.length} />
           <Stat
             label="Canais com métodos"
@@ -228,7 +228,7 @@ function MethodsLibraryPage() {
           </div>
 
           {filteredEntries.length ? (
-            <div className="mt-4 grid gap-3 xl:grid-cols-2">
+            <div className="mt-4 divide-y divide-border border-y border-border">
               {filteredEntries.map((entry) => (
                 <MethodCard
                   key={`${entry.channel.id}-${entry.processType}`}
@@ -312,9 +312,9 @@ function MethodCard({
   const process = PROCESS_META[entry.processType];
   const ProcessIcon = process.icon;
   return (
-    <article className="rounded-xl border border-border/70 bg-card p-4">
+    <article className="px-2 py-5 sm:px-4">
       <header className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-brand/25 bg-brand/10 text-brand-soft">
+        <span className="grid size-10 shrink-0 place-items-center rounded-md bg-secondary text-foreground">
           <ProcessIcon className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
@@ -331,14 +331,14 @@ function MethodCard({
         </div>
       </header>
 
-      <div className="mt-4 flex flex-wrap gap-1.5">
+      <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
         {entry.method.blocks.map((block, index) => {
           const OperatorIcon = OPERATOR_ICON[block.operator];
           return (
-            <Badge key={block.id} variant="outline" className="gap-1 text-[10px]">
+            <span key={block.id} className="inline-flex items-center gap-1">
               {index + 1}. {block.name ?? block.type}
               <OperatorIcon className="size-3 text-muted-foreground" />
-            </Badge>
+            </span>
           );
         })}
       </div>
@@ -372,11 +372,11 @@ function MethodCard({
 
 function Stat({ label, value, suffix }: { label: string; value: number; suffix?: string }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
+    <div className="px-4 py-4">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className="mt-1 text-xl font-semibold">
+      <p className="mt-1 text-2xl font-semibold">
         {value}{" "}
         {suffix && <span className="text-xs font-normal text-muted-foreground">{suffix}</span>}
       </p>

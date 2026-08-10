@@ -46,7 +46,7 @@ export function ChannelAvatar({
       aria-hidden
       className={sharedClassName}
       style={{
-        background: `linear-gradient(135deg, ${channel.color}, color-mix(in oklab, ${channel.color} 55%, #0F172A))`,
+        backgroundColor: channel.color,
       }}
     >
       {initials}

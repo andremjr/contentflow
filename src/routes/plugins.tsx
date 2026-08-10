@@ -111,14 +111,14 @@ function PluginsPage() {
         }
       />
 
-      <main className="flex-1 px-4 py-5 sm:px-6">
-        <section className="grid gap-3 sm:grid-cols-3">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <section className="grid divide-y divide-border border-y border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           <Stat label="Plugins disponíveis" value={data.plugins.length} />
           <Stat label="Incluídos no aplicativo" value={bundled.length} />
           <Stat label="Instalados pelo usuário" value={installed.length} />
         </section>
 
-        <section className="mt-5 rounded-xl border border-border/70 bg-card p-4 sm:p-5">
+        <section className="mt-6 border-b border-border pb-5">
           <div className="flex items-start gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-soft">
               <FolderOpen className="size-4" />
@@ -141,7 +141,7 @@ function PluginsPage() {
             </span>
           </div>
         ) : data.plugins.length ? (
-          <section className="mt-5 grid gap-3 xl:grid-cols-2">
+          <section className="mt-5 divide-y divide-border border-y border-border">
             {data.plugins.map((plugin) => (
               <PluginCard key={`${plugin.source}-${plugin.id}`} plugin={plugin} />
             ))}
@@ -181,9 +181,9 @@ function PluginsPage() {
 function PluginCard({ plugin }: { plugin: DiscoveredPlugin }) {
   const { manifest } = plugin;
   return (
-    <article className="rounded-xl border border-border/70 bg-card p-4">
+    <article className="px-2 py-5 sm:px-4">
       <header className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-brand/25 bg-brand/10 text-brand-soft">
+        <span className="grid size-10 shrink-0 place-items-center rounded-md bg-secondary text-foreground">
           <Plug className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
@@ -203,12 +203,9 @@ function PluginCard({ plugin }: { plugin: DiscoveredPlugin }) {
         </div>
       </header>
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-4 divide-y divide-border border-y border-border">
         {manifest.capabilities.map((capability) => (
-          <div
-            key={capability.id}
-            className="rounded-lg border border-border/60 bg-background/30 p-3"
-          >
+          <div key={capability.id} className="py-3">
             <div className="flex flex-wrap items-center gap-1.5">
               {capability.operator === "IA" ? (
                 <Bot className="size-3.5 text-brand-soft" />
@@ -475,11 +472,11 @@ function PluginSourceDialog({ plugin }: { plugin: DiscoveredPlugin }) {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
+    <div className="px-4 py-4">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className="mt-1 text-xl font-semibold">{value}</p>
+      <p className="mt-1 text-2xl font-semibold">{value}</p>
     </div>
   );
 }

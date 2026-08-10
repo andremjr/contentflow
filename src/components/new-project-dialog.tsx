@@ -58,18 +58,19 @@ export function NewProjectDialog({
         {trigger ?? (
           <Button
             size="sm"
-            className="h-9 gap-1.5 gradient-brand text-white shadow-[0_6px_20px_-8px_oklch(0.58_0.22_264/0.8)]"
+            className="h-9 gap-1.5 px-2.5 text-white sm:px-3"
+            aria-label="Novo projeto"
           >
             <Plus className="size-4" />
-            Novo projeto
+            <span className="hidden sm:inline">Novo projeto</span>
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-xl border border-border/60 bg-brand/15">
-              <FolderPlus className="size-5 text-brand-soft" />
+            <div className="grid size-10 place-items-center rounded-md bg-secondary">
+              <FolderPlus className="size-5 text-foreground" />
             </div>
             <div>
               <DialogTitle>Novo projeto</DialogTitle>

@@ -109,7 +109,7 @@ function ChannelLibraryPage() {
         subtitle="Coleções estruturadas usadas pelos blocos Escolher"
         actions={<NewCollection channelId={channelId} />}
       />
-      <main className="flex-1 px-4 py-5 sm:px-6 sm:py-6">
+      <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {collections.length ? (
           <div className="mx-auto max-w-6xl space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-1 text-xs text-muted-foreground">
@@ -168,17 +168,17 @@ function CollectionSection({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/40">
-      <header className="flex items-center gap-2 bg-card p-3 sm:p-4">
+    <section className="overflow-hidden border-y border-border bg-transparent">
+      <header className="flex items-center gap-2 p-3 sm:px-4 sm:py-3.5">
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-1 py-1.5 text-left outline-none transition hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-1.5 text-left outline-none transition hover:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setOpen((current) => !current)}
           aria-expanded={open}
           aria-controls={`collection-${collection.id}`}
         >
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-border/70 bg-background">
-            <FolderOpen className="size-4 text-brand-soft" />
+          <span className="grid size-8 shrink-0 place-items-center rounded-md bg-secondary">
+            <FolderOpen className="size-4 text-foreground" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2">
@@ -187,7 +187,7 @@ function CollectionSection({
                 {items.length} {items.length === 1 ? "item" : "itens"}
               </Badge>
             </span>
-            <span className="mt-1.5 flex flex-wrap gap-1.5">
+            <span className="mt-1.5 flex flex-wrap gap-x-1.5 gap-y-1">
               {collection.fields.map((field) => (
                 <Badge key={field.id} variant="outline" className="text-[10px] font-normal">
                   {field.label}
@@ -466,7 +466,7 @@ function NewCollection({ channelId }: { channelId: string }) {
               {fields.map((field, index) => (
                 <div
                   key={field.id}
-                  className="grid gap-2 rounded-xl border border-border/70 bg-background/30 p-3 sm:grid-cols-[minmax(0,1fr)_150px_auto_auto] sm:items-center"
+                  className="grid gap-2 border-b border-border py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_150px_auto_auto] sm:items-center"
                 >
                   <Input
                     value={field.label}
@@ -557,7 +557,7 @@ function CollectionFieldEditor({
         {fields.map((field, index) => (
           <div
             key={field.id}
-            className="grid gap-2 rounded-xl border border-border/70 bg-background/30 p-3 sm:grid-cols-[minmax(0,1fr)_150px_auto_auto] sm:items-center"
+            className="grid gap-2 border-b border-border py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_150px_auto_auto] sm:items-center"
           >
             <Input
               value={field.label}

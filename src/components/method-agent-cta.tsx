@@ -11,7 +11,7 @@ export function MethodAgentCta({ className }: { className?: string }) {
       <Button
         asChild
         variant="outline"
-        className="h-auto min-h-9 w-full justify-center gap-2 whitespace-normal border-brand/30 bg-brand/10 px-4 py-2.5 text-left text-brand-soft hover:border-brand/45 hover:bg-brand/15 hover:text-foreground sm:w-auto"
+        className="h-auto min-h-9 w-full justify-center gap-2 whitespace-normal px-4 py-2.5 text-left text-muted-foreground hover:text-foreground sm:w-auto"
       >
         <a
           href={METHOD_AGENT_URL}

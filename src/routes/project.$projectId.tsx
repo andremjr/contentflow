@@ -79,7 +79,7 @@ function ProjectLayout() {
                   blocked ? `Crie um método de ${meta.label} para executar esta etapa` : undefined
                 }
               >
-                <span className="grid size-4 place-items-center rounded-full bg-secondary font-mono text-[9px]">
+                <span className="grid size-4 place-items-center rounded-sm bg-secondary font-mono text-[9px]">
                   {index + 1}
                 </span>
                 <Icon className="hidden size-3.5 sm:inline" />

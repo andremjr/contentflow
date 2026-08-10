@@ -8,24 +8,24 @@ const TONE_CLASS: Record<(typeof STATE_META)[ProcessState]["tone"], { dot: strin
       chip: "bg-muted/40 text-muted-foreground border-border/60",
     },
     info: {
-      dot: "bg-info",
-      chip: "bg-info/10 text-info border-info/30",
+      dot: "bg-muted-foreground",
+      chip: "text-muted-foreground border-transparent",
     },
     brand: {
       dot: "bg-brand animate-pulse",
-      chip: "bg-brand/15 text-brand-soft border-brand/40",
+      chip: "text-foreground border-transparent",
     },
     warning: {
       dot: "bg-warning",
-      chip: "bg-warning/10 text-warning border-warning/30",
+      chip: "text-warning border-transparent",
     },
     success: {
       dot: "bg-success",
-      chip: "bg-success/10 text-success border-success/30",
+      chip: "text-muted-foreground border-transparent",
     },
     done: {
       dot: "bg-success",
-      chip: "bg-success/10 text-success border-success/30",
+      chip: "text-muted-foreground border-transparent",
     },
     error: {
       dot: "bg-destructive",
@@ -60,7 +60,7 @@ export function ProcessStatus({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium tracking-wide",
+        "inline-flex items-center gap-1.5 border px-1 py-0.5 text-[11px] font-medium",
         tone.chip,
         className,
       )}

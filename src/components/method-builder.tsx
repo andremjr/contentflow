@@ -1,7 +1,25 @@
+import { useNavigate } from "@tanstack/react-router";
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowDown,
-  ArrowUp,
   Bot,
   Braces,
   CheckCircle2,
@@ -9,7 +27,7 @@ import {
   CircleUserRound,
   Code2,
   Copy,
-  Database,
+  GripVertical,
   Library,
   ListChecks,
   LoaderCircle,
@@ -94,25 +112,25 @@ const BLOCK_META: Record<
     label: "Buscar",
     description: "Coletar informações ou mídias externas.",
     icon: Search,
-    className: "border-blue-500/35 bg-blue-500/10 text-blue-300",
+    className: "border-border bg-secondary text-foreground",
   },
   ESCOLHER: {
     label: "Escolher",
     description: "Selecionar itens preexistentes da Biblioteca Estratégica.",
     icon: ListChecks,
-    className: "border-violet-500/35 bg-violet-500/10 text-violet-300",
+    className: "border-border bg-secondary text-foreground",
   },
   CRIAR: {
     label: "Criar",
     description: "Gerar conteúdo, arquivos ou executar código.",
     icon: Sparkles,
-    className: "border-emerald-500/35 bg-emerald-500/10 text-emerald-300",
+    className: "border-border bg-secondary text-foreground",
   },
   VALIDAR: {
     label: "Validar",
     description: "Testar qualidade, regras ou pedir aprovação.",
     icon: CheckCircle2,
-    className: "border-amber-500/35 bg-amber-500/10 text-amber-300",
+    className: "border-border bg-secondary text-foreground",
   },
 };
 
@@ -178,10 +196,12 @@ export function MethodBuilder({
   initialProcess?: UniversalProcess;
 }) {
   const channel = useChannel(channelId);
+  const navigate = useNavigate();
   const channels = useChannels();
   const collections = useLibraryCollections(channelId);
   const [processType, setProcessType] = useState<UniversalProcess>(initialProcess ?? "theme");
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [draftBlocks, setDraftBlocks] = useState<ActionBlock[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">(
@@ -199,6 +219,13 @@ export function MethodBuilder({
   const method = channel?.methods[processType];
   const blocks = useMemo(() => [...draftBlocks].sort((a, b) => a.order - b.order), [draftBlocks]);
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
+  const activeBlock = blocks.find((block) => block.id === activeBlockId);
+  const blockIds = blocks.map((block) => block.id);
+  const activeBlockIndex = activeBlockId ? blockIds.indexOf(activeBlockId) : -1;
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const reusableMethods = channels
     .filter((candidate) => candidate.id !== channelId)
     .map((candidate) => ({
@@ -210,8 +237,8 @@ export function MethodBuilder({
   currentProcessRef.current = processType;
 
   useEffect(() => {
-    if (!blocks.some((block) => block.id === selectedBlockId)) {
-      setSelectedBlockId(blocks[0]?.id ?? null);
+    if (selectedBlockId && !blocks.some((block) => block.id === selectedBlockId)) {
+      setSelectedBlockId(null);
     }
   }, [blocks, selectedBlockId]);
 
@@ -302,6 +329,15 @@ export function MethodBuilder({
   );
 
   useEffect(() => {
+    const requestedProcess = initialProcess ?? "theme";
+    if (requestedProcess === processType) return;
+    if (isDirty) void persistMethod();
+    loadedProcessRef.current = null;
+    setSelectedBlockId(null);
+    setProcessType(requestedProcess);
+  }, [initialProcess, isDirty, persistMethod, processType]);
+
+  useEffect(() => {
     if (!isDirty) return;
     setSaveStatus("pending");
     const timer = window.setTimeout(() => void persistMethod(), 700);
@@ -337,7 +373,14 @@ export function MethodBuilder({
     if (nextProcess === processType) return;
     if (isDirty) void persistMethod();
     loadedProcessRef.current = null;
+    setSelectedBlockId(null);
     setProcessType(nextProcess);
+    void navigate({
+      to: "/channel/$channelId/methods",
+      params: { channelId },
+      search: { process: nextProcess },
+      replace: true,
+    });
   };
 
   const importMethod = (sourceChannelName: string, sourceBlocks: ActionBlock[]) => {
@@ -393,7 +436,7 @@ export function MethodBuilder({
         return;
       }
       setPendingFileImport(sharedMethod);
-      setProcessType(sharedMethod.method.processType);
+      selectProcess(sharedMethod.method.processType);
     } catch (error) {
       toast.error("Não foi possível importar o método", {
         description: error instanceof Error ? error.message : "O arquivo é inválido.",
@@ -439,58 +482,29 @@ export function MethodBuilder({
     saveBlocks(blocks.map((block) => (block.id === blockId ? { ...block, ...patch } : block)));
   };
 
-  const moveBlock = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= blocks.length) return;
-    const next = [...blocks];
-    [next[index], next[target]] = [next[target], next[index]];
-    saveBlocks(next);
-  };
-
   const removeBlock = (blockId: string) => {
     saveBlocks(blocks.filter((block) => block.id !== blockId));
+    setSelectedBlockId(null);
+  };
+
+  const clearDrag = () => setActiveBlockId(null);
+
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    setActiveBlockId(String(active.id));
+  };
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (over && active.id !== over.id) {
+      const oldIndex = blockIds.indexOf(String(active.id));
+      const newIndex = blockIds.indexOf(String(over.id));
+      if (oldIndex >= 0 && newIndex >= 0) saveBlocks(arrayMove(blocks, oldIndex, newIndex));
+    }
+    clearDrag();
   };
 
   return (
-    <div className="grid min-h-0 flex-1 lg:grid-cols-[240px_minmax(360px,1fr)_minmax(320px,420px)]">
-      <aside className="border-b border-border/70 bg-card/35 p-4 lg:border-b-0 lg:border-r">
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Processos universais
-        </p>
-        <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-1">
-          {PROCESS_ORDER.map((process, index) => {
-            const meta = PROCESS_META[process];
-            const Icon = meta.icon;
-            const active = process === processType;
-            const count =
-              process === processType ? blocks.length : channel.methods[process].blocks.length;
-            return (
-              <button
-                key={process}
-                type="button"
-                onClick={() => selectProcess(process)}
-                className={cn(
-                  "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition",
-                  active
-                    ? "border-brand/40 bg-brand/15 text-foreground"
-                    : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-secondary/50 hover:text-foreground",
-                )}
-              >
-                <span className="font-mono text-[10px] opacity-60">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <Icon className="size-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{meta.label}</span>
-                <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[9px]">
-                  {count}
-                </Badge>
-              </button>
-            );
-          })}
-        </div>
-      </aside>
-
-      <section className="border-b border-border/70 p-4 sm:p-6 lg:border-b-0 lg:border-r">
+    <div className="min-h-0 flex-1">
+      <section className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:px-8 lg:pb-10">
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -636,7 +650,7 @@ export function MethodBuilder({
                 type="button"
                 onClick={() => addBlock(type)}
                 className={cn(
-                  "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition hover:brightness-125",
+                  "flex items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium transition hover:border-foreground/25 hover:bg-surface-3",
                   item.className,
                 )}
               >
@@ -649,9 +663,9 @@ export function MethodBuilder({
         </div>
 
         {blocks.length === 0 ? (
-          <div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-border bg-card/25 p-8 text-center">
+          <div className="grid min-h-64 place-items-center rounded-lg border border-dashed border-border bg-card/25 p-8 text-center">
             <div>
-              <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand/10 text-brand-soft">
+              <div className="mx-auto grid size-12 place-items-center rounded-md bg-brand/10 text-brand-soft">
                 <Braces className="size-5" />
               </div>
               <h3 className="mt-3 text-sm font-medium">Este método está vazio</h3>
@@ -662,87 +676,253 @@ export function MethodBuilder({
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
-            {blocks.map((block, index) => {
-              const meta = BLOCK_META[block.type];
-              const operator = OPERATOR_META[block.operator];
-              const Icon = meta.icon;
-              const OperatorIcon = operator.icon;
-              const active = block.id === selectedBlockId;
-              return (
-                <div key={block.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBlockId(block.id)}
-                    className={cn(
-                      "group flex w-full items-center gap-3 rounded-xl border bg-card p-3 text-left transition",
-                      active
-                        ? "border-brand/50 shadow-[0_0_0_1px_oklch(0.62_0.2_260/0.18)]"
-                        : "border-border/70 hover:border-border",
-                    )}
-                  >
-                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary font-mono text-[10px] text-muted-foreground">
-                      {index + 1}
-                    </span>
-                    <span
-                      className={cn(
-                        "grid size-9 shrink-0 place-items-center rounded-lg border",
-                        meta.className,
-                      )}
-                    >
-                      <Icon className="size-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold uppercase tracking-wide">
-                        {meta.label}
-                      </span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {block.type === "ESCOLHER" && block.collectionId
-                          ? `Coleção: ${collections.find((item) => item.id === block.collectionId)?.name ?? "não encontrada"}`
-                          : block.instructions || "Sem instruções"}
-                      </span>
-                    </span>
-                    <Badge variant="secondary" className="gap-1 text-[10px]">
-                      <OperatorIcon className="size-3" />
-                      {operator.label}
-                    </Badge>
-                    <ChevronRight className="size-4 text-muted-foreground" />
-                  </button>
-                  {index < blocks.length - 1 && (
-                    <div className="ml-6 h-2 border-l border-dashed border-border" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={clearDrag}
+          >
+            <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
+              <div
+                className={cn(
+                  "space-y-2",
+                  activeBlockId && "!cursor-grabbing [&_*]:!cursor-grabbing",
+                )}
+              >
+                {blocks.map((block, index) => (
+                  <SortableMethodBlockCard
+                    key={block.id}
+                    block={block}
+                    index={index}
+                    activeIndex={activeBlockIndex}
+                    collectionName={
+                      block.collectionId
+                        ? collections.find((item) => item.id === block.collectionId)?.name
+                        : undefined
+                    }
+                    selected={block.id === selectedBlockId}
+                    onOpen={() => setSelectedBlockId(block.id)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+            <DragOverlay
+              adjustScale={false}
+              dropAnimation={{ duration: 220, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" }}
+            >
+              {activeBlock ? (
+                <MethodBlockPreview
+                  block={activeBlock}
+                  index={blocks.indexOf(activeBlock)}
+                  collectionName={
+                    activeBlock.collectionId
+                      ? collections.find((item) => item.id === activeBlock.collectionId)?.name
+                      : undefined
+                  }
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         )}
       </section>
 
-      <aside className="bg-card/25 p-4 sm:p-6">
-        {selectedBlock ? (
-          <BlockEditor
-            block={selectedBlock}
-            methodBlocks={blocks}
-            channelId={channelId}
-            collections={collections}
-            processType={processType}
-            plugins={availablePlugins}
-            openAIModels={openAIModels}
-            index={blocks.indexOf(selectedBlock)}
-            total={blocks.length}
-            onChange={(patch) => updateBlock(selectedBlock.id, patch)}
-            onMove={(direction) => moveBlock(blocks.indexOf(selectedBlock), direction)}
-            onRemove={() => removeBlock(selectedBlock.id)}
-          />
-        ) : (
-          <div className="grid min-h-64 place-items-center text-center text-xs text-muted-foreground">
-            <div>
-              <Database className="mx-auto mb-2 size-5" />
-              Selecione um bloco para configurar a ação.
-            </div>
-          </div>
+      <Dialog
+        open={Boolean(selectedBlock)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedBlockId(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-3xl lg:max-w-4xl">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Configurar bloco de ação</DialogTitle>
+            <DialogDescription>
+              Edite operador, instruções, entradas, saídas e execução deste bloco.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedBlock && (
+            <BlockEditor
+              block={selectedBlock}
+              methodBlocks={blocks}
+              channelId={channelId}
+              collections={collections}
+              processType={processType}
+              plugins={availablePlugins}
+              openAIModels={openAIModels}
+              index={blocks.indexOf(selectedBlock)}
+              total={blocks.length}
+              onChange={(patch) => updateBlock(selectedBlock.id, patch)}
+              onRemove={() => removeBlock(selectedBlock.id)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+type InsertionSide = "before" | "after";
+
+function SortableMethodBlockCard({
+  block,
+  index,
+  activeIndex,
+  collectionName,
+  selected,
+  onOpen,
+}: {
+  block: ActionBlock;
+  index: number;
+  activeIndex: number;
+  collectionName?: string;
+  selected: boolean;
+  onOpen: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    isDragging,
+    isOver,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({
+    id: block.id,
+    transition: { duration: 220, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+  });
+  const insertionSide: InsertionSide | undefined =
+    isOver && activeIndex >= 0 && activeIndex !== index
+      ? activeIndex < index
+        ? "after"
+        : "before"
+      : undefined;
+  const title = block.name?.trim() || BLOCK_META[block.type].label;
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="relative"
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : undefined,
+      }}
+    >
+      {insertionSide && !isDragging && (
+        <span
+          className={cn(
+            "pointer-events-none absolute left-2 right-2 z-40 h-0.5 bg-brand",
+            insertionSide === "before" ? "-top-[5px]" : "-bottom-[5px]",
+          )}
+        >
+          <span className="absolute -left-1 top-1/2 size-2 -translate-y-1/2 rounded-full bg-brand" />
+        </span>
+      )}
+
+      <article
+        className={cn(
+          "flex min-h-28 overflow-hidden rounded-lg border bg-card transition-colors",
+          selected ? "border-brand" : "border-border hover:border-foreground/20",
+          isDragging && "opacity-20",
         )}
-      </aside>
+      >
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          className="grid w-11 touch-none cursor-grab place-items-center border-r border-border text-muted-foreground transition hover:bg-secondary hover:text-foreground active:cursor-grabbing [&_svg]:pointer-events-none"
+          title="Clique, segure e arraste para reordenar"
+          aria-label={`Reorganizar ${title}`}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="group flex min-w-0 flex-1 items-center gap-4 p-4 text-left transition hover:bg-secondary/35 sm:p-5"
+        >
+          <MethodBlockCardContent block={block} index={index} collectionName={collectionName} />
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
+        </button>
+      </article>
+    </div>
+  );
+}
+
+function MethodBlockCardContent({
+  block,
+  index,
+  collectionName,
+}: {
+  block: ActionBlock;
+  index: number;
+  collectionName?: string;
+}) {
+  const meta = BLOCK_META[block.type];
+  const operator = OPERATOR_META[block.operator];
+  const Icon = meta.icon;
+  const OperatorIcon = operator.icon;
+  const title = block.name?.trim() || meta.label;
+  const summary =
+    block.type === "ESCOLHER" && collectionName
+      ? `Coleção: ${collectionName}`
+      : block.instructions?.trim() || "Sem instruções";
+  const outputCount = block.outputs?.length ?? 0;
+
+  return (
+    <>
+      <span className="w-6 shrink-0 self-start pt-1 font-mono text-[10px] text-muted-foreground">
+        {String(index + 1).padStart(2, "0")}
+      </span>
+      <span
+        className={cn("grid size-9 shrink-0 place-items-center rounded-md border", meta.className)}
+      >
+        <Icon className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+          <span className="text-[10px] font-medium uppercase text-muted-foreground">
+            {meta.label}
+          </span>
+        </span>
+        <span className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+          {summary}
+        </span>
+        <span className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <OperatorIcon className="size-3" />
+            {operator.label}
+          </span>
+          <span>
+            {outputCount} {outputCount === 1 ? "saída" : "saídas"}
+          </span>
+          {block.plugin && <span>{block.plugin.pluginId}</span>}
+        </span>
+      </span>
+    </>
+  );
+}
+
+function MethodBlockPreview({
+  block,
+  index,
+  collectionName,
+}: {
+  block: ActionBlock;
+  index: number;
+  collectionName?: string;
+}) {
+  return (
+    <div className="pointer-events-none flex w-[min(760px,calc(100vw-3rem))] overflow-hidden rounded-lg border border-brand bg-card">
+      <div className="grid w-11 place-items-center border-r border-brand/40 text-brand">
+        <GripVertical className="size-4" />
+      </div>
+      <div className="flex min-w-0 flex-1 items-center gap-4 p-5">
+        <MethodBlockCardContent block={block} index={index} collectionName={collectionName} />
+      </div>
     </div>
   );
 }
@@ -758,7 +938,6 @@ function BlockEditor({
   index,
   total,
   onChange,
-  onMove,
   onRemove,
 }: {
   block: ActionBlock;
@@ -771,7 +950,6 @@ function BlockEditor({
   index: number;
   total: number;
   onChange: (patch: Partial<ActionBlock>) => void;
-  onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
 }) {
   const meta = BLOCK_META[block.type];
@@ -797,39 +975,20 @@ function BlockEditor({
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 pr-8">
         <div className="flex items-center gap-3">
-          <span className={cn("grid size-10 place-items-center rounded-xl border", meta.className)}>
+          <span className={cn("grid size-10 place-items-center rounded-md border", meta.className)}>
             <Icon className="size-4" />
           </span>
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide">{meta.label}</p>
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase text-muted-foreground">{meta.label}</p>
+            <h2 className="truncate text-xl font-semibold">{block.name?.trim() || meta.label}</h2>
             <p className="text-[11px] text-muted-foreground">
               Bloco {index + 1} de {total}
             </p>
           </div>
         </div>
         <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            disabled={index === 0}
-            onClick={() => onMove(-1)}
-            aria-label="Mover para cima"
-          >
-            <ArrowUp className="size-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            disabled={index === total - 1}
-            onClick={() => onMove(1)}
-            aria-label="Mover para baixo"
-          >
-            <ArrowDown className="size-3.5" />
-          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -1194,7 +1353,7 @@ function ValidationEditor({
   }
 
   return (
-    <div className="mt-6 space-y-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+    <div className="mt-6 space-y-4 border-t border-border pt-5">
       <div>
         <h3 className="text-sm font-semibold">Regra de validação</h3>
         <p className="mt-1 text-[11px] text-muted-foreground">

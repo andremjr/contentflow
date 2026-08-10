@@ -41,7 +41,7 @@ function DashboardPage() {
         actions={<NewChannelDialog />}
       />
 
-      <main className="flex-1 px-4 py-4 sm:px-6 sm:py-6">
+      <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {!databaseReady ? (
           <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-2">
@@ -50,9 +50,15 @@ function DashboardPage() {
             </span>
           </div>
         ) : channels.length > 0 ? (
-          <section>
-            <header className="mb-4">
-              <h2 className="text-sm font-semibold">Seus canais</h2>
+          <section className="mx-auto max-w-[1500px]">
+            <header className="mb-3 flex items-end justify-between border-b border-border pb-3">
+              <div>
+                <h2 className="text-lg font-semibold">Seus canais</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Workspaces independentes de estratégia e produção
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground">{channels.length} ativos</span>
             </header>
             <SortableChannelGrid channels={channels} hiddenChannelIds={hiddenChannelIds} />
           </section>

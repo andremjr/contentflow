@@ -329,7 +329,7 @@ function ExecutionTimeline({ execution }: { execution: ProcessExecution }) {
               className={cn(
                 "rounded-lg border p-3 transition-colors duration-500",
                 done
-                  ? "border-success/40 bg-success/10"
+                  ? "border-border bg-secondary"
                   : waiting
                     ? "border-warning/45 bg-warning/10"
                     : running
@@ -340,9 +340,9 @@ function ExecutionTimeline({ execution }: { execution: ProcessExecution }) {
               <div className="flex items-center gap-2">
                 <span
                   className={cn(
-                    "grid size-6 place-items-center rounded-full transition-colors duration-500",
+                    "grid size-6 place-items-center rounded-sm transition-colors duration-500",
                     done
-                      ? "bg-success text-white"
+                      ? "bg-muted-foreground text-background"
                       : waiting
                         ? "bg-warning/20 text-warning"
                         : running
@@ -411,9 +411,9 @@ function ExecutionResults({
               open={index === completed.length - 1}
             >
               <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium">
-                <CheckCircle2 className="size-4 text-success" />
+                <CheckCircle2 className="size-4 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">{block.name ?? block.type}</span>
-                <Badge variant="outline" className="text-[9px] text-success">
+                <Badge variant="outline" className="text-[9px] text-muted-foreground">
                   Concluído
                 </Badge>
               </summary>
@@ -496,7 +496,7 @@ function MethodPreview({ method }: { method: ActionBlock[] }) {
             key={block.id}
             className="flex items-center gap-3 rounded-lg border border-border/60 bg-background/30 p-3"
           >
-            <span className="grid size-7 place-items-center rounded-full bg-brand/15 font-mono text-xs text-brand-soft">
+            <span className="grid size-7 place-items-center rounded-md bg-secondary font-mono text-xs text-muted-foreground">
               {index + 1}
             </span>
             <div className="min-w-0 flex-1">
@@ -545,10 +545,10 @@ function HumanChoiceGate({
   onChoose: (itemId: string) => void;
 }) {
   return (
-    <section className="rounded-xl border border-violet-500/40 bg-violet-500/5 p-5 sm:p-6">
+    <section className="rounded-lg border border-warning/35 bg-warning/5 p-5 sm:p-6">
       <div className="text-center">
-        <UserRound className="mx-auto size-7 text-violet-300" />
-        <Badge variant="outline" className="mt-3 border-violet-500/40 text-violet-300">
+        <UserRound className="mx-auto size-7 text-warning" />
+        <Badge variant="outline" className="mt-3 border-warning/35 text-warning">
           Escolha humana
         </Badge>
         <h3 className="mt-3 text-base font-semibold">{block.name ?? "Escolher opção"}</h3>
@@ -565,13 +565,13 @@ function HumanChoiceGate({
           </p>
         </div>
       ) : items.length ? (
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-5 divide-y divide-border border-y border-border">
           {items.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => onChoose(item.id)}
-              className="rounded-xl border border-border/70 bg-card p-4 text-left transition hover:border-violet-500/50 hover:bg-violet-500/5"
+              className="w-full p-4 text-left transition hover:bg-secondary/40"
             >
               <dl className="space-y-2.5">
                 {collection.fields.map((field) => {
@@ -945,8 +945,8 @@ function HumanBlockGate({
       </header>
 
       {retryFeedback && (
-        <div className="mt-5 rounded-xl border border-amber-500/35 bg-amber-500/5 p-4">
-          <p className="text-xs font-semibold text-amber-300">
+        <div className="mt-5 rounded-lg border border-warning/35 bg-warning/5 p-4">
+          <p className="text-xs font-semibold text-warning">
             Nova tentativa solicitada pela validação
           </p>
           <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
@@ -1183,7 +1183,7 @@ function PluginExecutionGate({
         {plugin?.pluginId === "official-openai-gpt" && (
           <div className="mt-4 space-y-1.5">
             {openAIConnected ? (
-              <p className="flex items-center gap-1.5 text-xs text-emerald-400">
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <CheckCircle2 className="size-3.5" /> OpenAI conectada pela Central de Plugins
               </p>
             ) : (
@@ -1266,8 +1266,8 @@ function ProcessCompleted({
   output?: Record<string, RuntimeValue>;
 }) {
   return (
-    <section className="rounded-xl border border-success/40 bg-success/5 p-10 text-center">
-      <CheckCircle2 className="mx-auto size-8 text-success" />
+    <section className="rounded-lg border border-border bg-card p-10 text-center">
+      <CheckCircle2 className="mx-auto size-8 text-muted-foreground" />
       <h3 className="mt-3 text-base font-semibold">{processLabel} concluído</h3>
       <p className="mt-1 text-xs text-muted-foreground">
         {advancesAutomatically
@@ -1277,10 +1277,10 @@ function ProcessCompleted({
             : "Este processo já foi concluído e permanece disponível para consulta."}
       </p>
       {advancesAutomatically && (
-        <LoaderCircle className="mx-auto mt-4 size-4 animate-spin text-success" />
+        <LoaderCircle className="mx-auto mt-4 size-4 animate-spin text-muted-foreground" />
       )}
       {output && Object.keys(output).length > 0 && (
-        <div className="mx-auto mt-5 max-w-2xl rounded-xl border border-success/25 bg-background/30 p-4 text-left">
+        <div className="mx-auto mt-5 max-w-2xl border-t border-border pt-4 text-left">
           {createProcessOutputFields(processType).map((field) => (
             <ResultValue
               key={field.id}
