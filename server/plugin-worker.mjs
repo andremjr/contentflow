@@ -1,47 +1,26 @@
-import { pathToFileURL } from "node:url";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import type {
-  PluginEntrypoint,
-  PluginExecutionRequest,
-  PluginExecutionResponse,
-} from "../src/lib/plugin-contract";
-
-type WorkerEnvelope = {
-  entrypoint: string;
-  request: PluginExecutionRequest;
-  secrets: Record<string, string>;
-  sandbox: {
-    permissions: string[];
-    uploadsDirectory: string;
-    workspaceDirectory: string;
-    outputDirectory: string;
-    networkEnforced: boolean;
-  };
-};
+import { pathToFileURL } from "node:url";
 
 async function readStdin() {
-  const chunks: Buffer[] = [];
+  const chunks = [];
   for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks).toString("utf8");
 }
 
 async function main() {
-  const envelope = JSON.parse(await readStdin()) as WorkerEnvelope;
-  const moduleUrl = pathToFileURL(envelope.entrypoint).href;
-  const loaded = (await import(moduleUrl)) as Partial<PluginEntrypoint> & {
-    default?: PluginEntrypoint["execute"];
-  };
+  const envelope = JSON.parse(await readStdin());
+  const loaded = await import(pathToFileURL(envelope.entrypoint).href);
   const execute = loaded.execute ?? loaded.default;
   if (typeof execute !== "function") {
     throw new Error("O entrypoint do plugin não exporta a função execute().");
   }
 
-  const controller = new AbortController();
   const permissions = new Set(envelope.sandbox.permissions);
+  const controller = new AbortController();
   const response = await execute(envelope.request, {
     signal: controller.signal,
-    getSecret: async (key: string) => envelope.secrets[key],
+    getSecret: async (key) => envelope.secrets[key],
     resolveInputFile: async (file) => {
       if (!permissions.has("filesystem:read")) {
         throw new Error("O plugin não declarou a permissão filesystem:read.");
@@ -85,16 +64,17 @@ async function main() {
       return resolved;
     },
   });
-  process.stdout.write(JSON.stringify(response satisfies PluginExecutionResponse));
+  process.stdout.write(JSON.stringify(response));
 }
 
 void main().catch((error) => {
-  const response: PluginExecutionResponse = {
-    status: "error",
-    code: "PLUGIN_WORKER_ERROR",
-    message: error instanceof Error ? error.message : "O plugin falhou durante a execução.",
-    retryable: false,
-  };
-  process.stdout.write(JSON.stringify(response));
+  process.stdout.write(
+    JSON.stringify({
+      status: "error",
+      code: "PLUGIN_WORKER_ERROR",
+      message: error instanceof Error ? error.message : "O plugin falhou durante a execução.",
+      retryable: false,
+    }),
+  );
   process.exitCode = 1;
 });

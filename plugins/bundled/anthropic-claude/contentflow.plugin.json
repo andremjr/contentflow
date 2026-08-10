@@ -1,10 +1,10 @@
 {
   "$schema": "../../../docs/schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
-  "id": "official-openai-gpt",
-  "name": "OpenAI Models",
-  "version": "1.1.0",
-  "description": "Executa qualquer bloco baseado em linguagem com um modelo de texto compatível com a Responses API da OpenAI.",
+  "id": "official-anthropic-claude",
+  "name": "Anthropic Claude",
+  "version": "1.0.0",
+  "description": "Executa ações baseadas em linguagem com modelos Claude disponíveis na API da Anthropic.",
   "author": "ContentFlow OS",
   "license": "LicenseRef-ContentFlow-Source-Available-1.0",
   "homepage": "https://github.com/andremjr/contentflow-os",
@@ -16,7 +16,7 @@
   },
   "entrypoint": "handler.ts",
   "permissions": ["network"],
-  "secretKeys": ["OPENAI_API_KEY"],
+  "secretKeys": ["ANTHROPIC_API_KEY"],
   "deliveryTypes": ["text"],
   "capabilities": [
     {
@@ -112,27 +112,22 @@
       "cost": { "model": "metered", "estimateSupported": false },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["OpenAI"],
-        "retentionPolicyUrl": "https://platform.openai.com/docs/guides/your-data",
-        "trainingPolicyUrl": "https://platform.openai.com/docs/guides/your-data"
+        "providers": ["Anthropic"],
+        "retentionPolicyUrl": "https://privacy.anthropic.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data",
+        "trainingPolicyUrl": "https://privacy.anthropic.com/en/articles/7996868-is-my-data-used-for-model-training"
       },
       "blockConfigSchema": {
         "type": "object",
         "properties": {
           "model": {
             "type": "string",
-            "title": "Modelo OpenAI",
-            "description": "Escolha o equilíbrio desejado entre qualidade e custo. A disponibilidade depende da sua conta OpenAI.",
-            "default": "gpt-5.6-terra",
+            "title": "Modelo Claude",
+            "description": "A disponibilidade depende da sua conta Anthropic.",
+            "default": "claude-sonnet-4-6",
             "oneOf": [
-              { "const": "gpt-5.6-sol", "title": "GPT-5.6 Sol — máxima qualidade" },
-              { "const": "gpt-5.6-terra", "title": "GPT-5.6 Terra — equilibrado" },
-              { "const": "gpt-5.6-luna", "title": "GPT-5.6 Luna — econômico" },
-              { "const": "gpt-5.5", "title": "GPT-5.5" },
-              { "const": "gpt-5.4", "title": "GPT-5.4" },
-              { "const": "gpt-5.4-mini", "title": "GPT-5.4 mini" },
-              { "const": "gpt-5.4-nano", "title": "GPT-5.4 nano" },
-              { "const": "gpt-5-mini", "title": "GPT-5 mini — geração anterior" }
+              { "const": "claude-opus-4-6", "title": "Claude Opus 4.6" },
+              { "const": "claude-sonnet-4-6", "title": "Claude Sonnet 4.6" },
+              { "const": "claude-haiku-4-5", "title": "Claude Haiku 4.5" }
             ]
           },
           "system_prompt": {
@@ -144,10 +139,16 @@
           "temperature": {
             "type": "number",
             "title": "Temperatura",
-            "description": "Quando o modelo não aceitar temperatura, o plugin tentará novamente sem este parâmetro.",
             "minimum": 0,
-            "maximum": 2,
+            "maximum": 1,
             "default": 0.7
+          },
+          "max_tokens": {
+            "type": "number",
+            "title": "Máximo de tokens de saída",
+            "minimum": 1,
+            "maximum": 64000,
+            "default": 4096
           }
         }
       },

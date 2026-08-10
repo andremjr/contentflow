@@ -1,0 +1,48 @@
+{
+  "$schema": "../../../docs/schemas/contentflow-plugin-v1.schema.json",
+  "apiVersion": "1",
+  "id": "com.contentflow.reference-community",
+  "name": "Plugin comunitário de referência",
+  "version": "1.0.0",
+  "description": "Exemplo mínimo que recebe texto, cria um arquivo e devolve o resultado.",
+  "author": "ContentFlow OS",
+  "license": "MIT",
+  "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
+  "entrypoint": "handler.mjs",
+  "permissions": ["filesystem:write"],
+  "deliveryTypes": ["text"],
+  "capabilities": [
+    {
+      "id": "save-text",
+      "operator": "Código",
+      "blockTypes": ["CRIAR"],
+      "inputPorts": [
+        {
+          "key": "content",
+          "label": "Conteúdo",
+          "acceptedTypes": ["text", "textarea"],
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Arquivo criado",
+          "producedTypes": ["file"],
+          "required": true
+        }
+      ],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 60000,
+        "supportsCancellation": true,
+        "maxConcurrency": 2
+      },
+      "sideEffects": ["local_artifact"],
+      "cost": { "model": "free", "estimateSupported": true },
+      "dataPolicy": { "sendsDataToThirdParties": false },
+      "blockConfigSchema": { "type": "object", "additionalProperties": false },
+      "outputSchema": { "type": "object" }
+    }
+  ]
+}

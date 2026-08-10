@@ -1108,6 +1108,7 @@ function PluginExecutionGate({
   const [apiKey, setApiKey] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [openAIConnected, setOpenAIConnected] = useState(false);
+  const [anthropicConnected, setAnthropicConnected] = useState(false);
   const plugin = block.plugin;
 
   useEffect(() => {
@@ -1126,10 +1127,30 @@ function PluginExecutionGate({
     };
   }, [plugin?.pluginId]);
 
+  useEffect(() => {
+    if (plugin?.pluginId !== "official-anthropic-claude") return;
+    let active = true;
+    void fetch("/api/plugins/official-anthropic-claude/connection")
+      .then((response) => response.json() as Promise<{ connected?: boolean }>)
+      .then((result) => {
+        if (active) setAnthropicConnected(result.connected === true);
+      })
+      .catch(() => {
+        if (active) setAnthropicConnected(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [plugin?.pluginId]);
+
   async function run() {
     if (!plugin || isRunning) return;
     if (plugin.pluginId === "official-openai-gpt" && !openAIConnected && !apiKey.trim()) {
       toast.error("Informe a chave da API da OpenAI para executar este bloco.");
+      return;
+    }
+    if (plugin.pluginId === "official-anthropic-claude" && !anthropicConnected && !apiKey.trim()) {
+      toast.error("Informe a chave da API da Anthropic para executar este bloco.");
       return;
     }
     setIsRunning(true);
@@ -1198,7 +1219,31 @@ function PluginExecutionGate({
                   onChange={(event) => setApiKey(event.target.value)}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Conecte em Plugins para reutilizar a chave durante toda a sessão local.
+                  Conecte em Plugins para salvar a chave no cofre seguro do sistema.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+        {plugin?.pluginId === "official-anthropic-claude" && (
+          <div className="mt-4 space-y-1.5">
+            {anthropicConnected ? (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <CheckCircle2 className="size-3.5" /> Anthropic conectada pela Central de Plugins
+              </p>
+            ) : (
+              <>
+                <Label htmlFor={`anthropic-api-key-${block.id}`}>Chave da API da Anthropic</Label>
+                <Input
+                  id={`anthropic-api-key-${block.id}`}
+                  type="password"
+                  autoComplete="off"
+                  value={apiKey}
+                  placeholder="sk-ant-..."
+                  onChange={(event) => setApiKey(event.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Conecte em Plugins para salvar a chave no cofre seguro do sistema.
                 </p>
               </>
             )}

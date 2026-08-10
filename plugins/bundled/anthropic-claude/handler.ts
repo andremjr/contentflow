@@ -4,7 +4,6 @@ type OutputField = {
   label: string;
   type: string;
   required: boolean;
-  options?: string[];
 };
 
 type PluginRequest = {
@@ -20,8 +19,6 @@ type PluginRequest = {
       name: string;
       instructions: string;
     };
-    previousProcessOutputs: unknown[];
-    previousBlockOutputs: unknown[];
     selectedCollection?: {
       collectionId: string;
       items: Array<{ id: string; values: Record<string, unknown> }>;
@@ -29,11 +26,17 @@ type PluginRequest = {
   };
 };
 
-type OpenAIResponse = {
-  output_text?: string;
-  output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
-  usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+type AnthropicContent = { type?: string; text?: string } & Record<string, unknown>;
+type AnthropicResponse = {
+  content?: AnthropicContent[];
+  stop_reason?: string;
   model?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
   error?: { message?: string };
 };
 
@@ -60,7 +63,7 @@ function parseOutput(text: string, type: string | undefined) {
       const parsed = JSON.parse(stripCodeFence(text));
       if (Array.isArray(parsed)) return parsed;
     } catch {
-      // A resposta em linhas continua sendo aceita para modelos sem saída estruturada.
+      // Respostas em linhas continuam sendo aceitas.
     }
     return text
       .split("\n")
@@ -78,11 +81,9 @@ function parseOutput(text: string, type: string | undefined) {
   return text.trim();
 }
 
-function responseText(body: OpenAIResponse) {
-  if (body.output_text?.trim()) return body.output_text.trim();
-  return (body.output ?? [])
-    .flatMap((item) => item.content ?? [])
-    .filter((item) => item.type === "output_text" && item.text)
+function responseText(body: AnthropicResponse) {
+  return (body.content ?? [])
+    .filter((item) => item.type === "text" && item.text)
     .map((item) => item.text)
     .join("\n")
     .trim();
@@ -111,7 +112,7 @@ function valuesFromResponse(text: string, fields: OutputField[]) {
   try {
     parsed = JSON.parse(stripCodeFence(text)) as Record<string, unknown>;
   } catch {
-    throw new Error("O modelo não retornou o objeto JSON exigido pelo contrato do bloco.");
+    throw new Error("O Claude não retornou o objeto JSON exigido pelo contrato do bloco.");
   }
   return Object.fromEntries(
     fields
@@ -125,12 +126,17 @@ function valuesFromResponse(text: string, fields: OutputField[]) {
   );
 }
 
-async function callOpenAI(apiKey: string, payload: Record<string, unknown>, signal: AbortSignal) {
-  return fetch("https://api.openai.com/v1/responses", {
+async function callAnthropic(
+  apiKey: string,
+  payload: Record<string, unknown>,
+  signal: AbortSignal,
+) {
+  return fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
     },
     body: JSON.stringify(payload),
     signal,
@@ -142,23 +148,24 @@ export async function execute(
   services: { signal: AbortSignal; getSecret(key: string): Promise<string | undefined> },
 ) {
   const apiKey = String(
-    (await services.getSecret("OPENAI_API_KEY")) ?? request.configuration.api_key ?? "",
+    (await services.getSecret("ANTHROPIC_API_KEY")) ?? request.configuration.api_key ?? "",
   ).trim();
   if (!apiKey) {
     return {
       status: "error" as const,
-      code: "OPENAI_API_KEY_REQUIRED",
-      message: "Informe uma chave da API da OpenAI para executar este bloco.",
+      code: "ANTHROPIC_API_KEY_REQUIRED",
+      message: "Informe uma chave da API da Anthropic para executar este bloco.",
       retryable: false,
     };
   }
 
-  const model = String(request.configuration.model ?? "gpt-5.6-terra").trim();
+  const model = String(request.configuration.model ?? "claude-sonnet-4-6").trim();
   const systemPrompt = String(
     request.configuration.system_prompt ??
       "Execute as instruções do bloco usando o contexto disponível e respeite exatamente o contrato de saída.",
   );
   const temperature = Number(request.configuration.temperature ?? 0.7);
+  const maxTokens = Number(request.configuration.max_tokens ?? 4096);
   const inputText = Object.entries(request.inputs)
     .map(([key, value]) => `${key}:\n${serialize(value)}`)
     .join("\n\n");
@@ -191,42 +198,42 @@ export async function execute(
       : outputInstructions(request.outputContract),
   ].join("\n\n");
 
+  const messages: Array<{ role: "user" | "assistant"; content: string | AnthropicContent[] }> = [
+    { role: "user", content: userPrompt },
+  ];
   const payload: Record<string, unknown> = {
     model,
-    instructions: systemPrompt,
-    input: userPrompt,
-    store: false,
+    system: systemPrompt,
+    max_tokens: Number.isFinite(maxTokens) ? Math.min(64000, Math.max(1, maxTokens)) : 4096,
+    temperature: Number.isFinite(temperature) ? Math.min(1, Math.max(0, temperature)) : 0.7,
+    messages,
   };
-  if (Number.isFinite(temperature)) payload.temperature = Math.min(2, Math.max(0, temperature));
-  if (request.context.block.type === "BUSCAR") payload.tools = [{ type: "web_search" }];
-
-  let response = await callOpenAI(apiKey, payload, services.signal);
-  let body = (await response.json()) as OpenAIResponse;
-  if (
-    !response.ok &&
-    response.status === 400 &&
-    payload.temperature !== undefined &&
-    /temperature|unsupported parameter/i.test(body.error?.message ?? "")
-  ) {
-    delete payload.temperature;
-    response = await callOpenAI(apiKey, payload, services.signal);
-    body = (await response.json()) as OpenAIResponse;
-  }
-  if (!response.ok) {
-    return {
-      status: "error" as const,
-      code: `OPENAI_HTTP_${response.status}`,
-      message: body.error?.message ?? "A OpenAI não conseguiu processar a solicitação.",
-      retryable: response.status === 429 || response.status >= 500,
-    };
+  if (request.context.block.type === "BUSCAR") {
+    payload.tools = [{ type: "web_search_20260318", name: "web_search", max_uses: 5 }];
   }
 
-  const text = responseText(body);
+  let body: AnthropicResponse | undefined;
+  for (let continuation = 0; continuation < 3; continuation += 1) {
+    const response = await callAnthropic(apiKey, payload, services.signal);
+    body = (await response.json()) as AnthropicResponse;
+    if (!response.ok) {
+      return {
+        status: "error" as const,
+        code: `ANTHROPIC_HTTP_${response.status}`,
+        message: body.error?.message ?? "A Anthropic não conseguiu processar a solicitação.",
+        retryable: response.status === 429 || response.status >= 500,
+      };
+    }
+    if (body.stop_reason !== "pause_turn") break;
+    messages.push({ role: "assistant", content: body.content ?? [] });
+  }
+
+  const text = responseText(body ?? {});
   if (!text) {
     return {
       status: "error" as const,
-      code: "OPENAI_EMPTY_RESPONSE",
-      message: "A OpenAI retornou uma resposta vazia.",
+      code: "ANTHROPIC_EMPTY_RESPONSE",
+      message: "A Anthropic retornou uma resposta vazia.",
       retryable: true,
     };
   }
@@ -238,15 +245,20 @@ export async function execute(
           .trim(),
       }
     : valuesFromResponse(text, request.outputContract);
+  const inputUnits =
+    (body?.usage?.input_tokens ?? 0) +
+    (body?.usage?.cache_creation_input_tokens ?? 0) +
+    (body?.usage?.cache_read_input_tokens ?? 0);
+  const outputUnits = body?.usage?.output_tokens;
   return {
     status: "success" as const,
     values,
     usage: {
-      provider: "OpenAI",
-      model: body.model ?? model,
-      inputUnits: body.usage?.input_tokens,
-      outputUnits: body.usage?.output_tokens,
-      totalUnits: body.usage?.total_tokens,
+      provider: "Anthropic",
+      model: body?.model ?? model,
+      inputUnits,
+      outputUnits,
+      totalUnits: inputUnits + (outputUnits ?? 0),
       unit: "tokens",
     },
   };

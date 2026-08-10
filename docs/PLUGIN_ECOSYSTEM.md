@@ -1,18 +1,19 @@
 # Governança do ecossistema de plugins
 
-Este documento define como plugins podem ser publicados, encontrados, avaliados, atualizados e removidos do ecossistema do ContentFlow OS. O contrato técnico está em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), e a segurança operacional em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
+Este documento define como plugins podem ser distribuídos diretamente, publicados em catálogos opcionais, encontrados, avaliados e atualizados no ecossistema do ContentFlow OS. O contrato técnico está em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), e a segurança operacional em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
 
 ## 1. Princípios
 
-O ecossistema existe para ampliar a execução dos Métodos sem transformar cada integração em código do núcleo. Ele segue cinco princípios:
+O ecossistema existe para ampliar a execução dos Métodos sem transformar cada integração em código do núcleo. Ele segue seis princípios:
 
 1. **Extensão, não clonagem:** integrações independentes conectam-se pelo protocolo; não copiam nem rebatizam o produto principal.
 2. **Escolha informada:** permissões, provedores, custos, efeitos e política de dados aparecem antes da instalação e do uso.
 3. **Interoperabilidade:** capacidades pequenas usam blocos e formatos universais, sem controlar o fluxo por fora do Método.
 4. **Responsabilidade identificável:** cada pacote possui autor, licença, origem, suporte, versão e hash.
 5. **Segurança proporcional:** origem confiável não substitui sandbox, validação ou consentimento.
+6. **Distribuição aberta:** criar, compartilhar, instalar e executar um plugin compatível não depende de aprovação prévia do mantenedor ou de publicação em catálogo.
 
-## 2. Categorias do catálogo
+## 2. Origem e sinais de confiança
 
 | Categoria   | Responsabilidade                                                   | Indicação visual |
 | ----------- | ------------------------------------------------------------------ | ---------------- |
@@ -21,7 +22,15 @@ O ecossistema existe para ampliar a execução dos Métodos sem transformar cada
 | `community` | Distribuído pelo autor, sem revisão integral do projeto.           | Comunidade       |
 | `private`   | Instalado localmente ou por organização, fora do catálogo público. | Privado          |
 
-“Verificado” confirma identidade/origem e uma revisão limitada; não garante disponibilidade do provedor, qualidade de outputs, adequação jurídica ou ausência absoluta de vulnerabilidades.
+Essas categorias comunicam origem e confiança; não formam níveis de permissão. “Verificado” confirma identidade/origem e uma revisão limitada, mas não garante disponibilidade do provedor, qualidade de outputs, adequação jurídica ou ausência absoluta de vulnerabilidades. `community` e `private` não significam “aguardando aprovação”.
+
+### Plugins recebidos diretamente
+
+Um arquivo compartilhado por mensagem, download direto, repositório ou mídia removível não se torna oficial ou verificado por poder ser descoberto pelo aplicativo. Isso não impede sua instalação ou execução pelo usuário. A interface apenas informa que a origem não passou por revisão do projeto e apresenta permissões, efeitos e riscos antes da ativação.
+
+No estado atual, plugins locais e comunitários podem ser exibidos, mas não são executados porque a sandbox ainda não foi concluída. Esse bloqueio é uma limitação temporária da implementação, não um fluxo de aprovação. Depois dos gates de [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), qualquer plugin compatível poderá ser instalado e executado localmente após validações automáticas e consentimento do usuário, sem análise manual do mantenedor.
+
+Se alguém modificar o núcleo, executar o pacote por fora do ContentFlow OS ou remover suas proteções, essa atividade não é uma execução autorizada pelo protocolo nem recebe status, suporte ou garantia do projeto.
 
 ## 3. Identidade e namespace
 
@@ -67,7 +76,9 @@ Antes da instalação, o usuário deve conseguir avaliar:
 
 Informações materiais não podem ficar apenas em link externo ou texto genérico.
 
-## 6. Fluxo de submissão
+## 6. Publicação opcional em catálogo
+
+Submeter um plugin ao catálogo é opcional. Serve para descoberta pública e para solicitar sinais como `verified`; não é requisito para compartilhar um arquivo, instalar por URL/repositório ou executar localmente.
 
 1. O autor reserva ou comprova o namespace.
 2. Envia pacote imutável, manifesto, licença, README, changelog e informações de suporte/segurança.
@@ -77,7 +88,7 @@ Informações materiais não podem ficar apenas em link externo ou texto genéri
 6. Para `verified`, identidade e controle do repositório/domínio são confirmados.
 7. O catálogo publica metadados, hash e resultado da revisão.
 
-Revisão pode pedir escopo menor, documentação adicional ou correção. Rejeições devem indicar a regra violada e oferecer recurso.
+Revisão pode pedir escopo menor, documentação adicional ou correção para aquela listagem ou selo. Uma rejeição remove apenas a elegibilidade no catálogo correspondente; não proíbe a existência, distribuição direta ou instalação local do plugin.
 
 ## 7. Critérios mínimos de aceitação
 
@@ -91,7 +102,11 @@ Revisão pode pedir escopo menor, documentação adicional ou correção. Rejei�
 - licença compatível com dependências distribuídas;
 - documentação suficiente para configuração, custo e suporte;
 - ausência de comportamento oculto, telemetria não declarada ou conteúdo enganoso;
+- comprovação de que automação de interface, quando existir, é permitida pelo provedor e preserva plano, cota e identidade da conta;
+- ausência de extração de cookies/tokens, evasão de CAPTCHA, rotação de contas ou dependência de API privada não autorizada;
 - respeito à licença e às marcas do ContentFlow OS.
+
+Esses critérios governam a listagem no catálogo. A instalação direta depende das regras técnicas do protocolo, das permissões solicitadas e da sandbox, verificadas automaticamente pelo aplicativo; não depende de julgamento ou aprovação do mantenedor.
 
 ## 8. Qualidade e verificação contínua
 
@@ -123,15 +138,15 @@ Qualquer mudança material exige tela de comparação e novo consentimento. Exec
 
 ### Descontinuação normal
 
-O autor informa prazo, motivo, substituto e impacto. Novos usos podem ser bloqueados depois do prazo, mas Métodos existentes continuam identificáveis e outputs permanecem acessíveis.
+O autor informa prazo, motivo, substituto e impacto. O catálogo pode deixar de sugerir a versão depois do prazo, mas não desinstala nem desativa silenciosamente cópias locais. Métodos existentes continuam identificáveis e outputs permanecem acessíveis.
 
 ### Remoção do catálogo
 
-Pode ocorrer por abandono, informações enganosas, violação de políticas, disputa de propriedade intelectual ou incompatibilidade persistente. O autor recebe motivo e canal de recurso quando isso não aumentar risco.
+Pode ocorrer por abandono, informações enganosas, violação de políticas, disputa de propriedade intelectual ou incompatibilidade persistente. Isso interrompe a distribuição por aquele catálogo, mas não apaga cópias locais nem impede distribuição independente. O autor recebe motivo e canal de recurso quando isso não aumentar risco.
 
 ### Revogação de segurança
 
-Malware, exfiltração, credencial comprometida ou risco grave permitem bloqueio imediato. Usuários afetados recebem orientação sobre versão, período, rotação de credenciais e alternativas. O histórico não é apagado silenciosamente.
+Malware, exfiltração, credencial comprometida ou risco grave permitem retirar imediatamente uma versão do catálogo e alertar usuários. O executor continua aplicando seus controles automáticos de integridade, permissões e sandbox. O histórico não é apagado silenciosamente, e a decisão sobre uma cópia local permanece visível ao usuário dentro dos limites técnicos seguros do aplicativo.
 
 ## 11. Vulnerabilidades e resposta
 
@@ -145,7 +160,17 @@ Plugins oficiais também obedecem ao protocolo público, permissões, isolamento
 
 Plugins não podem importar módulos privados do aplicativo, escrever no banco ou depender da interface React. Isso permite evoluir o núcleo sem quebrar o ecossistema e impede vantagens ocultas aos plugins oficiais.
 
-## 13. Checklist do publicador
+## 13. Responsabilidade compartilhada e limites
+
+O autor de um plugin independente é responsável por seu código, dependências, declarações, licenças, tratamento de dados, integrações e efeitos. Quem instala e utiliza o plugin é responsável por avaliar sua origem, conceder apenas permissões necessárias e usá-lo de acordo com a lei, contratos e políticas dos provedores.
+
+O ContentFlow OS não mantém, endossa nem garante plugins não oficiais apenas porque eles usam o protocolo ou podem ser carregados localmente. Problemas de qualidade, disponibilidade, cobrança, violação contratual ou comportamento oculto de um plugin independente devem ser atribuídos conforme a participação de cada agente e a legislação aplicável.
+
+Essa separação não elimina as responsabilidades próprias do núcleo. O ContentFlow OS continua responsável por representar corretamente o status do pacote, não prometer revisão inexistente, aplicar as proteções que documenta, proteger dados que efetivamente trata e corrigir vulnerabilidades da superfície de instalação ou execução sob seu controle. Nenhum aviso deve ser interpretado como exclusão de direitos ou responsabilidades que a lei não permita afastar.
+
+Quando houver indício de malware, exfiltração, fraude ou outra atividade ilícita, um catálogo mantido pelo projeto pode recusar ou remover sua listagem. O executor nega apenas violações técnicas detectáveis das permissões, integridade, contrato ou sandbox; ele não cria uma fila de aprovação humana nem tenta julgar previamente toda finalidade possível do código. Não é necessário inspecionar ou controlar tudo que o autor faz fora do aplicativo para manter uma fronteira segura dentro dele.
+
+## 14. Checklist do publicador
 
 - [ ] Namespace e identidade são legítimos.
 - [ ] Licença e modelo comercial estão claros.

@@ -53,6 +53,16 @@ Ferramentas de IA não recebem direitos adicionais. A pessoa ou empresa que dire
 
 O arquivo [`AI_USAGE_POLICY.md`](../AI_USAGE_POLICY.md), as instruções de agentes e as instruções do GitHub Copilot aumentam a chance de ferramentas automáticas alertarem seus usuários. Nenhum arquivo técnico consegue garantir o comportamento de toda IA, especialmente porque um operador de fork pode removê-lo. A proteção jurídica continua sendo a licença e a legislação aplicável.
 
+## Plugins independentes e responsabilidade
+
+Um plugin independente não precisa de aprovação do ContentFlow OS para ser criado, distribuído diretamente ou instalado localmente. Ele também não se torna produto oficial, verificado ou mantido pelo projeto apenas por implementar o protocolo. O autor continua responsável pela origem do código, dependências, permissões declaradas, tratamento de dados, integrações e efeitos que implementa; o usuário continua responsável por escolher a origem e utilizar o pacote dentro da lei e dos contratos aplicáveis.
+
+O projeto pode informar que não oferece suporte, revisão ou garantia para plugins não oficiais e pode exigir que o usuário reconheça os riscos antes de habilitá-los. Um catálogo mantido pelo projeto pode aceitar ou recusar uma listagem, mas essa decisão não impede distribuição direta. O aplicativo aplica automaticamente compatibilidade, integridade, permissões e sandbox sem criar uma fila de aprovação pelo titular.
+
+Esse aviso não deve prometer exoneração absoluta. A responsabilidade por um incidente depende dos fatos, da participação causal de cada agente e da legislação aplicável. O núcleo ainda precisa cumprir as obrigações relacionadas às superfícies que controla, às informações que fornece e aos dados pessoais que efetivamente trata. Em especial, relações de consumo podem limitar cláusulas que excluam ou transfiram responsabilidade, e a legislação de proteção de dados exige medidas técnicas e administrativas adequadas desde a concepção do produto.
+
+Código executado por fora do aplicativo, ou em uma cópia modificada que remove a sandbox e outras proteções, não constitui uso suportado do protocolo. Para transformar essa separação técnica em termos de uso, telas de consentimento e política de privacidade, recomenda-se revisão por advogado brasileiro.
+
 ## Revisão profissional recomendada
 
 Antes de licenciar comercialmente, receber contribuições externas relevantes ou agir contra um infrator, recomenda-se revisão por advogado brasileiro especializado em software, contratos e propriedade intelectual. A revisão deve confirmar especialmente titularidade, foro, política de contribuições, marca, tratamento internacional e compatibilidade com contratos futuros.

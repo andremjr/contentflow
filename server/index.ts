@@ -1,6 +1,16 @@
 import express, { type ErrorRequestHandler } from "express";
 import Database from "better-sqlite3";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type {
@@ -30,13 +40,35 @@ import {
   getOpenAIConnection,
   refreshOpenAIModels,
 } from "./openai-connection";
+import {
+  connectAnthropic,
+  disconnectAnthropic,
+  getAnthropicApiKey,
+  getAnthropicConnection,
+  refreshAnthropicModels,
+} from "./anthropic-connection";
+import { deletePluginSecret, getPluginSecret, setPluginSecret } from "./credential-vault";
 import { fetchYouTubeChannel } from "./youtube";
 
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
-const dataDirectory = path.join(process.cwd(), "data");
+const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
+const defaultDataDirectory =
+  process.platform === "win32" && process.env.APPDATA
+    ? path.join(process.env.APPDATA, "ContentFlow OS", "data")
+    : path.join(applicationRoot, "data");
+const dataDirectory = path.resolve(process.env.CONTENTFLOW_DATA_DIR ?? defaultDataDirectory);
 const uploadsDirectory = path.join(dataDirectory, "uploads");
-const installedPluginsDirectory = path.join(dataDirectory, "plugins", "installed");
-const bundledPluginsDirectory = path.join(process.cwd(), "plugins", "bundled");
+const installedPluginsDirectory = path.resolve(
+  process.env.CONTENTFLOW_INSTALLED_PLUGINS_DIR ?? path.join(dataDirectory, "plugins", "installed"),
+);
+const developmentLinksDirectory = path.resolve(
+  process.env.CONTENTFLOW_DEVELOPMENT_LINKS_DIR ??
+    path.join(dataDirectory, "plugins", "development"),
+);
+const nodeMajorVersion = Number(
+  process.env.CONTENTFLOW_PLUGIN_NODE_MAJOR ?? process.versions.node.split(".")[0],
+);
+const communitySandboxAvailable = nodeMajorVersion >= 26;
 const maxUploadMb = boundedEnvironmentNumber("CONTENTFLOW_MAX_UPLOAD_MB", 256, 1, 1_024);
 const maxUploadStorageGb = boundedEnvironmentNumber(
   "CONTENTFLOW_MAX_UPLOAD_STORAGE_GB",
@@ -67,10 +99,37 @@ const activeUploadMimeTypes = new Set([
   "text/xml",
 ]);
 mkdirSync(dataDirectory, { recursive: true });
+
+const databasePath = path.join(dataDirectory, "contentflow-os.sqlite");
+const legacyDataDirectory = path.join(applicationRoot, "data");
+const legacyDatabasePath = path.join(legacyDataDirectory, "contentflow-os.sqlite");
+const shouldMigrateLegacyData =
+  databasePath !== legacyDatabasePath &&
+  !existsSync(databasePath) &&
+  existsSync(legacyDatabasePath);
+
+if (shouldMigrateLegacyData) {
+  const legacyDatabase = new Database(legacyDatabasePath, { readonly: true });
+  try {
+    await legacyDatabase.backup(databasePath);
+  } finally {
+    legacyDatabase.close();
+  }
+
+  for (const directoryName of ["uploads", "plugins"]) {
+    const legacyDirectory = path.join(legacyDataDirectory, directoryName);
+    const destinationDirectory = path.join(dataDirectory, directoryName);
+    if (existsSync(legacyDirectory) && !existsSync(destinationDirectory)) {
+      cpSync(legacyDirectory, destinationDirectory, { recursive: true });
+    }
+  }
+}
+
 mkdirSync(uploadsDirectory, { recursive: true });
 mkdirSync(installedPluginsDirectory, { recursive: true });
+mkdirSync(developmentLinksDirectory, { recursive: true });
 
-const database = new Database(path.join(dataDirectory, "contentflow-os.sqlite"));
+const database = new Database(databasePath);
 database.pragma("journal_mode = WAL");
 database.exec(`
   CREATE TABLE IF NOT EXISTS channels (
@@ -118,6 +177,18 @@ database.exec(`
     language TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS plugin_consents (
+    plugin_id TEXT PRIMARY KEY,
+    version TEXT NOT NULL,
+    permissions TEXT NOT NULL,
+    enabled INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS plugin_workspaces (
+    plugin_id TEXT PRIMARY KEY,
+    directory TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
 
 type AppPreferences = {
@@ -159,6 +230,46 @@ function readPayload<T>(table: string, id: string): T | undefined {
   const row = database.prepare(`SELECT payload FROM ${table} WHERE id = ?`).get(id) as
     { payload: string } | undefined;
   return row ? (JSON.parse(row.payload) as T) : undefined;
+}
+
+type PluginConsent = {
+  version: string;
+  permissions: string[];
+  enabled: boolean;
+};
+
+function readPluginConsent(pluginId: string): PluginConsent | undefined {
+  const row = database
+    .prepare("SELECT version, permissions, enabled FROM plugin_consents WHERE plugin_id = ?")
+    .get(pluginId) as { version: string; permissions: string; enabled: number } | undefined;
+  if (!row) return undefined;
+  return {
+    version: row.version,
+    permissions: JSON.parse(row.permissions) as string[],
+    enabled: row.enabled === 1,
+  };
+}
+
+function pluginConsentIsCurrent(plugin: {
+  id: string;
+  source: string;
+  manifest: { version: string; permissions: string[] };
+}) {
+  if (plugin.source === "bundled") return true;
+  if (!communitySandboxAvailable) return false;
+  const consent = readPluginConsent(plugin.id);
+  return (
+    consent?.enabled === true &&
+    consent.version === plugin.manifest.version &&
+    JSON.stringify(consent.permissions) === JSON.stringify(plugin.manifest.permissions)
+  );
+}
+
+function readPluginWorkspace(pluginId: string) {
+  const row = database
+    .prepare("SELECT directory FROM plugin_workspaces WHERE plugin_id = ?")
+    .get(pluginId) as { directory: string } | undefined;
+  return row?.directory;
 }
 
 function executionFor(projectId: string, processType: string) {
@@ -293,7 +404,14 @@ function isOptionalHttpsUrl(value: unknown) {
 function isPluginManifest(manifest: Record<string, unknown>) {
   const runtime = manifest.runtime as Record<string, unknown> | undefined;
   const capabilities = manifest.capabilities;
-  const permissions = ["network", "filesystem:read", "filesystem:write", "process"] as const;
+  const permissions = [
+    "network",
+    "filesystem:read",
+    "filesystem:write",
+    "process",
+    "worker",
+    "native",
+  ] as const;
   const blockTypes = ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"] as const;
   const processTypes = [
     "theme",
@@ -393,7 +511,7 @@ function isPluginManifest(manifest: Record<string, unknown>) {
           isUniqueStringArray(capability.processTypes, processTypes)) &&
         portsAreValid(capability.inputPorts, "acceptedTypes") &&
         portsAreValid(capability.outputPorts, "producedTypes") &&
-        capability.outputPorts.length > 0 &&
+        (capability.outputPorts as unknown[]).length > 0 &&
         ["immediate", "async"].includes(String(execution?.mode)) &&
         (execution?.maxConcurrency === undefined ||
           (Number.isInteger(execution.maxConcurrency) &&
@@ -631,22 +749,293 @@ app.put("/api/preferences", (request, response) => {
 });
 
 app.get("/api/plugins", (_request, response) => {
-  initializePluginRunner();
-  const bundled = discoverPlugins(bundledPluginsDirectory, "bundled", "plugins/bundled");
-  const local = discoverPlugins(path.join(process.cwd(), "plugins"), "installed", "plugins");
-  const installed = discoverPlugins(
-    installedPluginsDirectory,
-    "installed",
-    "data/plugins/installed",
-  );
+  const registry = initializePluginRunner();
+  const plugins = registry.plugins.map((plugin) => {
+    const enabled = pluginConsentIsCurrent(plugin);
+    return {
+      id: plugin.id,
+      source: plugin.source,
+      directory: plugin.directory,
+      manifest: plugin.manifest,
+      enabled,
+      executable: Boolean(plugin.executable && enabled),
+      sandboxed: plugin.source !== "bundled",
+      networkIsolation: communitySandboxAvailable,
+    };
+  });
   response.json({
-    plugins: [...bundled.plugins, ...local.plugins, ...installed.plugins],
-    issues: [...bundled.issues, ...local.issues, ...installed.issues],
+    plugins,
+    issues: registry.issues,
+    examplesDirectory: process.env.CONTENTFLOW_EXAMPLES_DIR,
   });
 });
 
-app.get("/api/plugins/official-openai-gpt/connection", (_request, response) => {
-  response.json(getOpenAIConnection());
+app.post("/api/plugins/install-from-folder", (request, response) => {
+  const requestedPath = typeof request.body?.path === "string" ? request.body.path.trim() : "";
+  if (!requestedPath) {
+    response.status(400).json({ error: "Informe a pasta criada pelo autor ou pela IA." });
+    return;
+  }
+  const sourceDirectory = path.resolve(requestedPath);
+  const manifestPath = path.join(sourceDirectory, "contentflow.plugin.json");
+  if (!existsSync(sourceDirectory) || !statSync(sourceDirectory).isDirectory()) {
+    response.status(404).json({ error: "A pasta informada não existe." });
+    return;
+  }
+  if (!existsSync(manifestPath)) {
+    response.status(422).json({ error: "A pasta não contém contentflow.plugin.json." });
+    return;
+  }
+  let temporaryDestination: string | undefined;
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    if (!isPluginManifest(manifest)) throw new Error("O manifesto do plugin é inválido.");
+    const pluginId = String(manifest.id);
+    if (!/^[a-z0-9.-]+$/.test(pluginId)) throw new Error("O id do plugin é inválido.");
+    const destination = path.resolve(installedPluginsDirectory, pluginId);
+    if (!destination.startsWith(`${path.resolve(installedPluginsDirectory)}${path.sep}`)) {
+      throw new Error("O destino calculado para o plugin é inválido.");
+    }
+    if (existsSync(destination)) {
+      response.status(409).json({ error: "Esta versão já possui uma pasta instalada." });
+      return;
+    }
+    mkdirSync(installedPluginsDirectory, { recursive: true });
+    temporaryDestination = path.join(installedPluginsDirectory, `.install-${randomUUID()}`);
+    cpSync(sourceDirectory, temporaryDestination, {
+      recursive: true,
+      dereference: false,
+      errorOnExist: true,
+    });
+    const registry = initializePluginRunner();
+    const installed = registry.plugins.find(
+      (plugin) => plugin.id === pluginId && plugin.source === "installed",
+    );
+    if (!installed) {
+      const issue = registry.issues.find((item) => item.directory.includes(pluginId));
+      throw new Error(issue?.message ?? "O pacote não passou pela validação automática.");
+    }
+    renameSync(temporaryDestination, destination);
+    temporaryDestination = undefined;
+    initializePluginRunner();
+    response.status(201).json({ id: pluginId, installed: true });
+  } catch (error) {
+    if (temporaryDestination) rmSync(temporaryDestination, { recursive: true, force: true });
+    initializePluginRunner();
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível instalar o plugin.",
+    });
+  }
+});
+
+app.post("/api/plugins/link-development-folder", (request, response) => {
+  const requestedPath = typeof request.body?.path === "string" ? request.body.path.trim() : "";
+  if (!requestedPath) {
+    response.status(400).json({ error: "Informe a pasta de desenvolvimento do plugin." });
+    return;
+  }
+  const sourceDirectory = path.resolve(requestedPath);
+  const manifestPath = path.join(sourceDirectory, "contentflow.plugin.json");
+  if (!existsSync(sourceDirectory) || !statSync(sourceDirectory).isDirectory()) {
+    response.status(404).json({ error: "A pasta informada não existe." });
+    return;
+  }
+  if (!existsSync(manifestPath)) {
+    response.status(422).json({ error: "A pasta não contém contentflow.plugin.json." });
+    return;
+  }
+  let linkPath: string | undefined;
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    if (!isPluginManifest(manifest)) throw new Error("O manifesto do plugin é inválido.");
+    const pluginId = String(manifest.id);
+    if (!/^[a-z0-9.-]+$/.test(pluginId)) throw new Error("O id do plugin é inválido.");
+    linkPath = path.join(developmentLinksDirectory, `${pluginId}.json`);
+    writeFileSync(linkPath, JSON.stringify({ path: sourceDirectory }, null, 2), "utf8");
+    const registry = initializePluginRunner();
+    const linked = registry.plugins.find(
+      (plugin) => plugin.id === pluginId && plugin.source === "local",
+    );
+    if (!linked) {
+      const issue = registry.issues.find(
+        (item) => item.directory === sourceDirectory || item.directory === linkPath,
+      );
+      throw new Error(issue?.message ?? "A pasta não passou pela validação automática.");
+    }
+    response.status(201).json({ id: pluginId, linked: true });
+  } catch (error) {
+    if (linkPath) rmSync(linkPath, { force: true });
+    initializePluginRunner();
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível vincular o plugin.",
+    });
+  }
+});
+
+app.delete("/api/plugins/:pluginId", async (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Plugin não encontrado." });
+    return;
+  }
+  if (plugin.source === "bundled") {
+    response.status(403).json({ error: "Plugins incluídos fazem parte do ContentFlow OS." });
+    return;
+  }
+  try {
+    if (plugin.source === "installed") {
+      const installedRoot = path.resolve(installedPluginsDirectory);
+      if (!plugin.absoluteDirectory.startsWith(`${installedRoot}${path.sep}`)) {
+        throw new Error("A pasta instalada não está dentro do armazenamento autorizado.");
+      }
+      rmSync(plugin.absoluteDirectory, { recursive: true, force: true });
+    } else {
+      rmSync(path.join(developmentLinksDirectory, `${plugin.id}.json`), { force: true });
+    }
+    database.transaction(() => {
+      database.prepare("DELETE FROM plugin_consents WHERE plugin_id = ?").run(plugin.id);
+      database.prepare("DELETE FROM plugin_workspaces WHERE plugin_id = ?").run(plugin.id);
+    })();
+    for (const secretKey of plugin.manifest.secretKeys ?? []) {
+      await deletePluginSecret(plugin.id, secretKey);
+    }
+    initializePluginRunner();
+    response.status(204).end();
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível remover o plugin.",
+    });
+  }
+});
+
+app.put("/api/plugins/:pluginId/consent", (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Plugin não encontrado no registro local." });
+    return;
+  }
+  if (plugin.source === "bundled") {
+    response.json({ enabled: true });
+    return;
+  }
+  if (!communitySandboxAvailable && request.body?.enabled === true) {
+    response.status(426).json({
+      error: `A sandbox comunitária exige Node 26; o servidor atual usa Node ${process.versions.node}. Reinicie o aplicativo com a versão correta.`,
+    });
+    return;
+  }
+  const enabled = request.body?.enabled === true;
+  database
+    .prepare(
+      `INSERT INTO plugin_consents (plugin_id, version, permissions, enabled, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(plugin_id) DO UPDATE SET
+         version = excluded.version,
+         permissions = excluded.permissions,
+         enabled = excluded.enabled,
+         updated_at = excluded.updated_at`,
+    )
+    .run(
+      plugin.id,
+      plugin.manifest.version,
+      JSON.stringify(plugin.manifest.permissions),
+      enabled ? 1 : 0,
+      new Date().toISOString(),
+    );
+  response.json({ enabled });
+});
+
+app.get("/api/plugins/:pluginId/workspace", (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  if (!plugin || plugin.source === "bundled") {
+    response.status(404).json({ error: "Plugin comunitário não encontrado." });
+    return;
+  }
+  response.json({ path: readPluginWorkspace(plugin.id) ?? "" });
+});
+
+app.put("/api/plugins/:pluginId/workspace", (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  const requestedPath = typeof request.body?.path === "string" ? request.body.path.trim() : "";
+  if (!plugin || plugin.source === "bundled") {
+    response.status(404).json({ error: "Plugin comunitário não encontrado." });
+    return;
+  }
+  if (
+    !plugin.manifest.permissions.includes("filesystem:read") &&
+    !plugin.manifest.permissions.includes("filesystem:write")
+  ) {
+    response.status(422).json({ error: "Este plugin não declarou acesso a arquivos." });
+    return;
+  }
+  if (!requestedPath) {
+    database.prepare("DELETE FROM plugin_workspaces WHERE plugin_id = ?").run(plugin.id);
+    response.json({ path: "" });
+    return;
+  }
+  try {
+    const directory = path.resolve(requestedPath);
+    mkdirSync(directory, { recursive: true });
+    if (!statSync(directory).isDirectory()) throw new Error("O caminho não é uma pasta.");
+    database
+      .prepare(
+        `INSERT INTO plugin_workspaces (plugin_id, directory, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(plugin_id) DO UPDATE SET
+           directory = excluded.directory,
+           updated_at = excluded.updated_at`,
+      )
+      .run(plugin.id, directory, new Date().toISOString());
+    response.json({ path: directory });
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível preparar a pasta.",
+    });
+  }
+});
+
+app.get("/api/plugins/:pluginId/secrets/:secretKey", async (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  const secretKey = request.params.secretKey;
+  if (!plugin || !plugin.manifest.secretKeys?.includes(secretKey)) {
+    response.status(404).json({ error: "Credencial não declarada pelo plugin." });
+    return;
+  }
+  response.json({ connected: Boolean(await getPluginSecret(plugin.id, secretKey)) });
+});
+
+app.put("/api/plugins/:pluginId/secrets/:secretKey", async (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  const secretKey = request.params.secretKey;
+  const value = typeof request.body?.value === "string" ? request.body.value : "";
+  if (!plugin || !plugin.manifest.secretKeys?.includes(secretKey)) {
+    response.status(404).json({ error: "Credencial não declarada pelo plugin." });
+    return;
+  }
+  await setPluginSecret(plugin.id, secretKey, value);
+  response.json({ connected: true });
+});
+
+app.delete("/api/plugins/:pluginId/secrets/:secretKey", async (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  const secretKey = request.params.secretKey;
+  if (!plugin || !plugin.manifest.secretKeys?.includes(secretKey)) {
+    response.status(404).json({ error: "Credencial não declarada pelo plugin." });
+    return;
+  }
+  await deletePluginSecret(plugin.id, secretKey);
+  response.json({ connected: false });
+});
+
+app.get("/api/plugins/official-openai-gpt/connection", async (_request, response) => {
+  response.json(await getOpenAIConnection());
 });
 
 app.post("/api/plugins/official-openai-gpt/connection", async (request, response) => {
@@ -670,9 +1059,39 @@ app.post("/api/plugins/official-openai-gpt/models/refresh", async (_request, res
   }
 });
 
-app.delete("/api/plugins/official-openai-gpt/connection", (_request, response) => {
-  disconnectOpenAI();
-  response.json(getOpenAIConnection());
+app.delete("/api/plugins/official-openai-gpt/connection", async (_request, response) => {
+  await disconnectOpenAI();
+  response.json(await getOpenAIConnection());
+});
+
+app.get("/api/plugins/official-anthropic-claude/connection", async (_request, response) => {
+  response.json(await getAnthropicConnection());
+});
+
+app.post("/api/plugins/official-anthropic-claude/connection", async (request, response) => {
+  const apiKey = typeof request.body?.apiKey === "string" ? request.body.apiKey : "";
+  try {
+    response.json(await connectAnthropic(apiKey));
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível conectar à Anthropic.",
+    });
+  }
+});
+
+app.post("/api/plugins/official-anthropic-claude/models/refresh", async (_request, response) => {
+  try {
+    response.json(await refreshAnthropicModels());
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível atualizar os modelos.",
+    });
+  }
+});
+
+app.delete("/api/plugins/official-anthropic-claude/connection", async (_request, response) => {
+  await disconnectAnthropic();
+  response.json(await getAnthropicConnection());
 });
 
 app.get("/api/plugins/:pluginId/source", (request, response) => {
@@ -728,9 +1147,9 @@ app.post("/api/execute-block", async (request, response) => {
     response.status(404).json({ error: "Plugin não encontrado no registro local." });
     return;
   }
-  if (!plugin.executable) {
+  if (!plugin.executable || !pluginConsentIsCurrent(plugin)) {
     response.status(403).json({
-      error: "Plugins externos ainda não podem executar sem o sandbox comunitário.",
+      error: "Ative este plugin e confirme suas permissões na Central de Plugins.",
     });
     return;
   }
@@ -856,6 +1275,29 @@ app.post("/api/execute-block", async (request, response) => {
             capability.outputPorts[0]?.key ??
             field.key,
         }));
+  const { api_key: transientApiKey, ...executionParameters } = body.parameters;
+  const secretKey =
+    plugin.id === "official-openai-gpt"
+      ? "OPENAI_API_KEY"
+      : plugin.id === "official-anthropic-claude"
+        ? "ANTHROPIC_API_KEY"
+        : undefined;
+  const providedApiKey = typeof transientApiKey === "string" ? transientApiKey.trim() : "";
+  const storedApiKey =
+    !providedApiKey && plugin.id === "official-openai-gpt"
+      ? await getOpenAIApiKey()
+      : !providedApiKey && plugin.id === "official-anthropic-claude"
+        ? await getAnthropicApiKey()
+        : undefined;
+  const apiKey = providedApiKey || storedApiKey;
+  const pluginSecrets: Record<string, string> = {};
+  for (const declaredSecret of plugin.manifest.secretKeys ?? []) {
+    const storedSecret = await getPluginSecret(plugin.id, declaredSecret);
+    if (storedSecret) pluginSecrets[declaredSecret] = storedSecret;
+  }
+  if (secretKey && apiKey) pluginSecrets[secretKey] = apiKey;
+  const pluginWorkspaceDirectory = readPluginWorkspace(plugin.id);
+
   const pluginRequest: PluginExecutionRequest = {
     executionId: execution.id,
     traceId: randomUUID(),
@@ -865,10 +1307,7 @@ app.post("/api/execute-block", async (request, response) => {
     invocation: { mode: "start" },
     configuration: {
       ...block.plugin.configuration,
-      ...body.parameters,
-      ...(plugin.id === "official-openai-gpt" && !body.parameters.api_key && getOpenAIApiKey()
-        ? { api_key: getOpenAIApiKey() }
-        : {}),
+      ...executionParameters,
     },
     settings: {},
     inputs,
@@ -921,16 +1360,35 @@ app.post("/api/execute-block", async (request, response) => {
     .run(JSON.stringify(execution), execution.updatedAt, execution.id);
 
   try {
-    const pluginResponse = await executeRegisteredPlugin(
+    const executionTimeoutMs = capability.execution.defaultTimeoutMs ?? 60_000;
+    const executionDeadline = Date.now() + executionTimeoutMs;
+    let pluginResponse = await executeRegisteredPlugin(
       plugin,
       pluginRequest,
-      capability.execution.defaultTimeoutMs ?? 60_000,
+      executionTimeoutMs,
+      pluginSecrets,
+      { workspaceDirectory: pluginWorkspaceDirectory },
     );
+    while (pluginResponse.status === "pending") {
+      if (Date.now() >= executionDeadline) {
+        throw new Error("O job do plugin excedeu o tempo máximo declarado.");
+      }
+      const pollAfterMs = Math.max(500, Math.min(pluginResponse.pollAfterMs, 30_000));
+      await new Promise((resolve) => setTimeout(resolve, pollAfterMs));
+      pluginRequest.invocation = { mode: "resume", jobId: pluginResponse.jobId };
+      pluginResponse = await executeRegisteredPlugin(
+        plugin,
+        pluginRequest,
+        Math.max(1_000, executionDeadline - Date.now()),
+        pluginSecrets,
+        { workspaceDirectory: pluginWorkspaceDirectory },
+      );
+    }
     if (pluginResponse.status !== "success") {
       const message =
         pluginResponse.status === "error"
           ? pluginResponse.message
-          : "O plugin iniciou um job assíncrono, ainda não suportado por esta versão.";
+          : "O plugin não concluiu a execução.";
       blockExecution.status = "failed";
       blockExecution.error = message;
       blockExecution.logs = pluginResponse.logs;

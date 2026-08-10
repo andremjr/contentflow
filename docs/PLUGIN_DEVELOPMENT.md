@@ -1,19 +1,35 @@
 # Desenvolvimento de plugins
 
-Este guia leva um plugin do manifesto ao resultado validado. O protocolo normativo é [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), a referência TypeScript é [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e a ordem estratégica está em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Antes de distribuir, consulte também [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md) e [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md).
+Este guia leva um plugin do manifesto ao resultado validado. O protocolo normativo é [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), a referência TypeScript é [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e a ordem estratégica está em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Antes de distribuir, consulte também [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md) e [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md). Integrações que operam interfaces web devem seguir ainda [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md).
 
-> Estado atual: o ContentFlow OS descobre manifestos e já executa entrypoints oficiais incluídos em `plugins/bundled` por um processo separado. Plugins locais e comunitários continuam apenas visíveis até a conclusão dos gates de sandbox, permissões e instalação segura.
+> Estado atual: plugins locais e comunitários podem ser instalados por pasta, ativados pelo próprio usuário e executados sem aprovação central. O núcleo valida o manifesto, exige consentimento novamente quando versão ou permissões mudam e executa o código em processo separado com permissões de filesystem, rede, subprocessos, workers e módulos nativos negadas por padrão.
 
-## 1. Escolha uma capacidade pequena
+Se você está usando uma IA para criar o plugin, entregue a ela este documento, [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o schema [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json) e o exemplo mínimo em [`../plugins/examples/community-reference`](../plugins/examples/community-reference). Para o primeiro plugin, o autor precisa se concentrar em três coisas: o manifesto, o valor recebido em `request.inputs` e o valor devolvido em `response.values`. Instalação, consentimento, cofre, sandbox e importação de artifacts ficam a cargo do ContentFlow OS.
 
-Uma capacidade deve fazer uma coisa observável em um dos quatro blocos. Exemplos:
+> Estado desejado: qualquer autor poderá distribuir um plugin diretamente e qualquer usuário poderá instalá-lo e executá-lo após checks automáticos e consentimento local. Publicação ou verificação em catálogo será opcional.
+
+### Teste local sem terminal
+
+Na tela **Plugins**, use uma destas opções:
+
+- **Usar pasta ao vivo**: recomendado durante o desenvolvimento. O ContentFlow OS mantém um vínculo com a pasta escolhida; salvar uma alteração no código basta para a próxima execução usar a nova versão. Para remover, clique em **Desconectar pasta**.
+- **Instalar uma cópia**: recomendado para distribuição. O aplicativo copia o pacote para a área local e ele continua instalado mesmo se a pasta original for apagada. Para remover, clique em **Desinstalar**.
+
+O botão de exemplo preenche a pasta `Documentos\ContentFlow OS\Plugins\community-reference`, criada automaticamente pela V0. Atualizar a página apenas relê os plugins conectados ou instalados; apagar a pasta de origem não desinstala uma cópia. Essa distinção evita perda acidental de um plugin já instalado.
+
+## 1. Escolha uma entrega clara
+
+Uma capacidade representa uma responsabilidade observável de um dos quatro blocos. Ela pode ser internamente simples ou complexa e pode executar por segundos ou horas. Exemplos:
 
 - buscar referências na web (`BUSCAR` + `Código`);
 - criar três títulos (`CRIAR` + `IA`);
 - renderizar uma imagem a partir de um layout (`CRIAR` + `Código`);
 - validar um roteiro por critérios editoriais (`VALIDAR` + `IA`).
+- pesquisar fontes, planejar e escrever um roteiro completo (`CRIAR` + `IA`), entregando o roteiro como resultado único do bloco;
+- gerar e organizar centenas de imagens para slots identificados (`CRIAR` + `IA/Código`);
+- compilar e renderizar um vídeo local durante várias horas (`CRIAR` + `Código`).
 
-Não modele um método inteiro dentro de um plugin. Sequência, entradas, validação humana e novas tentativas pertencem ao núcleo.
+“Uma responsabilidade” não significa uma única chamada, um único prompt ou uma operação curta. O plugin pode pesquisar, raciocinar, dividir trabalho, chamar várias APIs, manter checkpoints e combinar resultados internamente. O limite é a interface externa: ele recebe as entradas daquele bloco e entrega o resultado declarado. A sequência visível entre processos, a validação humana e novas tentativas continuam pertencendo ao núcleo.
 
 ## 2. Estruture a pasta
 
@@ -97,7 +113,7 @@ export async function execute(
 
 O import público do SDK será disponibilizado junto com o executor. Até lá, use [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) como referência ou copie apenas os tipos para prototipação; não acople o plugin a arquivos internos do aplicativo em produção.
 
-Use `services.getSecret()` somente para chaves declaradas, `services.resolveInputFile()` para arquivos recebidos e `services.getOutputPath()` para artifacts. Encaminhe `services.signal` a `fetch` e SDKs que aceitem cancelamento.
+Use `services.getSecret()` somente para chaves declaradas, `services.resolveInputFile()` para arquivos recebidos, `services.getOutputPath()` para artifacts e `services.getWorkspacePath()` para arquivos persistentes/checkpoints. O usuário pode conectar uma pasta própria na Central de Plugins; sem isso, o núcleo fornece uma pasta interna isolada. Encaminhe `services.signal` a `fetch` e SDKs que aceitem cancelamento.
 
 Boas propriedades do handler:
 
@@ -184,7 +200,7 @@ Exemplo de layout de thumbnail:
 
 ## 7. Implemente jobs assíncronos quando necessário
 
-Não mantenha o processo aberto durante vários minutos esperando um gerador de vídeo, avatar, renderização ou upload. Declare `execution.mode = "async"` e trate três invocações:
+Trabalho demorado é permitido. Uma capacidade `immediate` pode manter um worker local supervisionado até o timeout declarado, atualmente limitado a 24 horas. Para jobs externos, retomáveis ou que precisam sobreviver à reinicialização do aplicativo, declare `execution.mode = "async"` e trate três invocações:
 
 ```ts
 if (request.invocation.mode === "start") {
@@ -210,6 +226,8 @@ return { status: "error", code: "CANCELLED", message: "Job cancelado.", retryabl
 ```
 
 O `jobId` precisa ser suficiente para retomar em outro processo, sem memória global. `start`, `resume` e `cancel` devem ser idempotentes. Não invente progresso quando o provedor não o informar.
+
+Renderizações locais também podem usar o lifecycle assíncrono quando o executor oferecer workers gerenciados: `start` inicia o processo supervisionado, `pending` preserva o handle e checkpoints, e `resume` consulta o progresso. Isso permite trabalhos de uma ou várias horas sem confundir duração com falha.
 
 ## 8. Entregue arquivos como artifacts
 
@@ -305,6 +323,8 @@ Teste no mínimo:
 - coerência entre tráfego real, providers e política de dados declarada.
 
 Fixtures de requisição e resposta podem seguir [`examples/plugin-request.example.json`](examples/plugin-request.example.json).
+
+Um plugin pode declarar uma chave, token ou token de sessão em `secretKeys` e pedir que o próprio usuário a conecte no cofre. Ele também pode pedir `network`, `filesystem:*` ou `process` quando sua função realmente exigir. A sandbox não extrai credenciais do navegador nem concede acesso silencioso a perfis: descoberta/captura mediada de sessão e automação de uma janela autenticada ainda dependem do broker descrito em [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md). Até esse broker existir, qualquer automação direta baseada em `process` é uma permissão avançada, executa sob responsabilidade explícita do usuário e deve documentar com clareza os dados, provedores e efeitos envolvidos.
 
 ## 13. Checklist de publicação
 

@@ -2,13 +2,14 @@
 
 Este documento é o contrato normativo entre o núcleo do ContentFlow OS e plugins dos operadores `IA` e `Código`. Em caso de divergência, a tipagem em [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e este documento devem ser atualizados juntos.
 
-O primeiro executor isolado está implementado para plugins oficiais incluídos em `plugins/bundled`, com processo separado, timeout, ambiente mínimo, validação da resposta e persistência controlada pelo núcleo. Plugins locais ou comunitários podem ser descobertos, mas permanecem não executáveis até a conclusão dos gates de segurança. Depois da publicação do primeiro plugin, qualquer alteração incompatível exigirá nova `apiVersion`.
+O executor isolado atende plugins oficiais, locais e comunitários. Plugins externos são validados automaticamente, exigem consentimento local por versão/permissões e executam em processo separado sob a sandbox do Node 26. Não existe aprovação central para criar, compartilhar, instalar ou ativar um plugin. Depois da publicação do primeiro plugin, qualquer alteração incompatível exigirá nova `apiVersion`.
 
 Documentos relacionados:
 
 - [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md): tutorial de implementação.
 - [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md): ordem estratégica e catálogo por processo.
 - [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md): modelo de ameaças e requisitos do executor.
+- [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md): requisitos futuros para automação autorizada de interfaces web.
 - [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md): publicação, revisão e governança do catálogo.
 - [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json): schema validável do manifesto v1.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): domínio, processos, blocos e operadores.
@@ -35,6 +36,7 @@ Não fazem parte da API v1:
 - componentes React injetados pelo plugin;
 - instalação arbitrária de dependências durante a execução;
 - execução de plugins do operador `Humano`.
+- acesso a navegador, cookies, tokens de sessão ou perfis autenticados.
 
 ## 2. Vocabulário
 
@@ -121,10 +123,11 @@ type PluginExecutionServices = {
   getSecret(key: string): Promise<string | undefined>;
   resolveInputFile(file: StoredFile): Promise<string>;
   getOutputPath(relativePath: string): string;
+  getWorkspacePath(relativePath: string): string;
 };
 ```
 
-O plugin encaminha `signal` a operações abortáveis. `getSecret` aceita apenas chaves declaradas pelo próprio manifesto. Os dois serviços de arquivo retornam caminhos dentro do sandbox, nunca caminhos arbitrários do host.
+O plugin encaminha `signal` a operações abortáveis. `getSecret` aceita apenas chaves declaradas pelo próprio manifesto. `resolveInputFile` abre uma entrada, `getOutputPath` cria um artifact temporário e `getWorkspacePath` aponta para arquivos/checkpoints persistentes na pasta escolhida pelo usuário ou na pasta interna padrão. Os serviços retornam caminhos dentro das raízes concedidas, nunca um caminho arbitrário escolhido pelo código do plugin.
 
 Webhooks e runtimes adicionais podem ser oferecidos depois por adapters oficiais, sem tornar a API v1 genérica demais.
 
@@ -153,6 +156,7 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
   "entrypoint": "dist/index.js",
   "permissions": ["network"],
   "secretKeys": ["EXEMPLO_API_KEY"],
+  "deliveryTypes": ["text"],
   "settingsSchema": {
     "type": "object",
     "properties": {
@@ -234,6 +238,8 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 
 ### Capacidades
 
+No nível do manifesto, `deliveryTypes` classifica o plugin para descoberta na galeria. Um plugin pode declarar qualquer combinação de `text`, `image`, `audio`, `video` e `processing`. O campo descreve a natureza das entregas e transformações do pacote inteiro; não substitui portas, formatos universais ou capacidades executáveis. Plugins legados sem o campo permanecem compatíveis e são apresentados como `processing` até atualizarem o manifesto.
+
 - `operator` aceita somente `IA` ou `Código`.
 - `blockTypes` contém um ou mais dos quatro blocos.
 - `processTypes` restringe a capacidade; ausência significa todos os processos.
@@ -300,12 +306,14 @@ Regras:
 
 Permissões da API v1:
 
-| Permissão          | Autoriza                                                             |
-| ------------------ | -------------------------------------------------------------------- |
-| `network`          | Conexões de rede sob políticas do executor.                          |
-| `filesystem:read`  | Leitura do diretório de staging e arquivos liberados.                |
-| `filesystem:write` | Escrita apenas no diretório de saída temporário.                     |
-| `process`          | Subprocessos permitidos, como FFmpeg, dentro de allowlist e limites. |
+| Permissão          | Autoriza                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| `network`          | Conexões de rede sob políticas do executor.                                          |
+| `filesystem:read`  | Leitura do diretório de staging e arquivos liberados.                                |
+| `filesystem:write` | Escrita apenas no diretório de saída temporário.                                     |
+| `process`          | Subprocessos como FFmpeg; permissão avançada, pois o filho não herda toda a sandbox. |
+| `worker`           | Workers locais para processamento paralelo declarado.                                |
+| `native`           | Addons nativos empacotados, como codecs ou bibliotecas de imagem.                    |
 
 Uma permissão declarada não significa acesso irrestrito. O executor ainda aplica:
 
@@ -318,6 +326,8 @@ Uma permissão declarada não significa acesso irrestrito. O executor ainda apli
 - redaction de secrets em logs.
 
 Instalação e atualização exibem qualquer aumento de permissões e exigem novo consentimento.
+
+Essas permissões podem conceder capacidades amplas sem conceder a máquina inteira. Quando o usuário escolher uma pasta de trabalho persistente, o núcleo poderá montá-la como raiz autorizada para aquele plugin/projeto. Dentro dessa raiz, um plugin com leitura/escrita poderá criar centenas de arquivos, reabrir artifacts por ID, conferir lacunas e alimentar plugins posteriores. O limite impede apenas sair da pasta escolhida sem novo consentimento.
 
 ## 9. Ciclo de execução
 
@@ -333,13 +343,13 @@ Instalação e atualização exibem qualquer aumento de permissões e exigem nov
 
 ### 9.2 Execução imediata
 
-O núcleo chama `execute()` com `invocation.mode = "start"`. A capacidade devolve `success` ou `error` dentro do timeout.
+O núcleo chama `execute()` com `invocation.mode = "start"`. A capacidade devolve `success` ou `error` dentro do timeout declarado. A API v1 aceita timeout de até 24 horas; duração longa não torna a capacidade inválida.
 
 ### 9.3 Execução assíncrona
 
-Geradores de vídeo, avatares, renderizações e uploads podem durar minutos. Eles não devem manter um processo local ocioso fazendo polling indefinido.
+Geradores de vídeo, avatares, renderizações e uploads podem durar minutos ou horas. Na implementação v1, o núcleo faz polling de respostas `pending` e mantém a chamada ativa até o timeout declarado, limitado a 24 horas. Persistir jobs para sobreviver à reinicialização do aplicativo e retomar sem conexão HTTP é a próxima etapa do executor assíncrono.
 
-1. `start` inicia o job externo.
+1. `start` inicia o job externo ou um worker local supervisionado.
 2. O plugin devolve `pending`, `jobId` e `pollAfterMs`.
 3. O núcleo persiste o estado e agenda nova chamada.
 4. `resume` consulta o mesmo job.
@@ -347,6 +357,8 @@ Geradores de vídeo, avatares, renderizações e uploads podem durar minutos. El
 6. Se o usuário cancelar e a capacidade suportar, o núcleo chama `cancel`.
 
 O `jobId` é opaco para o núcleo, mas não pode conter secrets. O plugin deve conseguir retomar usando `jobId`, settings e secrets declarados, sem memória global do processo anterior.
+
+Para worker local demorado, a arquitetura prevê persistir PID/handle, diretório autorizado, checkpoints e heartbeat em armazenamento próprio do executor. Essa persistência ainda não faz parte da v1; atualmente o plugin continua devolvendo apenas `jobId`, progresso e resultado enquanto a execução ativa é supervisionada.
 
 ### 9.4 Idempotência
 
@@ -854,7 +866,7 @@ Um Método referencia exatamente `pluginId`, `pluginVersion`, `capabilityId`, co
 - Composição entre capacidades ocorre no Método, por blocos e contratos universais, mantendo dependências visíveis.
 - Se a versão exata não estiver instalada, o núcleo não substitui silenciosamente por outra versão.
 - Uma versão patch ou minor compatível pode ser proposta ao usuário; a decisão e a versão efetiva ficam no snapshot.
-- Plugin ausente, desativado, revogado ou incompatível gera `blocked_executor` com instrução de resolução, nunca sucesso fictício.
+- Plugin ausente, desativado pelo usuário, bloqueado por política técnica local ou incompatível gera `blocked_executor` com instrução de resolução, nunca sucesso fictício.
 - Outputs já produzidos continuam acessíveis após remoção do plugin.
 - Importação de Método apresenta dependências, permissões, provedores, custos e versões antes de instalar qualquer pacote.
 
@@ -871,7 +883,7 @@ Política mínima de descontinuação:
 - preservar documentação e verificação de integridade das versões ainda referenciadas;
 - impedir novas seleções somente após aviso adequado;
 - não alterar um pacote publicado sob o mesmo número de versão;
-- usar revogação imediata apenas para malware, credencial comprometida, violação grave ou risco material.
+- remover imediatamente do catálogo apenas para malware, credencial comprometida, violação grave ou risco material, sem apagar cópias locais.
 
 Atualizações são instaladas lado a lado ou de modo atomicamente reversível. Falha de validação mantém a versão anterior. Jobs assíncronos continuam presos à versão que iniciou a operação.
 
@@ -891,15 +903,18 @@ O pacote deve documentar canal de suporte e de vulnerabilidades. Diagnósticos e
 
 ## 29. Governança e distribuição do ecossistema
 
-O catálogo diferencia plugins `official`, `verified` e `community`:
+Plugins podem ser distribuídos por arquivo, URL, repositório, organização ou catálogo. A instalação e execução local de um pacote compatível não exigem submissão nem aprovação do mantenedor. Catálogos são superfícies opcionais de descoberta e confiança.
+
+Quando houver catálogo, ele diferencia plugins `official`, `verified`, `community` e `private`:
 
 - `official`: mantido e assinado pelo ContentFlow OS;
 - `verified`: identidade, pacote e requisitos mínimos revisados, sem garantia de ausência de falhas;
 - `community`: distribuído pelo autor e ainda não verificado pelo projeto.
+- `private`: instalado diretamente pelo usuário ou por uma organização, fora do catálogo público.
 
 Todo anúncio exibe autor, licença, versão, origem, hash/assinatura quando disponível, permissões, efeitos externos, provedores, política de dados, custos, suporte e histórico de segurança. “Verified” não equivale a endosso do conteúdo gerado ou dos termos do provedor.
 
-O processo de publicação, revisão, denúncia, revogação e recurso está detalhado em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md). Requisitos técnicos de ameaça e resposta a incidentes estão em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
+O processo opcional de publicação, revisão, denúncia, remoção de catálogo e recurso está detalhado em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md). Requisitos técnicos automáticos de instalação e execução estão em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
 
 Plugins podem ser gratuitos, pagos, proprietários ou de código aberto conforme a licença de cada autor, desde que sejam integrações independentes construídas sobre o protocolo público. Não podem incorporar código protegido do núcleo nem se apresentar como clone, edição white-label ou substituto rebatizado do ContentFlow OS. A exceção para plugins e os limites de uso do código principal estão no [`LICENSE`](../LICENSE).
 

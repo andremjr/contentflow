@@ -94,9 +94,11 @@ import { cn } from "@/lib/utils";
 
 type DiscoveredPlugin = {
   id: string;
-  source: "bundled" | "installed";
+  source: "bundled" | "installed" | "local";
   directory: string;
   manifest: PluginManifest;
+  enabled?: boolean;
+  executable?: boolean;
 };
 
 const BLOCK_META: Record<
@@ -211,6 +213,7 @@ export function MethodBuilder({
   const [pendingFileImport, setPendingFileImport] = useState<SharedMethodFile | null>(null);
   const [availablePlugins, setAvailablePlugins] = useState<DiscoveredPlugin[]>([]);
   const [openAIModels, setOpenAIModels] = useState<Array<{ id: string; name: string }>>([]);
+  const [anthropicModels, setAnthropicModels] = useState<Array<{ id: string; name: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadedProcessRef = useRef<UniversalProcess | null>(null);
   const editVersionRef = useRef(0);
@@ -250,7 +253,13 @@ export function MethodBuilder({
         return response.json() as Promise<{ plugins: DiscoveredPlugin[] }>;
       })
       .then((result) => {
-        if (active) setAvailablePlugins(result.plugins);
+        if (active) {
+          setAvailablePlugins(
+            result.plugins.filter(
+              (plugin) => plugin.source === "bundled" || (plugin.enabled && plugin.executable),
+            ),
+          );
+        }
       })
       .catch(() => {
         if (active) setAvailablePlugins([]);
@@ -265,6 +274,17 @@ export function MethodBuilder({
       })
       .catch(() => {
         if (active) setOpenAIModels([]);
+      });
+    void fetch("/api/plugins/official-anthropic-claude/connection")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Falha ao consultar a conexão Anthropic.");
+        return response.json() as Promise<{ models: Array<{ id: string; name: string }> }>;
+      })
+      .then((result) => {
+        if (active) setAnthropicModels(result.models);
+      })
+      .catch(() => {
+        if (active) setAnthropicModels([]);
       });
     return () => {
       active = false;
@@ -749,6 +769,7 @@ export function MethodBuilder({
               processType={processType}
               plugins={availablePlugins}
               openAIModels={openAIModels}
+              anthropicModels={anthropicModels}
               index={blocks.indexOf(selectedBlock)}
               total={blocks.length}
               onChange={(patch) => updateBlock(selectedBlock.id, patch)}
@@ -935,6 +956,7 @@ function BlockEditor({
   processType,
   plugins,
   openAIModels,
+  anthropicModels,
   index,
   total,
   onChange,
@@ -947,6 +969,7 @@ function BlockEditor({
   processType: UniversalProcess;
   plugins: DiscoveredPlugin[];
   openAIModels: Array<{ id: string; name: string }>;
+  anthropicModels: Array<{ id: string; name: string }>;
   index: number;
   total: number;
   onChange: (patch: Partial<ActionBlock>) => void;
@@ -1159,7 +1182,11 @@ function BlockEditor({
                     key === "model" &&
                     openAIModels.length
                       ? openAIModels.map((model) => ({ value: model.id, label: model.name }))
-                      : undefined
+                      : selectedPlugin?.id === "official-anthropic-claude" &&
+                          key === "model" &&
+                          anthropicModels.length
+                        ? anthropicModels.map((model) => ({ value: model.id, label: model.name }))
+                        : undefined
                   }
                   onChange={(value) =>
                     onChange({
@@ -1176,6 +1203,13 @@ function BlockEditor({
                 <p className="text-[11px] text-muted-foreground">
                   {openAIModels.length
                     ? `${openAIModels.length} modelos disponíveis foram consultados na sua conta OpenAI.`
+                    : "Conecte sua chave em Plugins para atualizar os modelos disponíveis. A chave não é salva no Método."}
+                </p>
+              )}
+              {selectedPlugin?.id === "official-anthropic-claude" && (
+                <p className="text-[11px] text-muted-foreground">
+                  {anthropicModels.length
+                    ? `${anthropicModels.length} modelos disponíveis foram consultados na sua conta Anthropic.`
                     : "Conecte sua chave em Plugins para atualizar os modelos disponíveis. A chave não é salva no Método."}
                 </p>
               )}

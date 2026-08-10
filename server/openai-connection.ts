@@ -1,3 +1,10 @@
+import {
+  credentialStoreName,
+  deletePluginSecret,
+  getPluginSecret,
+  setPluginSecret,
+} from "./credential-vault";
+
 type OpenAIModel = {
   id: string;
   created?: number;
@@ -15,9 +22,11 @@ export type AvailableOpenAIModel = {
   ownedBy?: string;
 };
 
-let sessionApiKey: string | undefined;
 let availableModels: AvailableOpenAIModel[] = [];
 let updatedAt: string | undefined;
+
+const PLUGIN_ID = "official-openai-gpt";
+const SECRET_KEY = "OPENAI_API_KEY";
 
 const MODEL_NAMES: Record<string, string> = {
   "gpt-5.6-sol": "GPT-5.6 Sol — máxima qualidade",
@@ -79,34 +88,37 @@ export async function connectOpenAI(apiKey: string) {
   const normalized = apiKey.trim();
   if (!normalized) throw new Error("Informe a chave da API da OpenAI.");
   const models = await fetchModels(normalized);
-  sessionApiKey = normalized;
+  await setPluginSecret(PLUGIN_ID, SECRET_KEY, normalized);
   availableModels = models;
   updatedAt = new Date().toISOString();
   return getOpenAIConnection();
 }
 
 export async function refreshOpenAIModels() {
-  if (!sessionApiKey) throw new Error("Conecte uma chave da OpenAI primeiro.");
-  availableModels = await fetchModels(sessionApiKey);
+  const apiKey = await getOpenAIApiKey();
+  if (!apiKey) throw new Error("Conecte uma chave da OpenAI primeiro.");
+  availableModels = await fetchModels(apiKey);
   updatedAt = new Date().toISOString();
   return getOpenAIConnection();
 }
 
-export function disconnectOpenAI() {
-  sessionApiKey = undefined;
+export async function disconnectOpenAI() {
+  await deletePluginSecret(PLUGIN_ID, SECRET_KEY);
   availableModels = [];
   updatedAt = undefined;
 }
 
-export function getOpenAIConnection() {
+export async function getOpenAIConnection() {
+  const connected = Boolean(await getOpenAIApiKey());
   return {
-    connected: Boolean(sessionApiKey),
+    connected,
     models: availableModels,
     updatedAt,
-    persistence: "session" as const,
+    persistence: "keychain" as const,
+    credentialStore: credentialStoreName(),
   };
 }
 
 export function getOpenAIApiKey() {
-  return sessionApiKey;
+  return getPluginSecret(PLUGIN_ID, SECRET_KEY);
 }

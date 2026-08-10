@@ -19,6 +19,11 @@ dist-ssr
 mini-curso-contentflow-os/
 app-screenshots-local/
 
+# Desktop build intermediates (the distributable V0 lives in compiled/)
+desktop-dist/
+desktop-runtime/
+release/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars

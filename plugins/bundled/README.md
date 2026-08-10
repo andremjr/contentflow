@@ -1,8 +1,8 @@
 # Plugins oficiais
 
-Esta pasta receberá os plugins oficiais distribuídos junto com o ContentFlow OS.
+Esta pasta contém os plugins oficiais distribuídos junto com o ContentFlow OS.
 
-O primeiro plugin será adicionado somente depois da validação completa da produção humana e seguirá o contrato descrito em [`docs/PLUGIN_PROTOCOL.md`](../../docs/PLUGIN_PROTOCOL.md).
+Cada plugin oficial segue o contrato descrito em [`docs/PLUGIN_PROTOCOL.md`](../../docs/PLUGIN_PROTOCOL.md) e continua sujeito às mesmas regras públicas de capacidades, permissões e dados.
 
 O passo a passo, exemplos de manifesto e fixtures estão em [`docs/PLUGIN_DEVELOPMENT.md`](../../docs/PLUGIN_DEVELOPMENT.md).
 

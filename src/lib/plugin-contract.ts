@@ -13,7 +13,8 @@ import type {
 export const CONTENTFLOW_PLUGIN_API_VERSION = "1" as const;
 
 export type PluginOperator = "IA" | "Código";
-export type PluginPermission = "network" | "filesystem:read" | "filesystem:write" | "process";
+export type PluginPermission =
+  "network" | "filesystem:read" | "filesystem:write" | "process" | "worker" | "native";
 
 export type PluginRuntime = {
   kind: "node";
@@ -116,6 +117,8 @@ export type PluginCapability = {
   outputSchema: JsonSchema;
 };
 
+export type PluginDeliveryType = "text" | "image" | "audio" | "video" | "processing";
+
 export type PluginManifest = {
   $schema?: string;
   apiVersion: typeof CONTENTFLOW_PLUGIN_API_VERSION;
@@ -133,6 +136,7 @@ export type PluginManifest = {
   permissions: PluginPermission[];
   settingsSchema?: JsonSchema;
   secretKeys?: string[];
+  deliveryTypes?: PluginDeliveryType[];
   capabilities: PluginCapability[];
 };
 
@@ -233,6 +237,7 @@ export type PluginExecutionServices = {
   getSecret: (key: string) => Promise<string | undefined>;
   resolveInputFile: (file: StoredFile) => Promise<string>;
   getOutputPath: (relativePath: string) => string;
+  getWorkspacePath: (relativePath: string) => string;
 };
 
 export type PluginEntrypoint = {

@@ -2,7 +2,9 @@
 
 Este documento define o modelo de ameaças e os controles mínimos para executar plugins no ContentFlow OS. Ele complementa o contrato normativo de [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md).
 
-> Estado atual: plugins oficiais incluídos em `plugins/bundled` executam fora do processo principal, com timeout, ambiente mínimo e resposta limitada. Esse estágio não libera plugins comunitários: pacotes locais ou instalados continuam bloqueados até que todos os controles obrigatórios deste documento existam e tenham testes automatizados.
+> Estado atual: plugins comunitários e privados passam por validação automática e consentimento local, sem revisão ou aprovação manual do mantenedor. Cada invocação roda em processo separado sob o Permission Model do Node 26, com ambiente mínimo, timeout, limite de resposta, diretórios controlados e filesystem, rede, subprocessos, workers e módulos nativos negados por padrão. Artifacts locais são validados e importados pelo núcleo.
+
+> Limite importante: esta é a sandbox de capacidades v1, não uma máquina virtual. Conceder `process` permite que o plugin inicie programas com a autoridade normal do usuário e esses programas não herdam automaticamente a sandbox do Node. Conceder `native` também amplia fortemente a confiança. Essas permissões devem aparecer como acesso avançado na interface. Quotas fortes de CPU/memória, proxy SSRF, assinatura/hash de pacotes, instalação atômica, cancelamento persistente e allowlist de executáveis continuam como hardening planejado.
 
 ## 1. Objetivos
 
@@ -17,6 +19,8 @@ O sistema deve presumir que um pacote, uma dependência, um provedor remoto ou u
 - contaminação entre canais, projetos, tentativas ou plugins.
 
 Segurança é responsabilidade compartilhada: o núcleo fornece isolamento, permissões e validação; o plugin minimiza acesso, valida dados e documenta provedores e efeitos; o usuário concede permissões e controla credenciais.
+
+O núcleo não consegue garantir que todo arquivo criado ou compartilhado por terceiros seja honesto. Ele consegue — e deve — controlar a fronteira de execução autorizada: quais pacotes podem executar, quais serviços recebem, quais dados atravessam o protocolo e quais efeitos são permitidos. Um plugin não oficial não recebe acesso irrestrito ao host apenas porque foi instalado localmente.
 
 ## 2. Fronteiras de confiança
 
@@ -56,6 +60,9 @@ Um selo `official` ou `verified` melhora a confiança de origem, mas não remove
 | Efeito externo indevido       | upload publica vídeo sem confirmação                   | declaração de efeito e consentimento just-in-time                   |
 | Vazamento em logs             | token ou prompt aparece em erro                        | redaction, limites e logs estruturados                              |
 | Confusão entre execuções      | cache global mistura canais                            | staging e contexto exclusivos por invocação                         |
+| Sequestro de sessão           | plugin copia cookie ou token de um navegador           | broker autenticado, handles opacos e acesso negado ao perfil        |
+| Evasão de limites             | rotação de contas ou endpoints amplia créditos         | identidade fixa, quotas, auditoria e falha fechada                  |
+| Automação de UI incorreta     | mudança visual faz o plugin clicar em publicar         | estado validado, seletores acessíveis e confirmação just-in-time    |
 
 ## 4. Instalação segura
 
@@ -90,6 +97,12 @@ O executor deve rodar cada invocação fora do processo principal, com identidad
 - resposta serializada sem protótipos, funções ou objetos executáveis.
 
 Containers, sandboxes de sistema operacional ou processos restritos podem implementar esses controles. Uma sandbox JavaScript dentro do mesmo processo não é isolamento suficiente para código comunitário.
+
+### Implementação v1
+
+O executor comunitário atual usa `node --permission`. O pacote e o worker são somente leitura; entradas são resolvidas pelo serviço controlado; a escrita fica limitada à pasta exclusiva da invocação; e a rede só é liberada com `network`. O pacote é rejeitado se contiver symlinks e todo artifact passa por `realpath` antes de ser copiado para o armazenamento do ContentFlow OS. A resposta e os streams do processo possuem limites, e o processo é encerrado no timeout configurado, até o máximo de 24 horas.
+
+`process`, `worker` e `native` são permissões deliberadamente amplas para plugins como renderizadores e ferramentas locais. Elas preservam a abertura do sistema, mas mudam o nível de confiança: ao aceitá-las, o usuário está autorizando código capaz de ultrapassar parte do isolamento básico. O próximo nível de proteção deve acrescentar perfis/allowlists por executável e sandbox de sistema operacional para esses casos.
 
 ## 6. Rede e SSRF
 
@@ -155,6 +168,8 @@ Outputs de IA são validados estruturalmente e, quando houver risco de ação ex
 - Estado incerto após timeout não é repetido automaticamente; primeiro ocorre reconciliação pelo identificador externo.
 - Cancelamento informa efeitos que não puderam ser revertidos.
 
+Automação de navegador obedece também a [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md). O executor não entrega cookies, tokens, histórico, armazenamento de sessão ou perfil ao código do plugin. CAPTCHA, anti-bot, reautenticação, cota esgotada e upgrade necessário pausam a execução; não autorizam evasão, rotação de conta ou troca de endpoint.
+
 ## 11. Logs, auditoria e privacidade
 
 Eventos estruturados registram quem autorizou, pacote/hash, versão, capacidade, permissões, efeitos, domínios acessados, início/fim, status, uso e IDs externos seguros. O conteúdo completo não faz parte do log padrão.
@@ -166,29 +181,33 @@ Logs têm retenção configurável, acesso limitado e exportação com prévia/r
 Achados de segurança devem ser reportados de forma privada pelo canal indicado em [`../SECURITY.md`](../SECURITY.md). Em incidente confirmado, os mantenedores podem:
 
 1. ocultar a versão do catálogo;
-2. bloquear novas instalações ou execuções;
-3. revogar assinatura/origem;
+2. interromper novos downloads por superfícies mantidas pelo projeto;
+3. marcar assinatura/origem como comprometida e emitir alerta local;
 4. alertar usuários e identificar Métodos afetados;
 5. orientar rotação de secrets e mitigação;
 6. publicar versão corrigida e relatório pós-incidente proporcional;
 7. preservar evidências sem expor dados de usuários.
 
-Revogação não apaga outputs. O núcleo deve mostrar claramente quando uma execução histórica usou uma versão comprometida.
+Alertas não apagam outputs nem criam aprovação central. O núcleo deve mostrar claramente quando uma execução histórica usou uma versão comprometida; bloqueios locais só decorrem de política automática de integridade/sandbox ou de decisão do próprio usuário.
 
-## 13. Gates antes de plugins comunitários
+## 13. Estado dos controles e hardening
 
-- [ ] Executor fora do processo principal.
-- [ ] Validação estrutural e semântica do manifesto.
-- [ ] Instalação segura, hash e versões imutáveis.
-- [ ] Staging/saída isolados e proteção de caminhos.
-- [ ] Cofre de secrets e redaction testados.
-- [ ] Política de rede com proteção SSRF e redirects.
+- [x] Executor fora do processo principal.
+- [x] Validação estrutural e semântica do manifesto.
+- [x] Consentimento local por versão e conjunto exato de permissões.
+- [x] Filesystem, rede, subprocessos, workers e módulos nativos negados por padrão.
+- [x] Staging/saída isolados, rejeição de symlinks e proteção de caminhos de artifacts.
+- [x] Cofre de secrets declarados.
+- [x] Limites de tempo, resposta e artifact, com smoke test automatizado de isolamento.
+- [ ] Download assinado, hash, versões imutáveis e instalação atômica.
+- [ ] Proxy de rede com proteção SSRF, redirects e allowlist de domínios.
 - [ ] Allowlist de subprocessos e argumentos sem shell.
-- [ ] Quotas de CPU, memória, disco, tempo, rede e custo.
-- [ ] Cancelamento encerra árvore e limpa arquivos.
-- [ ] Idempotência e reconciliação de efeitos externos.
-- [ ] Validação de artifacts e arquivos hostis.
-- [ ] Auditoria e resposta a incidentes.
-- [ ] Testes contra as ameaças desta matriz.
+- [ ] Quotas fortes de CPU, memória, árvore de processos, disco, rede e custo.
+- [ ] Cancelamento persistente, encerramento comprovado da árvore e recuperação após reinício.
+- [ ] Idempotência e reconciliação de efeitos externos pelo núcleo.
+- [ ] Inspeção profunda de formatos hostis e malware.
+- [ ] Auditoria e resposta a incidentes completas.
 
-Sem esses gates, o sistema pode descobrir e exibir manifestos, mas deve manter a execução comunitária bloqueada.
+Os controles concluídos formam a fronteira mínima executável da v1. Os itens restantes não criam aprovação central: são camadas incrementais de proteção. A interface deve distinguir permissões básicas de permissões avançadas e nunca apresentar `process` ou `native` como equivalentes a um plugin puramente isolado.
+
+Um aviso de “plugin não oficial” complementa esses gates, mas não substitui sandbox, permissões e validação. A opção de sideload não deve equivaler a executar código nativo com a autoridade completa do usuário. Pacotes executados deliberadamente fora do ContentFlow OS, ou por um núcleo modificado que removeu essas barreiras, ficam fora da superfície autorizada e suportada pelo projeto.

@@ -49,6 +49,8 @@ No nível global, a navegação principal possui três áreas:
 - `/methods`: Biblioteca de Métodos, derivada dos métodos salvos nos canais, com busca, reutilização, importação e compartilhamento.
 - `/plugins`: Gerenciador de Plugins locais, responsável por descobrir e apresentar manifestos reais instalados no aplicativo.
 
+O Gerenciador de Plugins organiza o catálogo em cards compactos e pesquisáveis. Cada manifesto pode declarar uma ou mais capacidades de entrega entre `text`, `image`, `audio`, `video` e `processing`; esses metadados, somados aos blocos e Processos Universais compatíveis, alimentam os filtros da galeria sem alterar o contrato universal de dados dos blocos.
+
 ---
 
 ## 3. Os 8 Processos Universais de Conteúdo
@@ -121,7 +123,7 @@ O operador `Humano` é o executor nativo desse mesmo contrato e não depende de 
 
 O Método armazena apenas esse esquema. Os valores efetivamente preenchidos pertencem à execução do Projeto/Vídeo e nunca são gravados como parte do Método.
 
-Métodos compostos integralmente por blocos humanos podem ser executados de ponta a ponta. Blocos `IA` e `Código` são liberados quando possuem um plugin oficial compatível configurado. A configuração funcional permanece no Método. Secrets como chaves de API nunca são serializados no Método ou no SQLite: nesta primeira implementação, a chave OpenAI pode ser conectada na Central de Plugins e permanece somente na memória da sessão local, com preenchimento transitório na execução como alternativa. Sem plugin configurado, o bloco permanece explicitamente bloqueado.
+Métodos compostos integralmente por blocos humanos podem ser executados de ponta a ponta. Blocos `IA` e `Código` são liberados quando possuem um plugin oficial compatível configurado. A configuração funcional permanece no Método. Secrets como chaves de API nunca são serializados no Método ou no SQLite: credenciais conectadas na Central de Plugins são persistidas pelo cofre nativo do sistema operacional e entregues somente a invocações autorizadas por `getSecret()`, com preenchimento transitório na execução como alternativa. Sem plugin configurado, o bloco permanece explicitamente bloqueado.
 
 ---
 
@@ -207,9 +209,15 @@ Os outputs concluídos dos processos anteriores são injetados automaticamente c
 
 ## 12. Protocolo de Plugins
 
-O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. A primeira implementação executa somente plugins oficiais de `plugins/bundled`; plugins locais ou comunitários são descobertos, mas continuam bloqueados até a conclusão dos gates de sandbox comunitária.
+O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), os requisitos futuros para automação autorizada de interfaces web em [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Plugins oficiais são confiáveis pelo núcleo; plugins locais e comunitários exigem consentimento local e executam na sandbox de permissões em processo separado.
+
+A arquitetura não possui aprovação central: qualquer pessoa pode criar e compartilhar um plugin, inclusive por arquivo ou repositório, e qualquer usuário pode instalá-lo e autorizá-lo localmente. O núcleo aplica validações automáticas e pede consentimento para permissões; revisão humana do mantenedor existe apenas para selo `official`/`verified` ou publicação em catálogo opcional.
+
+Uma capacidade de plugin pode ser internamente complexa e demorada. Ela pode pesquisar, chamar várias APIs, usar uma sessão conectada pelo usuário, gerar centenas de arquivos, manter checkpoints ou renderizar durante horas, desde que sua interface externa continue sendo a entrega daquele bloco. Pastas de trabalho escolhidas pelo usuário podem ser montadas como raízes autorizadas; artifacts preservam IDs, ordem e proveniência para que plugins posteriores encontrem cada arquivo sem depender de caminhos frágeis gravados no Método.
 
 O plugin oficial `OpenAI Models` usa a Responses API e pode operar ações baseadas em linguagem nos quatro Blocos Essenciais e nos oito Processos Universais. Depois da conexão local, o servidor consulta `GET /v1/models` com a chave da sessão e o construtor substitui o catálogo de fallback pelos modelos de linguagem realmente disponíveis nessa conta. Os parâmetros declarados em `blockConfigSchema` aparecem imediatamente após a vinculação do plugin ao bloco. Modelos especializados de imagem, áudio, vídeo, transcrição ou embeddings continuam exigindo plugins próprios, pois usam contratos de mídia e APIs diferentes de um LLM com saída textual.
+
+O plugin oficial `Anthropic Claude` mantém o mesmo contrato de linguagem pela Messages API. A chave é protegida pelo cofre nativo do sistema operacional, `GET /v1/models` fornece o catálogo disponível para a conta e blocos `BUSCAR` podem usar a ferramenta de pesquisa web declarada pela Anthropic. A integração é mantida pelo ContentFlow OS e não implica endosso do provedor.
 
 ---
 
@@ -218,3 +226,11 @@ O plugin oficial `OpenAI Models` usa a Responses API e pode operar ações basea
 O núcleo preserva um canvas de composição visual para a futura Biblioteca de Layouts de Thumbnail. Cada layout descreve caixas, posições, dimensões, ordem de camadas e cores em coordenadas relativas a um quadro 16:9.
 
 Esse canvas é infraestrutura intencional, mesmo enquanto ainda não estiver exposto na navegação principal. Plugins de operador `Código` poderão consumir esses layouts para posicionar textos, pessoas, objetos e demais elementos durante a montagem programática de thumbnails. Ele não deve ser tratado como código legado ou removido apenas por ainda não possuir uma tela pública.
+
+---
+
+## 14. Distribuição desktop V0
+
+A distribuição Windows empacota a interface em Electron e inicia a API como processo filho com uma cópia privada do Node 26. Usuários finais não precisam instalar Node, npm ou abrir terminal. O processo Electron hospeda apenas a janela e os arquivos da interface; o runtime privado preserva para a API e para plugins comunitários o modelo de permissões documentado em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
+
+O programa instalado é substituível e os dados persistentes permanecem em `%APPDATA%\ContentFlow OS\data`. Plugins instalados e vínculos de desenvolvimento também vivem nessa área. Exemplos editáveis são copiados na primeira abertura para `Documentos\ContentFlow OS\Plugins`. Essa separação permite recompilar e reinstalar o núcleo sem apagar projetos, credenciais ou plugins do usuário.

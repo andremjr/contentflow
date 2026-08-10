@@ -1,9 +1,14 @@
 {
   "name": "contentflow-os",
+  "version": "0.0.0",
+  "productName": "ContentFlow OS",
+  "description": "Sistema operacional local para fluxos de produção de conteúdo e plugins independentes.",
+  "author": "André Marinho Jr.",
   "private": true,
+  "main": "desktop/main.cjs",
   "license": "LicenseRef-ContentFlow-Source-Available-1.0",
   "engines": {
-    "node": ">=22.12 <23",
+    "node": ">=26 <27",
     "npm": ">=10"
   },
   "sideEffects": false,
@@ -16,15 +21,22 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "start": "concurrently -k \"npm run api:start\" \"vite preview --host 127.0.0.1 --port 8080\"",
+    "desktop:prepare": "npm run build && node desktop/prepare-desktop.mjs",
+    "desktop:run": "npm run desktop:prepare && electron .",
+    "desktop:portable": "npm run desktop:prepare && electron-builder --win portable --x64",
+    "desktop:installer": "npm run desktop:prepare && electron-builder --win nsis --x64",
+    "desktop:v0": "npm run desktop:prepare && electron-builder --win portable nsis --x64",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck && npm run build",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
+    "test:sandbox": "tsx server/plugin-sandbox-smoke.ts",
+    "check": "npm run lint && npm run typecheck && npm run test:sandbox && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@napi-rs/keyring": "^1.3.0",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -37,7 +49,7 @@
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-router": "^1.170.16",
     "@tanstack/react-start": "^1.168.26",
-    "better-sqlite3": "12.4.6",
+    "better-sqlite3": "13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "express": "^5.2.1",
@@ -59,6 +71,9 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.2.0",
     "concurrently": "^10.0.4",
+    "electron": "^41.10.3",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
@@ -70,5 +85,82 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.16"
+  },
+  "build": {
+    "appId": "com.contentflow.os",
+    "productName": "ContentFlow OS",
+    "asar": false,
+    "npmRebuild": false,
+    "directories": {
+      "output": "release/v0",
+      "buildResources": "build"
+    },
+    "files": [
+      "desktop/main.cjs",
+      "desktop-dist/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop-runtime",
+        "to": "runtime",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "server",
+        "to": "runtime/workers",
+        "filter": [
+          "plugin-worker.mjs",
+          "plugin-worker.ts"
+        ]
+      },
+      {
+        "from": "plugins/bundled",
+        "to": "plugins/bundled",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "plugins/examples",
+        "to": "examples/plugins",
+        "filter": [
+          "**/*"
+        ]
+      },
+      "LICENSE",
+      "AI_USAGE_POLICY.md",
+      {
+        "from": "docs",
+        "to": "docs",
+        "filter": [
+          "PLUGIN_*.md",
+          "schemas/**/*",
+          "examples/**/*"
+        ]
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "artifactName": "ContentFlow-OS-V0-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "artifactName": "ContentFlow-OS-V0-${version}-${arch}-Setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "ContentFlow-OS-V0-${version}-${arch}-Portable.${ext}"
+    }
   }
 }
