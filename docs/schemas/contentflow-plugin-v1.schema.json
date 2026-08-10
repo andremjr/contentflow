@@ -114,6 +114,41 @@
         "thumbnail_layout"
       ]
     },
+    "presentation": {
+      "type": "object",
+      "description": "Solicitação opcional de apresentação. O renderer é implementado e controlado exclusivamente pelo núcleo.",
+      "additionalProperties": false,
+      "required": ["renderer"],
+      "properties": {
+        "renderer": {
+          "enum": [
+            "auto",
+            "text-short",
+            "text-long",
+            "list",
+            "tags",
+            "table",
+            "cards",
+            "file-list",
+            "image-gallery",
+            "audio-player",
+            "video-player",
+            "decision"
+          ]
+        },
+        "itemType": { "enum": ["text", "record", "file", "image", "audio", "video"] },
+        "acceptedMimeTypes": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[-A-Za-z0-9_.+]+/[-A-Za-z0-9_.+*]+$"
+          }
+        }
+      }
+    },
     "jsonSchema": {
       "type": "object",
       "description": "JSON Schema Draft 2020-12 restricted by the protocol.",
@@ -134,7 +169,8 @@
           "items": { "$ref": "#/$defs/dataType" }
         },
         "required": { "type": "boolean" },
-        "multiple": { "type": "boolean" }
+        "multiple": { "type": "boolean" },
+        "presentation": { "$ref": "#/$defs/presentation" }
       }
     },
     "outputPort": {
@@ -151,7 +187,8 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/dataType" }
         },
-        "required": { "type": "boolean" }
+        "required": { "type": "boolean" },
+        "presentation": { "$ref": "#/$defs/presentation" }
       }
     },
     "capability": {

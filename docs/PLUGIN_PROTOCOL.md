@@ -282,6 +282,26 @@ Regras de binding:
 
 Saídas seguem a mesma lógica. `outputContract` contém a chave do bloco e a `portKey` correspondente. A resposta usa `portKey`; o núcleo persiste o valor na chave técnica do bloco.
 
+### Apresentação declarativa
+
+Uma porta pode incluir `presentation` para solicitar uma forma padronizada de exibição, sem alterar `acceptedTypes` ou `producedTypes`:
+
+```json
+{
+  "key": "assets",
+  "label": "Assets visuais",
+  "producedTypes": ["files"],
+  "required": true,
+  "presentation": {
+    "renderer": "image-gallery",
+    "itemType": "image",
+    "acceptedMimeTypes": ["image/*"]
+  }
+}
+```
+
+Os identificadores v1 são `auto`, `text-short`, `text-long`, `list`, `tags`, `table`, `cards`, `file-list`, `image-gallery`, `audio-player`, `video-player` e `decision`. O núcleo valida compatibilidade, normaliza valores inválidos para `auto` e implementa toda a interface. Plugins não podem registrar renderers, injetar React ou HTML, nem fornecer scripts ou componentes arbitrários. A ausência de `presentation` preserva o comportamento legado.
+
 ## 7. Configuração, settings e secrets
 
 Há três categorias distintas:

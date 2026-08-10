@@ -54,6 +54,31 @@ export type HumanFieldType =
   | "approval"
   | "thumbnail_layout";
 
+export const PRESENTATION_RENDERER_IDS = [
+  "auto",
+  "text-short",
+  "text-long",
+  "list",
+  "tags",
+  "table",
+  "cards",
+  "file-list",
+  "image-gallery",
+  "audio-player",
+  "video-player",
+  "decision",
+] as const;
+
+export type PresentationRendererId = (typeof PRESENTATION_RENDERER_IDS)[number];
+
+export type PresentationItemType = "text" | "record" | "file" | "image" | "audio" | "video";
+
+export type FieldPresentation = {
+  renderer: PresentationRendererId;
+  itemType?: PresentationItemType;
+  acceptedMimeTypes?: string[];
+};
+
 export type RecordFieldType =
   | "text"
   | "textarea"
@@ -89,6 +114,7 @@ export type BlockInputBinding = {
   collection?: string;
   staticValue?: string;
   recordFields?: RecordFieldDefinition[];
+  presentation?: FieldPresentation;
 };
 
 export type BlockFieldDefinition = {
@@ -103,6 +129,7 @@ export type BlockFieldDefinition = {
   optionsSourceBlockId?: string;
   optionsSourceKey?: string;
   recordFields?: RecordFieldDefinition[];
+  presentation?: FieldPresentation;
 };
 
 export type BlockParameter = {

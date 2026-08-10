@@ -9,6 +9,7 @@ import {
   type RuntimeValue,
   type ValidationMode,
 } from "@/lib/domain";
+import { normalizeFieldPresentation } from "@/lib/presentation";
 
 export function getMethodConfigurationIssue(method?: ProcessMethod) {
   if (!method?.blocks.length) return "O processo ainda não possui um método.";
@@ -229,13 +230,26 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
         ? []
         : (block.inputs ?? [])
             .filter((input) => input.source !== "channel_library")
-            .map((input) => ({ ...input, type: input.type ?? "text" })),
+            .map((input) => {
+              const type = input.type ?? "text";
+              return {
+                ...input,
+                type,
+                presentation: normalizeFieldPresentation(type, input.presentation),
+              };
+            }),
     outputs:
       block.type === "ESCOLHER"
         ? []
         : block.outputs?.length || legacyOutputs.length
-          ? (block.outputs ?? legacyOutputs)
-          : createSuggestedHumanFields(processType, block.type),
+          ? (block.outputs ?? legacyOutputs).map((output) => ({
+              ...output,
+              presentation: normalizeFieldPresentation(output.type, output.presentation),
+            }))
+          : createSuggestedHumanFields(processType, block.type).map((output) => ({
+              ...output,
+              presentation: normalizeFieldPresentation(output.type, output.presentation),
+            })),
     validation:
       block.type === "VALIDAR"
         ? {

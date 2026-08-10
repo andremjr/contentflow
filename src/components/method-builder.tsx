@@ -40,6 +40,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ChannelAvatar } from "@/components/channel-avatar";
+import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
+import {
+  PRESENTATION_RENDERERS,
+  PRESENTATION_RENDERER_REGISTRY,
+} from "@/components/runtime-value-renderers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -69,7 +74,9 @@ import {
   type BlockInputBinding,
   type BlockOperator,
   type BlockType,
+  type FieldPresentation,
   type HumanFieldType,
+  type PresentationRendererId,
   type RecordFieldDefinition,
   type RecordFieldType,
   type StrategicCollection,
@@ -88,6 +95,7 @@ import {
   serializeMethodFile,
   type SharedMethodFile,
 } from "@/lib/method-file";
+import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
 import type { JsonSchema, PluginManifest } from "@/lib/plugin-contract";
 import { setChannelMethod, useChannel, useChannels, useLibraryCollections } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -1145,7 +1153,37 @@ function BlockEditor({
                       .filter(([, schema]) => schema.default !== undefined)
                       .map(([key, schema]) => [key, schema.default as string | number | boolean]),
                   );
-                  onChange({ plugin: { pluginId, capabilityId, configuration } });
+                  const requestedInputs = block.inputs?.map((input) => {
+                    const port = selection?.capability.inputPorts.find((candidate) =>
+                      candidate.acceptedTypes.includes(input.type),
+                    );
+                    const current = normalizeFieldPresentation(input.type, input.presentation);
+                    return {
+                      ...input,
+                      presentation: normalizeFieldPresentation(
+                        input.type,
+                        current.renderer === "auto" ? (port?.presentation ?? current) : current,
+                      ),
+                    };
+                  });
+                  const requestedOutputs = block.outputs?.map((output) => {
+                    const port = selection?.capability.outputPorts.find((candidate) =>
+                      candidate.producedTypes.includes(output.type),
+                    );
+                    const current = normalizeFieldPresentation(output.type, output.presentation);
+                    return {
+                      ...output,
+                      presentation: normalizeFieldPresentation(
+                        output.type,
+                        current.renderer === "auto" ? (port?.presentation ?? current) : current,
+                      ),
+                    };
+                  });
+                  onChange({
+                    plugin: { pluginId, capabilityId, configuration },
+                    inputs: requestedInputs,
+                    outputs: requestedOutputs,
+                  });
                 }}
               >
                 <SelectTrigger>
@@ -1529,6 +1567,7 @@ function DataContractEditor({
       label: "Nova entrada",
       type: "text",
       source: "previous_block",
+      presentation: { renderer: "auto" },
     };
     onChange({ inputs: [...inputs, input] });
   };
@@ -1539,6 +1578,7 @@ function DataContractEditor({
       key: `output_${outputs.length + 1}`,
       type: "text",
       required: true,
+      presentation: { renderer: "auto" },
     };
     onChange({ outputs: [...outputs, output] });
   };
@@ -1644,22 +1684,41 @@ function InputBindingEditor({
 
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)_32px] items-center gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(150px,0.8fr)_32px] items-center gap-2">
         <Input
           value={input.label}
           onChange={(event) => onChange({ label: event.target.value })}
           placeholder="Nome da entrada"
           className="h-8 text-xs"
         />
+        <PresentationSelector
+          type={input.type}
+          value={input.presentation}
+          onChange={(presentation) => onChange({ presentation })}
+        />
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+        >
+          <Trash2 className="size-3" />
+        </Button>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-[10px] text-muted-foreground">Tipo técnico do dado</Label>
         <Select
           value={input.type ?? "text"}
-          onValueChange={(type) =>
+          onValueChange={(type) => {
+            const nextType = type as HumanFieldType;
             onChange({
-              type: type as HumanFieldType,
+              type: nextType,
+              presentation: normalizeFieldPresentation(nextType, input.presentation),
               recordFields:
                 type === "records" ? (input.recordFields ?? [newRecordField(0)]) : undefined,
-            })
-          }
+            });
+          }}
         >
           <SelectTrigger className="h-8 text-xs">
             <SelectValue />
@@ -1672,14 +1731,6 @@ function InputBindingEditor({
             ))}
           </SelectContent>
         </Select>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
-          onClick={onRemove}
-        >
-          <Trash2 className="size-3" />
-        </Button>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
@@ -1699,6 +1750,7 @@ function InputBindingEditor({
                   blockId: undefined,
                   staticValue: undefined,
                   type: output?.type ?? input.type,
+                  presentation: output?.presentation ?? input.presentation,
                   recordFields: output?.recordFields,
                 });
                 return;
@@ -1764,6 +1816,7 @@ function InputBindingEditor({
                 onChange({
                   sourceKey,
                   type: output?.type ?? input.type,
+                  presentation: output?.presentation ?? input.presentation,
                   recordFields: output?.recordFields,
                 });
               }}
@@ -1826,6 +1879,7 @@ function InputBindingEditor({
               onChange({
                 sourceKey: sourceKey === "automatic" ? undefined : sourceKey,
                 type: output?.type ?? input.type,
+                presentation: output?.presentation ?? input.presentation,
                 recordFields: output?.recordFields,
               });
             }}
@@ -1866,22 +1920,40 @@ function OutputFieldEditor({
   const usesOptions = field.type === "select" || field.type === "multiselect";
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)_32px] items-center gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(150px,0.8fr)_32px] items-center gap-2">
         <Input
           value={field.label}
           onChange={(event) => onChange({ label: event.target.value })}
           placeholder="Nome da saída"
           className="h-8 text-xs"
         />
+        <PresentationSelector
+          type={field.type}
+          value={field.presentation}
+          onChange={(presentation) => onChange({ presentation })}
+        />
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-7 text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+        >
+          <Trash2 className="size-3" />
+        </Button>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-[10px] text-muted-foreground">Tipo técnico do dado</Label>
         <Select
           value={field.type}
-          onValueChange={(type) =>
+          onValueChange={(type) => {
+            const nextType = type as HumanFieldType;
             onChange({
-              type: type as HumanFieldType,
+              type: nextType,
+              presentation: normalizeFieldPresentation(nextType, field.presentation),
               recordFields:
                 type === "records" ? (field.recordFields ?? [newRecordField(0)]) : undefined,
-            })
-          }
+            });
+          }}
         >
           <SelectTrigger className="h-8 text-xs">
             <SelectValue />
@@ -1894,14 +1966,6 @@ function OutputFieldEditor({
             ))}
           </SelectContent>
         </Select>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="size-7 text-muted-foreground hover:text-destructive"
-          onClick={onRemove}
-        >
-          <Trash2 className="size-3" />
-        </Button>
       </div>
       {usesOptions && (
         <div>
@@ -1932,6 +1996,205 @@ function OutputFieldEditor({
         />
       )}
     </div>
+  );
+}
+
+function PresentationSelector({
+  type,
+  value,
+  onChange,
+}: {
+  type: HumanFieldType;
+  value?: FieldPresentation;
+  onChange: (presentation: FieldPresentation) => void;
+}) {
+  const normalized = normalizeFieldPresentation(type, value);
+  const compatible = getCompatiblePresentationRenderers(type);
+  const selected = compatible.includes(normalized.renderer) ? normalized.renderer : "auto";
+  const [previewId, setPreviewId] = useState<PresentationRendererId>(selected);
+  const [mimeDraft, setMimeDraft] = useState((normalized.acceptedMimeTypes ?? []).join(", "));
+  const groups = PRESENTATION_RENDERERS.filter((renderer) =>
+    compatible.includes(renderer.id),
+  ).reduce((result, renderer) => {
+    const group = result.get(renderer.group) ?? [];
+    group.push(renderer);
+    result.set(renderer.group, group);
+    return result;
+  }, new Map<string, typeof PRESENTATION_RENDERERS>());
+  const preview = PRESENTATION_RENDERER_REGISTRY[previewId] ?? PRESENTATION_RENDERER_REGISTRY.auto;
+  const selectedDefinition = PRESENTATION_RENDERER_REGISTRY[selected];
+  const SelectedIcon = selectedDefinition.icon;
+  const supportsRestrictions = [
+    "file",
+    "files",
+    "image",
+    "audio",
+    "video",
+    "list",
+    "records",
+  ].includes(type);
+  const itemTypeOptions =
+    type === "list" || type === "multiselect"
+      ? (["text"] as const)
+      : type === "records"
+        ? (["record"] as const)
+        : type === "image"
+          ? (["image"] as const)
+          : type === "audio"
+            ? (["audio"] as const)
+            : type === "video"
+              ? (["video"] as const)
+              : (["file", "image", "audio", "video"] as const);
+  const itemTypeLabels = {
+    text: "Texto",
+    record: "Registro",
+    file: "Arquivo",
+    image: "Imagem",
+    audio: "Áudio",
+    video: "Vídeo",
+  } as const;
+
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) return;
+        setPreviewId(selected);
+        setMimeDraft((normalized.acceptedMimeTypes ?? []).join(", "));
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline" className="h-8 justify-start gap-2 overflow-hidden px-2 text-xs">
+          <SelectedIcon className="size-3.5 shrink-0 text-brand-soft" />
+          <span className="truncate">{selectedDefinition.label}</span>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Forma de apresentação</DialogTitle>
+          <DialogDescription>
+            O tipo técnico continua definindo validação e compatibilidade. A apresentação muda
+            apenas o layout.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(280px,0.85fr)]">
+          <div className="space-y-4">
+            {[...groups.entries()].map(([group, renderers]) => (
+              <fieldset key={group}>
+                <legend className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {group}
+                </legend>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {renderers.map((renderer) => {
+                    const Icon = renderer.icon;
+                    const isSelected = selected === renderer.id;
+                    return (
+                      <button
+                        key={renderer.id}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onMouseEnter={() => setPreviewId(renderer.id)}
+                        onFocus={() => setPreviewId(renderer.id)}
+                        onClick={() => {
+                          setPreviewId(renderer.id);
+                          onChange({ ...normalized, renderer: renderer.id });
+                        }}
+                        className={cn(
+                          "rounded-xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          isSelected
+                            ? "border-brand/60 bg-brand/10"
+                            : "border-border/70 bg-background/30 hover:border-brand/35",
+                        )}
+                      >
+                        <span className="flex items-center gap-2 text-xs font-semibold">
+                          <Icon className="size-4 text-brand-soft" />
+                          {renderer.label}
+                        </span>
+                        <span className="mt-1 block text-[10px] leading-relaxed text-muted-foreground">
+                          {renderer.description}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            ))}
+            {supportsRestrictions && (
+              <div className="grid gap-3 rounded-xl border border-border/70 p-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">
+                    Tipo de item esperado (opcional)
+                  </Label>
+                  <Select
+                    value={normalized.itemType ?? "any"}
+                    onValueChange={(itemType) =>
+                      onChange(
+                        normalizeFieldPresentation(type, {
+                          ...normalized,
+                          itemType:
+                            itemType === "any"
+                              ? undefined
+                              : (itemType as FieldPresentation["itemType"]),
+                        }),
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Qualquer item compatível</SelectItem>
+                      {itemTypeOptions.map((itemType) => (
+                        <SelectItem key={itemType} value={itemType}>
+                          {itemTypeLabels[itemType]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {["file", "files", "image", "audio", "video"].includes(type) && (
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">
+                      MIME aceitos (opcional)
+                    </Label>
+                    <Input
+                      className="h-8 text-xs"
+                      value={mimeDraft}
+                      onChange={(event) => setMimeDraft(event.target.value)}
+                      onBlur={() =>
+                        onChange(
+                          normalizeFieldPresentation(type, {
+                            ...normalized,
+                            acceptedMimeTypes: mimeDraft.split(","),
+                          }),
+                        )
+                      }
+                      placeholder="image/*, image/png"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <aside className="md:sticky md:top-0 md:self-start">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Prévia real
+            </p>
+            <div className="min-h-56 rounded-xl border border-border/70 bg-card p-4">
+              <p className="mb-3 text-xs font-semibold">{preview.label}</p>
+              <RuntimeValueViewer
+                type={preview.preview.type}
+                value={preview.preview.value}
+                presentation={{ renderer: preview.id }}
+                compact
+              />
+            </div>
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              Passe o mouse ou use Tab para comparar. Em telas sem hover, toque em uma opção.
+            </p>
+          </aside>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

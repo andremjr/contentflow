@@ -18,6 +18,7 @@ import type {
   BlockExecution,
   Channel,
   ChannelLibraryItem,
+  HumanFieldType,
   ProcessExecution,
   Project,
   RuntimeValue,
@@ -26,6 +27,10 @@ import type {
 } from "../src/lib/domain";
 import { PROCESS_ORDER } from "../src/lib/domain";
 import { createProcessOutputFields, isEmptyRuntimeValue } from "../src/lib/human-workflow";
+import {
+  getCompatiblePresentationRenderers,
+  getPresentationRestrictionIssue,
+} from "../src/lib/presentation";
 import type { PluginExecutionRequest, PluginFieldContract } from "../src/lib/plugin-contract";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import {
@@ -442,6 +447,21 @@ function isPluginManifest(manifest: Record<string, unknown>) {
     "approval",
     "thumbnail_layout",
   ] as const;
+  const presentationRenderers = [
+    "auto",
+    "text-short",
+    "text-long",
+    "list",
+    "tags",
+    "table",
+    "cards",
+    "file-list",
+    "image-gallery",
+    "audio-player",
+    "video-player",
+    "decision",
+  ] as const;
+  const presentationItemTypes = ["text", "record", "file", "image", "audio", "video"] as const;
   const sideEffects = [
     "external_read",
     "external_write",
@@ -486,11 +506,59 @@ function isPluginManifest(manifest: Record<string, unknown>) {
         ports.every((portValue) => {
           if (!portValue || typeof portValue !== "object") return false;
           const port = portValue as Record<string, unknown>;
+          const presentation = port.presentation as Record<string, unknown> | undefined;
+          const allowedPortKeys =
+            typeKey === "acceptedTypes"
+              ? [
+                  "key",
+                  "label",
+                  "description",
+                  "acceptedTypes",
+                  "required",
+                  "multiple",
+                  "presentation",
+                ]
+              : ["key", "label", "description", "producedTypes", "required", "presentation"];
+          const declaredTypes = Array.isArray(port[typeKey])
+            ? (port[typeKey] as HumanFieldType[])
+            : [];
+          const presentationIsValid =
+            presentation === undefined ||
+            (presentation !== null &&
+              typeof presentation === "object" &&
+              presentationRenderers.includes(
+                String(presentation.renderer) as (typeof presentationRenderers)[number],
+              ) &&
+              declaredTypes.some(
+                (type) =>
+                  dataTypes.includes(type) &&
+                  getCompatiblePresentationRenderers(type).includes(
+                    String(presentation.renderer) as (typeof presentationRenderers)[number],
+                  ),
+              ) &&
+              (presentation.itemType === undefined ||
+                presentationItemTypes.includes(
+                  String(presentation.itemType) as (typeof presentationItemTypes)[number],
+                )) &&
+              (presentation.acceptedMimeTypes === undefined ||
+                (isUniqueStringArray(presentation.acceptedMimeTypes) &&
+                  presentation.acceptedMimeTypes.every((mime) =>
+                    /^[-\w.+]+\/[-\w.+*]+$/.test(mime),
+                  ))) &&
+              Object.keys(presentation).every((key) =>
+                ["renderer", "itemType", "acceptedMimeTypes"].includes(key),
+              ));
           return (
             isNonEmptyString(port.key) &&
             isNonEmptyString(port.label) &&
             typeof port.required === "boolean" &&
-            isUniqueStringArray(port[typeKey], dataTypes)
+            (port.description === undefined || typeof port.description === "string") &&
+            (typeKey !== "acceptedTypes" ||
+              port.multiple === undefined ||
+              typeof port.multiple === "boolean") &&
+            Object.keys(port).every((key) => allowedPortKeys.includes(key)) &&
+            isUniqueStringArray(port[typeKey], dataTypes) &&
+            presentationIsValid
           );
         }) &&
         new Set(ports.map((port) => String((port as Record<string, unknown>).key))).size ===
@@ -1229,6 +1297,7 @@ app.post("/api/execute-block", async (request, response) => {
     label: item.input.label,
     type: item.input.type,
     recordFields: item.input.recordFields,
+    presentation: item.input.presentation,
   }));
   const serializedContext = resolvedInputs
     .map((item) => `${item.input.label}: ${JSON.stringify(item.value)}`)
@@ -1270,6 +1339,7 @@ app.post("/api/execute-block", async (request, response) => {
           required: field.required,
           options: field.options,
           recordFields: field.recordFields,
+          presentation: field.presentation,
           portKey:
             capability.outputPorts.find((port) => port.producedTypes.includes(field.type))?.key ??
             capability.outputPorts[0]?.key ??
@@ -1425,6 +1495,13 @@ app.post("/api/execute-block", async (request, response) => {
       .map((field) => field.label);
     if (missingOutputs.length) {
       throw new Error(`O plugin não entregou: ${missingOutputs.join(", ")}.`);
+    }
+    const restrictionIssues = (block.outputs ?? []).flatMap((field) => {
+      const issue = getPresentationRestrictionIssue(field.presentation, values[field.key]);
+      return issue ? [`${field.label}: ${issue}`] : [];
+    });
+    if (restrictionIssues.length) {
+      throw new Error(`O plugin entregou valores incompatíveis: ${restrictionIssues.join("; ")}.`);
     }
     finishPluginBlock(execution, block, blockExecution, values);
     blockExecution.logs = pluginResponse.logs;

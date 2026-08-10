@@ -4,6 +4,7 @@ import type {
   BlockType,
   BlockValidationConfig,
   HumanFieldType,
+  FieldPresentation,
   ProcessOutput,
   RuntimeValue,
   StoredFile,
@@ -61,6 +62,8 @@ export type PluginInputPort = {
   acceptedTypes: PluginDataType[];
   required: boolean;
   multiple?: boolean;
+  /** Optional request for a renderer owned and validated by the core. */
+  presentation?: FieldPresentation;
 };
 
 export type PluginOutputPort = {
@@ -69,6 +72,8 @@ export type PluginOutputPort = {
   description?: string;
   producedTypes: PluginDataType[];
   required: boolean;
+  /** Optional request for a renderer owned and validated by the core. */
+  presentation?: FieldPresentation;
 };
 
 export type PluginExecutionPolicy = {
@@ -95,7 +100,7 @@ export type PluginDataPolicy = {
 
 export type PluginFieldContract = Pick<
   BlockFieldDefinition,
-  "label" | "key" | "type" | "required" | "options" | "recordFields"
+  "label" | "key" | "type" | "required" | "options" | "recordFields" | "presentation"
 > & {
   portKey: string;
 };
@@ -163,7 +168,7 @@ export type PluginInvocation =
 
 export type PluginInputContract = Pick<
   BlockInputBinding,
-  "id" | "label" | "type" | "recordFields"
+  "id" | "label" | "type" | "recordFields" | "presentation"
 > & {
   portKey: string;
 };

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ActionBlock, ProcessMethod, UniversalProcess } from "@/lib/domain";
+import { normalizeFieldPresentation } from "@/lib/presentation";
 
 const universalProcessSchema = z.enum([
   "theme",
@@ -43,11 +44,69 @@ const recordFieldSchema = z.object({
   options: z.array(z.string().max(500)).max(100).optional(),
 });
 
-const inputSchema = z.object({
-  id: z.string(),
-  label: z.string().max(200),
-  type: z
-    .enum([
+const presentationSchema = z.object({
+  renderer: z.enum([
+    "auto",
+    "text-short",
+    "text-long",
+    "list",
+    "tags",
+    "table",
+    "cards",
+    "file-list",
+    "image-gallery",
+    "audio-player",
+    "video-player",
+    "decision",
+  ]),
+  itemType: z.enum(["text", "record", "file", "image", "audio", "video"]).optional(),
+  acceptedMimeTypes: z.array(z.string().max(200)).max(50).optional(),
+});
+
+const inputSchema = z
+  .object({
+    id: z.string(),
+    label: z.string().max(200),
+    type: z
+      .enum([
+        "text",
+        "number",
+        "select",
+        "boolean",
+        "textarea",
+        "multiselect",
+        "list",
+        "records",
+        "datetime",
+        "url",
+        "file",
+        "image",
+        "audio",
+        "video",
+        "files",
+        "approval",
+        "thumbnail_layout",
+      ])
+      .default("text"),
+    source: z.enum(["project", "previous_process", "previous_block", "channel_library", "static"]),
+    sourceKey: z.string().max(200).optional(),
+    blockId: z.string().optional(),
+    collection: z.string().max(200).optional(),
+    staticValue: z.string().max(10_000).optional(),
+    recordFields: z.array(recordFieldSchema).max(100).optional(),
+    presentation: presentationSchema.optional(),
+  })
+  .transform((input) => ({
+    ...input,
+    presentation: normalizeFieldPresentation(input.type, input.presentation),
+  }));
+
+const outputSchema = z
+  .object({
+    id: z.string(),
+    label: z.string().max(200),
+    key: z.string().max(200),
+    type: z.enum([
       "text",
       "number",
       "select",
@@ -65,47 +124,20 @@ const inputSchema = z.object({
       "files",
       "approval",
       "thumbnail_layout",
-    ])
-    .default("text"),
-  source: z.enum(["project", "previous_process", "previous_block", "channel_library", "static"]),
-  sourceKey: z.string().max(200).optional(),
-  blockId: z.string().optional(),
-  collection: z.string().max(200).optional(),
-  staticValue: z.string().max(10_000).optional(),
-  recordFields: z.array(recordFieldSchema).max(100).optional(),
-});
-
-const outputSchema = z.object({
-  id: z.string(),
-  label: z.string().max(200),
-  key: z.string().max(200),
-  type: z.enum([
-    "text",
-    "number",
-    "select",
-    "boolean",
-    "textarea",
-    "multiselect",
-    "list",
-    "records",
-    "datetime",
-    "url",
-    "file",
-    "image",
-    "audio",
-    "video",
-    "files",
-    "approval",
-    "thumbnail_layout",
-  ]),
-  required: z.boolean(),
-  placeholder: z.string().max(500).optional(),
-  helpText: z.string().max(2_000).optional(),
-  options: z.array(z.string().max(500)).max(100).optional(),
-  optionsSourceBlockId: z.string().optional(),
-  optionsSourceKey: z.string().max(200).optional(),
-  recordFields: z.array(recordFieldSchema).max(100).optional(),
-});
+    ]),
+    required: z.boolean(),
+    placeholder: z.string().max(500).optional(),
+    helpText: z.string().max(2_000).optional(),
+    options: z.array(z.string().max(500)).max(100).optional(),
+    optionsSourceBlockId: z.string().optional(),
+    optionsSourceKey: z.string().max(200).optional(),
+    recordFields: z.array(recordFieldSchema).max(100).optional(),
+    presentation: presentationSchema.optional(),
+  })
+  .transform((output) => ({
+    ...output,
+    presentation: normalizeFieldPresentation(output.type, output.presentation),
+  }));
 
 const validationSchema = z.object({
   targetBlockId: z.string().optional(),
@@ -143,13 +175,13 @@ const sharedMethodSchema = z.object({
 export type SharedMethodFile = z.infer<typeof sharedMethodSchema>;
 
 export function serializeMethodFile(name: string, method: ProcessMethod) {
-  const file: SharedMethodFile = {
+  const file = sharedMethodSchema.parse({
     format: "contentflow-method",
     version: 1,
     name,
     exportedAt: new Date().toISOString(),
     method,
-  };
+  });
   return JSON.stringify(file, null, 2);
 }
 

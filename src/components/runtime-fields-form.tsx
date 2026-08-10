@@ -25,6 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type {
   BlockFieldDefinition,
+  FieldPresentation,
   RecordFieldDefinition,
   RuntimeValue,
   StoredFile,
@@ -59,11 +60,25 @@ function toDatetimeLocalValue(value: unknown) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function acceptFor(type: BlockFieldDefinition["type"]) {
+function acceptFor(type: BlockFieldDefinition["type"], presentation?: FieldPresentation) {
+  if (presentation?.acceptedMimeTypes?.length) return presentation.acceptedMimeTypes.join(",");
+  if (presentation?.itemType === "image") return "image/*";
+  if (presentation?.itemType === "audio") return "audio/*";
+  if (presentation?.itemType === "video") return "video/*";
   if (type === "image") return "image/*";
   if (type === "audio") return "audio/*";
   if (type === "video") return "video/*";
   return undefined;
+}
+
+function acceptsFile(field: BlockFieldDefinition, file: File) {
+  const accepted = acceptFor(field.type, field.presentation)
+    ?.split(",")
+    .map((item) => item.trim());
+  if (!accepted?.length) return true;
+  return accepted.some((pattern) =>
+    pattern.endsWith("/*") ? file.type.startsWith(pattern.slice(0, -1)) : file.type === pattern,
+  );
 }
 
 function FileIcon({ mimeType }: { mimeType: string }) {
@@ -90,6 +105,13 @@ export function RuntimeFieldsForm({
 
   async function upload(field: BlockFieldDefinition, files: FileList | null) {
     if (!files?.length) return;
+    const rejected = Array.from(files).find((file) => !acceptsFile(field, file));
+    if (rejected) {
+      toast.error("Formato de arquivo incompatível", {
+        description: `${rejected.name} não atende às restrições MIME deste campo.`,
+      });
+      return;
+    }
     setUploadingKey(field.key);
     try {
       const uploaded = await Promise.all(Array.from(files).map(uploadLocalFile));
@@ -280,7 +302,7 @@ export function RuntimeFieldsForm({
                     id={field.id}
                     type="file"
                     multiple={field.type === "files"}
-                    accept={acceptFor(field.type)}
+                    accept={acceptFor(field.type, field.presentation)}
                     className="hidden"
                     disabled={uploadingKey === field.key}
                     onChange={(event) => void upload(field, event.target.files)}

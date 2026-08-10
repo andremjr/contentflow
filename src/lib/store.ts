@@ -25,6 +25,7 @@ import {
   normalizeActionBlock,
   normalizeMethodBlocks,
 } from "@/lib/human-workflow";
+import { getPresentationRestrictionIssue } from "@/lib/presentation";
 import { resolveBlockInputs } from "@/lib/runtime-contract";
 
 export type YouTubeChannelProfile = Pick<
@@ -887,6 +888,10 @@ export function completeHumanBlock(
   const missing = (block.outputs ?? [])
     .filter((output) => output.required && isEmptyRuntimeValue(values[output.key]))
     .map((output) => output.label);
+  for (const output of block.outputs ?? []) {
+    const issue = getPresentationRestrictionIssue(output.presentation, values[output.key]);
+    if (issue) missing.push(`${output.label}: ${issue}`);
+  }
   for (const output of (block.outputs ?? []).filter((field) => field.type === "records")) {
     const storedRecords = values[output.key];
     const records = Array.isArray(storedRecords) ? storedRecords : [];

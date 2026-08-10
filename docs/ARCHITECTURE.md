@@ -143,7 +143,9 @@ Todo bloco `VALIDAR` referencia um bloco anterior específico e opera em um de t
 
 Cada execução mantém um snapshot do Método utilizado, o estado individual dos blocos, rascunhos, entregas concluídas e referências a arquivos armazenados localmente. As saídas concluídas tornam-se contexto para os blocos seguintes.
 
-A página do processo mantém um painel expansível de resultados concluídos. Cada valor é apresentado conforme seu formato: textos e listas, registros em tabela, datas localizadas, links clicáveis, imagens, players de áudio e vídeo, arquivos, layouts 16:9, valores booleanos e decisões de aprovação ou reprovação.
+A página do processo mantém um painel expansível de resultados concluídos. O tipo técnico do campo continua sendo a autoridade para validação e compatibilidade, enquanto `presentation` pode solicitar, de forma opcional, um renderer padronizado do núcleo. O registro central oferece modo automático, texto curto ou longo, lista ou etiquetas, tabela ou cartões, lista de arquivos, galeria de imagens, players de áudio e vídeo e decisão/aprovação. Assim, por exemplo, um mesmo valor `files` pode aparecer como lista de arquivos ou galeria sem alterar seu contrato técnico. Métodos e snapshots antigos, sem `presentation`, são normalizados para `auto`.
+
+Renderers são componentes internos do ContentFlow OS. Plugins podem apenas indicar um identificador permitido e restrições declarativas de item ou MIME; nunca fornecem React, HTML, scripts ou outra interface arbitrária. Preferências incompatíveis ou desconhecidas são ignoradas pelo núcleo e recaem no modo automático.
 
 ---
 

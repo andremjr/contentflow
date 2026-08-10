@@ -17,14 +17,14 @@ Use este contrato para criar um arquivo de método importável. O JSON represent
 }
 ```
 
-| Campo | Regra |
-| --- | --- |
-| `format` | Sempre `contentflow-method`. |
-| `version` | Sempre o número `1`. |
-| `name` | Texto de até 200 caracteres. |
-| `exportedAt` | Data/hora ISO 8601 válida. |
+| Campo                | Regra                                                                                        |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| `format`             | Sempre `contentflow-method`.                                                                 |
+| `version`            | Sempre o número `1`.                                                                         |
+| `name`               | Texto de até 200 caracteres.                                                                 |
+| `exportedAt`         | Data/hora ISO 8601 válida.                                                                   |
 | `method.processType` | Um: `theme`, `title`, `thumbnail`, `script`, `narration`, `assets`, `editing`, `publishing`. |
-| `method.blocks` | Lista com 1 a 200 blocos. |
+| `method.blocks`      | Lista com 1 a 200 blocos.                                                                    |
 
 ## Bloco de ação
 
@@ -42,17 +42,17 @@ Use este contrato para criar um arquivo de método importável. O JSON represent
 }
 ```
 
-| Campo | Regra |
-| --- | --- |
-| `id` | Texto único no arquivo. Use minúsculas e hífens. |
-| `type` | Um: `BUSCAR`, `ESCOLHER`, `CRIAR`, `VALIDAR`. |
-| `operator` | Um: `IA`, `Humano`, `Código`. |
-| `collectionId` | Opcional. Não gere este campo para arquivos portáveis. |
-| `name` | Opcional; até 200 caracteres. |
-| `instructions` | Opcional; até 20.000 caracteres. |
-| `inputs`, `outputs`, `parameters` | Listas; `parameters` é obrigatória, mesmo vazia. |
-| `validation` | Opcional; use apenas em bloco `VALIDAR`. |
-| `order` | Inteiro não negativo; comece em 0 e siga sem saltos. |
+| Campo                             | Regra                                                  |
+| --------------------------------- | ------------------------------------------------------ |
+| `id`                              | Texto único no arquivo. Use minúsculas e hífens.       |
+| `type`                            | Um: `BUSCAR`, `ESCOLHER`, `CRIAR`, `VALIDAR`.          |
+| `operator`                        | Um: `IA`, `Humano`, `Código`.                          |
+| `collectionId`                    | Opcional. Não gere este campo para arquivos portáveis. |
+| `name`                            | Opcional; até 200 caracteres.                          |
+| `instructions`                    | Opcional; até 20.000 caracteres.                       |
+| `inputs`, `outputs`, `parameters` | Listas; `parameters` é obrigatória, mesmo vazia.       |
+| `validation`                      | Opcional; use apenas em bloco `VALIDAR`.               |
+| `order`                           | Inteiro não negativo; comece em 0 e siga sem saltos.   |
 
 ## Parâmetro
 
@@ -107,6 +107,23 @@ O `type` de entrada aceita: `text`, `number`, `select`, `boolean`, `textarea`, `
 ```
 
 Toda saída tem `id`, `label`, `key`, `type` e `required`. `key` é uma chave técnica única dentro do bloco. Os tipos de saída são os mesmos tipos de entrada. Para `select` e `multiselect`, `options` é opcional (máximo 100). Para `records`, inclua `recordFields`.
+
+## Apresentação opcional (`presentation`)
+
+Entradas e saídas podem escolher uma forma de apresentação sem alterar o `type` técnico:
+
+```json
+{
+  "type": "files",
+  "presentation": {
+    "renderer": "image-gallery",
+    "itemType": "image",
+    "acceptedMimeTypes": ["image/*"]
+  }
+}
+```
+
+`renderer` aceita `auto`, `text-short`, `text-long`, `list`, `tags`, `table`, `cards`, `file-list`, `image-gallery`, `audio-player`, `video-player` e `decision`. `itemType` e `acceptedMimeTypes` são restrições opcionais. Omita todo o objeto ou use `auto` quando não houver preferência; arquivos antigos sem esse campo continuam válidos. O núcleo ignora combinações incompatíveis e nunca aceita HTML, scripts ou componentes de interface nesse contrato.
 
 ## Campos de registro (`recordFields`)
 

@@ -436,6 +436,7 @@ function ExecutionResults({
                         key={output.id}
                         label={output.label}
                         type={output.type}
+                        presentation={output.presentation}
                         value={blockExecution.values[output.key]}
                       />
                     ))}
@@ -457,11 +458,13 @@ function ExecutionResults({
 function ResultValue({
   label,
   type,
+  presentation,
   value,
   source,
 }: {
   label: string;
   type: Parameters<typeof RuntimeValueViewer>[0]["type"];
+  presentation?: Parameters<typeof RuntimeValueViewer>[0]["presentation"];
   value: RuntimeValue | undefined;
   source?: string;
 }) {
@@ -477,7 +480,7 @@ function ResultValue({
           </Badge>
         )}
       </div>
-      <RuntimeValueViewer type={type} value={value} compact />
+      <RuntimeValueViewer type={type} presentation={presentation} value={value} compact />
     </div>
   );
 }
@@ -817,6 +820,7 @@ function HumanBlockGate({
   const context: Array<{
     label: string;
     type: Parameters<typeof RuntimeValueViewer>[0]["type"];
+    presentation?: Parameters<typeof RuntimeValueViewer>[0]["presentation"];
     value: RuntimeValue;
     source?: string;
   }> = [];
@@ -969,6 +973,7 @@ function HumanBlockGate({
                   key={item.input.id}
                   label={item.input.label}
                   type={item.input.type}
+                  presentation={item.input.presentation}
                   value={item.value}
                   source={item.sourceLabel}
                 />
