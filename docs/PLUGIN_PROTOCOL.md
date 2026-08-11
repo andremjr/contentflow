@@ -6,6 +6,8 @@ O executor isolado atende plugins oficiais, locais e comunitários. Plugins exte
 
 Documentos relacionados:
 
+- [`PLUGIN_AI_KIT.md`](PLUGIN_AI_KIT.md): pacote curto para criação assistida por IA.
+- [`PLUGIN_TUTORIAL_30_MIN.md`](PLUGIN_TUTORIAL_30_MIN.md): aula prática com o kit oficial.
 - [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md): tutorial de implementação.
 - [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md): ordem estratégica e catálogo por processo.
 - [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md): modelo de ameaças e requisitos do executor.

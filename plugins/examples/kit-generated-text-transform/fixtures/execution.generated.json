@@ -1,0 +1,54 @@
+{
+  "executionId": "kit-execution",
+  "traceId": "kit-trace",
+  "blockId": "kit-block",
+  "capabilityId": "demo",
+  "attempt": 1,
+  "invocation": {
+    "mode": "start"
+  },
+  "configuration": {},
+  "settings": {},
+  "inputs": {
+    "content": "Texto fictício para validar o plugin."
+  },
+  "inputContract": [
+    {
+      "id": "kit-input",
+      "portKey": "content",
+      "label": "Texto",
+      "type": "textarea"
+    }
+  ],
+  "outputContract": [
+    {
+      "portKey": "result",
+      "label": "Resultado",
+      "key": "result",
+      "type": "textarea",
+      "required": true
+    }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "kit-channel",
+      "name": "Canal fictício",
+      "language": "pt-BR",
+      "niche": "Testes"
+    },
+    "project": {
+      "id": "kit-project",
+      "title": "Projeto fictício"
+    },
+    "processType": "script",
+    "block": {
+      "type": "CRIAR",
+      "name": "Bloco de teste",
+      "instructions": "Execute o contrato."
+    },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

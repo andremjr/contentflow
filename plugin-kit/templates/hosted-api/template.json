@@ -1,0 +1,11 @@
+{
+  "id": "hosted-api",
+  "label": "Plugin hospedado que chama uma API",
+  "description": "Envia texto a uma API HTTPS declarada e usa credencial protegida.",
+  "permissions": ["network"],
+  "networkHosts": ["api.example.com"],
+  "secretKeys": ["API_TOKEN"],
+  "input": { "key": "content", "label": "Texto", "type": "textarea" },
+  "output": { "key": "result", "label": "Resposta", "type": "textarea" },
+  "deliveryTypes": ["text"]
+}

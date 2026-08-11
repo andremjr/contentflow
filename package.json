@@ -32,7 +32,9 @@
     "test:presentation": "tsx server/presentation-smoke.ts",
     "test:remote-artifacts": "tsx server/remote-artifact-downloader.test.ts",
     "test:plugin-jobs": "tsx server/plugin-job-store.test.ts",
-    "check": "npm run lint && npm run typecheck && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run build",
+    "test:plugin-kit": "tsx server/plugin-kit.test.ts",
+    "plugin:kit": "tsx tools/plugin-kit.ts",
+    "check": "npm run lint && npm run typecheck && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-kit && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {

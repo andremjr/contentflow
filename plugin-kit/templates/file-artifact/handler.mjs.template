@@ -1,0 +1,29 @@
+import { copyFile, stat } from "node:fs/promises";
+
+export async function execute(request, services) {
+  const value = request.inputs["{{INPUT_KEY}}"];
+  if (!value || typeof value !== "object" || typeof value.url !== "string") {
+    return {
+      status: "error",
+      code: "INVALID_INPUT",
+      message: "{{INPUT_KEY}} precisa ser um arquivo.",
+      retryable: false,
+    };
+  }
+  const sourcePath = await services.resolveInputFile(value);
+  const name = `copia-${String(value.name || "arquivo.bin").replace(/[^A-Za-z0-9._-]/g, "-")}`;
+  const outputPath = services.getOutputPath(name);
+  await copyFile(sourcePath, outputPath);
+  const info = await stat(outputPath);
+  const artifact = {
+    id: "generated-file",
+    name,
+    mimeType: value.mimeType || "application/octet-stream",
+    size: info.size,
+  };
+  return {
+    status: "success",
+    values: { "{{OUTPUT_KEY}}": { ...artifact, url: "artifact://generated-file" } },
+    artifacts: [{ ...artifact, source: { kind: "path", path: name } }],
+  };
+}

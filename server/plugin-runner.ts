@@ -3,7 +3,6 @@ import {
   createReadStream,
   createWriteStream,
   existsSync,
-  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -27,8 +26,8 @@ import {
   assertRemoteArtifactNetworkPermission,
   DEFAULT_REMOTE_ARTIFACT_MAX_BYTES,
   downloadRemoteArtifact,
-  normalizeNetworkHostPattern,
 } from "./remote-artifact-downloader";
+import { findPluginManifest, validatePluginDirectory } from "./plugin-validation";
 
 export type PluginSource = "bundled" | "local" | "installed";
 
@@ -44,7 +43,6 @@ export type RegisteredPlugin = {
 
 type PluginIssue = { directory: string; message: string };
 
-const pluginDeliveryTypes = new Set(["text", "image", "audio", "video", "processing"]);
 const maxPluginExecutionMs = 24 * 60 * 60 * 1_000;
 const maxArtifactBytes = 4 * 1024 * 1024 * 1024;
 const maxArtifactBatchBytes = 4 * 1024 * 1024 * 1024;
@@ -72,72 +70,6 @@ const developmentLinksRoot = path.resolve(
 const registry = new Map<string, RegisteredPlugin>();
 let discoveryIssues: PluginIssue[] = [];
 
-function manifestPathFor(directory: string) {
-  const compatible = path.join(directory, "plugin.json");
-  if (existsSync(compatible)) {
-    try {
-      const alias = JSON.parse(readFileSync(compatible, "utf8")) as {
-        canonical_manifest?: unknown;
-      };
-      if (
-        typeof alias.canonical_manifest === "string" &&
-        !path.isAbsolute(alias.canonical_manifest) &&
-        !alias.canonical_manifest.includes("..")
-      ) {
-        const referenced = path.join(directory, alias.canonical_manifest);
-        if (existsSync(referenced)) return referenced;
-      }
-    } catch {
-      return compatible;
-    }
-  }
-  const canonical = path.join(directory, "contentflow.plugin.json");
-  if (existsSync(canonical)) return canonical;
-  return existsSync(compatible) ? compatible : undefined;
-}
-
-function validateManifest(value: unknown): PluginManifest {
-  if (!value || typeof value !== "object") throw new Error("Manifesto inválido.");
-  const manifest = value as PluginManifest;
-  if (
-    manifest.apiVersion !== "1" ||
-    !manifest.id ||
-    !manifest.name ||
-    !manifest.version ||
-    manifest.runtime?.kind !== "node" ||
-    manifest.runtime.module !== "esm" ||
-    !manifest.entrypoint ||
-    path.isAbsolute(manifest.entrypoint) ||
-    manifest.entrypoint.includes("..") ||
-    !Array.isArray(manifest.capabilities) ||
-    !manifest.capabilities.length
-  ) {
-    throw new Error("Manifesto incompleto ou incompatível com a API v1.");
-  }
-  if (
-    manifest.deliveryTypes !== undefined &&
-    (!Array.isArray(manifest.deliveryTypes) ||
-      !manifest.deliveryTypes.length ||
-      new Set(manifest.deliveryTypes).size !== manifest.deliveryTypes.length ||
-      manifest.deliveryTypes.some((type) => !pluginDeliveryTypes.has(type)))
-  ) {
-    throw new Error("deliveryTypes contém uma capacidade de entrega inválida.");
-  }
-  if (
-    manifest.networkHosts !== undefined &&
-    (!manifest.permissions.includes("network") ||
-      !Array.isArray(manifest.networkHosts) ||
-      !manifest.networkHosts.length ||
-      manifest.networkHosts.length > 100 ||
-      manifest.networkHosts.some((host) => typeof host !== "string") ||
-      new Set(manifest.networkHosts.map(normalizeNetworkHostPattern)).size !==
-        manifest.networkHosts.length)
-  ) {
-    throw new Error("networkHosts exige network e uma lista válida de hosts únicos.");
-  }
-  return manifest;
-}
-
 function scanPluginDirectory(
   pluginDirectory: string,
   source: PluginSource,
@@ -145,20 +77,14 @@ function scanPluginDirectory(
 ) {
   const shownDirectory =
     displayDirectory ?? path.relative(applicationRoot, pluginDirectory).replaceAll("\\", "/");
-  const manifestPath = manifestPathFor(pluginDirectory);
+  const manifestPath = findPluginManifest(pluginDirectory);
   if (!manifestPath) return;
   try {
-    const manifest = validateManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
-    const entrypoint = path.resolve(pluginDirectory, manifest.entrypoint);
-    const realDirectory = realpathSync(pluginDirectory);
-    const realEntrypoint = realpathSync(entrypoint);
-    if (!realEntrypoint.startsWith(`${realDirectory}${path.sep}`)) {
-      throw new Error("O entrypoint precisa permanecer dentro da pasta do plugin.");
-    }
+    const validated = validatePluginDirectory(pluginDirectory, source !== "bundled");
+    const { manifest, absoluteDirectory: realDirectory, entrypoint: realEntrypoint } = validated;
     if (registry.has(manifest.id)) {
       throw new Error(`O id ${manifest.id} já foi registrado por outro plugin.`);
     }
-    if (source !== "bundled") assertNoSymlinks(realDirectory);
     registry.set(manifest.id, {
       id: manifest.id,
       source,
@@ -202,23 +128,6 @@ function scanDevelopmentLinks() {
         directory: linkPath,
         message: error instanceof Error ? error.message : "Não foi possível carregar o plugin.",
       });
-    }
-  }
-}
-
-function assertNoSymlinks(directory: string) {
-  const pending = [directory];
-  let visited = 0;
-  while (pending.length) {
-    const current = pending.pop()!;
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      visited += 1;
-      if (visited > 20_000) throw new Error("O pacote excede o limite de 20.000 arquivos.");
-      const target = path.join(current, entry.name);
-      if (entry.isSymbolicLink() || lstatSync(target).isSymbolicLink()) {
-        throw new Error("Plugins comunitários não podem conter links simbólicos.");
-      }
-      if (entry.isDirectory()) pending.push(target);
     }
   }
 }

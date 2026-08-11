@@ -1,0 +1,17 @@
+{
+  "template": "text-transform",
+  "name": "ContentFlow Kit Text Demo",
+  "id": "com.contentflow.kit-text-demo",
+  "author": "ContentFlow OS",
+  "license": "LicenseRef-ContentFlow-Plugin-Example-1.0",
+  "description": "Exemplo mínimo criado pelo próprio Plugin Kit oficial.",
+  "operator": "Código",
+  "blockTypes": ["CRIAR"],
+  "input": { "key": "content", "label": "Texto", "type": "textarea" },
+  "output": { "key": "result", "label": "Resultado", "type": "textarea" },
+  "permissions": [],
+  "networkHosts": [],
+  "secretKeys": [],
+  "sendsDataToThirdParties": false,
+  "providers": []
+}

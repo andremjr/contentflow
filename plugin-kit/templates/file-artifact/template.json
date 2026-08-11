@@ -1,0 +1,9 @@
+{
+  "id": "file-artifact",
+  "label": "Arquivo de entrada para novo artefato",
+  "description": "Lê um arquivo armazenado e produz outro artefato local.",
+  "permissions": ["filesystem:read", "filesystem:write"],
+  "input": { "key": "source", "label": "Arquivo de origem", "type": "file" },
+  "output": { "key": "result", "label": "Arquivo gerado", "type": "file" },
+  "deliveryTypes": ["processing"]
+}

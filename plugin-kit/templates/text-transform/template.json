@@ -1,0 +1,9 @@
+{
+  "id": "text-transform",
+  "label": "Transformação simples de texto (sem rede)",
+  "description": "Recebe texto e devolve texto transformado sem sair da máquina.",
+  "permissions": [],
+  "input": { "key": "content", "label": "Texto", "type": "textarea" },
+  "output": { "key": "result", "label": "Resultado", "type": "textarea" },
+  "deliveryTypes": ["text"]
+}

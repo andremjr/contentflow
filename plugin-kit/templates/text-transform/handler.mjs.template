@@ -1,0 +1,12 @@
+export async function execute(request) {
+  const value = request.inputs["{{INPUT_KEY}}"];
+  if (typeof value !== "string") {
+    return {
+      status: "error",
+      code: "INVALID_INPUT",
+      message: "{{INPUT_KEY}} precisa ser texto.",
+      retryable: false,
+    };
+  }
+  return { status: "success", values: { "{{OUTPUT_KEY}}": value.trim().toUpperCase() } };
+}
