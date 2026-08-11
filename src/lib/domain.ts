@@ -272,6 +272,10 @@ export type BlockExecution = {
   retryFeedback?: Record<string, RuntimeValue>;
   error?: string;
   logs?: string[];
+  jobId?: string;
+  traceId?: string;
+  progress?: number;
+  progressMessage?: string;
   startedAt?: string;
   completedAt?: string;
 };

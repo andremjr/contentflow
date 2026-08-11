@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   PROCESS_META,
   PROCESS_ORDER,
@@ -47,6 +48,7 @@ import {
   completeHumanBlock,
   completeProcessOutput,
   executePluginBlock,
+  refreshProcessExecution,
   resetStage,
   retryBlockExecution,
   saveHumanBlockDraft,
@@ -104,6 +106,7 @@ export function ProcessRunner({
     activeExecution?.status === "blocked_executor" && activeBlock?.operator !== "Humano";
   const awaitingOutput = execution?.status === "awaiting_output";
   const methodIssue = getMethodConfigurationIssue(method);
+  const runningExecutionId = execution?.status === "running" ? execution.id : undefined;
 
   const scheduleNextProcess = useCallback(() => {
     if (!project || !channel || !nextProcess || nextNavigationTimer.current) return;
@@ -122,6 +125,20 @@ export function ProcessRunner({
     },
     [],
   );
+
+  useEffect(() => {
+    if (!runningExecutionId) return;
+    let active = true;
+    const refresh = () => {
+      if (active) void refreshProcessExecution(runningExecutionId);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 1_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [runningExecutionId]);
 
   if (!project || !channel) return null;
   const projectId = project.id;
@@ -159,9 +176,15 @@ export function ProcessRunner({
     toast.success("Opção escolhida. O processo continuará.");
   }
 
-  function cancel() {
-    if (!execution || !cancelProcessExecution(execution.id)) return;
-    toast.info("Execução cancelada.");
+  async function cancel() {
+    if (!execution) return;
+    try {
+      if (await cancelProcessExecution(execution.id)) toast.info("Cancelamento solicitado.");
+    } catch (error) {
+      toast.error("Não foi possível cancelar a execução", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
   }
 
   function retry() {
@@ -200,7 +223,7 @@ export function ProcessRunner({
               <Play className="mr-1.5 size-3.5 fill-current" /> Executar processo
             </Button>
           ) : (
-            <Button size="sm" variant="outline" onClick={cancel}>
+            <Button size="sm" variant="outline" onClick={() => void cancel()}>
               <Square className="mr-1.5 size-3.5 fill-current" /> Cancelar execução
             </Button>
           )}
@@ -269,8 +292,8 @@ export function ProcessRunner({
               isPublishing={!nextProcess}
               output={execution.output?.values}
             />
-          ) : activeBlock ? (
-            <ActiveExecutionBlock block={activeBlock} />
+          ) : activeBlock && activeExecution ? (
+            <ActiveExecutionBlock block={activeBlock} blockExecution={activeExecution} />
           ) : null}
         </>
       ) : (
@@ -361,6 +384,9 @@ function ExecutionTimeline({ execution }: { execution: ProcessExecution }) {
                 <span className="truncate text-xs font-semibold">{block?.name ?? block?.type}</span>
               </div>
               <p className="mt-2 text-[10px] text-muted-foreground">{STATUS_LABEL[item.status]}</p>
+              {item.status === "in_progress" && item.progress !== undefined && (
+                <Progress value={item.progress * 100} className="mt-2 h-1" />
+              )}
             </div>
           );
         })}
@@ -378,8 +404,13 @@ function ExecutionResults({
   collections: StrategicCollection[];
   libraryItems: ChannelLibraryItem[];
 }) {
-  const completed = execution.blocks.filter((item) => item.status === "completed");
-  if (!completed.length) return null;
+  const visibleResults = execution.blocks.filter(
+    (item) =>
+      item.status === "completed" ||
+      (item.status === "in_progress" &&
+        Object.values(item.values).some((value) => !isEmptyDisplayValue(value))),
+  );
+  if (!visibleResults.length) return null;
 
   return (
     <section className="rounded-xl border border-border/70 bg-card p-4">
@@ -387,7 +418,7 @@ function ExecutionResults({
         Resultados produzidos
       </h3>
       <div className="mt-3 space-y-2">
-        {completed.map((blockExecution, index) => {
+        {visibleResults.map((blockExecution, index) => {
           const block = execution.methodSnapshot.blocks.find(
             (candidate) => candidate.id === blockExecution.blockId,
           );
@@ -408,13 +439,17 @@ function ExecutionResults({
             <details
               key={blockExecution.blockId}
               className="group rounded-lg border border-border/60 bg-background/30"
-              open={index === completed.length - 1}
+              open={blockExecution.status === "in_progress" || index === visibleResults.length - 1}
             >
               <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium">
-                <CheckCircle2 className="size-4 text-muted-foreground" />
+                {blockExecution.status === "completed" ? (
+                  <CheckCircle2 className="size-4 text-muted-foreground" />
+                ) : (
+                  <LoaderCircle className="size-4 animate-spin text-brand-soft" />
+                )}
                 <span className="min-w-0 flex-1 truncate">{block.name ?? block.type}</span>
                 <Badge variant="outline" className="text-[9px] text-muted-foreground">
-                  Concluído
+                  {blockExecution.status === "completed" ? "Concluído" : "Atualizando"}
                 </Badge>
               </summary>
               <div className="border-t border-border/60 p-3">
@@ -516,7 +551,13 @@ function MethodPreview({ method }: { method: ActionBlock[] }) {
   );
 }
 
-function ActiveExecutionBlock({ block }: { block: ActionBlock }) {
+function ActiveExecutionBlock({
+  block,
+  blockExecution,
+}: {
+  block: ActionBlock;
+  blockExecution: BlockExecution;
+}) {
   return (
     <section className="rounded-xl border border-brand/35 bg-brand/5 p-8 text-center">
       <LoaderCircle className="mx-auto size-7 animate-spin text-brand-soft" />
@@ -525,8 +566,19 @@ function ActiveExecutionBlock({ block }: { block: ActionBlock }) {
       </Badge>
       <h3 className="mt-3 text-base font-semibold">{block.name ?? block.type}</h3>
       <p className="mx-auto mt-1 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">
-        {block.instructions || "Executando esta ação conforme a posição definida no método."}
+        {blockExecution.progressMessage ||
+          block.instructions ||
+          "Executando esta ação conforme a posição definida no método."}
       </p>
+      {blockExecution.progress !== undefined && (
+        <div className="mx-auto mt-4 max-w-md">
+          <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+            <span>Progresso</span>
+            <span>{Math.round(blockExecution.progress * 100)}%</span>
+          </div>
+          <Progress value={blockExecution.progress * 100} className="h-1.5" />
+        </div>
+      )}
       <div className="mt-4 flex justify-center">
         <OperatorBadge block={block} />
       </div>
@@ -1171,6 +1223,10 @@ function PluginExecutionGate({
       if (result.execution?.status === "completed") {
         toast.success("Plugin executado. Processo concluído.");
         onProcessCompleted();
+      } else if (result.pending) {
+        toast.success("Job iniciado", {
+          description: "O bloco continuará em segundo plano e será atualizado automaticamente.",
+        });
       } else {
         toast.success("Plugin executado. O próximo bloco está pronto.");
       }

@@ -4,7 +4,7 @@ Este documento define o modelo de ameaças e os controles mínimos para executar
 
 > Estado atual: plugins comunitários e privados passam por validação automática e consentimento local, sem revisão ou aprovação manual do mantenedor. Cada invocação roda em processo separado sob o Permission Model do Node 26, com ambiente mínimo, timeout, limite de resposta, diretórios controlados e filesystem, rede, subprocessos, workers e módulos nativos negados por padrão. Artifacts locais e remotos são validados e importados pelo núcleo.
 
-> Limite importante: esta é a sandbox de capacidades v1, não uma máquina virtual. Conceder `process` permite que o plugin inicie programas com a autoridade normal do usuário e esses programas não herdam automaticamente a sandbox do Node. Conceder `native` também amplia fortemente a confiança. Essas permissões devem aparecer como acesso avançado na interface. Quotas fortes de CPU/memória, proxy SSRF, assinatura/hash de pacotes, instalação atômica, cancelamento persistente e allowlist de executáveis continuam como hardening planejado.
+> Limite importante: esta é a sandbox de capacidades v1, não uma máquina virtual. Conceder `process` permite que o plugin inicie programas com a autoridade normal do usuário e esses programas não herdam automaticamente a sandbox do Node. Conceder `native` também amplia fortemente a confiança. Essas permissões devem aparecer como acesso avançado na interface. Quotas fortes de CPU/memória, proxy SSRF, assinatura/hash de pacotes, instalação atômica, confirmação de cancelamento externo e allowlist de executáveis continuam como hardening planejado.
 
 ## 1. Objetivos
 
@@ -204,11 +204,13 @@ Alertas não apagam outputs nem criam aprovação central. O núcleo deve mostra
 - [x] Cofre de secrets declarados.
 - [x] Limites de tempo, resposta e artifact, com smoke test automatizado de isolamento.
 - [x] Downloader HTTPS de artifacts com SSRF/DNS rebinding, redirects, streaming, timeout, limite e SHA-256.
+- [x] Jobs persistentes com deadline, leases contra `resume` concorrente, retomada após reinício e snapshots parciais validados.
+- [x] Solicitação de cancelamento persistente e chamada `cancel` para capacidades que a suportam.
 - [ ] Download assinado, hash, versões imutáveis e instalação atômica.
 - [ ] Proxy/SDK obrigatório para impor `networkHosts` a toda conexão aberta pelo processo do plugin.
 - [ ] Allowlist de subprocessos e argumentos sem shell.
 - [ ] Quotas fortes de CPU, memória, árvore de processos, disco, rede e custo.
-- [ ] Cancelamento persistente, encerramento comprovado da árvore e recuperação após reinício.
+- [ ] Encerramento comprovado de processos externos/árvores iniciadas por plugins e reconciliação de cancelamentos remotos incertos.
 - [ ] Idempotência e reconciliação de efeitos externos pelo núcleo.
 - [ ] Inspeção profunda de formatos hostis e malware.
 - [ ] Auditoria e resposta a incidentes completas.

@@ -124,6 +124,54 @@ try {
       ),
     /permissão network/,
   );
+
+  const partialSource = path.join(integrationOutput, "partial.txt");
+  await writeFile(partialSource, "parcial");
+  const partialResponse: PluginExecutionResponse = {
+    status: "pending",
+    jobId: "provider-job-1",
+    pollAfterMs: 1_000,
+    progress: 0.5,
+    partialValues: { files: ["artifact://partial-file"] },
+    partialArtifacts: [
+      {
+        id: "partial-file",
+        name: "partial.txt",
+        mimeType: "text/plain",
+        size: 7,
+        source: { kind: "path", path: "partial.txt" },
+      },
+    ],
+  };
+  const importedPartial = await importPluginArtifacts(
+    partialResponse,
+    integrationOutput,
+    uploadsDirectory,
+    manifest,
+  );
+  assert.equal(importedPartial.status, "pending");
+  if (importedPartial.status !== "pending") throw new Error("Artifact parcial não foi importado.");
+  const partialFile = importedPartial.storedArtifacts?.[0];
+  assert.ok(partialFile?.sha256);
+  assert.equal(
+    Array.isArray(importedPartial.partialValues?.files)
+      ? (importedPartial.partialValues.files[0] as { url?: string }).url
+      : undefined,
+    partialFile?.url,
+  );
+  await rm(partialSource, { force: true });
+  const repeatedPartial = await importPluginArtifacts(
+    partialResponse,
+    integrationOutput,
+    uploadsDirectory,
+    manifest,
+    { existingArtifacts: importedPartial.storedArtifacts },
+  );
+  assert.equal(repeatedPartial.status, "pending");
+  if (partialFile) {
+    await rm(path.join(uploadsDirectory, path.basename(partialFile.url)), { force: true });
+  }
+
   const body = Buffer.from("artifact remoto válido", "utf8");
   const valid = await downloadRemoteArtifact({
     artifact: artifact("https://files.example.test/result.txt", { size: body.length }),

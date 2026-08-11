@@ -954,25 +954,41 @@ export function completeProcessOutput(
   return { ok: true };
 }
 
-export function cancelProcessExecution(executionId: string) {
+export async function cancelProcessExecution(executionId: string) {
   const execution = db.executions.find((item) => item.id === executionId);
   if (!execution || execution.status === "completed" || execution.status === "cancelled") {
     return false;
   }
-  execution.status = "cancelled";
-  execution.blocks = execution.blocks.map((block) =>
-    block.status === "completed" ? block : { ...block, status: "cancelled" },
-  );
-  const project = db.projects.find((item) => item.id === execution.projectId);
-  if (project) {
-    project.stages = { ...project.stages, [execution.processType]: "not_started" };
-    project.currentStage = execution.processType;
-    project.state = "not_started";
-    persistProject(project);
+  const response = await fetch(`/api/executions/${executionId}/cancel`, { method: "POST" });
+  const body = (await response.json()) as {
+    error?: string;
+    execution?: ProcessExecution;
+    project?: Project;
+  };
+  if (!response.ok || !body.execution || !body.project) {
+    throw new Error(body.error ?? "Não foi possível cancelar a execução.");
   }
-  persistExecution(execution);
-  emit();
+  applyServerExecutionState(body.execution, body.project);
   return true;
+}
+
+export async function refreshProcessExecution(executionId: string) {
+  const response = await fetch(`/api/executions/${executionId}/state`);
+  if (!response.ok) return false;
+  const body = (await response.json()) as {
+    execution: ProcessExecution;
+    project: Project;
+  };
+  applyServerExecutionState(body.execution, body.project);
+  return true;
+}
+
+function applyServerExecutionState(execution: ProcessExecution, project: Project) {
+  const executionIndex = db.executions.findIndex((item) => item.id === execution.id);
+  if (executionIndex >= 0) db.executions[executionIndex] = normalizeExecution(execution);
+  const projectIndex = db.projects.findIndex((item) => item.id === project.id);
+  if (projectIndex >= 0) db.projects[projectIndex] = project;
+  emit();
 }
 
 export function failBlockExecution(executionId: string, blockId: string, message: string) {
@@ -1037,6 +1053,7 @@ export async function executePluginBlock(input: {
   });
   const body = (await response.json()) as {
     ok?: boolean;
+    pending?: boolean;
     error?: string;
     execution?: ProcessExecution;
     project?: Project;
@@ -1044,14 +1061,17 @@ export async function executePluginBlock(input: {
     usage?: Record<string, unknown>;
   };
   if (body.execution) {
-    const index = db.executions.findIndex((item) => item.id === body.execution?.id);
-    if (index >= 0) db.executions[index] = normalizeExecution(body.execution);
-  }
-  if (body.project) {
+    if (body.project) applyServerExecutionState(body.execution, body.project);
+    else {
+      const index = db.executions.findIndex((item) => item.id === body.execution?.id);
+      if (index >= 0) db.executions[index] = normalizeExecution(body.execution);
+      emit();
+    }
+  } else if (body.project) {
     const index = db.projects.findIndex((item) => item.id === body.project?.id);
     if (index >= 0) db.projects[index] = body.project;
+    emit();
   }
-  if (body.execution || body.project) emit();
   if (!response.ok || !body.ok) {
     throw new Error(body.error ?? "Não foi possível executar o plugin.");
   }

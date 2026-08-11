@@ -217,7 +217,13 @@ Trabalho demorado é permitido. Uma capacidade `immediate` pode manter um worker
 ```ts
 if (request.invocation.mode === "start") {
   const job = await provider.start(request.inputs.prompt);
-  return { status: "pending", jobId: job.id, pollAfterMs: 5000, progress: 0 };
+  return {
+    status: "pending",
+    jobId: job.id,
+    pollAfterMs: 5000,
+    progress: 0,
+    partialValues: { images: [] },
+  };
 }
 
 if (request.invocation.mode === "resume") {
@@ -228,6 +234,10 @@ if (request.invocation.mode === "resume") {
       jobId: job.id,
       pollAfterMs: 5000,
       progress: job.progress,
+      message: job.message,
+      // Snapshot acumulado: repetir resume produz o mesmo valor.
+      partialValues: { images: job.completedImages },
+      partialArtifacts: job.completedImages.map(toPluginArtifact),
     };
   }
   return finishedJobToResponse(job);
@@ -239,7 +249,11 @@ return { status: "error", code: "CANCELLED", message: "Job cancelado.", retryabl
 
 O `jobId` precisa ser suficiente para retomar em outro processo, sem memória global. `start`, `resume` e `cancel` devem ser idempotentes. Não invente progresso quando o provedor não o informar.
 
-Renderizações locais também podem usar o lifecycle assíncrono quando o executor oferecer workers gerenciados: `start` inicia o processo supervisionado, `pending` preserva o handle e checkpoints, e `resume` consulta o progresso. Isso permite trabalhos de uma ou várias horas sem confundir duração com falha.
+Uma resposta `pending` encerra a requisição HTTP. O ContentFlow OS persiste e retoma o job, inclusive depois de reiniciar o aplicativo. Não dependa de variável global, timer ou processo filho ainda vivo. Credenciais necessárias ao `resume` precisam estar salvas no cofre da Central de Plugins; uma chave transitória enviada somente no formulário não é persistida.
+
+Para resultados progressivos, envie em `partialValues` o snapshot acumulado de cada campo alterado. Use `partialArtifacts` para todo `artifact://` novo. O núcleo importa esses arquivos com as mesmas regras dos resultados finais e a interface reutiliza os renderizadores reais, portanto galerias, listas, tabelas e cartões são atualizados sem recarregar a página.
+
+Renderizações locais também podem usar o lifecycle assíncrono quando o estado necessário estiver em um workspace/checkpoint durável e puder ser reaberto pelo `jobId`. O processo do handler termina depois de cada resposta; não persista apenas PID, handle ou memória do processo.
 
 ## 8. Entregue arquivos como artifacts
 

@@ -371,7 +371,7 @@ O núcleo chama `execute()` com `invocation.mode = "start"`. A capacidade devolv
 
 ### 9.3 Execução assíncrona
 
-Geradores de vídeo, avatares, renderizações e uploads podem durar minutos ou horas. Na implementação v1, o núcleo faz polling de respostas `pending` e mantém a chamada ativa até o timeout declarado, limitado a 24 horas. Persistir jobs para sobreviver à reinicialização do aplicativo e retomar sem conexão HTTP é a próxima etapa do executor assíncrono.
+Geradores de vídeo, avatares, renderizações e uploads podem durar minutos ou horas. Uma resposta `pending` encerra a requisição HTTP atual. O núcleo persiste o job no SQLite, agenda `resume` e publica snapshots curtos para a interface; nenhuma conexão HTTP permanece aberta durante o intervalo de processamento.
 
 1. `start` inicia o job externo ou um worker local supervisionado.
 2. O plugin devolve `pending`, `jobId` e `pollAfterMs`.
@@ -382,7 +382,11 @@ Geradores de vídeo, avatares, renderizações e uploads podem durar minutos ou 
 
 O `jobId` é opaco para o núcleo, mas não pode conter secrets. O plugin deve conseguir retomar usando `jobId`, settings e secrets declarados, sem memória global do processo anterior.
 
-Para worker local demorado, a arquitetura prevê persistir PID/handle, diretório autorizado, checkpoints e heartbeat em armazenamento próprio do executor. Essa persistência ainda não faz parte da v1; atualmente o plugin continua devolvendo apenas `jobId`, progresso e resultado enquanto a execução ativa é supervisionada.
+O registro persistente contém plugin e versão, capacidade, `executionId`, `blockId`, tentativa, `traceId`, `jobId`, deadline, próxima consulta, progresso, mensagem, valores/artifacts parciais, cancelamento, erro e contador de novas tentativas. Um lease transacional impede duas chamadas `resume` simultâneas. Ao reiniciar, leases interrompidos são liberados e jobs voltam ao agendamento original.
+
+O núcleo interrompe com erro explícito um job cujo plugin tenha sido removido, atualizado, desativado, perdido consentimento ou removido a capacidade. Registros terminais expiram após sete dias; artifacts parciais de jobs falhos, cancelados ou abandonados são removidos nessa limpeza. Artifacts promovidos por jobs concluídos permanecem no armazenamento normal.
+
+Workers locais contínuos ainda precisam persistir seu próprio checkpoint em workspace e ser reiniciáveis por `jobId`. O núcleo v1 não conserva PID nem processo filho entre invocações ou reinicializações.
 
 ### 9.4 Idempotência
 
@@ -559,7 +563,7 @@ Regras:
 - O núcleo transmite o corpo diretamente para um arquivo parcial exclusivo, calcula SHA-256 durante o stream, valida o arquivo final e promove por rename. O `StoredFile` definitivo registra `size`, `mimeType`, URL local e `sha256`.
 - O núcleo substitui tanto um valor `artifact://id` quanto a propriedade `url` de um `StoredFile` temporário pelo `StoredFile` local definitivo.
 - Artifacts não referenciados por uma saída podem ser descartados.
-- Arquivos parciais são removidos em erro ou cancelamento.
+- Arquivos `.partial` que não foram promovidos são removidos no erro; resíduos de queda abrupta expiram em 24 horas. Artifacts progressivos já promovidos permanecem disponíveis no snapshot do job e são removidos com a retenção do job se ele terminar em erro, cancelamento ou abandono.
 - O plugin nunca retorna bytes em base64 dentro de `values`.
 
 ## 14. Semântica dos quatro blocos
@@ -620,12 +624,16 @@ O núcleo valida:
   pollAfterMs: number;
   progress?: number; // 0 a 1
   message?: string;
+  partialValues?: Record<string, RuntimeValue>;
+  partialArtifacts?: PluginArtifact[];
   usage?: PluginUsage;
   logs?: string[];
 }
 ```
 
-`pollAfterMs` respeita mínimo e máximo impostos pelo núcleo. `progress` deve ser monotônico quando conhecido; ausência é preferível a um valor inventado.
+`pollAfterMs` respeita mínimo e máximo impostos pelo núcleo. `progress` deve ser monotônico quando conhecido; ausência é preferível a um valor inventado. `partialValues` é um snapshot por campo: uma chave presente substitui o snapshot anterior daquela chave, o que torna repetições de `resume` idempotentes. Listas, cartões, tabelas e galerias devem devolver a coleção acumulada até aquele instante.
+
+`partialArtifacts` usa exatamente o contrato e o importador de `artifacts`: path/URL, permissões, HTTPS, SSRF, MIME, tamanho, streaming e SHA-256 são revalidados. IDs já importados são reutilizados e tornam retries seguros; mudar nome, MIME ou tamanho de um mesmo ID é erro. O núcleo troca `artifact://` por `StoredFile` antes de persistir e expor o snapshot.
 
 ### Erro
 

@@ -217,6 +217,8 @@ export type PluginExecutionResponse =
       status: "success";
       values: Record<string, RuntimeValue>;
       artifacts?: PluginArtifact[];
+      /** Preenchido pelo núcleo após importar artifacts; plugins não devem definir este campo. */
+      storedArtifacts?: StoredFile[];
       usage?: PluginUsage;
       logs?: string[];
     }
@@ -226,6 +228,12 @@ export type PluginExecutionResponse =
       pollAfterMs: number;
       progress?: number;
       message?: string;
+      /** Snapshot parcial por campo. Cada chave substitui o snapshot anterior da mesma chave. */
+      partialValues?: Record<string, RuntimeValue>;
+      /** Artifacts referenciados por partialValues; passam pelo mesmo importador dos finais. */
+      partialArtifacts?: PluginArtifact[];
+      /** Preenchido pelo núcleo após importar partialArtifacts. */
+      storedArtifacts?: StoredFile[];
       usage?: PluginUsage;
       logs?: string[];
     }

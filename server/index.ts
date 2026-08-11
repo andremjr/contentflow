@@ -22,6 +22,7 @@ import type {
   ProcessExecution,
   Project,
   RuntimeValue,
+  StoredFile,
   StrategicCollection,
   UniversalProcess,
 } from "../src/lib/domain";
@@ -39,6 +40,13 @@ import {
   initializePluginRunner,
 } from "./plugin-runner";
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
+import {
+  createPersistentPluginJob,
+  isPluginJobTimedOut,
+  type ClaimedPluginJob,
+  type PersistentPluginJob,
+  PluginJobStore,
+} from "./plugin-job-store";
 import {
   connectOpenAI,
   disconnectOpenAI,
@@ -204,6 +212,8 @@ const pluginConsentColumns = database.prepare("PRAGMA table_info(plugin_consents
 if (!pluginConsentColumns.some((column) => column.name === "network_hosts")) {
   database.exec("ALTER TABLE plugin_consents ADD COLUMN network_hosts TEXT NOT NULL DEFAULT '[]'");
 }
+const pluginJobs = new PluginJobStore(database);
+pluginJobs.recoverInterrupted();
 
 type AppPreferences = {
   theme: "light" | "dark";
@@ -319,15 +329,17 @@ function valuesForPluginResponse(
 function updateProjectAfterPluginBlock(project: Project, execution: ProcessExecution) {
   project.currentStage = execution.processType;
   project.state =
-    execution.status === "awaiting_human"
-      ? "awaiting_human"
-      : execution.status === "failed"
-        ? "error"
-        : execution.status === "completed"
-          ? "done"
-          : execution.status === "blocked_executor"
-            ? "blocked"
-            : "processing";
+    execution.status === "cancelled"
+      ? "not_started"
+      : execution.status === "awaiting_human"
+        ? "awaiting_human"
+        : execution.status === "failed"
+          ? "error"
+          : execution.status === "completed"
+            ? "done"
+            : execution.status === "blocked_executor"
+              ? "blocked"
+              : "processing";
   project.stages = { ...project.stages, [execution.processType]: project.state };
   if (execution.status === "completed") {
     const completed = PROCESS_ORDER.filter(
@@ -395,7 +407,479 @@ function finishPluginBlock(
   execution.updatedAt = now;
 }
 
+function executionById(executionId: string) {
+  const row = database
+    .prepare("SELECT payload FROM process_executions WHERE id = ?")
+    .get(executionId) as { payload: string } | undefined;
+  return row ? (JSON.parse(row.payload) as ProcessExecution) : undefined;
+}
+
+function persistPluginExecution(execution: ProcessExecution, project: Project) {
+  execution.updatedAt = new Date().toISOString();
+  updateProjectAfterPluginBlock(project, execution);
+  const persist = () => {
+    database
+      .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
+      .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+    database
+      .prepare("UPDATE projects SET payload = ? WHERE id = ?")
+      .run(JSON.stringify(project), project.id);
+  };
+  if (database.inTransaction) persist();
+  else database.transaction(persist)();
+}
+
+function mergeStoredArtifacts(current: StoredFile[], incoming: StoredFile[] = []) {
+  const merged = new Map(current.map((file) => [file.id, file]));
+  for (const file of incoming) merged.set(file.id, file);
+  return [...merged.values()];
+}
+
+function publicPluginJob(job: PersistentPluginJob) {
+  const { request: _request, partialArtifacts: _partialArtifacts, ...publicState } = job;
+  return publicState;
+}
+
+function mappedPluginValues(
+  block: ActionBlock,
+  responseValues: Record<string, RuntimeValue>,
+  outputContract: PluginFieldContract[],
+) {
+  return block.type === "ESCOLHER"
+    ? { selectedItemId: responseValues.selectedItemId ?? responseValues.result }
+    : valuesForPluginResponse(block, responseValues, outputContract);
+}
+
+function markPluginJobFailed(
+  claim: ClaimedPluginJob,
+  execution: ProcessExecution | undefined,
+  project: Project | undefined,
+  message: string,
+  status: "failed" | "abandoned" = "failed",
+) {
+  return pluginJobs.save(
+    claim,
+    {
+      ...claim.job,
+      status,
+      error: message,
+      message,
+      nextPollAt: new Date(8_640_000_000_000_000).toISOString(),
+    },
+    (saved) => {
+      if (saved.status === "cancel_requested" || !execution || !project) return;
+      const blockExecution = execution.blocks.find((item) => item.blockId === saved.blockId);
+      if (blockExecution && blockExecution.status !== "cancelled") {
+        blockExecution.status = "failed";
+        blockExecution.error = message;
+        blockExecution.progressMessage = message;
+        execution.status = "failed";
+        execution.error = message;
+        persistPluginExecution(execution, project);
+      }
+    },
+  );
+}
+
+function markPluginJobCancelled(
+  claim: ClaimedPluginJob,
+  execution: ProcessExecution | undefined,
+  project: Project | undefined,
+  message = "Execução cancelada.",
+) {
+  return pluginJobs.save(
+    claim,
+    {
+      ...claim.job,
+      status: "cancelled",
+      cancelRequested: true,
+      message,
+      nextPollAt: new Date(8_640_000_000_000_000).toISOString(),
+    },
+    () => {
+      if (!execution || !project) return;
+      execution.status = "cancelled";
+      execution.blocks = execution.blocks.map((item) =>
+        item.status === "completed" ? item : { ...item, status: "cancelled" },
+      );
+      project.stages = { ...project.stages, [execution.processType]: "not_started" };
+      project.currentStage = execution.processType;
+      project.state = "not_started";
+      persistPluginExecution(execution, project);
+    },
+  );
+}
+
+async function pluginSecretsForJob(pluginId: string, secretKeys: string[]) {
+  const secrets: Record<string, string> = {};
+  for (const key of secretKeys) {
+    const value = await getPluginSecret(pluginId, key);
+    if (value) secrets[key] = value;
+  }
+  return secrets;
+}
+
+async function processPluginJob(
+  jobId: string,
+  transientSecrets: Record<string, string> = {},
+  existingClaim?: ClaimedPluginJob,
+) {
+  const claim = existingClaim ?? pluginJobs.claim(jobId);
+  if (!claim) return pluginJobs.get(jobId);
+  const { job } = claim;
+  const execution = executionById(job.executionId);
+  const project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
+  if (!execution || !project) {
+    return markPluginJobFailed(
+      claim,
+      execution,
+      project,
+      "A execução associada ao job não existe mais.",
+      "abandoned",
+    );
+  }
+  const block = execution.methodSnapshot.blocks.find((item) => item.id === job.blockId);
+  const blockExecution = execution.blocks.find((item) => item.blockId === job.blockId);
+  if (!block || !blockExecution || (blockExecution.attempt ?? 1) !== job.attempt) {
+    return markPluginJobFailed(
+      claim,
+      execution,
+      project,
+      "O bloco ou a tentativa associada ao job não existe mais.",
+      "abandoned",
+    );
+  }
+  const plugin = getRegisteredPlugin(job.pluginId);
+  if (!plugin) {
+    return markPluginJobFailed(
+      claim,
+      execution,
+      project,
+      "O plugin foi removido enquanto o job estava pendente.",
+      "abandoned",
+    );
+  }
+  if (plugin.manifest.version !== job.pluginVersion) {
+    return markPluginJobFailed(
+      claim,
+      execution,
+      project,
+      `O plugin foi atualizado de ${job.pluginVersion} para ${plugin.manifest.version}; o job antigo não foi retomado.`,
+      "abandoned",
+    );
+  }
+  if (!plugin.executable || !pluginConsentIsCurrent(plugin)) {
+    return markPluginJobFailed(
+      claim,
+      execution,
+      project,
+      "O plugin foi desativado ou perdeu consentimento enquanto o job estava pendente.",
+      "abandoned",
+    );
+  }
+  const capability = plugin.manifest.capabilities.find((item) => item.id === job.capabilityId);
+  if (!capability) {
+    return markPluginJobFailed(
+      claim,
+      execution,
+      project,
+      "A capacidade usada pelo job não existe mais.",
+      "abandoned",
+    );
+  }
+
+  const remainingMs = new Date(job.deadlineAt).getTime() - Date.now();
+  const storedSecrets = await pluginSecretsForJob(plugin.id, plugin.manifest.secretKeys ?? []);
+  const secrets = { ...storedSecrets, ...transientSecrets };
+  const workspaceDirectory = readPluginWorkspace(plugin.id);
+  const invocationTimeout = Math.max(1_000, Math.min(remainingMs, 120_000));
+
+  try {
+    if (isPluginJobTimedOut(job)) {
+      if (job.jobId && capability.execution.supportsCancellation) {
+        await executeRegisteredPlugin(
+          plugin,
+          { ...job.request, invocation: { mode: "cancel", jobId: job.jobId } },
+          30_000,
+          secrets,
+          { workspaceDirectory, existingArtifacts: job.partialArtifacts },
+        ).catch(() => undefined);
+      }
+      return markPluginJobFailed(
+        claim,
+        execution,
+        project,
+        "O job do plugin excedeu o tempo máximo declarado.",
+      );
+    }
+
+    if (job.status === "cancel_requested") {
+      if (job.jobId && capability.execution.supportsCancellation) {
+        const cancelResponse = await executeRegisteredPlugin(
+          plugin,
+          { ...job.request, invocation: { mode: "cancel", jobId: job.jobId } },
+          invocationTimeout,
+          secrets,
+          { workspaceDirectory, existingArtifacts: job.partialArtifacts },
+        );
+        if (cancelResponse.status === "pending") {
+          return pluginJobs.save(claim, {
+            ...job,
+            status: "cancel_requested",
+            cancelRequested: true,
+            message: cancelResponse.message ?? "Cancelamento solicitado ao plugin…",
+            nextPollAt: new Date(
+              Date.now() + Math.max(500, Math.min(30_000, cancelResponse.pollAfterMs)),
+            ).toISOString(),
+          });
+        }
+        if (cancelResponse.status === "error" && cancelResponse.code !== "CANCELLED") {
+          throw new Error(`O plugin não confirmou o cancelamento: ${cancelResponse.message}`);
+        }
+        return markPluginJobCancelled(
+          claim,
+          execution,
+          project,
+          "Cancelamento confirmado pelo plugin.",
+        );
+      }
+      return markPluginJobCancelled(
+        claim,
+        execution,
+        project,
+        job.jobId
+          ? "Execução cancelada localmente; a capacidade não oferece cancelamento remoto."
+          : "Execução cancelada antes da criação do job remoto.",
+      );
+    }
+
+    const invocation =
+      job.status === "starting"
+        ? ({ mode: "start" } as const)
+        : ({ mode: "resume", jobId: job.jobId! } as const);
+    const pluginResponse = await executeRegisteredPlugin(
+      plugin,
+      { ...job.request, invocation },
+      invocationTimeout,
+      secrets,
+      { workspaceDirectory, existingArtifacts: job.partialArtifacts },
+    );
+
+    if (pluginResponse.status === "pending") {
+      if (capability.execution.mode !== "async") {
+        throw new Error("Uma capacidade immediate não pode devolver pending.");
+      }
+      if (
+        typeof pluginResponse.jobId !== "string" ||
+        !pluginResponse.jobId ||
+        pluginResponse.jobId.length > 1_024 ||
+        [...pluginResponse.jobId].some((character) => character.charCodeAt(0) < 32) ||
+        (job.jobId && pluginResponse.jobId !== job.jobId)
+      ) {
+        throw new Error("O plugin mudou ou omitiu o jobId durante a retomada.");
+      }
+      if (
+        Object.keys(transientSecrets).length &&
+        Object.keys(transientSecrets).some((key) => !storedSecrets[key])
+      ) {
+        throw new Error(
+          "Jobs persistentes exigem que a credencial seja salva na Central de Plugins.",
+        );
+      }
+      const partialValues = {
+        ...job.partialValues,
+        ...mappedPluginValues(
+          block,
+          pluginResponse.partialValues ?? {},
+          job.request.outputContract,
+        ),
+      };
+      const progress = Number.isFinite(pluginResponse.progress)
+        ? Math.max(job.progress ?? 0, Math.min(1, Math.max(0, pluginResponse.progress!)))
+        : job.progress;
+      const pollAfterMs = Number.isFinite(pluginResponse.pollAfterMs)
+        ? Math.max(500, Math.min(30_000, pluginResponse.pollAfterMs))
+        : 5_000;
+      const saved = pluginJobs.save(claim, {
+        ...job,
+        jobId: pluginResponse.jobId,
+        status: "pending",
+        nextPollAt: new Date(Date.now() + pollAfterMs).toISOString(),
+        progress,
+        message: pluginResponse.message,
+        partialValues,
+        partialArtifacts: mergeStoredArtifacts(
+          job.partialArtifacts,
+          pluginResponse.storedArtifacts,
+        ),
+        error: undefined,
+      });
+      if (saved.status === "cancel_requested") return saved;
+      blockExecution.status = "in_progress";
+      blockExecution.values = structuredClone(partialValues);
+      blockExecution.jobId = saved.jobId;
+      blockExecution.traceId = saved.traceId;
+      blockExecution.progress = saved.progress;
+      blockExecution.progressMessage = saved.message;
+      blockExecution.logs = pluginResponse.logs;
+      execution.status = "running";
+      execution.error = undefined;
+      persistPluginExecution(execution, project);
+      return saved;
+    }
+
+    if (pluginResponse.status === "error") {
+      if (
+        pluginResponse.retryable &&
+        job.retryCount < 2 &&
+        Date.now() + 1_000 < new Date(job.deadlineAt).getTime()
+      ) {
+        const retryCount = job.retryCount + 1;
+        const retryAfterMs = Math.max(
+          1_000,
+          Math.min(30_000, pluginResponse.retryAfterMs ?? 1_000 * 2 ** retryCount),
+        );
+        const saved = pluginJobs.save(claim, {
+          ...job,
+          status: job.jobId ? "pending" : "starting",
+          retryCount,
+          error: pluginResponse.message,
+          message: `Tentativa ${retryCount + 1}: ${pluginResponse.message}`,
+          nextPollAt: new Date(Date.now() + retryAfterMs).toISOString(),
+        });
+        if (saved.status === "cancel_requested") return saved;
+        blockExecution.status = "in_progress";
+        blockExecution.progressMessage = saved.message;
+        blockExecution.logs = pluginResponse.logs;
+        execution.status = "running";
+        persistPluginExecution(execution, project);
+        return saved;
+      }
+      return markPluginJobFailed(claim, execution, project, pluginResponse.message);
+    }
+
+    const values = {
+      ...job.partialValues,
+      ...mappedPluginValues(block, pluginResponse.values, job.request.outputContract),
+    };
+    if (
+      block.type === "ESCOLHER" &&
+      !job.request.context.selectedCollection?.items.some(
+        (item) => item.id === values.selectedItemId,
+      )
+    ) {
+      throw new Error("O plugin não escolheu um item válido da coleção vinculada.");
+    }
+    const missingOutputs = (block.outputs ?? [])
+      .filter((field) => field.required && isEmptyRuntimeValue(values[field.key]))
+      .map((field) => field.label);
+    if (missingOutputs.length)
+      throw new Error(`O plugin não entregou: ${missingOutputs.join(", ")}.`);
+    const restrictionIssues = (block.outputs ?? []).flatMap((field) => {
+      const issue = getPresentationRestrictionIssue(field.presentation, values[field.key]);
+      return issue ? [`${field.label}: ${issue}`] : [];
+    });
+    if (restrictionIssues.length) {
+      throw new Error(`O plugin entregou valores incompatíveis: ${restrictionIssues.join("; ")}.`);
+    }
+    return pluginJobs.save(
+      claim,
+      {
+        ...job,
+        status: "completed",
+        progress: 1,
+        partialValues: values,
+        partialArtifacts: mergeStoredArtifacts(
+          job.partialArtifacts,
+          pluginResponse.storedArtifacts,
+        ),
+        error: undefined,
+        nextPollAt: new Date(8_640_000_000_000_000).toISOString(),
+      },
+      (saved) => {
+        if (saved.status === "cancel_requested") return;
+        finishPluginBlock(execution, block, blockExecution, values);
+        blockExecution.logs = pluginResponse.logs;
+        blockExecution.progress = 1;
+        blockExecution.progressMessage = undefined;
+        persistPluginExecution(execution, project);
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Não foi possível executar o plugin.";
+    if (job.retryCount < 2 && Date.now() + 1_000 < new Date(job.deadlineAt).getTime()) {
+      const retryCount = job.retryCount + 1;
+      const saved = pluginJobs.save(claim, {
+        ...job,
+        status: job.jobId ? "pending" : "starting",
+        retryCount,
+        error: message,
+        message: `Tentativa ${retryCount + 1}: ${message}`,
+        nextPollAt: new Date(Date.now() + Math.min(30_000, 1_000 * 2 ** retryCount)).toISOString(),
+      });
+      if (saved.status === "cancel_requested") return saved;
+      blockExecution.status = "in_progress";
+      blockExecution.progressMessage = saved.message;
+      execution.status = "running";
+      persistPluginExecution(execution, project);
+      return saved;
+    }
+    return markPluginJobFailed(claim, execution, project, message);
+  }
+}
+
+let pluginJobSchedulerRunning = false;
+async function processDuePluginJobs() {
+  if (pluginJobSchedulerRunning) return;
+  pluginJobSchedulerRunning = true;
+  try {
+    const dueJobs: ClaimedPluginJob[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      const claim = pluginJobs.claimNext();
+      if (!claim) break;
+      dueJobs.push(claim);
+    }
+    await Promise.allSettled(dueJobs.map((claim) => processPluginJob(claim.job.id, {}, claim)));
+  } finally {
+    pluginJobSchedulerRunning = false;
+  }
+}
+
 initializePluginRunner();
+const pluginJobScheduler = setInterval(() => void processDuePluginJobs(), 500);
+pluginJobScheduler.unref();
+function cleanupAbandonedPluginJobs() {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1_000);
+  const expired = pluginJobs.terminalBefore(cutoff);
+  for (const job of expired) {
+    if (job.status === "completed") continue;
+    for (const file of job.partialArtifacts) {
+      if (!file.url.startsWith("/api/files/")) continue;
+      const storedName = file.url.slice("/api/files/".length);
+      if (!storedName || path.basename(storedName) !== storedName) continue;
+      const storedPath = path.resolve(uploadsDirectory, storedName);
+      if (storedPath.startsWith(`${path.resolve(uploadsDirectory)}${path.sep}`)) {
+        rmSync(storedPath, { force: true });
+      }
+    }
+  }
+  pluginJobs.deleteTerminalBefore(cutoff);
+  const partialCutoff = Date.now() - 24 * 60 * 60 * 1_000;
+  for (const entry of readdirSync(uploadsDirectory, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.startsWith(".") || !entry.name.endsWith(".partial"))
+      continue;
+    const partialPath = path.join(uploadsDirectory, entry.name);
+    try {
+      if (statSync(partialPath).mtimeMs < partialCutoff) rmSync(partialPath, { force: true });
+    } catch {
+      // Another cleanup or importer may have removed the partial concurrently.
+    }
+  }
+}
+const pluginJobCleanup = setInterval(cleanupAbandonedPluginJobs, 60 * 60 * 1_000);
+pluginJobCleanup.unref();
+cleanupAbandonedPluginJobs();
+void processDuePluginJobs();
 
 type PluginSource = "bundled" | "installed";
 
@@ -1269,6 +1753,25 @@ app.post("/api/execute-block", async (request, response) => {
     response.status(404).json({ error: "Bloco não encontrado no snapshot desta execução." });
     return;
   }
+  const existingJob = pluginJobs.getByExecution(
+    execution.id,
+    blockExecution.blockId,
+    blockExecution.attempt ?? 1,
+  );
+  if (existingJob) {
+    const currentExecution = executionById(execution.id) ?? execution;
+    const currentProject = readPayload<Project>("projects", project.id) ?? project;
+    const pending = ["starting", "pending", "cancel_requested"].includes(existingJob.status);
+    response.status(pending ? 202 : existingJob.status === "completed" ? 200 : 409).json({
+      ok: pending || existingJob.status === "completed",
+      pending,
+      job: publicPluginJob(existingJob),
+      execution: currentExecution,
+      project: currentProject,
+      error: existingJob.error,
+    });
+    return;
+  }
   if (
     block.operator === "Humano" ||
     blockExecution.status !== "blocked_executor" ||
@@ -1400,8 +1903,6 @@ app.post("/api/execute-block", async (request, response) => {
     if (storedSecret) pluginSecrets[declaredSecret] = storedSecret;
   }
   if (secretKey && apiKey) pluginSecrets[secretKey] = apiKey;
-  const pluginWorkspaceDirectory = readPluginWorkspace(plugin.id);
-
   const pluginRequest: PluginExecutionRequest = {
     executionId: execution.id,
     traceId: randomUUID(),
@@ -1456,117 +1957,74 @@ app.post("/api/execute-block", async (request, response) => {
     },
   };
 
+  const executionTimeoutMs = capability.execution.defaultTimeoutMs ?? 60_000;
+  const createdJob = pluginJobs.create(
+    createPersistentPluginJob({
+      pluginId: plugin.id,
+      pluginVersion: plugin.manifest.version,
+      request: pluginRequest,
+      timeoutMs: executionTimeoutMs,
+    }),
+  );
   blockExecution.status = "in_progress";
+  blockExecution.traceId = pluginRequest.traceId;
+  blockExecution.progress = 0;
+  blockExecution.progressMessage = "Iniciando job…";
   execution.status = "running";
-  execution.updatedAt = new Date().toISOString();
-  database
-    .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
-    .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+  persistPluginExecution(execution, project);
 
-  try {
-    const executionTimeoutMs = capability.execution.defaultTimeoutMs ?? 60_000;
-    const executionDeadline = Date.now() + executionTimeoutMs;
-    let pluginResponse = await executeRegisteredPlugin(
-      plugin,
-      pluginRequest,
-      executionTimeoutMs,
-      pluginSecrets,
-      { workspaceDirectory: pluginWorkspaceDirectory },
-    );
-    while (pluginResponse.status === "pending") {
-      if (Date.now() >= executionDeadline) {
-        throw new Error("O job do plugin excedeu o tempo máximo declarado.");
-      }
-      const pollAfterMs = Math.max(500, Math.min(pluginResponse.pollAfterMs, 30_000));
-      await new Promise((resolve) => setTimeout(resolve, pollAfterMs));
-      pluginRequest.invocation = { mode: "resume", jobId: pluginResponse.jobId };
-      pluginResponse = await executeRegisteredPlugin(
-        plugin,
-        pluginRequest,
-        Math.max(1_000, executionDeadline - Date.now()),
-        pluginSecrets,
-        { workspaceDirectory: pluginWorkspaceDirectory },
-      );
-    }
-    if (pluginResponse.status !== "success") {
-      const message =
-        pluginResponse.status === "error"
-          ? pluginResponse.message
-          : "O plugin não concluiu a execução.";
-      blockExecution.status = "failed";
-      blockExecution.error = message;
-      blockExecution.logs = pluginResponse.logs;
-      execution.status = "failed";
-      execution.error = message;
-      execution.updatedAt = new Date().toISOString();
-      updateProjectAfterPluginBlock(project, execution);
-      database.transaction(() => {
-        database
-          .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
-          .run(JSON.stringify(execution), execution.updatedAt, execution.id);
-        database
-          .prepare("UPDATE projects SET payload = ? WHERE id = ?")
-          .run(JSON.stringify(project), project.id);
-      })();
-      response.status(422).json({ error: message, execution, project });
+  if (capability.execution.mode === "async") {
+    if (providedApiKey && !storedApiKey) {
+      const claim = pluginJobs.claim(createdJob.id);
+      const failed = claim
+        ? markPluginJobFailed(
+            claim,
+            execution,
+            project,
+            "Jobs persistentes exigem que a credencial seja salva na Central de Plugins.",
+          )
+        : createdJob;
+      response.status(422).json({
+        error: failed.error,
+        job: publicPluginJob(failed),
+        execution: executionById(execution.id) ?? execution,
+        project: readPayload<Project>("projects", project.id) ?? project,
+      });
       return;
     }
-
-    const values =
-      block.type === "ESCOLHER"
-        ? {
-            selectedItemId: pluginResponse.values.selectedItemId ?? pluginResponse.values.result,
-          }
-        : valuesForPluginResponse(block, pluginResponse.values, outputContract);
-    if (
-      block.type === "ESCOLHER" &&
-      !selectedCollectionItems.some((item) => item.id === values.selectedItemId)
-    ) {
-      throw new Error("O plugin não escolheu um item válido da coleção vinculada.");
-    }
-    const missingOutputs = (block.outputs ?? [])
-      .filter((field) => field.required && isEmptyRuntimeValue(values[field.key]))
-      .map((field) => field.label);
-    if (missingOutputs.length) {
-      throw new Error(`O plugin não entregou: ${missingOutputs.join(", ")}.`);
-    }
-    const restrictionIssues = (block.outputs ?? []).flatMap((field) => {
-      const issue = getPresentationRestrictionIssue(field.presentation, values[field.key]);
-      return issue ? [`${field.label}: ${issue}`] : [];
+    void processDuePluginJobs();
+    response.status(202).json({
+      ok: true,
+      pending: true,
+      job: publicPluginJob(createdJob),
+      execution,
+      project,
+      values: {},
     });
-    if (restrictionIssues.length) {
-      throw new Error(`O plugin entregou valores incompatíveis: ${restrictionIssues.join("; ")}.`);
-    }
-    finishPluginBlock(execution, block, blockExecution, values);
-    blockExecution.logs = pluginResponse.logs;
-    updateProjectAfterPluginBlock(project, execution);
-    database.transaction(() => {
-      database
-        .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
-        .run(JSON.stringify(execution), execution.updatedAt, execution.id);
-      database
-        .prepare("UPDATE projects SET payload = ? WHERE id = ?")
-        .run(JSON.stringify(project), project.id);
-    })();
-    response.json({ ok: true, execution, project, values, usage: pluginResponse.usage });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Não foi possível executar o plugin.";
-    blockExecution.status = "failed";
-    blockExecution.error = message;
-    execution.status = "failed";
-    execution.error = message;
-    execution.updatedAt = new Date().toISOString();
-    updateProjectAfterPluginBlock(project, execution);
-    database.transaction(() => {
-      database
-        .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
-        .run(JSON.stringify(execution), execution.updatedAt, execution.id);
-      database
-        .prepare("UPDATE projects SET payload = ? WHERE id = ?")
-        .run(JSON.stringify(project), project.id);
-    })();
-    response.status(500).json({ error: message, execution, project });
+    return;
   }
+
+  const job = await processPluginJob(createdJob.id, pluginSecrets);
+  const currentExecution = executionById(execution.id) ?? execution;
+  const currentProject = readPayload<Project>("projects", project.id) ?? project;
+  if (!job || ["failed", "abandoned", "cancelled"].includes(job.status)) {
+    response.status(job?.status === "cancelled" ? 409 : 422).json({
+      error: job?.error ?? job?.message ?? "O job do plugin não pôde ser iniciado.",
+      job: job ? publicPluginJob(job) : undefined,
+      execution: currentExecution,
+      project: currentProject,
+    });
+    return;
+  }
+  const pending = ["starting", "pending", "cancel_requested"].includes(job.status);
+  response.status(pending ? 202 : 200).json({
+    ok: true,
+    pending,
+    job: publicPluginJob(job),
+    execution: currentExecution,
+    project: currentProject,
+    values: job.partialValues,
+  });
 });
 
 app.get("/api/youtube/channel", async (request, response) => {
@@ -1770,6 +2228,50 @@ app.get("/api/executions", (request, response) => {
         .prepare("SELECT payload FROM process_executions ORDER BY updated_at DESC")
         .all() as { payload: string }[]);
   response.json(parseRows(rows));
+});
+
+app.get("/api/executions/:id/state", (request, response) => {
+  const execution = executionById(request.params.id);
+  const project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
+  if (!execution || !project) {
+    response.status(404).json({ error: "Execução não encontrada." });
+    return;
+  }
+  const jobs = pluginJobs.listForExecution(execution.id).map(publicPluginJob);
+  response.json({ execution, project, jobs });
+});
+
+app.post("/api/executions/:id/cancel", (request, response) => {
+  const execution = executionById(request.params.id);
+  const project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
+  if (!execution || !project) {
+    response.status(404).json({ error: "Execução não encontrada." });
+    return;
+  }
+  if (execution.status === "completed") {
+    response.status(409).json({ error: "Uma execução concluída não pode ser cancelada." });
+    return;
+  }
+  pluginJobs.requestCancellation(execution.id);
+  execution.status = "cancelled";
+  execution.blocks = execution.blocks.map((item) =>
+    item.status === "completed" ? item : { ...item, status: "cancelled" },
+  );
+  execution.updatedAt = new Date().toISOString();
+  project.stages = { ...project.stages, [execution.processType]: "not_started" };
+  project.currentStage = execution.processType;
+  project.state = "not_started";
+  project.updatedAt = "Agora";
+  database.transaction(() => {
+    database
+      .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
+      .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+    database
+      .prepare("UPDATE projects SET payload = ? WHERE id = ?")
+      .run(JSON.stringify(project), project.id);
+  })();
+  void processDuePluginJobs();
+  response.status(202).json({ ok: true, execution, project });
 });
 
 app.post("/api/executions", (request, response) => {

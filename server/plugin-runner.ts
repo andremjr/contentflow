@@ -22,7 +22,7 @@ import type {
   PluginArtifact,
   PluginManifest,
 } from "../src/lib/plugin-contract";
-import type { StoredFile } from "../src/lib/domain";
+import type { RuntimeValue, StoredFile } from "../src/lib/domain";
 import {
   assertRemoteArtifactNetworkPermission,
   DEFAULT_REMOTE_ARTIFACT_MAX_BYTES,
@@ -246,7 +246,7 @@ export async function executeRegisteredPlugin(
   request: PluginExecutionRequest,
   timeoutMs: number,
   secrets: Record<string, string> = {},
-  options: { workspaceDirectory?: string } = {},
+  options: { workspaceDirectory?: string; existingArtifacts?: StoredFile[] } = {},
 ): Promise<PluginExecutionResponse> {
   if (!plugin.executable) {
     throw new Error("Este plugin não está disponível para execução.");
@@ -351,6 +351,7 @@ export async function executeRegisteredPlugin(
             outputDirectory,
             uploadsDirectory,
             plugin.manifest,
+            { existingArtifacts: options.existingArtifacts },
           )
             .then(resolve, reject)
             .finally(() => rmSync(outputDirectory, { recursive: true, force: true }));
@@ -390,29 +391,54 @@ export async function importPluginArtifacts(
   outputDirectory: string,
   uploadsDirectory: string,
   manifest: PluginManifest,
-  dependencies: { downloadRemote?: typeof downloadRemoteArtifact } = {},
+  dependencies: {
+    downloadRemote?: typeof downloadRemoteArtifact;
+    existingArtifacts?: StoredFile[];
+  } = {},
 ): Promise<PluginExecutionResponse> {
-  if (response.status !== "success") return response;
-  if (!response.artifacts?.length) {
-    if (containsArtifactUrl(response.values)) {
+  if (response.status === "error") return response;
+  const artifacts = response.status === "success" ? response.artifacts : response.partialArtifacts;
+  const responseValues = response.status === "success" ? response.values : response.partialValues;
+  const imported = new Map(
+    (dependencies.existingArtifacts ?? []).map((file) => [file.id, file] as const),
+  );
+  if (!artifacts?.length) {
+    const values = replaceArtifactUrls(responseValues ?? {}, imported) as Record<
+      string,
+      RuntimeValue
+    >;
+    if (containsArtifactUrl(values)) {
       throw new Error("A resposta contém artifact://, mas não declarou o arquivo correspondente.");
     }
-    return response;
+    const storedArtifacts = [...imported.values()];
+    return response.status === "success"
+      ? { ...response, values, storedArtifacts }
+      : { ...response, partialValues: values, storedArtifacts };
   }
-  if (response.artifacts.length > maxArtifactsPerResponse) {
+  if (artifacts.length > maxArtifactsPerResponse) {
     throw new Error(`A resposta excede o limite de ${maxArtifactsPerResponse} artifacts.`);
   }
-  const artifactIds = response.artifacts.map((artifact) => artifact.id);
+  const artifactIds = artifacts.map((artifact) => artifact.id);
   if (new Set(artifactIds).size !== artifactIds.length) {
     throw new Error("A resposta do plugin contém IDs de artifacts duplicados.");
   }
-  const imported = new Map<string, StoredFile>();
   const createdPaths: string[] = [];
   let importedBytes = 0;
   let remoteBytes = 0;
   const outputRoot = realpathSync(outputDirectory);
   try {
-    for (const artifact of response.artifacts) {
+    for (const artifact of artifacts) {
+      const existing = imported.get(artifact.id);
+      if (existing) {
+        if (
+          existing.name !== artifact.name ||
+          existing.mimeType !== artifact.mimeType.toLowerCase() ||
+          (artifact.size !== undefined && existing.size !== artifact.size)
+        ) {
+          throw new Error(`O artifact parcial ${artifact.id} mudou após ser importado.`);
+        }
+        continue;
+      }
       if (artifact.source.kind === "url") {
         assertRemoteArtifactNetworkPermission(manifest.permissions);
         const remainingBytes = Math.min(
@@ -459,11 +485,17 @@ export async function importPluginArtifacts(
       createdPaths.push(importedLocal.storedPath);
       importedBytes += importedLocal.file.size;
     }
-    const values = replaceArtifactUrls(response.values, imported) as typeof response.values;
+    const values = replaceArtifactUrls(responseValues ?? {}, imported) as Record<
+      string,
+      RuntimeValue
+    >;
     if (containsArtifactUrl(values)) {
       throw new Error("A resposta contém uma referência artifact:// sem arquivo correspondente.");
     }
-    return { ...response, values };
+    const storedArtifacts = [...imported.values()];
+    return response.status === "success"
+      ? { ...response, values, storedArtifacts }
+      : { ...response, partialValues: values, storedArtifacts };
   } catch (error) {
     await Promise.all(createdPaths.map((createdPath) => rm(createdPath, { force: true })));
     throw error;
