@@ -1,7 +1,5 @@
 # ContentFlow OS
 
-[![CI](https://github.com/andremjr/contentflow-os/actions/workflows/ci.yml/badge.svg)](https://github.com/andremjr/contentflow-os/actions/workflows/ci.yml)
-
 Aplicativo local para organizar a produção de vídeos. O frontend e a API rodam localmente na máquina do usuário.
 
 ## V0 para Windows — sem Node ou terminal
