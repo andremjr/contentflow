@@ -1,6 +1,6 @@
 {
   "name": "contentflow-os",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "productName": "ContentFlow OS",
   "description": "Sistema operacional local para fluxos de produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
