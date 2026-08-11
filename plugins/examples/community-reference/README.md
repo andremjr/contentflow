@@ -2,6 +2,8 @@
 
 Este é o menor exemplo funcional de um plugin independente. Ele recebe `inputs.content`, grava um arquivo na pasta concedida por `services.getOutputPath()` e devolve o artifact pelo contrato universal.
 
+Para criar outro plugin ou adaptar uma automação existente, veja [`docs/PLUGIN_START_HERE.md`](../../../docs/PLUGIN_START_HERE.md).
+
 Para experimentar:
 
 1. abra a Central de Plugins;

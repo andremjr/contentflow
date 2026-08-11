@@ -2,6 +2,8 @@
 
 Este guia define como planejar plugins que operam interfaces web de terceiros sem contornar planos, créditos, controles de acesso ou políticas do provedor. Ele complementa [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md) e [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
 
+Para o fluxo básico de criação e conversão, comece em [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md). Este documento trata apenas dos riscos e decisões adicionais de automação de interface.
+
 > Decisão de arquitetura: o núcleo não fornece um runtime ou broker específico de navegador. Cada plugin escolhe sua tecnologia de automação e seu mecanismo de autenticação — OAuth, login interativo, secret de sessão ou pasta de perfil escolhida pelo usuário — usando as permissões genéricas e o consentimento do protocolo. O ContentFlow OS não descobre nem entrega silenciosamente perfis, cookies ou sessões.
 
 ## 1. Princípio central

@@ -50,7 +50,7 @@ Cada bloco tem um dos **3 Operadores**: `Humano`, `IA` ou `Código`. Escolha o o
 - Nunca transforme em bloco uma decisão estratégica de canal anterior à produção de um vídeo: nicho, subnicho, público, posicionamento, estudo de mercado, modelo de negócio ou pesquisa geral de audiência. Eles só viram proposta de Biblioteca Estratégica quando forem informações reutilizáveis que um bloco de execução realmente consumirá; caso contrário, apenas registre que ficaram fora da importação.
 - Uma lista de temas só vira coleção estratégica se ela já estiver definida e for reutilizada por vários vídeos futuros. Se a IA gera opções para o vídeo atual e o humano seleciona uma, é `CRIAR` seguido de `VALIDAR`, nunca uma coleção nem `ESCOLHER`.
 - Numere os blocos pela sequência de execução. Cada bloco precisa ter pelo menos uma saída útil; entradas só devem ser declaradas quando sua origem estiver clara.
-- Use `previous_block` somente para blocos anteriores no mesmo método. Use `previous_process` somente para processo anterior, respeitando a ordem dos 8 processos. Use `project` para `title` ou `deadline`. Use `static` para instruções/contexto fixo. Não use fontes ou campos não especificados no contrato.
+- Use `previous_block` somente para blocos anteriores no mesmo método. Use `previous_process` para qualquer Processo Universal anterior, respeitando a ordem dos 8 processos, e sempre declare `sourceProcessType` e `sourceKey`. Omitir `blockId` é preferível em arquivo portátil; `__process_output__` representa o output oficial. Use `project` para `title` ou `deadline`. Use `static` para instruções/contexto fixo. Não use fontes ou campos não especificados no contrato.
 - Para qualquer seleção, aprovação, reprovação, curadoria ou refinamento de algo pesquisado, gerado ou preenchido **durante a execução**, use `VALIDAR`. A validação deve apontar para um bloco anterior e sua saída: `approval` aprova/reprova, `select_one` escolhe uma opção, e `select_many` escolhe múltiplas opções.
 - Use `ESCOLHER` exclusivamente quando o usuário declarar que a etapa usa uma coleção estratégica pré-existente do canal. Na prévia, justifique obrigatoriamente: nome da coleção esperada, motivo de ela já existir antes da execução e formato de cada item (campos e tipos). Em JSON portátil, não gere `ESCOLHER`, pois a coleção pertence a um canal específico e não pode ser inferida. Explique que esse bloco deve ser configurado manualmente após a importação, se for indispensável.
 - Mantenha instruções concretas, imperativas e observáveis. Não coloque explicações longas ou raciocínio interno no JSON.
@@ -81,6 +81,7 @@ Quando o usuário pedir ou confirmar a importação:
 - use chaves técnicas em `snake_case`, únicas por bloco e sem acentos;
 - mantenha `order` como 0, 1, 2… sem saltos;
 - confira que todas as referências por ID apontam para blocos/saídas existentes e anteriores quando aplicável.
+- nunca invente `deliveryId` ou `itemId`: eles pertencem à execução e são resolvidos pelo núcleo a partir da referência estrutural.
 - faça uma última auditoria de classificação: nenhum `ESCOLHER` pode aparecer sem uma coleção estratégica pré-existente explicitamente indicada pelo usuário; nenhuma seleção de resultado da execução pode estar como `ESCOLHER`.
 
 Se faltarem informações que impeçam um JSON válido, não produza um JSON parcial: faça as perguntas mínimas necessárias.

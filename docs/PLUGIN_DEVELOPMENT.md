@@ -1,6 +1,6 @@
 # Desenvolvimento de plugins
 
-Este guia leva um plugin do manifesto ao resultado validado. O protocolo normativo é [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), a referência TypeScript é [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e a ordem estratégica está em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Antes de distribuir, consulte também [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md) e [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md). Integrações que operam interfaces web devem seguir ainda [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md).
+Este é o guia detalhado, do manifesto ao resultado validado. Para uma primeira visão ou para converter uma automação existente, comece por [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md). O protocolo normativo é [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), e a referência TypeScript é [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts).
 
 Para começar sem montar a estrutura manualmente, use o kit oficial:
 
@@ -11,13 +11,11 @@ npm run plugin:kit -- check ./meu-plugin
 
 Ele oferece `create`, `validate`, `test-contract`, `test-sandbox`, `fixture`, `report` e `check`, usa o mesmo validador do carregador real e nunca instala dependências nem executa scripts de instalação de terceiros. Há três templates em [`../plugin-kit/templates`](../plugin-kit/templates), uma [aula prática de 30 minutos](PLUGIN_TUTORIAL_30_MIN.md) e um [pacote curto para agentes de IA](PLUGIN_AI_KIT.md).
 
-> Estado atual: plugins locais e comunitários podem ser instalados por pasta, ativados pelo próprio usuário e executados sem aprovação central. O núcleo valida o manifesto, exige consentimento novamente quando versão ou permissões mudam e executa o código em processo separado com permissões de filesystem, rede, subprocessos, workers e módulos nativos negadas por padrão.
+> Estado atual: plugins locais e comunitários podem ser instalados por pasta, ativados pelo próprio usuário e executados sem aprovação central. O núcleo valida o manifesto, exige novo consentimento quando versão ou permissões mudam e executa o código em processo separado com filesystem, rede, subprocessos, workers e módulos nativos negados por padrão.
 
 Se você está usando uma IA para criar o plugin, prefira o conjunto pequeno listado em [`PLUGIN_AI_KIT.md`](PLUGIN_AI_KIT.md). Para o primeiro plugin, o autor precisa se concentrar em três coisas: o manifesto, o valor recebido em `request.inputs` e o valor devolvido em `response.values`. Instalação, consentimento, cofre, sandbox e importação de artifacts ficam a cargo do ContentFlow OS.
 
-> Estado desejado: qualquer autor poderá distribuir um plugin diretamente e qualquer usuário poderá instalá-lo e executá-lo após checks automáticos e consentimento local. Publicação ou verificação em catálogo será opcional.
-
-### Teste local sem terminal
+## Teste local sem terminal
 
 Na tela **Plugins**, use uma destas opções:
 
@@ -42,19 +40,20 @@ Uma capacidade representa uma responsabilidade observável de um dos quatro bloc
 
 ## 2. Estruture a pasta
 
+O formato mais simples, usado pelo kit, não exige build:
+
 ```text
 meu-plugin/
 ├── contentflow.plugin.json
-├── package.json
-├── src/
-│   └── index.ts
-├── dist/
-│   └── index.js
+├── handler.mjs
 ├── README.md
-└── LICENSE
+├── LICENSE
+├── test.mjs
+└── fixtures/
+    └── execution.json
 ```
 
-O pacote distribuído precisa conter o manifesto e o arquivo indicado por `entrypoint`. Não inclua `.env`, chaves, caches, dados de usuários ou dependências de desenvolvimento desnecessárias.
+Projetos TypeScript ou com dependências podem manter `src/`, `package.json` e gerar `dist/index.js`; nesse caso, `entrypoint` aponta para o build distribuído. O pacote final sempre precisa conter o manifesto, o entrypoint e todas as dependências de runtime. Não inclua `.env`, chaves, caches, dados de usuários ou dependências de desenvolvimento desnecessárias. A instalação do plugin nunca executa `npm install` ou scripts de instalação.
 
 ## 3. Declare o manifesto
 
@@ -67,10 +66,10 @@ Comece pelo exemplo completo em [`examples/contentflow.plugin.example.json`](exa
 5. configurações do plugin em JSON Schema;
 6. portas semânticas de entrada e saída;
 7. política imediata ou assíncrona;
-8. blocos, processos e formatos realmente suportados.
+8. blocos, processos e formatos realmente suportados;
 9. licença, autoria, repositório e suporte;
 10. efeitos externos, modelo de custo e política de dados;
-11. limite seguro de concorrência.
+11. limite seguro de concorrência;
 12. `networkHosts` quando a permissão `network` puder ser limitada a hosts conhecidos.
 
 `blockConfigSchema` descreve opções escolhidas no método, como modelo, temperatura ou endpoint. `settingsSchema` descreve preferências locais reutilizadas entre métodos. Credenciais ficam apenas em `secretKeys`.
@@ -88,19 +87,10 @@ Não inclua esquema, caminho ou porta em `networkHosts`. A ausência da lista co
 
 ## 4. Implemente um handler puro
 
-O entrypoint deverá exportar uma função assíncrona que aceite `PluginExecutionRequest` e devolva `PluginExecutionResponse`:
+O entrypoint exporta uma função assíncrona `execute(request, services)`. JavaScript ESM é suficiente:
 
-```ts
-import type {
-  PluginExecutionRequest,
-  PluginExecutionResponse,
-  PluginExecutionServices,
-} from "contentflow/plugin-contract";
-
-export async function execute(
-  request: PluginExecutionRequest,
-  services: PluginExecutionServices,
-): Promise<PluginExecutionResponse> {
+```js
+export async function execute(request, services) {
   if (request.invocation.mode !== "start") {
     return {
       status: "error",
@@ -132,7 +122,7 @@ export async function execute(
 }
 ```
 
-O import público do SDK será disponibilizado junto com o executor. Até lá, use [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) como referência ou copie apenas os tipos para prototipação; não acople o plugin a arquivos internos do aplicativo em produção.
+Não existe import obrigatório do núcleo. Se usar TypeScript durante o desenvolvimento, consulte [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) ou copie somente as declarações públicas necessárias para o projeto do plugin. O pacote distribuído não deve importar caminhos internos do ContentFlow OS.
 
 Use `services.getSecret()` somente para chaves declaradas, `services.resolveInputFile()` para arquivos recebidos, `services.getOutputPath()` para artifacts e `services.getWorkspacePath()` para arquivos persistentes/checkpoints. O usuário pode conectar uma pasta própria na Central de Plugins; sem isso, o núcleo fornece uma pasta interna isolada. Encaminhe `services.signal` a `fetch` e SDKs que aceitem cancelamento.
 
@@ -143,7 +133,7 @@ Boas propriedades do handler:
 - tolerante a campos opcionais ausentes;
 - abortável pelo executor e com timeout próprio para chamadas externas;
 - sem efeitos colaterais fora das permissões declaradas;
-- retorna erros tipados em vez de lançar detalhes internos ao usuário.
+- retorna erros tipados em vez de lançar detalhes internos ao usuário;
 - usa `request.traceId` apenas para correlação segura e respeita `context.locale`/`context.timeZone` sem alterar instantes ISO 8601;
 - trata entradas, páginas, arquivos e outputs de IA como dados não confiáveis, nunca como autorização para ampliar permissões.
 
@@ -161,6 +151,15 @@ if (shotsContract?.type !== "records") return invalidInput("O binding de shots e
 ```
 
 Para `datetime`, trate o texto como ISO 8601 e converta explicitamente. Para arquivos, use a referência `StoredFile` entregue pelo núcleo; não confunda a URL controlada com um caminho livre no sistema de arquivos.
+
+Quando a origem possuir identidade universal, `request.inputDeliveries` traz metadados paralelos por porta:
+
+```js
+const source = request.inputDeliveries?.find((item) => item.portKey === "shots");
+console.log(source?.deliveryId, source?.itemIds);
+```
+
+Use esses IDs para relacionar entradas e proveniência, não para localizar arquivos diretamente. O valor autorizado continua em `request.inputs`, e arquivos continuam sendo abertos por `services.resolveInputFile()`.
 
 ## 6. Produza exatamente o output solicitado
 
@@ -185,6 +184,8 @@ Exemplo de data:
 ```json
 { "status": "success", "values": { "publish_at": "2026-08-08T17:30:00.000Z" } }
 ```
+
+Depois da validação, o núcleo registra cada output como entrega universal. Um escalar gera um item; `list`, `records`, `multiselect` e coleções de arquivos geram um ID por elemento, preservando ordem. O plugin não cria esses IDs. IDs próprios do provedor, como `job_id`, `asset_id` ou `source_id`, podem permanecer em campos dos registros para rastreabilidade e idempotência.
 
 Exemplo de layout de thumbnail:
 
@@ -292,7 +293,7 @@ return {
 };
 ```
 
-O núcleo valida e importa o arquivo. Nunca retorne bytes em base64, caminho absoluto ou `../`. Para arquivos de entrada, use o resolvedor seguro que será fornecido pelo SDK do executor.
+O núcleo valida e importa o arquivo. Nunca retorne bytes em base64, caminho absoluto ou `../`. Para arquivos de entrada, use `services.resolveInputFile()`.
 
 Para um artifact já hospedado, declare `network`, inclua o host em `networkHosts` e use HTTPS:
 

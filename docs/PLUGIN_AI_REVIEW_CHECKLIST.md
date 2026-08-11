@@ -3,7 +3,7 @@
 Antes de testar:
 
 - `apiVersion` é `1`, o ID é reverso/estável e a versão é semântica;
-- o entrypoint existe, é ESM e exporta `execute`;
+- o runtime declara Node `>=26 <27`; o entrypoint existe, é ESM e exporta `execute`;
 - portas usam chaves semânticas, tipos públicos e outputs obrigatórios;
 - permissões, efeitos colaterais e política de dados descrevem o comportamento real;
 - `networkHosts`, `secretKeys` e provedores estão declarados quando aplicáveis;
@@ -13,6 +13,9 @@ Antes de testar:
 - erros esperados retornam `status: "error"` sem vazar segredos;
 - não há React, HTML arbitrário, acesso ao SQLite ou import de módulos internos do ContentFlow;
 - não há script de instalação nem dependência baixada automaticamente;
+- dependências de runtime realmente necessárias estão incluídas no pacote final;
+- o plugin usa os valores de `request.inputs` e não inventa IDs universais; IDs externos possuem campo próprio;
+- automação de navegador não enumera perfis/sessões nem presume um browser fornecido pelo núcleo;
 - `test.mjs` cobre sucesso e ao menos a entrada inválida principal.
 
 Validação final:

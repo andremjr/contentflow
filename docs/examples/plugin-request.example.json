@@ -33,6 +33,20 @@
       "type": "thumbnail_layout"
     }
   ],
+  "inputDeliveries": [
+    {
+      "inputId": "input-title",
+      "portKey": "title",
+      "deliveryId": "delivery:exec-title:title-create:title:attempt:1",
+      "itemIds": ["delivery:exec-title:title-create:title:attempt:1:item:1"]
+    },
+    {
+      "inputId": "input-layout",
+      "portKey": "layout",
+      "deliveryId": "delivery:exec-theme:layout-select:layout:attempt:1",
+      "itemIds": ["delivery:exec-theme:layout-select:layout:attempt:1:item:1"]
+    }
+  ],
   "outputContract": [
     {
       "portKey": "thumbnail",
@@ -53,7 +67,13 @@
     },
     "project": { "id": "project-example", "title": "Vídeo exemplo" },
     "processType": "thumbnail",
+    "block": {
+      "type": "CRIAR",
+      "name": "Renderizar thumbnail",
+      "instructions": "Produza a imagem final usando o título e o layout recebidos."
+    },
     "previousProcessOutputs": [],
-    "previousBlockOutputs": []
+    "previousBlockOutputs": [],
+    "previousDeliveries": []
   }
 }

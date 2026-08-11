@@ -2,11 +2,12 @@
 
 Este documento é o contrato normativo entre o núcleo do ContentFlow OS e plugins dos operadores `IA` e `Código`. Em caso de divergência, a tipagem em [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e este documento devem ser atualizados juntos.
 
-O executor isolado atende plugins oficiais, locais e comunitários. Plugins externos são validados automaticamente, exigem consentimento local por versão/permissões e executam em processo separado sob a sandbox do Node 26. Não existe aprovação central para criar, compartilhar, instalar ou ativar um plugin. Depois da publicação do primeiro plugin, qualquer alteração incompatível exigirá nova `apiVersion`.
+O executor isolado atende plugins oficiais, locais e comunitários. Plugins externos são validados automaticamente, exigem consentimento local por versão/permissões e executam em processo separado sob a sandbox do Node 26. Não existe aprovação central para criar, compartilhar, instalar ou ativar um plugin. A API v1 já é pública; qualquer alteração futura incompatível exige uma nova `apiVersion`.
 
 Documentos relacionados:
 
 - [`PLUGIN_AI_KIT.md`](PLUGIN_AI_KIT.md): pacote curto para criação assistida por IA.
+- [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md): entrada rápida para criar ou converter uma automação.
 - [`PLUGIN_TUTORIAL_30_MIN.md`](PLUGIN_TUTORIAL_30_MIN.md): aula prática com o kit oficial.
 - [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md): tutorial de implementação.
 - [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md): ordem estratégica e catálogo por processo.
@@ -38,7 +39,7 @@ Não fazem parte da API v1:
 - componentes React injetados pelo plugin;
 - instalação arbitrária de dependências durante a execução;
 - execução de plugins do operador `Humano`.
-- acesso a navegador, cookies, tokens de sessão ou perfis autenticados.
+- navegador, perfil autenticado ou extração de sessão fornecidos automaticamente pelo núcleo. Um plugin pode implementar sua própria automação com permissões genéricas e autenticação explícita do usuário.
 
 ## 2. Vocabulário
 
@@ -86,7 +87,7 @@ O plugin:
 - não acessa diretamente SQLite, interface ou diretórios internos;
 - não decide repetição, aprovação humana ou publicação pública fora do contrato.
 
-Tudo que o plugin pode ler chega na requisição, por secrets declarados ou por APIs controladas do futuro SDK. Tudo que produz volta na resposta e em artifacts declarados.
+Todo dado interno do ContentFlow que o plugin pode ler chega na requisição, por secrets declarados ou pelos serviços controlados `resolveInputFile()` e `getWorkspacePath()`. Resultados para outros blocos voltam na resposta e em artifacts declarados; o workspace guarda apenas estado próprio/checkpoints autorizados.
 
 ## 4. Pacote e runtime
 
@@ -153,10 +154,10 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
   "repository": "https://github.com/example/contentflow-plugin",
   "runtime": {
     "kind": "node",
-    "version": ">=22",
+    "version": ">=26 <27",
     "module": "esm"
   },
-  "minCoreVersion": "1.0.0",
+  "minCoreVersion": "0.2.0",
   "entrypoint": "dist/index.js",
   "permissions": ["network"],
   "secretKeys": ["EXEMPLO_API_KEY"],
@@ -228,7 +229,7 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 - `apiVersion` deve ser `"1"`.
 - `id` é global, imutável e usa domínio reverso em minúsculas.
 - `version` segue SemVer.
-- `minCoreVersion` impede instalação em núcleos incompatíveis.
+- `minCoreVersion` declara a versão mínima pretendida. Na v0.2 ele é metadado de compatibilidade; o autor ainda deve testar e informar a versão suportada no README.
 - `capability.id` é único dentro do plugin e não muda depois de publicado.
 - `license` identifica a licença do pacote com expressão SPDX quando existir; licenças personalizadas usam um identificador estável e incluem o arquivo integral no pacote.
 - `homepage` e `repository`, quando informados, usam URLs HTTPS e apontam para páginas controladas pelo publicador.
@@ -238,7 +239,7 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 
 - `runtime.kind` é `node` na API v1.
 - `runtime.module` é `esm`.
-- `runtime.version` é validada contra o Node empacotado pelo aplicativo.
+- use `runtime.version: ">=26 <27"` para plugins comunitários da API v1. Na v0.2, essa faixa é informativa; o gate executável verifica que o runtime ativo é Node 26.
 
 ### Capacidades
 
@@ -324,7 +325,7 @@ Regras:
 - Configurações exportadas não podem conter secrets.
 - Secrets são disponibilizados apenas à execução que declarou a chave, por `services.getSecret()`.
 - O plugin não pode enumerar secrets de outros plugins.
-- OAuth deve usar fluxo mediado pelo núcleo quando for implementado.
+- OAuth ou login interativo são implementados pelo plugin quando necessários. Tokens persistentes devem usar secrets declarados e consentidos; o núcleo não extrai sessões do navegador.
 
 ## 8. Permissões
 
@@ -339,15 +340,16 @@ Permissões da API v1:
 | `worker`           | Workers locais para processamento paralelo declarado.                                |
 | `native`           | Addons nativos empacotados, como codecs ou bibliotecas de imagem.                    |
 
-Uma permissão declarada não significa acesso irrestrito. O executor ainda aplica:
+Uma permissão declarada não significa acesso irrestrito. Na implementação v0.2, o executor aplica:
 
 - diretórios permitidos;
 - bloqueio de travessia e symlink escape;
-- allowlist de executáveis;
 - timeout e cancelamento;
-- limites de CPU, memória, disco e tamanho de saída;
-- política de rede e redirecionamentos;
+- limites de resposta, streams, artifacts e downloads mediados;
+- proteção SSRF, DNS e redirects nos downloads mediados pelo núcleo;
 - redaction de secrets em logs.
+
+`process` e `native` são permissões deliberadamente amplas. Allowlist de executáveis e quotas fortes de CPU/memória permanecem hardening futuro e não devem ser prometidas pelo autor como isolamento já disponível.
 
 Instalação e atualização exibem qualquer aumento de permissões e exigem novo consentimento.
 
@@ -355,7 +357,7 @@ Plugins com `network` podem declarar `networkHosts`, com hosts exatos (`api.exam
 
 O Permission Model do Node 26 oferece apenas `--allow-net` como chave binária, sem allowlist por host. Portanto, `networkHosts` não restringe tecnicamente sockets abertos diretamente pelo código do plugin nesta versão. A lista expressa intenção auditável e controla clientes de rede mediados pelo núcleo. Um proxy/SDK obrigatório será necessário para egress por domínio de todo o processo.
 
-Essas permissões podem conceder capacidades amplas sem conceder a máquina inteira. Quando o usuário escolher uma pasta de trabalho persistente, o núcleo poderá montá-la como raiz autorizada para aquele plugin/projeto. Dentro dessa raiz, um plugin com leitura/escrita poderá criar centenas de arquivos, reabrir artifacts por ID, conferir lacunas e alimentar plugins posteriores. O limite impede apenas sair da pasta escolhida sem novo consentimento.
+Essas permissões podem conceder capacidades amplas sem conceder a máquina inteira. Quando o usuário escolhe uma pasta de trabalho persistente, o núcleo a monta como raiz autorizada para aquele plugin. Dentro dessa raiz, um plugin com leitura/escrita pode criar arquivos, manter checkpoints e reabrir seu próprio estado. O vínculo não autoriza outras pastas nem substitui artifacts quando o resultado precisa entrar no contrato de outro bloco.
 
 ## 9. Ciclo de execução
 
@@ -427,6 +429,12 @@ type PluginExecutionRequest = {
     type: HumanFieldType;
     recordFields?: RecordFieldDefinition[];
   }>;
+  inputDeliveries?: Array<{
+    inputId: string;
+    portKey: string;
+    deliveryId?: string;
+    itemIds: string[];
+  }>;
   outputContract: Array<{
     portKey: string;
     key: string;
@@ -442,7 +450,7 @@ type PluginExecutionRequest = {
 };
 ```
 
-O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContract` serve para conhecer tipo e schema dos registros recebidos. `settings` contém somente preferências não secretas validadas por `settingsSchema`; secrets declarados são acessados pelo mecanismo seguro do SDK/runtime e não aparecem no envelope serializável.
+O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContract` serve para conhecer tipo e schema dos registros recebidos. `inputDeliveries` é metadado paralelo e opcional de proveniência; plugins v1 que leem somente `inputs` continuam compatíveis. `settings` contém somente preferências não secretas validadas por `settingsSchema`; secrets declarados são acessados por `services.getSecret()` e não aparecem no envelope serializável.
 
 ## 11. Contexto permitido
 
@@ -454,6 +462,7 @@ O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContrac
 - Processo Universal atual;
 - outputs universais de processos anteriores;
 - resultados concluídos de blocos anteriores;
+- entregas anteriores autorizadas, com IDs universais, itens, ordem e referências;
 - coleção vinculada, quando aplicável.
 
 Princípios:
@@ -799,7 +808,7 @@ O Método deve salvar `pluginId`, `pluginVersion`, `capabilityId` e bindings. A 
 
 `settingsSchema`, `blockConfigSchema` e `outputSchema` usam JSON Schema Draft 2020-12, limitado aos recursos que o núcleo consegue validar e renderizar de forma idêntica em todas as plataformas.
 
-O schema canônico do manifesto fica versionado em [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json). Durante o desenvolvimento, `$schema` pode apontar para a cópia local ou para a futura URL oficial; esse campo ajuda editores, mas não substitui a validação feita pelo núcleo.
+O schema canônico do manifesto fica versionado em [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json). Durante o desenvolvimento, `$schema` pode apontar para a cópia local ou para `https://raw.githubusercontent.com/andremjr/contentflow-os/main/docs/schemas/contentflow-plugin-v1.schema.json`; esse campo ajuda editores, mas não substitui a validação feita pelo núcleo.
 
 Recursos aceitos na API v1:
 
@@ -833,7 +842,7 @@ Cada invocação deve ser tratada como independente. Plugins não podem depender
 - O diretório de staging e saída é exclusivo por invocação e tentativa.
 - Ao terminar, falhar ou cancelar, o plugin fecha streams, sockets, processos filhos e handles. O executor elimina recursos restantes após o prazo de encerramento.
 - Cache só pode existir em área concedida pelo núcleo, deve ser descartável, não pode conter secrets e nunca substitui persistência do job.
-- Estado necessário para `resume` deve estar no provedor externo, no `jobId` opaco ou em armazenamento futuro explicitamente mediado pelo SDK.
+- Estado necessário para `resume` deve estar no provedor externo, no `jobId` opaco ou no workspace obtido por `services.getWorkspacePath()`.
 
 Uma capacidade não deve implementar mutex global para serializar silenciosamente todo o aplicativo. Se o provedor só permite uma operação por vez, declare `maxConcurrency: 1` e documente o limite.
 
@@ -957,11 +966,11 @@ O pacote deve documentar canal de suporte e de vulnerabilidades. Diagnósticos e
 
 ## 29. Governança e distribuição do ecossistema
 
-Plugins podem ser distribuídos por arquivo, URL, repositório, organização ou catálogo. A instalação e execução local de um pacote compatível não exigem submissão nem aprovação do mantenedor. Catálogos são superfícies opcionais de descoberta e confiança.
+Plugins podem ser distribuídos por arquivo, repositório, organização ou catálogo. Na v0.2, o usuário obtém a pasta do pacote e escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**; instalação direta por URL ainda não faz parte da interface. A execução local de um pacote compatível não exige submissão nem aprovação do mantenedor. Catálogos são superfícies opcionais de descoberta e confiança.
 
 Quando houver catálogo, ele diferencia plugins `official`, `verified`, `community` e `private`:
 
-- `official`: mantido e assinado pelo ContentFlow OS;
+- `official`: incluído, mantido e suportado pelo ContentFlow OS;
 - `verified`: identidade, pacote e requisitos mínimos revisados, sem garantia de ausência de falhas;
 - `community`: distribuído pelo autor e ainda não verificado pelo projeto.
 - `private`: instalado diretamente pelo usuário ou por uma organização, fora do catálogo público.
@@ -1000,4 +1009,4 @@ Antes de publicar um plugin:
 - [ ] Ausência, atualização e descontinuação do plugin não corrompem Métodos ou outputs.
 - [ ] README documenta custos, limites, licenças e efeitos externos.
 
-O ContentFlow Reference Plugin será a implementação executável de conformidade para este protocolo.
+O plugin em [`../plugins/examples/community-reference`](../plugins/examples/community-reference) é a referência executável mínima. O Plugin Kit acrescenta validação, testes de contrato, execução no sandbox, fixtures e relatório de compatibilidade.

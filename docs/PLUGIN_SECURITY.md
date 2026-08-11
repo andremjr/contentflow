@@ -2,9 +2,11 @@
 
 Este documento define o modelo de ameaças e os controles mínimos para executar plugins no ContentFlow OS. Ele complementa o contrato normativo de [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md).
 
+Autores começando um plugin não precisam ler este documento inteiro antes do primeiro teste; use [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md) e retorne aqui antes de distribuir uma capacidade com rede, arquivos, subprocessos, navegador, credenciais ou efeitos externos.
+
 > Estado atual: plugins comunitários e privados passam por validação automática e consentimento local, sem revisão ou aprovação manual do mantenedor. Cada invocação roda em processo separado sob o Permission Model do Node 26, com ambiente mínimo, timeout, limite de resposta, diretórios controlados e filesystem, rede, subprocessos, workers e módulos nativos negados por padrão. Artifacts locais e remotos são validados e importados pelo núcleo.
 
-> Limite importante: esta é a sandbox de capacidades v1, não uma máquina virtual. Conceder `process` permite que o plugin inicie programas com a autoridade normal do usuário e esses programas não herdam automaticamente a sandbox do Node. Conceder `native` também amplia fortemente a confiança. Essas permissões devem aparecer como acesso avançado na interface. Quotas fortes de CPU/memória, proxy SSRF, assinatura/hash de pacotes, instalação atômica, confirmação de cancelamento externo e allowlist de executáveis continuam como hardening planejado.
+> Limite importante: esta é a sandbox de capacidades v1, não uma máquina virtual. Conceder `process` permite que o plugin inicie programas com a autoridade normal do usuário e esses programas não herdam automaticamente a sandbox do Node. Conceder `native` também amplia fortemente a confiança. Essas permissões devem aparecer como acesso avançado na interface. Quotas fortes de CPU/memória, proxy obrigatório para todo egress, assinatura/hash de pacotes, confirmação de cancelamento externo e allowlist de executáveis continuam como hardening planejado.
 
 ## 1. Objetivos
 
@@ -126,7 +128,7 @@ Webhooks locais ou destinos privados exigem uma permissão futura distinta e avi
 - Secrets são armazenados cifrados no cofre local e referenciados somente pela chave declarada.
 - O valor só existe na memória da invocação autorizada e não aparece em request, snapshot, método, log ou artifact.
 - `getSecret()` falha para chaves não declaradas.
-- OAuth usa redirect e armazenamento mediados pelo núcleo; access tokens curtos são preferíveis.
+- OAuth e login interativo são implementados pelo plugin na v0.2; tokens persistentes devem ser declarados como secrets e guardados pelo cofre do núcleo. Access tokens curtos são preferíveis.
 - A interface identifica escopo, conta e provedor antes de salvar uma credencial.
 - Remoção do plugin oferece revogação local e orienta revogação no provedor.
 - Redaction cobre valor integral, formas codificadas conhecidas e headers de autorização.

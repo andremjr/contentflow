@@ -30,6 +30,17 @@ npm run dev
 
 Abra `http://127.0.0.1:8080`.
 
+## Criar ou converter um plugin
+
+Comece por [`docs/PLUGIN_START_HERE.md`](docs/PLUGIN_START_HERE.md). O guia mostra o caminho mínimo, como adaptar JavaScript, APIs, n8n/Make, Python/FFmpeg e automações de navegador, e o que o núcleo já resolve para o autor.
+
+```sh
+npm run plugin:kit -- create ./meu-plugin --template text-transform
+npm run plugin:kit -- check ./meu-plugin
+```
+
+Para criar com ChatGPT, Claude, Gemini ou outro agente, use o [pacote compacto para IA](docs/PLUGIN_AI_KIT.md). Não é necessário compartilhar o repositório inteiro com a IA.
+
 ## Dados locais
 
 No Windows, tanto a execução pelo código-fonte quanto a versão instalada usam o mesmo banco SQLite em `%APPDATA%\ContentFlow OS\data\contentflow-os.sqlite`. Assim, canais, projetos e métodos vistos no preview também aparecem no aplicativo compilado. Em outros sistemas, o desenvolvimento continua usando `data/contentflow-os.sqlite` dentro do repositório.
@@ -71,16 +82,25 @@ npm run check
 
 ## Documentação
 
+### Para autores de plugins
+
+- [Comece aqui: criar ou converter um plugin](docs/PLUGIN_START_HERE.md)
+- [Aula prática de 30 minutos](docs/PLUGIN_TUTORIAL_30_MIN.md)
+- [Pacote compacto para criação com IA](docs/PLUGIN_AI_KIT.md)
+- [Guia detalhado de desenvolvimento](docs/PLUGIN_DEVELOPMENT.md)
+- [Protocolo normativo API v1](docs/PLUGIN_PROTOCOL.md)
+- [Automação de navegador](docs/PLUGIN_BROWSER_AUTOMATION.md)
+- [Segurança e permissões](docs/PLUGIN_SECURITY.md)
+- [Distribuição e governança](docs/PLUGIN_ECOSYSTEM.md)
+- [Roadmap e ideias por processo](docs/PLUGIN_ROADMAP.md)
+
+### Produto e manutenção
+
 - [Arquitetura e visão de produto](docs/ARCHITECTURE.md)
 - [V0 compilada para Windows](docs/DESKTOP_V0.md)
-- [Protocolo de plugins](docs/PLUGIN_PROTOCOL.md)
-- [Guia de desenvolvimento de plugins](docs/PLUGIN_DEVELOPMENT.md)
-- [Automação de navegador e camadas de produtividade](docs/PLUGIN_BROWSER_AUTOMATION.md)
-- [Revisão de manutenção de 2026-08-10](docs/MAINTENANCE_REVIEW_2026-08-10.md)
-- [Roadmap estratégico de plugins](docs/PLUGIN_ROADMAP.md)
-- [Segurança de plugins](docs/PLUGIN_SECURITY.md)
-- [Governança do ecossistema](docs/PLUGIN_ECOSYSTEM.md)
+- [Tradutor de Métodos](docs/gpt-method-translator/GPT_CONFIGURATION.md)
 - [Proteção jurídica e licenciamento](docs/LEGAL_AND_LICENSING.md)
+- [Revisão histórica de manutenção de 2026-08-10](docs/MAINTENANCE_REVIEW_2026-08-10.md)
 - [Como contribuir](CONTRIBUTING.md)
 
 ## Licença

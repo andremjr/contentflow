@@ -2,6 +2,8 @@
 
 Este documento define como plugins podem ser distribuídos diretamente, publicados em catálogos opcionais, encontrados, avaliados e atualizados no ecossistema do ContentFlow OS. O contrato técnico está em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), e a segurança operacional em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
 
+Ele é voltado à distribuição. Para criar ou converter o plugin, comece em [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md).
+
 ## 1. Princípios
 
 O ecossistema existe para ampliar a execução dos Métodos sem transformar cada integração em código do núcleo. Ele segue seis princípios:
@@ -17,7 +19,7 @@ O ecossistema existe para ampliar a execução dos Métodos sem transformar cada
 
 | Categoria   | Responsabilidade                                                   | Indicação visual |
 | ----------- | ------------------------------------------------------------------ | ---------------- |
-| `official`  | Mantido, assinado e suportado pelo ContentFlow OS.                 | Oficial          |
+| `official`  | Incluído, mantido e suportado pelo ContentFlow OS.                 | Oficial          |
 | `verified`  | Autor e pacote revisados contra requisitos publicados.             | Verificado       |
 | `community` | Distribuído pelo autor, sem revisão integral do projeto.           | Comunidade       |
 | `private`   | Instalado localmente ou por organização, fora do catálogo público. | Privado          |
@@ -28,7 +30,7 @@ Essas categorias comunicam origem e confiança; não formam níveis de permissã
 
 Um arquivo compartilhado por mensagem, download direto, repositório ou mídia removível não se torna oficial ou verificado por poder ser descoberto pelo aplicativo. Isso não impede sua instalação ou execução pelo usuário. A interface apenas informa que a origem não passou por revisão do projeto e apresenta permissões, efeitos e riscos antes da ativação.
 
-No estado atual, plugins locais e comunitários podem ser exibidos, mas não são executados porque a sandbox ainda não foi concluída. Esse bloqueio é uma limitação temporária da implementação, não um fluxo de aprovação. Depois dos gates de [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), qualquer plugin compatível poderá ser instalado e executado localmente após validações automáticas e consentimento do usuário, sem análise manual do mantenedor.
+Na v0.2, plugins locais e comunitários podem ser instalados por uma pasta ou conectados como pasta ao vivo, validados, consentidos, ativados e executados na sandbox do Node 26 sem análise manual do mantenedor. A interface ainda não baixa pacotes diretamente de URL ou catálogo: o usuário primeiro obtém a pasta do autor e então escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**.
 
 Se alguém modificar o núcleo, executar o pacote por fora do ContentFlow OS ou remover suas proteções, essa atividade não é uma execução autorizada pelo protocolo nem recebe status, suporte ou garantia do projeto.
 
@@ -78,7 +80,7 @@ Informações materiais não podem ficar apenas em link externo ou texto genéri
 
 ## 6. Publicação opcional em catálogo
 
-Submeter um plugin ao catálogo é opcional. Serve para descoberta pública e para solicitar sinais como `verified`; não é requisito para compartilhar um arquivo, instalar por URL/repositório ou executar localmente.
+Submeter um plugin a um catálogo futuro é opcional. Serve para descoberta pública e para solicitar sinais como `verified`; não é requisito para compartilhar uma pasta ou executar localmente. A v0.2 não inclui publicação, download ou atualização por catálogo.
 
 1. O autor reserva ou comprova o namespace.
 2. Envia pacote imutável, manifesto, licença, README, changelog e informações de suporte/segurança.
@@ -103,7 +105,7 @@ Revisão pode pedir escopo menor, documentação adicional ou correção para aq
 - documentação suficiente para configuração, custo e suporte;
 - ausência de comportamento oculto, telemetria não declarada ou conteúdo enganoso;
 - comprovação de que automação de interface, quando existir, é permitida pelo provedor e preserva plano, cota e identidade da conta;
-- ausência de extração de cookies/tokens, evasão de CAPTCHA, rotação de contas ou dependência de API privada não autorizada;
+- ausência de extração silenciosa de cookies/tokens, evasão de CAPTCHA, rotação de contas ou dependência de API privada não autorizada; autenticação de navegador explicitamente conectada segue o guia específico;
 - respeito à licença e às marcas do ContentFlow OS.
 
 Esses critérios governam a listagem no catálogo. A instalação direta depende das regras técnicas do protocolo, das permissões solicitadas e da sandbox, verificadas automaticamente pelo aplicativo; não depende de julgamento ou aprovação do mantenedor.

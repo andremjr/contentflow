@@ -74,23 +74,26 @@ Use este contrato para criar um arquivo de método importável. O JSON represent
 
 ```json
 {
-  "id": "theme-input-project-title",
-  "label": "Tema inicial do projeto",
+  "id": "title-input-theme",
+  "label": "Tema aprovado",
   "type": "text",
-  "source": "project",
-  "sourceKey": "title"
+  "source": "previous_process",
+  "sourceProcessType": "theme",
+  "sourceKey": "theme"
 }
 ```
 
 `source` aceita somente:
 
 - `project`: use `sourceKey` `title` ou `deadline`;
-- `previous_process`: use uma saída do processo anterior; informe `sourceKey`;
+- `previous_process`: use uma entrega de qualquer Processo Universal anterior; informe `sourceProcessType` e `sourceKey`. `blockId` é opcional em arquivo portátil; use `__process_output__` apenas para exigir o output oficial;
 - `previous_block`: use saída de bloco anterior. `blockId` e `sourceKey` são opcionais; se presentes, devem existir;
 - `channel_library`: reservado para configuração do canal; evite em JSON portátil;
 - `static`: contexto fixo; informe `staticValue`.
 
 O `type` de entrada aceita: `text`, `number`, `select`, `boolean`, `textarea`, `multiselect`, `list`, `records`, `datetime`, `url`, `file`, `image`, `audio`, `video`, `files`, `approval`, `thumbnail_layout`.
+
+O arquivo guarda a referência estrutural `Processo / Bloco / Entrega`, nunca os IDs de uma execução. Na produção, o núcleo resolve essa referência para `deliveryId` e `itemIds` reais. Em um arquivo portátil, só declare `blockId` de outro processo quando esse ID fizer parte de um conjunto de Métodos distribuído em conjunto e for estável no canal de destino; caso contrário, prefira `sourceProcessType` + `sourceKey`.
 
 ## Saída (`outputs`)
 
@@ -171,5 +174,5 @@ Use em bloco `VALIDAR`:
 2. Todos os enums e nomes de campos são exatamente os deste documento?
 3. `parameters` existe em cada bloco?
 4. IDs são únicos e `order` é sequencial?
-5. Uma referência `blockId`, `optionsSourceBlockId` ou `targetBlockId` existe e aponta para bloco anterior?
+5. Uma referência `blockId`, `optionsSourceBlockId` ou `targetBlockId` existe e aponta para bloco/processo anterior compatível?
 6. Toda referência `sourceKey` ou `targetOutputKey` existe na saída indicada?

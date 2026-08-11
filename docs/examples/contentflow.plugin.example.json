@@ -11,14 +11,15 @@
   "repository": "https://github.com/example/contentflow-thumbnail-renderer",
   "runtime": {
     "kind": "node",
-    "version": ">=22",
+    "version": ">=26 <27",
     "module": "esm"
   },
-  "minCoreVersion": "1.0.0",
+  "minCoreVersion": "0.2.0",
   "entrypoint": "dist/index.js",
   "permissions": ["network", "filesystem:write"],
   "networkHosts": ["api.image-provider.example", "*.image-provider.example"],
   "secretKeys": ["IMAGE_PROVIDER_API_KEY"],
+  "deliveryTypes": ["image"],
   "capabilities": [
     {
       "id": "render-thumbnail",

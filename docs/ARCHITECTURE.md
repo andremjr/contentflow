@@ -27,7 +27,7 @@ A experiência do usuário no ContentFlow OS apoia-se em 3 camadas de interface 
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │ INTERFACE 3: Gerenciamento de Plugins (Nível Operacional / Conexões)   │
-│ Galeria de plugins (IA, Código, Webhooks) e chaves de API globais.     │
+│ Plugins de IA/Código, automações, permissões e credenciais locais.     │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -41,7 +41,7 @@ A experiência do usuário no ContentFlow OS apoia-se em 3 camadas de interface 
 
 3. **Interface 3: Gerenciador de Plugins (Operação & Integrações)**
    - **Objetivo**: Gestão de ferramentas e conexões técnicas.
-   - **Funcionamento**: Cadastro e gerenciamento de plugins (oficiais, de código aberto ou webhooks), centralização de chaves de API globais e credenciais.
+   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, ativação, consentimento, settings, workspaces e credenciais de plugins oficiais ou independentes.
 
 No nível global, a navegação principal possui três áreas:
 
@@ -119,7 +119,7 @@ As chaves técnicas, a persistência e a conexão padrão com resultados anterio
 
 Cada entrada declarada é conectada automaticamente a uma saída compatível já produzida. O motor prioriza os blocos anteriores mais próximos, depois os outputs dos Processos Universais anteriores, considera a semelhança entre os nomes e não reutiliza a mesma saída em duas entradas do mesmo bloco. Conexões explícitas legadas continuam sendo respeitadas. Se uma entrada não puder ser resolvida, o bloco permanece pausado e informa claramente qual dado está ausente.
 
-O operador `Humano` é o executor nativo desse mesmo contrato e não depende de plugin. Um futuro plugin de `IA` ou `Código` deverá consumir as mesmas entradas e produzir as mesmas saídas; seus parâmetros particulares aparecem somente depois que o plugin for selecionado.
+O operador `Humano` é o executor nativo desse mesmo contrato e não depende de plugin. Plugins de `IA` ou `Código` consomem as mesmas entradas e produzem as mesmas saídas; seus parâmetros particulares aparecem somente depois que o plugin é selecionado.
 
 O Método armazena apenas esse esquema. Os valores efetivamente preenchidos pertencem à execução do Projeto/Vídeo e nunca são gravados como parte do Método.
 
@@ -134,7 +134,7 @@ O orquestrador do sistema funciona em modelo de **Máquina de Estados Concorrent
 1. Lê o JSON do Método do Canal para o processo atual.
 2. Executa os blocos sequencialmente injetando as saídas do bloco anterior no bloco seguinte.
 3. **Pausa e Retomada para Operador Humano**: Se um bloco for atribuído ao operador `Humano`, o motor pausa o estado da execução (`awaiting_human`), gera uma notificação e um cartão interativo no Projeto, e aguarda a entrega ou seleção do usuário para continuar a esteira.
-4. **Execução por plugin**: Blocos `IA` e `Código` entram em `blocked_executor` até o usuário disparar o plugin compatível configurado. O servidor resolve as entradas, executa plugins oficiais incluídos em um processo separado, valida a resposta, persiste os valores no snapshot do bloco e ativa a próxima etapa.
+4. **Execução por plugin**: Blocos `IA` e `Código` entram em `blocked_executor` até o usuário disparar o plugin compatível configurado. O servidor resolve as entradas, executa plugins oficiais, instalados ou vinculados em um processo separado, valida a resposta, registra entregas e artifacts no snapshot e ativa a próxima etapa.
 5. **Bloqueio de executores ausentes**: Blocos sem plugin compatível permanecem em `blocked_executor`. Eles nunca são concluídos de forma fictícia.
 
 Os métodos permanecem lineares: não existem ramificações, junções, paralelismo ou loops genéricos no canvas. Uma entrada pode apontar explicitamente para a saída de qualquer bloco anterior ou processo universal anterior, e um bloco pode declarar várias entradas.
@@ -153,8 +153,8 @@ Renderers são componentes internos do ContentFlow OS. Plugins podem apenas indi
 
 O ContentFlow OS apoia-se em dois tipos de compartilhamento comunitário:
 
-1. **Templates de Métodos (Caixa-Aberta)**: Exportação e importação de sequências de blocos com prompts e regras prontas via código/link. Ao importar, o sistema detecta e instala os plugins necessários na conta do usuário de forma transparente.
-2. **Plugins de Código Aberto & Webhooks**: Suporte a plugins comunitários hospedados no GitHub ou via conexões HTTP Webhook (n8n/Make/FastAPI).
+1. **Templates de Métodos (Caixa-Aberta)**: Exportação e importação de sequências de blocos com prompts e regras prontas por arquivo. Referências de plugins permanecem explícitas; instalação e consentimento são ações separadas do usuário.
+2. **Plugins Independentes**: Pastas instaláveis ou vinculadas podem adaptar APIs HTTPS, scripts, executáveis, filas externas, n8n/Make/FastAPI públicos e automações de navegador sem acrescentar um novo tipo de integração ao núcleo.
 
 A Biblioteca de Métodos global não cria uma segunda cópia independente no banco. Ela agrega os métodos existentes nos canais. Uma cópia só é criada quando o usuário escolhe usar um método em outro canal ou importa um arquivo compartilhado.
 
@@ -229,9 +229,9 @@ O plugin oficial `Anthropic Claude` mantém o mesmo contrato de linguagem pela M
 
 ## 13. Layouts Programáticos de Thumbnail
 
-O núcleo preserva um canvas de composição visual para a futura Biblioteca de Layouts de Thumbnail. Cada layout descreve caixas, posições, dimensões, ordem de camadas e cores em coordenadas relativas a um quadro 16:9.
+O núcleo oferece um canvas de composição visual na Biblioteca Estratégica para layouts de thumbnail. Cada layout descreve caixas, posições, dimensões, ordem de camadas e cores em coordenadas relativas a um quadro 16:9.
 
-Esse canvas é infraestrutura intencional, mesmo enquanto ainda não estiver exposto na navegação principal. Plugins de operador `Código` poderão consumir esses layouts para posicionar textos, pessoas, objetos e demais elementos durante a montagem programática de thumbnails. Ele não deve ser tratado como código legado ou removido apenas por ainda não possuir uma tela pública.
+Plugins de operador `Código` podem consumir esses layouts pelo contrato `thumbnail_layout` para posicionar textos, pessoas, objetos e demais elementos durante a montagem programática. O canvas e o formato fazem parte da infraestrutura pública do Método e da Biblioteca, não são código legado.
 
 ---
 

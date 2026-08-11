@@ -1,12 +1,12 @@
 # Roadmap estratégico de plugins
 
-Este documento registra a estratégia recomendada para iniciar o ecossistema de plugins do ContentFlow OS. Ele deve ser relido antes da implementação dos primeiros plugins e atualizado conforme as integrações forem validadas.
+Este documento é um catálogo estratégico de capacidades, não a documentação de instalação nem uma promessa de integrações já disponíveis. Para criar um plugin, comece em [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md). Atualize este backlog conforme integrações forem validadas pela comunidade.
 
 O protocolo normativo está em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md) e o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md).
 
 ## 1. Princípio de desenvolvimento
 
-O primeiro objetivo não é oferecer muitos fornecedores. É comprovar uma esteira vertical capaz de produzir um vídeo completo mantendo rastreabilidade entre os oito Processos Universais.
+Na v0.2, a fundação já inclui plugin comunitário de referência, sandbox Node 26, jobs retomáveis, artifacts, Plugin Kit e IDs universais de entregas. A fase atual é ampliar capacidades reais com a comunidade e comprovar esteiras verticais de vídeo completo.
 
 Um plugin deve oferecer capacidades atômicas para `BUSCAR`, `ESCOLHER`, `CRIAR` ou `VALIDAR`. Ele não deve esconder um método inteiro dentro de uma integração. Sequência, conexões, repetição e pausas humanas continuam pertencendo ao núcleo.
 
@@ -16,8 +16,8 @@ Plugins podem ter parâmetros locais como modelo, formato, proporção, resoluç
 
 Ordem recomendada de implementação:
 
-1. **ContentFlow Reference Plugin**: executor determinístico, sem API externa, para testar o contrato completo.
-2. **OpenAI Text & Vision**: capacidades estruturadas para tema, título, roteiro, planejamento visual e validação.
+1. **Plugins de referência e Plugin Kit**: já disponíveis para testar o contrato e iniciar novos pacotes.
+2. **OpenAI Models e Anthropic Claude**: integrações textuais oficiais já incluídas; capacidades multimídia continuam em plugins próprios.
 3. **Transcription & Alignment**: áudio ou vídeo para transcrição, SRT e cues temporizados.
 4. **ElevenLabs Narration**: narração com alinhamento temporal.
 5. **Pexels Media Search**: busca de fotos e vídeos de estoque.
@@ -28,6 +28,8 @@ Ordem recomendada de implementação:
 10. **YouTube Publisher**: upload privado, thumbnail, legendas, metadados e verificação.
 
 Essa seleção cobre uma produção completa com poucas dependências. Runway, HeyGen, outros LLMs e outros bancos de mídia entram depois que essa linha estiver confiável.
+
+Os contratos sugeridos abaixo usam campos como `segment_id`, `cue_id`, `slot_id` e `asset_id` quando um formato ou provedor externo se beneficia deles. Esses IDs de domínio não substituem a identidade universal do núcleo. Cada output e elemento recebe `deliveryId`/`itemId`, e plugins posteriores podem recuperar essa proveniência em `request.inputDeliveries` e `context.previousDeliveries`.
 
 ## 3. Catálogo mínimo por Processo Universal
 
@@ -234,20 +236,21 @@ Se essa cadeia permanecer íntegra, reprovações, substituições de assets e n
 
 ## 5. Ondas de implementação
 
-### Onda 0 — executor e conformidade
+### Onda 0 — fundação concluída na v0.2
 
-- ContentFlow Reference Plugin.
+- Plugin comunitário de referência e Plugin Kit.
 - Validação de manifesto e schemas.
 - Execução isolada, timeout e cancelamento.
 - Jobs assíncronos e retomada.
-- Staging e ingestão de artefatos.
-- Logs, progresso, uso e erros redigidos.
+- Staging e ingestão de artifacts.
+- Registro universal de entregas e subentregas.
 
-Critério de saída: todos os formatos e estados do protocolo passam por testes determinísticos.
+Estado: a base executável está disponível. Hardening adicional permanece documentado em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md) e pode evoluir sem bloquear a criação comunitária.
 
 ### Onda 1 — texto e sincronização
 
-- OpenAI Text & Vision.
+- Expansão comunitária a partir do Plugin Kit.
+- OpenAI Models e Anthropic Claude para texto já incluídos; visão e mídia em capacidades próprias.
 - Transcription & Alignment.
 - ElevenLabs Narration.
 - Script Segmenter.
@@ -280,16 +283,16 @@ Critério de saída: upload privado verificado de ponta a ponta.
 - Runway ou outro gerador de vídeo.
 - HeyGen ou outro gerador de avatar.
 - Outros LLMs, TTS, catálogos e renderizadores.
-- Plugins comunitários e webhooks.
+- Novos provedores, adapters HTTPS e automações de navegador criados pela comunidade.
 
 ## 6. Referências técnicas avaliadas
 
-- [OpenAI: transcrição de áudio e timestamps](https://platform.openai.com/docs/api-reference/audio/voice-consent-list?lang=curl)
+- [OpenAI: transcrição de áudio](https://developers.openai.com/api/docs/guides/speech-to-text)
 - [OpenAI: imagens e visão](https://platform.openai.com/docs/guides/images)
 - [ElevenLabs: fala com timestamps](https://elevenlabs.io/docs/api-reference/text-to-speech/convert-with-timestamps?explorer=true)
 - [Pexels API](https://www.pexels.com/api/documentation/?language=javascript)
 - [Runway API](https://docs.dev.runwayml.com/api/)
-- [HeyGen: geração de avatar](https://docs.heygen.com/docs/create-video-archived)
+- [HeyGen: referência da API](https://docs.heygen.com/reference)
 - [Remotion: Sequence](https://www.remotion.dev/docs/sequence)
 - [FFmpeg: filtros](https://ffmpeg.org/ffmpeg-filters.html)
 - [YouTube Data API: vídeos](https://developers.google.com/youtube/v3/docs/videos)

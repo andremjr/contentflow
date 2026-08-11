@@ -2,6 +2,8 @@
 
 Objetivo: gerar uma transformação de texto local, testá-la no mesmo sandbox usado pelo ContentFlow e conectá-la ao aplicativo. Use Node 26 e execute os comandos na raiz do repositório.
 
+Se você já possui uma automação e quer decidir como envolvê-la, leia primeiro [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md); esta aula usa deliberadamente o caso mais simples.
+
 ## 0–5 min — escolher o comportamento
 
 Decida uma responsabilidade pequena: receber `content` e devolver `result`. Escolha operador `Código`, bloco `CRIAR`, entrada `textarea`, saída `textarea`, nenhuma permissão e nenhum envio a terceiros.
