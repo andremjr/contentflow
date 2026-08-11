@@ -36,6 +36,8 @@ No Windows, tanto a execução pelo código-fonte quanto a versão instalada usa
 
 Na primeira execução da versão atual pelo código-fonte no Windows, um banco legado encontrado em `data/` é migrado automaticamente para a área compartilhada quando ainda não existe um banco no destino.
 
+Cada saída produzida no Projeto é registrada em **Produtos do projeto** com um ID universal de entrega e IDs individuais para suas subentregas. O construtor de Métodos pode selecionar qualquer saída anterior por Processo, Bloco e Entrega; o motor resolve os IDs reais em cada execução. Isso permite que plugins relacionem títulos, cenas, SRT, áudio, assets e cortes sem regras de produção fixas no núcleo.
+
 Não há login nem sincronização em nuvem nesta fase.
 
 Faça backup de `%APPDATA%\ContentFlow OS\data` antes de atualizar ou trocar de computador. Para atualizar o código-fonte:

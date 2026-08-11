@@ -11,7 +11,7 @@ Documentos relacionados:
 - [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md): tutorial de implementação.
 - [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md): ordem estratégica e catálogo por processo.
 - [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md): modelo de ameaças e requisitos do executor.
-- [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md): requisitos futuros para automação autorizada de interfaces web.
+- [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md): requisitos para plugins que automatizam interfaces web.
 - [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md): publicação, revisão e governança do catálogo.
 - [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json): schema validável do manifesto v1.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): domínio, processos, blocos e operadores.
@@ -52,6 +52,8 @@ Não fazem parte da API v1:
 - **Artifact:** arquivo produzido pelo plugin e importado pelo núcleo.
 - **Job:** execução externa demorada que pode ser consultada ou cancelada.
 - **Tentativa:** número de execução do bloco dentro da política de validação/repetição.
+- **Entrega:** registro universal de uma saída produzida em um Projeto, identificado por execução, bloco, chave e tentativa.
+- **Item de entrega:** subentrega identificada e ordenada dentro de uma entrega escalar ou múltipla.
 
 ## 3. Fronteira de responsabilidades
 
@@ -567,6 +569,20 @@ Regras:
 - Artifacts não referenciados por uma saída podem ser descartados.
 - Arquivos `.partial` que não foram promovidos são removidos no erro; resíduos de queda abrupta expiram em 24 horas. Artifacts progressivos já promovidos permanecem disponíveis no snapshot do job e são removidos com a retenção do job se ele terminar em erro, cancelamento ou abandono.
 - O plugin nunca retorna bytes em base64 dentro de `values`.
+
+### 13.1. Registro universal de entregas
+
+O protocolo v1 de valores e artifacts permanece compatível. Depois de validar a resposta, o núcleo materializa cada saída como uma entrega universal do Projeto:
+
+- valores escalares geram um item;
+- `list`, `multiselect`, `records` e coleções de arquivos geram um item por elemento, preservando ordem;
+- a identidade inclui execução, bloco, chave de saída e tentativa;
+- retries invalidam os registros afetados e produzem uma nova identidade de tentativa;
+- o output oficial de cada Processo Universal também é uma entrega.
+
+`request.inputDeliveries` informa, para cada porta resolvida, o ID da entrega e os IDs dos itens fornecidos. `context.previousDeliveries` expõe metadados e valores das entregas anteriores que o motor autorizou como contexto. Esses campos são aditivos: plugins v1 que não os leem continuam funcionando.
+
+No Método, uma referência explícita guarda `sourceProcessType`, `blockId` e `sourceKey`. IDs concretos pertencem somente à execução e não são serializados no template. Plugins podem devolver relações entre itens quando a capacidade precisar de proveniência, mas não devem inventar IDs do núcleo nem depender da forma textual desses identificadores.
 
 ## 14. Semântica dos quatro blocos
 

@@ -35,6 +35,12 @@ import {
 import type { PluginExecutionRequest, PluginFieldContract } from "../src/lib/plugin-contract";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import {
+  activeProjectDeliveries,
+  normalizeExecutionDeliveries,
+  recordBlockDeliveries,
+  recordProcessOutputDelivery,
+} from "../src/lib/deliveries";
+import {
   executeRegisteredPlugin,
   getRegisteredPlugin,
   initializePluginRunner,
@@ -366,6 +372,7 @@ function finishPluginBlock(
   blockExecution.status = "completed";
   blockExecution.completedAt = now;
   blockExecution.error = undefined;
+  recordBlockDeliveries(execution, block, values, "completed", now);
   const completedIndex = execution.blocks.indexOf(blockExecution);
   const nextExecution = execution.blocks[completedIndex + 1];
   const nextBlock = execution.methodSnapshot.blocks[completedIndex + 1];
@@ -397,6 +404,7 @@ function finishPluginBlock(
         sourceBlockId,
         createdAt: now,
       };
+      recordProcessOutputDelivery(execution, execution.output.values, now);
       execution.outputStatus = "completed";
       execution.status = "completed";
     } else {
@@ -724,6 +732,7 @@ async function processPluginJob(
       blockExecution.logs = pluginResponse.logs;
       execution.status = "running";
       execution.error = undefined;
+      recordBlockDeliveries(execution, block, partialValues, "partial");
       persistPluginExecution(execution, project);
       return saved;
     }
@@ -1800,7 +1809,7 @@ app.post("/api/execute-block", async (request, response) => {
     database
       .prepare("SELECT payload FROM process_executions WHERE project_id = ?")
       .all(project.id) as { payload: string }[]
-  ).map((row) => JSON.parse(row.payload) as ProcessExecution);
+  ).map((row) => normalizeExecutionDeliveries(JSON.parse(row.payload) as ProcessExecution));
   const collections = (
     database
       .prepare("SELECT payload FROM library_collections WHERE channel_id = ?")
@@ -1827,21 +1836,45 @@ app.post("/api/execute-block", async (request, response) => {
     return;
   }
 
-  const contextPort = capability.inputPorts[0];
-  const inputContract = resolvedInputs.map((item) => ({
+  const usedInputPorts = new Set<string>();
+  const assignedInputs = resolvedInputs.map((item) => {
+    const port =
+      capability.inputPorts.find(
+        (candidate) =>
+          candidate.acceptedTypes.includes(item.input.type) &&
+          (candidate.multiple || !usedInputPorts.has(candidate.key)),
+      ) ?? capability.inputPorts[0];
+    if (port && !port.multiple) usedInputPorts.add(port.key);
+    return { resolved: item, port };
+  });
+  const inputContract = assignedInputs.map(({ resolved: item, port }) => ({
     id: item.input.id,
-    portKey: contextPort?.key ?? item.input.id,
+    portKey: port?.key ?? item.input.id,
     label: item.input.label,
     type: item.input.type,
     recordFields: item.input.recordFields,
     presentation: item.input.presentation,
   }));
-  const serializedContext = resolvedInputs
-    .map((item) => `${item.input.label}: ${JSON.stringify(item.value)}`)
-    .join("\n");
-  const inputs: Record<string, RuntimeValue> = contextPort
-    ? { [contextPort.key]: serializedContext }
-    : {};
+  const inputs = Object.fromEntries(
+    capability.inputPorts.flatMap((port) => {
+      const assigned = assignedInputs.filter((item) => item.port?.key === port.key);
+      if (!assigned.length) return [];
+      if (assigned.length === 1 && !port.multiple) {
+        return [[port.key, assigned[0].resolved.value ?? null]];
+      }
+      return [
+        [
+          port.key,
+          assigned
+            .map(
+              ({ resolved }) =>
+                `${resolved.input.label}: ${JSON.stringify(resolved.value ?? null)}`,
+            )
+            .join("\n"),
+        ],
+      ];
+    }),
+  ) as Record<string, RuntimeValue>;
   const selectedCollection =
     block.type === "ESCOLHER"
       ? collections.find((item) => item.id === block.collectionId)
@@ -1917,6 +1950,12 @@ app.post("/api/execute-block", async (request, response) => {
     settings: {},
     inputs,
     inputContract,
+    inputDeliveries: resolvedInputs.map((item, index) => ({
+      inputId: item.input.id,
+      portKey: inputContract[index]?.portKey ?? item.input.id,
+      deliveryId: item.sourceDeliveryId,
+      itemIds: item.sourceDeliveryItemIds ?? [],
+    })),
     outputContract,
     validation: block.validation,
     retryFeedback: blockExecution.retryFeedback,
@@ -1954,6 +1993,12 @@ app.post("/api/execute-block", async (request, response) => {
       previousBlockOutputs: execution.blocks
         .filter((item) => item.status === "completed")
         .map((item) => ({ blockId: item.blockId, values: item.values })),
+      previousDeliveries: activeProjectDeliveries(projectExecutions).filter(
+        (delivery) =>
+          PROCESS_ORDER.indexOf(delivery.processType) <
+            PROCESS_ORDER.indexOf(execution.processType) ||
+          (delivery.processType === execution.processType && delivery.blockId !== block.id),
+      ),
     },
   };
 
@@ -2213,6 +2258,55 @@ app.delete("/api/projects/:id", (request, response) => {
   });
   const result = remove(request.params.id) as { changes: number };
   response.status(result.changes ? 204 : 404).end();
+});
+
+app.get("/api/projects/:id/deliveries", (request, response) => {
+  const executions = (
+    database
+      .prepare(
+        "SELECT payload FROM process_executions WHERE project_id = ? ORDER BY updated_at ASC",
+      )
+      .all(request.params.id) as { payload: string }[]
+  ).map((row) => normalizeExecutionDeliveries(JSON.parse(row.payload) as ProcessExecution));
+  const includeHistory = request.query.history === "true";
+  const deliveries = includeHistory
+    ? executions.flatMap((execution) => execution.deliveries ?? [])
+    : activeProjectDeliveries(executions);
+  response.json({ deliveries });
+});
+
+app.get("/api/deliveries/:deliveryId", (request, response) => {
+  const rows = database.prepare("SELECT payload FROM process_executions").all() as {
+    payload: string;
+  }[];
+  for (const row of rows) {
+    const execution = JSON.parse(row.payload) as ProcessExecution;
+    const delivery = activeProjectDeliveries([execution]).find(
+      (item) => item.id === request.params.deliveryId,
+    );
+    if (delivery) {
+      response.json({ delivery });
+      return;
+    }
+  }
+  response.status(404).json({ error: "Entrega nao encontrada." });
+});
+
+app.get("/api/delivery-items/:itemId", (request, response) => {
+  const rows = database.prepare("SELECT payload FROM process_executions").all() as {
+    payload: string;
+  }[];
+  for (const row of rows) {
+    const execution = JSON.parse(row.payload) as ProcessExecution;
+    for (const delivery of activeProjectDeliveries([execution])) {
+      const item = delivery.items.find((candidate) => candidate.id === request.params.itemId);
+      if (item) {
+        response.json({ delivery, item });
+        return;
+      }
+    }
+  }
+  response.status(404).json({ error: "Item de entrega nao encontrado." });
 });
 
 app.get("/api/executions", (request, response) => {

@@ -6,6 +6,7 @@ import type {
   HumanFieldType,
   FieldPresentation,
   ProcessOutput,
+  ProjectDelivery,
   RuntimeValue,
   StoredFile,
   UniversalProcess,
@@ -156,6 +157,8 @@ export type PluginExecutionContext = {
   block: { type: BlockType; name: string; instructions: string };
   previousProcessOutputs: ProcessOutput[];
   previousBlockOutputs: Array<{ blockId: string; values: Record<string, RuntimeValue> }>;
+  /** Entregas anteriores com identidade universal, ordem e proveniÃªncia. */
+  previousDeliveries?: ProjectDelivery[];
   selectedCollection?: {
     collectionId: string;
     items: Array<{
@@ -173,6 +176,13 @@ export type PluginInputContract = Pick<
   "id" | "label" | "type" | "recordFields" | "presentation"
 > & {
   portKey: string;
+};
+
+export type PluginInputDelivery = {
+  inputId: string;
+  portKey: string;
+  deliveryId?: string;
+  itemIds: string[];
 };
 
 export type PluginArtifact = {
@@ -206,6 +216,8 @@ export type PluginExecutionRequest = {
   /** `inputs` is keyed by the semantic `portKey` declared in `inputContract`. */
   inputs: Record<string, RuntimeValue>;
   inputContract: PluginInputContract[];
+  /** Metadados paralelos aos valores, sem quebrar plugins v1 que leem apenas `inputs`. */
+  inputDeliveries?: PluginInputDelivery[];
   outputContract: PluginFieldContract[];
   validation?: BlockValidationConfig;
   retryFeedback?: Record<string, RuntimeValue>;

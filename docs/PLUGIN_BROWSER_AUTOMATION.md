@@ -2,7 +2,7 @@
 
 Este guia define como planejar plugins que operam interfaces web de terceiros sem contornar planos, créditos, controles de acesso ou políticas do provedor. Ele complementa [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md) e [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
 
-> Estado atual: a API v1 não entrega navegador, cookies, tokens de sessão nem um perfil autenticado ao plugin. O executor atual executa apenas plugins oficiais incluídos e ainda não implementa o broker de navegador descrito neste documento. Este texto é um requisito de projeto para uma etapa futura, não uma permissão já disponível no manifesto.
+> Decisão de arquitetura: o núcleo não fornece um runtime ou broker específico de navegador. Cada plugin escolhe sua tecnologia de automação e seu mecanismo de autenticação — OAuth, login interativo, secret de sessão ou pasta de perfil escolhida pelo usuário — usando as permissões genéricas e o consentimento do protocolo. O ContentFlow OS não descobre nem entrega silenciosamente perfis, cookies ou sessões.
 
 ## 1. Princípio central
 
@@ -76,15 +76,15 @@ Uma capacidade continua representando uma entrega observável de um bloco, mas p
 
 O plugin pode manter sua própria fila interna, checkpoints e subtarefas necessárias para produzir aquela entrega. A sequência externa entre blocos e Processos Universais, aprovações humanas e repetição editorial continuam visíveis no Método.
 
-## 6. Arquitetura futura: broker de navegador
+## 6. Arquitetura gerenciada pelo plugin
 
-O navegador deve ser mediado pelo núcleo, não entregue como acesso arbitrário ao plugin:
+A automação do navegador é uma implementação interna da capacidade do plugin:
 
 ```text
 Método
   -> capacidade do plugin
-  -> broker de navegador do ContentFlow OS
-  -> perfil autorizado e isolado
+  -> navegador/runtime escolhido pelo plugin
+  -> autenticação conectada explicitamente pelo usuário
   -> interface do provedor
   -> resultado validado
   -> output do bloco
@@ -92,18 +92,17 @@ Método
 
 Responsabilidades do núcleo:
 
-- criar ou selecionar um perfil isolado por provedor e conta;
-- mostrar qual domínio e conta serão usados;
-- permitir login interativo e informar claramente quando a integração precisa entregar uma credencial de sessão ao plugin;
-- aplicar allowlist de origens, redirects e downloads;
-- limitar abas, tempo, memória, downloads, concorrência e frequência;
-- mediar navegação, leitura visível, cliques, preenchimento e downloads;
-- pausar para CAPTCHA, consentimento, reautenticação e efeitos materiais;
-- registrar eventos e domínios sem gravar conteúdo sensível;
-- destruir contexto efêmero e revogar acesso quando o plugin for removido.
+- validar manifesto, permissões, secrets, contratos de entrada e saída;
+- mostrar e registrar o consentimento para `network`, `filesystem:*`, `process` e `native` quando declarados;
+- oferecer cofre de secrets, pasta de trabalho escolhida e staging de artifacts;
+- aplicar timeout, cancelamento e limites que a sandbox genérica conseguir impor;
+- deixar efeitos materiais, provedores e política de dados visíveis ao usuário.
 
 Responsabilidades do plugin:
 
+- instalar ou incluir o navegador/runtime de que precisa, sem instalação arbitrária durante a execução;
+- abrir login interativo, solicitar OAuth/secret ou pedir que o usuário escolha uma pasta de perfil quando necessário;
+- documentar claramente conta, perfil, domínios, dados, efeitos e riscos envolvidos;
 - pedir apenas operações necessárias à capacidade;
 - usar seletores resilientes baseados em papel, label e estado visível;
 - validar página, origem, conta e resultado antes de avançar;
@@ -112,18 +111,20 @@ Responsabilidades do plugin:
 - devolver `pending` enquanto o provedor processa o job;
 - usar apenas a sessão, conta e origens que o usuário conectou àquela capacidade, sem enumerar outros perfis.
 
+Usar o perfil principal de um Chrome que esteja aberto pode causar bloqueio de arquivos, corrupção de estado ou acesso muito amplo. Prefira um perfil dedicado ao plugin. Se a capacidade aceitar um perfil existente, a seleção deve ser explícita, restrita à pasta escolhida e acompanhada de aviso compatível com a permissão avançada solicitada.
+
 ## 7. Sessões e autenticação
 
-Autenticação deve ocorrer em uma superfície clara para o usuário. Sempre que possível, o plugin recebe um identificador opaco de contexto autorizado. Quando a integração realmente exigir um cookie ou token de sessão, o usuário pode conectar essa credencial explicitamente e o núcleo a entrega pelo cofre somente àquele plugin.
+Autenticação deve ocorrer em uma superfície clara para o usuário e ser definida pelo próprio plugin. Quando a integração exigir cookie ou token de sessão, o usuário conecta a credencial explicitamente e o núcleo a entrega pelo cofre somente àquele plugin. Quando exigir um perfil local, o usuário escolhe a pasta e concede a permissão correspondente; o núcleo não procura perfis automaticamente.
 
 Requisitos:
 
 - cookies, access tokens e refresh tokens nunca entram em `request`, `settings`, `configuration`, logs ou artifacts; quando necessários, são secrets obtidos em memória por `getSecret()`;
-- o plugin não pode enumerar perfis, contas ou sessões;
+- o plugin não pode enumerar silenciosamente perfis, contas ou sessões fora da origem escolhida;
 - o contexto fica preso ao plugin, provedor, conta e escopo consentidos;
 - troca de conta ou ampliação de escopo exige novo consentimento;
 - expiração ou revogação gera `AUTH_REQUIRED` e pausa recuperável;
-- logout e remoção do plugin oferecem limpeza do perfil local e orientação para revogar acesso no provedor;
+- logout e remoção do plugin oferecem limpeza do estado criado pelo próprio plugin e orientação para revogar acesso no provedor;
 - importação/exportação de Método nunca inclui estado autenticado.
 
 Se um provedor oferecer OAuth, prefira OAuth a reaproveitar uma sessão da interface.
@@ -132,7 +133,7 @@ Se um provedor oferecer OAuth, prefira OAuth a reaproveitar uma sessão da inter
 
 O modo headless só deve ser usado quando permitido pelo provedor e quando não esconder do usuário uma decisão relevante. Login, CAPTCHA, consentimento, compra, publicação e reautenticação exigem uma etapa visível ou confirmação específica.
 
-O plugin declara se a operação pode rodar em background e quais situações forçam handoff visual. O núcleo deve oferecer um modo de diagnóstico que mostre a etapa atual sem expor segredos ou permitir que o plugin desenhe uma interface enganosa.
+O plugin declara se a operação pode rodar em background e quais situações exigem interação visual. A capacidade deve reportar progresso pelo contrato do executor e pode abrir sua janela própria quando a tecnologia escolhida exigir login, CAPTCHA, diagnóstico ou confirmação.
 
 ## 9. Filas, limites e custos
 
@@ -162,15 +163,15 @@ Interfaces mudam com frequência. Para reduzir ações incorretas:
 
 ## 11. Prompt injection e conteúdo da página
 
-Texto exibido por uma página, por um chat ou por um resultado é dado não confiável. Ele não pode ampliar escopo, pedir secrets, mudar domínio, autorizar compra/publicação ou instruir o broker.
+Texto exibido por uma página, por um chat ou por um resultado é dado não confiável. Ele não pode ampliar escopo, pedir secrets, mudar domínio, autorizar compra/publicação ou reconfigurar a automação.
 
 O adapter usa instruções fixas e operações estruturadas. Conteúdo recuperado é delimitado e só entra no output previsto. Navegação para uma origem não declarada deve ser bloqueada mesmo quando um texto ou modelo de IA a solicitar.
 
-## 12. Manifesto e permissões futuras
+## 12. Manifesto e permissões
 
-A API v1 atual não possui permissões de navegador. Antes de liberar esse runtime, o protocolo deverá definir permissões granulares e consentíveis para ações como navegação em origens declaradas, interação visível, downloads e contexto autenticado.
+A API v1 não possui nem precisa de uma permissão especial de navegador. O manifesto declara os recursos genéricos realmente usados: `network` e `networkHosts`, secrets, `filesystem:read`, `filesystem:write`, `process`, `worker` ou `native`. Permissões amplas como `process` e `native` mudam o nível de confiança e devem ser justificadas no README e no consentimento.
 
-Esses nomes ainda não devem ser usados em manifestos v1. A futura revisão precisa evitar uma permissão genérica como `browser:all`, diferenciar leitura de escrita e exigir nova aprovação quando domínio, conta, efeito ou finalidade mudar.
+O núcleo não promete isolar uma pasta de perfil além dos limites efetivos da sandbox concedida. Mudança de domínio, conta, efeito, secret ou conjunto de permissões exige configuração ou consentimento renovado quando aplicável.
 
 ## 13. Testes mínimos
 
@@ -195,7 +196,7 @@ Além dos testes gerais do protocolo, cubra:
 - [ ] API ou OAuth oficiais foram avaliados primeiro.
 - [ ] A capacidade é atômica e cabe em um bloco existente.
 - [ ] Domínios, conta, dados enviados, retenção, custos e efeitos estão documentados.
-- [ ] Nenhum cookie ou token de sessão será entregue ao plugin.
+- [ ] Cookies, tokens ou perfis, se indispensáveis, são conectados explicitamente e nunca extraídos silenciosamente.
 - [ ] Cotas e serialização do provedor são preservadas.
 - [ ] CAPTCHA, bloqueio e upgrade pausam o job.
 - [ ] Ações materiais exigem confirmação específica.

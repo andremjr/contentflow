@@ -90,6 +90,18 @@ const inputSchema = z
       .default("text"),
     source: z.enum(["project", "previous_process", "previous_block", "channel_library", "static"]),
     sourceKey: z.string().max(200).optional(),
+    sourceProcessType: z
+      .enum([
+        "theme",
+        "title",
+        "thumbnail",
+        "script",
+        "narration",
+        "assets",
+        "editing",
+        "publishing",
+      ])
+      .optional(),
     blockId: z.string().optional(),
     collection: z.string().max(200).optional(),
     staticValue: z.string().max(10_000).optional(),
@@ -225,7 +237,10 @@ export function copyImportedBlocks(
         ...field,
         id: createId(`${processType}-record-field`),
       })),
-      blockId: input.blockId ? blockIds.get(input.blockId) : undefined,
+      blockId:
+        input.source === "previous_block" && input.blockId
+          ? blockIds.get(input.blockId)
+          : input.blockId,
     })),
     outputs: block.outputs?.map((output) => ({
       ...output,

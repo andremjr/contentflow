@@ -2,6 +2,8 @@
 
 Esta revisão registra o estado observado do ContentFlow OS e separa remoções seguras de código que apenas parece antigo. Durante a mesma rodada, a primeira sandbox executável para plugins comunitários foi implementada e testada; os limites e o hardening restante estão registrados abaixo.
 
+> Decisão posterior, consolidada na v0.2.0: o item histórico de broker de navegador foi substituído por automação gerenciada por cada plugin, usando permissões genéricas e autenticação conectada explicitamente pelo usuário. O núcleo não terá runtime de navegador próprio.
+
 ## Escopo verificado
 
 - estrutura de `src`, `server`, `plugins/bundled` e documentação;
@@ -85,7 +87,7 @@ Isso não equivale a uma VM. Em especial, conceder `process` ou `native` amplia 
 4. acrescentar proxy SSRF e perfis seguros para subprocessos;
 5. decompor `server/index.ts`, `method-builder.tsx` e `process-runner.tsx` sem mudar o domínio;
 6. substituir tradução por mutação do DOM por chaves explícitas;
-7. implementar o broker de navegador mediado sobre a sandbox existente.
+7. ampliar o hardening das permissões genéricas usadas por plugins de automação de navegador.
 
 ## Comandos de repetição
 

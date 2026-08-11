@@ -110,6 +110,7 @@ export type BlockInputBinding = {
   type: HumanFieldType;
   source: BlockInputSource;
   sourceKey?: string;
+  sourceProcessType?: UniversalProcess;
   blockId?: string;
   collection?: string;
   staticValue?: string;
@@ -227,6 +228,41 @@ export type StoredFile = {
   sha256?: string;
 };
 
+export type DeliveryStatus = "partial" | "completed" | "invalidated";
+
+export type DeliveryItemReference = {
+  itemId: string;
+  role?: string;
+};
+
+export type DeliveryItem = {
+  /** Identidade universal gerada pelo nÃºcleo para este item da entrega. */
+  id: string;
+  order: number;
+  value: RuntimeValue | StructuredRecord;
+  externalKey?: string;
+  references?: DeliveryItemReference[];
+};
+
+export type ProjectDelivery = {
+  /** Identidade universal da saÃ­da materializada de um bloco. */
+  id: string;
+  projectId: string;
+  channelId: string;
+  processType: UniversalProcess;
+  executionId: string;
+  blockId: string;
+  outputKey: string;
+  label: string;
+  type: HumanFieldType;
+  cardinality: "one" | "many";
+  attempt: number;
+  status: DeliveryStatus;
+  items: DeliveryItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ThumbnailLayoutBox = {
   id: string;
   label: string;
@@ -304,6 +340,8 @@ export type ProcessExecution = {
   processType: UniversalProcess;
   methodSnapshot: ProcessMethod;
   blocks: BlockExecution[];
+  /** Registro derivado e persistido de todas as entregas produzidas pela execuÃ§Ã£o. */
+  deliveries?: ProjectDelivery[];
   status: ProcessExecutionStatus;
   outputStatus: "pending" | "awaiting_human" | "completed";
   output?: ProcessOutput;

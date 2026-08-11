@@ -60,7 +60,7 @@ Um selo `official` ou `verified` melhora a confiança de origem, mas não remove
 | Efeito externo indevido       | upload publica vídeo sem confirmação                   | declaração de efeito e consentimento just-in-time                   |
 | Vazamento em logs             | token ou prompt aparece em erro                        | redaction, limites e logs estruturados                              |
 | Confusão entre execuções      | cache global mistura canais                            | staging e contexto exclusivos por invocação                         |
-| Sequestro de sessão           | plugin copia cookie ou token de um navegador           | broker autenticado, handles opacos e acesso negado ao perfil        |
+| Sequestro de sessão           | plugin copia cookie ou token de perfil não autorizado  | conexão explícita, cofre, pasta escolhida e proibição de varredura   |
 | Evasão de limites             | rotação de contas ou endpoints amplia créditos         | identidade fixa, quotas, auditoria e falha fechada                  |
 | Automação de UI incorreta     | mudança visual faz o plugin clicar em publicar         | estado validado, seletores acessíveis e confirmação just-in-time    |
 
@@ -172,7 +172,7 @@ Outputs de IA são validados estruturalmente e, quando houver risco de ação ex
 - Estado incerto após timeout não é repetido automaticamente; primeiro ocorre reconciliação pelo identificador externo.
 - Cancelamento informa efeitos que não puderam ser revertidos.
 
-Automação de navegador obedece também a [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md). O executor não entrega cookies, tokens, histórico, armazenamento de sessão ou perfil ao código do plugin. CAPTCHA, anti-bot, reautenticação, cota esgotada e upgrade necessário pausam a execução; não autorizam evasão, rotação de conta ou troca de endpoint.
+Automação de navegador obedece também a [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md). O executor não extrai nem entrega automaticamente cookies, tokens, histórico, armazenamento de sessão ou perfis. O usuário pode conectar explicitamente um secret ou escolher uma pasta para uma capacidade que declare as permissões avançadas necessárias; nesse caso, o plugin responde pelo runtime e opera dentro do consentimento concedido. CAPTCHA, anti-bot, reautenticação, cota esgotada e upgrade necessário pausam a execução; não autorizam evasão, rotação de conta ou troca de endpoint.
 
 ## 11. Logs, auditoria e privacidade
 

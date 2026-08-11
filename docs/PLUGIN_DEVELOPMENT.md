@@ -376,7 +376,7 @@ Teste no mínimo:
 
 Fixtures de requisição e resposta podem seguir [`examples/plugin-request.example.json`](examples/plugin-request.example.json).
 
-Um plugin pode declarar uma chave, token ou token de sessão em `secretKeys` e pedir que o próprio usuário a conecte no cofre. Ele também pode pedir `network`, `filesystem:*` ou `process` quando sua função realmente exigir. A sandbox não extrai credenciais do navegador nem concede acesso silencioso a perfis: descoberta/captura mediada de sessão e automação de uma janela autenticada ainda dependem do broker descrito em [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md). Até esse broker existir, qualquer automação direta baseada em `process` é uma permissão avançada, executa sob responsabilidade explícita do usuário e deve documentar com clareza os dados, provedores e efeitos envolvidos.
+Um plugin pode declarar uma chave, token ou token de sessão em `secretKeys` e pedir que o próprio usuário a conecte no cofre. Ele também pode pedir `network`, `filesystem:*`, `process` ou `native` quando sua função realmente exigir. A sandbox não extrai credenciais do navegador nem concede acesso silencioso a perfis. Cada plugin define seu navegador e sua autenticação; pode abrir login próprio ou pedir que o usuário escolha uma pasta de perfil. Automação direta baseada em `process` ou `native` é uma permissão avançada, executa sob responsabilidade explícita do usuário e deve documentar com clareza os dados, provedores, perfis e efeitos envolvidos. Veja [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md).
 
 ## 13. Checklist de publicação
 

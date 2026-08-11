@@ -27,6 +27,12 @@ import {
 } from "@/lib/human-workflow";
 import { getPresentationRestrictionIssue } from "@/lib/presentation";
 import { resolveBlockInputs } from "@/lib/runtime-contract";
+import {
+  invalidateBlockDeliveries,
+  normalizeExecutionDeliveries,
+  recordBlockDeliveries,
+  recordProcessOutputDelivery,
+} from "@/lib/deliveries";
 
 export type YouTubeChannelProfile = Pick<
   Channel,
@@ -94,12 +100,12 @@ function normalizeChannel(channel: Channel): Channel {
 }
 
 function normalizeExecution(execution: ProcessExecution): ProcessExecution {
-  return {
+  return normalizeExecutionDeliveries({
     ...execution,
     blocks: execution.blocks.map((block) => ({ attempt: 1, ...block })),
     outputStatus:
       execution.outputStatus ?? (execution.status === "completed" ? "completed" : "pending"),
-  };
+  });
 }
 
 async function hydrate() {
@@ -644,6 +650,7 @@ function finalizeOrRequestOutput(execution: ProcessExecution) {
   const output = deriveProcessOutput(execution);
   if (output) {
     execution.output = output;
+    recordProcessOutputDelivery(execution, output.values, output.createdAt);
     execution.outputStatus = "completed";
     execution.status = "completed";
     if (project) completeProjectStage(project, execution.processType);
@@ -827,6 +834,14 @@ function retryValidatedBlock(
       blockExecution.status = "pending";
     }
   }
+  invalidateBlockDeliveries(
+    execution,
+    [
+      ...execution.methodSnapshot.blocks.slice(targetIndex).map((item) => item.id),
+      "__process_output__",
+    ],
+    now,
+  );
 
   execution.output = undefined;
   execution.outputStatus = "pending";
@@ -910,6 +925,7 @@ export function completeHumanBlock(
   );
   if (rejected) {
     blockExecution.values = structuredClone(values);
+    recordBlockDeliveries(execution, block, blockExecution.values, "completed");
     if (block.type === "VALIDAR" && block.validation?.onReject === "retry_target") {
       const retry = retryValidatedBlock(execution, block, values);
       if (!retry.ok) return { ok: false, missing: [retry.message] };
@@ -923,6 +939,7 @@ export function completeHumanBlock(
   blockExecution.values = structuredClone(values);
   blockExecution.status = "completed";
   blockExecution.completedAt = now;
+  recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
   const updated = activateNextBlock(execution, execution.blocks.indexOf(blockExecution));
   return { ok: true, completedProcess: updated.status === "completed" };
 }
@@ -945,6 +962,7 @@ export function completeProcessOutput(
     values: structuredClone(values),
     createdAt: new Date().toISOString(),
   };
+  recordProcessOutputDelivery(execution, execution.output.values, execution.output.createdAt);
   execution.outputStatus = "completed";
   execution.status = "completed";
   const project = db.projects.find((item) => item.id === execution.projectId);
@@ -1018,6 +1036,7 @@ export function retryBlockExecution(executionId: string, blockId: string) {
   const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
   if (!execution || !blockExecution || !block || blockExecution.status !== "failed") return false;
   blockExecution.attempt = (blockExecution.attempt ?? 1) + 1;
+  invalidateBlockDeliveries(execution, [blockId]);
   blockExecution.error = undefined;
   blockExecution.status = block.operator === "Humano" ? "awaiting_human" : "blocked_executor";
   execution.error = undefined;

@@ -6,11 +6,13 @@ import {
   type ChannelLibraryItem,
   type HumanFieldType,
   type ProcessExecution,
+  type ProjectDelivery,
   type Project,
   type RuntimeValue,
   type StrategicCollection,
 } from "@/lib/domain";
 import { createProcessOutputFields, isEmptyRuntimeValue } from "@/lib/human-workflow";
+import { normalizeExecutionDeliveries } from "@/lib/deliveries";
 
 type RuntimeCandidate = {
   id: string;
@@ -21,6 +23,8 @@ type RuntimeCandidate = {
   sourceLabel: string;
   sourceBlockId?: string;
   sourceProcessType?: ProcessExecution["processType"];
+  deliveryId?: string;
+  deliveryItemIds?: string[];
 };
 
 export type ResolvedBlockInput = {
@@ -30,6 +34,8 @@ export type ResolvedBlockInput = {
   sourceLabel?: string;
   sourceBlockId?: string;
   sourceProcessType?: ProcessExecution["processType"];
+  sourceDeliveryId?: string;
+  sourceDeliveryItemIds?: string[];
 };
 
 function areRuntimeTypesCompatible(output: HumanFieldType, input: HumanFieldType) {
@@ -87,6 +93,8 @@ export function resolveBlockInputs({
       sourceLabel: selected.sourceLabel,
       sourceBlockId: selected.sourceBlockId,
       sourceProcessType: selected.sourceProcessType,
+      sourceDeliveryId: selected.deliveryId,
+      sourceDeliveryItemIds: selected.deliveryItemIds,
     };
   });
 }
@@ -105,6 +113,7 @@ function collectCandidates({
   libraryItems: ChannelLibraryItem[];
 }) {
   const candidates: RuntimeCandidate[] = [];
+  const normalizedCurrentExecution = normalizeExecutionDeliveries(execution);
   const blockIndex = execution.methodSnapshot.blocks.findIndex((item) => item.id === block.id);
   const completedBlocks = execution.blocks
     .slice(0, blockIndex)
@@ -142,6 +151,11 @@ function collectCandidates({
     for (const output of definition.outputs ?? []) {
       const value = completed.values[output.key];
       if (isEmptyRuntimeValue(value)) continue;
+      const delivery = activeDeliveryFor(
+        normalizedCurrentExecution.deliveries,
+        completed.blockId,
+        output.key,
+      );
       candidates.push({
         id: `${completed.blockId}:${output.key}`,
         label: output.label,
@@ -150,6 +164,8 @@ function collectCandidates({
         value,
         sourceLabel: definition.name ?? definition.type,
         sourceBlockId: completed.blockId,
+        deliveryId: delivery?.id,
+        deliveryItemIds: delivery?.items.map((item) => item.id),
       });
     }
   }
@@ -165,10 +181,39 @@ function collectCandidates({
       (left, right) =>
         PROCESS_ORDER.indexOf(right.processType) - PROCESS_ORDER.indexOf(left.processType),
     );
-  for (const processExecution of completedProcesses) {
+  for (const rawProcessExecution of completedProcesses) {
+    const processExecution = normalizeExecutionDeliveries(rawProcessExecution);
+    const processBlocks = new Map(
+      processExecution.methodSnapshot.blocks.map((item) => [item.id, item] as const),
+    );
+    for (const delivery of (processExecution.deliveries ?? []).filter(
+      (item) => item.status !== "invalidated",
+    )) {
+      const sourceBlock = processBlocks.get(delivery.blockId);
+      candidates.push({
+        id: delivery.id,
+        label: delivery.label,
+        key: delivery.outputKey,
+        type: delivery.type,
+        value:
+          delivery.cardinality === "many"
+            ? (delivery.items.map((item) => item.value) as RuntimeValue)
+            : ((delivery.items[0]?.value ?? null) as RuntimeValue),
+        sourceLabel: `${PROCESS_META[processExecution.processType].label} / ${sourceBlock?.name ?? sourceBlock?.type ?? "Entrega"}`,
+        sourceBlockId: delivery.blockId,
+        sourceProcessType: processExecution.processType,
+        deliveryId: delivery.id,
+        deliveryItemIds: delivery.items.map((item) => item.id),
+      });
+    }
     for (const output of createProcessOutputFields(processExecution.processType)) {
       const value = processExecution.output?.values[output.key];
       if (value === undefined || isEmptyRuntimeValue(value)) continue;
+      const delivery = activeDeliveryFor(
+        processExecution.deliveries,
+        "__process_output__",
+        output.key,
+      );
       candidates.push({
         id: `process:${processExecution.processType}:${output.key}`,
         label: output.label,
@@ -176,7 +221,10 @@ function collectCandidates({
         type: output.type,
         value,
         sourceLabel: `Processo ${PROCESS_META[processExecution.processType].label}`,
+        sourceBlockId: "__process_output__",
         sourceProcessType: processExecution.processType,
+        deliveryId: delivery?.id,
+        deliveryItemIds: delivery?.items.map((item) => item.id),
       });
     }
   }
@@ -217,6 +265,8 @@ function resolveExplicitInput(
             value: candidate.value,
             sourceLabel: candidate.sourceLabel,
             sourceBlockId: candidate.sourceBlockId,
+            sourceDeliveryId: candidate.deliveryId,
+            sourceDeliveryItemIds: candidate.deliveryItemIds,
           },
         }
       : { result: { resolved: false } };
@@ -225,6 +275,8 @@ function resolveExplicitInput(
     const candidate = candidates.find(
       (item) =>
         Boolean(item.sourceProcessType) &&
+        (!input.sourceProcessType || item.sourceProcessType === input.sourceProcessType) &&
+        (!input.blockId || item.sourceBlockId === input.blockId) &&
         item.key === input.sourceKey &&
         areRuntimeTypesCompatible(item.type, input.type),
     );
@@ -236,11 +288,29 @@ function resolveExplicitInput(
             value: candidate.value,
             sourceLabel: candidate.sourceLabel,
             sourceProcessType: candidate.sourceProcessType,
+            sourceBlockId: candidate.sourceBlockId,
+            sourceDeliveryId: candidate.deliveryId,
+            sourceDeliveryItemIds: candidate.deliveryItemIds,
           },
         }
       : { result: { resolved: false } };
   }
   return undefined;
+}
+
+function activeDeliveryFor(
+  deliveries: ProjectDelivery[] | undefined,
+  blockId: string,
+  outputKey: string,
+) {
+  return [...(deliveries ?? [])]
+    .reverse()
+    .find(
+      (delivery) =>
+        delivery.blockId === blockId &&
+        delivery.outputKey === outputKey &&
+        delivery.status !== "invalidated",
+    );
 }
 
 function labelScore(inputLabel: string, outputLabel: string) {

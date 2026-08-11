@@ -77,6 +77,7 @@ import {
   type FieldPresentation,
   type HumanFieldType,
   type PresentationRendererId,
+  type ProcessMethod,
   type RecordFieldDefinition,
   type RecordFieldType,
   type StrategicCollection,
@@ -775,6 +776,7 @@ export function MethodBuilder({
               channelId={channelId}
               collections={collections}
               processType={processType}
+              channelMethods={channel.methods}
               plugins={availablePlugins}
               openAIModels={openAIModels}
               anthropicModels={anthropicModels}
@@ -962,6 +964,7 @@ function BlockEditor({
   channelId,
   collections,
   processType,
+  channelMethods,
   plugins,
   openAIModels,
   anthropicModels,
@@ -975,6 +978,7 @@ function BlockEditor({
   channelId: string;
   collections: StrategicCollection[];
   processType: UniversalProcess;
+  channelMethods: Record<UniversalProcess, ProcessMethod>;
   plugins: DiscoveredPlugin[];
   openAIModels: Array<{ id: string; name: string }>;
   anthropicModels: Array<{ id: string; name: string }>;
@@ -1131,6 +1135,7 @@ function BlockEditor({
           methodBlocks={methodBlocks}
           blockIndex={index}
           processType={processType}
+          channelMethods={channelMethods}
           onChange={onChange}
         />
       )}
@@ -1551,12 +1556,14 @@ function DataContractEditor({
   methodBlocks,
   blockIndex,
   processType,
+  channelMethods,
   onChange,
 }: {
   block: ActionBlock;
   methodBlocks: ActionBlock[];
   blockIndex: number;
   processType: UniversalProcess;
+  channelMethods: Record<UniversalProcess, ProcessMethod>;
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const inputs = block.inputs ?? [];
@@ -1602,6 +1609,7 @@ function DataContractEditor({
             input={input}
             availableBlocks={methodBlocks.slice(0, blockIndex)}
             processType={processType}
+            channelMethods={channelMethods}
             onChange={(patch) =>
               onChange({
                 inputs: inputs.map((item) => (item.id === input.id ? { ...item, ...patch } : item)),
@@ -1670,17 +1678,52 @@ function InputBindingEditor({
   input,
   availableBlocks,
   processType,
+  channelMethods,
   onChange,
   onRemove,
 }: {
   input: BlockInputBinding;
   availableBlocks: ActionBlock[];
   processType: UniversalProcess;
+  channelMethods: Record<UniversalProcess, ProcessMethod>;
   onChange: (patch: Partial<BlockInputBinding>) => void;
   onRemove: () => void;
 }) {
   const sourceBlock = availableBlocks.find((block) => block.id === input.blockId);
   const previousProcesses = PROCESS_ORDER.slice(0, PROCESS_ORDER.indexOf(processType));
+  const previousDeliverySources = previousProcesses.flatMap((sourceProcessType) => {
+    const method = channelMethods[sourceProcessType];
+    const blockOutputs = (method?.blocks ?? []).flatMap((sourceBlock) =>
+      (sourceBlock.outputs ?? []).map((output) => ({
+        id: `${sourceProcessType}::${sourceBlock.id}::${output.key}`,
+        processType: sourceProcessType,
+        blockId: sourceBlock.id,
+        blockLabel: sourceBlock.name ?? sourceBlock.type,
+        output,
+      })),
+    );
+    const officialOutput = createProcessOutputFields(sourceProcessType)[0];
+    return [
+      {
+        id: `${sourceProcessType}::process::${officialOutput.key}`,
+        processType: sourceProcessType,
+        blockId: "__process_output__",
+        blockLabel: "Resultado oficial",
+        output: officialOutput,
+      },
+      ...blockOutputs,
+    ];
+  });
+  const selectedPreviousDelivery =
+    previousDeliverySources.find(
+      (source) =>
+        source.processType === input.sourceProcessType &&
+        source.blockId === input.blockId &&
+        source.output.key === input.sourceKey,
+    ) ??
+    previousDeliverySources.find(
+      (source) => !input.sourceProcessType && source.output.key === input.sourceKey,
+    );
 
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
@@ -1740,14 +1783,13 @@ function InputBindingEditor({
             value={input.source}
             onValueChange={(source) => {
               if (source === "previous_process") {
-                const latestProcess = previousProcesses.at(-1);
-                const output = latestProcess
-                  ? createProcessOutputFields(latestProcess)[0]
-                  : undefined;
+                const selected = previousDeliverySources.at(-1);
+                const output = selected?.output;
                 onChange({
                   source: "previous_process",
                   sourceKey: output?.key,
-                  blockId: undefined,
+                  sourceProcessType: selected?.processType,
+                  blockId: selected?.blockId,
                   staticValue: undefined,
                   type: output?.type ?? input.type,
                   presentation: output?.presentation ?? input.presentation,
@@ -1758,6 +1800,7 @@ function InputBindingEditor({
               onChange({
                 source: source as BlockInputBinding["source"],
                 sourceKey: source === "project" ? "title" : undefined,
+                sourceProcessType: undefined,
                 blockId: undefined,
                 staticValue: undefined,
               });
@@ -1768,8 +1811,8 @@ function InputBindingEditor({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="previous_block">Bloco anterior</SelectItem>
-              <SelectItem value="previous_process" disabled={!previousProcesses.length}>
-                Processo anterior
+              <SelectItem value="previous_process" disabled={!previousDeliverySources.length}>
+                Entrega anterior
               </SelectItem>
               <SelectItem value="project">Dados do projeto</SelectItem>
               <SelectItem value="static">Valor fixo</SelectItem>
@@ -1806,15 +1849,18 @@ function InputBindingEditor({
 
         {input.source === "previous_process" && (
           <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground">Resultado do processo</Label>
+            <Label className="text-[10px] text-muted-foreground">Processo, bloco e entrega</Label>
             <Select
-              value={input.sourceKey}
-              onValueChange={(sourceKey) => {
-                const output = previousProcesses
-                  .flatMap((process) => createProcessOutputFields(process))
-                  .find((candidate) => candidate.key === sourceKey);
+              value={selectedPreviousDelivery?.id}
+              onValueChange={(sourceId) => {
+                const selected = previousDeliverySources.find(
+                  (candidate) => candidate.id === sourceId,
+                );
+                const output = selected?.output;
                 onChange({
-                  sourceKey,
+                  sourceProcessType: selected?.processType,
+                  blockId: selected?.blockId,
+                  sourceKey: output?.key,
                   type: output?.type ?? input.type,
                   presentation: output?.presentation ?? input.presentation,
                   recordFields: output?.recordFields,
@@ -1825,14 +1871,12 @@ function InputBindingEditor({
                 <SelectValue placeholder="Selecione o resultado" />
               </SelectTrigger>
               <SelectContent>
-                {previousProcesses.map((process) => {
-                  const output = createProcessOutputFields(process)[0];
-                  return (
-                    <SelectItem key={process} value={output.key}>
-                      {PROCESS_META[process].label}: {output.label}
-                    </SelectItem>
-                  );
-                })}
+                {previousDeliverySources.map((source) => (
+                  <SelectItem key={source.id} value={source.id}>
+                    {PROCESS_META[source.processType].label} / {source.blockLabel} /{" "}
+                    {source.output.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

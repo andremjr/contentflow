@@ -190,7 +190,11 @@ Além dos campos simples, uma coleção pode usar o formato especializado `Layou
 
 ## 11. Resultados Intermediários e Outputs Universais
 
-Cada bloco pode produzir resultados intermediários tipados. Eles pertencem exclusivamente à execução do Projeto, são persistidos no snapshot da execução e ficam disponíveis como contexto para blocos posteriores.
+Cada saída concluída de um bloco torna-se uma **entrega universal do Projeto**. A entrega pertence à execução, conserva processo, bloco, chave de saída, tentativa, tipo, ordem e estado, e recebe um ID técnico estável. Valores escalares geram um item; listas, registros e coleções de arquivos geram um item identificado para cada elemento. Assim, três opções de título possuem uma entrega e três IDs de item distintos.
+
+O Método não grava IDs de execução. No construtor, o usuário escolhe estruturalmente `Processo / Bloco / Entrega`; o motor resolve essa referência para a entrega e os itens reais quando o Projeto é executado. Plugins recebem os valores tipados junto com os IDs de proveniência, podendo sincronizar SRT, cenas, áudio, assets e cortes sem depender de posição visual ou nome de arquivo.
+
+As entregas são persistidas no snapshot da execução, sem criar uma segunda base de dados paralela. Uma nova tentativa invalida as entregas afetadas e cria IDs correspondentes à nova tentativa, preservando o histórico. O painel **Produtos do projeto** mostra entregas e subentregas ativas de todos os Processos Universais. Relações especializadas, como um asset selecionado para uma cena, são referências genéricas entre IDs e permanecem configuradas pelo Método ou plugin, nunca codificadas como uma regra fixa do núcleo.
 
 Separadamente, cada Processo Universal possui um output oficial, independente do método e do executor utilizado:
 
@@ -205,13 +209,13 @@ Separadamente, cada Processo Universal possui um output oficial, independente do
 
 Quando um bloco `CRIAR` entrega o campo universal esperado, o motor promove esse valor automaticamente a output do processo após o término e a eventual validação. Se nenhum bloco entregar um valor compatível, o processo pausa para que o operador humano registre o resultado final.
 
-Os outputs concluídos dos processos anteriores são injetados automaticamente como contexto nos processos seguintes.
+Os outputs concluídos dos processos anteriores e as demais entregas compatíveis ficam disponíveis como contexto nos processos seguintes. O output oficial de cada processo também é registrado como entrega universal, com a mesma identidade e rastreabilidade.
 
 ---
 
 ## 12. Protocolo de Plugins
 
-O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), os requisitos futuros para automação autorizada de interfaces web em [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Plugins oficiais são confiáveis pelo núcleo; plugins locais e comunitários exigem consentimento local e executam na sandbox de permissões em processo separado.
+O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), os requisitos para plugins que automatizam interfaces web em [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Plugins oficiais são confiáveis pelo núcleo; plugins locais e comunitários exigem consentimento local e executam na sandbox de permissões em processo separado.
 
 A arquitetura não possui aprovação central: qualquer pessoa pode criar e compartilhar um plugin, inclusive por arquivo ou repositório, e qualquer usuário pode instalá-lo e autorizá-lo localmente. O núcleo aplica validações automáticas e pede consentimento para permissões; revisão humana do mantenedor existe apenas para selo `official`/`verified` ou publicação em catálogo opcional.
 
