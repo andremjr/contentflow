@@ -224,6 +224,7 @@ export type StoredFile = {
   mimeType: string;
   size: number;
   url: string;
+  sha256?: string;
 };
 
 export type ThumbnailLayoutBox = {

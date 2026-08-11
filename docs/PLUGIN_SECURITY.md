@@ -2,7 +2,7 @@
 
 Este documento define o modelo de ameaças e os controles mínimos para executar plugins no ContentFlow OS. Ele complementa o contrato normativo de [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md).
 
-> Estado atual: plugins comunitários e privados passam por validação automática e consentimento local, sem revisão ou aprovação manual do mantenedor. Cada invocação roda em processo separado sob o Permission Model do Node 26, com ambiente mínimo, timeout, limite de resposta, diretórios controlados e filesystem, rede, subprocessos, workers e módulos nativos negados por padrão. Artifacts locais são validados e importados pelo núcleo.
+> Estado atual: plugins comunitários e privados passam por validação automática e consentimento local, sem revisão ou aprovação manual do mantenedor. Cada invocação roda em processo separado sob o Permission Model do Node 26, com ambiente mínimo, timeout, limite de resposta, diretórios controlados e filesystem, rede, subprocessos, workers e módulos nativos negados por padrão. Artifacts locais e remotos são validados e importados pelo núcleo.
 
 > Limite importante: esta é a sandbox de capacidades v1, não uma máquina virtual. Conceder `process` permite que o plugin inicie programas com a autoridade normal do usuário e esses programas não herdam automaticamente a sandbox do Node. Conceder `native` também amplia fortemente a confiança. Essas permissões devem aparecer como acesso avançado na interface. Quotas fortes de CPU/memória, proxy SSRF, assinatura/hash de pacotes, instalação atômica, cancelamento persistente e allowlist de executáveis continuam como hardening planejado.
 
@@ -100,7 +100,9 @@ Containers, sandboxes de sistema operacional ou processos restritos podem implem
 
 ### Implementação v1
 
-O executor comunitário atual usa `node --permission`. O pacote e o worker são somente leitura; entradas são resolvidas pelo serviço controlado; a escrita fica limitada à pasta exclusiva da invocação; e a rede só é liberada com `network`. O pacote é rejeitado se contiver symlinks e todo artifact passa por `realpath` antes de ser copiado para o armazenamento do ContentFlow OS. A resposta e os streams do processo possuem limites, e o processo é encerrado no timeout configurado, até o máximo de 24 horas.
+O executor comunitário atual usa `node --permission`. O pacote e o worker são somente leitura; entradas são resolvidas pelo serviço controlado; a escrita fica limitada à pasta exclusiva da invocação; e a rede só é liberada com `network`. O pacote é rejeitado se contiver symlinks e todo artifact local passa por `realpath` antes de ser copiado para o armazenamento do ContentFlow OS. Artifacts HTTPS são baixados pelo núcleo com proteção SSRF, DNS fixado, redirects revalidados, streaming, limite, timeout e SHA-256. A resposta e os streams do processo possuem limites, e o processo é encerrado no timeout configurado, até o máximo de 24 horas.
+
+O manifesto pode declarar `networkHosts`. Essa lista é mostrada e renovada no consentimento, além de ser obrigatória para o downloader do núcleo quando presente. Entretanto, o `--allow-net` do Node 26 é binário e não impõe hosts ao código do plugin. Um plugin comunitário com `network` ainda deve ser tratado como capaz de abrir conexões para qualquer destino público; a ausência de `networkHosts` recebe aviso reforçado.
 
 `process`, `worker` e `native` são permissões deliberadamente amplas para plugins como renderizadores e ferramentas locais. Elas preservam a abertura do sistema, mas mudam o nível de confiança: ao aceitá-las, o usuário está autorizando código capaz de ultrapassar parte do isolamento básico. O próximo nível de proteção deve acrescentar perfis/allowlists por executável e sandbox de sistema operacional para esses casos.
 
@@ -145,6 +147,8 @@ Entradas e saídas são verificadas por caminho canônico, tamanho e tipo real. 
 - tratar metadados como não confiáveis e remover campos sensíveis quando apropriado.
 
 URLs remotas de artifacts passam pelo mesmo downloader protegido contra SSRF. O plugin nunca decide sozinho o destino definitivo.
+
+O downloader resolve todos os registros antes de conectar e rejeita o host inteiro se qualquer endereço for não público. A conexão HTTPS usa diretamente um IP validado, mantendo o hostname original em SNI/Host, para impedir uma segunda resolução suscetível a DNS rebinding. Cada redirect repete URL, host e DNS. Downloads usam arquivo parcial exclusivo, hash incremental, promoção atômica e limpeza em falha. MIME ainda é validado pela declaração e pelo cabeçalho HTTP; inspeção profunda de magic bytes, codecs e malware permanece hardening futuro.
 
 ## 9. IA, conteúdo externo e prompt injection
 
@@ -199,8 +203,9 @@ Alertas não apagam outputs nem criam aprovação central. O núcleo deve mostra
 - [x] Staging/saída isolados, rejeição de symlinks e proteção de caminhos de artifacts.
 - [x] Cofre de secrets declarados.
 - [x] Limites de tempo, resposta e artifact, com smoke test automatizado de isolamento.
+- [x] Downloader HTTPS de artifacts com SSRF/DNS rebinding, redirects, streaming, timeout, limite e SHA-256.
 - [ ] Download assinado, hash, versões imutáveis e instalação atômica.
-- [ ] Proxy de rede com proteção SSRF, redirects e allowlist de domínios.
+- [ ] Proxy/SDK obrigatório para impor `networkHosts` a toda conexão aberta pelo processo do plugin.
 - [ ] Allowlist de subprocessos e argumentos sem shell.
 - [ ] Quotas fortes de CPU, memória, árvore de processos, disco, rede e custo.
 - [ ] Cancelamento persistente, encerramento comprovado da árvore e recuperação após reinício.

@@ -57,6 +57,18 @@
         "enum": ["network", "filesystem:read", "filesystem:write", "process", "worker", "native"]
       }
     },
+    "networkHosts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "uniqueItems": true,
+      "description": "Hosts de rede pretendidos, como api.example.com ou *.cdn.example.com. O downloader de artifacts do núcleo impõe esta lista.",
+      "items": {
+        "type": "string",
+        "maxLength": 255,
+        "pattern": "^(?:\\*\\.)?(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)*[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$"
+      }
+    },
     "secretKeys": {
       "type": "array",
       "uniqueItems": true,
@@ -82,6 +94,16 @@
       "items": { "$ref": "#/$defs/capability" }
     }
   },
+  "allOf": [
+    {
+      "if": { "required": ["networkHosts"] },
+      "then": {
+        "properties": {
+          "permissions": { "contains": { "const": "network" } }
+        }
+      }
+    }
+  ],
   "$defs": {
     "semver": {
       "type": "string",

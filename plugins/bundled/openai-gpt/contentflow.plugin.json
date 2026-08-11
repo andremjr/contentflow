@@ -16,6 +16,7 @@
   },
   "entrypoint": "handler.ts",
   "permissions": ["network"],
+  "networkHosts": ["api.openai.com"],
   "secretKeys": ["OPENAI_API_KEY"],
   "deliveryTypes": ["text"],
   "capabilities": [

@@ -16,6 +16,7 @@
   },
   "entrypoint": "handler.ts",
   "permissions": ["network"],
+  "networkHosts": ["api.anthropic.com"],
   "secretKeys": ["ANTHROPIC_API_KEY"],
   "deliveryTypes": ["text"],
   "capabilities": [

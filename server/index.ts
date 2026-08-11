@@ -38,6 +38,7 @@ import {
   getRegisteredPlugin,
   initializePluginRunner,
 } from "./plugin-runner";
+import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
 import {
   connectOpenAI,
   disconnectOpenAI,
@@ -186,6 +187,7 @@ database.exec(`
     plugin_id TEXT PRIMARY KEY,
     version TEXT NOT NULL,
     permissions TEXT NOT NULL,
+    network_hosts TEXT NOT NULL DEFAULT '[]',
     enabled INTEGER NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -195,6 +197,13 @@ database.exec(`
     updated_at TEXT NOT NULL
   );
 `);
+
+const pluginConsentColumns = database.prepare("PRAGMA table_info(plugin_consents)").all() as Array<{
+  name: string;
+}>;
+if (!pluginConsentColumns.some((column) => column.name === "network_hosts")) {
+  database.exec("ALTER TABLE plugin_consents ADD COLUMN network_hosts TEXT NOT NULL DEFAULT '[]'");
+}
 
 type AppPreferences = {
   theme: "light" | "dark";
@@ -240,17 +249,22 @@ function readPayload<T>(table: string, id: string): T | undefined {
 type PluginConsent = {
   version: string;
   permissions: string[];
+  networkHosts: string[];
   enabled: boolean;
 };
 
 function readPluginConsent(pluginId: string): PluginConsent | undefined {
   const row = database
-    .prepare("SELECT version, permissions, enabled FROM plugin_consents WHERE plugin_id = ?")
-    .get(pluginId) as { version: string; permissions: string; enabled: number } | undefined;
+    .prepare(
+      "SELECT version, permissions, network_hosts, enabled FROM plugin_consents WHERE plugin_id = ?",
+    )
+    .get(pluginId) as
+    { version: string; permissions: string; network_hosts: string; enabled: number } | undefined;
   if (!row) return undefined;
   return {
     version: row.version,
     permissions: JSON.parse(row.permissions) as string[],
+    networkHosts: JSON.parse(row.network_hosts) as string[],
     enabled: row.enabled === 1,
   };
 }
@@ -258,7 +272,7 @@ function readPluginConsent(pluginId: string): PluginConsent | undefined {
 function pluginConsentIsCurrent(plugin: {
   id: string;
   source: string;
-  manifest: { version: string; permissions: string[] };
+  manifest: { version: string; permissions: string[]; networkHosts?: string[] };
 }) {
   if (plugin.source === "bundled") return true;
   if (!communitySandboxAvailable) return false;
@@ -266,7 +280,8 @@ function pluginConsentIsCurrent(plugin: {
   return (
     consent?.enabled === true &&
     consent.version === plugin.manifest.version &&
-    JSON.stringify(consent.permissions) === JSON.stringify(plugin.manifest.permissions)
+    JSON.stringify(consent.permissions) === JSON.stringify(plugin.manifest.permissions) &&
+    JSON.stringify(consent.networkHosts) === JSON.stringify(plugin.manifest.networkHosts ?? [])
   );
 }
 
@@ -473,6 +488,22 @@ function isPluginManifest(manifest: Record<string, unknown>) {
   const manifestPermissions = isUniqueStringArray(manifest.permissions, permissions)
     ? manifest.permissions
     : [];
+  let networkHostsAreValid = manifest.networkHosts === undefined;
+  if (
+    Array.isArray(manifest.networkHosts) &&
+    manifest.networkHosts.length <= 100 &&
+    manifest.networkHosts.every((host) => typeof host === "string")
+  ) {
+    try {
+      const normalizedHosts = manifest.networkHosts.map(normalizeNetworkHostPattern);
+      networkHostsAreValid =
+        manifestPermissions.includes("network") &&
+        normalizedHosts.length > 0 &&
+        new Set(normalizedHosts).size === normalizedHosts.length;
+    } catch {
+      networkHostsAreValid = false;
+    }
+  }
 
   return Boolean(
     manifest.apiVersion === "1" &&
@@ -488,6 +519,7 @@ function isPluginManifest(manifest: Record<string, unknown>) {
     !path.isAbsolute(manifest.entrypoint) &&
     !manifest.entrypoint.includes("..") &&
     isUniqueStringArray(manifest.permissions, permissions) &&
+    networkHostsAreValid &&
     (manifest.secretKeys === undefined || isUniqueStringArray(manifest.secretKeys)) &&
     runtime?.kind === "node" &&
     runtime.module === "esm" &&
@@ -997,11 +1029,12 @@ app.put("/api/plugins/:pluginId/consent", (request, response) => {
   const enabled = request.body?.enabled === true;
   database
     .prepare(
-      `INSERT INTO plugin_consents (plugin_id, version, permissions, enabled, updated_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO plugin_consents (plugin_id, version, permissions, network_hosts, enabled, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(plugin_id) DO UPDATE SET
          version = excluded.version,
          permissions = excluded.permissions,
+         network_hosts = excluded.network_hosts,
          enabled = excluded.enabled,
          updated_at = excluded.updated_at`,
     )
@@ -1009,6 +1042,7 @@ app.put("/api/plugins/:pluginId/consent", (request, response) => {
       plugin.id,
       plugin.manifest.version,
       JSON.stringify(plugin.manifest.permissions),
+      JSON.stringify(plugin.manifest.networkHosts ?? []),
       enabled ? 1 : 0,
       new Date().toISOString(),
     );

@@ -347,6 +347,10 @@ Uma permissão declarada não significa acesso irrestrito. O executor ainda apli
 
 Instalação e atualização exibem qualquer aumento de permissões e exigem novo consentimento.
 
+Plugins com `network` podem declarar `networkHosts`, com hosts exatos (`api.example.com`) ou curingas de subdomínio (`*.cdn.example.com`). A lista é opcional para preservar plugins v1 existentes. Quando presente, ela integra o snapshot de consentimento e é aplicada pelo núcleo a downloads de artifacts; redirects precisam continuar dentro da lista. Quando ausente, a tela de consentimento alerta que o plugin comunitário pediu rede irrestrita.
+
+O Permission Model do Node 26 oferece apenas `--allow-net` como chave binária, sem allowlist por host. Portanto, `networkHosts` não restringe tecnicamente sockets abertos diretamente pelo código do plugin nesta versão. A lista expressa intenção auditável e controla clientes de rede mediados pelo núcleo. Um proxy/SDK obrigatório será necessário para egress por domínio de todo o processo.
+
 Essas permissões podem conceder capacidades amplas sem conceder a máquina inteira. Quando o usuário escolher uma pasta de trabalho persistente, o núcleo poderá montá-la como raiz autorizada para aquele plugin/projeto. Dentro dessa raiz, um plugin com leitura/escrita poderá criar centenas de arquivos, reabrir artifacts por ID, conferir lacunas e alimentar plugins posteriores. O limite impede apenas sair da pasta escolhida sem novo consentimento.
 
 ## 9. Ciclo de execução
@@ -548,8 +552,12 @@ Regras:
 
 - `source.path` é relativo ao diretório de saída e não contém `..`.
 - `source.url` exige `network` e passa por download controlado do núcleo.
+- URLs remotas usam HTTPS, não aceitam credenciais embutidas e precisam corresponder a `networkHosts` quando a lista existir.
+- Antes de cada conexão e redirect, o núcleo resolve todos os endereços DNS, bloqueia qualquer resultado local, privado, link-local, reservado ou multicast e fixa a conexão a um dos IPs já validados. Uma nova resolução não ocorre dentro do socket, mitigando DNS rebinding.
+- O downloader não encaminha cookies ou autorização, limita redirects, tempo e bytes, compara o MIME HTTP ao MIME declarado e confere `Content-Length`/`size` quando disponíveis.
 - O valor de mídia correspondente usa um `StoredFile` com mesmo `id` e URL temporária `artifact://final-video`.
-- O núcleo verifica MIME, tamanho, existência e hash, importa o arquivo e substitui a URL temporária.
+- O núcleo transmite o corpo diretamente para um arquivo parcial exclusivo, calcula SHA-256 durante o stream, valida o arquivo final e promove por rename. O `StoredFile` definitivo registra `size`, `mimeType`, URL local e `sha256`.
+- O núcleo substitui tanto um valor `artifact://id` quanto a propriedade `url` de um `StoredFile` temporário pelo `StoredFile` local definitivo.
 - Artifacts não referenciados por uma saída podem ser descartados.
 - Arquivos parciais são removidos em erro ou cancelamento.
 - O plugin nunca retorna bytes em base64 dentro de `values`.

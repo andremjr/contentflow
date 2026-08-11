@@ -62,8 +62,20 @@ Comece pelo exemplo completo em [`examples/contentflow.plugin.example.json`](exa
 9. licença, autoria, repositório e suporte;
 10. efeitos externos, modelo de custo e política de dados;
 11. limite seguro de concorrência.
+12. `networkHosts` quando a permissão `network` puder ser limitada a hosts conhecidos.
 
 `blockConfigSchema` descreve opções escolhidas no método, como modelo, temperatura ou endpoint. `settingsSchema` descreve preferências locais reutilizadas entre métodos. Credenciais ficam apenas em `secretKeys`.
+
+Exemplo de rede declarativa:
+
+```json
+{
+  "permissions": ["network"],
+  "networkHosts": ["api.example.com", "*.cdn.example.com"]
+}
+```
+
+Não inclua esquema, caminho ou porta em `networkHosts`. A ausência da lista continua válida na API v1, mas aparece para o usuário como acesso irrestrito à rede. Na implementação atual, o núcleo impõe a lista ao baixar artifacts; o `--allow-net` do Node 26 ainda é binário para conexões abertas diretamente pelo handler.
 
 ## 4. Implemente um handler puro
 
@@ -259,6 +271,22 @@ return {
 
 O núcleo valida e importa o arquivo. Nunca retorne bytes em base64, caminho absoluto ou `../`. Para arquivos de entrada, use o resolvedor seguro que será fornecido pelo SDK do executor.
 
+Para um artifact já hospedado, declare `network`, inclua o host em `networkHosts` e use HTTPS:
+
+```ts
+artifacts: [
+  {
+    id: "final-video",
+    name: "final.mp4",
+    mimeType: "video/mp4",
+    size: renderedSize,
+    source: { kind: "url", url: "https://cdn.example.com/jobs/123/final.mp4" },
+  },
+];
+```
+
+O servidor remoto precisa devolver status `200`, MIME compatível e, quando enviar `Content-Length`, tamanho coerente. Redirects também precisam usar HTTPS, permanecer nos hosts declarados e resolver apenas para endereços públicos. O ContentFlow OS baixa em streaming, calcula SHA-256 e substitui `artifact://final-video` pelo arquivo local gerenciado.
+
 ## 9. Respeite validações e tentativas
 
 Um plugin de `VALIDAR` recebe `validation` para conhecer o modo configurado. Ele devolve a decisão nas saídas pedidas; não movimenta o fluxo sozinho.
@@ -309,6 +337,7 @@ Teste no mínimo:
 - cada formato aceito, incluindo registro vazio e campos opcionais;
 - data com fuso e virada de dia;
 - arquivo inválido ou indisponível;
+- artifact remoto com redirect, timeout, MIME divergente, resposta acima do limite e host bloqueado;
 - layout com caixas nos limites do quadro;
 - resposta com chave, tipo ou obrigatório incorreto;
 - timeout, rate limit e credencial inválida;

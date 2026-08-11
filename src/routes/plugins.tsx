@@ -682,6 +682,31 @@ function CommunityAccessPanel({
           </Badge>
         )}
       </div>
+      {plugin.manifest.permissions.includes("network") &&
+        (plugin.manifest.networkHosts?.length ? (
+          <div className="mt-3 rounded-md border border-border/70 bg-background/40 p-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Hosts declarados
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {plugin.manifest.networkHosts.map((host) => (
+                <Badge key={host} variant="secondary" className="font-mono text-[9px]">
+                  {host}
+                </Badge>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+              O núcleo aplica esta lista ao importar artifacts remotos. O Permission Model do Node
+              26 ainda não restringe por host a rede usada diretamente pelo código do plugin.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-2 flex gap-1.5 text-[10px] leading-relaxed text-warning">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            Acesso irrestrito à rede: este plugin comunitário pediu network sem declarar hosts.
+            Ative apenas se você confia na origem e no código.
+          </p>
+        ))}
       {!plugin.networkIsolation && (
         <p className="mt-2 text-[10px] leading-relaxed text-warning">
           Reinicie o ContentFlow OS com Node 26 antes de ativar código não confiável. O runtime

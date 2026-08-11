@@ -30,7 +30,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "test:sandbox": "tsx server/plugin-sandbox-smoke.ts",
     "test:presentation": "tsx server/presentation-smoke.ts",
-    "check": "npm run lint && npm run typecheck && npm run test:sandbox && npm run build",
+    "test:remote-artifacts": "tsx server/remote-artifact-downloader.test.ts",
+    "check": "npm run lint && npm run typecheck && npm run test:sandbox && npm run test:remote-artifacts && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {

@@ -139,6 +139,8 @@ export type PluginManifest = {
   minCoreVersion?: string;
   entrypoint: string;
   permissions: PluginPermission[];
+  /** Intended remote hosts. Core-managed downloads enforce this list; Node's network permission is currently all-or-nothing. */
+  networkHosts?: string[];
   settingsSchema?: JsonSchema;
   secretKeys?: string[];
   deliveryTypes?: PluginDeliveryType[];

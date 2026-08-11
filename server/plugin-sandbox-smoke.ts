@@ -70,6 +70,9 @@ if (!file || typeof file !== "object" || Array.isArray(file) || !("url" in file)
 }
 const url = String(file.url);
 if (!url.startsWith("/api/files/")) throw new Error("A URL do artifact não foi importada.");
+if (typeof file.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(file.sha256)) {
+  throw new Error("O SHA-256 do artifact local não foi registrado.");
+}
 const uploadedPath = path.resolve(temporaryDataDirectory, "uploads", path.basename(url));
 if (!existsSync(uploadedPath)) throw new Error("O arquivo importado não existe.");
 if (readFileSync(uploadedPath, "utf8") !== "Sandbox comunitária funcionando.") {
