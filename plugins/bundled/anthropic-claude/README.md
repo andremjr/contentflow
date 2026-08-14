@@ -11,7 +11,7 @@ O catálogo de modelos é consultado em `GET /v1/models` depois que a chave é c
 
 ## Credencial
 
-A chave pode ser conectada na página `/plugins` e é persistida no cofre nativo do sistema operacional (Windows Credential Manager, macOS Keychain ou Secret Service no Linux). Ela é disponibilizada somente ao processo isolado de uma invocação autorizada e não é persistida no Método, no snapshot da execução ou no SQLite. Sem uma conexão global, a execução aceita uma chave transitória para o bloco sem salvá-la.
+A chave pode ser conectada na página `/plugins` e é persistida no cofre seguro do ambiente local (Windows Credential Manager, macOS Keychain ou Secret Service no Linux). Ela é disponibilizada somente ao processo isolado de uma invocação autorizada e não é persistida no Método, no snapshot da execução ou no SQLite. Depois de conectado, o plugin é acionado automaticamente pelos blocos vinculados.
 
 O usuário é responsável pelos custos e termos aplicáveis à API da Anthropic. Os dados necessários à execução são transmitidos à Anthropic conforme as políticas do provedor.
 

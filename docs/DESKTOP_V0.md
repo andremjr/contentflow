@@ -6,8 +6,8 @@ A V0 transforma o ContentFlow OS em um aplicativo comum do Windows. Ela não exi
 
 Os binários são publicados manualmente na página [Releases do projeto](https://github.com/andremjr/contentflow-os/releases):
 
-- `ContentFlow-OS-V0-0.2.0-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
-- `ContentFlow-OS-V0-0.2.0-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
+- `ContentFlow-OS-V0-0.3.0-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
+- `ContentFlow-OS-V0-0.3.0-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
 
 O Windows pode mostrar um aviso porque esta V0 ainda não possui assinatura digital comercial. Confira se o arquivo veio do repositório oficial antes de executá-lo.
 

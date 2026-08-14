@@ -437,6 +437,71 @@ function persistPluginExecution(execution: ProcessExecution, project: Project) {
   else database.transaction(persist)();
 }
 
+function failAutomaticPluginStart(executionId: string, blockId: string, message: string) {
+  const execution = executionById(executionId);
+  const project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
+  const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
+  if (!execution || !project || !blockExecution || blockExecution.status !== "blocked_executor") {
+    return;
+  }
+  blockExecution.status = "failed";
+  blockExecution.error = message;
+  blockExecution.logs = [...(blockExecution.logs ?? []), message];
+  execution.status = "failed";
+  execution.error = message;
+  persistPluginExecution(execution, project);
+}
+
+function scheduleAutomaticPluginBlock(execution: ProcessExecution) {
+  if (execution.status !== "blocked_executor") return;
+  const blockExecution = execution.blocks.find((item) => item.status !== "completed");
+  const block = blockExecution
+    ? execution.methodSnapshot.blocks.find((item) => item.id === blockExecution.blockId)
+    : undefined;
+  if (
+    !blockExecution ||
+    blockExecution.status !== "blocked_executor" ||
+    !block ||
+    block.operator === "Humano" ||
+    !block.plugin
+  ) {
+    return;
+  }
+
+  const executionId = execution.id;
+  const blockId = block.id;
+  const requestBody = {
+    projectId: execution.projectId,
+    processType: execution.processType,
+    blockId,
+    pluginId: block.plugin.pluginId,
+    parameters: {},
+  };
+  setTimeout(() => {
+    void fetch(`http://127.0.0.1:${port}/api/execute-block`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    })
+      .then(async (response) => {
+        if (response.ok) return;
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        failAutomaticPluginStart(
+          executionId,
+          blockId,
+          body.error ?? "Não foi possível iniciar automaticamente o plugin.",
+        );
+      })
+      .catch((error) => {
+        failAutomaticPluginStart(
+          executionId,
+          blockId,
+          error instanceof Error ? error.message : "Não foi possível acessar o executor local.",
+        );
+      });
+  }, 0);
+}
+
 function mergeStoredArtifacts(current: StoredFile[], incoming: StoredFile[] = []) {
   const merged = new Map(current.map((file) => [file.id, file]));
   for (const file of incoming) merged.set(file.id, file);
@@ -791,7 +856,7 @@ async function processPluginJob(
     if (restrictionIssues.length) {
       throw new Error(`O plugin entregou valores incompatíveis: ${restrictionIssues.join("; ")}.`);
     }
-    return pluginJobs.save(
+    const saved = pluginJobs.save(
       claim,
       {
         ...job,
@@ -814,6 +879,8 @@ async function processPluginJob(
         persistPluginExecution(execution, project);
       },
     );
+    scheduleAutomaticPluginBlock(execution);
+    return saved;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível executar o plugin.";
     if (job.retryCount < 2 && Date.now() + 1_000 < new Date(job.deadlineAt).getTime()) {
@@ -2388,6 +2455,7 @@ app.post("/api/executions", (request, response) => {
       JSON.stringify(execution),
       execution.updatedAt,
     );
+  scheduleAutomaticPluginBlock(execution as unknown as ProcessExecution);
   response.status(201).json(execution);
 });
 
@@ -2400,6 +2468,9 @@ app.put("/api/executions/:id", (request, response) => {
   const result = database
     .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
     .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+  if (result.changes) {
+    scheduleAutomaticPluginBlock(execution as unknown as ProcessExecution);
+  }
   response
     .status(result.changes ? 200 : 404)
     .json(result.changes ? execution : { error: "Execução não encontrada." });

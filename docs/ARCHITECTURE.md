@@ -2,7 +2,7 @@
 
 ## 1. Visão Geral do Produto
 
-O **ContentFlow OS** é um Sistema Operacional de Mídia e Orquestrador Visual de Métodos (_Visual Workflow Orchestrator_). Diferente das ferramentas tradicionais "caixa-preta" (geradores de 1 clique que ocultam o processo e geram conteúdo repetitivo e vulnerável à desmonetização no YouTube), o ContentFlow OS desacola a **Estratégia do Método** da **Execução Funcional**.
+O **ContentFlow OS** é um **Gerenciador Estratégico de Métodos** para produção de conteúdo. Diferente das ferramentas tradicionais "caixa-preta" (geradores de 1 clique que ocultam o processo e geram conteúdo repetitivo e vulnerável à desmonetização no YouTube), o ContentFlow OS desacopla a **Estratégia do Método** da **Execução Funcional**.
 
 A plataforma permite que criadores desenhem, personalizem e automatizem seus próprios fluxos de trabalho através de uma arquitetura modular baseada em **4 Blocos Essenciais de Ação**, **3 Operadores** e um **Ecossistema Aberto de Plugins**.
 
@@ -123,7 +123,7 @@ O operador `Humano` é o executor nativo desse mesmo contrato e não depende de 
 
 O Método armazena apenas esse esquema. Os valores efetivamente preenchidos pertencem à execução do Projeto/Vídeo e nunca são gravados como parte do Método.
 
-Métodos compostos integralmente por blocos humanos podem ser executados de ponta a ponta. Blocos `IA` e `Código` são liberados quando possuem um plugin oficial compatível configurado. A configuração funcional permanece no Método. Secrets como chaves de API nunca são serializados no Método ou no SQLite: credenciais conectadas na Central de Plugins são persistidas pelo cofre nativo do sistema operacional e entregues somente a invocações autorizadas por `getSecret()`, com preenchimento transitório na execução como alternativa. Sem plugin configurado, o bloco permanece explicitamente bloqueado.
+Métodos compostos integralmente por blocos humanos podem ser executados de ponta a ponta. Blocos `IA` e `Código` são liberados quando possuem um plugin oficial compatível configurado. A configuração funcional permanece no Método. Secrets como chaves de API nunca são serializados no Método ou no SQLite: credenciais conectadas na Central de Plugins são persistidas pelo cofre seguro do ambiente local e entregues somente a invocações autorizadas por `getSecret()`. Sem plugin configurado, o bloco permanece explicitamente bloqueado.
 
 ---
 
@@ -134,7 +134,7 @@ O orquestrador do sistema funciona em modelo de **Máquina de Estados Concorrent
 1. Lê o JSON do Método do Canal para o processo atual.
 2. Executa os blocos sequencialmente injetando as saídas do bloco anterior no bloco seguinte.
 3. **Pausa e Retomada para Operador Humano**: Se um bloco for atribuído ao operador `Humano`, o motor pausa o estado da execução (`awaiting_human`), gera uma notificação e um cartão interativo no Projeto, e aguarda a entrega ou seleção do usuário para continuar a esteira.
-4. **Execução por plugin**: Blocos `IA` e `Código` entram em `blocked_executor` até o usuário disparar o plugin compatível configurado. O servidor resolve as entradas, executa plugins oficiais, instalados ou vinculados em um processo separado, valida a resposta, registra entregas e artifacts no snapshot e ativa a próxima etapa.
+4. **Execução por plugin**: Blocos `IA` e `Código` disparam automaticamente o plugin compatível configurado assim que suas entradas ficam disponíveis. O servidor resolve as entradas, executa plugins oficiais, instalados ou vinculados em um processo separado, valida a resposta, registra entregas e artifacts no snapshot e ativa a próxima etapa sem exigir um botão por bloco.
 5. **Bloqueio de executores ausentes**: Blocos sem plugin compatível permanecem em `blocked_executor`. Eles nunca são concluídos de forma fictícia.
 
 Os métodos permanecem lineares: não existem ramificações, junções, paralelismo ou loops genéricos no canvas. Uma entrada pode apontar explicitamente para a saída de qualquer bloco anterior ou processo universal anterior, e um bloco pode declarar várias entradas.
@@ -223,7 +223,7 @@ Uma capacidade de plugin pode ser internamente complexa e demorada. Ela pode pes
 
 O plugin oficial `OpenAI Models` usa a Responses API e pode operar ações baseadas em linguagem nos quatro Blocos Essenciais e nos oito Processos Universais. Depois da conexão local, o servidor consulta `GET /v1/models` com a chave da sessão e o construtor substitui o catálogo de fallback pelos modelos de linguagem realmente disponíveis nessa conta. Os parâmetros declarados em `blockConfigSchema` aparecem imediatamente após a vinculação do plugin ao bloco. Modelos especializados de imagem, áudio, vídeo, transcrição ou embeddings continuam exigindo plugins próprios, pois usam contratos de mídia e APIs diferentes de um LLM com saída textual.
 
-O plugin oficial `Anthropic Claude` mantém o mesmo contrato de linguagem pela Messages API. A chave é protegida pelo cofre nativo do sistema operacional, `GET /v1/models` fornece o catálogo disponível para a conta e blocos `BUSCAR` podem usar a ferramenta de pesquisa web declarada pela Anthropic. A integração é mantida pelo ContentFlow OS e não implica endosso do provedor.
+O plugin oficial `Anthropic Claude` mantém o mesmo contrato de linguagem pela Messages API. A chave é protegida pelo cofre seguro do ambiente local, `GET /v1/models` fornece o catálogo disponível para a conta e blocos `BUSCAR` podem usar a ferramenta de pesquisa web declarada pela Anthropic. A integração é mantida pelo ContentFlow OS e não implica endosso do provedor.
 
 ---
 

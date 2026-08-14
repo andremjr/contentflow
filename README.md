@@ -1,6 +1,6 @@
 # ContentFlow OS
 
-Aplicativo local para organizar a produção de vídeos. O frontend e a API rodam localmente na máquina do usuário.
+Gerenciador estratégico de métodos para organizar e executar a produção de vídeos. O frontend e a API rodam localmente na máquina do usuário.
 
 ## V0 para Windows — sem Node ou terminal
 
@@ -68,7 +68,7 @@ O ContentFlow OS não possui telemetria ou analytics. As informações permanece
 - plugins oficiais de modelos utilizam a credencial do próprio usuário, podem gerar cobranças na conta dele e enviam ao provedor declarado o contexto necessário à execução;
 - links externos só são abertos quando clicados.
 
-Credenciais de plugins são armazenadas no cofre nativo do sistema operacional, nunca no SQLite ou no Método, e são entregues somente à invocação autorizada. O preenchimento transitório continua disponível quando o usuário não quiser persistir uma credencial.
+Credenciais de plugins são armazenadas no cofre seguro do ambiente local, nunca no SQLite ou no Método, e são entregues somente à invocação autorizada. A execução usa as conexões configuradas na Central de Plugins para avançar automaticamente entre os blocos.
 
 Plugins não oficiais não são mantidos, revisados ou garantidos pelo ContentFlow OS apenas por serem carregados localmente. Eles não precisam de aprovação do projeto para ser criados, compartilhados, instalados ou ativados. A decisão é local: o aplicativo valida o manifesto, mostra as capacidades pedidas e só executa depois do consentimento do usuário, em um processo separado com a sandbox de permissões do Node. Autores e usuários respondem por seu código e uso conforme sua participação e a legislação aplicável; o núcleo continua responsável pelas proteções e dados que estiverem efetivamente sob seu controle. Consulte o [guia de desenvolvimento](docs/PLUGIN_DEVELOPMENT.md), o [plugin comunitário mínimo](plugins/examples/community-reference/README.md), a [governança do ecossistema](docs/PLUGIN_ECOSYSTEM.md) e a [proteção jurídica e licenciamento](docs/LEGAL_AND_LICENSING.md).
 

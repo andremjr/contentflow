@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { CompositionCanvas } from "@/components/composition-canvas";
+import { LineListTextarea } from "@/components/line-list-textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -159,24 +160,16 @@ export function RuntimeFieldsForm({
                 onChange={(records) => update(field.key, records)}
               />
             ) : field.type === "list" ? (
-              <Textarea
+              <LineListTextarea
                 id={field.id}
                 rows={6}
                 value={
                   Array.isArray(value)
-                    ? value.filter((item) => typeof item === "string").join("\n")
-                    : ""
+                    ? value.filter((item): item is string => typeof item === "string")
+                    : []
                 }
                 placeholder={field.placeholder ?? "Um item por linha"}
-                onChange={(event) =>
-                  update(
-                    field.key,
-                    event.target.value
-                      .split("\n")
-                      .map((item) => item.trim())
-                      .filter(Boolean),
-                  )
-                }
+                onChange={(nextValue) => update(field.key, nextValue)}
               />
             ) : field.type === "datetime" ? (
               <Input

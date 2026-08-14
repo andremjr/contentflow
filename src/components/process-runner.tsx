@@ -17,7 +17,6 @@ import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -48,7 +47,6 @@ import {
   chooseCollectionItem,
   completeHumanBlock,
   completeProcessOutput,
-  executePluginBlock,
   refreshProcessExecution,
   resetStage,
   retryBlockExecution,
@@ -94,6 +92,7 @@ export function ProcessRunner({
   const completed = execution?.status === "completed";
   const nextProcess = PROCESS_ORDER[PROCESS_ORDER.indexOf(processId) + 1];
   const nextNavigationTimer = useRef<number | undefined>(undefined);
+  const previousExecutionStatus = useRef(execution?.status);
   const [isAdvancing, setIsAdvancing] = useState(false);
   const activeExecution = execution?.blocks.find((item) => item.status !== "completed");
   const activeBlock = activeExecution
@@ -107,7 +106,10 @@ export function ProcessRunner({
     activeExecution?.status === "blocked_executor" && activeBlock?.operator !== "Humano";
   const awaitingOutput = execution?.status === "awaiting_output";
   const methodIssue = getMethodConfigurationIssue(method);
-  const runningExecutionId = execution?.status === "running" ? execution.id : undefined;
+  const runningExecutionId =
+    execution && ["running", "blocked_executor"].includes(execution.status)
+      ? execution.id
+      : undefined;
 
   const scheduleNextProcess = useCallback(() => {
     if (!project || !channel || !nextProcess || nextNavigationTimer.current) return;
@@ -119,6 +121,14 @@ export function ProcessRunner({
       navigate({ to: `/project/${project.id}/${PROCESS_ROUTE_SEGMENT[nextProcess]}` });
     }, NEXT_PROCESS_DELAY);
   }, [channel, navigate, nextProcess, project]);
+
+  useEffect(() => {
+    const previousStatus = previousExecutionStatus.current;
+    previousExecutionStatus.current = execution?.status;
+    if (execution?.status === "completed" && previousStatus && previousStatus !== "completed") {
+      scheduleNextProcess();
+    }
+  }, [execution?.status, scheduleNextProcess]);
 
   useEffect(
     () => () => {
@@ -270,10 +280,8 @@ export function ProcessRunner({
           ) : blockedByPluginExecutor && activeBlock ? (
             activeBlock.plugin ? (
               <PluginExecutionGate
+                key={`${execution.id}:${activeExecution.blockId}:${activeExecution.attempt ?? 1}`}
                 block={activeBlock}
-                project={project}
-                processType={processId}
-                onProcessCompleted={scheduleNextProcess}
               />
             ) : (
               <MissingPluginGate block={activeBlock} />
@@ -1238,93 +1246,8 @@ function MissingPluginGate({ block }: { block: ActionBlock }) {
   );
 }
 
-function PluginExecutionGate({
-  block,
-  project,
-  processType,
-  onProcessCompleted,
-}: {
-  block: ActionBlock;
-  project: Project;
-  processType: ProcessId;
-  onProcessCompleted: () => void;
-}) {
-  const [apiKey, setApiKey] = useState("");
-  const [isRunning, setIsRunning] = useState(false);
-  const [openAIConnected, setOpenAIConnected] = useState(false);
-  const [anthropicConnected, setAnthropicConnected] = useState(false);
+function PluginExecutionGate({ block }: { block: ActionBlock }) {
   const plugin = block.plugin;
-
-  useEffect(() => {
-    if (plugin?.pluginId !== "official-openai-gpt") return;
-    let active = true;
-    void fetch("/api/plugins/official-openai-gpt/connection")
-      .then((response) => response.json() as Promise<{ connected?: boolean }>)
-      .then((result) => {
-        if (active) setOpenAIConnected(result.connected === true);
-      })
-      .catch(() => {
-        if (active) setOpenAIConnected(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [plugin?.pluginId]);
-
-  useEffect(() => {
-    if (plugin?.pluginId !== "official-anthropic-claude") return;
-    let active = true;
-    void fetch("/api/plugins/official-anthropic-claude/connection")
-      .then((response) => response.json() as Promise<{ connected?: boolean }>)
-      .then((result) => {
-        if (active) setAnthropicConnected(result.connected === true);
-      })
-      .catch(() => {
-        if (active) setAnthropicConnected(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [plugin?.pluginId]);
-
-  async function run() {
-    if (!plugin || isRunning) return;
-    if (plugin.pluginId === "official-openai-gpt" && !openAIConnected && !apiKey.trim()) {
-      toast.error("Informe a chave da API da OpenAI para executar este bloco.");
-      return;
-    }
-    if (plugin.pluginId === "official-anthropic-claude" && !anthropicConnected && !apiKey.trim()) {
-      toast.error("Informe a chave da API da Anthropic para executar este bloco.");
-      return;
-    }
-    setIsRunning(true);
-    try {
-      const result = await executePluginBlock({
-        projectId: project.id,
-        processType,
-        blockId: block.id,
-        pluginId: plugin.pluginId,
-        parameters: apiKey.trim() ? { api_key: apiKey.trim() } : {},
-      });
-      setApiKey("");
-      if (result.execution?.status === "completed") {
-        toast.success("Plugin executado. Processo concluído.");
-        onProcessCompleted();
-      } else if (result.pending) {
-        toast.success("Job iniciado", {
-          description: "O bloco continuará em segundo plano e será atualizado automaticamente.",
-        });
-      } else {
-        toast.success("Plugin executado. O próximo bloco está pronto.");
-      }
-    } catch (error) {
-      toast.error("O plugin não conseguiu concluir o bloco", {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    } finally {
-      setIsRunning(false);
-    }
-  }
 
   return (
     <section className="rounded-xl border border-brand/35 bg-brand/5 p-5 sm:p-6">
@@ -1336,11 +1259,11 @@ function PluginExecutionGate({
             ) : (
               <Code2 className="mr-1 size-3" />
             )}
-            Plugin pronto
+            Execução automática
           </Badge>
           <h3 className="mt-3 text-base font-semibold">{block.name ?? block.type}</h3>
           <p className="mt-1 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">
-            {block.instructions || "Execute este bloco usando o plugin configurado no Método."}
+            {block.instructions || "Este bloco será executado pelo plugin configurado no Método."}
           </p>
         </div>
         <OperatorBadge block={block} />
@@ -1349,62 +1272,10 @@ function PluginExecutionGate({
       <div className="mt-5 rounded-xl border border-border/70 bg-card p-4">
         <p className="text-xs font-semibold">Plugin</p>
         <p className="mt-1 font-mono text-xs text-muted-foreground">{plugin?.pluginId}</p>
-        {plugin?.pluginId === "official-openai-gpt" && (
-          <div className="mt-4 space-y-1.5">
-            {openAIConnected ? (
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <CheckCircle2 className="size-3.5" /> OpenAI conectada pela Central de Plugins
-              </p>
-            ) : (
-              <>
-                <Label htmlFor={`api-key-${block.id}`}>Chave da API da OpenAI</Label>
-                <Input
-                  id={`api-key-${block.id}`}
-                  type="password"
-                  autoComplete="off"
-                  value={apiKey}
-                  placeholder="sk-..."
-                  onChange={(event) => setApiKey(event.target.value)}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Conecte em Plugins para salvar a chave no cofre seguro do sistema.
-                </p>
-              </>
-            )}
-          </div>
-        )}
-        {plugin?.pluginId === "official-anthropic-claude" && (
-          <div className="mt-4 space-y-1.5">
-            {anthropicConnected ? (
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <CheckCircle2 className="size-3.5" /> Anthropic conectada pela Central de Plugins
-              </p>
-            ) : (
-              <>
-                <Label htmlFor={`anthropic-api-key-${block.id}`}>Chave da API da Anthropic</Label>
-                <Input
-                  id={`anthropic-api-key-${block.id}`}
-                  type="password"
-                  autoComplete="off"
-                  value={apiKey}
-                  placeholder="sk-ant-..."
-                  onChange={(event) => setApiKey(event.target.value)}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Conecte em Plugins para salvar a chave no cofre seguro do sistema.
-                </p>
-              </>
-            )}
-          </div>
-        )}
-        <Button className="mt-5" disabled={isRunning} onClick={() => void run()}>
-          {isRunning ? (
-            <LoaderCircle className="mr-1.5 size-4 animate-spin" />
-          ) : (
-            <Play className="mr-1.5 size-4 fill-current" />
-          )}
-          {isRunning ? "Processando..." : "Rodar Bloco / Testar Execução"}
-        </Button>
+        <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <LoaderCircle className="size-3.5 animate-spin" />
+          Executando automaticamente...
+        </p>
       </div>
     </section>
   );

@@ -98,7 +98,7 @@ O executor deve rodar cada invocação fora do processo principal, com identidad
 - canal IPC autenticado, limitado e validado;
 - resposta serializada sem protótipos, funções ou objetos executáveis.
 
-Containers, sandboxes de sistema operacional ou processos restritos podem implementar esses controles. Uma sandbox JavaScript dentro do mesmo processo não é isolamento suficiente para código comunitário.
+Containers, sandboxes nativas do ambiente hospedeiro ou processos restritos podem implementar esses controles. Uma sandbox JavaScript dentro do mesmo processo não é isolamento suficiente para código comunitário.
 
 ### Implementação v1
 
@@ -106,7 +106,7 @@ O executor comunitário atual usa `node --permission`. O pacote e o worker são 
 
 O manifesto pode declarar `networkHosts`. Essa lista é mostrada e renovada no consentimento, além de ser obrigatória para o downloader do núcleo quando presente. Entretanto, o `--allow-net` do Node 26 é binário e não impõe hosts ao código do plugin. Um plugin comunitário com `network` ainda deve ser tratado como capaz de abrir conexões para qualquer destino público; a ausência de `networkHosts` recebe aviso reforçado.
 
-`process`, `worker` e `native` são permissões deliberadamente amplas para plugins como renderizadores e ferramentas locais. Elas preservam a abertura do sistema, mas mudam o nível de confiança: ao aceitá-las, o usuário está autorizando código capaz de ultrapassar parte do isolamento básico. O próximo nível de proteção deve acrescentar perfis/allowlists por executável e sandbox de sistema operacional para esses casos.
+`process`, `worker` e `native` são permissões deliberadamente amplas para plugins como renderizadores e ferramentas locais. Elas preservam a abertura do sistema, mas mudam o nível de confiança: ao aceitá-las, o usuário está autorizando código capaz de ultrapassar parte do isolamento básico. O próximo nível de proteção deve acrescentar perfis/allowlists por executável e isolamento nativo reforçado para esses casos.
 
 ## 6. Rede e SSRF
 

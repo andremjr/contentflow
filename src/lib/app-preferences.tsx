@@ -225,7 +225,6 @@ const PHRASES: Record<string, Translation> = {
     "This collection does not have any items yet.",
     "Esta colección todavía no tiene elementos.",
   ],
-  "Executar plugin": ["Run plugin", "Ejecutar plugin"],
   "Executar processo": ["Run process", "Ejecutar proceso"],
   "Os blocos serão executados na ordem abaixo. A execução pausará sempre que o operador for humano.":
     [
@@ -479,14 +478,12 @@ const PHRASES: Record<string, Translation> = {
     "Complete this action and record its outputs to continue.",
     "Realiza esta acción y registra sus entregas para continuar.",
   ],
-  "Rodar Bloco / Testar Execução": [
-    "Run Block / Test Execution",
-    "Ejecutar bloque / Probar ejecución",
+  "Execução automática": ["Automatic execution", "Ejecución automática"],
+  "Este bloco será executado pelo plugin configurado no Método.": [
+    "This block will be run by the plugin configured in the Method.",
+    "Este bloque será ejecutado por el plugin configurado en el Método.",
   ],
-  "Execute este bloco usando o plugin configurado no Método.": [
-    "Run this block using the plugin configured in the Method.",
-    "Ejecuta este bloque con el plugin configurado en el Método.",
-  ],
+  "Executando automaticamente...": ["Running automatically...", "Ejecutando automáticamente..."],
   "Cancelar execução": ["Cancel execution", "Cancelar ejecución"],
   "Existem entradas sem conexão": ["Some inputs are not connected", "Hay entradas sin conexión"],
   "Não informado": ["Not provided", "No informado"],

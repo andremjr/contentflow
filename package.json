@@ -1,8 +1,8 @@
 {
   "name": "contentflow-os",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "productName": "ContentFlow OS",
-  "description": "Sistema operacional local para fluxos de produção de conteúdo e plugins independentes.",
+  "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
   "private": true,
   "main": "desktop/main.cjs",
@@ -33,9 +33,10 @@
     "test:deliveries": "tsx --test server/deliveries.test.ts",
     "test:remote-artifacts": "tsx server/remote-artifact-downloader.test.ts",
     "test:plugin-jobs": "tsx server/plugin-job-store.test.ts",
+    "test:automatic-execution": "tsx --test server/automatic-plugin-execution.test.ts",
     "test:plugin-kit": "tsx server/plugin-kit.test.ts",
     "plugin:kit": "tsx tools/plugin-kit.ts",
-    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-kit && npm run build",
+    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:automatic-execution && npm run test:plugin-kit && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {

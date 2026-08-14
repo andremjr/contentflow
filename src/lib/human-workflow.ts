@@ -304,6 +304,11 @@ export function normalizeMethodBlocks(blocks: ActionBlock[], processType: Proces
 }
 
 export function isEmptyRuntimeValue(value: RuntimeValue | undefined) {
-  if (value == null || value === "") return true;
-  return Array.isArray(value) && value.length === 0;
+  if (value == null) return true;
+  if (typeof value === "string") return value.trim().length === 0;
+  if (!Array.isArray(value)) return false;
+  return (
+    value.length === 0 ||
+    value.every((item) => item == null || (typeof item === "string" && item.trim().length === 0))
+  );
 }

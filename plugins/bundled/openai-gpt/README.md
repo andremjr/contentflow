@@ -13,7 +13,7 @@ Esta versão recebe entradas estruturadas e textuais. Arquivos, imagens, áudios
 
 ## Credencial
 
-A chave da API pode ser conectada na página `/plugins` e é persistida no cofre nativo do sistema operacional (Windows Credential Manager, macOS Keychain ou Secret Service no Linux). Ela é disponibilizada somente ao processo isolado de uma invocação autorizada e não é persistida no Método, no snapshot da execução ou no SQLite. A tela de execução ainda aceita uma chave transitória para aquele bloco sem salvá-la.
+A chave da API pode ser conectada na página `/plugins` e é persistida no cofre seguro do ambiente local (Windows Credential Manager, macOS Keychain ou Secret Service no Linux). Ela é disponibilizada somente ao processo isolado de uma invocação autorizada e não é persistida no Método, no snapshot da execução ou no SQLite. Depois de conectado, o plugin é acionado automaticamente pelos blocos vinculados.
 
 O usuário é responsável pelos custos e pelos termos aplicáveis à API da OpenAI.
 As chamadas usam `store: false`; os dados ainda são transmitidos ao provedor para processamento conforme a política da API.

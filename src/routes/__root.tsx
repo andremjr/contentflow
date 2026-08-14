@@ -74,11 +74,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "ContentFlow OS — Central de produção de conteúdo" },
+      { title: "ContentFlow OS — Gerenciador estratégico de métodos" },
       {
         name: "description",
         content:
-          "Sistema operacional para gerenciar a produção completa de canais do YouTube: tema, roteiro, narração, edição e publicação.",
+          "Gerenciador estratégico de métodos para a produção completa de canais do YouTube: tema, roteiro, narração, edição e publicação.",
       },
       { name: "author", content: "ContentFlow OS" },
       { name: "theme-color", content: "#08111F" },
@@ -86,7 +86,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         property: "og:description",
         content:
-          "Central de comando para produção audiovisual — pipeline, canais e automações em um só lugar.",
+          "Gerenciador estratégico de métodos para produção audiovisual, canais e automações.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

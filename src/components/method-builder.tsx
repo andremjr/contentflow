@@ -41,6 +41,7 @@ import {
 import { toast } from "sonner";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
+import { LineListTextarea } from "@/components/line-list-textarea";
 import {
   PRESENTATION_RENDERERS,
   PRESENTATION_RENDERER_REGISTRY,
@@ -2013,16 +2014,9 @@ function OutputFieldEditor({
       </div>
       {usesOptions && (
         <div>
-          <Textarea
-            value={(field.options ?? []).join("\n")}
-            onChange={(event) =>
-              onChange({
-                options: event.target.value
-                  .split("\n")
-                  .map((item) => item.trim())
-                  .filter(Boolean),
-              })
-            }
+          <LineListTextarea
+            value={field.options ?? []}
+            onChange={(options) => onChange({ options })}
             placeholder="Opções fixas, uma por linha (opcional)"
             rows={3}
             className="text-xs"
@@ -2326,17 +2320,10 @@ function RecordFieldsEditor({
               Obrigatório
             </label>
             {recordField.type === "select" && (
-              <Textarea
+              <LineListTextarea
                 className="min-h-20 text-xs sm:col-span-3"
-                value={(recordField.options ?? []).join("\n")}
-                onChange={(event) =>
-                  update(recordField.id, {
-                    options: event.target.value
-                      .split("\n")
-                      .map((option) => option.trim())
-                      .filter(Boolean),
-                  })
-                }
+                value={recordField.options ?? []}
+                onChange={(options) => update(recordField.id, { options })}
                 placeholder="Uma opção por linha"
               />
             )}

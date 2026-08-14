@@ -55,7 +55,18 @@ const db = {
 };
 const listeners = new Set<() => void>();
 const executionPersistenceQueues = new Map<string, Promise<void>>();
+const pluginExecutionRequests = new Map<string, Promise<PluginBlockExecutionResponse>>();
 let version = 0;
+
+type PluginBlockExecutionResponse = {
+  ok?: boolean;
+  pending?: boolean;
+  error?: string;
+  execution?: ProcessExecution;
+  project?: Project;
+  values?: Record<string, RuntimeValue>;
+  usage?: Record<string, unknown>;
+};
 
 function emit() {
   version += 1;
@@ -1058,27 +1069,47 @@ export function retryBlockExecution(executionId: string, blockId: string) {
   return true;
 }
 
-export async function executePluginBlock(input: {
+export function executePluginBlock(input: {
   projectId: string;
   processType: UniversalProcess;
   blockId: string;
   pluginId: string;
   parameters: Record<string, unknown>;
 }) {
+  const requestKey = `${input.projectId}:${input.processType}:${input.blockId}`;
+  const currentRequest = pluginExecutionRequests.get(requestKey);
+  if (currentRequest) return currentRequest;
+
+  const nextRequest = requestPluginBlockExecution(input);
+  const clearRequest = () => {
+    if (pluginExecutionRequests.get(requestKey) === nextRequest) {
+      pluginExecutionRequests.delete(requestKey);
+    }
+  };
+  pluginExecutionRequests.set(requestKey, nextRequest);
+  void nextRequest.then(clearRequest, clearRequest);
+  return nextRequest;
+}
+
+async function requestPluginBlockExecution(input: {
+  projectId: string;
+  processType: UniversalProcess;
+  blockId: string;
+  pluginId: string;
+  parameters: Record<string, unknown>;
+}): Promise<PluginBlockExecutionResponse> {
+  const execution = db.executions.find(
+    (item) => item.projectId === input.projectId && item.processType === input.processType,
+  );
+  const pendingPersistence = execution ? executionPersistenceQueues.get(execution.id) : undefined;
+  if (pendingPersistence) await pendingPersistence;
+
   const response = await fetch("/api/execute-block", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  const body = (await response.json()) as {
-    ok?: boolean;
-    pending?: boolean;
-    error?: string;
-    execution?: ProcessExecution;
-    project?: Project;
-    values?: Record<string, RuntimeValue>;
-    usage?: Record<string, unknown>;
-  };
+  const body = (await response.json()) as PluginBlockExecutionResponse;
   if (body.execution) {
     if (body.project) applyServerExecutionState(body.execution, body.project);
     else {

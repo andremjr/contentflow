@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Plus, FolderPlus } from "lucide-react";
 import {
   Dialog,
@@ -28,6 +28,9 @@ export function NewProjectDialog({
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const titleId = useId();
+  const deadlineId = useId();
 
   const canSubmit = title.trim().length > 0;
 
@@ -66,7 +69,13 @@ export function NewProjectDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          titleInputRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="grid size-10 place-items-center rounded-md bg-secondary">
@@ -81,19 +90,21 @@ export function NewProjectDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="pr-title">Título *</Label>
+            <Label htmlFor={titleId}>Título *</Label>
             <Input
-              id="pr-title"
+              ref={titleInputRef}
+              id={titleId}
+              name="project-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex.: A física impossível de Interstellar"
-              autoFocus
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pr-deadline">Prazo (opcional)</Label>
+            <Label htmlFor={deadlineId}>Prazo (opcional)</Label>
             <Input
-              id="pr-deadline"
+              id={deadlineId}
+              name="project-deadline"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
               placeholder="Ex.: 15 dez"
