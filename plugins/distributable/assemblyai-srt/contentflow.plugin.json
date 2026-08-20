@@ -1,0 +1,152 @@
+{
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow-os/main/docs/schemas/contentflow-plugin-v1.schema.json",
+  "apiVersion": "1",
+  "id": "com.andremjr.assemblyai-srt",
+  "name": "AssemblyAI SRT Studio",
+  "version": "1.0.0",
+  "description": "Transcreve uma ou várias mídias com rotação circular de chaves AssemblyAI e compila legendas SRT configuráveis.",
+  "author": "André Marinho Jr.",
+  "license": "Proprietary",
+  "runtime": {
+    "kind": "node",
+    "version": ">=26 <27",
+    "module": "esm"
+  },
+  "minCoreVersion": "0.2.0",
+  "entrypoint": "handler.mjs",
+  "permissions": ["network", "filesystem:read", "filesystem:write"],
+  "networkHosts": ["api.assemblyai.com", "api.eu.assemblyai.com"],
+  "secretKeys": ["ASSEMBLYAI_API_KEYS"],
+  "deliveryTypes": ["text", "processing"],
+  "capabilities": [
+    {
+      "id": "transcribe-to-srt",
+      "operator": "Código",
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["narration", "editing"],
+      "inputPorts": [
+        {
+          "key": "media_files",
+          "label": "Áudios ou vídeos",
+          "description": "Uma ou várias mídias, processadas na ordem recebida.",
+          "acceptedTypes": ["audio", "video", "file", "files"],
+          "required": true,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "subtitles",
+          "label": "Legendas SRT",
+          "description": "Um arquivo SRT para cada mídia de entrada, preservando a ordem.",
+          "producedTypes": ["files"],
+          "required": true,
+          "presentation": {
+            "renderer": "file-list",
+            "itemType": "file",
+            "acceptedMimeTypes": ["application/x-subrip", "text/plain"]
+          }
+        }
+      ],
+      "acceptedInputTypes": ["audio", "video", "file", "files"],
+      "producedOutputTypes": ["files"],
+      "execution": {
+        "mode": "async",
+        "defaultTimeoutMs": 120000,
+        "supportsCancellation": false,
+        "maxConcurrency": 2
+      },
+      "sideEffects": ["external_write", "local_artifact"],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["AssemblyAI"],
+        "retentionPolicyUrl": "https://www.assemblyai.com/docs/data-retention-and-model-training"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "region": {
+            "type": "string",
+            "title": "Região da AssemblyAI",
+            "description": "Use Europa somente com chaves e requisitos de residência de dados compatíveis.",
+            "enum": ["us", "eu"],
+            "default": "us"
+          },
+          "segmentationMode": {
+            "type": "string",
+            "title": "Como dividir as entradas do SRT",
+            "description": "Por frases mantém exatamente a lógica original do script.",
+            "enum": ["sentence", "max_words", "max_duration", "combined_limits", "target_cues"],
+            "enumNames": [
+              "Por frases (lógica original)",
+              "Máximo de palavras",
+              "Máximo de segundos",
+              "Frases + ambos os limites",
+              "Quantidade exata de entradas"
+            ],
+            "default": "sentence"
+          },
+          "maxWordsPerCue": {
+            "type": "integer",
+            "title": "Máximo de palavras por entrada",
+            "description": "Usado nos modos Máximo de palavras e Frases + ambos os limites.",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 12
+          },
+          "maxSecondsPerCue": {
+            "type": "number",
+            "title": "Máximo de segundos por entrada",
+            "description": "Usado nos modos Máximo de segundos e Frases + ambos os limites. Uma palavra isolada pode exceder o limite.",
+            "minimum": 0.25,
+            "maximum": 60,
+            "default": 6
+          },
+          "targetCueCount": {
+            "type": "integer",
+            "title": "Quantidade desejada de entradas",
+            "description": "No modo Quantidade exata, distribui as palavras pela linha do tempo. Se houver menos palavras, gera uma entrada por palavra.",
+            "minimum": 1,
+            "maximum": 10000,
+            "default": 200
+          }
+        },
+        "required": [
+          "region",
+          "segmentationMode",
+          "maxWordsPerCue",
+          "maxSecondsPerCue",
+          "targetCueCount"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "subtitles": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string", "pattern": "\\.srt$" },
+                "mimeType": { "type": "string", "enum": ["application/x-subrip"] },
+                "size": { "type": "integer", "minimum": 1 },
+                "url": { "type": "string", "pattern": "^artifact://" }
+              },
+              "required": ["id", "name", "mimeType", "size", "url"]
+            }
+          }
+        },
+        "required": ["subtitles"]
+      }
+    }
+  ]
+}

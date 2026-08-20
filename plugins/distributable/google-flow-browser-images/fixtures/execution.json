@@ -1,0 +1,69 @@
+{
+  "executionId": "google-flow-fixture-execution",
+  "traceId": "google-flow-fixture-trace",
+  "blockId": "google-flow-fixture-block",
+  "capabilityId": "generate-images-in-browser",
+  "attempt": 1,
+  "invocation": {
+    "mode": "start"
+  },
+  "configuration": {
+    "accountProfile": "default",
+    "imageModel": "flow_auto",
+    "fallbackOnModelLimit": true,
+    "aspectRatio": "flow_current",
+    "maxPrompts": 3,
+    "delayBetweenPromptsMs": 5000,
+    "maxConcurrentGenerations": 1,
+    "retryAttempts": 1,
+    "maxReferenceImages": 10,
+    "maxImagesPerPrompt": 1
+  },
+  "settings": {},
+  "inputs": {
+    "prompts": [
+      "Primeira imagem de teste.",
+      "Segunda imagem de teste.",
+      "Terceira imagem de teste."
+    ]
+  },
+  "inputContract": [
+    {
+      "id": "google-flow-fixture-input",
+      "portKey": "prompts",
+      "label": "Prompts",
+      "type": "textarea"
+    }
+  ],
+  "outputContract": [
+    {
+      "portKey": "images",
+      "label": "Imagens geradas",
+      "key": "images",
+      "type": "files",
+      "required": true
+    }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "fixture-channel",
+      "name": "Canal fictício",
+      "language": "pt-BR",
+      "niche": "Testes"
+    },
+    "project": {
+      "id": "fixture-project",
+      "title": "Projeto fictício"
+    },
+    "processType": "assets",
+    "block": {
+      "type": "CRIAR",
+      "name": "Gerar imagens de teste",
+      "instructions": "Valide o contrato da capability sem publicar resultados."
+    },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

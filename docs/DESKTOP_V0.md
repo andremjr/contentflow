@@ -6,8 +6,8 @@ A V0 transforma o ContentFlow OS em um aplicativo comum do Windows. Ela não exi
 
 Os binários são publicados manualmente na página [Releases do projeto](https://github.com/andremjr/contentflow-os/releases):
 
-- `ContentFlow-OS-V0-0.3.0-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
-- `ContentFlow-OS-V0-0.3.0-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
+- `ContentFlow-OS-V0-0.3.1-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
+- `ContentFlow-OS-V0-0.3.1-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
 
 O Windows pode mostrar um aviso porque esta V0 ainda não possui assinatura digital comercial. Confira se o arquivo veio do repositório oficial antes de executá-lo.
 
@@ -15,7 +15,7 @@ O Windows pode mostrar um aviso porque esta V0 ainda não possui assinatura digi
 
 - projetos e banco local: `%APPDATA%\ContentFlow OS\data`;
 - plugins instalados e pastas vinculadas: dentro da mesma área de dados;
-- exemplo editável: `Documentos\ContentFlow OS\Plugins\community-reference`;
+- exemplos e plugins opcionais editáveis: `Documentos\ContentFlow OS\Plugins`;
 - programa instalado: pasta escolhida no instalador.
 
 Reinstalar uma compilação nova substitui o programa, mas não remove os dados. Ainda assim, faça backup da área de dados antes de uma atualização importante.
@@ -32,6 +32,8 @@ Abra **Plugins**, informe a pasta que contém `contentflow.plugin.json` e escolh
 2. **Instalar uma cópia** quando quiser uma versão estável e independente da pasta original.
 
 Depois, revise as capacidades e permissões, aceite o consentimento local e ative o plugin. Nenhuma aprovação central é necessária.
+
+A distribuição 0.3.1 também copia os plugins opcionais mantidos em `plugins/distributable` para essa pasta de Documentos. Eles não são ativados automaticamente: o usuário escolhe conscientemente se quer instalar uma cópia ou vincular a pasta ao vivo.
 
 ## Recompilar o núcleo
 

@@ -151,8 +151,6 @@ function PluginsPage() {
     void refresh();
   }, [refresh]);
 
-  const bundled = data.plugins.filter((plugin) => plugin.source === "bundled");
-  const installed = data.plugins.filter((plugin) => plugin.source === "installed");
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredPlugins = data.plugins.filter((plugin) => {
     const capabilities = plugin.manifest.capabilities;
@@ -205,8 +203,6 @@ function PluginsPage() {
         <section className="rounded-xl border border-border bg-card/40 p-3 sm:p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{data.plugins.length} plugins</Badge>
-            <Badge variant="outline">{bundled.length} incluídos</Badge>
-            <Badge variant="outline">{installed.length} instalados</Badge>
             {filtersActive && (
               <Button size="sm" variant="ghost" className="ml-auto h-7" onClick={clearFilters}>
                 Limpar filtros
@@ -486,16 +482,9 @@ function PluginCard({
             <Badge variant="secondary" className="text-[10px]">
               v{manifest.version}
             </Badge>
-            <Badge variant="outline" className="text-[10px]">
-              {plugin.source === "bundled"
-                ? "Incluído"
-                : plugin.source === "local"
-                  ? "Desenvolvimento"
-                  : "Instalado"}
-            </Badge>
-            {plugin.source !== "bundled" && (
-              <Badge variant={plugin.enabled ? "secondary" : "outline"} className="text-[10px]">
-                {plugin.enabled ? "Ativo" : "Desativado"}
+            {!plugin.enabled && plugin.source !== "bundled" && (
+              <Badge variant="outline" className="text-[10px]">
+                Desativado
               </Badge>
             )}
           </div>

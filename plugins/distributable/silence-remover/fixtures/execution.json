@@ -1,0 +1,68 @@
+{
+  "executionId": "silence-remover-fixture-execution",
+  "traceId": "silence-remover-fixture-trace",
+  "blockId": "silence-remover-fixture-block",
+  "capabilityId": "remove-silence-audio",
+  "attempt": 1,
+  "invocation": {
+    "mode": "start"
+  },
+  "configuration": {
+    "minimumSilenceDurationMs": 400,
+    "silenceThresholdDb": -45,
+    "paddingMs": 50
+  },
+  "inputs": {
+    "source": {
+      "id": "fixture-audio",
+      "name": "fixture.wav",
+      "mimeType": "audio/wav",
+      "size": 288078,
+      "url": "/api/files/fixture-input.txt"
+    }
+  },
+  "inputContract": [
+    {
+      "id": "fixture-audio-input",
+      "portKey": "source",
+      "label": "Áudio de origem",
+      "type": "audio"
+    }
+  ],
+  "outputContract": [
+    {
+      "portKey": "result",
+      "label": "Áudio sem silêncios",
+      "key": "result",
+      "type": "audio",
+      "required": true,
+      "presentation": {
+        "renderer": "audio-player",
+        "itemType": "audio",
+        "acceptedMimeTypes": ["audio/*"]
+      }
+    }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "fixture-channel",
+      "name": "Canal fictício",
+      "language": "pt-BR",
+      "niche": "Testes"
+    },
+    "project": {
+      "id": "fixture-project",
+      "title": "Projeto fictício"
+    },
+    "processType": "narration",
+    "block": {
+      "type": "CRIAR",
+      "name": "Remover silêncios do áudio",
+      "instructions": "Remova pausas silenciosas mantendo uma pequena margem nas transições."
+    },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

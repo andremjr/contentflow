@@ -1,0 +1,212 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { __test, execute } from "./handler.mjs";
+const manifest = JSON.parse(
+  await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
+);
+function req(o = {}) {
+  return {
+    capabilityId: o.capabilityId ?? "generate-text-in-browser",
+    configuration: {
+      promptTemplate: "{{BLOCK_INSTRUCTIONS}} Tema: {{CONTENT}} Canal: {{CHANNEL_NAME}}",
+      generationMode: "single",
+      plainTextOnly: true,
+      cleanOutput: true,
+      retryAttempts: 0,
+      ...o.configuration,
+    },
+    settings: { diagnosticMockResponse: "TESTE OK", ...o.settings },
+    inputs: { content: "Tema principal", ...o.inputs },
+    context: {
+      channel: { name: "Canal A", niche: "Histórias" },
+      project: { title: "Projeto A" },
+      processType: "script",
+      block: { type: "CRIAR", instructions: "Escreva com clareza." },
+      ...o.context,
+    },
+    validation: o.validation,
+    outputContract: o.outputContract,
+  };
+}
+test("manifesto possui oito capabilities e permissões mínimas", () => {
+  assert.equal(manifest.id, "local.contentflow.gemini-browser-studio");
+  assert.equal(manifest.capabilities.length, 8);
+  assert.deepEqual(
+    manifest.capabilities.map((x) => x.id),
+    [
+      "generate-text-in-browser",
+      "search-web-in-browser",
+      "choose-library-item-in-browser",
+      "validate-content-in-browser",
+      "analyze-images-in-browser",
+      "analyze-documents-in-browser",
+      "generate-image-in-browser",
+      "generate-music-in-browser",
+    ],
+  );
+  assert.deepEqual(manifest.permissions, [
+    "network",
+    "filesystem:read",
+    "filesystem:write",
+    "process",
+  ]);
+  assert.deepEqual(manifest.secretKeys ?? [], []);
+});
+test("separa contas por perfil dedicado", () => {
+  assert.equal(__test.normalizeProfile("canal-a"), "canal-a");
+  assert.throws(() => __test.normalizeProfile("../x"), /Perfil Gemini/);
+  assert.match(
+    __test.profilePath({}, "canal-a").replaceAll("\\", "/"),
+    /gemini-browser-profiles\/canal-a$/,
+  );
+  assert.notEqual(__test.profilePort(9644, "canal-a"), __test.profilePort(9644, "canal-b"));
+});
+test("expande placeholders", () =>
+  assert.equal(
+    __test.expand("{{TEMA}} | {{NICHO}} | {{PROJECT_TITLE}}", req()),
+    "Tema principal | Histórias | Projeto A",
+  ));
+test("gera texto simples", () => {
+  const p = __test.buildParts(req());
+  assert.equal(p.length, 1);
+  assert.match(p[0], /Tema principal/);
+  assert.match(p[0], /FORMATO OBRIGATÓRIO/);
+});
+test("mantém roteiro legado em três partes", () => {
+  const p = __test.buildParts(req({ configuration: { generationMode: "legacy_script_3_parts" } }));
+  assert.equal(p.length, 3);
+  assert.match(p[0], /TÓPICOS 1, 2 e 3/);
+  assert.match(p[2], /TÓPICOS 7 e 8/);
+});
+test("outline variável gera doze envios", () => {
+  const outline = Array.from({ length: 12 }, (_, i) => ({ titulo_bloco: `Ponto ${i + 1}` }));
+  const p = __test.buildParts(
+    req({
+      configuration: {
+        generationMode: "outline_sequence",
+        outlineFirstPromptTemplate: "I {{BLOCK_NUMBER}}/{{BLOCK_TOTAL}} {{BLOCK}}",
+        outlineNextPromptTemplate: "M {{BLOCK_NUMBER}}/{{BLOCK_TOTAL}} {{BLOCK}}",
+        outlineLastPromptTemplate: "F {{BLOCK_NUMBER}}/{{BLOCK_TOTAL}} {{BLOCK}}",
+      },
+      inputs: { outline },
+    }),
+  );
+  assert.equal(p.length, 12);
+  assert.match(p[0], /I 1\/12/);
+  assert.match(p[11], /F 12\/12/);
+});
+test("partes personalizadas", () =>
+  assert.equal(
+    __test.buildParts(
+      req({ configuration: { generationMode: "custom_parts", customParts: "A\n---PARTE---\nB" } }),
+    ).length,
+    2,
+  ));
+test("preserva partes individuais", () =>
+  assert.deepEqual(
+    __test.generationValues("A B", [{ text: "A" }, { text: "B" }], {
+      outputContract: [{ key: "parts" }],
+    }),
+    { result: "A B", parts: ["A", "B"] },
+  ));
+test("monta busca", () =>
+  assert.equal(
+    __test.buildSearch(
+      req({
+        configuration: { searchPromptTemplate: "BUSCA {{QUERY}} {{SEARCH_CONTEXT}}" },
+        inputs: { query: "tema", context: "hoje" },
+      }),
+    ),
+    "BUSCA tema hoje",
+  ));
+test("respeita contrato de busca", () =>
+  assert.deepEqual(
+    __test.searchValues("- A\n- B", ["https://example.com"], {
+      outputContract: [
+        { key: "items", type: "list" },
+        { key: "sources", type: "list" },
+      ],
+    }),
+    { items: ["A", "B"], sources: ["https://example.com"] },
+  ));
+test("Escolher exige ID real", () => {
+  const r = req({ context: { selectedCollection: { items: [{ id: "a" }, { id: "b" }] } } });
+  assert.equal(__test.parseChoice('{"selectedItemId":"b"}', r), "b");
+  assert.throws(() => __test.parseChoice('{"selectedItemId":"x"}', r), /ID permitido/);
+});
+test("Validar interpreta três modos", () => {
+  assert.deepEqual(
+    __test.parseValidation(
+      '{"decision":"approved","feedback":"OK"}',
+      req({ validation: { mode: "approval" } }),
+    ),
+    { decision: "approved", feedback: "OK" },
+  );
+  assert.deepEqual(
+    __test.parseValidation(
+      '{"selectedIndex":2}',
+      req({ validation: { mode: "select_one" }, inputs: { content: ["A", "B"] } }),
+    ),
+    { selected_value: "B" },
+  );
+  assert.deepEqual(
+    __test.parseValidation(
+      '{"selectedIndices":[1,3]}',
+      req({ validation: { mode: "select_many" }, inputs: { content: ["A", "B", "C"] } }),
+    ),
+    { selected_values: ["A", "C"] },
+  );
+});
+test("monta visão, imagem e música", () => {
+  assert.equal(
+    __test.buildAnalysis(
+      req({
+        configuration: { analysisPromptTemplate: "ANALISE {{ANALYSIS_CONTEXT}}" },
+        inputs: { context: "thumb" },
+      }),
+    ),
+    "ANALISE thumb",
+  );
+  assert.equal(
+    __test.buildMedia(
+      req({
+        configuration: { imagePromptTemplate: "IMG {{IMAGE_PROMPT}}" },
+        inputs: { prompt: "azul" },
+      }),
+      "image",
+    ),
+    "IMG azul",
+  );
+  assert.equal(
+    __test.buildMedia(
+      req({
+        configuration: { musicPromptTemplate: "MUS {{MUSIC_PROMPT}}" },
+        inputs: { prompt: "calma" },
+      }),
+      "music",
+    ),
+    "MUS calma",
+  );
+});
+test("encontra StoredFiles aninhados", () => {
+  const f = { id: "f", name: "a.pdf", url: "staging://f" };
+  assert.deepEqual(__test.collect({ x: [f] }), [f]);
+});
+test("mock textual não abre navegador", async () => {
+  assert.deepEqual((await execute(req(), { signal: AbortSignal.timeout(5000) })).values, {
+    result: "TESTE OK",
+  });
+  assert.deepEqual(
+    (
+      await execute(
+        req({
+          capabilityId: "search-web-in-browser",
+          settings: { diagnosticMockResponse: "Pesquisa" },
+        }),
+        { signal: AbortSignal.timeout(5000) },
+      )
+    ).values,
+    { result: "Pesquisa", sources: [] },
+  );
+});

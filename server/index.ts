@@ -46,6 +46,7 @@ import {
   initializePluginRunner,
 } from "./plugin-runner";
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
+import { composePluginPortValue } from "./plugin-input-values";
 import {
   createPersistentPluginJob,
   isPluginJobTimedOut,
@@ -1926,18 +1927,15 @@ app.post("/api/execute-block", async (request, response) => {
     capability.inputPorts.flatMap((port) => {
       const assigned = assignedInputs.filter((item) => item.port?.key === port.key);
       if (!assigned.length) return [];
-      if (assigned.length === 1 && !port.multiple) {
-        return [[port.key, assigned[0].resolved.value ?? null]];
-      }
       return [
         [
           port.key,
-          assigned
-            .map(
-              ({ resolved }) =>
-                `${resolved.input.label}: ${JSON.stringify(resolved.value ?? null)}`,
-            )
-            .join("\n"),
+          composePluginPortValue(
+            assigned.map(({ resolved }) => ({
+              label: resolved.input.label,
+              value: resolved.value ?? null,
+            })),
+          ),
         ],
       ];
     }),

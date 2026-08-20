@@ -1,0 +1,47 @@
+{
+  "executionId": "gemini-fixture",
+  "traceId": "gemini-fixture-trace",
+  "blockId": "gemini-fixture-block",
+  "capabilityId": "generate-text-in-browser",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": {
+    "promptTemplate": "{{BLOCK_INSTRUCTIONS}}\n{{CONTENT}}",
+    "generationMode": "single",
+    "modelPreference": "current",
+    "plainTextOnly": true,
+    "cleanOutput": true,
+    "minCharacters": 1,
+    "delayBetweenPartsMs": 0,
+    "retryAttempts": 0
+  },
+  "settings": { "diagnosticMockResponse": "Resposta fictícia do Gemini." },
+  "inputs": { "content": "Tema fictício" },
+  "inputContract": [
+    { "id": "input", "portKey": "content", "label": "Contexto", "type": "textarea" }
+  ],
+  "outputContract": [
+    {
+      "portKey": "result",
+      "label": "Texto gerado",
+      "key": "result",
+      "type": "textarea",
+      "required": true
+    }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "channel",
+      "name": "Canal fictício",
+      "language": "pt-BR",
+      "niche": "Histórias"
+    },
+    "project": { "id": "project", "title": "Projeto fictício" },
+    "processType": "script",
+    "block": { "type": "CRIAR", "name": "Criar texto", "instructions": "Escreva um teste." },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}
