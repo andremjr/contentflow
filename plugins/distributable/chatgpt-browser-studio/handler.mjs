@@ -765,6 +765,12 @@ async function attachChatGptPage(client, signal) {
   await client.send("Target.activateTarget", { targetId: target.targetId });
   await client.send("Page.enable", {}, sessionId);
   await client.send("Runtime.enable", {}, sessionId);
+  try {
+    await client.send("Page.bringToFront", {}, sessionId);
+  } catch {
+    // Target.activateTarget is still sufficient on Chrome builds without this command.
+  }
+  await sleep(300, signal);
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
@@ -782,7 +788,8 @@ function cfVisible(el){if(!el||!(el instanceof Element))return false;const s=get
 function cfText(el){return [el?.innerText,el?.textContent,el?.getAttribute?.('aria-label'),el?.getAttribute?.('data-testid')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()}
 function cfPrompt(){const selectors=['#prompt-textarea','[contenteditable="true"][role="textbox"]','[role="textbox"][aria-label*="Chat" i]'];for(const s of selectors){const el=[...document.querySelectorAll(s)].find(cfVisible);if(el)return el}return null}
 function cfAssistantNodes(){const selectors=['[data-message-author-role="assistant"] .markdown','[data-message-author-role="assistant"]','article[data-testid^="conversation-turn-"] .markdown'];for(const s of selectors){const n=[...document.querySelectorAll(s)].filter(cfVisible);if(n.length)return n}return []}
-function cfResponseState(){const nodes=cfAssistantNodes(),entries=nodes.map(el=>({text:(el.innerText||el.textContent||'').trim(),links:[...el.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text);const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(/stop/i.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'));return{texts:entries.map(x=>x.text),entries,stop,bodyHint:(document.body?.innerText||'').slice(0,6000)}}
+function cfResolveComparison(){const body=document.body?.innerText||'';if(!/giving feedback on a new version|qual resposta voc[êe] prefere|dando feedback sobre uma nova vers[ãa]o/i.test(body))return false;const button=[...document.querySelectorAll('button')].find(el=>cfVisible(el)&&/prefer this response|prefiro esta resposta|choose this response|escolher esta resposta/i.test(cfText(el)));if(!button)return false;button.click();return true}
+function cfResponseState(){const comparisonResolved=cfResolveComparison(),nodes=cfAssistantNodes(),entries=nodes.map(el=>({text:(el.innerText||el.textContent||'').trim(),links:[...el.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text);const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(/stop/i.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'));return{texts:entries.map(x=>x.text),entries,stop,comparisonResolved,bodyHint:(document.body?.innerText||'').slice(0,6000)}}
 `;
 
 async function openNewConversation(client, sessionId, signal) {
@@ -868,6 +875,10 @@ async function clickMode(client, sessionId, mode, signal) {
     sessionId,
     `(() => {${PAGE_HELPERS};const p=/${pattern}/i;const el=[...document.querySelectorAll('button,[role="menuitem"]')].find(x=>cfVisible(x)&&p.test(cfText(x)));if(!el)return null;const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
   );
+  // A geração de imagens também funciona no chat padrão quando a conta não
+  // exibe o atalho "Criar uma imagem". Nesse caso o próprio prompt explícito
+  // aciona a ferramenta, portanto não devemos abortar antes de enviá-lo.
+  if (!point && mode === "image") return false;
   if (!point)
     throw codedError("PERMISSION_DENIED", `A conta atual não oferece o modo ${mode}.`, false);
   await client.send(
@@ -881,6 +892,7 @@ async function clickMode(client, sessionId, mode, signal) {
     sessionId,
   );
   await sleep(300, signal);
+  return true;
 }
 
 async function setPrompt(client, sessionId, prompt, settings, signal) {
@@ -933,25 +945,82 @@ async function setPrompt(client, sessionId, prompt, settings, signal) {
     );
     if (delay) await sleep(delay, signal);
   }
+  // The ChatGPT ProseMirror editor can expose an enabled submit button before
+  // the final inserted chunks reach its internal state. Give it one render
+  // cycle before dispatching the trusted CDP click.
+  await sleep(1_000, signal);
 }
 
-async function clickSend(client, sessionId) {
-  const point = await evaluate(
+async function clickSend(client, sessionId, signal) {
+  const deadline = Date.now() + 10_000;
+  let point;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    point = await evaluate(
+      client,
+      sessionId,
+      `(() => {${PAGE_HELPERS};const el=[...document.querySelectorAll('button')].find(x=>cfVisible(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true'&&(x.getAttribute('data-testid')==='send-button'||/send prompt|enviar/i.test(cfText(x))));if(!el)return null;const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
+    );
+    if (point) break;
+    await sleep(200, signal);
+  }
+  if (!point)
+    throw codedError("OUTPUT_VALIDATION_FAILED", "Botão Enviar não ficou disponível.", true);
+  const clicked = await evaluate(
     client,
     sessionId,
-    `(() => {${PAGE_HELPERS};const el=[...document.querySelectorAll('button')].find(x=>cfVisible(x)&&!x.disabled&&(x.getAttribute('data-testid')==='send-button'||/send prompt|enviar/i.test(cfText(x))));if(!el)return null;const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
+    `(() => {${PAGE_HELPERS};const el=[...document.querySelectorAll('button')].find(x=>cfVisible(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true'&&(x.getAttribute('data-testid')==='send-button'||/send prompt|enviar/i.test(cfText(x))));if(!el)return false;el.click();return true})()`,
   );
-  if (!point) throw codedError("OUTPUT_VALIDATION_FAILED", "Botão Enviar não disponível.", true);
+  if (!clicked) {
+    await client.send(
+      "Input.dispatchMouseEvent",
+      { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 },
+      sessionId,
+    );
+    await client.send(
+      "Input.dispatchMouseEvent",
+      { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 },
+      sessionId,
+    );
+  }
+  const sent = async (deadline) => {
+    while (Date.now() < deadline) {
+      if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+      const submitted = await evaluate(
+        client,
+        sessionId,
+        `(() => {${PAGE_HELPERS};const prompt=cfPrompt();const text=(prompt?.innerText||prompt?.textContent||'').trim();const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(/stop/i.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'));return !text||stop})()`,
+      );
+      if (submitted) return true;
+      await sleep(150, signal);
+    }
+    return false;
+  };
+  if (await sent(Date.now() + 2_500)) return;
   await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 },
+    "Input.dispatchKeyEvent",
+    {
+      type: "keyDown",
+      key: "Enter",
+      code: "Enter",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    },
     sessionId,
   );
   await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 },
+    "Input.dispatchKeyEvent",
+    {
+      type: "keyUp",
+      key: "Enter",
+      code: "Enter",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    },
     sessionId,
   );
+  if (await sent(Date.now() + 2_500)) return;
+  throw codedError("OUTPUT_VALIDATION_FAILED", "O ChatGPT não confirmou o envio do prompt.", true);
 }
 
 async function responseState(client, sessionId) {
@@ -984,7 +1053,7 @@ async function generatePart(client, sessionId, prompt, settings, signal) {
   const before = await responseState(client, sessionId),
     baseline = before?.texts?.length ?? 0;
   await setPrompt(client, sessionId, prompt, settings, signal);
-  await clickSend(client, sessionId);
+  await clickSend(client, sessionId, signal);
   return await waitForResponse(
     client,
     sessionId,
@@ -998,7 +1067,7 @@ async function generateImagePart(client, sessionId, prompt, settings, signal) {
   const baseline = await evaluate(
     client,
     sessionId,
-    `(() => [...document.querySelectorAll('img')].filter(img=>img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||/backend-api\/estuary\/content/i.test(img.currentSrc||img.src||''))).length)()`,
+    `(() => [...document.querySelectorAll('img')].filter(img=>img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||(img.currentSrc||img.src||'').includes('backend-api/estuary/content'))).length)()`,
   );
   await setPrompt(client, sessionId, prompt, settings, signal);
   await clickSend(client, sessionId);
@@ -1009,7 +1078,7 @@ async function generateImagePart(client, sessionId, prompt, settings, signal) {
     const state = await evaluate(
       client,
       sessionId,
-      `(() => {${PAGE_HELPERS};const images=[...document.querySelectorAll('img')].filter(img=>img.complete&&img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||/backend-api\/estuary\/content/i.test(img.currentSrc||img.src||'')));const img=images.at(-1);const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(/stop/i.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'));return{count:images.length,stop,alt:img?.alt||'Imagem gerada',src:img?.currentSrc||img?.src||''}})()`,
+      `(() => {${PAGE_HELPERS};const images=[...document.querySelectorAll('img')].filter(img=>img.complete&&img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||(img.currentSrc||img.src||'').includes('backend-api/estuary/content')));const img=images.at(-1);const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(/stop/i.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'));return{count:images.length,stop,alt:img?.alt||'Imagem gerada',src:img?.currentSrc||img?.src||''}})()`,
     );
     if (state.count > baseline && state.src && !state.stop) return { text: state.alt, links: [] };
     const body = await evaluate(client, sessionId, "(document.body?.innerText||'').slice(-4000)");
@@ -1028,7 +1097,7 @@ async function captureGeneratedImage(client, sessionId, services, request, timeo
     imageData = await evaluate(
       client,
       sessionId,
-      `(() => {const images=[...document.querySelectorAll('img')].filter(img=>img.complete&&img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||/backend-api\/estuary\/content/i.test(img.currentSrc||img.src||'')));const img=images.at(-1);return img?{src:img.currentSrc||img.src,width:img.naturalWidth,height:img.naturalHeight,alt:img.alt||'Imagem gerada'}:null})()`,
+      `(() => {const images=[...document.querySelectorAll('img')].filter(img=>img.complete&&img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||(img.currentSrc||img.src||'').includes('backend-api/estuary/content')));const img=images.at(-1);return img?{src:img.currentSrc||img.src,width:img.naturalWidth,height:img.naturalHeight,alt:img.alt||'Imagem gerada'}:null})()`,
     );
     if (imageData?.src) break;
     await sleep(1000, services.signal);
@@ -1159,7 +1228,7 @@ export async function execute(request, services) {
       profilePath,
       port,
       startMinimized: settings.startMinimized === true,
-      keepBrowserOpen: settings.keepBrowserOpen !== false,
+      keepBrowserOpen: settings.keepBrowserOpen === true,
       signal: services.signal,
     });
     child = launched.child;
@@ -1266,8 +1335,12 @@ export async function execute(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
+    if (settings.keepBrowserOpen !== true)
+      try {
+        await client?.send("Browser.close");
+      } catch {}
     client?.close();
-    if (settings.keepBrowserOpen === false && child) {
+    if (settings.keepBrowserOpen !== true && child) {
       try {
         child.kill();
       } catch {}

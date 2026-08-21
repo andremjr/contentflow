@@ -644,6 +644,11 @@ function deriveProcessOutput(execution: ProcessExecution): ProcessOutput | undef
       };
     }
     if (block.type === "ESCOLHER") continue;
+    const compatibleOutput = block.outputs?.find(
+      (field) =>
+        (field.key === definition.key || field.key === legacyKey) && field.type === definition.type,
+    );
+    if (!compatibleOutput) continue;
     const value = blockExecution?.values[definition.key] ?? blockExecution?.values[legacyKey];
     if (value === undefined || isEmptyRuntimeValue(value)) continue;
     return {

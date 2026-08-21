@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.chatgpt-browser-studio",
   "name": "ChatGPT Browser Studio",
-  "version": "0.1.0",
+  "version": "0.1.13",
   "description": "Automação modular do ChatGPT web para criar, pesquisar, escolher, validar, analisar arquivos e gerar imagens.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -33,7 +33,7 @@
         "maximum": 64000,
         "default": 9544
       },
-      "keepBrowserOpen": { "type": "boolean", "default": true },
+      "keepBrowserOpen": { "type": "boolean", "default": false },
       "startMinimized": { "type": "boolean", "default": false },
       "interactiveWaitSeconds": {
         "type": "integer",
@@ -115,7 +115,7 @@
         {
           "key": "result",
           "label": "Texto gerado",
-          "producedTypes": ["textarea"],
+          "producedTypes": ["text", "textarea"],
           "required": true,
           "presentation": { "renderer": "text-long" }
         },
@@ -143,7 +143,7 @@
         "file",
         "files"
       ],
-      "producedOutputTypes": ["textarea", "list"],
+      "producedOutputTypes": ["text", "textarea", "list"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,

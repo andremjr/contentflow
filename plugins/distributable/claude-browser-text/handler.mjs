@@ -1070,6 +1070,11 @@ async function waitForPrompt(client, sessionId, waitMs, signal) {
 
 async function attachFiles(client, sessionId, attachments, signal) {
   if (!attachments.length) return;
+  const baselinePreviewCount = await evaluate(
+    client,
+    sessionId,
+    `(() => [...document.querySelectorAll('img')].filter(el => { const r=el.getBoundingClientRect(); return r.width>40 && r.height>40; }).length)()`,
+  );
   await client.send("DOM.enable", {}, sessionId);
   const { root } = await client.send("DOM.getDocument", { depth: 1, pierce: true }, sessionId);
   const { nodeIds = [] } = await client.send(
@@ -1096,9 +1101,14 @@ async function attachFiles(client, sessionId, attachments, signal) {
     const state = await evaluate(
       client,
       sessionId,
-      `(() => { ${PAGE_HELPERS}; const body=(document.body?.innerText||'').toLowerCase(); return {body, prompt:!!cfPrompt()}; })()`,
+      `(() => { ${PAGE_HELPERS}; const body=(document.body?.innerText||'').toLowerCase(); const previewCount=[...document.querySelectorAll('img')].filter(el => { const r=el.getBoundingClientRect(); return r.width>40 && r.height>40; }).length; return {body, prompt:!!cfPrompt(), previewCount}; })()`,
     );
-    if (state?.prompt && expected.every((name) => state.body.includes(name))) return;
+    if (
+      state?.prompt &&
+      (expected.every((name) => state.body.includes(name)) ||
+        Number(state.previewCount) > Number(baselinePreviewCount))
+    )
+      return;
     if (
       /upload failed|falha.*upload|arquivo.*grande|file.*large/i.test(String(state?.body ?? ""))
     ) {
@@ -1184,28 +1194,36 @@ async function setPrompt(client, sessionId, prompt, settings, signal) {
   }
 }
 
-async function clickSend(client, sessionId) {
-  const point = await evaluate(
-    client,
-    sessionId,
-    `(() => { ${PAGE_HELPERS}; const buttons=[...document.querySelectorAll('button')].filter(cfVisible); const button=buttons.find(el => /send message|enviar mensagem|send$/i.test(cfText(el)) && !el.disabled && el.getAttribute('aria-disabled')!=='true'); if(!button)return null; button.scrollIntoView({block:'center'}); const r=button.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()`,
-  );
+async function clickSend(client, sessionId, signal) {
+  const deadline = Date.now() + 10_000;
+  let point;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    point = await evaluate(
+      client,
+      sessionId,
+      `(() => { ${PAGE_HELPERS}; const buttons=[...document.querySelectorAll('button')].filter(cfVisible); const button=buttons.find(el => /send message|enviar mensagem|send$/i.test(cfText(el)) && !el.disabled && el.getAttribute('aria-disabled')!=='true'); if(!button)return null; button.scrollIntoView({block:'center'}); const r=button.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()`,
+    );
+    if (point) break;
+    await sleep(200, signal);
+  }
   if (!point)
     throw codedError(
       "OUTPUT_VALIDATION_FAILED",
       "O botão Enviar do Claude não ficou disponível.",
       true,
     );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 },
+  const clicked = await evaluate(
+    client,
     sessionId,
+    `(() => { ${PAGE_HELPERS}; const button=[...document.querySelectorAll('button')].filter(cfVisible).find(el => /send message|enviar mensagem|send$/i.test(cfText(el)) && !el.disabled && el.getAttribute('aria-disabled')!=='true'); if(!button)return false; button.click(); return true; })()`,
   );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
+  if (!clicked)
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      "O botão Enviar do Claude não aceitou o clique.",
+      true,
+    );
 }
 
 async function ensureWebSearchEnabled(client, sessionId, signal) {
@@ -1331,7 +1349,7 @@ async function generatePart(client, sessionId, prompt, settings, signal) {
   const before = await responseState(client, sessionId);
   const baselineCount = Array.isArray(before?.texts) ? before.texts.length : 0;
   await setPrompt(client, sessionId, prompt, settings, signal);
-  await clickSend(client, sessionId);
+  await clickSend(client, sessionId, signal);
   const timeoutSeconds = clampInteger(settings?.responseTimeoutSeconds, 600, 30, 900);
   return await waitForResponse(client, sessionId, baselineCount, timeoutSeconds * 1000, signal);
 }
@@ -1427,7 +1445,7 @@ export async function execute(request, services) {
       profilePath,
       port,
       startMinimized: settings.startMinimized === true,
-      keepBrowserOpen: settings.keepBrowserOpen !== false,
+      keepBrowserOpen: settings.keepBrowserOpen === true,
       signal: services.signal,
     });
     child = launched.child;
@@ -1531,8 +1549,12 @@ export async function execute(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
+    if (settings.keepBrowserOpen !== true)
+      try {
+        await client?.send("Browser.close");
+      } catch {}
     client?.close();
-    if (settings.keepBrowserOpen === false && child) {
+    if (settings.keepBrowserOpen !== true && child) {
       try {
         child.kill();
       } catch {

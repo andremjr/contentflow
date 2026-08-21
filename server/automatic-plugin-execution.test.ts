@@ -135,6 +135,33 @@ test("encadeia blocos de plugin automaticamente sem ação por etapa", async () 
         parameters: [],
         order: 1,
       },
+      {
+        id: "block-three-incompatible",
+        type: "CRIAR",
+        operator: "Código",
+        name: "Análise posterior com chave repetida",
+        inputs: [
+          {
+            id: "input-three",
+            label: "Texto",
+            type: "textarea",
+            source: "static",
+            staticValue: "wrong final value",
+          },
+        ],
+        outputs: [
+          {
+            id: "output-three",
+            label: "Análise textual",
+            key: "theme",
+            type: "text",
+            required: true,
+          },
+        ],
+        plugin,
+        parameters: [],
+        order: 2,
+      },
     ];
 
     await request("/api/channels", {
@@ -185,6 +212,7 @@ test("encadeia blocos de plugin automaticamente sem ação por etapa", async () 
             startedAt: now,
           },
           { blockId: "block-two", status: "pending", values: {}, attempt: 1 },
+          { blockId: "block-three-incompatible", status: "pending", values: {}, attempt: 1 },
         ],
         status: "blocked_executor",
         outputStatus: "pending",
@@ -207,10 +235,11 @@ test("encadeia blocos de plugin automaticamente sem ação por etapa", async () 
     assert.equal(execution.status, "completed", execution.error ?? output.join("\n"));
     assert.deepEqual(
       execution.blocks.map((block) => block.status),
-      ["completed", "completed"],
+      ["completed", "completed", "completed"],
     );
     assert.equal(execution.blocks[0].values.intermediate, "HELLO");
     assert.equal(execution.blocks[1].values.theme, "HELLO");
+    assert.equal(execution.blocks[2].values.theme, "WRONG FINAL VALUE");
     assert.equal(execution.output?.values.theme, "HELLO");
   } finally {
     server.kill();

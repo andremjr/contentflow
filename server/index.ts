@@ -36,6 +36,7 @@ import type { PluginExecutionRequest, PluginFieldContract } from "../src/lib/plu
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import {
   activeProjectDeliveries,
+  invalidateBlockDeliveries,
   normalizeExecutionDeliveries,
   recordBlockDeliveries,
   recordProcessOutputDelivery,
@@ -375,6 +376,52 @@ function finishPluginBlock(
   blockExecution.error = undefined;
   recordBlockDeliveries(execution, block, values, "completed", now);
   const completedIndex = execution.blocks.indexOf(blockExecution);
+  const rejected =
+    block.type === "VALIDAR" &&
+    (block.outputs ?? []).some(
+      (output) => output.type === "approval" && values[output.key] === "rejected",
+    );
+  if (rejected && block.validation?.onReject === "retry_target") {
+    const targetIndex = execution.methodSnapshot.blocks.findIndex(
+      (candidate) => candidate.id === block.validation?.targetBlockId,
+    );
+    const maxAttempts = Math.max(1, block.validation.maxAttempts ?? 3);
+    const targetExecution = execution.blocks[targetIndex];
+    const targetBlock = execution.methodSnapshot.blocks[targetIndex];
+    if (targetIndex >= 0 && targetIndex < completedIndex && targetExecution && targetBlock) {
+      if ((targetExecution.attempt ?? 1) >= maxAttempts) {
+        execution.status = "awaiting_human";
+        blockExecution.status = "awaiting_human";
+        blockExecution.error = `O limite de ${maxAttempts} tentativas foi atingido.`;
+      } else {
+        for (let index = targetIndex; index < execution.blocks.length; index += 1) {
+          const item = execution.blocks[index];
+          item.values = {};
+          item.error = undefined;
+          item.logs = undefined;
+          item.completedAt = undefined;
+          item.jobId = undefined;
+          item.progress = undefined;
+          item.progressMessage = undefined;
+          item.retryFeedback = undefined;
+          item.status = "pending";
+        }
+        targetExecution.attempt = (targetExecution.attempt ?? 1) + 1;
+        targetExecution.retryFeedback = structuredClone(values);
+        targetExecution.startedAt = now;
+        targetExecution.status =
+          targetBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
+        invalidateBlockDeliveries(
+          execution,
+          execution.methodSnapshot.blocks.slice(targetIndex).map((candidate) => candidate.id),
+        );
+        execution.status =
+          targetExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
+      }
+      execution.updatedAt = now;
+      return;
+    }
+  }
   const nextExecution = execution.blocks[completedIndex + 1];
   const nextBlock = execution.methodSnapshot.blocks[completedIndex + 1];
 
@@ -390,6 +437,10 @@ function finishPluginBlock(
     for (let index = execution.methodSnapshot.blocks.length - 1; index >= 0; index -= 1) {
       const candidate = execution.methodSnapshot.blocks[index];
       if (candidate.type === "VALIDAR" || candidate.type === "ESCOLHER") continue;
+      const candidateOutput = candidate.outputs?.find(
+        (output) => output.key === finalField.key && output.type === finalField.type,
+      );
+      if (!candidateOutput) continue;
       const candidateExecution = execution.blocks.find((item) => item.blockId === candidate.id);
       const value = candidateExecution?.values[finalField.key];
       if (!isEmptyRuntimeValue(value)) {
@@ -666,7 +717,13 @@ async function processPluginJob(
   const storedSecrets = await pluginSecretsForJob(plugin.id, plugin.manifest.secretKeys ?? []);
   const secrets = { ...storedSecrets, ...transientSecrets };
   const workspaceDirectory = readPluginWorkspace(plugin.id);
-  const invocationTimeout = Math.max(1_000, Math.min(remainingMs, 120_000));
+  // Browser-driven capabilities legitimately need more than two minutes for
+  // page loading, model generation and UI transitions. Honor the capability's
+  // declared bound while never exceeding the persistent job deadline.
+  const invocationTimeout = Math.max(
+    1_000,
+    Math.min(remainingMs, capability.execution.defaultTimeoutMs ?? 120_000),
+  );
 
   try {
     if (isPluginJobTimedOut(job)) {
@@ -1940,6 +1997,111 @@ app.post("/api/execute-block", async (request, response) => {
       ];
     }),
   ) as Record<string, RuntimeValue>;
+  if (block.type === "VALIDAR" && block.validation?.targetBlockId) {
+    const targetBlock = execution.methodSnapshot.blocks.find(
+      (candidate) => candidate.id === block.validation?.targetBlockId,
+    );
+    const targetExecution = execution.blocks.find(
+      (candidate) => candidate.blockId === block.validation?.targetBlockId,
+    );
+    const targetOutput =
+      targetBlock?.outputs?.find((field) => field.key === block.validation?.targetOutputKey) ??
+      targetBlock?.outputs?.[0];
+    const targetValue = targetOutput ? targetExecution?.values[targetOutput.key] : undefined;
+    const targetPort = targetOutput
+      ? capability.inputPorts.find((port) => port.acceptedTypes.includes(targetOutput.type))
+      : undefined;
+    if (
+      targetOutput &&
+      targetValue !== undefined &&
+      targetPort &&
+      inputs[targetPort.key] === undefined
+    ) {
+      inputs[targetPort.key] = targetValue;
+      inputContract.push({
+        id: `validation-${targetBlock?.id ?? "target"}-${targetOutput.key}`,
+        portKey: targetPort.key,
+        label: targetOutput.label,
+        type: targetOutput.type,
+        recordFields: targetOutput.recordFields,
+        presentation: targetOutput.presentation,
+      });
+    }
+  }
+  // The builder intentionally allows a block without declared inputs while
+  // still advertising prior deliveries as available context. Materialize that
+  // context for plugins so browser automations receive the actual values, not
+  // only instructions that refer to them.
+  const currentBlockIndex = execution.blocks.indexOf(blockExecution);
+  const contextValues = execution.methodSnapshot.blocks
+    .slice(0, Math.max(0, currentBlockIndex))
+    .flatMap((previousBlock) =>
+      (previousBlock.outputs ?? []).flatMap((field) => {
+        const previousExecution = execution.blocks.find(
+          (item) => item.blockId === previousBlock.id,
+        );
+        const value = previousExecution?.values[field.key];
+        return value === undefined || isEmptyRuntimeValue(value) ? [] : [{ field, value }];
+      }),
+    );
+  for (const { field, value } of contextValues) {
+    if (!["image", "audio", "video", "file", "files"].includes(field.type)) continue;
+    const port = capability.inputPorts.find(
+      (candidate) =>
+        inputs[candidate.key] === undefined && candidate.acceptedTypes.includes(field.type),
+    );
+    if (!port) continue;
+    inputs[port.key] = value;
+    inputContract.push({
+      id: `context-${field.id}`,
+      portKey: port.key,
+      label: field.label,
+      type: field.type,
+      recordFields: field.recordFields,
+      presentation: field.presentation,
+    });
+  }
+  const textPort = capability.inputPorts.find(
+    (candidate) =>
+      inputs[candidate.key] === undefined &&
+      (candidate.acceptedTypes.includes("text") || candidate.acceptedTypes.includes("textarea")),
+  );
+  const previousProcessContextText = projectExecutions
+    .filter(
+      (candidate) =>
+        candidate.outputStatus === "completed" &&
+        PROCESS_ORDER.indexOf(candidate.processType) < PROCESS_ORDER.indexOf(execution.processType),
+    )
+    .flatMap((candidate) =>
+      Object.entries(candidate.output?.values ?? {}).map(
+        ([key, value]) =>
+          `${candidate.processType}.${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
+      ),
+    )
+    .join("\n\n");
+  if (textPort && (contextValues.length || previousProcessContextText)) {
+    const currentProcessContextText = contextValues
+      .filter(({ field }) => !["image", "audio", "video", "file", "files"].includes(field.type))
+      .map(
+        ({ field, value }) =>
+          `${field.label}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
+      )
+      .join("\n\n");
+    const contextText = [previousProcessContextText, currentProcessContextText]
+      .filter(Boolean)
+      .join("\n\n");
+    if (contextText) {
+      inputs[textPort.key] = contextText;
+      inputContract.push({
+        id: "previous-block-context",
+        portKey: textPort.key,
+        label: "Contexto dos blocos anteriores",
+        type: "textarea",
+        recordFields: undefined,
+        presentation: undefined,
+      });
+    }
+  }
   const selectedCollection =
     block.type === "ESCOLHER"
       ? collections.find((item) => item.id === block.collectionId)

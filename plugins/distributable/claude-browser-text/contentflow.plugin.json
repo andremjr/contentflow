@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.claude-browser-text",
   "name": "Claude Browser Studio",
-  "version": "0.3.0",
+  "version": "0.3.5",
   "description": "Super plugin do Claude web para criar, pesquisar, escolher, validar e analisar imagens ou documentos em conversas persistentes.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -38,7 +38,7 @@
         "maximum": 64000,
         "default": 9444
       },
-      "keepBrowserOpen": { "type": "boolean", "default": true },
+      "keepBrowserOpen": { "type": "boolean", "default": false },
       "startMinimized": {
         "type": "boolean",
         "default": false,
@@ -126,7 +126,7 @@
         {
           "key": "result",
           "label": "Texto gerado",
-          "producedTypes": ["textarea"],
+          "producedTypes": ["text", "textarea"],
           "required": true,
           "presentation": { "renderer": "text-long" }
         },
@@ -155,7 +155,7 @@
         "file",
         "files"
       ],
-      "producedOutputTypes": ["textarea", "list"],
+      "producedOutputTypes": ["text", "textarea", "list"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 900000,

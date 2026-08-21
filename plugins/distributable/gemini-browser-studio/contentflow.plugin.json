@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.gemini-browser-studio",
   "name": "Gemini Browser Studio",
-  "version": "0.1.0",
+  "version": "0.1.10",
   "description": "Automação modular do Gemini web para texto, pesquisa, escolha, validação, análise de arquivos, imagens e música.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -29,7 +29,7 @@
         "maximum": 64000,
         "default": 9644
       },
-      "keepBrowserOpen": { "type": "boolean", "default": true },
+      "keepBrowserOpen": { "type": "boolean", "default": false },
       "startMinimized": { "type": "boolean", "default": false },
       "interactiveWaitSeconds": {
         "type": "integer",
@@ -107,7 +107,7 @@
         {
           "key": "result",
           "label": "Texto gerado",
-          "producedTypes": ["textarea"],
+          "producedTypes": ["text", "textarea"],
           "required": true,
           "presentation": { "renderer": "text-long" }
         },
@@ -135,7 +135,7 @@
         "file",
         "files"
       ],
-      "producedOutputTypes": ["textarea", "list"],
+      "producedOutputTypes": ["text", "textarea", "list"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,
