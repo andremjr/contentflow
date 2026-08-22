@@ -5,7 +5,8 @@ import { __test } from "./handler.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.0.1");
+assert.equal(manifest.version, "1.0.2");
+assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
 assert.ok(manifest.permissions.includes("filesystem:write"));
@@ -147,5 +148,5 @@ assert.ok(!source.includes("FALLBACK_IMAGE_BASE64"));
 await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), /ENOENT/);
 
 console.log(
-  "OK: v1.0.1 usa perfis dedicados, referências, modelos configuráveis e capacidade exclusiva de imagem.",
+  "OK: v1.0.2 usa perfis dedicados, referências, modelos configuráveis e capacidade exclusiva de imagem.",
 );

@@ -1,0 +1,34 @@
+{
+  "executionId": "grok-browser-fixture",
+  "traceId": "grok-browser-fixture-trace",
+  "blockId": "grok-browser-fixture-block",
+  "capabilityId": "generate-image-in-browser",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": {
+    "accountProfile": "default",
+    "imagePromptTemplate": "Crie uma imagem. {{IMAGE_PROMPT}}",
+    "retryAttempts": 0
+  },
+  "settings": { "diagnosticMockResponse": "Imagem diagnóstica." },
+  "inputs": { "prompt": "Paisagem de teste" },
+  "inputContract": [{ "id": "prompt", "portKey": "prompt", "label": "Prompt", "type": "textarea" }],
+  "outputContract": [
+    { "portKey": "image", "label": "Imagem", "key": "image", "type": "image", "required": true }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "fixture-channel",
+      "name": "Canal fictício",
+      "language": "pt-BR",
+      "niche": "Teste"
+    },
+    "project": { "id": "fixture-project", "title": "Projeto fictício" },
+    "processType": "thumbnail",
+    "block": { "type": "CRIAR", "name": "Criar imagem", "instructions": "Gere uma imagem." },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

@@ -82,6 +82,18 @@ const outputPortSchema = z
     producedTypes: z.array(dataTypeSchema).min(1).refine(unique, "não pode conter duplicatas"),
   })
   .strict();
+const profileSetupSchema = z
+  .object({
+    configurationKey: z
+      .string()
+      .min(1)
+      .max(100)
+      .regex(/^[A-Za-z][A-Za-z0-9_-]*$/),
+    label: z.string().min(1).max(100),
+    description: z.string().max(500).optional(),
+    prepareTimeoutMs: z.number().int().min(30_000).max(900_000).optional(),
+  })
+  .strict();
 const capabilitySchema = z
   .object({
     id: z.string().min(1).max(100).regex(identifier),
@@ -214,6 +226,7 @@ export const pluginManifestSchema = z
       .min(1)
       .refine(unique, "não pode conter duplicatas")
       .optional(),
+    profileSetup: profileSetupSchema.optional(),
     settingsSchema: jsonSchema.optional(),
     capabilities: z.array(capabilitySchema).min(1),
   })
@@ -225,6 +238,22 @@ export const pluginManifestSchema = z
         path: ["networkHosts"],
         message: "exige a permissão network",
       });
+    }
+    if (manifest.profileSetup) {
+      for (const [index, capability] of manifest.capabilities.entries()) {
+        const properties = capability.blockConfigSchema?.properties;
+        if (
+          !properties ||
+          typeof properties !== "object" ||
+          !(manifest.profileSetup.configurationKey in properties)
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["capabilities", index, "blockConfigSchema", "properties"],
+            message: `precisa declarar ${manifest.profileSetup.configurationKey} para profileSetup`,
+          });
+        }
+      }
     }
   });
 

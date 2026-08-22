@@ -87,6 +87,26 @@
         "enum": ["text", "image", "audio", "video", "processing"]
       }
     },
+    "profileSetup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configurationKey", "label"],
+      "properties": {
+        "configurationKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "prepareTimeoutMs": {
+          "type": "integer",
+          "minimum": 30000,
+          "maximum": 900000
+        }
+      }
+    },
     "settingsSchema": { "$ref": "#/$defs/jsonSchema" },
     "capabilities": {
       "type": "array",

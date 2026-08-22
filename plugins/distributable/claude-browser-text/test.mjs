@@ -7,6 +7,11 @@ const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
 
+test("manifesto prepara perfis antes da execução", () => {
+  assert.equal(manifest.version, "0.3.6");
+  assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
+});
+
 function request(overrides = {}) {
   return {
     capabilityId: overrides.capabilityId ?? "generate-text-in-browser",

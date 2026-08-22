@@ -1,0 +1,40 @@
+{
+  "executionId": "fixture-elevenlabs",
+  "traceId": "fixture-elevenlabs-trace",
+  "blockId": "fixture-list-voices",
+  "capabilityId": "list-voices",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": { "search": "", "page_size": 5, "voice_type": "all", "category": "all" },
+  "settings": { "diagnosticFixture": true },
+  "inputs": {},
+  "inputContract": [],
+  "outputContract": [
+    {
+      "portKey": "voices",
+      "label": "Vozes disponíveis",
+      "key": "voices",
+      "type": "records",
+      "required": true
+    }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "fixture-channel",
+      "name": "Canal de teste",
+      "language": "pt-BR",
+      "niche": "Testes"
+    },
+    "project": { "id": "fixture-project", "title": "Projeto de teste" },
+    "processType": "narration",
+    "block": {
+      "type": "BUSCAR",
+      "name": "Listar vozes",
+      "instructions": "Liste as vozes disponíveis."
+    },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

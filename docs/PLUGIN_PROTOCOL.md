@@ -256,6 +256,7 @@ No nível do manifesto, `deliveryTypes` classifica o plugin para descoberta na g
 - `cost` informa se a capacidade é gratuita, tarifada ou de custo desconhecido e se consegue estimar o uso antes da confirmação.
 - `dataPolicy` informa se dados deixam a máquina, para quais provedores e onde consultar retenção e uso para treinamento.
 - `blockConfigSchema` descreve parâmetros salvos no bloco.
+- `profileSetup`, quando presente, identifica uma chave de configuração de perfil dedicado e permite que o construtor ofereça uma preparação interativa antes da execução. O plugin continua responsável pelo navegador, pela validação da sessão e pelo estado local do perfil.
 - `outputSchema` adiciona validação específica da capacidade sem substituir `outputContract`.
 
 ## 6. Portas e binding
@@ -374,6 +375,8 @@ Essas permissões podem conceder capacidades amplas sem conceder a máquina inte
 ### 9.2 Execução imediata
 
 O núcleo chama `execute()` com `invocation.mode = "start"`. A capacidade devolve `success` ou `error` dentro do timeout declarado. A API v1 aceita timeout de até 24 horas; duração longa não torna a capacidade inválida.
+
+Plugins que declaram `profileSetup` também podem receber `invocation.mode = "configure"` com `action = "status"` ou `"prepare"`. Essas chamadas não pertencem a uma execução de Projeto, não recebem inputs e devem devolver `success` com `values.ready` booleano ou um erro seguro. `prepare` abre a superfície interativa necessária, aguarda login/onboarding e fecha o navegador após validar; `status` apenas consulta o estado mantido pelo próprio plugin.
 
 ### 9.3 Execução assíncrona
 

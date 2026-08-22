@@ -5,7 +5,8 @@
   "capabilityId": "generate-images-in-browser",
   "attempt": 1,
   "invocation": {
-    "mode": "start"
+    "mode": "configure",
+    "action": "status"
   },
   "configuration": {
     "accountProfile": "default",

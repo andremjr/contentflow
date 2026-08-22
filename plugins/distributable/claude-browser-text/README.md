@@ -36,7 +36,7 @@ Não há rotação automática de contas. Limite de uso, cobrança, reautentica�
 4. Revise e conceda `network`, `filesystem:read`, `filesystem:write` e `process`. A leitura alcança somente arquivos liberados pelo núcleo.
 5. Vincule a capability correspondente ao bloco `BUSCAR`, `ESCOLHER`, `CRIAR` ou `VALIDAR`.
 
-No primeiro uso, deixe `startMinimized=false`. O Chrome dedicado será aberto em `https://claude.ai/new`; faça login manualmente. Com `keepBrowserOpen=true`, a sessão fica disponível para as próximas execuções.
+Depois de informar o perfil no construtor do Método, use **Salvar perfil**. O Chrome dedicado abre em `https://claude.ai/new`, aguarda o login e fecha depois que a área real do chat for validada.
 
 ## Capabilities
 
@@ -101,7 +101,7 @@ O plugin deriva perfis separados em:
 ~/.contentflow-os/claude-browser-profiles/canal-c
 ```
 
-No primeiro bloco executado com um alias, o Chrome correspondente abre em primeiro plano. Faça login manualmente na conta Claude daquele canal. Nas próximas execuções, o Método escolhe automaticamente a conta pelo alias configurado, sem ler ou exportar cookies.
+Antes da primeira execução com um alias, use **Salvar perfil** no bloco do Método e faça login manualmente na conta Claude daquele canal. Nas execuções seguintes, o Método escolhe a conta pelo alias configurado, sem ler ou exportar cookies. Um perfil não preparado é recusado antes de qualquer prompt ser preenchido.
 
 O ContentFlow OS v0.3 ainda envia `settings: {}` para plugins comunitários, portanto a página de Plugins não mantém hoje uma lista dinâmica de contas. A escolha por `accountProfile` no bloco é a solução compatível com a API v1 atual e fica naturalmente no nível do Método/canal. `settingsSchema` permanece preparado para um futuro suporte do núcleo a settings persistentes.
 

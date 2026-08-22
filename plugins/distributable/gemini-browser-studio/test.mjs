@@ -31,6 +31,8 @@ function req(o = {}) {
 }
 test("manifesto possui oito capabilities e permissões mínimas", () => {
   assert.equal(manifest.id, "local.contentflow.gemini-browser-studio");
+  assert.equal(manifest.version, "0.1.11");
+  assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.capabilities.length, 8);
   assert.deepEqual(
     manifest.capabilities.map((x) => x.id),

@@ -119,6 +119,8 @@ Usar o perfil principal de um Chrome que esteja aberto pode causar bloqueio de a
 
 Autenticação deve ocorrer em uma superfície clara para o usuário e ser definida pelo próprio plugin. Quando a integração exigir cookie ou token de sessão, o usuário conecta a credencial explicitamente e o núcleo a entrega pelo cofre somente àquele plugin. Quando exigir um perfil local, o usuário escolhe a pasta e concede a permissão correspondente; o núcleo não procura perfis automaticamente.
 
+Quando o perfil é referenciado por uma configuração do Método, o plugin pode declarar `profileSetup`. Nesse fluxo, o construtor oferece uma ação explícita para abrir o navegador e concluir o login antes de qualquer Projeto ser executado. A execução normal deve falhar fechada quando o perfil ainda não foi preparado ou quando a sessão expirou; nunca deve preencher um prompt enquanto a página estiver em login, onboarding, CAPTCHA ou reautenticação.
+
 Requisitos:
 
 - cookies, access tokens e refresh tokens nunca entram em `request`, `settings`, `configuration`, logs ou artifacts; quando necessários, são secrets obtidos em memória por `getSecret()`;

@@ -1,0 +1,10 @@
+{
+  "name": "contentflow-official-elevenlabs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test.mjs",
+    "smoke:real": "node real-smoke.mjs"
+  }
+}

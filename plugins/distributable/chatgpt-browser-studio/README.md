@@ -35,7 +35,7 @@ Cada bloco possui `accountProfile`. Use aliases como `canal-a`, `canal-b` e `can
 ~/.contentflow-os/chatgpt-browser-profiles/canal-c
 ```
 
-No primeiro uso de cada alias, deixe `startMinimized=false`, faça login manualmente na janela Chrome dedicada e repita a execução. O plugin não faz rotação automática em limite, CAPTCHA, reautenticação ou bloqueio.
+Depois de informar um alias no construtor do Método, use **Salvar perfil**. O Chrome dedicado abre para o login, o plugin aguarda a área real do ChatGPT, grava a validação no próprio perfil e fecha o navegador. A execução normal recusa perfis ainda não preparados e não digita prompts em páginas de login, CAPTCHA ou reautenticação.
 
 ## Anexos e artifacts
 

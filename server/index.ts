@@ -1042,6 +1042,7 @@ function isOptionalHttpsUrl(value: unknown) {
 function isPluginManifest(manifest: Record<string, unknown>) {
   const runtime = manifest.runtime as Record<string, unknown> | undefined;
   const capabilities = manifest.capabilities;
+  const profileSetup = manifest.profileSetup as Record<string, unknown> | undefined;
   const permissions = [
     "network",
     "filesystem:read",
@@ -1138,6 +1139,17 @@ function isPluginManifest(manifest: Record<string, unknown>) {
     !manifest.entrypoint.includes("..") &&
     isUniqueStringArray(manifest.permissions, permissions) &&
     networkHostsAreValid &&
+    (profileSetup === undefined ||
+      (isNonEmptyString(profileSetup.configurationKey) &&
+        isNonEmptyString(profileSetup.label) &&
+        (profileSetup.description === undefined || typeof profileSetup.description === "string") &&
+        (profileSetup.prepareTimeoutMs === undefined ||
+          (Number.isInteger(profileSetup.prepareTimeoutMs) &&
+            Number(profileSetup.prepareTimeoutMs) >= 30_000 &&
+            Number(profileSetup.prepareTimeoutMs) <= 900_000)) &&
+        Object.keys(profileSetup).every((key) =>
+          ["configurationKey", "label", "description", "prepareTimeoutMs"].includes(key),
+        ))) &&
     (manifest.secretKeys === undefined || isUniqueStringArray(manifest.secretKeys)) &&
     runtime?.kind === "node" &&
     runtime.module === "esm" &&
@@ -1486,6 +1498,100 @@ app.get("/api/plugins", (_request, response) => {
     issues: registry.issues,
     examplesDirectory: process.env.CONTENTFLOW_EXAMPLES_DIR,
   });
+});
+
+app.post("/api/plugins/:pluginId/profile", async (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  const action = request.body?.action;
+  const configuration = request.body?.configuration;
+  if (!plugin || !plugin.manifest.profileSetup) {
+    response.status(404).json({ error: "Este plugin não oferece preparação de perfil." });
+    return;
+  }
+  if (!plugin.executable || !pluginConsentIsCurrent(plugin)) {
+    response.status(403).json({
+      error: "Ative este plugin e confirme suas permissões na Central de Plugins.",
+    });
+    return;
+  }
+  if (
+    !["status", "prepare"].includes(String(action)) ||
+    !configuration ||
+    typeof configuration !== "object" ||
+    Array.isArray(configuration)
+  ) {
+    response.status(400).json({ error: "Solicitação de preparação de perfil inválida." });
+    return;
+  }
+  const profileKey = plugin.manifest.profileSetup.configurationKey;
+  const profileName = (configuration as Record<string, unknown>)[profileKey];
+  if (typeof profileName !== "string" || !profileName.trim()) {
+    response.status(422).json({ error: "Informe o nome do perfil antes de prepará-lo." });
+    return;
+  }
+  const capability = plugin.manifest.capabilities.find(
+    (candidate) => candidate.blockConfigSchema.properties?.[profileKey],
+  );
+  if (!capability) {
+    response.status(422).json({ error: "O perfil não pertence à configuração deste plugin." });
+    return;
+  }
+
+  try {
+    const pluginSecrets: Record<string, string> = {};
+    for (const declaredSecret of plugin.manifest.secretKeys ?? []) {
+      const storedSecret = await getPluginSecret(plugin.id, declaredSecret);
+      if (storedSecret) pluginSecrets[declaredSecret] = storedSecret;
+    }
+    const pluginRequest: PluginExecutionRequest = {
+      executionId: `profile-${randomUUID()}`,
+      traceId: randomUUID(),
+      blockId: "profile-setup",
+      capabilityId: capability.id,
+      attempt: 1,
+      invocation: { mode: "configure", action: action as "status" | "prepare" },
+      configuration: { [profileKey]: profileName.trim() },
+      settings: {},
+      inputs: {},
+      inputContract: [],
+      outputContract: [],
+      context: {
+        locale: "pt-BR",
+        timeZone: "America/Sao_Paulo",
+        channel: { id: "profile-setup", name: "Configuração", language: "pt-BR", niche: "" },
+        project: { id: "profile-setup", title: "Preparação de perfil" },
+        processType: "theme",
+        block: { type: "CRIAR", name: "Preparar perfil", instructions: "" },
+        previousProcessOutputs: [],
+        previousBlockOutputs: [],
+      },
+    };
+    const timeoutMs =
+      action === "prepare" ? (plugin.manifest.profileSetup.prepareTimeoutMs ?? 600_000) : 30_000;
+    const result = await executeRegisteredPlugin(plugin, pluginRequest, timeoutMs, pluginSecrets, {
+      workspaceDirectory: readPluginWorkspace(plugin.id),
+    });
+    if (result.status === "error") {
+      response.status(action === "status" ? 200 : 422).json({
+        ready: false,
+        error: result.message,
+      });
+      return;
+    }
+    response.json({
+      ready: result.status === "success" && result.values.ready === true,
+      message:
+        result.status === "success" && typeof result.values.message === "string"
+          ? result.values.message
+          : undefined,
+    });
+  } catch (error) {
+    response.status(422).json({
+      ready: false,
+      error: error instanceof Error ? error.message : "Não foi possível preparar o perfil.",
+    });
+  }
 });
 
 app.post("/api/plugins/install-from-folder", (request, response) => {

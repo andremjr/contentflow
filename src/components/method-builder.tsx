@@ -98,7 +98,7 @@ import {
   type SharedMethodFile,
 } from "@/lib/method-file";
 import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
-import type { JsonSchema, PluginManifest } from "@/lib/plugin-contract";
+import type { JsonSchema, PluginManifest, PluginProfileSetup } from "@/lib/plugin-contract";
 import { setChannelMethod, useChannel, useChannels, useLibraryCollections } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -1215,34 +1215,54 @@ function BlockEditor({
 
           {selectedCapability && (
             <div className="space-y-3">
-              {Object.entries(configProperties).map(([key, schema]) => (
-                <PluginConfigurationField
-                  key={key}
-                  propertyKey={key}
-                  schema={schema}
-                  value={block.plugin?.configuration[key]}
-                  options={
-                    selectedPlugin?.id === "official-openai-gpt" &&
-                    key === "model" &&
-                    openAIModels.length
-                      ? openAIModels.map((model) => ({ value: model.id, label: model.name }))
-                      : selectedPlugin?.id === "official-anthropic-claude" &&
-                          key === "model" &&
-                          anthropicModels.length
-                        ? anthropicModels.map((model) => ({ value: model.id, label: model.name }))
-                        : undefined
-                  }
-                  onChange={(value) =>
-                    onChange({
-                      plugin: {
-                        pluginId: block.plugin!.pluginId,
-                        capabilityId: block.plugin!.capabilityId,
-                        configuration: { ...block.plugin!.configuration, [key]: value },
-                      },
-                    })
-                  }
-                />
-              ))}
+              {Object.entries(configProperties).map(([key, schema]) => {
+                const profileSetup =
+                  selectedPlugin?.manifest.profileSetup?.configurationKey === key
+                    ? selectedPlugin.manifest.profileSetup
+                    : undefined;
+                return (
+                  <div
+                    key={key}
+                    className={cn(profileSetup && "grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]")}
+                  >
+                    <PluginConfigurationField
+                      propertyKey={key}
+                      schema={schema}
+                      value={block.plugin?.configuration[key]}
+                      options={
+                        selectedPlugin?.id === "official-openai-gpt" &&
+                        key === "model" &&
+                        openAIModels.length
+                          ? openAIModels.map((model) => ({ value: model.id, label: model.name }))
+                          : selectedPlugin?.id === "official-anthropic-claude" &&
+                              key === "model" &&
+                              anthropicModels.length
+                            ? anthropicModels.map((model) => ({
+                                value: model.id,
+                                label: model.name,
+                              }))
+                            : undefined
+                      }
+                      onChange={(value) =>
+                        onChange({
+                          plugin: {
+                            pluginId: block.plugin!.pluginId,
+                            capabilityId: block.plugin!.capabilityId,
+                            configuration: { ...block.plugin!.configuration, [key]: value },
+                          },
+                        })
+                      }
+                    />
+                    {profileSetup && block.plugin && (
+                      <ProfileSetupControl
+                        pluginId={block.plugin.pluginId}
+                        profileSetup={profileSetup}
+                        configuration={block.plugin.configuration}
+                      />
+                    )}
+                  </div>
+                );
+              })}
               {selectedPlugin?.id === "official-openai-gpt" && (
                 <p className="text-[11px] text-muted-foreground">
                   {openAIModels.length
@@ -1261,6 +1281,106 @@ function BlockEditor({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ProfileSetupControl({
+  pluginId,
+  profileSetup,
+  configuration,
+}: {
+  pluginId: string;
+  profileSetup: PluginProfileSetup;
+  configuration: Record<string, string | number | boolean>;
+}) {
+  const profileName = String(configuration[profileSetup.configurationKey] ?? "").trim();
+  const [status, setStatus] = useState<"checking" | "ready" | "missing" | "preparing">("checking");
+
+  useEffect(() => {
+    if (!profileName) {
+      setStatus("missing");
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setStatus("checking");
+      void fetch(`/api/plugins/${encodeURIComponent(pluginId)}/profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "status", configuration }),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const payload = (await response.json()) as { ready?: boolean };
+          if (!response.ok) throw new Error();
+          setStatus(payload.ready ? "ready" : "missing");
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setStatus("missing");
+        });
+    }, 500);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [configuration, pluginId, profileName]);
+
+  const prepare = async () => {
+    if (!profileName || status === "preparing") return;
+    setStatus("preparing");
+    toast.info("Conclua o login na janela do navegador", {
+      description: `O perfil ${profileName} será guardado quando a área do provedor estiver pronta.`,
+    });
+    try {
+      const response = await fetch(`/api/plugins/${encodeURIComponent(pluginId)}/profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "prepare", configuration }),
+      });
+      const payload = (await response.json()) as {
+        ready?: boolean;
+        error?: string;
+        message?: string;
+      };
+      if (!response.ok || !payload.ready) {
+        throw new Error(payload.error ?? "O login não foi confirmado pelo plugin.");
+      }
+      setStatus("ready");
+      toast.success("Perfil salvo e validado", {
+        description: payload.message ?? `${profileName} está pronto para futuras execuções.`,
+      });
+    } catch (error) {
+      setStatus("missing");
+      toast.error("Não foi possível salvar o perfil", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  };
+
+  return (
+    <div className="flex min-w-44 flex-col justify-end gap-1.5 sm:pt-5">
+      <Button
+        type="button"
+        variant={status === "ready" ? "outline" : "default"}
+        className="gap-1.5"
+        disabled={!profileName || status === "preparing" || status === "checking"}
+        onClick={() => void prepare()}
+      >
+        {status === "preparing" || status === "checking" ? (
+          <LoaderCircle className="size-3.5 animate-spin" />
+        ) : status === "ready" ? (
+          <CheckCircle2 className="size-3.5" />
+        ) : (
+          <CircleUserRound className="size-3.5" />
+        )}
+        {status === "ready" ? "Perfil salvo" : profileSetup.label}
+      </Button>
+      <p className="text-[10px] text-muted-foreground">
+        {status === "ready"
+          ? "Login validado para futuras execuções."
+          : (profileSetup.description ?? "Abre o navegador para login e fecha após validar.")}
+      </p>
     </div>
   );
 }

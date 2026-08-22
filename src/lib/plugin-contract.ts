@@ -123,6 +123,13 @@ export type PluginCapability = {
   outputSchema: JsonSchema;
 };
 
+export type PluginProfileSetup = {
+  configurationKey: string;
+  label: string;
+  description?: string;
+  prepareTimeoutMs?: number;
+};
+
 export type PluginDeliveryType = "text" | "image" | "audio" | "video" | "processing";
 
 export type PluginManifest = {
@@ -145,6 +152,8 @@ export type PluginManifest = {
   settingsSchema?: JsonSchema;
   secretKeys?: string[];
   deliveryTypes?: PluginDeliveryType[];
+  /** Optional interactive preparation for a dedicated browser profile referenced by block configuration. */
+  profileSetup?: PluginProfileSetup;
   capabilities: PluginCapability[];
 };
 
@@ -169,7 +178,10 @@ export type PluginExecutionContext = {
 };
 
 export type PluginInvocation =
-  { mode: "start" } | { mode: "resume"; jobId: string } | { mode: "cancel"; jobId: string };
+  | { mode: "start" }
+  | { mode: "resume"; jobId: string }
+  | { mode: "cancel"; jobId: string }
+  | { mode: "configure"; action: "status" | "prepare" };
 
 export type PluginInputContract = Pick<
   BlockInputBinding,

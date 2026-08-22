@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { stat, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 
@@ -163,6 +163,24 @@ function resolveProfileRuntime(request) {
     profilePath: join(root, accountProfile),
     port: basePort + stableProfileOffset(accountProfile),
   };
+}
+function profileMarkerPath(path) {
+  return join(path, ".contentflow-profile-ready.json");
+}
+async function profileIsPrepared(path, name) {
+  try {
+    const marker = JSON.parse(await readFile(profileMarkerPath(path), "utf8"));
+    return marker?.provider === FLOW_HOST && marker?.profile === name;
+  } catch {
+    return false;
+  }
+}
+async function markProfilePrepared(path, name) {
+  await writeFile(
+    profileMarkerPath(path),
+    JSON.stringify({ provider: FLOW_HOST, profile: name, preparedAt: new Date().toISOString() }),
+    "utf8",
+  );
 }
 
 function resolveGenerationPreferences(configuration = {}) {
@@ -936,6 +954,40 @@ async function ensureFlowProjectReady(
   throw codedError(
     "OUTPUT_VALIDATION_FAILED",
     `Entrei no projeto, mas não encontrei a caixa de comando do Google Flow${actionCount ? ` após ${actionCount} ação(ões) de onboarding` : ""}. Se a interface mudou, configure promptSelector.`,
+  );
+}
+
+async function waitForFlowProfile(client, sessionId, settings, signal) {
+  const seconds = Number.isInteger(settings?.interactiveWaitSeconds)
+    ? settings.interactiveWaitSeconds
+    : 600;
+  const deadline = Date.now() + Math.min(900, Math.max(30, seconds)) * 1000;
+  let state;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    try {
+      state = await getPageState(client, sessionId, settings?.promptSelector || "");
+      const authenticatedSurface =
+        state?.promptFound ||
+        state?.projectLike ||
+        state?.hasNewProject ||
+        (Array.isArray(state?.projectLinks) && state.projectLinks.length > 0);
+      if (
+        state?.host === FLOW_HOST &&
+        !state?.loginLike &&
+        !state?.challenge &&
+        authenticatedSurface
+      )
+        return;
+    } catch {
+      // O contexto pode ser recriado durante o login interativo.
+    }
+    await sleep(750, signal);
+  }
+  throw codedError(
+    "AUTHENTICATION_FAILED",
+    "Conclua o login do Google Flow na janela dedicada até aparecer a lista de projetos ou o editor.",
+    true,
   );
 }
 
@@ -1964,7 +2016,70 @@ async function maybeCloseBrowser(client, browserInfo, keepBrowserOpen) {
   client.close();
 }
 
+async function configureProfile(request, services) {
+  const settings = request?.settings ?? {};
+  let runtime;
+  try {
+    runtime = resolveProfileRuntime(request);
+    assertDedicatedProfilePath(runtime.profilePath);
+  } catch (error) {
+    return resultError(
+      error?.code || "INVALID_CONFIGURATION",
+      error?.message || "Perfil inválido.",
+    );
+  }
+  if (request?.invocation?.action === "status") {
+    return {
+      status: "success",
+      values: { ready: await profileIsPrepared(runtime.profilePath, runtime.accountProfile) },
+    };
+  }
+  if (request?.invocation?.action !== "prepare") {
+    return resultError("INVALID_CONFIGURATION", "Ação de configuração de perfil inválida.");
+  }
+
+  let client, child;
+  try {
+    const launched = await launchOrReuseChrome({
+      executables: await resolveChromeExecutables(settings),
+      profilePath: runtime.profilePath,
+      port: runtime.port,
+      startMinimized: false,
+      keepBrowserOpen: false,
+      startUrl: FLOW_LANDING_URL,
+      signal: services.signal,
+    });
+    child = launched.child;
+    client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
+    const page = await attachFlowPage(client, FLOW_LANDING_URL, true, services.signal);
+    await waitForFlowProfile(client, page.sessionId, settings, services.signal);
+    await markProfilePrepared(runtime.profilePath, runtime.accountProfile);
+    return {
+      status: "success",
+      values: {
+        ready: true,
+        message: `Perfil ${runtime.accountProfile} validado no Google Flow.`,
+      },
+    };
+  } catch (error) {
+    return resultError(
+      error?.code || "AUTHENTICATION_FAILED",
+      error?.message || "Não foi possível validar o login do Google Flow.",
+      Boolean(error?.retryable),
+    );
+  } finally {
+    try {
+      await client?.send("Browser.close");
+    } catch {}
+    client?.close();
+    try {
+      child?.kill();
+    } catch {}
+  }
+}
+
 export async function execute(request, services) {
+  if (request?.invocation?.mode === "configure") return await configureProfile(request, services);
   if (request?.invocation?.mode !== "start") {
     return resultError(
       "INVALID_CONFIGURATION",
@@ -2057,6 +2172,12 @@ export async function execute(request, services) {
     profileRuntime = resolveProfileRuntime(request);
     generationPreferences = resolveGenerationPreferences(request?.configuration ?? {});
     assertDedicatedProfilePath(profileRuntime.profilePath);
+    if (!(await profileIsPrepared(profileRuntime.profilePath, profileRuntime.accountProfile))) {
+      throw codedError(
+        "AUTHENTICATION_FAILED",
+        `O perfil ${profileRuntime.accountProfile} ainda não foi salvo. Abra a configuração do Método e use Salvar perfil antes de executar.`,
+      );
+    }
     navigation = resolveNavigationTarget(request);
     chromeExecutables = await resolveChromeExecutables(settings);
     referencePaths = await prepareReferenceImagePaths(
@@ -2333,6 +2454,8 @@ export const __test = {
   defaultProfilesRootPath,
   normalizeAccountProfile,
   resolveProfileRuntime,
+  profileIsPrepared,
+  markProfilePrepared,
   resolveGenerationPreferences,
   normalizeReferenceImages,
   assertDedicatedProfilePath,

@@ -1,0 +1,498 @@
+{
+  "$schema": "../../../docs/schemas/contentflow-plugin-v1.schema.json",
+  "apiVersion": "1",
+  "id": "official-elevenlabs",
+  "name": "ElevenLabs Audio",
+  "version": "1.0.0",
+  "description": "Gera narração, efeitos sonoros e música, transcreve mídia e consulta vozes pela API oficial da ElevenLabs.",
+  "author": "ContentFlow OS",
+  "license": "LicenseRef-ContentFlow-Source-Available-1.0",
+  "homepage": "https://github.com/andremjr/contentflow-os",
+  "repository": "https://github.com/andremjr/contentflow-os",
+  "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
+  "minCoreVersion": "0.3.0",
+  "entrypoint": "handler.mjs",
+  "permissions": ["network", "filesystem:read", "filesystem:write"],
+  "networkHosts": ["api.elevenlabs.io"],
+  "secretKeys": ["ELEVENLABS_API_KEY"],
+  "deliveryTypes": ["text", "audio", "processing"],
+  "settingsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "requestTimeoutMs": {
+        "type": "integer",
+        "minimum": 5000,
+        "maximum": 600000,
+        "default": 180000
+      },
+      "maxInputBytes": {
+        "type": "integer",
+        "minimum": 1048576,
+        "maximum": 524288000,
+        "default": 104857600
+      },
+      "maxOutputBytes": {
+        "type": "integer",
+        "minimum": 1048576,
+        "maximum": 209715200,
+        "default": 104857600
+      },
+      "diagnosticFixture": {
+        "type": "boolean",
+        "default": false,
+        "description": "Somente para testes determinísticos do pacote oficial."
+      }
+    }
+  },
+  "capabilities": [
+    {
+      "id": "list-voices",
+      "operator": "Código",
+      "blockTypes": ["BUSCAR"],
+      "processTypes": ["narration"],
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "key": "voices",
+          "label": "Vozes disponíveis",
+          "producedTypes": ["records"],
+          "required": true,
+          "presentation": { "renderer": "table", "itemType": "record" }
+        }
+      ],
+      "acceptedInputTypes": [],
+      "producedOutputTypes": ["records"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 60000,
+        "supportsCancellation": true,
+        "maxConcurrency": 2
+      },
+      "sideEffects": ["external_read"],
+      "cost": { "model": "free", "estimateSupported": false },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["ElevenLabs"],
+        "retentionPolicyUrl": "https://elevenlabs.io/privacy-policy"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "search": { "type": "string", "title": "Pesquisar voz", "maxLength": 100, "default": "" },
+          "page_size": {
+            "type": "integer",
+            "title": "Quantidade",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 25
+          },
+          "voice_type": {
+            "type": "string",
+            "title": "Tipo",
+            "enum": ["all", "default", "personal", "community", "workspace", "saved"],
+            "default": "all"
+          },
+          "category": {
+            "type": "string",
+            "title": "Categoria",
+            "enum": ["all", "premade", "cloned", "generated", "professional"],
+            "default": "all"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "voices": { "type": "array" } },
+        "required": ["voices"]
+      }
+    },
+    {
+      "id": "text-to-speech",
+      "operator": "IA",
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["narration"],
+      "inputPorts": [
+        {
+          "key": "text",
+          "label": "Texto para narrar",
+          "acceptedTypes": ["text", "textarea", "list"],
+          "required": true,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "audio",
+          "label": "Narração",
+          "producedTypes": ["audio"],
+          "required": true,
+          "presentation": {
+            "renderer": "audio-player",
+            "itemType": "audio",
+            "acceptedMimeTypes": ["audio/mpeg"]
+          }
+        },
+        {
+          "key": "metadata",
+          "label": "Metadados da geração",
+          "producedTypes": ["records"],
+          "required": false,
+          "presentation": { "renderer": "table", "itemType": "record" }
+        }
+      ],
+      "acceptedInputTypes": ["text", "textarea", "list"],
+      "producedOutputTypes": ["audio", "records"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 300000,
+        "supportsCancellation": true,
+        "maxConcurrency": 2
+      },
+      "sideEffects": ["external_write", "local_artifact"],
+      "cost": { "model": "metered", "estimateSupported": true },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["ElevenLabs"],
+        "retentionPolicyUrl": "https://elevenlabs.io/privacy-policy"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "voice_id": {
+            "type": "string",
+            "title": "ID da voz",
+            "minLength": 1,
+            "maxLength": 100,
+            "default": "JBFqnCBsd6RMkjVDRZzb"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Modelo",
+            "enum": ["eleven_multilingual_v2", "eleven_flash_v2_5", "eleven_v3"],
+            "default": "eleven_multilingual_v2"
+          },
+          "output_format": {
+            "type": "string",
+            "title": "Formato",
+            "enum": ["mp3_22050_32", "mp3_44100_64", "mp3_44100_96", "mp3_44100_128"],
+            "default": "mp3_44100_128"
+          },
+          "stability": {
+            "type": "number",
+            "title": "Estabilidade",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5
+          },
+          "similarity_boost": {
+            "type": "number",
+            "title": "Similaridade",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.75
+          },
+          "style": {
+            "type": "number",
+            "title": "Estilo",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0
+          },
+          "use_speaker_boost": {
+            "type": "boolean",
+            "title": "Reforçar identidade da voz",
+            "default": true
+          },
+          "language_code": {
+            "type": "string",
+            "title": "Idioma ISO opcional",
+            "maxLength": 10,
+            "default": ""
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "audio": { "type": "object" }, "metadata": { "type": "array" } },
+        "required": ["audio"]
+      }
+    },
+    {
+      "id": "generate-sound-effect",
+      "operator": "IA",
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["narration", "assets", "editing"],
+      "inputPorts": [
+        {
+          "key": "description",
+          "label": "Descrição do efeito",
+          "acceptedTypes": ["text", "textarea"],
+          "required": true,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "audio",
+          "label": "Efeito sonoro",
+          "producedTypes": ["audio"],
+          "required": true,
+          "presentation": {
+            "renderer": "audio-player",
+            "itemType": "audio",
+            "acceptedMimeTypes": ["audio/mpeg"]
+          }
+        },
+        {
+          "key": "metadata",
+          "label": "Metadados da geração",
+          "producedTypes": ["records"],
+          "required": false,
+          "presentation": { "renderer": "table", "itemType": "record" }
+        }
+      ],
+      "acceptedInputTypes": ["text", "textarea"],
+      "producedOutputTypes": ["audio", "records"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 300000,
+        "supportsCancellation": true,
+        "maxConcurrency": 2
+      },
+      "sideEffects": ["external_write", "local_artifact"],
+      "cost": { "model": "metered", "estimateSupported": true },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["ElevenLabs"],
+        "retentionPolicyUrl": "https://elevenlabs.io/privacy-policy"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "title": "Modelo",
+            "enum": ["eleven_text_to_sound_v2"],
+            "default": "eleven_text_to_sound_v2"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "title": "Duração em segundos",
+            "minimum": 0,
+            "maximum": 30,
+            "default": 0,
+            "description": "Zero deixa a IA escolher."
+          },
+          "prompt_influence": {
+            "type": "number",
+            "title": "Influência do prompt",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.3
+          },
+          "loop": { "type": "boolean", "title": "Loop contínuo", "default": false },
+          "output_format": {
+            "type": "string",
+            "title": "Formato",
+            "enum": ["mp3_44100_128"],
+            "default": "mp3_44100_128"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "audio": { "type": "object" }, "metadata": { "type": "array" } },
+        "required": ["audio"]
+      }
+    },
+    {
+      "id": "transcribe-media",
+      "operator": "IA",
+      "blockTypes": ["BUSCAR", "CRIAR"],
+      "processTypes": ["script", "narration", "assets", "editing"],
+      "inputPorts": [
+        {
+          "key": "media",
+          "label": "Áudio ou vídeo",
+          "acceptedTypes": ["audio", "video", "file"],
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "transcript",
+          "label": "Transcrição",
+          "producedTypes": ["textarea"],
+          "required": true,
+          "presentation": { "renderer": "text-long", "itemType": "text" }
+        },
+        {
+          "key": "segments",
+          "label": "Palavras e eventos",
+          "producedTypes": ["records"],
+          "required": false,
+          "presentation": { "renderer": "table", "itemType": "record" }
+        },
+        {
+          "key": "metadata",
+          "label": "Metadados da transcrição",
+          "producedTypes": ["records"],
+          "required": false,
+          "presentation": { "renderer": "table", "itemType": "record" }
+        }
+      ],
+      "acceptedInputTypes": ["audio", "video", "file"],
+      "producedOutputTypes": ["textarea", "records"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 600000,
+        "supportsCancellation": true,
+        "maxConcurrency": 1
+      },
+      "sideEffects": ["external_write"],
+      "cost": { "model": "metered", "estimateSupported": false },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["ElevenLabs"],
+        "retentionPolicyUrl": "https://elevenlabs.io/privacy-policy"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "title": "Modelo",
+            "enum": ["scribe_v2", "scribe_v1"],
+            "default": "scribe_v2"
+          },
+          "language_code": {
+            "type": "string",
+            "title": "Idioma ISO opcional",
+            "maxLength": 10,
+            "default": ""
+          },
+          "tag_audio_events": {
+            "type": "boolean",
+            "title": "Identificar eventos sonoros",
+            "default": true
+          },
+          "diarize": { "type": "boolean", "title": "Separar locutores", "default": true },
+          "num_speakers": {
+            "type": "integer",
+            "title": "Quantidade de locutores",
+            "minimum": 0,
+            "maximum": 32,
+            "default": 0
+          },
+          "timestamps_granularity": {
+            "type": "string",
+            "title": "Granularidade",
+            "enum": ["word", "character"],
+            "default": "word"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "transcript": { "type": "string" },
+          "segments": { "type": "array" },
+          "metadata": { "type": "array" }
+        },
+        "required": ["transcript"]
+      }
+    },
+    {
+      "id": "compose-music",
+      "operator": "IA",
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["narration", "assets", "editing"],
+      "inputPorts": [
+        {
+          "key": "prompt",
+          "label": "Descrição da música",
+          "acceptedTypes": ["text", "textarea"],
+          "required": true,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "audio",
+          "label": "Música",
+          "producedTypes": ["audio"],
+          "required": true,
+          "presentation": {
+            "renderer": "audio-player",
+            "itemType": "audio",
+            "acceptedMimeTypes": ["audio/mpeg"]
+          }
+        },
+        {
+          "key": "metadata",
+          "label": "Metadados da composição",
+          "producedTypes": ["records"],
+          "required": false,
+          "presentation": { "renderer": "table", "itemType": "record" }
+        }
+      ],
+      "acceptedInputTypes": ["text", "textarea"],
+      "producedOutputTypes": ["audio", "records"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 600000,
+        "supportsCancellation": true,
+        "maxConcurrency": 1
+      },
+      "sideEffects": ["external_write", "local_artifact"],
+      "cost": { "model": "metered", "estimateSupported": true },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["ElevenLabs"],
+        "retentionPolicyUrl": "https://elevenlabs.io/privacy-policy"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "title": "Modelo",
+            "enum": ["music_v1", "music_v2"],
+            "default": "music_v2"
+          },
+          "music_length_seconds": {
+            "type": "integer",
+            "title": "Duração em segundos",
+            "minimum": 3,
+            "maximum": 600,
+            "default": 30
+          },
+          "force_instrumental": {
+            "type": "boolean",
+            "title": "Somente instrumental",
+            "default": true
+          },
+          "output_format": {
+            "type": "string",
+            "title": "Formato",
+            "enum": ["mp3_44100_128", "mp3_48000_192"],
+            "default": "mp3_44100_128"
+          },
+          "sign_with_c2pa": { "type": "boolean", "title": "Assinar com C2PA", "default": false }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "audio": { "type": "object" }, "metadata": { "type": "array" } },
+        "required": ["audio"]
+      }
+    }
+  ]
+}

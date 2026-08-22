@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { stat, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, extname, join } from "node:path";
 
@@ -407,6 +407,24 @@ function profilePath(settings, n) {
     n,
   );
 }
+function profileMarkerPath(path) {
+  return join(path, ".contentflow-profile-ready.json");
+}
+async function profileIsPrepared(path, name) {
+  try {
+    const marker = JSON.parse(await readFile(profileMarkerPath(path), "utf8"));
+    return marker?.provider === HOST && marker?.profile === name;
+  } catch {
+    return false;
+  }
+}
+async function markProfilePrepared(path, name) {
+  await writeFile(
+    profileMarkerPath(path),
+    JSON.stringify({ provider: HOST, profile: name, preparedAt: new Date().toISOString() }),
+    "utf8",
+  );
+}
 function profilePort(base, n) {
   if (n === "default") return base;
   let h = 2166136261;
@@ -638,13 +656,17 @@ async function newChat(c, s, signal) {
 }
 async function waitPrompt(c, s, ms, signal) {
   const d = Date.now() + ms;
-  let b = "";
+  let state = {};
   while (Date.now() < d) {
-    b = await evaluate(c, s, "document.body?.innerText||''");
-    if (await evaluate(c, s, `(()=>{${HELP};return !!prompt()})()`)) return;
+    state = await evaluate(
+      c,
+      s,
+      `(()=>{${HELP};const body=document.body?.innerText||'';return{host:location.hostname,body,prompt:!!prompt(),login:/sign in|entrar|fazer login|use another account|usar outra conta/i.test(body)}})()`,
+    );
+    if (state?.host === HOST && state?.prompt && !state?.login) return;
     await sleep(700, signal);
   }
-  if (/captcha|verifique/i.test(b))
+  if (/captcha|verifique/i.test(state?.body ?? ""))
     throw err("AUTHENTICATION_FAILED", "Gemini exige verificação manual.", true);
   throw err("AUTHENTICATION_FAILED", "Faça login no Gemini no Chrome dedicado.", true);
 }
@@ -966,7 +988,66 @@ async function captureMedia(c, s, services, request, type) {
   return { file, artifact };
 }
 
+async function configureProfile(request, services) {
+  const settings = request?.settings ?? {};
+  let name, path, port;
+  try {
+    name = normalizeProfile(request?.configuration?.accountProfile);
+    path = profilePath(settings, name);
+    port = profilePort(clamp(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000), name);
+    assertProfile(path);
+  } catch (error) {
+    return failure(error?.code || "INVALID_CONFIGURATION", error?.message || "Perfil inválido.");
+  }
+  if (request?.invocation?.action === "status") {
+    return { status: "success", values: { ready: await profileIsPrepared(path, name) } };
+  }
+  if (request?.invocation?.action !== "prepare") {
+    return failure("INVALID_CONFIGURATION", "Ação de configuração de perfil inválida.");
+  }
+
+  let client, child;
+  try {
+    const launched = await launch(
+      { ...settings, keepBrowserOpen: false },
+      path,
+      port,
+      services.signal,
+    );
+    child = launched.child;
+    client = await new CDP(launched.version.webSocketDebuggerUrl).connect(services.signal);
+    const { sessionId } = await attach(client, services.signal);
+    await newChat(client, sessionId, services.signal);
+    await waitPrompt(
+      client,
+      sessionId,
+      clamp(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
+      services.signal,
+    );
+    await markProfilePrepared(path, name);
+    return {
+      status: "success",
+      values: { ready: true, message: `Perfil ${name} validado no Gemini.` },
+    };
+  } catch (error) {
+    return failure(
+      error?.code || "AUTHENTICATION_FAILED",
+      error?.message || "Não foi possível validar o login do Gemini.",
+      Boolean(error?.retryable),
+    );
+  } finally {
+    try {
+      await client?.send("Browser.close");
+    } catch {}
+    client?.close();
+    try {
+      child?.kill();
+    } catch {}
+  }
+}
+
 export async function execute(request, services) {
+  if (request?.invocation?.mode === "configure") return await configureProfile(request, services);
   const settings = request?.settings ?? {},
     id = String(request?.capabilityId ?? "generate-text-in-browser"),
     mock = String(settings.diagnosticMockResponse ?? "").trim();
@@ -1012,6 +1093,12 @@ export async function execute(request, services) {
       port = profilePort(clamp(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000), profile),
       files = await resolveFiles(request, services);
     assertProfile(path);
+    if (!(await profileIsPrepared(path, profile))) {
+      throw err(
+        "AUTHENTICATION_FAILED",
+        `O perfil ${profile} ainda não foi salvo. Abra a configuração do Método e use Salvar perfil antes de executar.`,
+      );
+    }
     const launched = await launch(settings, path, port, services.signal);
     child = launched.child;
     client = await new CDP(
@@ -1120,6 +1207,8 @@ export const __test = {
   outline,
   parseChoice,
   parseValidation,
+  profileIsPrepared,
+  markProfilePrepared,
   profilePath,
   profilePort,
   searchValues,

@@ -4,14 +4,16 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, extname, join } from "node:path";
 
-const CHATGPT_HOST = "chatgpt.com";
-const CHATGPT_NEW_URL = "https://chatgpt.com/";
-const DEFAULT_PORT = 9544;
+const CHATGPT_HOST = "grok.com";
+const CHATGPT_NEW_URL = "https://grok.com/imagine";
+const CHATGPT_CHAT_URL = "https://grok.com/";
+const DEFAULT_PORT = 9744;
 const MAX_PARTS = 32;
 const MAX_PROMPT_CHARACTERS = 500_000;
 const MAX_ATTACHMENTS = 20;
 const MAX_ATTACHMENT_BYTES = 512 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
+const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".m4v"]);
 const DOCUMENT_EXTENSIONS = new Set([
   ".pdf",
   ".docx",
@@ -26,7 +28,7 @@ const DOCUMENT_EXTENSIONS = new Set([
   ".xlsx",
   ".pptx",
 ]);
-const SUPPORTED_EXTENSIONS = new Set([...IMAGE_EXTENSIONS, ...DOCUMENT_EXTENSIONS]);
+const SUPPORTED_EXTENSIONS = new Set([...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS]);
 
 function codedError(code, message, retryable = false) {
   const error = new Error(message);
@@ -280,6 +282,16 @@ function buildImagePrompt(request) {
   return prompt;
 }
 
+function buildVideoPrompt(request) {
+  const prompt = expandCapabilityTemplate(
+    request?.configuration?.videoPromptTemplate,
+    { "{{VIDEO_PROMPT}}": serialize(request?.inputs?.prompt) },
+    request,
+  );
+  if (!prompt) throw codedError("INVALID_INPUT", "O prompt do vídeo ficou vazio.");
+  return prompt;
+}
+
 function stripCodeFence(text) {
   return String(text ?? "")
     .trim()
@@ -420,7 +432,8 @@ function attachmentInput(request) {
   if (request?.capabilityId === "validate-content-in-browser") return request?.inputs?.content;
   if (request?.capabilityId === "generate-text-in-browser") return request?.inputs?.attachments;
   if (request?.capabilityId === "deep-research-in-browser") return request?.inputs?.context;
-  if (request?.capabilityId === "generate-image-in-browser") return request?.inputs?.references;
+  if (["generate-image-in-browser", "generate-video-in-browser"].includes(request?.capabilityId))
+    return request?.inputs?.references;
   return undefined;
 }
 
@@ -459,19 +472,20 @@ async function resolveAttachments(request, services) {
 }
 
 function defaultProfilesBasePath() {
-  return join(homedir(), ".contentflow-os", "chatgpt-browser-profiles");
+  return join(homedir(), ".contentflow-os", "grok-browser-profiles");
 }
 function normalizeAccountProfile(value) {
   const name = String(value ?? "default").trim() || "default";
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$/.test(name))
-    throw codedError(
-      "INVALID_CONFIGURATION",
-      "Perfil ChatGPT inválido; use letras, números, _ ou -.",
-    );
+    throw codedError("INVALID_CONFIGURATION", "Perfil Grok inválido; use letras, números, _ ou -.");
   return name;
 }
 function profilePathFor(settings, name) {
   return join(settings?.profilesBasePath?.trim?.() || defaultProfilesBasePath(), name);
+}
+function runtimeProfilePath(settings, name, services) {
+  if (settings?.profilesBasePath?.trim?.()) return profilePathFor(settings, name);
+  return services.getWorkspacePath(join("browser-profiles", name));
 }
 function profileMarkerPath(path) {
   return join(path, ".contentflow-profile-ready.json");
@@ -804,14 +818,14 @@ async function attachChatGptPage(client, signal) {
 const PAGE_HELPERS = String.raw`
 function cfVisible(el){if(!el||!(el instanceof Element))return false;const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>8&&r.height>8&&r.bottom>0&&r.right>0}
 function cfText(el){return [el?.innerText,el?.textContent,el?.getAttribute?.('aria-label'),el?.getAttribute?.('data-testid')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()}
-function cfPrompt(){const selectors=['#prompt-textarea','[contenteditable="true"][role="textbox"]','[role="textbox"][aria-label*="Chat" i]'];for(const s of selectors){const el=[...document.querySelectorAll(s)].find(cfVisible);if(el)return el}return null}
-function cfAssistantNodes(){const selectors=['[data-message-author-role="assistant"] .markdown','[data-message-author-role="assistant"]','article[data-testid^="conversation-turn-"] .markdown'];for(const s of selectors){const n=[...document.querySelectorAll(s)].filter(cfVisible);if(n.length)return n}return []}
+function cfPrompt(){const selectors=['textarea[placeholder]','[contenteditable="true"][role="textbox"]','[contenteditable="true"]','[role="textbox"]'];for(const s of selectors){const all=[...document.querySelectorAll(s)].filter(cfVisible);const preferred=all.find(el=>/prompt|imagine|describe|ask|create|what/i.test([el.getAttribute('placeholder'),el.getAttribute('aria-label')].filter(Boolean).join(' ')));if(preferred)return preferred;if(all.length)return all.at(-1)}return null}
+function cfAssistantNodes(){const selectors=['[data-testid="assistant-message"] .response-content-markdown','[data-testid="assistant-message"]','[data-message-author-role="assistant"] .markdown','[data-message-author-role="assistant"]','article[data-testid^="conversation-turn-"] .markdown'];for(const s of selectors){const n=[...document.querySelectorAll(s)].filter(cfVisible);if(n.length)return n}return []}
 function cfResolveComparison(){const body=document.body?.innerText||'';if(!/giving feedback on a new version|qual resposta voc[êe] prefere|dando feedback sobre uma nova vers[ãa]o/i.test(body))return false;const button=[...document.querySelectorAll('button')].find(el=>cfVisible(el)&&/prefer this response|prefiro esta resposta|choose this response|escolher esta resposta/i.test(cfText(el)));if(!button)return false;button.click();return true}
 function cfResponseState(){const comparisonResolved=cfResolveComparison(),nodes=cfAssistantNodes(),entries=nodes.map(el=>({text:(el.innerText||el.textContent||'').trim(),links:[...el.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text);const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(/stop/i.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'));return{texts:entries.map(x=>x.text),entries,stop,comparisonResolved,bodyHint:(document.body?.innerText||'').slice(0,6000)}}
 `;
 
-async function openNewConversation(client, sessionId, signal) {
-  await client.send("Page.navigate", { url: CHATGPT_NEW_URL }, sessionId);
+async function openNewConversation(client, sessionId, signal, url = CHATGPT_NEW_URL) {
+  await client.send("Page.navigate", { url }, sessionId);
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
@@ -840,7 +854,7 @@ async function waitForPrompt(client, sessionId, waitMs, signal) {
     throw codedError("AUTHENTICATION_FAILED", "O ChatGPT exige verificação manual/CAPTCHA.", true);
   throw codedError(
     "AUTHENTICATION_FAILED",
-    "Faça login no ChatGPT na janela Chrome dedicada e tente novamente.",
+    "Faça login no Grok na janela Chrome dedicada e tente novamente.",
     true,
   );
 }
@@ -857,7 +871,7 @@ async function attachFiles(client, sessionId, attachments, signal) {
   if (!nodeIds.length)
     throw codedError(
       "OUTPUT_VALIDATION_FAILED",
-      "Seletor de arquivos do ChatGPT não encontrado.",
+      "Seletor de arquivos do Grok Imagine não encontrado.",
       true,
     );
   await client.send(
@@ -872,21 +886,21 @@ async function attachFiles(client, sessionId, attachments, signal) {
     const body = await evaluate(client, sessionId, "(document.body?.innerText||'').toLowerCase()");
     if (expected.every((name) => body.includes(name))) return;
     if (/upload failed|couldn't upload|arquivo.*grande/i.test(body))
-      throw codedError("INVALID_INPUT", "O ChatGPT recusou um anexo.");
+      throw codedError("INVALID_INPUT", "O Grok recusou um anexo.");
     await sleep(500, signal);
   }
   throw codedError("TIMEOUT", "Anexos não ficaram prontos em 120 segundos.", true);
 }
 
 async function clickMode(client, sessionId, mode, signal) {
-  if (!mode || mode === "standard") return;
+  if (!mode || mode === "standard" || mode === "image") return;
   const pattern =
     mode === "search"
       ? "search the web|pesquisar na web"
       : mode === "deep"
         ? "deep research|pesquisa aprofundada"
-        : mode === "image"
-          ? "create an image|criar uma imagem"
+        : mode === "video"
+          ? "video|animate|motion|vídeo|animar"
           : "think|pensar";
   const point = await evaluate(
     client,
@@ -896,7 +910,7 @@ async function clickMode(client, sessionId, mode, signal) {
   // A geração de imagens também funciona no chat padrão quando a conta não
   // exibe o atalho "Criar uma imagem". Nesse caso o próprio prompt explícito
   // aciona a ferramenta, portanto não devemos abortar antes de enviá-lo.
-  if (!point && mode === "image") return false;
+  if (!point && ["image", "video", "search"].includes(mode)) return false;
   if (!point)
     throw codedError("PERMISSION_DENIED", `A conta atual não oferece o modo ${mode}.`, false);
   await client.send(
@@ -977,30 +991,23 @@ async function clickSend(client, sessionId, signal) {
     point = await evaluate(
       client,
       sessionId,
-      `(() => {${PAGE_HELPERS};const el=[...document.querySelectorAll('button')].find(x=>cfVisible(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true'&&(x.getAttribute('data-testid')==='send-button'||/send prompt|enviar/i.test(cfText(x))));if(!el)return null;const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
+      `(() => {${PAGE_HELPERS};const el=[...document.querySelectorAll('button')].find(x=>cfVisible(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true'&&(x.getAttribute('data-testid')==='send-button'||/send|generate|create|submit|enviar|gerar|criar/i.test(cfText(x))));if(!el)return null;const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
     );
     if (point) break;
     await sleep(200, signal);
   }
   if (!point)
     throw codedError("OUTPUT_VALIDATION_FAILED", "Botão Enviar não ficou disponível.", true);
-  const clicked = await evaluate(
-    client,
+  await client.send(
+    "Input.dispatchMouseEvent",
+    { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 },
     sessionId,
-    `(() => {${PAGE_HELPERS};const el=[...document.querySelectorAll('button')].find(x=>cfVisible(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true'&&(x.getAttribute('data-testid')==='send-button'||/send prompt|enviar/i.test(cfText(x))));if(!el)return false;el.click();return true})()`,
   );
-  if (!clicked) {
-    await client.send(
-      "Input.dispatchMouseEvent",
-      { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 },
-      sessionId,
-    );
-    await client.send(
-      "Input.dispatchMouseEvent",
-      { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 },
-      sessionId,
-    );
-  }
+  await client.send(
+    "Input.dispatchMouseEvent",
+    { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 },
+    sessionId,
+  );
   const sent = async (deadline) => {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
@@ -1085,7 +1092,7 @@ async function generateImagePart(client, sessionId, prompt, settings, signal) {
   const baseline = await evaluate(
     client,
     sessionId,
-    `(() => [...document.querySelectorAll('img')].filter(img=>img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||(img.currentSrc||img.src||'').includes('backend-api/estuary/content'))).length)()`,
+    `(() => [...document.querySelectorAll('main img, img')].filter(img=>img.complete&&img.naturalWidth>=512&&img.naturalHeight>=512&&!/avatar|logo|profile|photo edit|bg removal|character sprite|ugc photos|room staging|reimagine|e-commerce|icon maker|emoji creator|professional headshot|smart resize|photo collage|hero product reveal|product color change|mascot maker|editorial product poster|props & ui kit/i.test(img.alt||'')).map(img=>img.currentSrc||img.src).filter(Boolean))()`,
   );
   await setPrompt(client, sessionId, prompt, settings, signal);
   await clickSend(client, sessionId);
@@ -1096,47 +1103,108 @@ async function generateImagePart(client, sessionId, prompt, settings, signal) {
     const state = await evaluate(
       client,
       sessionId,
-      `(() => {${PAGE_HELPERS};const images=[...document.querySelectorAll('img')].filter(img=>img.complete&&img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||(img.currentSrc||img.src||'').includes('backend-api/estuary/content')));const img=images.at(-1);const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(/stop/i.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'));return{count:images.length,stop,alt:img?.alt||'Imagem gerada',src:img?.currentSrc||img?.src||''}})()`,
+      `(() => {${PAGE_HELPERS};const before=new Set(${JSON.stringify(baseline)});const images=[...document.querySelectorAll('main img, img')].filter(img=>img.complete&&img.naturalWidth>=512&&img.naturalHeight>=512&&!/avatar|logo|profile|photo edit|bg removal|character sprite|ugc photos|room staging|reimagine|e-commerce|icon maker|emoji creator|professional headshot|smart resize|photo collage|hero product reveal|product color change|mascot maker|editorial product poster|props & ui kit/i.test(img.alt||''));const img=images.findLast(item=>!before.has(item.currentSrc||item.src));const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&/stop|cancel generation|parar/i.test(cfText(el)));return{isNew:!!img,stop,alt:img?.alt||'Imagem gerada pelo Grok',src:img?.currentSrc||img?.src||''}})()`,
     );
-    if (state.count > baseline && state.src && !state.stop) return { text: state.alt, links: [] };
+    if (state.isNew && state.src && !state.stop)
+      return { text: state.alt, links: [], mediaSrc: state.src };
     const body = await evaluate(client, sessionId, "(document.body?.innerText||'').slice(-4000)");
     if (/usage limit|rate limit|reached.*limit|limite de uso/i.test(body))
-      throw codedError("RATE_LIMIT", "O ChatGPT informou limite de geração de imagens.", true);
+      throw codedError("RATE_LIMIT", "O Grok informou limite de geração de imagens.", true);
     await sleep(1200, signal);
   }
-  throw codedError("TIMEOUT", "O ChatGPT não concluiu a imagem no prazo.", true);
+  throw codedError("TIMEOUT", "O Grok não concluiu a imagem no prazo.", true);
 }
 
-async function captureGeneratedImage(client, sessionId, services, request, timeoutMs) {
+async function downloadMedia(client, sessionId, url, fallbackMimeType) {
+  const directDownload = async () => {
+    let cookie = "";
+    try {
+      const { cookies = [] } = await client.send("Network.getCookies", { urls: [url] }, sessionId);
+      cookie = cookies.map((item) => `${item.name}=${item.value}`).join("; ");
+    } catch {}
+    const response = await fetch(url, {
+      redirect: "follow",
+      headers: cookie ? { cookie, referer: CHATGPT_NEW_URL } : { referer: CHATGPT_NEW_URL },
+    });
+    if (!response.ok)
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        `O CDN do Grok recusou o download do artefato (HTTP ${response.status}).`,
+        true,
+      );
+    return {
+      bytes: Buffer.from(await response.arrayBuffer()),
+      mimeType: (response.headers.get("content-type") || fallbackMimeType).split(";")[0],
+    };
+  };
+  // MP4s não devem ser convertidos para base64 dentro da página: além do custo,
+  // uma resposta do CDN pode manter Runtime.evaluate pendente indefinidamente.
+  if (fallbackMimeType.startsWith("video/")) return await directDownload();
+  try {
+    let timer;
+    const pageDownload = evaluate(
+      client,
+      sessionId,
+      `(async()=>{const r=await fetch(${JSON.stringify(url)},{credentials:'include'});if(!r.ok)throw new Error('HTTP '+r.status);const b=new Uint8Array(await r.arrayBuffer());let s='';const n=32768;for(let i=0;i<b.length;i+=n)s+=String.fromCharCode(...b.subarray(i,i+n));return{base64:btoa(s),mimeType:(r.headers.get('content-type')||${JSON.stringify(fallbackMimeType)}).split(';')[0]}})()`,
+    );
+    const payload = await Promise.race([
+      pageDownload,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("page download timeout")), 30000);
+      }),
+    ]).finally(() => clearTimeout(timer));
+    return { bytes: Buffer.from(payload.base64, "base64"), mimeType: payload.mimeType };
+  } catch {
+    // Os artefatos do Imagine podem bloquear fetch dentro da página por CORS.
+    return await directDownload();
+  }
+}
+
+async function captureGeneratedImage(
+  client,
+  sessionId,
+  services,
+  request,
+  timeoutMs,
+  preferredSrc,
+) {
   const deadline = Date.now() + timeoutMs;
-  let imageData;
+  let imageData, payload;
   while (Date.now() < deadline) {
     if (services.signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     imageData = await evaluate(
       client,
       sessionId,
-      `(() => {const images=[...document.querySelectorAll('img')].filter(img=>img.complete&&img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||(img.currentSrc||img.src||'').includes('backend-api/estuary/content')));const img=images.at(-1);return img?{src:img.currentSrc||img.src,width:img.naturalWidth,height:img.naturalHeight,alt:img.alt||'Imagem gerada'}:null})()`,
+      `(() => {const images=[...document.querySelectorAll('main img, img')].filter(img=>img.complete&&img.naturalWidth>=512&&img.naturalHeight>=512&&!/avatar|logo|profile|photo edit|bg removal|character sprite|ugc photos|room staging|reimagine|e-commerce|icon maker|emoji creator|professional headshot|smart resize|photo collage|hero product reveal|product color change|mascot maker|editorial product poster|props & ui kit/i.test(img.alt||''));const img=images.at(-1);return img?{src:img.currentSrc||img.src,width:img.naturalWidth,height:img.naturalHeight,alt:img.alt||'Imagem gerada pelo Grok'}:null})()`,
     );
-    if (imageData?.src) break;
+    if (!imageData?.src && preferredSrc) imageData = { ...(imageData || {}), src: preferredSrc };
+    if (imageData?.src) {
+      try {
+        const candidate = await downloadMedia(client, sessionId, imageData.src, "image/png");
+        // O Imagine publica primeiro um JPEG borrado de poucos KB. Aguarde o
+        // src/arquivo final em vez de entregar esse placeholder como imagem.
+        if (candidate.bytes.length >= 64 * 1024) {
+          payload = candidate;
+          break;
+        }
+      } catch (error) {
+        if (!error?.retryable) throw error;
+      }
+    }
     await sleep(1000, services.signal);
   }
-  if (!imageData?.src)
+  if (!imageData?.src || !payload)
     throw codedError(
       "OUTPUT_VALIDATION_FAILED",
-      "A resposta terminou sem uma imagem gerada capturável.",
+      "A resposta terminou sem uma imagem final capturável; apenas o preview borrado foi encontrado.",
       true,
     );
-  const payload = await evaluate(
-    client,
-    sessionId,
-    `(async()=>{const r=await fetch(${JSON.stringify(imageData.src)},{credentials:'include'});if(!r.ok)throw new Error('HTTP '+r.status);const b=new Uint8Array(await r.arrayBuffer());let s='';const n=32768;for(let i=0;i<b.length;i+=n)s+=String.fromCharCode(...b.subarray(i,i+n));return{base64:btoa(s),mimeType:(r.headers.get('content-type')||'image/png').split(';')[0]}})()`,
-  );
-  const bytes = Buffer.from(payload.base64, "base64");
+  const bytes = payload.bytes;
   if (!bytes.length || bytes.length > 50 * 1024 * 1024)
     throw codedError("OUTPUT_VALIDATION_FAILED", "Imagem gerada vazia ou acima de 50 MB.", true);
   const extension =
     payload.mimeType === "image/webp" ? "webp" : payload.mimeType === "image/jpeg" ? "jpg" : "png";
-  const artifactId = `chatgpt-image-${createHash("sha256")
+  const artifactId = `grok-image-${createHash("sha256")
     .update(
       `${request?.executionId || "execution"}:${request?.blockId || "block"}:${request?.attempt || 1}`,
     )
@@ -1164,12 +1232,99 @@ async function captureGeneratedImage(client, sessionId, services, request, timeo
   };
 }
 
+async function generateVideoPart(client, sessionId, prompt, settings, signal) {
+  const baseline = await evaluate(
+    client,
+    sessionId,
+    `(() => [...document.querySelectorAll('main video, video')].map(v=>v.currentSrc||v.src||v.querySelector('source')?.src||'').filter(Boolean))()`,
+  );
+  await setPrompt(client, sessionId, prompt, settings, signal);
+  await clickSend(client, sessionId, signal);
+  const deadline =
+    Date.now() + clampInteger(settings?.responseTimeoutSeconds, 900, 30, 3600) * 1000;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    const state = await evaluate(
+      client,
+      sessionId,
+      `(() => {${PAGE_HELPERS};const before=new Set(${JSON.stringify(baseline)});const videos=[...document.querySelectorAll('main video, video')];const v=videos.findLast(item=>!before.has(item.currentSrc||item.src||item.querySelector('source')?.src||''));const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&/stop|cancel generation|parar/i.test(cfText(el)));return{isNew:!!v,ready:!!v&&v.readyState>=2,stop,src:v?.currentSrc||v?.src||v?.querySelector('source')?.src||''}})()`,
+    );
+    if (state.isNew && state.ready && state.src && !state.stop)
+      return { text: "Vídeo gerado pelo Grok Imagine", links: [], mediaSrc: state.src };
+    const body = await evaluate(client, sessionId, "(document.body?.innerText||'').slice(-4000)");
+    if (/usage limit|rate limit|reached.*limit|limite de uso|credits? exhausted/i.test(body))
+      throw codedError("RATE_LIMIT", "O Grok informou limite de geração de vídeo.", true);
+    await sleep(1500, signal);
+  }
+  throw codedError("TIMEOUT", "O Grok não concluiu o vídeo no prazo.", true);
+}
+
+async function captureGeneratedVideo(
+  client,
+  sessionId,
+  services,
+  request,
+  timeoutMs,
+  preferredSrc,
+) {
+  const deadline = Date.now() + timeoutMs;
+  let videoData;
+  while (Date.now() < deadline) {
+    if (services.signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    videoData = await evaluate(
+      client,
+      sessionId,
+      `(() => {const videos=[...document.querySelectorAll('main video, video')].filter(v=>v.videoWidth>=256&&v.videoHeight>=144);const v=videos.at(-1);return v?{src:v.currentSrc||v.src||v.querySelector('source')?.src||'',width:v.videoWidth,height:v.videoHeight,duration:Number.isFinite(v.duration)?v.duration:0}:null})()`,
+    );
+    if (preferredSrc) videoData = { ...(videoData || {}), src: preferredSrc };
+    if (videoData?.src) break;
+    await sleep(1000, services.signal);
+  }
+  if (!videoData?.src)
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      "A resposta terminou sem um vídeo capturável.",
+      true,
+    );
+  const payload = await downloadMedia(client, sessionId, videoData.src, "video/mp4");
+  const bytes = payload.bytes;
+  if (!bytes.length || bytes.length > 200 * 1024 * 1024)
+    throw codedError("OUTPUT_VALIDATION_FAILED", "Vídeo gerado vazio ou acima de 200 MB.", true);
+  const extension = payload.mimeType === "video/webm" ? "webm" : "mp4";
+  const artifactId = `grok-video-${createHash("sha256")
+    .update(
+      `${request?.executionId || "execution"}:${request?.blockId || "block"}:${request?.attempt || 1}`,
+    )
+    .digest("hex")
+    .slice(0, 16)}`;
+  const name = `${artifactId}.${extension}`;
+  await writeFile(services.getOutputPath(name), bytes);
+  const file = {
+    id: artifactId,
+    name,
+    mimeType: payload.mimeType,
+    size: bytes.length,
+    url: `artifact://${artifactId}`,
+  };
+  return {
+    file,
+    artifact: {
+      id: artifactId,
+      name,
+      mimeType: payload.mimeType,
+      size: bytes.length,
+      source: { kind: "path", path: name },
+    },
+    metadata: videoData,
+  };
+}
+
 async function configureProfile(request, services) {
   const settings = request?.settings ?? {};
   let profileName, profilePath, port;
   try {
     profileName = normalizeAccountProfile(request?.configuration?.accountProfile);
-    profilePath = profilePathFor(settings, profileName);
+    profilePath = runtimeProfilePath(settings, profileName, services);
     port = profilePort(
       clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
       profileName,
@@ -1214,12 +1369,12 @@ async function configureProfile(request, services) {
     await markProfilePrepared(profilePath, profileName);
     return {
       status: "success",
-      values: { ready: true, message: `Perfil ${profileName} validado no ChatGPT.` },
+      values: { ready: true, message: `Perfil ${profileName} validado no Grok Imagine.` },
     };
   } catch (error) {
     return resultError(
       error?.code || "AUTHENTICATION_FAILED",
-      error?.message || "Não foi possível validar o login do ChatGPT.",
+      error?.message || "Não foi possível validar o login do Grok.",
       Boolean(error?.retryable),
     );
   } finally {
@@ -1247,11 +1402,28 @@ export async function execute(request, services) {
       if (["search-web-in-browser", "deep-research-in-browser"].includes(capabilityId))
         return { status: "success", values: searchResponseValues(mock, [], request) };
       if (capabilityId === "generate-image-in-browser") {
-        return resultError(
-          "INVALID_CONFIGURATION",
-          "A geração de imagem não usa diagnosticMockResponse porque precisa produzir um artifact real.",
+        const bytes = Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64",
         );
+        const id = "grok-image-diagnostic";
+        const name = `${id}.png`;
+        await writeFile(services.getOutputPath(name), bytes);
+        const image = {
+          id,
+          name,
+          mimeType: "image/png",
+          size: bytes.length,
+          url: `artifact://${id}`,
+        };
+        return {
+          status: "success",
+          values: { image, description: mock },
+          artifacts: [{ ...image, source: { kind: "path", path: name } }],
+        };
       }
+      if (capabilityId === "generate-video-in-browser")
+        return resultError("INVALID_CONFIGURATION", "O diagnóstico de vídeo exige execução real.");
       return {
         status: "success",
         values: generationResponseValues(mock, [{ text: mock }], request),
@@ -1286,6 +1458,9 @@ export async function execute(request, services) {
     } else if (capabilityId === "generate-image-in-browser") {
       parts = [buildImagePrompt(request)];
       mode = "image";
+    } else if (capabilityId === "generate-video-in-browser") {
+      parts = [buildVideoPrompt(request)];
+      mode = "video";
     } else throw codedError("INVALID_CONFIGURATION", `Capability desconhecida: ${capabilityId}.`);
   } catch (error) {
     return resultError(
@@ -1298,7 +1473,7 @@ export async function execute(request, services) {
   let client, child;
   try {
     const profileName = normalizeAccountProfile(configuration.accountProfile),
-      profilePath = profilePathFor(settings, profileName),
+      profilePath = runtimeProfilePath(settings, profileName, services),
       port = profilePort(
         clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
         profileName,
@@ -1308,14 +1483,14 @@ export async function execute(request, services) {
     if (!(await profileIsPrepared(profilePath, profileName))) {
       throw codedError(
         "AUTHENTICATION_FAILED",
-        `O perfil ${profileName} ainda não foi salvo. Abra a configuração do Método e use Salvar perfil antes de executar.`,
+        `O perfil Grok ${profileName} ainda não foi salvo. Use Salvar perfil antes de executar.`,
       );
     }
     const trace =
       settings.diagnosticTrace === true
-        ? (message) => process.stderr.write(`[ChatGPT Browser] ${message}\n`)
+        ? (message) => process.stderr.write(`[Grok Browser] ${message}\n`)
         : () => {};
-    const step = (message) => process.stderr.write(`[ChatGPT Browser] ${message}\n`);
+    const step = (message) => process.stderr.write(`[Grok Browser] ${message}\n`);
     step(`Preparando perfil ${profileName} para ${parts.length} etapa(s).`);
     const launched = await launchOrReuseChrome({
       executables: await resolveChromeExecutables(settings),
@@ -1330,7 +1505,14 @@ export async function execute(request, services) {
       services.signal,
     );
     const { sessionId } = await attachChatGptPage(client, services.signal);
-    await openNewConversation(client, sessionId, services.signal);
+    await openNewConversation(
+      client,
+      sessionId,
+      services.signal,
+      ["generate-image-in-browser", "generate-video-in-browser"].includes(capabilityId)
+        ? CHATGPT_NEW_URL
+        : CHATGPT_CHAT_URL,
+    );
     await waitForPrompt(
       client,
       sessionId,
@@ -1355,7 +1537,15 @@ export async function execute(request, services) {
           responses.push(
             capabilityId === "generate-image-in-browser"
               ? await generateImagePart(client, sessionId, parts[index], settings, services.signal)
-              : await generatePart(client, sessionId, parts[index], settings, services.signal),
+              : capabilityId === "generate-video-in-browser"
+                ? await generateVideoPart(
+                    client,
+                    sessionId,
+                    parts[index],
+                    settings,
+                    services.signal,
+                  )
+                : await generatePart(client, sessionId, parts[index], settings, services.signal),
           );
           lastError = undefined;
           break;
@@ -1385,16 +1575,33 @@ export async function execute(request, services) {
         services,
         request,
         clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000,
+        responses.at(-1)?.mediaSrc,
       );
       return {
         status: "success",
         values: { image: captured.file, description: combined.trim() },
         artifacts: [captured.artifact],
         usage: {
-          provider: "OpenAI / ChatGPT Images",
+          provider: "xAI / Grok Imagine",
           outputUnits: captured.file.size,
           unit: "bytes",
         },
+      };
+    }
+    if (capabilityId === "generate-video-in-browser") {
+      const captured = await captureGeneratedVideo(
+        client,
+        sessionId,
+        services,
+        request,
+        clampInteger(settings?.responseTimeoutSeconds, 900, 30, 3600) * 1000,
+        responses.at(-1)?.mediaSrc,
+      );
+      return {
+        status: "success",
+        values: { video: captured.file, description: combined.trim() },
+        artifacts: [captured.artifact],
+        usage: { provider: "xAI / Grok Imagine", outputUnits: captured.file.size, unit: "bytes" },
       };
     }
     if (["search-web-in-browser", "deep-research-in-browser"].includes(capabilityId))
@@ -1418,7 +1625,7 @@ export async function execute(request, services) {
     return {
       status: "success",
       values,
-      usage: { provider: "OpenAI / ChatGPT web", outputUnits: combined.length, unit: "characters" },
+      usage: { provider: "xAI / Grok web", outputUnits: combined.length, unit: "characters" },
     };
   } catch (error) {
     if (services.signal?.aborted || error?.code === "CANCELLED")
@@ -1449,6 +1656,7 @@ export const __test = {
   buildValidationPrompt,
   buildAnalysisPrompt,
   buildImagePrompt,
+  buildVideoPrompt,
   cleanGeneratedText,
   collectStoredFiles,
   expandTemplate,

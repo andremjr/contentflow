@@ -34,26 +34,17 @@ function request(overrides = {}) {
   };
 }
 
-test("manifesto declara oito capabilities modulares", () => {
-  assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "0.1.14");
+test("manifesto declara capabilities reais de texto, pesquisa, imagem e vídeo", () => {
+  assert.equal(manifest.id, "local.contentflow.grok-browser-studio");
+  assert.equal(manifest.version, "0.1.1");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
-  const generation = manifest.capabilities.find((item) => item.id === "generate-text-in-browser");
-  assert.deepEqual(generation.outputPorts.find((port) => port.key === "result").producedTypes, [
-    "text",
-    "textarea",
-  ]);
   assert.deepEqual(
     manifest.capabilities.map((item) => item.id),
     [
       "generate-text-in-browser",
       "search-web-in-browser",
-      "deep-research-in-browser",
-      "choose-library-item-in-browser",
-      "validate-content-in-browser",
-      "analyze-images-in-browser",
-      "analyze-documents-in-browser",
       "generate-image-in-browser",
+      "generate-video-in-browser",
     ],
   );
   assert.deepEqual(manifest.permissions, [
@@ -67,12 +58,12 @@ test("manifesto declara oito capabilities modulares", () => {
 
 test("isola contas por alias e porta", () => {
   assert.equal(__test.normalizeAccountProfile("canal-a"), "canal-a");
-  assert.throws(() => __test.normalizeAccountProfile("../x"), /Perfil ChatGPT/);
+  assert.throws(() => __test.normalizeAccountProfile("../x"), /Perfil Grok/);
   assert.match(
     __test.profilePathFor({}, "canal-a").replaceAll("\\", "/"),
-    /chatgpt-browser-profiles\/canal-a$/,
+    /grok-browser-profiles\/canal-a$/,
   );
-  assert.notEqual(__test.profilePort(9544, "canal-a"), __test.profilePort(9544, "canal-b"));
+  assert.notEqual(__test.profilePort(9744, "canal-a"), __test.profilePort(9744, "canal-b"));
 });
 
 test("só considera pronto o perfil marcado após login", async () => {

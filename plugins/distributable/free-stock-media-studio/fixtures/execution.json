@@ -1,0 +1,55 @@
+{
+  "executionId": "fixture-free-stock-search",
+  "traceId": "fixture-free-stock-trace",
+  "blockId": "fixture-search-images",
+  "capabilityId": "search-stock-images",
+  "attempt": 1,
+  "invocation": { "mode": "start", "attempt": 1 },
+  "inputs": { "query": "fitness workout" },
+  "configuration": {
+    "provider": "all",
+    "resultsPerProvider": 3,
+    "page": 1,
+    "orientation": "landscape",
+    "safeSearch": true
+  },
+  "settings": { "diagnosticFixture": true },
+  "inputContract": [
+    { "id": "fixture-query", "portKey": "query", "label": "Termos de busca", "type": "text" }
+  ],
+  "outputContract": [
+    {
+      "portKey": "results",
+      "label": "Imagens encontradas",
+      "key": "results",
+      "type": "records",
+      "required": true
+    },
+    {
+      "portKey": "warnings",
+      "label": "Avisos dos provedores",
+      "key": "warnings",
+      "type": "list",
+      "required": false
+    }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "fixture-channel",
+      "name": "Canal de teste",
+      "language": "pt-BR",
+      "niche": "Fitness"
+    },
+    "project": { "id": "fixture-project", "title": "Projeto de teste" },
+    "processType": "thumbnail",
+    "block": {
+      "type": "BUSCAR",
+      "name": "Pesquisar imagens stock",
+      "instructions": "Pesquise mídia stock."
+    },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

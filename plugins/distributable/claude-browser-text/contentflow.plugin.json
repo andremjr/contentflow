@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.claude-browser-text",
   "name": "Claude Browser Studio",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Super plugin do Claude web para criar, pesquisar, escolher, validar e analisar imagens ou documentos em conversas persistentes.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -13,6 +13,12 @@
   "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
   "networkHosts": ["claude.ai"],
   "deliveryTypes": ["text", "processing"],
+  "profileSetup": {
+    "configurationKey": "accountProfile",
+    "label": "Salvar perfil",
+    "description": "Abre o Claude para login e fecha o Chrome após validar a área do chat.",
+    "prepareTimeoutMs": 900000
+  },
   "settingsSchema": {
     "type": "object",
     "additionalProperties": false,

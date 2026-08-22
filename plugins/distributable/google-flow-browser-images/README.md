@@ -17,7 +17,7 @@ O plugin nunca cria imagens substitutas. CAPTCHA, sessão expirada, cota geral, 
 - configure a mesma chave nos blocos de um canal para reutilizar conta, projetos, personagens e referências;
 - use chaves diferentes entre canais quando quiser bases separadas.
 
-O primeiro uso de cada perfil abre uma janela para login. O plugin não copia cookies e não alterna contas automaticamente quando há limite ou cota.
+Depois de informar o perfil no construtor do Método, use **Salvar perfil**. O plugin abre uma janela para login, valida a conta quando a lista de projetos ou o editor aparece e fecha o navegador. A execução recusa perfis ainda não preparados. O plugin não copia cookies e não alterna contas automaticamente quando há limite ou cota.
 
 ## Modelos
 

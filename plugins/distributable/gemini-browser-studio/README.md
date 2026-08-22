@@ -33,7 +33,7 @@ canal-b → ~/.contentflow-os/gemini-browser-profiles/canal-b
 canal-c → ~/.contentflow-os/gemini-browser-profiles/canal-c
 ```
 
-Cada alias recebe pasta Chrome, login, histórico e porta CDP próprios. Assim, a estratégia e o contexto de um canal não contaminam outro. No primeiro uso de cada alias, deixe o navegador visível, faça login manualmente e repita a execução.
+Cada alias recebe pasta Chrome, login, histórico e porta CDP próprios. Assim, a estratégia e o contexto de um canal não contaminam outro. Antes da primeira execução, use **Salvar perfil** no construtor do Método, conclua o login na janela visível e aguarde o navegador fechar. Perfis não preparados são recusados antes de qualquer prompt ser digitado.
 
 Não existe rotação automática de contas. Cota, CAPTCHA, upgrade, reautenticação ou bloqueio pausam a operação para intervenção manual.
 
