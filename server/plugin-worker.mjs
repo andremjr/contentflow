@@ -56,10 +56,13 @@ async function main() {
         throw new Error("Caminho de trabalho inválido.");
       }
       const resolved = path.resolve(envelope.sandbox.workspaceDirectory, relativePath);
-      if (!resolved.startsWith(`${envelope.sandbox.workspaceDirectory}${path.sep}`)) {
+      if (
+        resolved !== envelope.sandbox.workspaceDirectory &&
+        !resolved.startsWith(`${envelope.sandbox.workspaceDirectory}${path.sep}`)
+      ) {
         throw new Error("Caminho fora da pasta de trabalho autorizada.");
       }
-      if (permissions.has("filesystem:write"))
+      if (permissions.has("filesystem:write") && resolved !== envelope.sandbox.workspaceDirectory)
         mkdirSync(path.dirname(resolved), { recursive: true });
       return resolved;
     },

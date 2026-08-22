@@ -27,12 +27,12 @@ Templates de outline aceitam `{{PROMPT_BASE}}`, `{{BLOCK}}`, `{{BLOCK_JSON}}`, `
 
 ## Contas por canal
 
-Cada bloco possui `accountProfile`. Use aliases como `canal-a`, `canal-b` e `canal-c`. O plugin mantém perfis separados em:
+Cada bloco possui `accountProfile`. Use aliases como `canal-a`, `canal-b` e `canal-c`. O plugin mantém cada alias em uma subpasta da pasta de trabalho autorizada do plugin:
 
 ```text
-~/.contentflow-os/chatgpt-browser-profiles/canal-a
-~/.contentflow-os/chatgpt-browser-profiles/canal-b
-~/.contentflow-os/chatgpt-browser-profiles/canal-c
+<workspace-do-plugin>/canal-a
+<workspace-do-plugin>/canal-b
+<workspace-do-plugin>/canal-c
 ```
 
 Depois de informar um alias no construtor do Método, use **Salvar perfil**. O Chrome dedicado abre para o login, o plugin aguarda a área real do ChatGPT, grava a validação no próprio perfil e fecha o navegador. A execução normal recusa perfis ainda não preparados e não digita prompts em páginas de login, CAPTCHA ou reautenticação.
@@ -80,4 +80,4 @@ Em 20/08/2026, a interface real foi validada com: dois prompts consecutivos na m
 
 ## Revogação
 
-Saia da conta na janela Chrome dedicada e, se desejar remover a sessão, exclua manualmente somente a pasta do alias em `~/.contentflow-os/chatgpt-browser-profiles`. Remover o plugin não apaga outputs já promovidos pelo ContentFlow OS.
+Saia da conta na janela Chrome dedicada e, se desejar remover a sessão, exclua manualmente somente a pasta do alias dentro da pasta de trabalho conectada ao plugin. Remover o plugin não apaga outputs já promovidos pelo ContentFlow OS.

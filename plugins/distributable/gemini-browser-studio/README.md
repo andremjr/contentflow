@@ -28,9 +28,9 @@ Também existem `single`, `legacy_script_3_parts` e `custom_parts`, separados po
 Todas as oito capabilities possuem `accountProfile`. Configure aliases estáveis no Método de cada canal:
 
 ```text
-canal-a → ~/.contentflow-os/gemini-browser-profiles/canal-a
-canal-b → ~/.contentflow-os/gemini-browser-profiles/canal-b
-canal-c → ~/.contentflow-os/gemini-browser-profiles/canal-c
+canal-a → <workspace-do-plugin>/canal-a
+canal-b → <workspace-do-plugin>/canal-b
+canal-c → <workspace-do-plugin>/canal-c
 ```
 
 Cada alias recebe pasta Chrome, login, histórico e porta CDP próprios. Assim, a estratégia e o contexto de um canal não contaminam outro. Antes da primeira execução, use **Salvar perfil** no construtor do Método, conclua o login na janela visível e aguarde o navegador fechar. Perfis não preparados são recusados antes de qualquer prompt ser digitado.
@@ -78,4 +78,4 @@ Em 20/08/2026, a interface real foi validada com dois prompts consecutivos na me
 
 ## Revogação
 
-Saia da conta na janela Chrome dedicada. Para remover uma sessão, exclua manualmente apenas a pasta do alias correspondente em `~/.contentflow-os/gemini-browser-profiles`. Outputs já promovidos permanecem no ContentFlow OS.
+Saia da conta na janela Chrome dedicada. Para remover uma sessão, exclua manualmente apenas a pasta do alias correspondente dentro da pasta de trabalho conectada ao plugin. Outputs já promovidos permanecem no ContentFlow OS.

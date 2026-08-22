@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.google-flow-batch-images",
   "name": "Google Flow Browser Images",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Gera imagens reais no Google Flow com perfis de conta dedicados, modelos configuráveis, fallback entre modelos, referências visuais e fila segura sem imagens substitutas.",
   "author": "Local user",
   "license": "MIT",
@@ -35,12 +35,12 @@
       "profilePath": {
         "type": "string",
         "default": "",
-        "description": "Perfil Chrome do accountProfile default. Vazio usa ~/.contentflow-os/google-flow-chrome-profile. Não use seu perfil pessoal padrão."
+        "description": "Perfil Chrome do accountProfile default. Vazio usa a raiz do workspace autorizado. Não use seu perfil pessoal padrão."
       },
       "profilesRootPath": {
         "type": "string",
         "default": "",
-        "description": "Raiz opcional para perfis adicionais. Vazio usa ~/.contentflow-os/google-flow-chrome-profiles/<accountProfile>."
+        "description": "Raiz opcional para perfis adicionais. Vazio usa uma subpasta do workspace autorizado por accountProfile."
       },
       "flowUrl": {
         "type": "string",

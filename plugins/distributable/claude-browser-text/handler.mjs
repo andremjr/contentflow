@@ -600,6 +600,12 @@ function profilePathFor(settings, profileName) {
   const base = settings?.profilesBasePath?.trim?.() || defaultProfilesBasePath();
   return join(base, profileName);
 }
+function runtimeProfilePath(settings, profileName, services) {
+  if (settings?.profilePath?.trim?.() || settings?.profilesBasePath?.trim?.()) {
+    return profilePathFor(settings, profileName);
+  }
+  return services.getWorkspacePath(profileName);
+}
 function profileMarkerPath(path) {
   return join(path, ".contentflow-profile-ready.json");
 }
@@ -1378,7 +1384,7 @@ async function configureProfile(request, services) {
   let profileName, profilePath, port;
   try {
     profileName = normalizeAccountProfile(request?.configuration?.accountProfile);
-    profilePath = profilePathFor(settings, profileName);
+    profilePath = runtimeProfilePath(settings, profileName, services);
     port = profilePort(
       clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
       profileName,
@@ -1503,7 +1509,7 @@ export async function execute(request, services) {
   let port;
   try {
     profileName = normalizeAccountProfile(configuration.accountProfile);
-    profilePath = profilePathFor(settings, profileName);
+    profilePath = runtimeProfilePath(settings, profileName, services);
     const basePort = clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000);
     port = profilePort(basePort, profileName);
   } catch (error) {
@@ -1678,6 +1684,7 @@ export const __test = {
   profileIsPrepared,
   markProfilePrepared,
   profilePathFor,
+  runtimeProfilePath,
   profilePort,
   searchResponseValues,
   serializeInputs,

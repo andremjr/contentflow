@@ -124,12 +124,17 @@ try {
     "cancel_requested",
     "cancelamento não pode ser perdido por um resume concorrente",
   );
-  const racingCancelClaim = restartedStore.claim(racing.id, now);
-  assert.ok(racingCancelClaim);
-  restartedStore.save(racingCancelClaim, {
-    ...racingCancelClaim.job,
-    status: "cancelled",
+  const abandoned = restartedStore.save(restartedStore.claim(racing.id, now)!, {
+    ...racingClaim.job,
+    status: "abandoned",
+    error: "A execução associada não existe mais.",
+    nextPollAt: new Date("9999-12-31T23:59:59.999Z").toISOString(),
   });
+  assert.equal(
+    abandoned.status,
+    "abandoned",
+    "job órfão deve encerrar mesmo após solicitação de cancelamento",
+  );
   assert.equal(
     restartedStore.deleteTerminalBefore(new Date("9999-12-31T23:59:59.999Z")),
     2,

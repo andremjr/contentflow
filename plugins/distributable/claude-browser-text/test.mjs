@@ -8,7 +8,7 @@ const manifest = JSON.parse(
 );
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "0.3.6");
+  assert.equal(manifest.version, "0.3.7");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 });
 
@@ -102,6 +102,12 @@ test("isola contas por alias sem aceitar traversal", () => {
     /claude-browser-profiles\/canal-a$/,
   );
   assert.notEqual(__test.profilePort(9444, "canal-a"), __test.profilePort(9444, "canal-b"));
+  assert.equal(
+    __test.runtimeProfilePath({}, "canal-a", {
+      getWorkspacePath: (relativePath) => `workspace/${relativePath}`,
+    }),
+    "workspace/canal-a",
+  );
 });
 
 test("expande contexto e placeholders legados", () => {

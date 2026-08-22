@@ -96,9 +96,9 @@ Cada capability possui a configuração de bloco `accountProfile`. Use um alias 
 O plugin deriva perfis separados em:
 
 ```text
-~/.contentflow-os/claude-browser-profiles/canal-a
-~/.contentflow-os/claude-browser-profiles/canal-b
-~/.contentflow-os/claude-browser-profiles/canal-c
+<workspace-do-plugin>/canal-a
+<workspace-do-plugin>/canal-b
+<workspace-do-plugin>/canal-c
 ```
 
 Antes da primeira execução com um alias, use **Salvar perfil** no bloco do Método e faça login manualmente na conta Claude daquele canal. Nas execuções seguintes, o Método escolhe a conta pelo alias configurado, sem ler ou exportar cookies. Um perfil não preparado é recusado antes de qualquer prompt ser preenchido.
@@ -140,7 +140,7 @@ Esses templates aceitam `{{PROMPT_BASE}}`, `{{BLOCK}}`, `{{BLOCK_JSON}}`, `{{BLO
 - Quando uma capability recebe anexos, os arquivos autorizados são enviados ao Claude web. O plugin não aceita caminhos arbitrários nem URLs remotas como substituto de `StoredFile`.
 - Efeitos externos: criação de conversa e mensagens na conta Claude conectada.
 - Custo: depende do plano e dos limites da conta Claude.
-- Pasta-base padrão: `~/.contentflow-os/claude-browser-profiles`.
+- Pasta-base padrão: workspace interno e autorizado do plugin; uma pasta existente pode ser conectada na Central de Plugins.
 - Porta CDP base: `9444`, limitada a `127.0.0.1`; cada alias recebe uma porta derivada estável para permitir perfis separados.
 - Logs redigidos não incluem prompts, respostas, cookies ou tokens.
 

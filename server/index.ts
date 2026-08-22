@@ -152,6 +152,7 @@ mkdirSync(installedPluginsDirectory, { recursive: true });
 mkdirSync(developmentLinksDirectory, { recursive: true });
 
 const database = new Database(databasePath);
+database.pragma("busy_timeout = 5000");
 database.pragma("journal_mode = WAL");
 database.exec(`
   CREATE TABLE IF NOT EXISTS channels (
@@ -308,6 +309,14 @@ function readPluginWorkspace(pluginId: string) {
     .prepare("SELECT directory FROM plugin_workspaces WHERE plugin_id = ?")
     .get(pluginId) as { directory: string } | undefined;
   return row?.directory;
+}
+
+function executionWorkspaceForPlugin(plugin: { id: string; manifest: { profileSetup?: unknown } }) {
+  const configuredWorkspace = readPluginWorkspace(plugin.id);
+  if (configuredWorkspace) return configuredWorkspace;
+  if (!plugin.manifest.profileSetup) return undefined;
+  const safePluginId = plugin.id.replace(/[^A-Za-z0-9._-]/g, "_");
+  return path.join(dataDirectory, "plugin-workspaces", "profiles", safePluginId);
 }
 
 function executionFor(projectId: string, processType: string) {
@@ -716,7 +725,7 @@ async function processPluginJob(
   const remainingMs = new Date(job.deadlineAt).getTime() - Date.now();
   const storedSecrets = await pluginSecretsForJob(plugin.id, plugin.manifest.secretKeys ?? []);
   const secrets = { ...storedSecrets, ...transientSecrets };
-  const workspaceDirectory = readPluginWorkspace(plugin.id);
+  const workspaceDirectory = executionWorkspaceForPlugin(plugin);
   // Browser-driven capabilities legitimately need more than two minutes for
   // page loading, model generation and UI transitions. Honor the capability's
   // declared bound while never exceeding the persistent job deadline.
@@ -1570,7 +1579,7 @@ app.post("/api/plugins/:pluginId/profile", async (request, response) => {
     const timeoutMs =
       action === "prepare" ? (plugin.manifest.profileSetup.prepareTimeoutMs ?? 600_000) : 30_000;
     const result = await executeRegisteredPlugin(plugin, pluginRequest, timeoutMs, pluginSecrets, {
-      workspaceDirectory: readPluginWorkspace(plugin.id),
+      workspaceDirectory: executionWorkspaceForPlugin(plugin),
     });
     if (result.status === "error") {
       response.status(action === "status" ? 200 : 422).json({

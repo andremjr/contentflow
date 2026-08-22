@@ -123,6 +123,7 @@ try {
   const checkpoint = path.join(temporaryWorkspace, "checkpoints", "etapa-001.txt");
   if (
     workspaceProbe.status !== "success" ||
+    workspaceProbe.values.workspaceRoot !== realpathSync(temporaryWorkspace) ||
     readFileSync(checkpoint, "utf8") !== "checkpoint persistente"
   ) {
     throw new Error("A pasta de trabalho persistente não funcionou.");

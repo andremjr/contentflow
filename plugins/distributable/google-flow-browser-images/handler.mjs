@@ -138,7 +138,7 @@ function stableProfileOffset(profile) {
   return 1 + (digest.readUInt16BE(0) % 400);
 }
 
-function resolveProfileRuntime(request) {
+function resolveProfileRuntime(request, services) {
   const settings = request?.settings ?? {};
   const accountProfile = normalizeAccountProfile(request?.configuration?.accountProfile);
   const basePort = Number.isInteger(settings.remoteDebuggingPort)
@@ -153,14 +153,19 @@ function resolveProfileRuntime(request) {
   if (accountProfile === "default") {
     return {
       accountProfile,
-      profilePath: settings.profilePath?.trim?.() || defaultProfilePath(),
+      profilePath:
+        settings.profilePath?.trim?.() ||
+        (services ? services.getWorkspacePath(".") : defaultProfilePath()),
       port: basePort,
     };
   }
-  const root = settings.profilesRootPath?.trim?.() || defaultProfilesRootPath();
+  const root = settings.profilesRootPath?.trim?.();
   return {
     accountProfile,
-    profilePath: join(root, accountProfile),
+    profilePath:
+      root || !services
+        ? join(root || defaultProfilesRootPath(), accountProfile)
+        : services.getWorkspacePath(accountProfile),
     port: basePort + stableProfileOffset(accountProfile),
   };
 }
@@ -2020,7 +2025,7 @@ async function configureProfile(request, services) {
   const settings = request?.settings ?? {};
   let runtime;
   try {
-    runtime = resolveProfileRuntime(request);
+    runtime = resolveProfileRuntime(request, services);
     assertDedicatedProfilePath(runtime.profilePath);
   } catch (error) {
     return resultError(
@@ -2169,7 +2174,7 @@ export async function execute(request, services) {
   let generationPreferences;
   let referencePaths;
   try {
-    profileRuntime = resolveProfileRuntime(request);
+    profileRuntime = resolveProfileRuntime(request, services);
     generationPreferences = resolveGenerationPreferences(request?.configuration ?? {});
     assertDedicatedProfilePath(profileRuntime.profilePath);
     if (!(await profileIsPrepared(profileRuntime.profilePath, profileRuntime.accountProfile))) {

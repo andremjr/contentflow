@@ -122,7 +122,7 @@ export class PluginJobStore {
     job: PersistentPluginJob,
     onSaved?: (saved: PersistentPluginJob) => void,
   ) {
-    return this.database.transaction(() => {
+    const persist = this.database.transaction(() => {
       const current = this.database
         .prepare("SELECT status, next_poll_at FROM plugin_jobs WHERE id = ? AND lease_token = ?")
         .get(job.id, claim.leaseToken) as
@@ -130,7 +130,7 @@ export class PluginJobStore {
       if (!current) throw new Error("O lease do job expirou antes da persistência.");
       const cancellationWon =
         current.status === "cancel_requested" &&
-        !["cancel_requested", "cancelled"].includes(job.status);
+        !["cancel_requested", "cancelled", "abandoned"].includes(job.status);
       const updatedAt = new Date().toISOString();
       const saved: PersistentPluginJob = cancellationWon
         ? {
@@ -158,7 +158,8 @@ export class PluginJobStore {
         );
       onSaved?.(saved);
       return saved;
-    })();
+    });
+    return persist.immediate();
   }
 
   requestCancellation(executionId: string, now = new Date()) {
@@ -242,7 +243,7 @@ export class PluginJobStore {
         .run(leaseToken, leaseUntil, job.id, now.toISOString());
       return result.changes ? { job, leaseToken } : undefined;
     });
-    return claim() as ClaimedPluginJob | undefined;
+    return claim.immediate() as ClaimedPluginJob | undefined;
   }
 }
 

@@ -473,6 +473,10 @@ function normalizeAccountProfile(value) {
 function profilePathFor(settings, name) {
   return join(settings?.profilesBasePath?.trim?.() || defaultProfilesBasePath(), name);
 }
+function runtimeProfilePath(settings, name, services) {
+  if (settings?.profilesBasePath?.trim?.()) return profilePathFor(settings, name);
+  return services.getWorkspacePath(name);
+}
 function profileMarkerPath(path) {
   return join(path, ".contentflow-profile-ready.json");
 }
@@ -1169,7 +1173,7 @@ async function configureProfile(request, services) {
   let profileName, profilePath, port;
   try {
     profileName = normalizeAccountProfile(request?.configuration?.accountProfile);
-    profilePath = profilePathFor(settings, profileName);
+    profilePath = runtimeProfilePath(settings, profileName, services);
     port = profilePort(
       clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
       profileName,
@@ -1298,7 +1302,7 @@ export async function execute(request, services) {
   let client, child;
   try {
     const profileName = normalizeAccountProfile(configuration.accountProfile),
-      profilePath = profilePathFor(settings, profileName),
+      profilePath = runtimeProfilePath(settings, profileName, services),
       port = profilePort(
         clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
         profileName,
@@ -1459,6 +1463,7 @@ export const __test = {
   profileIsPrepared,
   markProfilePrepared,
   profilePathFor,
+  runtimeProfilePath,
   profilePort,
   searchResponseValues,
   generationResponseValues,
