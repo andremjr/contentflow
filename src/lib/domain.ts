@@ -102,7 +102,14 @@ export type RecordFieldDefinition = {
 };
 
 export type BlockInputSource =
-  "project" | "previous_process" | "previous_block" | "channel_library" | "static";
+  | "project"
+  | "previous_process"
+  | "previous_block"
+  | "channel_history"
+  | "channel_library"
+  | "static";
+
+export type ChannelHistoryEligibility = "completed" | "published";
 
 export type BlockInputBinding = {
   id: string;
@@ -114,6 +121,8 @@ export type BlockInputBinding = {
   blockId?: string;
   collection?: string;
   staticValue?: string;
+  historyLimit?: number;
+  historyEligibility?: ChannelHistoryEligibility;
   recordFields?: RecordFieldDefinition[];
   presentation?: FieldPresentation;
 };

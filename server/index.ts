@@ -2050,6 +2050,21 @@ app.post("/api/execute-block", async (request, response) => {
       .prepare("SELECT payload FROM process_executions WHERE project_id = ?")
       .all(project.id) as { payload: string }[]
   ).map((row) => normalizeExecutionDeliveries(JSON.parse(row.payload) as ProcessExecution));
+  const channelProjects = (
+    database.prepare("SELECT payload FROM projects WHERE channel_id = ?").all(channel.id) as {
+      payload: string;
+    }[]
+  ).map((row) => JSON.parse(row.payload) as Project);
+  const channelExecutions = (
+    database
+      .prepare(
+        `SELECT process_executions.payload
+         FROM process_executions
+         INNER JOIN projects ON projects.id = process_executions.project_id
+         WHERE projects.channel_id = ?`,
+      )
+      .all(channel.id) as { payload: string }[]
+  ).map((row) => normalizeExecutionDeliveries(JSON.parse(row.payload) as ProcessExecution));
   const collections = (
     database
       .prepare("SELECT payload FROM library_collections WHERE channel_id = ?")
@@ -2065,6 +2080,8 @@ app.post("/api/execute-block", async (request, response) => {
     execution,
     project,
     projectExecutions,
+    channelExecutions,
+    channelProjects,
     collections,
     libraryItems,
   });
@@ -2078,15 +2095,23 @@ app.post("/api/execute-block", async (request, response) => {
 
   const usedInputPorts = new Set<string>();
   const assignedInputs = resolvedInputs.map((item) => {
-    const port =
-      capability.inputPorts.find(
-        (candidate) =>
-          candidate.acceptedTypes.includes(item.input.type) &&
-          (candidate.multiple || !usedInputPorts.has(candidate.key)),
-      ) ?? capability.inputPorts[0];
+    const port = capability.inputPorts.find(
+      (candidate) =>
+        candidate.acceptedTypes.includes(item.input.type) &&
+        (candidate.multiple || !usedInputPorts.has(candidate.key)),
+    );
     if (port && !port.multiple) usedInputPorts.add(port.key);
     return { resolved: item, port };
   });
+  const unsupportedInputs = assignedInputs.filter((item) => !item.port);
+  if (unsupportedInputs.length) {
+    response.status(422).json({
+      error: `O plugin não aceita: ${unsupportedInputs
+        .map((item) => item.resolved.input.label)
+        .join(", ")}.`,
+    });
+    return;
+  }
   const inputContract = assignedInputs.map(({ resolved: item, port }) => ({
     id: item.input.id,
     portKey: port?.key ?? item.input.id,

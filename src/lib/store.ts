@@ -217,6 +217,12 @@ export function useProjectExecutions(projectId: string) {
   return db.executions.filter((execution) => execution.projectId === projectId);
 }
 
+export function useChannelExecutions(channelId: string) {
+  const storeVersion = useClientStoreVersion();
+  if (storeVersion < 0) return [];
+  return db.executions.filter((execution) => execution.channelId === channelId);
+}
+
 export function useLibraryItems(channelId?: string) {
   const storeVersion = useClientStoreVersion();
   if (storeVersion < 0) return [];
@@ -778,10 +784,31 @@ export function chooseCollectionItem(executionId: string, blockId: string, itemI
     return false;
   }
 
+  const project = db.projects.find((candidate) => candidate.id === execution.projectId);
+  if (!project) return false;
+  const unresolvedInputs = resolveBlockInputs({
+    block,
+    execution,
+    project,
+    projectExecutions: db.executions.filter((candidate) => candidate.projectId === project.id),
+    channelExecutions: db.executions.filter(
+      (candidate) => candidate.channelId === execution.channelId,
+    ),
+    channelProjects: db.projects.filter((candidate) => candidate.channelId === execution.channelId),
+    collections: db.libraryCollections.filter(
+      (candidate) => candidate.channelId === execution.channelId,
+    ),
+    libraryItems: db.libraryItems.filter(
+      (candidate) => candidate.channelId === execution.channelId,
+    ),
+  }).filter((candidate) => !candidate.resolved);
+  if (unresolvedInputs.length) return false;
+
   const now = new Date().toISOString();
   blockExecution.values = { selectedItemId: itemId };
   blockExecution.status = "completed";
   blockExecution.completedAt = now;
+  recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
   activateNextBlock(execution, execution.blocks.indexOf(blockExecution));
   return true;
 }
@@ -907,6 +934,8 @@ export function completeHumanBlock(
     execution,
     project,
     projectExecutions: db.executions.filter((item) => item.projectId === execution.projectId),
+    channelExecutions: db.executions.filter((item) => item.channelId === execution.channelId),
+    channelProjects: db.projects.filter((item) => item.channelId === execution.channelId),
     collections: db.libraryCollections.filter((item) => item.channelId === execution.channelId),
     libraryItems: db.libraryItems.filter((item) => item.channelId === execution.channelId),
   }).filter((item) => !item.resolved);

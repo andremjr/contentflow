@@ -13,6 +13,7 @@ import {
 } from "@/lib/domain";
 import { createProcessOutputFields, isEmptyRuntimeValue } from "@/lib/human-workflow";
 import { normalizeExecutionDeliveries } from "@/lib/deliveries";
+import { resolveChannelHistory } from "@/lib/channel-history";
 
 type RuntimeCandidate = {
   id: string;
@@ -50,6 +51,8 @@ export function resolveBlockInputs({
   execution,
   project,
   projectExecutions,
+  channelExecutions = projectExecutions,
+  channelProjects = [project],
   collections,
   libraryItems,
 }: {
@@ -57,6 +60,8 @@ export function resolveBlockInputs({
   execution: ProcessExecution;
   project: Project;
   projectExecutions: ProcessExecution[];
+  channelExecutions?: ProcessExecution[];
+  channelProjects?: Project[];
   collections: StrategicCollection[];
   libraryItems: ChannelLibraryItem[];
 }): ResolvedBlockInput[] {
@@ -70,7 +75,14 @@ export function resolveBlockInputs({
   const usedCandidateIds = new Set<string>();
 
   return (block.inputs ?? []).map((input) => {
-    const explicit = resolveExplicitInput(input, project, candidates);
+    if (input.source === "channel_history" && block.type !== "ESCOLHER") {
+      return { input, resolved: false };
+    }
+    const explicit = resolveExplicitInput(input, project, candidates, {
+      execution,
+      channelExecutions,
+      channelProjects,
+    });
     if (explicit) {
       if (explicit.candidateId) usedCandidateIds.add(explicit.candidateId);
       return { input, ...explicit.result };
@@ -235,12 +247,34 @@ function resolveExplicitInput(
   input: BlockInputBinding,
   project: Project,
   candidates: RuntimeCandidate[],
+  historyContext: {
+    execution: ProcessExecution;
+    channelExecutions: ProcessExecution[];
+    channelProjects: Project[];
+  },
 ):
   | {
       candidateId?: string;
       result: Omit<ResolvedBlockInput, "input">;
     }
   | undefined {
+  if (input.source === "channel_history") {
+    const value = resolveChannelHistory({
+      input,
+      currentExecution: historyContext.execution,
+      channelExecutions: historyContext.channelExecutions,
+      channelProjects: historyContext.channelProjects,
+    });
+    return value
+      ? {
+          result: {
+            resolved: true,
+            value,
+            sourceLabel: "Histórico do canal",
+          },
+        }
+      : { result: { resolved: false } };
+  }
   if (input.source === "static") {
     return input.staticValue
       ? { result: { resolved: true, value: input.staticValue, sourceLabel: "Valor fixo" } }

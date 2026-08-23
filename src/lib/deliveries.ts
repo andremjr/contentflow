@@ -1,5 +1,6 @@
 import type {
   ActionBlock,
+  BlockFieldDefinition,
   DeliveryItem,
   HumanFieldType,
   ProcessExecution,
@@ -39,7 +40,19 @@ export function materializeBlockDeliveries({
   now?: string;
 }): ProjectDelivery[] {
   const attempt = execution.blocks.find((item) => item.blockId === block.id)?.attempt ?? 1;
-  return (block.outputs ?? []).flatMap((output) => {
+  const outputs: BlockFieldDefinition[] =
+    block.type === "ESCOLHER"
+      ? [
+          {
+            id: `${block.id}-selected-item`,
+            label: "Item estratégico escolhido",
+            key: "selectedItemId",
+            type: "text",
+            required: true,
+          },
+        ]
+      : (block.outputs ?? []);
+  return outputs.flatMap((output) => {
     const value = values[output.key];
     if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) {
       return [];

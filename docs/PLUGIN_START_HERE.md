@@ -2,7 +2,7 @@
 
 Um plugin do ContentFlow OS é uma pasta com um manifesto e uma função JavaScript. O manifesto diz **quando** a capacidade pode ser usada; a função recebe os inputs do bloco e devolve os outputs. O núcleo cuida de instalação, consentimento, cofre de credenciais, sandbox, persistência, arquivos, IDs universais e continuidade do Método.
 
-Compatibilidade deste guia: ContentFlow OS v0.2, Plugin API v1 e Node 26.
+Compatibilidade deste guia: ContentFlow OS v0.3.5, Plugin API v1 e Node 26.
 
 Para o primeiro plugin, você não precisa estudar o protocolo completo nem alterar o núcleo.
 
@@ -23,11 +23,11 @@ Node e terminal não são necessários para instalar ou executar um plugin pront
 
 O kit possui três pontos de partida:
 
-| Template | Use quando sua automação… | Permissões iniciais |
-| --- | --- | --- |
-| `text-transform` | transforma texto ou dados somente em JavaScript | nenhuma |
-| `hosted-api` | chama uma API ou webhook HTTPS público | `network` + secret, quando necessário |
-| `file-artifact` | lê um arquivo gerenciado e produz outro | filesystem controlado |
+| Template         | Use quando sua automação…                       | Permissões iniciais                   |
+| ---------------- | ----------------------------------------------- | ------------------------------------- |
+| `text-transform` | transforma texto ou dados somente em JavaScript | nenhuma                               |
+| `hosted-api`     | chama uma API ou webhook HTTPS público          | `network` + secret, quando necessário |
+| `file-artifact`  | lê um arquivo gerenciado e produz outro         | filesystem controlado                 |
 
 O kit cria `contentflow.plugin.json`, `handler.mjs`, `README.md`, `test.mjs` e uma fixture. Ele não instala dependências nem executa scripts de terceiros.
 
@@ -43,15 +43,15 @@ O kit cria `contentflow.plugin.json`, `handler.mjs`, `README.md`, `test.mjs` e u
 
 Não reescreva a lógica primeiro. Isole a fronteira que o ContentFlow precisa enxergar e envolva o comportamento existente com o contrato do plugin.
 
-| O que você já tem | Adaptação recomendada | Atenção |
-| --- | --- | --- |
-| função ou script JavaScript | mova a função para `handler.mjs` e leia/escreva pelas portas | remova estado global e caminhos absolutos |
-| API própria, SaaS ou webhook público | comece com `hosted-api` e use `fetch` | declare `networkHosts`, provedor, dados enviados e secret |
-| fluxo n8n, Make ou servidor FastAPI público | exponha uma entrada HTTPS estável e trate o retorno no handler | webhooks locais/rede privada não possuem permissão dedicada na v1 |
-| Python, FFmpeg ou outro programa local | mantenha o handler Node como adapter e empacote/invoque o executável | declare `process`; é uma permissão avançada e não existe instalação automática |
-| automação Playwright, Puppeteer ou Selenium | empacote o runtime/dependências e faça o plugin abrir seu navegador | declare rede/processo/filesystem necessários e deixe autenticação explícita |
-| fila externa ou geração demorada | use capacidade `async` com `start`, `resume` e `cancel` | `jobId` precisa sobreviver ao encerramento do handler |
-| muitos passos internos para uma entrega | mantenha a fila/checkpoints dentro da capacidade | etapas editoriais e aprovações continuam no Método |
+| O que você já tem                           | Adaptação recomendada                                                | Atenção                                                                        |
+| ------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| função ou script JavaScript                 | mova a função para `handler.mjs` e leia/escreva pelas portas         | remova estado global e caminhos absolutos                                      |
+| API própria, SaaS ou webhook público        | comece com `hosted-api` e use `fetch`                                | declare `networkHosts`, provedor, dados enviados e secret                      |
+| fluxo n8n, Make ou servidor FastAPI público | exponha uma entrada HTTPS estável e trate o retorno no handler       | webhooks locais/rede privada não possuem permissão dedicada na v1              |
+| Python, FFmpeg ou outro programa local      | mantenha o handler Node como adapter e empacote/invoque o executável | declare `process`; é uma permissão avançada e não existe instalação automática |
+| automação Playwright, Puppeteer ou Selenium | empacote o runtime/dependências e faça o plugin abrir seu navegador  | declare rede/processo/filesystem necessários e deixe autenticação explícita    |
+| fila externa ou geração demorada            | use capacidade `async` com `start`, `resume` e `cancel`              | `jobId` precisa sobreviver ao encerramento do handler                          |
+| muitos passos internos para uma entrega     | mantenha a fila/checkpoints dentro da capacidade                     | etapas editoriais e aprovações continuam no Método                             |
 
 Uma automação grande pode virar várias capacidades no mesmo plugin. Separe quando houver entregas que o usuário deve conectar, validar, substituir ou reutilizar em outro bloco. Mantenha junto o que só existe para produzir uma única entrega observável.
 
@@ -119,7 +119,8 @@ O plugin devolve valores; o núcleo registra a identidade:
 - `records` e coleções de arquivos preservam ordem e identidade por elemento;
 - uma nova tentativa cria a identidade da nova tentativa e invalida a anterior;
 - inputs resolvidos podem trazer `request.inputDeliveries` com os IDs de origem;
-- `request.context.previousDeliveries` permite consultar entregas anteriores autorizadas.
+- `request.context.previousDeliveries` permite consultar entregas anteriores autorizadas do Projeto atual.
+- Um input `channel_history` configurado em `ESCOLHER` chega antes da escolha como `records` em `request.inputs`, limitado a outros Projetos do mesmo Canal; o plugin não consulta o banco diretamente.
 
 Não invente IDs do núcleo. Quando um provedor possuir `jobId`, `assetId` ou outro ID externo, preserve-o em um campo do seu registro para proveniência e idempotência.
 
@@ -151,4 +152,4 @@ Se o plugin cabe em um template e passa no `check`, você não precisa ler todos
 
 ## Compartilhar ou vender
 
-Um plugin independente pode ser gratuito, pago, proprietário ou aberto e não precisa de aprovação central para ser criado, compartilhado ou instalado localmente. Ele deve possuir licença própria, autoria clara e declarações honestas de permissões, custos, dados e suporte. Na v0.2, distribua a pasta completa; o usuário escolhe **Instalar uma cópia**. Catálogo e instalação direta por URL ainda não fazem parte da interface.
+Um plugin independente pode ser gratuito, pago, proprietário ou aberto e não precisa de aprovação central para ser criado, compartilhado ou instalado localmente. Ele deve possuir licença própria, autoria clara e declarações honestas de permissões, custos, dados e suporte. Na versão atual, distribua a pasta completa; o usuário escolhe **Instalar uma cópia**. Catálogo e instalação direta por URL ainda não fazem parte da interface.

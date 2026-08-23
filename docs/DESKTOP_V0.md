@@ -6,8 +6,9 @@ A V0 transforma o ContentFlow OS em um aplicativo comum do Windows. Ela não exi
 
 Os binários são publicados manualmente na página [Releases do projeto](https://github.com/andremjr/contentflow-os/releases):
 
-- `ContentFlow-OS-V0-0.3.1-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
-- `ContentFlow-OS-V0-0.3.1-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
+- `ContentFlow-OS-V0-0.3.5-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
+- `ContentFlow-OS-V0-0.3.5-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
+- `ContentFlow-OS-V0-0.3.5-SHA256.txt`: hashes para conferir a integridade dos dois executáveis.
 
 O Windows pode mostrar um aviso porque esta V0 ainda não possui assinatura digital comercial. Confira se o arquivo veio do repositório oficial antes de executá-lo.
 
@@ -33,7 +34,7 @@ Abra **Plugins**, informe a pasta que contém `contentflow.plugin.json` e escolh
 
 Depois, revise as capacidades e permissões, aceite o consentimento local e ative o plugin. Nenhuma aprovação central é necessária.
 
-A distribuição 0.3.1 também copia os plugins opcionais mantidos em `plugins/distributable` para essa pasta de Documentos. Eles não são ativados automaticamente: o usuário escolhe conscientemente se quer instalar uma cópia ou vincular a pasta ao vivo.
+A distribuição atual também copia os plugins opcionais mantidos em `plugins/distributable` para essa pasta de Documentos. Eles não são ativados automaticamente: o usuário escolhe conscientemente se quer instalar uma cópia ou vincular a pasta ao vivo.
 
 ## Recompilar o núcleo
 
@@ -46,5 +47,17 @@ npm run desktop:v0
 ```
 
 Os artefatos intermediários são gerados em `release/v0`. Para publicar a próxima compilação, valide os dois executáveis e envie-os manualmente como arquivos de uma Release do GitHub. Os binários não entram no histórico Git, evitando dependência de Git LFS e mantendo o clone leve.
+
+Depois do build, gere o manifesto de integridade no PowerShell:
+
+```powershell
+Get-FileHash -Algorithm SHA256 `
+  release/v0/ContentFlow-OS-V0-0.3.5-x64-Setup.exe, `
+  release/v0/ContentFlow-OS-V0-0.3.5-x64-Portable.exe |
+  ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
+  Set-Content -Encoding ascii release/v0/ContentFlow-OS-V0-0.3.5-SHA256.txt
+```
+
+Na página **Releases → Draft a new release**, escolha a tag já enviada, preencha título e notas, anexe Setup, Portable e SHA-256, marque como pre-release apenas quando for um build de teste e publique. A tag e o commit devem existir no remoto antes dessa etapa.
 
 O empacotamento inclui o runtime Node 26 privado em `resources/runtime/node.exe`. A API inicia em uma porta local aleatória e a janela Electron encaminha `/api` internamente, evitando portas fixas e conflitos com uma cópia de desenvolvimento.

@@ -24,6 +24,20 @@ export function getMethodConfigurationIssue(method?: ProcessMethod) {
     if (new Set(keys).size !== keys.length) {
       return `As chaves das entregas do bloco “${block.name ?? block.type}” precisam ser únicas.`;
     }
+    for (const input of block.inputs ?? []) {
+      if (input.source === "channel_history" && block.type !== "ESCOLHER") {
+        return `O Histórico do Canal só pode orientar um bloco “Escolher”. Remova-o do bloco “${block.name ?? block.type}”.`;
+      }
+      if (
+        input.source === "channel_history" &&
+        (!input.sourceProcessType || !input.blockId || !input.sourceKey)
+      ) {
+        return `Selecione a origem do histórico do canal na entrada “${input.label}”.`;
+      }
+      if (input.source === "channel_history" && input.type !== "records") {
+        return `A entrada de histórico “${input.label}” precisa usar Lista de registros.`;
+      }
+    }
     for (const structuredField of [...(block.inputs ?? []), ...(block.outputs ?? [])].filter(
       (field) => field.type === "records",
     )) {
@@ -225,19 +239,24 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
     ...block,
     name: block.name || `${block.type.charAt(0)}${block.type.slice(1).toLowerCase()}`,
     instructions: block.instructions ?? "",
-    inputs:
-      block.type === "ESCOLHER"
-        ? []
-        : (block.inputs ?? [])
-            .filter((input) => input.source !== "channel_library")
-            .map((input) => {
-              const type = input.type ?? "text";
-              return {
-                ...input,
-                type,
-                presentation: normalizeFieldPresentation(type, input.presentation),
-              };
-            }),
+    inputs: (block.inputs ?? [])
+      .filter((input) => input.source !== "channel_library")
+      .map((input) => {
+        const type = input.source === "channel_history" ? "records" : (input.type ?? "text");
+        return {
+          ...input,
+          type,
+          historyLimit:
+            input.source === "channel_history"
+              ? Math.min(100, Math.max(1, input.historyLimit ?? 10))
+              : undefined,
+          historyEligibility:
+            input.source === "channel_history"
+              ? (input.historyEligibility ?? "completed")
+              : undefined,
+          presentation: normalizeFieldPresentation(type, input.presentation),
+        };
+      }),
     outputs:
       block.type === "ESCOLHER"
         ? []

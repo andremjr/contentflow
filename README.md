@@ -49,6 +49,8 @@ Na primeira execução da versão atual pelo código-fonte no Windows, um banco 
 
 Cada saída produzida no Projeto é registrada em **Produtos do projeto** com um ID universal de entrega e IDs individuais para suas subentregas. O construtor de Métodos pode selecionar qualquer saída anterior por Processo, Bloco e Entrega; o motor resolve os IDs reais em cada execução. Isso permite que plugins relacionem títulos, cenas, SRT, áudio, assets e cortes sem regras de produção fixas no núcleo.
 
+O bloco `ESCOLHER` pode declarar **Histórico do canal** como contexto para consultar entregas escalares de outros Projetos do mesmo Canal antes de selecionar um item da Biblioteca Estratégica. O Método define a origem, a janela e se considera decisões concluídas ou apenas Projetos publicados; a regra editorial permanece nas instruções ou na configuração do plugin. Cada item escolhido passa a ser uma entrega histórica reutilizável.
+
 Não há login nem sincronização em nuvem nesta fase.
 
 Faça backup de `%APPDATA%\ContentFlow OS\data` antes de atualizar ou trocar de computador. Para atualizar o código-fonte:

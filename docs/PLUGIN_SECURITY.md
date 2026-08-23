@@ -62,7 +62,7 @@ Um selo `official` ou `verified` melhora a confiança de origem, mas não remove
 | Efeito externo indevido       | upload publica vídeo sem confirmação                   | declaração de efeito e consentimento just-in-time                   |
 | Vazamento em logs             | token ou prompt aparece em erro                        | redaction, limites e logs estruturados                              |
 | Confusão entre execuções      | cache global mistura canais                            | staging e contexto exclusivos por invocação                         |
-| Sequestro de sessão           | plugin copia cookie ou token de perfil não autorizado  | conexão explícita, cofre, pasta escolhida e proibição de varredura   |
+| Sequestro de sessão           | plugin copia cookie ou token de perfil não autorizado  | conexão explícita, cofre, pasta escolhida e proibição de varredura  |
 | Evasão de limites             | rotação de contas ou endpoints amplia créditos         | identidade fixa, quotas, auditoria e falha fechada                  |
 | Automação de UI incorreta     | mudança visual faz o plugin clicar em publicar         | estado validado, seletores acessíveis e confirmação just-in-time    |
 
@@ -128,7 +128,7 @@ Webhooks locais ou destinos privados exigem uma permissão futura distinta e avi
 - Secrets são armazenados cifrados no cofre local e referenciados somente pela chave declarada.
 - O valor só existe na memória da invocação autorizada e não aparece em request, snapshot, método, log ou artifact.
 - `getSecret()` falha para chaves não declaradas.
-- OAuth e login interativo são implementados pelo plugin na v0.2; tokens persistentes devem ser declarados como secrets e guardados pelo cofre do núcleo. Access tokens curtos são preferíveis.
+- OAuth e login interativo são implementados pelo plugin na versão atual; tokens persistentes devem ser declarados como secrets e guardados pelo cofre do núcleo. Access tokens curtos são preferíveis.
 - A interface identifica escopo, conta e provedor antes de salvar uma credencial.
 - Remoção do plugin oferece revogação local e orienta revogação no provedor.
 - Redaction cobre valor integral, formas codificadas conhecidas e headers de autorização.

@@ -229,7 +229,7 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 - `apiVersion` deve ser `"1"`.
 - `id` é global, imutável e usa domínio reverso em minúsculas.
 - `version` segue SemVer.
-- `minCoreVersion` declara a versão mínima pretendida. Na v0.2 ele é metadado de compatibilidade; o autor ainda deve testar e informar a versão suportada no README.
+- `minCoreVersion` declara a versão mínima pretendida. Na versão atual ele é metadado de compatibilidade; o autor ainda deve testar e informar a versão suportada no README.
 - `capability.id` é único dentro do plugin e não muda depois de publicado.
 - `license` identifica a licença do pacote com expressão SPDX quando existir; licenças personalizadas usam um identificador estável e incluem o arquivo integral no pacote.
 - `homepage` e `repository`, quando informados, usam URLs HTTPS e apontam para páginas controladas pelo publicador.
@@ -239,7 +239,7 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 
 - `runtime.kind` é `node` na API v1.
 - `runtime.module` é `esm`.
-- use `runtime.version: ">=26 <27"` para plugins comunitários da API v1. Na v0.2, essa faixa é informativa; o gate executável verifica que o runtime ativo é Node 26.
+- use `runtime.version: ">=26 <27"` para plugins comunitários da API v1. Na versão atual, essa faixa é informativa; o gate executável verifica que o runtime ativo é Node 26.
 
 ### Capacidades
 
@@ -341,7 +341,7 @@ Permissões da API v1:
 | `worker`           | Workers locais para processamento paralelo declarado.                                |
 | `native`           | Addons nativos empacotados, como codecs ou bibliotecas de imagem.                    |
 
-Uma permissão declarada não significa acesso irrestrito. Na implementação v0.2, o executor aplica:
+Uma permissão declarada não significa acesso irrestrito. Na implementação atual, o executor aplica:
 
 - diretórios permitidos;
 - bloqueio de travessia e symlink escape;
@@ -592,7 +592,7 @@ O protocolo v1 de valores e artifacts permanece compatível. Depois de validar a
 - retries invalidam os registros afetados e produzem uma nova identidade de tentativa;
 - o output oficial de cada Processo Universal também é uma entrega.
 
-`request.inputDeliveries` informa, para cada porta resolvida, o ID da entrega e os IDs dos itens fornecidos. `context.previousDeliveries` expõe metadados e valores das entregas anteriores que o motor autorizou como contexto. Esses campos são aditivos: plugins v1 que não os leem continuam funcionando.
+`request.inputDeliveries` informa, para cada porta resolvida, o ID da entrega e os IDs dos itens fornecidos. `context.previousDeliveries` expõe metadados e valores das entregas anteriores do Projeto atual que o motor autorizou como contexto. Uma entrada `channel_history`, quando declarada em `ESCOLHER`, chega antes da escolha em `request.inputs` como `records` com valor, projeto e instante de decisões de outros Projetos do mesmo Canal. `CRIAR`, `BUSCAR` e `VALIDAR` recebem o item escolhido pelas conexões normais. Esses campos e valores são aditivos: plugins v1 que não os leem continuam funcionando.
 
 No Método, uma referência explícita guarda `sourceProcessType`, `blockId` e `sourceKey`. IDs concretos pertencem somente à execução e não são serializados no template. Plugins podem devolver relações entre itens quando a capacidade precisar de proveniência, mas não devem inventar IDs do núcleo nem depender da forma textual desses identificadores.
 
@@ -969,7 +969,7 @@ O pacote deve documentar canal de suporte e de vulnerabilidades. Diagnósticos e
 
 ## 29. Governança e distribuição do ecossistema
 
-Plugins podem ser distribuídos por arquivo, repositório, organização ou catálogo. Na v0.2, o usuário obtém a pasta do pacote e escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**; instalação direta por URL ainda não faz parte da interface. A execução local de um pacote compatível não exige submissão nem aprovação do mantenedor. Catálogos são superfícies opcionais de descoberta e confiança.
+Plugins podem ser distribuídos por arquivo, repositório, organização ou catálogo. Na versão atual, o usuário obtém a pasta do pacote e escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**; instalação direta por URL ainda não faz parte da interface. A execução local de um pacote compatível não exige submissão nem aprovação do mantenedor. Catálogos são superfícies opcionais de descoberta e confiança.
 
 Quando houver catálogo, ele diferencia plugins `official`, `verified`, `community` e `private`:
 

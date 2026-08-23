@@ -88,7 +88,14 @@ const inputSchema = z
         "thumbnail_layout",
       ])
       .default("text"),
-    source: z.enum(["project", "previous_process", "previous_block", "channel_library", "static"]),
+    source: z.enum([
+      "project",
+      "previous_process",
+      "previous_block",
+      "channel_history",
+      "channel_library",
+      "static",
+    ]),
     sourceKey: z.string().max(200).optional(),
     sourceProcessType: z
       .enum([
@@ -105,6 +112,8 @@ const inputSchema = z
     blockId: z.string().optional(),
     collection: z.string().max(200).optional(),
     staticValue: z.string().max(10_000).optional(),
+    historyLimit: z.number().int().min(1).max(100).optional(),
+    historyEligibility: z.enum(["completed", "published"]).optional(),
     recordFields: z.array(recordFieldSchema).max(100).optional(),
     presentation: presentationSchema.optional(),
   })
@@ -238,7 +247,10 @@ export function copyImportedBlocks(
         id: createId(`${processType}-record-field`),
       })),
       blockId:
-        input.source === "previous_block" && input.blockId
+        (input.source === "previous_block" ||
+          (input.source === "channel_history" && input.sourceProcessType === processType)) &&
+        input.blockId &&
+        input.blockId !== "__process_output__"
           ? blockIds.get(input.blockId)
           : input.blockId,
     })),

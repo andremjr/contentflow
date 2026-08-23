@@ -13,12 +13,12 @@ Se houver dúvida entre `ESCOLHER` e `VALIDAR`, use `VALIDAR`, a menos que uma c
 
 ## Definições e exemplos
 
-| Bloco | Use quando | Exemplos corretos | Nunca use para |
-| --- | --- | --- | --- |
-| `BUSCAR` | Capturar/recuperar dados, mídia ou referências fora da plataforma. | IA pesquisa 5 canais brasileiros; humano reúne notícias; código consulta uma API. | Sintetizar a análise ou decidir qual resultado aproveitar. |
-| `CRIAR` | Produzir um ativo, dado, arquivo ou síntese novo. | IA gera 100 ideias a partir da pesquisa; humano escreve o roteiro; código renderiza vídeo. | Apenas recuperar uma fonte externa ou aprovar o que foi produzido. |
-| `ESCOLHER` | Selecionar ou aplicar item pré-existente de coleção da Biblioteca Estratégica do mesmo canal. | Humano aplica uma estrutura de título cadastrada; humano escolhe um layout de thumbnail da coleção do canal. | Escolher entre 100 temas que a IA acabou de gerar; aprovar uma thumbnail recém-criada; escolher entre referências recém-pesquisadas. |
-| `VALIDAR` | Auditar, aprovar, reprovar ou escolher resultados criados/pesquisados durante a execução. | Humano escolhe 1 dos 100 temas gerados; humano aprova a persona; humano seleciona uma thumbnail recém-criada. | Buscar fontes externas ou criar o ativo inicial. |
+| Bloco      | Use quando                                                                                    | Exemplos corretos                                                                                             | Nunca use para                                                                                                                       |
+| ---------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `BUSCAR`   | Capturar/recuperar dados, mídia ou referências fora da plataforma.                            | IA pesquisa 5 canais brasileiros; humano reúne notícias; código consulta uma API.                             | Sintetizar a análise ou decidir qual resultado aproveitar.                                                                           |
+| `CRIAR`    | Produzir um ativo, dado, arquivo ou síntese novo.                                             | IA gera 100 ideias a partir da pesquisa; humano escreve o roteiro; código renderiza vídeo.                    | Apenas recuperar uma fonte externa ou aprovar o que foi produzido.                                                                   |
+| `ESCOLHER` | Selecionar ou aplicar item pré-existente de coleção da Biblioteca Estratégica do mesmo canal. | Humano aplica uma estrutura de título cadastrada; humano escolhe um layout de thumbnail da coleção do canal.  | Escolher entre 100 temas que a IA acabou de gerar; aprovar uma thumbnail recém-criada; escolher entre referências recém-pesquisadas. |
+| `VALIDAR`  | Auditar, aprovar, reprovar ou escolher resultados criados/pesquisados durante a execução.     | Humano escolhe 1 dos 100 temas gerados; humano aprova a persona; humano seleciona uma thumbnail recém-criada. | Buscar fontes externas ou criar o ativo inicial.                                                                                     |
 
 ## Regra obrigatória de justificativa para `ESCOLHER`
 
@@ -30,6 +30,8 @@ Só use `ESCOLHER` se a transcrição ou o usuário identificar uma coleção es
 
 Se qualquer ponto faltar, faça uma pergunta ou classifique como `VALIDAR` se a decisão for sobre resultado da execução. Um arquivo JSON portátil não pode conter `ESCOLHER`, porque não conhece o `collectionId` do canal de destino.
 
+O `ESCOLHER` pode consultar `channel_history` para orientar a seleção sem mudar sua classificação. A coleção continua sendo fornecida exclusivamente pelo vínculo do bloco; o histórico é contexto de decisões passadas, não acesso alternativo à Biblioteca. A regra editorial fica em `instructions` para Humano/IA ou na configuração do plugin de Código.
+
 ## Regras de `VALIDAR`
 
 - O bloco sempre aponta para um bloco anterior e para a entrega que ele valida.
@@ -40,12 +42,12 @@ Se qualquer ponto faltar, faça uma pergunta ou classifique como `VALIDAR` se a 
 
 ## Exemplo: tema do vídeo
 
-| Ordem | Ação | Classificação correta |
-| --- | --- | --- |
-| 1 | Pesquisar canais brasileiros, vídeos recentes e comentários | `BUSCAR` · `IA` |
-| 2 | Sintetizar assuntos polarizados a partir da pesquisa | `CRIAR` · `IA` |
-| 3 | Humano seleciona um assunto polarizado para explorar | `VALIDAR` · `Humano` · `select_one` |
-| 4 | IA cria 100 temas alinhados ao posicionamento escolhido | `CRIAR` · `IA` |
-| 5 | Humano escolhe o tema que será o vídeo | `VALIDAR` · `Humano` · `select_one` |
+| Ordem | Ação                                                        | Classificação correta               |
+| ----- | ----------------------------------------------------------- | ----------------------------------- |
+| 1     | Pesquisar canais brasileiros, vídeos recentes e comentários | `BUSCAR` · `IA`                     |
+| 2     | Sintetizar assuntos polarizados a partir da pesquisa        | `CRIAR` · `IA`                      |
+| 3     | Humano seleciona um assunto polarizado para explorar        | `VALIDAR` · `Humano` · `select_one` |
+| 4     | IA cria 100 temas alinhados ao posicionamento escolhido     | `CRIAR` · `IA`                      |
+| 5     | Humano escolhe o tema que será o vídeo                      | `VALIDAR` · `Humano` · `select_one` |
 
 O passo 3 e o passo 5 não são `ESCOLHER`: os itens não estavam pré-cadastrados na Biblioteca Estratégica; eles foram produzidos durante a execução.

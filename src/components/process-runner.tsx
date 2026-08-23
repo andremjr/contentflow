@@ -53,10 +53,12 @@ import {
   saveHumanBlockDraft,
   startProcessExecution,
   useChannel,
+  useChannelExecutions,
   useLibraryCollections,
   useLibraryItems,
   useProcessExecution,
   useProjectExecutions,
+  useProjects,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -87,6 +89,8 @@ export function ProcessRunner({
   const libraryItems = useLibraryItems(project?.channelId);
   const execution = useProcessExecution(project?.id ?? "", processId);
   const projectExecutions = useProjectExecutions(project?.id ?? "");
+  const channelExecutions = useChannelExecutions(project?.channelId ?? "");
+  const channelProjects = useProjects(project?.channelId);
   const method = channel?.methods[processId];
   const meta = PROCESS_META[processId];
   const completed = execution?.status === "completed";
@@ -261,6 +265,13 @@ export function ProcessRunner({
               block={activeBlock}
               collection={collections.find((item) => item.id === activeBlock.collectionId)}
               items={libraryItems.filter((item) => item.collectionId === activeBlock.collectionId)}
+              execution={execution}
+              project={project}
+              projectExecutions={projectExecutions}
+              channelExecutions={channelExecutions}
+              channelProjects={channelProjects}
+              collections={collections}
+              libraryItems={libraryItems}
               libraryUrl={`/channel/${channelId}/library`}
               onChoose={chooseItem}
             />
@@ -685,15 +696,55 @@ function HumanChoiceGate({
   block,
   collection,
   items,
+  execution,
+  project,
+  projectExecutions,
+  channelExecutions,
+  channelProjects,
+  collections,
+  libraryItems,
   libraryUrl,
   onChoose,
 }: {
   block: ActionBlock;
   collection?: StrategicCollection;
   items: ChannelLibraryItem[];
+  execution: ProcessExecution;
+  project: Project;
+  projectExecutions: ProcessExecution[];
+  channelExecutions: ProcessExecution[];
+  channelProjects: Project[];
+  collections: StrategicCollection[];
+  libraryItems: ChannelLibraryItem[];
   libraryUrl: string;
   onChoose: (itemId: string) => void;
 }) {
+  const resolvedInputs = resolveBlockInputs({
+    block,
+    execution,
+    project,
+    projectExecutions,
+    channelExecutions,
+    channelProjects,
+    collections,
+    libraryItems,
+  });
+  const hasMissingInputs = resolvedInputs.some((item) => !item.resolved);
+  const historicalChoiceCounts = new Map<string, number>();
+  for (const resolved of resolvedInputs) {
+    if (resolved.input.source !== "channel_history" || !resolved.resolved) continue;
+    if (!Array.isArray(resolved.value)) continue;
+    for (const record of resolved.value) {
+      if (!record || typeof record !== "object" || !("value" in record)) continue;
+      const selectedItemId = record.value;
+      if (typeof selectedItemId !== "string") continue;
+      historicalChoiceCounts.set(
+        selectedItemId,
+        (historicalChoiceCounts.get(selectedItemId) ?? 0) + 1,
+      );
+    }
+  }
+
   return (
     <section className="rounded-lg border border-warning/35 bg-warning/5 p-5 sm:p-6">
       <div className="text-center">
@@ -707,6 +758,38 @@ function HumanChoiceGate({
         </p>
       </div>
 
+      {resolvedInputs.length > 0 && (
+        <div className="mt-5 rounded-xl border border-border/70 bg-background/30 p-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Contexto para a escolha
+          </h4>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {resolvedInputs.map((item) =>
+              item.resolved ? (
+                <ResultValue
+                  key={item.input.id}
+                  label={item.input.label}
+                  type={item.input.type}
+                  presentation={item.input.presentation}
+                  value={item.value}
+                  source={item.sourceLabel}
+                />
+              ) : (
+                <div
+                  key={item.input.id}
+                  className="rounded-lg border border-destructive/35 bg-destructive/5 p-3"
+                >
+                  <p className="text-xs font-semibold text-destructive">{item.input.label}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    A origem configurada não está disponível.
+                  </p>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      )}
+
       {!collection ? (
         <div className="mx-auto mt-5 max-w-xl rounded-xl border border-destructive/35 bg-destructive/5 p-5 text-center">
           <p className="text-sm font-medium text-destructive">Nenhuma coleção vinculada</p>
@@ -716,31 +799,40 @@ function HumanChoiceGate({
         </div>
       ) : items.length ? (
         <div className="mt-5 divide-y divide-border border-y border-border">
-          {items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onChoose(item.id)}
-              className="w-full p-4 text-left transition hover:bg-secondary/40"
-            >
-              <dl className="space-y-2.5">
-                {collection.fields.map((field) => {
-                  const value = item.values[field.id];
-                  if (!value) return null;
-                  return (
-                    <div key={field.id}>
-                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {field.label}
-                      </dt>
-                      <dd className="mt-1 text-sm">
-                        <RuntimeValueViewer type={field.type} value={value} compact />
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
-            </button>
-          ))}
+          {items.map((item) => {
+            const historicalUses = historicalChoiceCounts.get(item.id) ?? 0;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                disabled={hasMissingInputs}
+                onClick={() => onChoose(item.id)}
+                className="w-full p-4 text-left transition hover:bg-secondary/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {historicalUses > 0 && (
+                  <Badge variant="outline" className="mb-3 border-brand/35 text-brand-soft">
+                    Escolhido {historicalUses} {historicalUses === 1 ? "vez" : "vezes"} no histórico
+                  </Badge>
+                )}
+                <dl className="space-y-2.5">
+                  {collection.fields.map((field) => {
+                    const value = item.values[field.id];
+                    if (!value) return null;
+                    return (
+                      <div key={field.id}>
+                        <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {field.label}
+                        </dt>
+                        <dd className="mt-1 text-sm">
+                          <RuntimeValueViewer type={field.type} value={value} compact />
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              </button>
+            );
+          })}
         </div>
       ) : (
         <div className="mx-auto mt-5 max-w-xl rounded-xl border border-warning/35 bg-warning/5 p-5 text-center">

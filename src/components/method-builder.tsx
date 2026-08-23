@@ -31,6 +31,7 @@ import {
   Library,
   ListChecks,
   LoaderCircle,
+  History,
   Plus,
   Search,
   Share2,
@@ -98,6 +99,7 @@ import {
   type SharedMethodFile,
 } from "@/lib/method-file";
 import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
+import { createChannelHistoryRecordFields, isChannelHistoryValueType } from "@/lib/channel-history";
 import type { JsonSchema, PluginManifest, PluginProfileSetup } from "@/lib/plugin-contract";
 import { setChannelMethod, useChannel, useChannels, useLibraryCollections } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -198,6 +200,65 @@ function newRecordField(index: number): RecordFieldDefinition {
     type: index === 0 ? "text" : "textarea",
     required: true,
   };
+}
+
+type ChannelHistorySource = {
+  id: string;
+  processType: UniversalProcess;
+  blockId: string;
+  blockLabel: string;
+  output: BlockFieldDefinition;
+};
+
+function collectChannelHistorySources(
+  processType: UniversalProcess,
+  methodBlocks: ActionBlock[],
+  channelMethods: Record<UniversalProcess, ProcessMethod>,
+) {
+  return PROCESS_ORDER.flatMap<ChannelHistorySource>((sourceProcessType) => {
+    const blocks =
+      sourceProcessType === processType
+        ? methodBlocks
+        : (channelMethods[sourceProcessType]?.blocks ?? []);
+    const blockOutputs = blocks.flatMap((sourceBlock) => {
+      const outputs =
+        sourceBlock.type === "ESCOLHER"
+          ? [
+              {
+                id: `${sourceBlock.id}-selected-item`,
+                label: "Item estratégico escolhido",
+                key: "selectedItemId",
+                type: "text" as const,
+                required: true,
+              },
+            ]
+          : (sourceBlock.outputs ?? []);
+      return outputs
+        .filter((output) => isChannelHistoryValueType(output.type))
+        .map((output) => ({
+          id: `${sourceProcessType}::${sourceBlock.id}::${output.key}`,
+          processType: sourceProcessType,
+          blockId: sourceBlock.id,
+          blockLabel: sourceBlock.name ?? sourceBlock.type,
+          output,
+        }));
+    });
+    const officialOutput = createProcessOutputFields(sourceProcessType)[0];
+    return [
+      ...(isChannelHistoryValueType(officialOutput.type)
+        ? [
+            {
+              id: `${sourceProcessType}::__process_output__::${officialOutput.key}`,
+              processType: sourceProcessType,
+              blockId: "__process_output__",
+              blockLabel: "Resultado oficial",
+              output: officialOutput,
+            },
+          ]
+        : []),
+      ...blockOutputs,
+    ];
+  });
 }
 
 export function MethodBuilder({
@@ -997,6 +1058,9 @@ function BlockEditor({
           capability.operator === block.operator &&
           capability.blockTypes.includes(block.type) &&
           (!capability.processTypes || capability.processTypes.includes(processType)) &&
+          (block.inputs ?? []).every((field) =>
+            capability.inputPorts.some((port) => port.acceptedTypes.includes(field.type)),
+          ) &&
           (block.outputs ?? []).every((field) =>
             capability.outputPorts.some((port) => port.producedTypes.includes(field.type)),
           ),
@@ -1126,6 +1190,17 @@ function BlockEditor({
           block={block}
           methodBlocks={methodBlocks}
           index={index}
+          onChange={onChange}
+        />
+      )}
+
+      {block.type === "ESCOLHER" && (
+        <ContextInputsEditor
+          block={block}
+          methodBlocks={methodBlocks}
+          blockIndex={index}
+          processType={processType}
+          channelMethods={channelMethods}
           onChange={onChange}
         />
       )}
@@ -1672,6 +1747,81 @@ function ValidationEditor({
   );
 }
 
+function ContextInputsEditor({
+  block,
+  methodBlocks,
+  blockIndex,
+  processType,
+  channelMethods,
+  onChange,
+}: {
+  block: ActionBlock;
+  methodBlocks: ActionBlock[];
+  blockIndex: number;
+  processType: UniversalProcess;
+  channelMethods: Record<UniversalProcess, ProcessMethod>;
+  onChange: (patch: Partial<ActionBlock>) => void;
+}) {
+  const inputs = block.inputs ?? [];
+  const addInput = () => {
+    const input: BlockInputBinding = {
+      id: uid(`${block.id}-context`),
+      label: "Histórico relevante",
+      type: "records",
+      source: "channel_history",
+      historyLimit: 10,
+      historyEligibility: "completed",
+      recordFields: createChannelHistoryRecordFields("text"),
+      presentation: { renderer: "table", itemType: "record" },
+    };
+    onChange({ inputs: [...inputs, input] });
+  };
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+            <History className="size-3.5 text-brand-soft" /> Contexto para a decisão
+          </h3>
+          <p className="text-[11px] text-muted-foreground">
+            Opcional. Consulte entregas de projetos anteriores sem dar acesso direto à Biblioteca.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
+          <Plus className="size-3" /> Adicionar
+        </Button>
+      </div>
+      <div className="mt-3 space-y-3">
+        {inputs.map((input) => (
+          <InputBindingEditor
+            key={input.id}
+            input={input}
+            availableBlocks={methodBlocks.slice(0, blockIndex)}
+            methodBlocks={methodBlocks}
+            currentBlockId={block.id}
+            processType={processType}
+            channelMethods={channelMethods}
+            allowChannelHistory
+            onChange={(patch) =>
+              onChange({
+                inputs: inputs.map((item) => (item.id === input.id ? { ...item, ...patch } : item)),
+              })
+            }
+            onRemove={() => onChange({ inputs: inputs.filter((item) => item.id !== input.id) })}
+          />
+        ))}
+        {!inputs.length && (
+          <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
+            Sem contexto adicional. A coleção vinculada e os resultados do projeto continuam
+            disponíveis normalmente.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DataContractEditor({
   block,
   methodBlocks,
@@ -1729,6 +1879,8 @@ function DataContractEditor({
             key={input.id}
             input={input}
             availableBlocks={methodBlocks.slice(0, blockIndex)}
+            methodBlocks={methodBlocks}
+            currentBlockId={block.id}
             processType={processType}
             channelMethods={channelMethods}
             onChange={(patch) =>
@@ -1798,15 +1950,21 @@ function DataContractEditor({
 function InputBindingEditor({
   input,
   availableBlocks,
+  methodBlocks,
+  currentBlockId,
   processType,
   channelMethods,
+  allowChannelHistory = false,
   onChange,
   onRemove,
 }: {
   input: BlockInputBinding;
   availableBlocks: ActionBlock[];
+  methodBlocks: ActionBlock[];
+  currentBlockId: string;
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
+  allowChannelHistory?: boolean;
   onChange: (patch: Partial<BlockInputBinding>) => void;
   onRemove: () => void;
 }) {
@@ -1845,6 +2003,15 @@ function InputBindingEditor({
     previousDeliverySources.find(
       (source) => !input.sourceProcessType && source.output.key === input.sourceKey,
     );
+  const channelHistorySources = allowChannelHistory
+    ? collectChannelHistorySources(processType, methodBlocks, channelMethods)
+    : [];
+  const selectedChannelHistory = channelHistorySources.find(
+    (source) =>
+      source.processType === input.sourceProcessType &&
+      source.blockId === input.blockId &&
+      source.output.key === input.sourceKey,
+  );
 
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
@@ -1874,6 +2041,7 @@ function InputBindingEditor({
         <Label className="text-[10px] text-muted-foreground">Tipo técnico do dado</Label>
         <Select
           value={input.type ?? "text"}
+          disabled={input.source === "channel_history"}
           onValueChange={(type) => {
             const nextType = type as HumanFieldType;
             onChange({
@@ -1895,6 +2063,11 @@ function InputBindingEditor({
             ))}
           </SelectContent>
         </Select>
+        {input.source === "channel_history" && (
+          <p className="text-[10px] text-muted-foreground">
+            O histórico sempre chega como lista de registros com valor, projeto e data.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
@@ -1903,6 +2076,26 @@ function InputBindingEditor({
           <Select
             value={input.source}
             onValueChange={(source) => {
+              if (source === "channel_history") {
+                const selected =
+                  channelHistorySources.find(
+                    (candidate) =>
+                      candidate.processType === processType && candidate.blockId === currentBlockId,
+                  ) ?? channelHistorySources[0];
+                onChange({
+                  source: "channel_history",
+                  sourceKey: selected?.output.key,
+                  sourceProcessType: selected?.processType,
+                  blockId: selected?.blockId,
+                  staticValue: undefined,
+                  historyLimit: 10,
+                  historyEligibility: "completed",
+                  type: "records",
+                  presentation: { renderer: "table", itemType: "record" },
+                  recordFields: createChannelHistoryRecordFields(selected?.output.type ?? "text"),
+                });
+                return;
+              }
               if (source === "previous_process") {
                 const selected = previousDeliverySources.at(-1);
                 const output = selected?.output;
@@ -1912,6 +2105,8 @@ function InputBindingEditor({
                   sourceProcessType: selected?.processType,
                   blockId: selected?.blockId,
                   staticValue: undefined,
+                  historyLimit: undefined,
+                  historyEligibility: undefined,
                   type: output?.type ?? input.type,
                   presentation: output?.presentation ?? input.presentation,
                   recordFields: output?.recordFields,
@@ -1924,6 +2119,8 @@ function InputBindingEditor({
                 sourceProcessType: undefined,
                 blockId: undefined,
                 staticValue: undefined,
+                historyLimit: undefined,
+                historyEligibility: undefined,
               });
             }}
           >
@@ -1935,6 +2132,11 @@ function InputBindingEditor({
               <SelectItem value="previous_process" disabled={!previousDeliverySources.length}>
                 Entrega anterior
               </SelectItem>
+              {allowChannelHistory && (
+                <SelectItem value="channel_history" disabled={!channelHistorySources.length}>
+                  Histórico do canal
+                </SelectItem>
+              )}
               <SelectItem value="project">Dados do projeto</SelectItem>
               <SelectItem value="static">Valor fixo</SelectItem>
             </SelectContent>
@@ -2000,6 +2202,80 @@ function InputBindingEditor({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        )}
+
+        {input.source === "channel_history" && (
+          <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">
+                Processo, bloco e decisão anteriores
+              </Label>
+              <Select
+                value={selectedChannelHistory?.id}
+                onValueChange={(sourceId) => {
+                  const selected = channelHistorySources.find(
+                    (candidate) => candidate.id === sourceId,
+                  );
+                  onChange({
+                    sourceProcessType: selected?.processType,
+                    blockId: selected?.blockId,
+                    sourceKey: selected?.output.key,
+                    type: "records",
+                    presentation: { renderer: "table", itemType: "record" },
+                    recordFields: createChannelHistoryRecordFields(selected?.output.type ?? "text"),
+                  });
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Selecione o histórico consultado" />
+                </SelectTrigger>
+                <SelectContent>
+                  {channelHistorySources.map((source) => (
+                    <SelectItem key={source.id} value={source.id}>
+                      {PROCESS_META[source.processType].label} / {source.blockLabel} /{" "}
+                      {source.output.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Últimos registros</Label>
+                <Input
+                  className="h-8 text-xs"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={input.historyLimit ?? 10}
+                  onChange={(event) =>
+                    onChange({
+                      historyLimit: Math.min(100, Math.max(1, Number(event.target.value) || 1)),
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Considerar</Label>
+                <Select
+                  value={input.historyEligibility ?? "completed"}
+                  onValueChange={(historyEligibility) =>
+                    onChange({
+                      historyEligibility: historyEligibility as "completed" | "published",
+                    })
+                  }
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="completed">Decisões concluídas</SelectItem>
+                    <SelectItem value="published">Somente projetos publicados</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
         )}
 

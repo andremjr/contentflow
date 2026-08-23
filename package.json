@@ -1,6 +1,6 @@
 {
   "name": "contentflow-os",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "productName": "ContentFlow OS",
   "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
@@ -31,13 +31,14 @@
     "test:sandbox": "tsx server/plugin-sandbox-smoke.ts",
     "test:presentation": "tsx server/presentation-smoke.ts",
     "test:deliveries": "tsx --test server/deliveries.test.ts",
+    "test:channel-history": "tsx --test server/channel-history.test.ts",
     "test:remote-artifacts": "tsx server/remote-artifact-downloader.test.ts",
     "test:plugin-jobs": "tsx server/plugin-job-store.test.ts",
     "test:plugin-inputs": "tsx --test server/plugin-input-values.test.ts",
     "test:automatic-execution": "tsx --test server/automatic-plugin-execution.test.ts",
     "test:plugin-kit": "tsx server/plugin-kit.test.ts",
     "plugin:kit": "tsx tools/plugin-kit.ts",
-    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:plugin-kit && npm run build",
+    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:plugin-kit && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {

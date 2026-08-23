@@ -30,7 +30,7 @@ Essas categorias comunicam origem e confiança; não formam níveis de permissã
 
 Um arquivo compartilhado por mensagem, download direto, repositório ou mídia removível não se torna oficial ou verificado por poder ser descoberto pelo aplicativo. Isso não impede sua instalação ou execução pelo usuário. A interface apenas informa que a origem não passou por revisão do projeto e apresenta permissões, efeitos e riscos antes da ativação.
 
-Na v0.2, plugins locais e comunitários podem ser instalados por uma pasta ou conectados como pasta ao vivo, validados, consentidos, ativados e executados na sandbox do Node 26 sem análise manual do mantenedor. A interface ainda não baixa pacotes diretamente de URL ou catálogo: o usuário primeiro obtém a pasta do autor e então escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**.
+Na versão atual, plugins locais e comunitários podem ser instalados por uma pasta ou conectados como pasta ao vivo, validados, consentidos, ativados e executados na sandbox do Node 26 sem análise manual do mantenedor. A interface ainda não baixa pacotes diretamente de URL ou catálogo: o usuário primeiro obtém a pasta do autor e então escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**.
 
 Se alguém modificar o núcleo, executar o pacote por fora do ContentFlow OS ou remover suas proteções, essa atividade não é uma execução autorizada pelo protocolo nem recebe status, suporte ou garantia do projeto.
 
@@ -80,7 +80,7 @@ Informações materiais não podem ficar apenas em link externo ou texto genéri
 
 ## 6. Publicação opcional em catálogo
 
-Submeter um plugin a um catálogo futuro é opcional. Serve para descoberta pública e para solicitar sinais como `verified`; não é requisito para compartilhar uma pasta ou executar localmente. A v0.2 não inclui publicação, download ou atualização por catálogo.
+Submeter um plugin a um catálogo futuro é opcional. Serve para descoberta pública e para solicitar sinais como `verified`; não é requisito para compartilhar uma pasta ou executar localmente. A versão atual não inclui publicação, download ou atualização por catálogo.
 
 1. O autor reserva ou comprova o namespace.
 2. Envia pacote imutável, manifesto, licença, README, changelog e informações de suporte/segurança.

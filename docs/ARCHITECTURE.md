@@ -182,9 +182,25 @@ O bloco `ESCOLHER` é o único bloco cuja função é selecionar elementos preex
 
 O operador do bloco `ESCOLHER` pode ser Humano, IA ou Código. Quando executado por plugin, o núcleo entrega somente os itens da coleção vinculada e só aceita como resultado o identificador de um item real dessa coleção; o plugin não pode criar uma opção nova nesse bloco.
 
+O `ESCOLHER` pode receber entradas de contexto para orientar a decisão, inclusive o Histórico do Canal. Isso não transforma a coleção em uma entrada comum: o núcleo continua entregando a coleção vinculada separadamente e validando que o resultado é um item real. Blocos seguintes recebem apenas os campos do item escolhido.
+
 A Biblioteca Estratégica é diferente da Biblioteca de Métodos: a primeira contém peças utilizadas dentro das ações; a segunda permite reutilizar sequências completas de ações entre canais.
 
 Além dos campos simples, uma coleção pode usar o formato especializado `Layout de thumbnail`. Cada item desse tipo armazena uma composição 16:9 criada no canvas visual, com caixas posicionadas em coordenadas percentuais. O mesmo formato faz parte do contrato universal de blocos, portanto o layout escolhido pode atravessar conexões tipadas e orientar um plugin de montagem programática sem perder sua estrutura.
+
+### 10.1. Histórico do Canal e memória entre projetos
+
+O Histórico do Canal é uma visão derivada das entregas persistidas nos snapshots dos Projetos do mesmo Canal. Ele não possui tabela, ciclo de retenção ou interface de gerenciamento próprios, não duplica valores na Biblioteca Estratégica e não cria uma segunda fonte de verdade. A Biblioteca representa o repertório preexistente; o Histórico representa decisões e resultados efetivamente usados; as regras para a próxima decisão pertencem às instruções do bloco ou ao plugin executor.
+
+Somente o bloco `ESCOLHER` pode declarar uma entrada `channel_history`. Assim, o operador recebe a memória antes de selecionar um item da coleção; `CRIAR`, `BUSCAR` e `VALIDAR` continuam recebendo o resultado já escolhido pelos encadeamentos normais do Método. O Método escolhe estruturalmente `Processo / Bloco / Entrega`, um limite de 1 a 100 registros e uma elegibilidade: decisões concluídas ou somente Projetos com Publicação concluída. O runtime exclui o Projeto atual, isola o Canal e entrega uma lista de registros ordenada do mais recente para o mais antigo, com valor, projeto e instante da decisão. Histórico vazio é uma entrada válida e não bloqueia o primeiro Projeto.
+
+Na versão inicial, o Histórico aceita entregas escalares: texto curto ou longo, número, booleano, seleção, data, URL, arquivo, imagem, áudio e vídeo. Listas, decisões de aprovação, records aninhados, múltiplos arquivos e layouts não entram diretamente nessa consulta; um bloco pode antes produzir um resumo escalar apropriado.
+
+Toda conclusão de `ESCOLHER`, por Humano, IA ou Código, materializa `selectedItemId` como entrega universal. Assim, o mesmo bloco pode consultar suas escolhas anteriores e aplicar por instrução ou plugin regras como rodízio, cooldown, pesos ou não repetição. O núcleo não possui catálogo de regras editoriais: Humano e IA seguem `instructions`; plugins de Código declaram suas estratégias e configurações no próprio manifesto.
+
+Entregas invalidadas por retry e execuções canceladas não participam do Histórico. Excluir um Projeto também elimina sua contribuição porque a memória é derivada dos snapshots. Plugins recebem somente históricos conectados explicitamente como inputs; não ganham acesso ao SQLite nem ao restante do Canal.
+
+Quando a origem é outra decisão `ESCOLHER`, o valor histórico é o ID persistido do item estratégico. O executor de plugin recebe os mesmos IDs junto da coleção vinculada, e a interface humana marca nos itens quantas vezes eles aparecem na janela conectada. Essa marcação informa repetição sem impor uma regra: evitar, alternar, priorizar ou repetir continua sendo decisão das instruções ou do plugin.
 
 ---
 
