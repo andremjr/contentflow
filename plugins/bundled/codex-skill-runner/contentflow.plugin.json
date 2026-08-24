@@ -1,0 +1,369 @@
+{
+  "$schema": "../../../docs/schemas/contentflow-plugin-v1.schema.json",
+  "apiVersion": "1",
+  "id": "com.contentflow.codex-skill-runner",
+  "name": "Codex Skill Runner",
+  "version": "0.1.1",
+  "description": "Executa skills locais do Codex dentro de blocos do ContentFlow OS e devolve entregas tipadas ao Método.",
+  "author": "ContentFlow OS",
+  "license": "LicenseRef-ContentFlow-Codex-Plugin-Proprietary-1.0",
+  "homepage": "https://github.com/andremjr/contentflow-os",
+  "repository": "https://github.com/andremjr/contentflow-os",
+  "runtime": {
+    "kind": "node",
+    "version": ">=26 <27",
+    "module": "esm"
+  },
+  "minCoreVersion": "0.3.5",
+  "entrypoint": "handler.mjs",
+  "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
+  "secretKeys": ["OPENAI_API_KEY"],
+  "deliveryTypes": ["text", "processing"],
+  "settingsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "capabilities": [
+    {
+      "id": "run-production-skill",
+      "operator": "IA",
+      "blockTypes": ["BUSCAR", "CRIAR", "VALIDAR"],
+      "processTypes": [
+        "theme",
+        "title",
+        "thumbnail",
+        "script",
+        "narration",
+        "assets",
+        "editing",
+        "publishing"
+      ],
+      "inputPorts": [
+        {
+          "key": "context",
+          "label": "Contexto",
+          "description": "Entradas resolvidas que a skill usará para produzir a entrega.",
+          "acceptedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "approval",
+            "thumbnail_layout"
+          ],
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Resultado da skill",
+          "description": "Entrega tipada produzida pelo Codex.",
+          "producedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "approval"
+          ],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "approval",
+        "thumbnail_layout"
+      ],
+      "producedOutputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "approval"
+      ],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 900000,
+        "supportsCancellation": false,
+        "maxConcurrency": 1
+      },
+      "sideEffects": ["external_read", "external_write", "subprocess"],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["OpenAI", "provedores chamados por scripts das skills autorizadas"],
+        "retentionPolicyUrl": "https://platform.openai.com/docs/guides/your-data",
+        "trainingPolicyUrl": "https://platform.openai.com/docs/guides/your-data"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "skill_name": {
+            "type": "string",
+            "title": "Nome da skill",
+            "description": "Nome técnico da skill em .agents/skills. Vazio permite seleção implícita pelo Codex.",
+            "pattern": "^$|^[a-z0-9][a-z0-9_-]{0,63}$",
+            "default": ""
+          },
+          "task_prompt": {
+            "type": "string",
+            "title": "Orientação adicional",
+            "description": "Complementa as instruções do bloco sem substituir o contrato do Método.",
+            "format": "textarea",
+            "default": "Execute a etapa de produção e devolva somente a entrega solicitada."
+          },
+          "model": {
+            "type": "string",
+            "title": "Modelo do Codex",
+            "description": "Modelo disponível na conta OpenAI conectada.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$",
+            "default": "gpt-5.6-terra"
+          },
+          "reasoning_effort": {
+            "type": "string",
+            "title": "Esforço de raciocínio",
+            "oneOf": [
+              { "const": "low", "title": "Baixo" },
+              { "const": "medium", "title": "Médio" },
+              { "const": "high", "title": "Alto" },
+              { "const": "xhigh", "title": "Extra alto" }
+            ],
+            "default": "medium"
+          },
+          "sandbox_mode": {
+            "type": "string",
+            "title": "Acesso da skill à pasta de trabalho",
+            "description": "Leitura é o padrão. Escrita permite scripts da skill alterarem apenas a pasta autorizada.",
+            "oneOf": [
+              { "const": "read-only", "title": "Somente leitura" },
+              { "const": "workspace-write", "title": "Ler e escrever no workspace" }
+            ],
+            "default": "read-only"
+          },
+          "enable_web_search": {
+            "type": "boolean",
+            "title": "Pesquisa web ao vivo",
+            "description": "Permite que o Codex pesquise a web quando a etapa exigir fontes atuais.",
+            "default": false
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "title": "Tempo máximo (segundos)",
+            "minimum": 30,
+            "maximum": 3600,
+            "default": 900
+          },
+          "diagnostic_mode": {
+            "type": "boolean",
+            "title": "Modo de diagnóstico",
+            "description": "Testa o contrato sem chamar o Codex. Não use em Métodos de produção.",
+            "default": false
+          }
+        },
+        "required": [
+          "skill_name",
+          "task_prompt",
+          "model",
+          "reasoning_effort",
+          "sandbox_mode",
+          "enable_web_search",
+          "timeout_seconds",
+          "diagnostic_mode"
+        ]
+      },
+      "outputSchema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "choose-with-production-skill",
+      "operator": "IA",
+      "blockTypes": ["ESCOLHER"],
+      "processTypes": [
+        "theme",
+        "title",
+        "thumbnail",
+        "script",
+        "narration",
+        "assets",
+        "editing",
+        "publishing"
+      ],
+      "inputPorts": [
+        {
+          "key": "context",
+          "label": "Contexto da escolha",
+          "acceptedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "approval",
+            "thumbnail_layout"
+          ],
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Item escolhido",
+          "producedTypes": ["select"],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "approval",
+        "thumbnail_layout"
+      ],
+      "producedOutputTypes": ["select"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 900000,
+        "supportsCancellation": false,
+        "maxConcurrency": 1
+      },
+      "sideEffects": ["external_read", "external_write", "subprocess"],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["OpenAI", "provedores chamados por scripts das skills autorizadas"],
+        "retentionPolicyUrl": "https://platform.openai.com/docs/guides/your-data",
+        "trainingPolicyUrl": "https://platform.openai.com/docs/guides/your-data"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "skill_name": {
+            "type": "string",
+            "title": "Nome da skill",
+            "pattern": "^$|^[a-z0-9][a-z0-9_-]{0,63}$",
+            "default": ""
+          },
+          "task_prompt": {
+            "type": "string",
+            "title": "Orientação adicional",
+            "format": "textarea",
+            "default": "Escolha o item que melhor atende às instruções do bloco."
+          },
+          "model": {
+            "type": "string",
+            "title": "Modelo do Codex",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$",
+            "default": "gpt-5.6-terra"
+          },
+          "reasoning_effort": {
+            "type": "string",
+            "title": "Esforço de raciocínio",
+            "oneOf": [
+              { "const": "low", "title": "Baixo" },
+              { "const": "medium", "title": "Médio" },
+              { "const": "high", "title": "Alto" },
+              { "const": "xhigh", "title": "Extra alto" }
+            ],
+            "default": "medium"
+          },
+          "sandbox_mode": {
+            "type": "string",
+            "title": "Acesso da skill à pasta de trabalho",
+            "oneOf": [
+              { "const": "read-only", "title": "Somente leitura" },
+              { "const": "workspace-write", "title": "Ler e escrever no workspace" }
+            ],
+            "default": "read-only"
+          },
+          "enable_web_search": {
+            "type": "boolean",
+            "title": "Pesquisa web ao vivo",
+            "default": false
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "title": "Tempo máximo (segundos)",
+            "minimum": 30,
+            "maximum": 3600,
+            "default": 900
+          },
+          "diagnostic_mode": {
+            "type": "boolean",
+            "title": "Modo de diagnóstico",
+            "description": "Testa o contrato sem chamar o Codex. Não use em Métodos de produção.",
+            "default": false
+          }
+        },
+        "required": [
+          "skill_name",
+          "task_prompt",
+          "model",
+          "reasoning_effort",
+          "sandbox_mode",
+          "enable_web_search",
+          "timeout_seconds",
+          "diagnostic_mode"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "selectedItemId": { "type": "string" }
+        },
+        "required": ["selectedItemId"]
+      }
+    }
+  ]
+}

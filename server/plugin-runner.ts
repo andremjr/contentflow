@@ -82,7 +82,9 @@ function scanPluginDirectory(
   try {
     const validated = validatePluginDirectory(pluginDirectory, source !== "bundled");
     const { manifest, absoluteDirectory: realDirectory, entrypoint: realEntrypoint } = validated;
-    if (registry.has(manifest.id)) {
+    const registered = registry.get(manifest.id);
+    if (registered?.source === "bundled" && source !== "bundled") return;
+    if (registered) {
       throw new Error(`O id ${manifest.id} já foi registrado por outro plugin.`);
     }
     registry.set(manifest.id, {
@@ -120,6 +122,8 @@ function scanDevelopmentLinks() {
     try {
       const link = JSON.parse(readFileSync(linkPath, "utf8")) as { path?: unknown };
       if (typeof link.path !== "string" || !existsSync(link.path)) {
+        const pluginId = entry.name.slice(0, -".json".length);
+        if (registry.get(pluginId)?.source === "bundled") continue;
         throw new Error("A pasta de desenvolvimento não existe mais.");
       }
       scanPluginDirectory(path.resolve(link.path), "local", path.resolve(link.path));

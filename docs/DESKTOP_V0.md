@@ -6,9 +6,9 @@ A V0 transforma o ContentFlow OS em um aplicativo comum do Windows. Ela não exi
 
 Os binários são publicados manualmente na página [Releases do projeto](https://github.com/andremjr/contentflow-os/releases):
 
-- `ContentFlow-OS-V0-0.3.5-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
-- `ContentFlow-OS-V0-0.3.5-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
-- `ContentFlow-OS-V0-0.3.5-SHA256.txt`: hashes para conferir a integridade dos dois executáveis.
+- `ContentFlow-OS-V0-0.3.6-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
+- `ContentFlow-OS-V0-0.3.6-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
+- `ContentFlow-OS-V0-0.3.6-SHA256.txt`: hashes para conferir a integridade dos dois executáveis.
 
 O Windows pode mostrar um aviso porque esta V0 ainda não possui assinatura digital comercial. Confira se o arquivo veio do repositório oficial antes de executá-lo.
 
@@ -16,7 +16,7 @@ O Windows pode mostrar um aviso porque esta V0 ainda não possui assinatura digi
 
 - projetos e banco local: `%APPDATA%\ContentFlow OS\data`;
 - plugins instalados e pastas vinculadas: dentro da mesma área de dados;
-- exemplos e plugins opcionais editáveis: `Documentos\ContentFlow OS\Plugins`;
+- exemplos editáveis de plugins: `Documentos\ContentFlow OS\Plugins`;
 - programa instalado: pasta escolhida no instalador.
 
 Reinstalar uma compilação nova substitui o programa, mas não remove os dados. Ainda assim, faça backup da área de dados antes de uma atualização importante.
@@ -34,7 +34,7 @@ Abra **Plugins**, informe a pasta que contém `contentflow.plugin.json` e escolh
 
 Depois, revise as capacidades e permissões, aceite o consentimento local e ative o plugin. Nenhuma aprovação central é necessária.
 
-A distribuição atual também copia os plugins opcionais mantidos em `plugins/distributable` para essa pasta de Documentos. Eles não são ativados automaticamente: o usuário escolhe conscientemente se quer instalar uma cópia ou vincular a pasta ao vivo.
+Os plugins mantidos em `plugins/bundled` acompanham o aplicativo, são carregados automaticamente e executam como componentes confiáveis do ContentFlow OS. A pasta de Documentos continua recebendo somente os exemplos editáveis mantidos em `plugins/examples`; plugins externos ainda exigem instalação ou vínculo, revisão de permissões e consentimento local.
 
 ## Recompilar o núcleo
 
@@ -52,10 +52,10 @@ Depois do build, gere o manifesto de integridade no PowerShell:
 
 ```powershell
 Get-FileHash -Algorithm SHA256 `
-  release/v0/ContentFlow-OS-V0-0.3.5-x64-Setup.exe, `
-  release/v0/ContentFlow-OS-V0-0.3.5-x64-Portable.exe |
+  release/v0/ContentFlow-OS-V0-0.3.6-x64-Setup.exe, `
+  release/v0/ContentFlow-OS-V0-0.3.6-x64-Portable.exe |
   ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
-  Set-Content -Encoding ascii release/v0/ContentFlow-OS-V0-0.3.5-SHA256.txt
+  Set-Content -Encoding ascii release/v0/ContentFlow-OS-V0-0.3.6-SHA256.txt
 ```
 
 Na página **Releases → Draft a new release**, escolha a tag já enviada, preencha título e notas, anexe Setup, Portable e SHA-256, marque como pre-release apenas quando for um build de teste e publique. A tag e o commit devem existir no remoto antes dessa etapa.

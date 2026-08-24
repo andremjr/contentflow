@@ -2,7 +2,7 @@
 
 Um plugin do ContentFlow OS é uma pasta com um manifesto e uma função JavaScript. O manifesto diz **quando** a capacidade pode ser usada; a função recebe os inputs do bloco e devolve os outputs. O núcleo cuida de instalação, consentimento, cofre de credenciais, sandbox, persistência, arquivos, IDs universais e continuidade do Método.
 
-Compatibilidade deste guia: ContentFlow OS v0.3.5, Plugin API v1 e Node 26.
+Compatibilidade deste guia: ContentFlow OS v0.3.6, Plugin API v1 e Node 26.
 
 Para o primeiro plugin, você não precisa estudar o protocolo completo nem alterar o núcleo.
 

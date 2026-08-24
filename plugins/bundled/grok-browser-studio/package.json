@@ -1,0 +1,12 @@
+{
+  "name": "contentflow-grok-browser-studio",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26 <27"
+  },
+  "scripts": {
+    "test": "node --test test.mjs"
+  }
+}

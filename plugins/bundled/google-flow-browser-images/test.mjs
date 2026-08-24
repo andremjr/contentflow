@@ -1,0 +1,157 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { __test } from "./handler.mjs";
+
+const manifest = JSON.parse(
+  await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
+);
+assert.equal(manifest.version, "1.0.4");
+assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
+assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
+assert.ok(manifest.permissions.includes("filesystem:read"));
+assert.ok(manifest.permissions.includes("filesystem:write"));
+assert.ok(manifest.permissions.includes("network"));
+assert.ok(manifest.permissions.includes("process"));
+assert.deepEqual(manifest.deliveryTypes, ["image"]);
+
+const cap = manifest.capabilities.find((item) => item.id === "generate-images-in-browser");
+assert.ok(cap);
+assert.deepEqual(
+  cap.inputPorts.map((port) => port.key),
+  ["prompts", "reference_images"],
+);
+assert.deepEqual(
+  cap.outputPorts.map((port) => port.key),
+  ["images"],
+);
+assert.equal(cap.blockConfigSchema.properties.accountProfile.default, "default");
+assert.equal(cap.blockConfigSchema.properties.imageModel.default, "flow_auto");
+assert.equal(cap.blockConfigSchema.properties.fallbackOnModelLimit.default, true);
+assert.equal(cap.blockConfigSchema.properties.aspectRatio.default, "flow_current");
+assert.equal(cap.blockConfigSchema.properties.maxConcurrentGenerations.default, 1);
+assert.equal(cap.blockConfigSchema.properties.delayBetweenPromptsMs.default, 5000);
+assert.equal(cap.blockConfigSchema.properties.maxReferenceImages.maximum, 10);
+assert.equal(cap.blockConfigSchema.properties.maxImagesPerPrompt.maximum, 4);
+
+assert.deepEqual(__test.normalizePrompts(["primeiro", ["segundo"]]), ["primeiro", "segundo"]);
+assert.deepEqual(__test.normalizeReferenceImages([{ id: "a" }, [{ id: "b" }]]), [
+  { id: "a" },
+  { id: "b" },
+]);
+assert.equal(__test.normalizeAccountProfile("canal_01"), "canal_01");
+assert.throws(() => __test.normalizeAccountProfile("../perfil"), /accountProfile/);
+
+const defaultRuntime = __test.resolveProfileRuntime({
+  configuration: { accountProfile: "default" },
+  settings: {},
+});
+const channelRuntime = __test.resolveProfileRuntime({
+  configuration: { accountProfile: "canal_a" },
+  settings: {},
+});
+const managedRuntime = __test.resolveProfileRuntime(
+  { configuration: { accountProfile: "default" }, settings: {} },
+  { getWorkspacePath: (relativePath) => `workspace/${relativePath}` },
+);
+assert.equal(defaultRuntime.port, 9333);
+assert.equal(managedRuntime.profilePath, "workspace/.");
+assert.notEqual(channelRuntime.port, 9333);
+assert.match(
+  channelRuntime.profilePath.replaceAll("\\", "/"),
+  /google-flow-chrome-profiles\/canal_a$/,
+);
+
+const automatic = __test.resolveGenerationPreferences({
+  imageModel: "flow_auto",
+  aspectRatio: "flow_current",
+});
+assert.equal(automatic.imageModelName, null);
+assert.equal(automatic.imageAspectRatio, null);
+const explicit = __test.resolveGenerationPreferences({
+  imageModel: "nano_banana_pro",
+  aspectRatio: "landscape",
+});
+assert.equal(explicit.imageModelName, "GEM_PIX_2");
+assert.equal(explicit.imageAspectRatio, "IMAGE_ASPECT_RATIO_LANDSCAPE");
+
+const raw = JSON.stringify({
+  clientContext: { projectId: "dynamic-project", recaptchaContext: { token: "dynamic-token" } },
+  requests: [
+    {
+      imageModelName: "GEM_PIX_2",
+      imageAspectRatio: "IMAGE_ASPECT_RATIO_PORTRAIT",
+      structuredPrompt: { parts: [{ text: "teste" }] },
+      clientContext: { recaptchaContext: { token: "dynamic-token" } },
+      seed: 123,
+    },
+  ],
+});
+const preserved = __test.applyGenerationPreferences(raw, null, null);
+assert.equal(preserved.changed, 0);
+assert.deepEqual(JSON.parse(preserved.postData), JSON.parse(raw));
+const patched = __test.applyGenerationPreferences(raw, "GEM_PIX", "IMAGE_ASPECT_RATIO_SQUARE");
+const body = JSON.parse(patched.postData);
+assert.equal(body.requests[0].imageModelName, "GEM_PIX");
+assert.equal(body.requests[0].imageAspectRatio, "IMAGE_ASPECT_RATIO_SQUARE");
+assert.equal(body.requests[0].clientContext.recaptchaContext.token, "dynamic-token");
+assert.equal(body.clientContext.projectId, "dynamic-project");
+
+const modelLimit = __test.classifyGenerationHttpError(
+  403,
+  JSON.stringify({
+    error: {
+      status: "RESOURCE_EXHAUSTED",
+      message: "Daily limit for Nano Banana Pro model reached",
+    },
+  }),
+);
+assert.equal(modelLimit.code, "MODEL_LIMIT");
+assert.equal(modelLimit.retryable, false);
+const captcha = __test.classifyGenerationHttpError(
+  403,
+  JSON.stringify({
+    error: { status: "PERMISSION_DENIED", message: "reCAPTCHA challenge failed" },
+  }),
+);
+assert.equal(captcha.code, "AUTHENTICATION_FAILED");
+assert.equal(captcha.retryable, false);
+const quota = __test.classifyGenerationHttpError(
+  429,
+  JSON.stringify({
+    error: { status: "RESOURCE_EXHAUSTED", message: "Account credits exhausted" },
+  }),
+);
+assert.equal(quota.code, "RATE_LIMIT");
+assert.equal(quota.retryAfterMs, 60_000);
+
+let submissions = 0;
+await assert.rejects(
+  __test.runGenerationPlan({
+    prompts: ["p1", "p2"],
+    maxInFlight: 1,
+    retryAttempts: 2,
+    failFast: true,
+    submit(task) {
+      submissions += 1;
+      return {
+        completion: Promise.reject(
+          Object.assign(new Error(`falha ${task.index}`), { code: "PERMISSION_DENIED" }),
+        ),
+      };
+    },
+  }),
+  /falha 0/,
+);
+assert.equal(submissions, 1, "failFast não deve enviar os prompts restantes");
+
+const source = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
+assert.ok(source.includes("Modo Automático do Flow"));
+assert.ok(source.includes("DOM.setFileInputFiles"));
+assert.ok(source.includes("limite do Nano Banana Pro atingido"));
+assert.ok(!source.includes("createFallbackArtifact"));
+assert.ok(!source.includes("FALLBACK_IMAGE_BASE64"));
+await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), /ENOENT/);
+
+console.log(
+  "OK: v1.0.4 usa perfis dedicados, referências, modelos configuráveis e capacidade exclusiva de imagem.",
+);

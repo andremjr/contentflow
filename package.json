@@ -1,6 +1,6 @@
 {
   "name": "contentflow-os",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "productName": "ContentFlow OS",
   "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
@@ -135,13 +135,6 @@
       },
       {
         "from": "plugins/examples",
-        "to": "examples/plugins",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "plugins/distributable",
         "to": "examples/plugins",
         "filter": [
           "**/*"

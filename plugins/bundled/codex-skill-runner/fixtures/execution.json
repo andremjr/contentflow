@@ -1,0 +1,56 @@
+{
+  "executionId": "fixture-codex-skill-runner",
+  "traceId": "fixture-codex-skill-trace",
+  "blockId": "fixture-create-script",
+  "capabilityId": "run-production-skill",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": {
+    "skill_name": "",
+    "task_prompt": "Execute a etapa de diagnóstico.",
+    "model": "gpt-5.6-terra",
+    "reasoning_effort": "medium",
+    "sandbox_mode": "read-only",
+    "enable_web_search": false,
+    "timeout_seconds": 60,
+    "diagnostic_mode": true
+  },
+  "settings": {},
+  "inputs": { "context": "Contexto fictício para validar o contrato." },
+  "inputContract": [
+    {
+      "id": "fixture-context",
+      "portKey": "context",
+      "label": "Contexto",
+      "type": "textarea"
+    }
+  ],
+  "outputContract": [
+    {
+      "portKey": "result",
+      "label": "Roteiro",
+      "key": "script",
+      "type": "textarea",
+      "required": true
+    }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "fixture-channel",
+      "name": "Canal fictício",
+      "language": "pt-BR",
+      "niche": "Educação"
+    },
+    "project": { "id": "fixture-project", "title": "Projeto fictício" },
+    "processType": "script",
+    "block": {
+      "type": "CRIAR",
+      "name": "Criar roteiro",
+      "instructions": "Produza um roteiro usando a skill configurada."
+    },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}
