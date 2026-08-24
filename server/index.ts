@@ -26,8 +26,20 @@ import type {
   StrategicCollection,
   UniversalProcess,
 } from "../src/lib/domain";
-import { PROCESS_ORDER } from "../src/lib/domain";
-import { createProcessOutputFields, isEmptyRuntimeValue } from "../src/lib/human-workflow";
+import { PROCESS_META, PROCESS_ORDER } from "../src/lib/domain";
+import {
+  createProcessOutputFields,
+  getMethodConfigurationIssue,
+  isEmptyRuntimeValue,
+  normalizeMethodBlocks,
+} from "../src/lib/human-workflow";
+import {
+  ACTIVE_ORCHESTRATOR_STATUSES,
+  buildOrchestratorSteps,
+  type ExecutionOrchestrator,
+  type ExecutionOrchestratorMode,
+  type ExecutionOrchestratorStatus,
+} from "../src/lib/execution-orchestrator";
 import {
   getCompatiblePresentationRenderers,
   getPresentationRestrictionIssue,
@@ -180,6 +192,14 @@ database.exec(`
     UNIQUE(project_id, process_type)
   );
   CREATE INDEX IF NOT EXISTS executions_project_id ON process_executions(project_id);
+  CREATE TABLE IF NOT EXISTS execution_orchestrators (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS orchestrators_channel_id ON execution_orchestrators(channel_id);
   CREATE TABLE IF NOT EXISTS library_items (
     id TEXT PRIMARY KEY,
     channel_id TEXT NOT NULL,
@@ -496,6 +516,7 @@ function persistPluginExecution(execution: ProcessExecution, project: Project) {
   };
   if (database.inTransaction) persist();
   else database.transaction(persist)();
+  queueOrchestratorReconciliationForProject(execution.projectId);
 }
 
 function failAutomaticPluginStart(executionId: string, blockId: string, message: string) {
@@ -561,6 +582,281 @@ function scheduleAutomaticPluginBlock(execution: ProcessExecution) {
         );
       });
   }, 0);
+}
+
+const orchestratorReconciliationLocks = new Set<string>();
+
+function parseOrchestratorRow(row?: { payload: string }) {
+  return row ? (JSON.parse(row.payload) as ExecutionOrchestrator) : undefined;
+}
+
+function executionOrchestratorById(id: string) {
+  return parseOrchestratorRow(
+    database.prepare("SELECT payload FROM execution_orchestrators WHERE id = ?").get(id) as
+      { payload: string } | undefined,
+  );
+}
+
+function executionOrchestrators(channelId?: string) {
+  const rows = channelId
+    ? (database
+        .prepare(
+          "SELECT payload FROM execution_orchestrators WHERE channel_id = ? ORDER BY created_at DESC",
+        )
+        .all(channelId) as { payload: string }[])
+    : (database
+        .prepare("SELECT payload FROM execution_orchestrators ORDER BY created_at DESC")
+        .all() as { payload: string }[]);
+  return rows.map((row) => JSON.parse(row.payload) as ExecutionOrchestrator);
+}
+
+function persistExecutionOrchestrator(orchestrator: ExecutionOrchestrator, create = false) {
+  orchestrator.updatedAt = new Date().toISOString();
+  if (create) {
+    database
+      .prepare(
+        `INSERT INTO execution_orchestrators
+          (id, channel_id, payload, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(
+        orchestrator.id,
+        orchestrator.channelId,
+        JSON.stringify(orchestrator),
+        orchestrator.createdAt,
+        orchestrator.updatedAt,
+      );
+    return;
+  }
+  database
+    .prepare("UPDATE execution_orchestrators SET payload = ?, updated_at = ? WHERE id = ?")
+    .run(JSON.stringify(orchestrator), orchestrator.updatedAt, orchestrator.id);
+}
+
+function setExecutionOrchestratorState(
+  orchestrator: ExecutionOrchestrator,
+  patch: Partial<ExecutionOrchestrator>,
+) {
+  const changed = Object.entries(patch).some(
+    ([key, value]) => orchestrator[key as keyof ExecutionOrchestrator] !== value,
+  );
+  if (!changed) return false;
+  Object.assign(orchestrator, patch);
+  persistExecutionOrchestrator(orchestrator);
+  return true;
+}
+
+function createOrchestratedProject(channelId: string, title: string, index: number): Project {
+  const stages = Object.fromEntries(
+    PROCESS_ORDER.map((processType) => [processType, "not_started"]),
+  ) as Project["stages"];
+  const now = new Date().toISOString();
+  return {
+    id: randomUUID(),
+    title,
+    channelId,
+    currentStage: "theme",
+    state: "not_started",
+    progress: 0,
+    deadline: "Sem prazo",
+    duration: "—",
+    updatedAt: "Agora",
+    createdAt: now,
+    stages,
+    assignee: { name: "Não atribuído", initials: "—" },
+    thumbHue: (index * 47 + 211) % 360,
+  };
+}
+
+function startOrchestratedProcess(
+  project: Project,
+  channel: Channel,
+  processType: UniversalProcess,
+) {
+  const existing = executionFor(project.id, processType);
+  if (existing) return { execution: existing };
+
+  const savedMethod = channel.methods?.[processType];
+  const method = savedMethod
+    ? { processType, blocks: normalizeMethodBlocks(savedMethod.blocks ?? [], processType) }
+    : undefined;
+  const issue = getMethodConfigurationIssue(method);
+  if (!method || issue) return { issue: issue ?? "O método deste processo não está disponível." };
+
+  const now = new Date().toISOString();
+  const methodSnapshot = structuredClone(method);
+  const execution: ProcessExecution = {
+    id: randomUUID(),
+    projectId: project.id,
+    channelId: channel.id,
+    processType,
+    methodSnapshot,
+    blocks: methodSnapshot.blocks.map((block, index) => ({
+      blockId: block.id,
+      status:
+        index === 0
+          ? block.operator === "Humano"
+            ? "awaiting_human"
+            : "blocked_executor"
+          : "pending",
+      values: {},
+      attempt: 1,
+      startedAt: index === 0 ? now : undefined,
+    })),
+    status: methodSnapshot.blocks[0].operator === "Humano" ? "awaiting_human" : "blocked_executor",
+    outputStatus: "pending",
+    createdAt: now,
+    updatedAt: now,
+  };
+  project.stages = {
+    ...project.stages,
+    [processType]: execution.status === "awaiting_human" ? "awaiting_human" : "processing",
+  };
+  project.currentStage = processType;
+  project.state = project.stages[processType];
+  project.updatedAt = "Agora";
+
+  database.transaction(() => {
+    database
+      .prepare(
+        `INSERT INTO process_executions (id, project_id, process_type, payload, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(execution.id, execution.projectId, processType, JSON.stringify(execution), now);
+    database
+      .prepare("UPDATE projects SET payload = ? WHERE id = ?")
+      .run(JSON.stringify(project), project.id);
+  })();
+  scheduleAutomaticPluginBlock(execution);
+  return { execution };
+}
+
+function orchestrationMessage(
+  status: ExecutionOrchestratorStatus,
+  project: Project,
+  processType: UniversalProcess,
+) {
+  const processLabel = PROCESS_META[processType].label;
+  if (status === "awaiting_human") {
+    return `${project.title} aguarda uma ação humana em ${processLabel}.`;
+  }
+  if (status === "blocked") {
+    return `${project.title} está bloqueado em ${processLabel}: configure o executor necessário.`;
+  }
+  if (status === "failed") return `${project.title} encontrou um erro em ${processLabel}.`;
+  return `Executando ${processLabel} em ${project.title}.`;
+}
+
+function reconcileExecutionOrchestrator(id: string) {
+  if (orchestratorReconciliationLocks.has(id)) return;
+  orchestratorReconciliationLocks.add(id);
+  try {
+    const orchestrator = executionOrchestratorById(id);
+    if (!orchestrator || !ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status)) return;
+    const channel = readPayload<Channel>("channels", orchestrator.channelId);
+    if (!channel) {
+      setExecutionOrchestratorState(orchestrator, {
+        status: "failed",
+        message: "O canal desta orquestração não existe mais.",
+      });
+      return;
+    }
+
+    const steps = buildOrchestratorSteps(orchestrator.projectIds, orchestrator.mode);
+    while (orchestrator.currentStep < steps.length) {
+      const step = steps[orchestrator.currentStep];
+      const project = readPayload<Project>("projects", step.projectId);
+      if (!project) {
+        setExecutionOrchestratorState(orchestrator, {
+          status: "failed",
+          message: "Um projeto da orquestração não existe mais.",
+          currentProjectId: step.projectId,
+          currentProcessType: step.processType,
+        });
+        return;
+      }
+
+      const started = startOrchestratedProcess(project, channel, step.processType);
+      if (!started.execution) {
+        setExecutionOrchestratorState(orchestrator, {
+          status: "blocked",
+          currentProjectId: step.projectId,
+          currentProcessType: step.processType,
+          message: started.issue,
+        });
+        return;
+      }
+      const execution = started.execution;
+      if (execution.status === "completed") {
+        orchestrator.currentStep += 1;
+        continue;
+      }
+      if (execution.status === "cancelled") {
+        setExecutionOrchestratorState(orchestrator, {
+          status: "cancelled",
+          currentProjectId: step.projectId,
+          currentProcessType: step.processType,
+          message: "A execução atual foi cancelada.",
+        });
+        return;
+      }
+
+      const activeBlockExecution = execution.blocks.find((item) => item.status !== "completed");
+      const activeBlock = activeBlockExecution
+        ? execution.methodSnapshot.blocks.find((item) => item.id === activeBlockExecution.blockId)
+        : undefined;
+      const status: ExecutionOrchestratorStatus =
+        execution.status === "awaiting_human" || execution.status === "awaiting_output"
+          ? "awaiting_human"
+          : execution.status === "failed"
+            ? "failed"
+            : execution.status === "blocked_executor" && !activeBlock?.plugin
+              ? "blocked"
+              : "running";
+      setExecutionOrchestratorState(orchestrator, {
+        status,
+        currentProjectId: step.projectId,
+        currentProcessType: step.processType,
+        message: execution.error ?? orchestrationMessage(status, project, step.processType),
+      });
+      return;
+    }
+
+    setExecutionOrchestratorState(orchestrator, {
+      currentStep: steps.length,
+      totalSteps: steps.length,
+      status: "completed",
+      currentProjectId: undefined,
+      currentProcessType: undefined,
+      message: "Todos os projetos da orquestração foram concluídos.",
+      completedAt: new Date().toISOString(),
+    });
+  } finally {
+    orchestratorReconciliationLocks.delete(id);
+  }
+}
+
+function queueOrchestratorReconciliation(id: string) {
+  setTimeout(() => reconcileExecutionOrchestrator(id), 0);
+}
+
+function queueOrchestratorReconciliationForProject(projectId: string) {
+  for (const orchestrator of executionOrchestrators()) {
+    if (
+      ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status) &&
+      orchestrator.projectIds.includes(projectId)
+    ) {
+      queueOrchestratorReconciliation(orchestrator.id);
+    }
+  }
+}
+
+function resumeExecutionOrchestrators() {
+  for (const orchestrator of executionOrchestrators()) {
+    if (ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status)) {
+      reconcileExecutionOrchestrator(orchestrator.id);
+    }
+  }
 }
 
 function mergeStoredArtifacts(current: StoredFile[], incoming: StoredFile[] = []) {
@@ -2570,11 +2866,125 @@ app.delete("/api/channels/:id", (request, response) => {
     database.prepare("DELETE FROM projects WHERE channel_id = ?").run(channelId);
     database.prepare("DELETE FROM library_items WHERE channel_id = ?").run(channelId);
     database.prepare("DELETE FROM library_collections WHERE channel_id = ?").run(channelId);
+    database.prepare("DELETE FROM execution_orchestrators WHERE channel_id = ?").run(channelId);
     database.prepare("DELETE FROM channel_order WHERE channel_id = ?").run(channelId);
     return database.prepare("DELETE FROM channels WHERE id = ?").run(channelId);
   });
   const result = remove(request.params.id) as { changes: number };
   response.status(result.changes ? 204 : 404).end();
+});
+
+function executionOrchestratorState(orchestrator: ExecutionOrchestrator) {
+  const projects = orchestrator.projectIds
+    .map((id) => readPayload<Project>("projects", id))
+    .filter((project): project is Project => !!project);
+  const executions = orchestrator.projectIds.flatMap(
+    (projectId) =>
+      parseRows(
+        database
+          .prepare(
+            "SELECT payload FROM process_executions WHERE project_id = ? ORDER BY updated_at DESC",
+          )
+          .all(projectId) as { payload: string }[],
+      ) as ProcessExecution[],
+  );
+  return {
+    orchestrator,
+    channel: readPayload<Channel>("channels", orchestrator.channelId),
+    projects,
+    executions,
+  };
+}
+
+app.get("/api/orchestrators", (request, response) => {
+  const channelId =
+    typeof request.query.channelId === "string" ? request.query.channelId : undefined;
+  response.json(executionOrchestrators(channelId));
+});
+
+app.get("/api/orchestrators/:id/state", (request, response) => {
+  const orchestrator = executionOrchestratorById(request.params.id);
+  if (!orchestrator) {
+    response.status(404).json({ error: "Orquestração não encontrada." });
+    return;
+  }
+  reconcileExecutionOrchestrator(orchestrator.id);
+  response.json(executionOrchestratorState(executionOrchestratorById(orchestrator.id)!));
+});
+
+app.post("/api/orchestrators", (request, response) => {
+  const body = request.body as {
+    channelId?: string;
+    mode?: ExecutionOrchestratorMode;
+    quantity?: number;
+    projectPrefix?: string;
+  };
+  const channel = body.channelId ? readPayload<Channel>("channels", body.channelId) : undefined;
+  const quantity = Math.trunc(Number(body.quantity));
+  if (!channel) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+  if (body.mode !== "end_to_end" && body.mode !== "batch") {
+    response.status(400).json({ error: "Modo de orquestração inválido." });
+    return;
+  }
+  if (!Number.isFinite(quantity) || quantity < 1 || quantity > 50) {
+    response.status(400).json({ error: "Escolha entre 1 e 50 projetos." });
+    return;
+  }
+  const active = executionOrchestrators(channel.id).find((orchestrator) =>
+    ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status),
+  );
+  if (active) {
+    response.status(409).json({
+      error: "Este canal já possui uma orquestração em andamento.",
+      orchestrator: active,
+    });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const projectPrefix = body.projectPrefix?.trim() || "Produção orquestrada";
+  const projects = Array.from({ length: quantity }, (_, index) =>
+    createOrchestratedProject(channel.id, `${projectPrefix} ${index + 1}`, index),
+  );
+  const steps = buildOrchestratorSteps(
+    projects.map((project) => project.id),
+    body.mode,
+  );
+  const orchestrator: ExecutionOrchestrator = {
+    id: randomUUID(),
+    channelId: channel.id,
+    mode: body.mode,
+    quantity,
+    projectPrefix,
+    projectIds: projects.map((project) => project.id),
+    currentStep: 0,
+    totalSteps: steps.length,
+    status: "running",
+    message: "Preparando a primeira execução.",
+    createdAt: now,
+    updatedAt: now,
+  };
+  channel.activeProjects += quantity;
+
+  database.transaction(() => {
+    const insertProject = database.prepare(
+      "INSERT INTO projects (id, channel_id, payload, created_at) VALUES (?, ?, ?, ?)",
+    );
+    for (const project of projects) {
+      insertProject.run(project.id, project.channelId, JSON.stringify(project), project.createdAt);
+    }
+    database
+      .prepare("UPDATE channels SET payload = ? WHERE id = ?")
+      .run(JSON.stringify(channel), channel.id);
+    persistExecutionOrchestrator(orchestrator, true);
+  })();
+  reconcileExecutionOrchestrator(orchestrator.id);
+  response
+    .status(201)
+    .json(executionOrchestratorState(executionOrchestratorById(orchestrator.id)!));
 });
 
 app.get("/api/projects", (request, response) => {
@@ -2756,6 +3166,7 @@ app.post("/api/executions", (request, response) => {
       execution.updatedAt,
     );
   scheduleAutomaticPluginBlock(execution as unknown as ProcessExecution);
+  queueOrchestratorReconciliationForProject(execution.projectId);
   response.status(201).json(execution);
 });
 
@@ -2770,6 +3181,7 @@ app.put("/api/executions/:id", (request, response) => {
     .run(JSON.stringify(execution), execution.updatedAt, execution.id);
   if (result.changes) {
     scheduleAutomaticPluginBlock(execution as unknown as ProcessExecution);
+    if (execution.projectId) queueOrchestratorReconciliationForProject(execution.projectId);
   }
   response
     .status(result.changes ? 200 : 404)
@@ -2920,7 +3332,10 @@ app.use(payloadErrorHandler);
 
 app.listen(port, "127.0.0.1", () => {
   console.log(`ContentFlow OS API local pronta em http://127.0.0.1:${port}`);
+  resumeExecutionOrchestrators();
 });
+
+setInterval(resumeExecutionOrchestrators, 2_000).unref();
 
 function boundedEnvironmentNumber(
   name: string,

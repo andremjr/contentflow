@@ -147,6 +147,17 @@ A página do processo mantém um painel expansível de resultados concluídos. O
 
 Renderers são componentes internos do ContentFlow OS. Plugins podem apenas indicar um identificador permitido e restrições declarativas de item ou MIME; nunca fornecem React, HTML, scripts ou outra interface arbitrária. Preferências incompatíveis ou desconhecidas são ignoradas pelo núcleo e recaem no modo automático.
 
+### 7.1. Orquestrador de execução entre Projetos
+
+Na visualização em lista do Canal, o Orquestrador de execução agenda vários Projetos sobre o mesmo motor linear. Ele não cria um novo Processo Universal, Bloco ou Operador e não altera o Método de cada Canal. Sua responsabilidade é somente criar a fila e iniciar a próxima combinação `Projeto / Processo Universal` quando a combinação atual terminar.
+
+Existem dois modos de ordenação:
+
+1. **Ponta a ponta**: executa os 8 Processos Universais de um Projeto antes de iniciar o Projeto seguinte.
+2. **Em lote por processo**: executa o mesmo Processo Universal em todos os Projetos, de forma sequencial, antes de avançar ao processo seguinte. Assim, um lote de 10 executa 10 Temas, depois 10 Títulos, 10 Thumbnails e assim por diante.
+
+A fila do Orquestrador nunca inicia dois itens em paralelo. Estados `awaiting_human` e `awaiting_output` pausam a fila no item atual e continuam alimentando a Central Global de Pendências Humanas. Estados de executor ausente ou falha também interrompem o avanço até que a execução atual seja corrigida. A fila, seu cursor, modo e Projetos pertencentes são persistidos localmente para permitir retomada após reiniciar o aplicativo.
+
 ---
 
 ## 8. Ecossistema e Compartilhamento

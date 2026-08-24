@@ -33,6 +33,11 @@ import {
   recordBlockDeliveries,
   recordProcessOutputDelivery,
 } from "@/lib/deliveries";
+import {
+  ACTIVE_ORCHESTRATOR_STATUSES,
+  type ExecutionOrchestrator,
+  type ExecutionOrchestratorMode,
+} from "@/lib/execution-orchestrator";
 
 export type YouTubeChannelProfile = Pick<
   Channel,
@@ -49,6 +54,7 @@ const db = {
   channels: [] as Channel[],
   projects: [] as Project[],
   executions: [] as ProcessExecution[],
+  orchestrators: [] as ExecutionOrchestrator[],
   libraryItems: [] as ChannelLibraryItem[],
   libraryCollections: [] as StrategicCollection[],
   ready: false,
@@ -56,6 +62,8 @@ const db = {
 const listeners = new Set<() => void>();
 const executionPersistenceQueues = new Map<string, Promise<void>>();
 const pluginExecutionRequests = new Map<string, Promise<PluginBlockExecutionResponse>>();
+const orchestratorStateRequests = new Map<string, Promise<boolean>>();
+let orchestratorRefreshInterval: number | undefined;
 let version = 0;
 
 type PluginBlockExecutionResponse = {
@@ -128,18 +136,26 @@ async function hydrate() {
       fetch("/api/executions"),
       fetch("/api/library"),
       fetch("/api/library/collections"),
+      fetch("/api/orchestrators"),
     ]);
     if (responses.some((response) => !response.ok)) {
       throw new Error("Não foi possível conectar à API local.");
     }
-    const [channels, projects, executions, libraryItems, libraryCollections] = (await Promise.all(
-      responses.map((response) => response.json()),
-    )) as [Channel[], Project[], ProcessExecution[], ChannelLibraryItem[], StrategicCollection[]];
+    const [channels, projects, executions, libraryItems, libraryCollections, orchestrators] =
+      (await Promise.all(responses.map((response) => response.json()))) as [
+        Channel[],
+        Project[],
+        ProcessExecution[],
+        ChannelLibraryItem[],
+        StrategicCollection[],
+        ExecutionOrchestrator[],
+      ];
     db.channels.splice(0, db.channels.length, ...channels.map(normalizeChannel));
     db.projects.splice(0, db.projects.length, ...projects);
     db.executions.splice(0, db.executions.length, ...executions.map(normalizeExecution));
     db.libraryItems.splice(0, db.libraryItems.length, ...libraryItems);
     db.libraryCollections.splice(0, db.libraryCollections.length, ...libraryCollections);
+    db.orchestrators.splice(0, db.orchestrators.length, ...orchestrators);
     for (const channel of db.channels) {
       for (const processType of PROCESS_ORDER) {
         synchronizeOpenExecutionsWithMethod(channel.id, processType, channel.methods[processType]);
@@ -151,10 +167,24 @@ async function hydrate() {
   } finally {
     db.ready = true;
     emit();
+    startGlobalOrchestratorRefresh();
   }
 }
 
 void hydrate();
+
+function startGlobalOrchestratorRefresh() {
+  if (typeof window === "undefined" || orchestratorRefreshInterval !== undefined) return;
+  const refresh = () => {
+    for (const orchestrator of db.orchestrators) {
+      if (ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status)) {
+        void refreshExecutionOrchestrator(orchestrator.id);
+      }
+    }
+  };
+  refresh();
+  orchestratorRefreshInterval = window.setInterval(refresh, 2_000);
+}
 
 export function useDatabaseReady() {
   const storeVersion = useClientStoreVersion();
@@ -221,6 +251,85 @@ export function useChannelExecutions(channelId: string) {
   const storeVersion = useClientStoreVersion();
   if (storeVersion < 0) return [];
   return db.executions.filter((execution) => execution.channelId === channelId);
+}
+
+export function useChannelExecutionOrchestrator(channelId: string) {
+  const storeVersion = useClientStoreVersion();
+  if (storeVersion < 0) return undefined;
+  const orchestrators = db.orchestrators.filter((item) => item.channelId === channelId);
+  return (
+    orchestrators.find((item) => ACTIVE_ORCHESTRATOR_STATUSES.has(item.status)) ?? orchestrators[0]
+  );
+}
+
+type ExecutionOrchestratorState = {
+  orchestrator: ExecutionOrchestrator;
+  channel?: Channel;
+  projects: Project[];
+  executions: ProcessExecution[];
+};
+
+function applyExecutionOrchestratorState(state: ExecutionOrchestratorState) {
+  const orchestratorIndex = db.orchestrators.findIndex((item) => item.id === state.orchestrator.id);
+  if (orchestratorIndex >= 0) db.orchestrators[orchestratorIndex] = state.orchestrator;
+  else db.orchestrators.unshift(state.orchestrator);
+
+  if (state.channel) {
+    const channelIndex = db.channels.findIndex((item) => item.id === state.channel?.id);
+    if (channelIndex >= 0) db.channels[channelIndex] = normalizeChannel(state.channel);
+  }
+  for (const project of state.projects) {
+    const projectIndex = db.projects.findIndex((item) => item.id === project.id);
+    if (projectIndex >= 0) db.projects[projectIndex] = project;
+    else db.projects.unshift(project);
+  }
+  const projectIds = new Set(state.orchestrator.projectIds);
+  db.executions.splice(
+    0,
+    db.executions.length,
+    ...db.executions.filter((execution) => !projectIds.has(execution.projectId)),
+    ...state.executions.map(normalizeExecution),
+  );
+  emit();
+}
+
+export async function startExecutionOrchestrator(input: {
+  channelId: string;
+  mode: ExecutionOrchestratorMode;
+  quantity: number;
+  projectPrefix?: string;
+}) {
+  const response = await fetch("/api/orchestrators", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = (await response.json()) as ExecutionOrchestratorState & { error?: string };
+  if (!response.ok || !body.orchestrator) {
+    throw new Error(body.error ?? "Não foi possível iniciar a orquestração.");
+  }
+  applyExecutionOrchestratorState(body);
+  return body.orchestrator;
+}
+
+export async function refreshExecutionOrchestrator(orchestratorId: string) {
+  const currentRequest = orchestratorStateRequests.get(orchestratorId);
+  if (currentRequest) return currentRequest;
+  const nextRequest = (async () => {
+    const response = await fetch(`/api/orchestrators/${orchestratorId}/state`);
+    if (!response.ok) return false;
+    const body = (await response.json()) as ExecutionOrchestratorState;
+    applyExecutionOrchestratorState(body);
+    return true;
+  })();
+  orchestratorStateRequests.set(orchestratorId, nextRequest);
+  try {
+    return await nextRequest;
+  } finally {
+    if (orchestratorStateRequests.get(orchestratorId) === nextRequest) {
+      orchestratorStateRequests.delete(orchestratorId);
+    }
+  }
 }
 
 export function useLibraryItems(channelId?: string) {
@@ -462,6 +571,11 @@ export function removeChannel(id: string) {
     0,
     db.libraryCollections.length,
     ...db.libraryCollections.filter((collection) => collection.channelId !== id),
+  );
+  db.orchestrators.splice(
+    0,
+    db.orchestrators.length,
+    ...db.orchestrators.filter((orchestrator) => orchestrator.channelId !== id),
   );
   emit();
   void request(`/api/channels/${id}`, "DELETE");

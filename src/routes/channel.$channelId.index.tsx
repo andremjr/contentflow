@@ -8,7 +8,7 @@ import {
   Calendar,
   AlertTriangle,
   LayoutGrid,
-  Table as TableIcon,
+  List,
   FolderKanban,
   RefreshCw,
   Trash2,
@@ -19,6 +19,7 @@ import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { ProcessStatus } from "@/components/process-status";
+import { ExecutionOrchestratorPanel } from "@/components/execution-orchestrator-panel";
 import { NewProjectDialog } from "@/components/new-project-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +50,7 @@ function ChannelWorkspace() {
   const { channelId } = Route.useParams();
   const channel = useChannel(channelId);
   const projects = useProjects(channelId);
-  const [view, setView] = useState<"cards" | "table">("cards");
+  const [view, setView] = useState<"cards" | "list">("cards");
   const [search, setSearch] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -176,6 +177,7 @@ function ChannelWorkspace() {
             <div className="inline-flex overflow-hidden rounded-md border border-border/60 bg-background/40 p-0.5">
               <button
                 onClick={() => setView("cards")}
+                aria-label="Cards"
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition",
                   view === "cards"
@@ -183,29 +185,41 @@ function ChannelWorkspace() {
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <LayoutGrid className="size-3.5" /> Cards
+                <LayoutGrid className="size-3.5" />
+                {view === "cards" && <span>Cards</span>}
               </button>
               <button
-                onClick={() => setView("table")}
+                onClick={() => setView("list")}
+                aria-label="List"
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition",
-                  view === "table"
+                  view === "list"
                     ? "bg-brand/20 text-brand-soft"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <TableIcon className="size-3.5" /> Tabela
+                <List className="size-3.5" />
+                {view === "list" && <span>List</span>}
               </button>
             </div>
           </div>
         </div>
 
-        {filtered.length === 0 ? (
-          <EmptyProjects channelId={channel.id} channelName={channel.name} />
-        ) : view === "cards" ? (
-          <ProjectGrid projects={filtered} channel={channel} />
+        {view === "cards" ? (
+          filtered.length === 0 ? (
+            <EmptyProjects channelId={channel.id} channelName={channel.name} />
+          ) : (
+            <ProjectGrid projects={filtered} channel={channel} />
+          )
         ) : (
-          <ProjectTable projects={filtered} channel={channel} />
+          <div className="space-y-4">
+            <ExecutionOrchestratorPanel channelId={channel.id} channelName={channel.name} />
+            {filtered.length === 0 ? (
+              <EmptyProjects channelId={channel.id} channelName={channel.name} />
+            ) : (
+              <ProjectTable projects={filtered} channel={channel} />
+            )}
+          </div>
         )}
       </main>
     </AppShell>
