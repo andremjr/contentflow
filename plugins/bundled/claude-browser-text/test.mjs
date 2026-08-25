@@ -8,7 +8,7 @@ const manifest = JSON.parse(
 );
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "0.3.8");
+  assert.equal(manifest.version, "0.3.9");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 });
 

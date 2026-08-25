@@ -82,6 +82,12 @@ export type PluginExecutionPolicy = {
   defaultTimeoutMs?: number;
   supportsCancellation?: boolean;
   maxConcurrency?: number;
+  /** Optional core-owned sequential expansion of one list input into atomic plugin calls. */
+  itemOrchestration?: {
+    inputPort: string;
+    outputPort: string;
+    mode: "sequential";
+  };
 };
 
 export type PluginSideEffect =
@@ -125,6 +131,8 @@ export type PluginCapability = {
 
 export type PluginProfileSetup = {
   configurationKey: string;
+  /** Ordered aliases used only after retryable technical failures. */
+  fallbackConfigurationKey?: string;
   label: string;
   description?: string;
   prepareTimeoutMs?: number;
@@ -166,7 +174,7 @@ export type PluginExecutionContext = {
   block: { type: BlockType; name: string; instructions: string };
   previousProcessOutputs: ProcessOutput[];
   previousBlockOutputs: Array<{ blockId: string; values: Record<string, RuntimeValue> }>;
-  /** Entregas anteriores com identidade universal, ordem e proveniÃªncia. */
+  /** Entregas anteriores com identidade universal, ordem e proveniência. */
   previousDeliveries?: ProjectDelivery[];
   selectedCollection?: {
     collectionId: string;
@@ -233,6 +241,8 @@ export type PluginExecutionRequest = {
   outputContract: PluginFieldContract[];
   validation?: BlockValidationConfig;
   retryFeedback?: Record<string, RuntimeValue>;
+  /** Core-owned position when a declared list input is executed item by item. */
+  batch?: { itemId: string; index: number; total: number };
   context: PluginExecutionContext;
 };
 
@@ -267,6 +277,10 @@ export type PluginExecutionResponse =
       message: string;
       retryable: boolean;
       retryAfterMs?: number;
+      /** Completed outputs remain durable when a later item fails. */
+      partialValues?: Record<string, RuntimeValue>;
+      partialArtifacts?: PluginArtifact[];
+      storedArtifacts?: StoredFile[];
       usage?: PluginUsage;
       logs?: string[];
     };

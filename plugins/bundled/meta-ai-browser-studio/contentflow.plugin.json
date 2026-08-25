@@ -3,11 +3,15 @@
   "apiVersion": "1",
   "id": "local.contentflow.meta-ai-browser-studio",
   "name": "Meta AI Browser Studio",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Gera texto e imagens no Meta AI e vídeos curtos no Vibes usando um perfil Chrome dedicado, sem API oficial.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
-  "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
+  "runtime": {
+    "kind": "node",
+    "version": ">=26 <27",
+    "module": "esm"
+  },
   "minCoreVersion": "0.3.0",
   "entrypoint": "handler.mjs",
   "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
@@ -17,22 +21,35 @@
     "configurationKey": "accountProfile",
     "label": "Salvar perfil",
     "description": "Abre o Meta AI para login e fecha o Chrome depois de validar o chat.",
-    "prepareTimeoutMs": 900000
+    "prepareTimeoutMs": 900000,
+    "fallbackConfigurationKey": "fallbackAccountProfiles"
   },
   "settingsSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "chromeExecutable": { "type": "string", "default": "" },
-      "profilesBasePath": { "type": "string", "default": "" },
+      "chromeExecutable": {
+        "type": "string",
+        "default": ""
+      },
+      "profilesBasePath": {
+        "type": "string",
+        "default": ""
+      },
       "remoteDebuggingPort": {
         "type": "integer",
         "minimum": 1024,
         "maximum": 64000,
         "default": 9844
       },
-      "keepBrowserOpen": { "type": "boolean", "default": false },
-      "startMinimized": { "type": "boolean", "default": false },
+      "keepBrowserOpen": {
+        "type": "boolean",
+        "default": false
+      },
+      "startMinimized": {
+        "type": "boolean",
+        "default": false
+      },
       "interactiveWaitSeconds": {
         "type": "integer",
         "minimum": 30,
@@ -45,10 +62,26 @@
         "maximum": 3600,
         "default": 900
       },
-      "typingChunkSize": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 },
-      "typingDelayMs": { "type": "integer", "minimum": 0, "maximum": 200, "default": 10 },
-      "diagnosticTrace": { "type": "boolean", "default": false },
-      "diagnosticMockResponse": { "type": "string", "default": "" }
+      "typingChunkSize": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50,
+        "default": 10
+      },
+      "typingDelayMs": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 200,
+        "default": 10
+      },
+      "diagnosticTrace": {
+        "type": "boolean",
+        "default": false
+      },
+      "diagnosticMockResponse": {
+        "type": "string",
+        "default": ""
+      }
     }
   },
   "capabilities": [
@@ -100,14 +133,18 @@
           "label": "Texto gerado",
           "producedTypes": ["text", "textarea"],
           "required": true,
-          "presentation": { "renderer": "text-long" }
+          "presentation": {
+            "renderer": "text-long"
+          }
         },
         {
           "key": "parts",
           "label": "Respostas por etapa",
           "producedTypes": ["list"],
           "required": false,
-          "presentation": { "renderer": "list" }
+          "presentation": {
+            "renderer": "list"
+          }
         }
       ],
       "acceptedInputTypes": [
@@ -134,8 +171,14 @@
         "maxConcurrency": 1
       },
       "sideEffects": ["external_write", "subprocess"],
-      "cost": { "model": "unknown", "estimateSupported": false },
-      "dataPolicy": { "sendsDataToThirdParties": true, "providers": ["Meta AI web"] },
+      "cost": {
+        "model": "unknown",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["Meta AI web"]
+      },
       "blockConfigSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -144,6 +187,14 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default"
+          },
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O núcleo troca somente após UPSTREAM_UNAVAILABLE, TIMEOUT ou JOB_FAILED; CAPTCHA, autenticação, bloqueio e cota sempre pausam."
           },
           "promptTemplate": {
             "type": "string",
@@ -155,27 +206,54 @@
             "default": "single",
             "enum": ["single", "legacy_script_3_parts", "outline_sequence", "custom_parts"]
           },
-          "customParts": { "type": "string", "format": "textarea", "default": "" },
+          "customParts": {
+            "type": "string",
+            "format": "textarea",
+            "default": ""
+          },
           "reasoningMode": {
             "type": "string",
             "default": "standard",
             "enum": ["standard", "think"]
           },
-          "plainTextOnly": { "type": "boolean", "default": true },
-          "cleanOutput": { "type": "boolean", "default": true },
-          "minCharacters": { "type": "integer", "minimum": 1, "maximum": 1000000, "default": 1 },
+          "plainTextOnly": {
+            "type": "boolean",
+            "default": true
+          },
+          "cleanOutput": {
+            "type": "boolean",
+            "default": true
+          },
+          "minCharacters": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
+            "default": 1
+          },
           "delayBetweenPartsMs": {
             "type": "integer",
             "minimum": 0,
             "maximum": 30000,
             "default": 2000
           },
-          "retryAttempts": { "type": "integer", "minimum": 0, "maximum": 3, "default": 1 }
+          "retryAttempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "default": 1
+          }
         }
       },
       "outputSchema": {
         "type": "object",
-        "properties": { "result": { "type": "string" }, "parts": { "type": "array" } },
+        "properties": {
+          "result": {
+            "type": "string"
+          },
+          "parts": {
+            "type": "array"
+          }
+        },
         "required": ["result"]
       }
     },
@@ -233,8 +311,14 @@
         "maxConcurrency": 1
       },
       "sideEffects": ["external_write", "local_artifact", "subprocess"],
-      "cost": { "model": "unknown", "estimateSupported": false },
-      "dataPolicy": { "sendsDataToThirdParties": true, "providers": ["Meta AI / Muse Image web"] },
+      "cost": {
+        "model": "unknown",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["Meta AI / Muse Image web"]
+      },
       "blockConfigSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -244,18 +328,38 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default"
           },
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O núcleo troca somente após UPSTREAM_UNAVAILABLE, TIMEOUT ou JOB_FAILED; CAPTCHA, autenticação, bloqueio e cota sempre pausam."
+          },
           "imagePromptTemplate": {
             "type": "string",
             "format": "textarea",
             "default": "Crie uma imagem de alta qualidade usando o Meta AI conforme o briefing. Entregue uma imagem, não apenas uma descrição.\n\n{{IMAGE_PROMPT}}\n\n{{BLOCK_INSTRUCTIONS}}"
           },
-          "retryAttempts": { "type": "integer", "minimum": 0, "maximum": 3, "default": 1 }
+          "retryAttempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "default": 1
+          }
         }
       },
       "outputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "properties": { "image": { "type": "object" }, "description": { "type": "string" } },
+        "properties": {
+          "image": {
+            "type": "object"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
         "required": ["image"]
       }
     },
@@ -281,7 +385,12 @@
         }
       ],
       "outputPorts": [
-        { "key": "video", "label": "Vídeo gerado", "producedTypes": ["video"], "required": true },
+        {
+          "key": "video",
+          "label": "Vídeo gerado",
+          "producedTypes": ["video"],
+          "required": true
+        },
         {
           "key": "description",
           "label": "Descrição",
@@ -298,8 +407,14 @@
         "maxConcurrency": 1
       },
       "sideEffects": ["external_write", "local_artifact", "subprocess"],
-      "cost": { "model": "unknown", "estimateSupported": false },
-      "dataPolicy": { "sendsDataToThirdParties": true, "providers": ["Meta AI / Vibes web"] },
+      "cost": {
+        "model": "unknown",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["Meta AI / Vibes web"]
+      },
       "blockConfigSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -309,18 +424,38 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default"
           },
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O núcleo troca somente após UPSTREAM_UNAVAILABLE, TIMEOUT ou JOB_FAILED; CAPTCHA, autenticação, bloqueio e cota sempre pausam."
+          },
           "videoPromptTemplate": {
             "type": "string",
             "format": "textarea",
             "default": "Crie um vídeo curto no Meta AI Vibes conforme o briefing, com movimento coerente e música apenas quando adequada.\n\n{{VIDEO_PROMPT}}\n\n{{BLOCK_INSTRUCTIONS}}"
           },
-          "retryAttempts": { "type": "integer", "minimum": 0, "maximum": 2, "default": 1 }
+          "retryAttempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2,
+            "default": 1
+          }
         }
       },
       "outputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "properties": { "video": { "type": "object" }, "description": { "type": "string" } },
+        "properties": {
+          "video": {
+            "type": "object"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
         "required": ["video"]
       }
     }

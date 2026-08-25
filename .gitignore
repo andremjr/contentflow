@@ -18,6 +18,9 @@ dist-ssr
 *.local
 mini-curso-contentflow-os/
 app-screenshots-local/
+.tmp-*/
+__pycache__/
+*.py[cod]
 
 # Desktop build intermediates (the distributable V0 lives in compiled/)
 desktop-dist/

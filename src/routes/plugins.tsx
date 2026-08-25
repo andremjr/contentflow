@@ -581,7 +581,7 @@ function PluginCard({
             permission.startsWith("filesystem:"),
           ) && <CommunityWorkspaceField pluginId={plugin.id} />}
 
-        {plugin.source !== "bundled" &&
+        {!new Set(["official-openai-gpt", "official-anthropic-claude"]).has(plugin.id) &&
           (manifest.secretKeys ?? []).map((secretKey) => (
             <CommunitySecretField key={secretKey} pluginId={plugin.id} secretKey={secretKey} />
           ))}

@@ -27,6 +27,19 @@ export type PersistentPluginJob = {
   cancelRequested: boolean;
   error?: string;
   retryCount: number;
+  profileFallback?: {
+    configurationKey: string;
+    candidates: string[];
+    activeIndex: number;
+    history: Array<{ profile: string; code: string; message: string }>;
+  };
+  itemOrchestration?: {
+    inputPort: string;
+    outputPort: string;
+    items: RuntimeValue[];
+    itemIds: string[];
+    currentIndex: number;
+  };
   createdAt: string;
   updatedAt: string;
 };
@@ -252,6 +265,8 @@ export function createPersistentPluginJob(input: {
   pluginVersion: string;
   request: PluginExecutionRequest;
   timeoutMs: number;
+  profileFallback?: PersistentPluginJob["profileFallback"];
+  itemOrchestration?: PersistentPluginJob["itemOrchestration"];
   now?: Date;
 }): PersistentPluginJob {
   const now = input.now ?? new Date();
@@ -273,6 +288,8 @@ export function createPersistentPluginJob(input: {
     partialArtifacts: [],
     cancelRequested: false,
     retryCount: 0,
+    profileFallback: structuredClone(input.profileFallback),
+    itemOrchestration: structuredClone(input.itemOrchestration),
     createdAt: timestamp,
     updatedAt: timestamp,
   };

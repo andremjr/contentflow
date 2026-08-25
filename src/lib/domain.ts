@@ -245,7 +245,7 @@ export type DeliveryItemReference = {
 };
 
 export type DeliveryItem = {
-  /** Identidade universal gerada pelo nÃºcleo para este item da entrega. */
+  /** Identidade universal gerada pelo núcleo para este item da entrega. */
   id: string;
   order: number;
   value: RuntimeValue | StructuredRecord;
@@ -254,7 +254,7 @@ export type DeliveryItem = {
 };
 
 export type ProjectDelivery = {
-  /** Identidade universal da saÃ­da materializada de um bloco. */
+  /** Identidade universal da saída materializada de um bloco. */
   id: string;
   projectId: string;
   channelId: string;
@@ -349,7 +349,7 @@ export type ProcessExecution = {
   processType: UniversalProcess;
   methodSnapshot: ProcessMethod;
   blocks: BlockExecution[];
-  /** Registro derivado e persistido de todas as entregas produzidas pela execuÃ§Ã£o. */
+  /** Registro derivado e persistido de todas as entregas produzidas pela execução. */
   deliveries?: ProjectDelivery[];
   status: ProcessExecutionStatus;
   outputStatus: "pending" | "awaiting_human" | "completed";

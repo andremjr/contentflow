@@ -26,12 +26,17 @@ export type ExecutionOrchestrator = {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+  stoppedAt?: string;
 };
 
 export const ACTIVE_ORCHESTRATOR_STATUSES = new Set<ExecutionOrchestratorStatus>([
   "running",
   "awaiting_human",
   "blocked",
+]);
+
+export const STOPPABLE_ORCHESTRATOR_STATUSES = new Set<ExecutionOrchestratorStatus>([
+  ...ACTIVE_ORCHESTRATOR_STATUSES,
   "failed",
 ]);
 

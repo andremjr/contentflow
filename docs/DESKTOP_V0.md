@@ -6,9 +6,9 @@ A V0 transforma o ContentFlow OS em um aplicativo comum do Windows. Ela não exi
 
 Os binários são publicados manualmente na página [Releases do projeto](https://github.com/andremjr/contentflow-os/releases):
 
-- `ContentFlow-OS-V0-0.3.6-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
-- `ContentFlow-OS-V0-0.3.6-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
-- `ContentFlow-OS-V0-0.3.6-SHA256.txt`: hashes para conferir a integridade dos dois executáveis.
+- `ContentFlow-OS-V0-<versão>-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
+- `ContentFlow-OS-V0-<versão>-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
+- `ContentFlow-OS-V0-<versão>-SHA256.txt`: hashes para conferir a integridade dos dois executáveis.
 
 O Windows pode mostrar um aviso porque esta V0 ainda não possui assinatura digital comercial. Confira se o arquivo veio do repositório oficial antes de executá-lo.
 
@@ -51,11 +51,12 @@ Os artefatos intermediários são gerados em `release/v0`. Para publicar a próx
 Depois do build, gere o manifesto de integridade no PowerShell:
 
 ```powershell
+$releaseVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
 Get-FileHash -Algorithm SHA256 `
-  release/v0/ContentFlow-OS-V0-0.3.6-x64-Setup.exe, `
-  release/v0/ContentFlow-OS-V0-0.3.6-x64-Portable.exe |
+  "release/v0/ContentFlow-OS-V0-$releaseVersion-x64-Setup.exe", `
+  "release/v0/ContentFlow-OS-V0-$releaseVersion-x64-Portable.exe" |
   ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
-  Set-Content -Encoding ascii release/v0/ContentFlow-OS-V0-0.3.6-SHA256.txt
+  Set-Content -Encoding ascii "release/v0/ContentFlow-OS-V0-$releaseVersion-SHA256.txt"
 ```
 
 Na página **Releases → Draft a new release**, escolha a tag já enviada, preencha título e notas, anexe Setup, Portable e SHA-256, marque como pre-release apenas quando for um build de teste e publique. A tag e o commit devem existir no remoto antes dessa etapa.

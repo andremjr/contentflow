@@ -1,6 +1,6 @@
 # ChatGPT Browser Studio
 
-Versão **0.1.16** para ContentFlow OS Plugin API v1.
+Versão **0.1.17** para ContentFlow OS Plugin API v1.
 
 Super plugin independente que usa a interface web do ChatGPT em um Google Chrome real com perfil persistente dedicado. Não usa a API oficial da OpenAI, não solicita chave de API e nunca exporta cookies, tokens ou storage da sessão.
 
@@ -81,3 +81,7 @@ Em 20/08/2026, a interface real foi validada com: dois prompts consecutivos na m
 ## Revogação
 
 Saia da conta na janela Chrome dedicada e, se desejar remover a sessão, exclua manualmente somente a pasta do alias dentro da pasta de trabalho conectada ao plugin. Remover o plugin não apaga outputs já promovidos pelo ContentFlow OS.
+
+## Perfis de fallback
+
+`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. Cada alias deve ser salvo separadamente. O núcleo troca de perfil somente em falhas técnicas transitórias; CAPTCHA, autenticação, limite, cota e bloqueio pausam a execução.

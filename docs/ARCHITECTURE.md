@@ -141,6 +141,8 @@ Os métodos permanecem lineares: não existem ramificações, junções, paralel
 
 Todo bloco `VALIDAR` referencia um bloco anterior específico e opera em um de três modos: aprovar ou reprovar, escolher uma opção, ou escolher várias opções. Uma reprovação pode pausar a execução ou solicitar uma nova tentativa do bloco validado. Nesse último caso, o motor invalida e executa novamente o trecho linear entre o bloco-alvo e a validação, preservando o feedback da reprovação como contexto da nova tentativa e respeitando o limite configurado. Uma escolha concluída torna-se uma saída tipada do próprio bloco `VALIDAR`, disponível para os blocos seguintes.
 
+Cada nova tentativa incrementa a identidade de execução dos blocos já iniciados no trecho invalidado. Jobs, artifacts e entregas da tentativa anterior permanecem rastreáveis, mas não podem ser reutilizados como se pertencessem à nova tentativa.
+
 Cada execução mantém um snapshot do Método utilizado, o estado individual dos blocos, rascunhos, entregas concluídas e referências a arquivos armazenados localmente. As saídas concluídas tornam-se contexto para os blocos seguintes.
 
 A página do processo mantém um painel expansível de resultados concluídos. O tipo técnico do campo continua sendo a autoridade para validação e compatibilidade, enquanto `presentation` pode solicitar, de forma opcional, um renderer padronizado do núcleo. O registro central oferece modo automático, texto curto ou longo, lista ou etiquetas, tabela ou cartões, lista de arquivos, galeria de imagens, players de áudio e vídeo e decisão/aprovação. Assim, por exemplo, um mesmo valor `files` pode aparecer como lista de arquivos ou galeria sem alterar seu contrato técnico. Métodos e snapshots antigos, sem `presentation`, são normalizados para `auto`.
@@ -156,7 +158,9 @@ Existem dois modos de ordenação:
 1. **Ponta a ponta**: executa os 8 Processos Universais de um Projeto antes de iniciar o Projeto seguinte.
 2. **Em lote por processo**: executa o mesmo Processo Universal em todos os Projetos, de forma sequencial, antes de avançar ao processo seguinte. Assim, um lote de 10 executa 10 Temas, depois 10 Títulos, 10 Thumbnails e assim por diante.
 
-A fila do Orquestrador nunca inicia dois itens em paralelo. Estados `awaiting_human` e `awaiting_output` pausam a fila no item atual e continuam alimentando a Central Global de Pendências Humanas. Estados de executor ausente ou falha também interrompem o avanço até que a execução atual seja corrigida. A fila, seu cursor, modo e Projetos pertencentes são persistidos localmente para permitir retomada após reiniciar o aplicativo.
+A fila do Orquestrador nunca inicia dois itens em paralelo. Estados `awaiting_human` e `awaiting_output` pausam a fila no item atual e continuam alimentando a Central Global de Pendências Humanas. Um executor ausente mantém a fila bloqueada. Uma falha pausa a fila com erro: depois que o usuário corrige ou repete a etapa no Projeto, pode retomar a mesma fila no cursor preservado, sem recriar Projetos nem repetir etapas concluídas. Enquanto não for retomada, a falha também não impede que uma nova fila seja criada.
+
+O usuário pode parar uma fila em execução, aguardando humano, bloqueada ou com erro. O Stop cancela também a execução atual, impede o início dos itens restantes e preserva os Projetos já criados. Enquanto uma fila estiver ativa, seus Projetos não podem ser excluídos; primeiro é necessário pará-la. A fila, seu cursor, modo e Projetos pertencentes são persistidos localmente para permitir retomada após reiniciar o aplicativo.
 
 ---
 
@@ -247,6 +251,8 @@ O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.
 A arquitetura não possui aprovação central: qualquer pessoa pode criar e compartilhar um plugin, inclusive por arquivo ou repositório, e qualquer usuário pode instalá-lo e autorizá-lo localmente. O núcleo aplica validações automáticas e pede consentimento para permissões; revisão humana do mantenedor existe apenas para selo `official`/`verified` ou publicação em catálogo opcional.
 
 Uma capacidade de plugin pode ser internamente complexa e demorada. Ela pode pesquisar, chamar várias APIs, usar uma sessão conectada pelo usuário, gerar centenas de arquivos, manter checkpoints ou renderizar durante horas, desde que sua interface externa continue sendo a entrega daquele bloco. Pastas de trabalho escolhidas pelo usuário podem ser montadas como raízes autorizadas; artifacts preservam IDs, ordem e proveniência para que plugins posteriores encontrem cada arquivo sem depender de caminhos frágeis gravados no Método.
+
+Automações de navegador podem cadastrar vários perfis de conta explicitamente preparados. O núcleo mantém a ordem, o cursor e as entregas e permite fallback automático somente para falhas técnicas transitórias; CAPTCHA, autenticação, rate limit, cota, upgrade e bloqueio pausam para intervenção. Capacidades que declaram uma entrada em lote podem solicitar orquestração sequencial item a item pelo núcleo, que persiste cada texto ou mídia antes de avançar e nunca repete itens concluídos ao trocar de perfil.
 
 O plugin oficial `OpenAI Models` usa a Responses API e pode operar ações baseadas em linguagem nos quatro Blocos Essenciais e nos oito Processos Universais. Depois da conexão local, o servidor consulta `GET /v1/models` com a chave da sessão e o construtor substitui o catálogo de fallback pelos modelos de linguagem realmente disponíveis nessa conta. Os parâmetros declarados em `blockConfigSchema` aparecem imediatamente após a vinculação do plugin ao bloco. Modelos especializados de imagem, áudio, vídeo, transcrição ou embeddings continuam exigindo plugins próprios, pois usam contratos de mídia e APIs diferentes de um LLM com saída textual.
 

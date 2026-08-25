@@ -1,0 +1,63 @@
+{
+  "executionId": "ffmpeg-sequence-fixture-execution",
+  "traceId": "ffmpeg-sequence-fixture-trace",
+  "blockId": "ffmpeg-sequence-fixture-block",
+  "capabilityId": "compose-image-sequence-with-audio",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "imageFit": "cover",
+    "backgroundColor": "#000000",
+    "videoQuality": 20
+  },
+  "settings": {},
+  "inputs": {
+    "images": [
+      {
+        "id": "fixture-image",
+        "name": "fixture.png",
+        "mimeType": "image/png",
+        "size": 100,
+        "url": "/api/files/fixture-input.txt"
+      }
+    ],
+    "audio": {
+      "id": "fixture-audio",
+      "name": "fixture.wav",
+      "mimeType": "audio/mpeg",
+      "size": 100,
+      "url": "/api/files/fixture-input.txt"
+    }
+  },
+  "inputContract": [
+    { "id": "images", "portKey": "images", "label": "Imagens ordenadas", "type": "files" },
+    { "id": "audio", "portKey": "audio", "label": "Áudio final", "type": "audio" }
+  ],
+  "outputContract": [
+    {
+      "portKey": "video",
+      "label": "Vídeo final",
+      "key": "video",
+      "type": "video",
+      "required": true
+    }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "fixture-channel",
+      "name": "Canal fictício",
+      "language": "pt-BR",
+      "niche": "Testes"
+    },
+    "project": { "id": "fixture-project", "title": "Projeto fictício" },
+    "processType": "editing",
+    "block": { "type": "CRIAR", "name": "Montar vídeo", "instructions": "Monte o vídeo final." },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

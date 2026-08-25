@@ -309,7 +309,6 @@ export async function importPluginArtifacts(
     existingArtifacts?: StoredFile[];
   } = {},
 ): Promise<PluginExecutionResponse> {
-  if (response.status === "error") return response;
   const artifacts = response.status === "success" ? response.artifacts : response.partialArtifacts;
   const responseValues = response.status === "success" ? response.values : response.partialValues;
   const imported = new Map(

@@ -1,0 +1,47 @@
+{
+  "executionId": "edge-tts-fixture-execution",
+  "traceId": "edge-tts-fixture-trace",
+  "blockId": "edge-tts-fixture-block",
+  "capabilityId": "text-to-speech",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": {
+    "voice": "en-US-GuyNeural",
+    "ratePercent": 0,
+    "volumePercent": 0,
+    "pitchHz": 0
+  },
+  "settings": {},
+  "inputs": { "text": "This is a short ContentFlow OS Edge TTS integration test." },
+  "inputContract": [
+    { "id": "text", "portKey": "text", "label": "Texto da narração", "type": "textarea" }
+  ],
+  "outputContract": [
+    {
+      "portKey": "audio",
+      "label": "Narração Edge TTS",
+      "key": "audio",
+      "type": "audio",
+      "required": true
+    }
+  ],
+  "context": {
+    "locale": "en-US",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "fixture-channel",
+      "name": "Captain Workout",
+      "language": "EN-US",
+      "niche": "Fitness"
+    },
+    "project": { "id": "fixture-project", "title": "Edge TTS test" },
+    "processType": "narration",
+    "block": {
+      "type": "CRIAR",
+      "name": "Generate narration",
+      "instructions": "Generate an English narration."
+    },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

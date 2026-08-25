@@ -531,7 +531,7 @@ async function searchOpenverse(query, config, request, services) {
     url,
     {
       headers: {
-        "Api-User-Agent": "ContentFlowOS/0.3.2 (https://github.com/andremjr/contentflow-os)",
+        "Api-User-Agent": "ContentFlowOS/0.4.1 (https://github.com/andremjr/contentflow-os)",
       },
     },
     request,
@@ -561,7 +561,7 @@ async function searchWikimedia(mediaType, query, config, request, services) {
     url,
     {
       headers: {
-        "Api-User-Agent": "ContentFlowOS/0.3.2 (https://github.com/andremjr/contentflow-os)",
+        "Api-User-Agent": "ContentFlowOS/0.4.1 (https://github.com/andremjr/contentflow-os)",
       },
     },
     request,
@@ -947,7 +947,7 @@ async function download(mediaType, request, services) {
         name: artifact.name,
         mimeType: artifact.mimeType,
         size: artifact.size,
-        source: artifact.name,
+        source: { kind: "path", path: artifact.name },
       },
     ],
     usage: { provider: asset.provider, outputUnits: artifact.size, unit: "bytes" },

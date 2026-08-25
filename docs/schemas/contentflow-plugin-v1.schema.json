@@ -98,6 +98,12 @@
           "maxLength": 100,
           "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
         },
+        "fallbackConfigurationKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+        },
         "label": { "type": "string", "minLength": 1, "maxLength": 100 },
         "description": { "type": "string", "maxLength": 500 },
         "prepareTimeoutMs": {
@@ -303,7 +309,27 @@
             "mode": { "enum": ["immediate", "async"] },
             "defaultTimeoutMs": { "type": "integer", "minimum": 100, "maximum": 86400000 },
             "supportsCancellation": { "type": "boolean" },
-            "maxConcurrency": { "type": "integer", "minimum": 1, "maximum": 100 }
+            "maxConcurrency": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "itemOrchestration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["inputPort", "outputPort", "mode"],
+              "properties": {
+                "inputPort": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+                },
+                "outputPort": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+                },
+                "mode": { "const": "sequential" }
+              }
+            }
           }
         },
         "sideEffects": {

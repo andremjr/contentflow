@@ -21,6 +21,9 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     port: 8080,
+    watch: {
+      ignored: ["**/data/test-exports/**"],
+    },
     proxy: {
       "/api": "http://127.0.0.1:8787",
     },

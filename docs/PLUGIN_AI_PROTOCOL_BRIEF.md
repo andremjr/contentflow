@@ -26,6 +26,8 @@ O plugin não inventa os IDs universais. Depois de validar a resposta, o núcleo
 
 Jobs assíncronos devolvem `pending` com `jobId` e `pollAfterMs`; `start`, `resume` e `cancel` devem ser idempotentes. Resultados progressivos usam `partialValues` e `partialArtifacts` como snapshots acumulados.
 
+Uma capability pode declarar `execution.itemOrchestration` para o núcleo executar uma entrada em lista item a item e persistir cada resultado antes de avançar. Nessas chamadas, `request.batch` informa `itemId`, índice e total. Plugins com perfis de navegador podem declarar `profileSetup.fallbackConfigurationKey`; o valor contém aliases previamente preparados, e a troca automática ocorre somente nas falhas técnicas permitidas pelo protocolo.
+
 ## Segurança e manifesto
 
 Declare o menor conjunto entre `network`, `filesystem:read`, `filesystem:write`, `process`, `worker` e `native`. Para rede, declare `networkHosts`; para credenciais, somente nomes em `secretKeys`. Automação de navegador é implementada e autenticada pelo próprio plugin; o núcleo não fornece navegador nem extrai sessões. Toda capacidade declara operador, blocos, portas, execução, efeitos colaterais, custo, política de dados e schemas.

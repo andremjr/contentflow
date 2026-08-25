@@ -1193,27 +1193,25 @@ async function setPrompt(client, sessionId, prompt, settings, signal) {
     { type: "keyUp", key: "Backspace", code: "Backspace" },
     sessionId,
   );
-  const size = clampInteger(settings?.typingChunkSize, 8, 1, 40);
-  const delay = clampInteger(settings?.typingDelayMs, 15, 0, 200);
-  const characters = Array.from(prompt);
-  for (let index = 0; index < characters.length; index += size) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    await client.send(
-      "Input.insertText",
-      { text: characters.slice(index, index + size).join("") },
-      sessionId,
-    );
-    if (delay) await sleep(delay, signal);
-  }
+  if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+  // Claude's rich-text editor can drop characters while reconciling a rapid
+  // sequence of small CDP insertions. Insert the complete prompt atomically so
+  // the editor observes a single input transaction.
+  await client.send("Input.insertText", { text: prompt }, sessionId);
+  await sleep(500, signal);
   const readback = await evaluate(
     client,
     sessionId,
     `(() => { ${PAGE_HELPERS}; const el=cfPrompt(); return (el?.value || el?.innerText || el?.textContent || '').trim(); })()`,
   );
-  if (!readback || readback.length < Math.min(20, prompt.length)) {
+  const comparableReadback = String(readback ?? "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const comparablePrompt = prompt.replace(/\s+/gu, " ").trim();
+  if (comparableReadback !== comparablePrompt) {
     throw codedError(
       "OUTPUT_VALIDATION_FAILED",
-      "O Claude não confirmou o preenchimento do prompt.",
+      "O Claude não confirmou o prompt completo sem perda de caracteres.",
       true,
     );
   }

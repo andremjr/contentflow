@@ -36,7 +36,7 @@ function request(overrides = {}) {
 
 test("manifesto declara capabilities reais de texto, pesquisa, imagem e vídeo", () => {
   assert.equal(manifest.id, "local.contentflow.grok-browser-studio");
-  assert.equal(manifest.version, "0.1.2");
+  assert.equal(manifest.version, "0.1.3");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.deepEqual(
     manifest.capabilities.map((item) => item.id),

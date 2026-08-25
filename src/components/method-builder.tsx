@@ -1369,41 +1369,64 @@ function ProfileSetupControl({
   profileSetup: PluginProfileSetup;
   configuration: Record<string, string | number | boolean>;
 }) {
-  const profileName = String(configuration[profileSetup.configurationKey] ?? "").trim();
-  const [status, setStatus] = useState<"checking" | "ready" | "missing" | "preparing">("checking");
+  type ProfileStatus = "checking" | "ready" | "missing" | "preparing";
+  const primaryProfile = String(configuration[profileSetup.configurationKey] ?? "").trim();
+  const fallbackProfilesValue = profileSetup.fallbackConfigurationKey
+    ? String(configuration[profileSetup.fallbackConfigurationKey] ?? "")
+    : "";
+  const profileNames = useMemo(
+    () =>
+      [
+        primaryProfile,
+        ...fallbackProfilesValue
+          .split(/[\n,;]+/)
+          .map((value) => value.trim())
+          .filter(Boolean),
+      ].filter((value, index, values) => value && values.indexOf(value) === index),
+    [fallbackProfilesValue, primaryProfile],
+  );
+  const [statuses, setStatuses] = useState<Record<string, ProfileStatus>>({});
 
   useEffect(() => {
-    if (!profileName) {
-      setStatus("missing");
-      return;
-    }
+    if (!profileNames.length) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      setStatus("checking");
-      void fetch(`/api/plugins/${encodeURIComponent(pluginId)}/profile`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "status", configuration }),
-        signal: controller.signal,
-      })
-        .then(async (response) => {
-          const payload = (await response.json()) as { ready?: boolean };
-          if (!response.ok) throw new Error();
-          setStatus(payload.ready ? "ready" : "missing");
-        })
-        .catch(() => {
-          if (!controller.signal.aborted) setStatus("missing");
-        });
+      setStatuses(Object.fromEntries(profileNames.map((name) => [name, "checking"])));
+      void Promise.all(
+        profileNames.map(async (profileName) => {
+          try {
+            const response = await fetch(`/api/plugins/${encodeURIComponent(pluginId)}/profile`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "status",
+                configuration: {
+                  ...configuration,
+                  [profileSetup.configurationKey]: profileName,
+                },
+              }),
+              signal: controller.signal,
+            });
+            const payload = (await response.json()) as { ready?: boolean };
+            if (!response.ok) throw new Error();
+            return [profileName, payload.ready ? "ready" : "missing"] as const;
+          } catch {
+            return [profileName, "missing"] as const;
+          }
+        }),
+      ).then((entries) => {
+        if (!controller.signal.aborted) setStatuses(Object.fromEntries(entries));
+      });
     }, 500);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [configuration, pluginId, profileName]);
+  }, [configuration, pluginId, profileNames, profileSetup.configurationKey]);
 
-  const prepare = async () => {
-    if (!profileName || status === "preparing") return;
-    setStatus("preparing");
+  const prepare = async (profileName: string) => {
+    if (!profileName || statuses[profileName] === "preparing") return;
+    setStatuses((current) => ({ ...current, [profileName]: "preparing" }));
     toast.info("Conclua o login na janela do navegador", {
       description: `O perfil ${profileName} será guardado quando a área do provedor estiver pronta.`,
     });
@@ -1411,7 +1434,10 @@ function ProfileSetupControl({
       const response = await fetch(`/api/plugins/${encodeURIComponent(pluginId)}/profile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "prepare", configuration }),
+        body: JSON.stringify({
+          action: "prepare",
+          configuration: { ...configuration, [profileSetup.configurationKey]: profileName },
+        }),
       });
       const payload = (await response.json()) as {
         ready?: boolean;
@@ -1421,12 +1447,12 @@ function ProfileSetupControl({
       if (!response.ok || !payload.ready) {
         throw new Error(payload.error ?? "O login não foi confirmado pelo plugin.");
       }
-      setStatus("ready");
+      setStatuses((current) => ({ ...current, [profileName]: "ready" }));
       toast.success("Perfil salvo e validado", {
         description: payload.message ?? `${profileName} está pronto para futuras execuções.`,
       });
     } catch (error) {
-      setStatus("missing");
+      setStatuses((current) => ({ ...current, [profileName]: "missing" }));
       toast.error("Não foi possível salvar o perfil", {
         description: error instanceof Error ? error.message : undefined,
       });
@@ -1435,26 +1461,33 @@ function ProfileSetupControl({
 
   return (
     <div className="flex min-w-44 flex-col justify-end gap-1.5 sm:pt-5">
-      <Button
-        type="button"
-        variant={status === "ready" ? "outline" : "default"}
-        className="gap-1.5"
-        disabled={!profileName || status === "preparing" || status === "checking"}
-        onClick={() => void prepare()}
-      >
-        {status === "preparing" || status === "checking" ? (
-          <LoaderCircle className="size-3.5 animate-spin" />
-        ) : status === "ready" ? (
-          <CheckCircle2 className="size-3.5" />
-        ) : (
-          <CircleUserRound className="size-3.5" />
-        )}
-        {status === "ready" ? "Perfil salvo" : profileSetup.label}
-      </Button>
+      {profileNames.map((profileName, index) => {
+        const status = statuses[profileName] ?? "checking";
+        return (
+          <Button
+            key={profileName}
+            type="button"
+            variant={status === "ready" ? "outline" : "default"}
+            className="justify-start gap-1.5"
+            disabled={status === "preparing" || status === "checking"}
+            onClick={() => void prepare(profileName)}
+          >
+            {status === "preparing" || status === "checking" ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : status === "ready" ? (
+              <CheckCircle2 className="size-3.5" />
+            ) : (
+              <CircleUserRound className="size-3.5" />
+            )}
+            {status === "ready" ? `${profileName} salvo` : `${profileSetup.label}: ${profileName}`}
+            {index > 0 && <span className="ml-auto text-[10px] opacity-70">fallback {index}</span>}
+          </Button>
+        );
+      })}
       <p className="text-[10px] text-muted-foreground">
-        {status === "ready"
-          ? "Login validado para futuras execuções."
-          : (profileSetup.description ?? "Abre o navegador para login e fecha após validar.")}
+        {profileNames.length
+          ? "Cada alias mantém login separado. O fallback ocorre somente em falhas técnicas permitidas."
+          : (profileSetup.description ?? "Informe pelo menos um perfil de conta.")}
       </p>
     </div>
   );

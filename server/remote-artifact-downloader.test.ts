@@ -168,6 +168,28 @@ try {
     { existingArtifacts: importedPartial.storedArtifacts },
   );
   assert.equal(repeatedPartial.status, "pending");
+  const importedErrorPartial = await importPluginArtifacts(
+    {
+      status: "error",
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "Falha depois de uma entrega parcial.",
+      retryable: true,
+      partialValues: { files: ["artifact://partial-file"] },
+      partialArtifacts: partialResponse.partialArtifacts,
+    },
+    integrationOutput,
+    uploadsDirectory,
+    manifest,
+    { existingArtifacts: importedPartial.storedArtifacts },
+  );
+  assert.equal(importedErrorPartial.status, "error");
+  assert.equal(
+    importedErrorPartial.status === "error" &&
+      Array.isArray(importedErrorPartial.partialValues?.files)
+      ? (importedErrorPartial.partialValues.files[0] as { url?: string }).url
+      : undefined,
+    partialFile?.url,
+  );
   if (partialFile) {
     await rm(path.join(uploadsDirectory, path.basename(partialFile.url)), { force: true });
   }

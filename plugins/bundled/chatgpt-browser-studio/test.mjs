@@ -36,7 +36,7 @@ function request(overrides = {}) {
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "0.1.16");
+  assert.equal(manifest.version, "0.1.17");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   const generation = manifest.capabilities.find((item) => item.id === "generate-text-in-browser");
   assert.deepEqual(generation.outputPorts.find((port) => port.key === "result").producedTypes, [
@@ -154,6 +154,17 @@ test("preserva respostas individuais quando parts está conectada", () => {
     outputContract: [{ key: "parts" }],
   });
   assert.deepEqual(values, { result: "A\n\nB", parts: ["A", "B"] });
+});
+
+test("respeita saída list em geração de texto", () => {
+  assert.deepEqual(
+    __test.generationResponseValues(
+      "Primeiro prompt\n\nSegundo prompt\n\nTerceiro prompt",
+      [{ text: "Primeiro prompt\n\nSegundo prompt\n\nTerceiro prompt" }],
+      { outputContract: [{ key: "visual_prompts", type: "list" }] },
+    ).visual_prompts,
+    ["Primeiro prompt", "Segundo prompt", "Terceiro prompt"],
+  );
 });
 
 test("monta pesquisa web e deep research", () => {

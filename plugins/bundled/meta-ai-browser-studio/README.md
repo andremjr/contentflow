@@ -22,3 +22,7 @@ npm run plugin:kit -- check ./plugins/bundled/meta-ai-browser-studio
 npm run plugin:kit -- test-contract ./plugins/bundled/meta-ai-browser-studio
 npm run plugin:kit -- test-sandbox ./plugins/bundled/meta-ai-browser-studio
 ```
+
+## Perfis de fallback
+
+`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. Cada alias deve ser salvo separadamente. O núcleo troca de perfil somente em falhas técnicas transitórias; CAPTCHA, autenticação, limite, cota e bloqueio pausam a execução.

@@ -2,7 +2,7 @@
 
 Este é o índice de um pacote pequeno que pode ser enviado integralmente a ChatGPT, Claude ou Gemini sem compartilhar o repositório inteiro. Envie somente estes quatro itens:
 
-Compatibilidade: ContentFlow OS v0.3.6, Plugin API v1 e Node 26.
+Compatibilidade: ContentFlow OS v0.4.1, Plugin API v1 e Node 26.
 
 1. este arquivo;
 2. [`PLUGIN_AI_PROTOCOL_BRIEF.md`](PLUGIN_AI_PROTOCOL_BRIEF.md);

@@ -384,8 +384,11 @@ function searchResponseValues(text, sources, request) {
 
 function generationResponseValues(result, responses, request) {
   const values = { result };
-  if ((request?.outputContract ?? []).some((field) => field?.key === "parts"))
-    values.parts = responses.map((response) => response.text);
+  for (const field of request?.outputContract ?? []) {
+    if (field?.key === "parts") values.parts = responses.map((response) => response.text);
+    else if (["list", "multiselect"].includes(field?.type)) values[field.key] = textAsList(result);
+    else values[field.key] = result;
+  }
   return values;
 }
 
@@ -820,11 +823,21 @@ async function openNewConversation(client, sessionId, signal) {
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     try {
-      if (await evaluate(client, sessionId, `(() => {${PAGE_HELPERS};return !!cfPrompt()})()`))
+      // Page.navigate returns before the previous conversation disappears. Waiting
+      // only for the composer can therefore capture the old response count and
+      // make the next generation wait forever for a non-existent extra answer.
+      if (
+        await evaluate(
+          client,
+          sessionId,
+          `(() => {${PAGE_HELPERS};return location.hostname==='${CHATGPT_HOST}'&&location.pathname==='/'&&document.readyState!=='loading'&&!!cfPrompt()})()`,
+        )
+      )
         return;
     } catch {}
     await sleep(350, signal);
   }
+  throw codedError("UPSTREAM_UNAVAILABLE", "O ChatGPT não abriu uma conversa nova no prazo.", true);
 }
 
 async function waitForPrompt(client, sessionId, waitMs, signal) {

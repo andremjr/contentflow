@@ -928,13 +928,16 @@ async function persistMetaSessionCookies(client, sessionId) {
 async function attachFiles(client, sessionId, attachments, signal) {
   if (!attachments.length) return;
   await client.send("DOM.enable", {}, sessionId);
-  const { root } = await client.send("DOM.getDocument", { depth: 1, pierce: true }, sessionId);
-  const { nodeIds = [] } = await client.send(
-    "DOM.querySelectorAll",
-    { nodeId: root.nodeId, selector: 'input[type="file"]' },
+  const target = await client.send(
+    "Runtime.evaluate",
+    {
+      expression: "document.querySelector('input[type=\"file\"]')",
+      returnByValue: false,
+    },
     sessionId,
   );
-  if (!nodeIds.length)
+  const objectId = target?.result?.objectId;
+  if (!objectId)
     throw codedError(
       "OUTPUT_VALIDATION_FAILED",
       "Seletor de anexos do Meta AI não encontrado.",
@@ -942,7 +945,7 @@ async function attachFiles(client, sessionId, attachments, signal) {
     );
   await client.send(
     "DOM.setFileInputFiles",
-    { files: attachments.map((item) => item.path), nodeId: nodeIds[0] },
+    { files: attachments.map((item) => item.path), objectId },
     sessionId,
   );
   const expected = attachments.map((item) => item.name.toLowerCase()),

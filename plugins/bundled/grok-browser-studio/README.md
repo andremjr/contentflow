@@ -23,3 +23,7 @@ npm run plugin:kit -- check ./plugins/bundled/grok-browser-studio
 npm run plugin:kit -- test-contract ./plugins/bundled/grok-browser-studio
 npm run plugin:kit -- test-sandbox ./plugins/bundled/grok-browser-studio
 ```
+
+## Perfis de fallback
+
+`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. Cada alias deve ser salvo separadamente. O núcleo troca de perfil somente em falhas técnicas transitórias; CAPTCHA, autenticação, limite, cota e bloqueio pausam a execução.

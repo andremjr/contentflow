@@ -27,6 +27,7 @@ import {
 } from "@/lib/human-workflow";
 import { getPresentationRestrictionIssue } from "@/lib/presentation";
 import { resolveBlockInputs } from "@/lib/runtime-contract";
+import { attemptAfterRetryInvalidation } from "@/lib/retry-attempt";
 import {
   invalidateBlockDeliveries,
   normalizeExecutionDeliveries,
@@ -332,6 +333,26 @@ export async function refreshExecutionOrchestrator(orchestratorId: string) {
   }
 }
 
+export async function stopExecutionOrchestrator(orchestratorId: string) {
+  const response = await fetch(`/api/orchestrators/${orchestratorId}/stop`, { method: "POST" });
+  const body = (await response.json()) as ExecutionOrchestratorState & { error?: string };
+  if (!response.ok || !body.orchestrator) {
+    throw new Error(body.error ?? "Não foi possível parar a orquestração.");
+  }
+  applyExecutionOrchestratorState(body);
+  return body.orchestrator;
+}
+
+export async function resumeExecutionOrchestrator(orchestratorId: string) {
+  const response = await fetch(`/api/orchestrators/${orchestratorId}/resume`, { method: "POST" });
+  const body = (await response.json()) as ExecutionOrchestratorState & { error?: string };
+  if (!response.ok || !body.orchestrator) {
+    throw new Error(body.error ?? "Não foi possível retomar a orquestração.");
+  }
+  applyExecutionOrchestratorState(body);
+  return body.orchestrator;
+}
+
 export function useLibraryItems(channelId?: string) {
   const storeVersion = useClientStoreVersion();
   if (storeVersion < 0) return [];
@@ -581,9 +602,14 @@ export function removeChannel(id: string) {
   void request(`/api/channels/${id}`, "DELETE");
 }
 
-export function removeProject(id: string) {
+export async function removeProject(id: string) {
   const project = db.projects.find((item) => item.id === id);
   if (!project) return;
+  const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Não foi possível excluir o projeto.");
+  }
   db.projects.splice(db.projects.indexOf(project), 1);
   db.executions.splice(
     0,
@@ -596,7 +622,6 @@ export function removeProject(id: string) {
     void request(`/api/channels/${channel.id}`, "PUT", channel);
   }
   emit();
-  void request(`/api/projects/${id}`, "DELETE");
 }
 
 export type NewProjectInput = { title: string; channelId: string; deadline?: string };
@@ -975,13 +1000,16 @@ function retryValidatedBlock(
   const now = new Date().toISOString();
   for (let index = targetIndex; index < execution.blocks.length; index += 1) {
     const blockExecution = execution.blocks[index];
+    blockExecution.attempt = attemptAfterRetryInvalidation(blockExecution);
     blockExecution.values = {};
     blockExecution.error = undefined;
     blockExecution.logs = undefined;
     blockExecution.completedAt = undefined;
+    blockExecution.jobId = undefined;
+    blockExecution.progress = undefined;
+    blockExecution.progressMessage = undefined;
     blockExecution.retryFeedback = undefined;
     if (index === targetIndex) {
-      blockExecution.attempt = (blockExecution.attempt ?? 1) + 1;
       blockExecution.startedAt = now;
       blockExecution.retryFeedback = structuredClone(validationValues);
       blockExecution.status =

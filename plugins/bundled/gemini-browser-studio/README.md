@@ -1,6 +1,6 @@
 # Gemini Browser Studio
 
-Versão **0.1.13** para ContentFlow OS Plugin API v1.
+Versão **0.1.14** para ContentFlow OS Plugin API v1.
 
 Super plugin independente que usa a interface web do Gemini em um Google Chrome real com perfil persistente dedicado. Não usa a API oficial do Gemini, não pede chave e não exporta cookies, tokens ou storage.
 
@@ -79,3 +79,7 @@ Em 20/08/2026, a interface real foi validada com dois prompts consecutivos na me
 ## Revogação
 
 Saia da conta na janela Chrome dedicada. Para remover uma sessão, exclua manualmente apenas a pasta do alias correspondente dentro da pasta de trabalho conectada ao plugin. Outputs já promovidos permanecem no ContentFlow OS.
+
+## Perfis de fallback
+
+`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. Cada alias deve ser salvo separadamente. O núcleo troca de perfil somente em falhas técnicas transitórias; CAPTCHA, autenticação, limite, cota e bloqueio pausam a execução.

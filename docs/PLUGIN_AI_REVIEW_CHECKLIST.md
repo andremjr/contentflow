@@ -14,6 +14,7 @@ Antes de testar:
 - não há React, HTML arbitrário, acesso ao SQLite ou import de módulos internos do ContentFlow;
 - não há script de instalação nem dependência baixada automaticamente;
 - dependências de runtime realmente necessárias estão incluídas no pacote final;
+- executáveis e runtimes adicionais são resolvidos dentro do próprio pacote, nunca pelo `PATH`, e o teste prova que o usuário não precisa instalar software além do ContentFlow OS;
 - o plugin usa os valores de `request.inputs` e não inventa IDs universais; IDs externos possuem campo próprio;
 - automação de navegador não enumera perfis/sessões nem presume um browser fornecido pelo núcleo;
 - `test.mjs` cobre sucesso e ao menos a entrada inválida principal.

@@ -2,6 +2,18 @@
 
 Gerenciador estratégico de métodos para organizar e executar a produção de vídeos. O frontend e a API rodam localmente na máquina do usuário.
 
+## Estado atual
+
+A versão `0.4.1` mantém os 8 Processos Universais, os 4 Blocos Essenciais e os 3 Operadores definidos na arquitetura. O aplicativo inclui:
+
+- execução linear de Métodos com pausa humana, plugins automáticos, outputs universais e histórico do canal;
+- Orquestrador de Projetos nos modos ponta a ponta e lote por processo, com fila persistente, parada, correção e retomada;
+- retries de validação com novas tentativas identificadas sem reaproveitar jobs invalidados;
+- execução sequencial de inputs em lote e fallback entre perfis explicitamente preparados somente para falhas técnicas permitidas;
+- plugins oficiais para modelos de linguagem, navegador, narração, mídia de acervo, transcrição, remoção de silêncio e montagem de vídeo por sequência de imagens.
+
+A descrição normativa do comportamento está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). O contrato de integrações está em [`docs/PLUGIN_PROTOCOL.md`](docs/PLUGIN_PROTOCOL.md).
+
 ## V0 para Windows — sem Node ou terminal
 
 Usuários leigos podem baixar o instalador pronto na página [Releases](https://github.com/andremjr/contentflow-os/releases). O arquivo **Setup** é a opção recomendada: basta executar, escolher a pasta e abrir o atalho do ContentFlow OS. O arquivo **Portable** não instala nada, mas é mais lento para abrir porque descompacta o aplicativo a cada execução.
@@ -102,7 +114,6 @@ npm run check
 - [V0 compilada para Windows](docs/DESKTOP_V0.md)
 - [Tradutor de Métodos](docs/gpt-method-translator/GPT_CONFIGURATION.md)
 - [Proteção jurídica e licenciamento](docs/LEGAL_AND_LICENSING.md)
-- [Revisão histórica de manutenção de 2026-08-10](docs/MAINTENANCE_REVIEW_2026-08-10.md)
 - [Como contribuir](CONTRIBUTING.md)
 
 ## Licença

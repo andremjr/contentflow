@@ -28,7 +28,7 @@ function executionFor(
 
 const project = {
   id: "project-1",
-  title: "VÃ­deo",
+  title: "Vídeo",
   channelId: "channel-1",
   currentStage: "title",
   state: "processing",
@@ -56,12 +56,12 @@ test("materializa uma entrega e um ID universal por item", () => {
     id: "generate-titles",
     type: "CRIAR",
     operator: "Humano",
-    name: "Gerar tÃ­tulos",
+    name: "Gerar títulos",
     inputs: [],
     outputs: [
       {
         id: "titles-output",
-        label: "OpÃ§Ãµes de tÃ­tulo",
+        label: "Opções de título",
         key: "title_options",
         type: "list",
         required: true,
@@ -84,7 +84,7 @@ test("materializa uma entrega e um ID universal por item", () => {
   );
 });
 
-test("resolve uma entrega especÃ­fica de bloco de processo anterior", () => {
+test("resolve uma entrega específica de bloco de processo anterior", () => {
   const sourceBlock: ActionBlock = {
     id: "transcribe",
     type: "CRIAR",
@@ -149,7 +149,7 @@ test("resolve uma entrega especÃ­fica de bloco de processo anterior", () => {
   );
 });
 
-test("invalida a revisÃ£o anterior e cria novos IDs em outra tentativa", () => {
+test("invalida a revisão anterior e cria novos IDs em outra tentativa", () => {
   const block: ActionBlock = {
     id: "create-script",
     type: "CRIAR",
@@ -161,12 +161,12 @@ test("invalida a revisÃ£o anterior e cria novos IDs em outra tentativa", () =>
     order: 0,
   };
   const execution = executionFor("script", block);
-  execution.blocks[0].values = { script: "VersÃ£o 1" };
+  execution.blocks[0].values = { script: "Versão 1" };
   recordBlockDeliveries(execution, block, execution.blocks[0].values, "completed");
   const firstId = execution.deliveries?.[0].id;
   invalidateBlockDeliveries(execution, [block.id]);
   execution.blocks[0].attempt = 2;
-  execution.blocks[0].values = { script: "VersÃ£o 2" };
+  execution.blocks[0].values = { script: "Versão 2" };
   recordBlockDeliveries(execution, block, execution.blocks[0].values, "completed");
 
   assert.equal(execution.deliveries?.find((item) => item.id === firstId)?.status, "invalidated");

@@ -63,6 +63,8 @@ Plugins oficiais e catálogos mantidos pelo projeto não aceitam capacidades que
 
 Quando surgir um CAPTCHA, bloqueio antiabuso ou pedido de nova autenticação, o job deve pausar. Esses eventos são limites operacionais, não falhas a serem contornadas.
 
+Múltiplas contas conectadas explicitamente são permitidas para continuidade operacional. A troca automática fica restrita a falhas técnicas transitórias (`UPSTREAM_UNAVAILABLE`, `TIMEOUT` e `JOB_FAILED`) e não pode ser usada em resposta a CAPTCHA, autenticação, rate limit, cota, upgrade ou bloqueio. Todas as contas precisam ser preparadas individualmente pelo usuário e permanecem em perfis dedicados separados.
+
 Um autor pode escrever, compartilhar e instalar diretamente código que ignore essas regras. A documentação não afirma aprovar previamente nem controlar esse comportamento. Ela define o que recebe selo oficial, listagem nos catálogos do projeto e suporte. Independentemente da origem ou finalidade, todo plugin executado dentro do ContentFlow OS recebe somente os recursos consentidos; se tentar ampliar essa autoridade, a sandbox deve impedir ou encerrar a operação automaticamente.
 
 ## 5. Uma capacidade pode ser internamente complexa
@@ -121,6 +123,8 @@ Autenticação deve ocorrer em uma superfície clara para o usuário e ser defin
 
 Quando o perfil é referenciado por uma configuração do Método, o plugin pode declarar `profileSetup`. Nesse fluxo, o construtor oferece uma ação explícita para abrir o navegador e concluir o login antes de qualquer Projeto ser executado. A execução normal deve falhar fechada quando o perfil ainda não foi preparado ou quando a sessão expirou; nunca deve preencher um prompt enquanto a página estiver em login, onboarding, CAPTCHA ou reautenticação.
 
+Plugins com vários perfis podem declarar `profileSetup.fallbackConfigurationKey`. O campo contém aliases ordenados, nunca cookies ou credenciais. O núcleo valida e prepara cada alias separadamente, registra qual perfil foi usado e preserva o cursor e as entregas parciais ao fazer um fallback técnico permitido.
+
 Requisitos:
 
 - cookies, access tokens e refresh tokens nunca entram em `request`, `settings`, `configuration`, logs ou artifacts; quando necessários, são secrets obtidos em memória por `getSecret()`;
@@ -148,6 +152,7 @@ O núcleo aplica o menor limite entre manifesto, configuração local e resposta
 - persistir `jobId` e chave de idempotência antes de repetir;
 - interromper ao receber cota esgotada, upgrade necessário ou bloqueio da conta;
 - nunca interpretar erro de limite como motivo para trocar endpoint, conta ou identidade;
+- em lote declarado por `execution.itemOrchestration`, concluir e persistir um item antes de iniciar o próximo;
 - mostrar ao usuário contagem de jobs, estado, custo conhecido e ação externa esperada.
 
 Automação aumenta conveniência, não a franquia adquirida pelo usuário.

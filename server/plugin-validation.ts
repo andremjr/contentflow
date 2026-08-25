@@ -89,6 +89,12 @@ const profileSetupSchema = z
       .min(1)
       .max(100)
       .regex(/^[A-Za-z][A-Za-z0-9_-]*$/),
+    fallbackConfigurationKey: z
+      .string()
+      .min(1)
+      .max(100)
+      .regex(/^[A-Za-z][A-Za-z0-9_-]*$/)
+      .optional(),
     label: z.string().min(1).max(100),
     description: z.string().max(500).optional(),
     prepareTimeoutMs: z.number().int().min(30_000).max(900_000).optional(),
@@ -135,6 +141,14 @@ const capabilitySchema = z
         defaultTimeoutMs: z.number().int().min(100).max(86_400_000).optional(),
         supportsCancellation: z.boolean().optional(),
         maxConcurrency: z.number().int().min(1).max(100).optional(),
+        itemOrchestration: z
+          .object({
+            inputPort: z.string().min(1).max(100).regex(identifier),
+            outputPort: z.string().min(1).max(100).regex(identifier),
+            mode: z.literal("sequential"),
+          })
+          .strict()
+          .optional(),
       })
       .strict(),
     sideEffects: z
@@ -253,6 +267,41 @@ export const pluginManifestSchema = z
             message: `precisa declarar ${manifest.profileSetup.configurationKey} para profileSetup`,
           });
         }
+      }
+      if (manifest.profileSetup.fallbackConfigurationKey) {
+        for (const [index, capability] of manifest.capabilities.entries()) {
+          const properties = capability.blockConfigSchema?.properties;
+          if (
+            !(
+              manifest.profileSetup.fallbackConfigurationKey in
+              ((properties ?? {}) as Record<string, unknown>)
+            )
+          ) {
+            context.addIssue({
+              code: "custom",
+              path: ["capabilities", index, "blockConfigSchema", "properties"],
+              message: `precisa declarar ${manifest.profileSetup.fallbackConfigurationKey} para fallback de perfis`,
+            });
+          }
+        }
+      }
+    }
+    for (const [index, capability] of manifest.capabilities.entries()) {
+      const orchestration = capability.execution.itemOrchestration;
+      if (!orchestration) continue;
+      if (!capability.inputPorts.some((port) => port.key === orchestration.inputPort)) {
+        context.addIssue({
+          code: "custom",
+          path: ["capabilities", index, "execution", "itemOrchestration", "inputPort"],
+          message: "precisa referenciar uma porta de entrada existente",
+        });
+      }
+      if (!capability.outputPorts.some((port) => port.key === orchestration.outputPort)) {
+        context.addIssue({
+          code: "custom",
+          path: ["capabilities", index, "execution", "itemOrchestration", "outputPort"],
+          message: "precisa referenciar uma porta de saída existente",
+        });
       }
     }
   });

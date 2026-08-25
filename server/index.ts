@@ -46,6 +46,7 @@ import {
 } from "../src/lib/presentation";
 import type { PluginExecutionRequest, PluginFieldContract } from "../src/lib/plugin-contract";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
+import { attemptAfterRetryInvalidation } from "../src/lib/retry-attempt";
 import {
   activeProjectDeliveries,
   invalidateBlockDeliveries,
@@ -59,7 +60,7 @@ import {
   initializePluginRunner,
 } from "./plugin-runner";
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
-import { composePluginPortValue } from "./plugin-input-values";
+import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
 import {
   createPersistentPluginJob,
   isPluginJobTimedOut,
@@ -83,6 +84,12 @@ import {
 } from "./anthropic-connection";
 import { deletePluginSecret, getPluginSecret, setPluginSecret } from "./credential-vault";
 import { fetchYouTubeChannel } from "./youtube";
+import { canAdvanceProfileFallback, orderedProfileCandidates } from "./plugin-account-fallback";
+import {
+  appendOrchestratedOutput,
+  declaredItemOrchestration,
+  invocationRequestForJob,
+} from "./plugin-item-orchestration";
 
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
 const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
@@ -425,6 +432,7 @@ function finishPluginBlock(
       } else {
         for (let index = targetIndex; index < execution.blocks.length; index += 1) {
           const item = execution.blocks[index];
+          item.attempt = attemptAfterRetryInvalidation(item);
           item.values = {};
           item.error = undefined;
           item.logs = undefined;
@@ -435,7 +443,6 @@ function finishPluginBlock(
           item.retryFeedback = undefined;
           item.status = "pending";
         }
-        targetExecution.attempt = (targetExecution.attempt ?? 1) + 1;
         targetExecution.retryFeedback = structuredClone(values);
         targetExecution.startedAt = now;
         targetExecution.status =
@@ -851,6 +858,28 @@ function queueOrchestratorReconciliationForProject(projectId: string) {
   }
 }
 
+function cancelStoredProcessExecution(execution: ProcessExecution, project: Project) {
+  pluginJobs.requestCancellation(execution.id);
+  execution.status = "cancelled";
+  execution.blocks = execution.blocks.map((item) =>
+    item.status === "completed" ? item : { ...item, status: "cancelled" },
+  );
+  execution.updatedAt = new Date().toISOString();
+  project.stages = { ...project.stages, [execution.processType]: "not_started" };
+  project.currentStage = execution.processType;
+  project.state = "not_started";
+  project.updatedAt = "Agora";
+  database.transaction(() => {
+    database
+      .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
+      .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+    database
+      .prepare("UPDATE projects SET payload = ? WHERE id = ?")
+      .run(JSON.stringify(project), project.id);
+  })();
+  void processDuePluginJobs();
+}
+
 function resumeExecutionOrchestrators() {
   for (const orchestrator of executionOrchestrators()) {
     if (ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status)) {
@@ -1095,7 +1124,7 @@ async function processPluginJob(
         : ({ mode: "resume", jobId: job.jobId! } as const);
     const pluginResponse = await executeRegisteredPlugin(
       plugin,
-      { ...job.request, invocation },
+      invocationRequestForJob(job, invocation),
       invocationTimeout,
       secrets,
       { workspaceDirectory, existingArtifacts: job.partialArtifacts },
@@ -1166,6 +1195,55 @@ async function processPluginJob(
     }
 
     if (pluginResponse.status === "error") {
+      const partialValues = {
+        ...job.partialValues,
+        ...mappedPluginValues(
+          block,
+          pluginResponse.partialValues ?? {},
+          job.request.outputContract,
+        ),
+      };
+      const partialArtifacts = mergeStoredArtifacts(
+        job.partialArtifacts,
+        pluginResponse.storedArtifacts,
+      );
+      const fallback = job.profileFallback;
+      if (fallback && canAdvanceProfileFallback(job, pluginResponse)) {
+        const currentProfile = fallback.candidates[fallback.activeIndex];
+        const nextIndex = fallback.activeIndex + 1;
+        const nextProfile = fallback.candidates[nextIndex];
+        const saved = pluginJobs.save(claim, {
+          ...job,
+          status: "starting",
+          retryCount: job.retryCount + 1,
+          profileFallback: {
+            ...fallback,
+            activeIndex: nextIndex,
+            history: [
+              ...fallback.history,
+              {
+                profile: currentProfile,
+                code: pluginResponse.code,
+                message: pluginResponse.message,
+              },
+            ],
+          },
+          partialValues,
+          partialArtifacts,
+          error: pluginResponse.message,
+          message: `Falha técnica em ${currentProfile}; continuando com ${nextProfile}.`,
+          nextPollAt: new Date().toISOString(),
+        });
+        if (saved.status === "cancel_requested") return saved;
+        blockExecution.status = "in_progress";
+        blockExecution.values = structuredClone(partialValues);
+        blockExecution.progressMessage = saved.message;
+        blockExecution.logs = pluginResponse.logs;
+        execution.status = "running";
+        recordBlockDeliveries(execution, block, partialValues, "partial");
+        persistPluginExecution(execution, project);
+        return saved;
+      }
       if (
         pluginResponse.retryable &&
         job.retryCount < 2 &&
@@ -1180,6 +1258,8 @@ async function processPluginJob(
           ...job,
           status: job.jobId ? "pending" : "starting",
           retryCount,
+          partialValues,
+          partialArtifacts,
           error: pluginResponse.message,
           message: `Tentativa ${retryCount + 1}: ${pluginResponse.message}`,
           nextPollAt: new Date(Date.now() + retryAfterMs).toISOString(),
@@ -1199,6 +1279,46 @@ async function processPluginJob(
       ...job.partialValues,
       ...mappedPluginValues(block, pluginResponse.values, job.request.outputContract),
     };
+    const itemOrchestration = job.itemOrchestration;
+    if (itemOrchestration) {
+      const outputKey =
+        job.request.outputContract.find((field) => field.portKey === itemOrchestration.outputPort)
+          ?.key ?? itemOrchestration.outputPort;
+      const accumulated = appendOrchestratedOutput(
+        job.partialValues,
+        mappedPluginValues(block, pluginResponse.values, job.request.outputContract),
+        outputKey,
+      );
+      if (itemOrchestration.currentIndex + 1 < itemOrchestration.items.length) {
+        const nextIndex = itemOrchestration.currentIndex + 1;
+        const saved = pluginJobs.save(claim, {
+          ...job,
+          status: "starting",
+          nextPollAt: new Date().toISOString(),
+          retryCount: 0,
+          partialValues: accumulated,
+          partialArtifacts: mergeStoredArtifacts(
+            job.partialArtifacts,
+            pluginResponse.storedArtifacts,
+          ),
+          itemOrchestration: { ...itemOrchestration, currentIndex: nextIndex },
+          progress: nextIndex / itemOrchestration.items.length,
+          message: `Item ${nextIndex} de ${itemOrchestration.items.length} concluído.`,
+          error: undefined,
+        });
+        if (saved.status === "cancel_requested") return saved;
+        blockExecution.status = "in_progress";
+        blockExecution.values = structuredClone(accumulated);
+        blockExecution.progress = saved.progress;
+        blockExecution.progressMessage = saved.message;
+        blockExecution.logs = pluginResponse.logs;
+        execution.status = "running";
+        recordBlockDeliveries(execution, block, accumulated, "partial");
+        persistPluginExecution(execution, project);
+        return saved;
+      }
+      Object.assign(values, accumulated);
+    }
     if (
       block.type === "ESCOLHER" &&
       !job.request.context.selectedCollection?.items.some(
@@ -1446,6 +1566,8 @@ function isPluginManifest(manifest: Record<string, unknown>) {
     networkHostsAreValid &&
     (profileSetup === undefined ||
       (isNonEmptyString(profileSetup.configurationKey) &&
+        (profileSetup.fallbackConfigurationKey === undefined ||
+          isNonEmptyString(profileSetup.fallbackConfigurationKey)) &&
         isNonEmptyString(profileSetup.label) &&
         (profileSetup.description === undefined || typeof profileSetup.description === "string") &&
         (profileSetup.prepareTimeoutMs === undefined ||
@@ -1453,7 +1575,13 @@ function isPluginManifest(manifest: Record<string, unknown>) {
             Number(profileSetup.prepareTimeoutMs) >= 30_000 &&
             Number(profileSetup.prepareTimeoutMs) <= 900_000)) &&
         Object.keys(profileSetup).every((key) =>
-          ["configurationKey", "label", "description", "prepareTimeoutMs"].includes(key),
+          [
+            "configurationKey",
+            "fallbackConfigurationKey",
+            "label",
+            "description",
+            "prepareTimeoutMs",
+          ].includes(key),
         ))) &&
     (manifest.secretKeys === undefined || isUniqueStringArray(manifest.secretKeys)) &&
     runtime?.kind === "node" &&
@@ -1465,6 +1593,7 @@ function isPluginManifest(manifest: Record<string, unknown>) {
       if (!value || typeof value !== "object") return false;
       const capability = value as Record<string, unknown>;
       const execution = capability.execution as Record<string, unknown> | undefined;
+      const itemOrchestration = execution?.itemOrchestration as Record<string, unknown> | undefined;
       const cost = capability.cost as Record<string, unknown> | undefined;
       const dataPolicy = capability.dataPolicy as Record<string, unknown> | undefined;
       const capabilitySideEffects = capability.sideEffects;
@@ -1552,6 +1681,16 @@ function isPluginManifest(manifest: Record<string, unknown>) {
           (Number.isInteger(execution.maxConcurrency) &&
             Number(execution.maxConcurrency) >= 1 &&
             Number(execution.maxConcurrency) <= 100)) &&
+        (itemOrchestration === undefined ||
+          (itemOrchestration.mode === "sequential" &&
+            isNonEmptyString(itemOrchestration.inputPort) &&
+            isNonEmptyString(itemOrchestration.outputPort) &&
+            (capability.inputPorts as Array<Record<string, unknown>>).some(
+              (port) => port.key === itemOrchestration.inputPort,
+            ) &&
+            (capability.outputPorts as Array<Record<string, unknown>>).some(
+              (port) => port.key === itemOrchestration.outputPort,
+            ))) &&
         isUniqueStringArray(capabilitySideEffects, sideEffects) &&
         (!usesNetwork || manifestPermissions.includes("network")) &&
         (!capabilitySideEffects.includes("local_artifact") ||
@@ -1767,7 +1906,7 @@ app.put("/api/preferences", (request, response) => {
     !(["light", "dark"] as const).includes(theme) ||
     !(["pt-BR", "en", "es"] as const).includes(language)
   ) {
-    response.status(400).json({ error: "PreferÃªncias invÃ¡lidas." });
+    response.status(400).json({ error: "Preferências inválidas." });
     return;
   }
   database
@@ -2391,11 +2530,7 @@ app.post("/api/execute-block", async (request, response) => {
 
   const usedInputPorts = new Set<string>();
   const assignedInputs = resolvedInputs.map((item) => {
-    const port = capability.inputPorts.find(
-      (candidate) =>
-        candidate.acceptedTypes.includes(item.input.type) &&
-        (candidate.multiple || !usedInputPorts.has(candidate.key)),
-    );
+    const port = selectPluginInputPort(item.input, capability.inputPorts, usedInputPorts);
     if (port && !port.multiple) usedInputPorts.add(port.key);
     return { resolved: item, port };
   });
@@ -2672,6 +2807,8 @@ app.post("/api/execute-block", async (request, response) => {
       pluginVersion: plugin.manifest.version,
       request: pluginRequest,
       timeoutMs: executionTimeoutMs,
+      profileFallback: orderedProfileCandidates(plugin.manifest, pluginRequest.configuration),
+      itemOrchestration: declaredItemOrchestration(capability, pluginRequest),
     }),
   );
   blockExecution.status = "in_progress";
@@ -2912,6 +3049,89 @@ app.get("/api/orchestrators/:id/state", (request, response) => {
   response.json(executionOrchestratorState(executionOrchestratorById(orchestrator.id)!));
 });
 
+app.post("/api/orchestrators/:id/resume", (request, response) => {
+  const orchestrator = executionOrchestratorById(request.params.id);
+  if (!orchestrator) {
+    response.status(404).json({ error: "Orquestração não encontrada." });
+    return;
+  }
+  if (orchestrator.status !== "failed") {
+    response.status(409).json({ error: "Somente uma fila com erro pode ser retomada." });
+    return;
+  }
+  const otherActive = executionOrchestrators(orchestrator.channelId).find(
+    (item) => item.id !== orchestrator.id && ACTIVE_ORCHESTRATOR_STATUSES.has(item.status),
+  );
+  if (otherActive) {
+    response.status(409).json({ error: "Este canal já possui outra orquestração em andamento." });
+    return;
+  }
+  if (orchestrator.currentProjectId && orchestrator.currentProcessType) {
+    const execution = executionFor(orchestrator.currentProjectId, orchestrator.currentProcessType);
+    if (execution?.status === "failed") {
+      response.status(409).json({
+        error: "Corrija ou tente novamente a etapa que falhou antes de retomar a fila.",
+      });
+      return;
+    }
+    if (execution?.status === "cancelled") {
+      response.status(409).json({
+        error: "A execução atual foi cancelada e não pode ser retomada nesta fila.",
+      });
+      return;
+    }
+  }
+
+  setExecutionOrchestratorState(orchestrator, {
+    status: "running",
+    message: "Retomando a fila a partir da última etapa preservada.",
+    completedAt: undefined,
+    stoppedAt: undefined,
+  });
+  reconcileExecutionOrchestrator(orchestrator.id);
+  response.json(executionOrchestratorState(executionOrchestratorById(orchestrator.id)!));
+});
+
+app.post("/api/orchestrators/:id/stop", (request, response) => {
+  const orchestrator = executionOrchestratorById(request.params.id);
+  if (!orchestrator) {
+    response.status(404).json({ error: "Orquestração não encontrada." });
+    return;
+  }
+  if (orchestrator.status === "completed") {
+    response.status(409).json({ error: "Uma orquestração concluída não pode ser parada." });
+    return;
+  }
+  if (orchestrator.status === "cancelled") {
+    response.json(executionOrchestratorState(orchestrator));
+    return;
+  }
+
+  const stoppedAt = new Date().toISOString();
+  setExecutionOrchestratorState(orchestrator, {
+    status: "cancelled",
+    message: "Fila interrompida pelo usuário. Os projetos criados foram preservados.",
+    stoppedAt,
+  });
+
+  if (orchestrator.currentProjectId && orchestrator.currentProcessType) {
+    const project = readPayload<Project>("projects", orchestrator.currentProjectId);
+    const execution = project
+      ? executionFor(orchestrator.currentProjectId, orchestrator.currentProcessType)
+      : undefined;
+    if (
+      project &&
+      execution &&
+      execution.status !== "completed" &&
+      execution.status !== "cancelled"
+    ) {
+      cancelStoredProcessExecution(execution, project);
+    }
+  }
+
+  response.json(executionOrchestratorState(executionOrchestratorById(orchestrator.id)!));
+});
+
 app.post("/api/orchestrators", (request, response) => {
   const body = request.body as {
     channelId?: string;
@@ -3029,6 +3249,17 @@ app.put("/api/projects/:id", (request, response) => {
 });
 
 app.delete("/api/projects/:id", (request, response) => {
+  const activeOrchestrator = executionOrchestrators().find(
+    (orchestrator) =>
+      ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status) &&
+      orchestrator.projectIds.includes(request.params.id),
+  );
+  if (activeOrchestrator) {
+    response.status(409).json({
+      error: "Pare a fila do orquestrador antes de excluir um projeto vinculado a ela.",
+    });
+    return;
+  }
   const remove = database.transaction((projectId: string) => {
     database.prepare("DELETE FROM process_executions WHERE project_id = ?").run(projectId);
     return database.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
@@ -3123,25 +3354,7 @@ app.post("/api/executions/:id/cancel", (request, response) => {
     response.status(409).json({ error: "Uma execução concluída não pode ser cancelada." });
     return;
   }
-  pluginJobs.requestCancellation(execution.id);
-  execution.status = "cancelled";
-  execution.blocks = execution.blocks.map((item) =>
-    item.status === "completed" ? item : { ...item, status: "cancelled" },
-  );
-  execution.updatedAt = new Date().toISOString();
-  project.stages = { ...project.stages, [execution.processType]: "not_started" };
-  project.currentStage = execution.processType;
-  project.state = "not_started";
-  project.updatedAt = "Agora";
-  database.transaction(() => {
-    database
-      .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
-      .run(JSON.stringify(execution), execution.updatedAt, execution.id);
-    database
-      .prepare("UPDATE projects SET payload = ? WHERE id = ?")
-      .run(JSON.stringify(project), project.id);
-  })();
-  void processDuePluginJobs();
+  cancelStoredProcessExecution(execution, project);
   response.status(202).json({ ok: true, execution, project });
 });
 

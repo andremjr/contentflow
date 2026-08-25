@@ -115,6 +115,7 @@ Regras:
 - `entrypoint` é relativo à raiz e não pode conter travessia (`..`).
 - O entrypoint exporta uma função assíncrona chamada `execute(request, services)`.
 - O pacote distribuído contém o build e todas as dependências de runtime necessárias.
+- Um plugin pronto precisa ser autossuficiente na plataforma declarada: não pode exigir que o usuário instale Python, FFmpeg, bibliotecas, CLIs, navegadores ou qualquer outro software além do ContentFlow OS. Binários e runtimes adicionais necessários ficam dentro da pasta do plugin, com plataforma, arquitetura, versão, integridade e licenças documentadas; o handler os resolve por caminho relativo ao próprio pacote e nunca pelo `PATH` da máquina.
 - Scripts de instalação não são executados automaticamente.
 - Arquivos `.env`, caches, credenciais e dados de usuário são proibidos.
 - Symlinks que escapem da pasta do plugin são rejeitados.
@@ -252,11 +253,12 @@ No nível do manifesto, `deliveryTypes` classifica o plugin para descoberta na g
 - `acceptedInputTypes` e `producedOutputTypes` são resumos para descoberta rápida; portas são a autoridade para binding.
 - `execution` declara comportamento imediato ou assíncrono.
 - `execution.maxConcurrency` informa o teto seguro declarado pelo autor; o núcleo pode impor um valor menor.
+- `execution.itemOrchestration`, quando presente, permite que o núcleo expanda uma entrada em lista em chamadas atômicas sequenciais, acumule a saída correspondente e materialize entregas parciais com IDs estáveis.
 - `sideEffects` declara todos os efeitos observáveis fora da resposta do bloco.
 - `cost` informa se a capacidade é gratuita, tarifada ou de custo desconhecido e se consegue estimar o uso antes da confirmação.
 - `dataPolicy` informa se dados deixam a máquina, para quais provedores e onde consultar retenção e uso para treinamento.
 - `blockConfigSchema` descreve parâmetros salvos no bloco.
-- `profileSetup`, quando presente, identifica uma chave de configuração de perfil dedicado e permite que o construtor ofereça uma preparação interativa antes da execução. O plugin continua responsável pelo navegador, pela validação da sessão e pelo estado local do perfil.
+- `profileSetup`, quando presente, identifica uma chave de configuração de perfil dedicado e permite que o construtor ofereça uma preparação interativa antes da execução. `fallbackConfigurationKey` pode apontar para uma lista textual ordenada de aliases adicionais. O plugin continua responsável pelo navegador, pela validação da sessão e pelo estado local de cada perfil.
 - `outputSchema` adiciona validação específica da capacidade sem substituir `outputContract`.
 
 ## 6. Portas e binding
@@ -377,6 +379,10 @@ Essas permissões podem conceder capacidades amplas sem conceder a máquina inte
 O núcleo chama `execute()` com `invocation.mode = "start"`. A capacidade devolve `success` ou `error` dentro do timeout declarado. A API v1 aceita timeout de até 24 horas; duração longa não torna a capacidade inválida.
 
 Plugins que declaram `profileSetup` também podem receber `invocation.mode = "configure"` com `action = "status"` ou `"prepare"`. Essas chamadas não pertencem a uma execução de Projeto, não recebem inputs e devem devolver `success` com `values.ready` booleano ou um erro seguro. `prepare` abre a superfície interativa necessária, aguarda login/onboarding e fecha o navegador após validar; `status` apenas consulta o estado mantido pelo próprio plugin.
+
+Quando `fallbackConfigurationKey` estiver declarado, o usuário prepara explicitamente cada alias. O núcleo preserva a ordem configurada e só avança para o próximo perfil diante de `UPSTREAM_UNAVAILABLE`, `TIMEOUT` ou `JOB_FAILED` retryable, antes da criação de um job externo opaco. `AUTHENTICATION_FAILED`, `RATE_LIMIT`, CAPTCHA, cota, bloqueio e upgrade nunca acionam troca automática de identidade.
+
+`execution.itemOrchestration` aceita `inputPort`, `outputPort` e `mode: "sequential"`. Se a entrada indicada for uma lista com mais de um item, o núcleo chama o plugin uma vez por item, inclui `request.batch` com ID, índice e total, acumula a saída indicada e persiste cada resultado antes de iniciar o seguinte. Assim, um erro ou fallback não repete itens já entregues.
 
 ### 9.3 Execução assíncrona
 

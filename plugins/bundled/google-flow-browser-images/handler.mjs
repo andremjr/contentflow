@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 
@@ -112,6 +112,53 @@ function resolveNavigationTarget(request) {
   const configured = request?.settings?.flowUrl?.trim?.();
   if (!configured) return { url: FLOW_LANDING_URL, pinned: false };
   return { url: validateFlowUrl(configured), pinned: true };
+}
+
+function captchaRetryStatePath(request, services) {
+  if (typeof services?.getWorkspacePath !== "function") return undefined;
+  const key = createHash("sha256")
+    .update(`${request?.executionId || "execution"}:${request?.blockId || "block"}`)
+    .digest("hex")
+    .slice(0, 24);
+  return services.getWorkspacePath(`.flow-captcha-retry-${key}.json`);
+}
+
+async function readCaptchaRetryNavigation(request, services) {
+  const statePath = captchaRetryStatePath(request, services);
+  if (!statePath || Number(request?.attempt) <= 1) return undefined;
+  try {
+    const state = JSON.parse(await readFile(statePath, "utf8"));
+    if (
+      state?.executionId !== request.executionId ||
+      state?.blockId !== request.blockId ||
+      state?.failedAttempt !== Number(request.attempt) - 1
+    ) {
+      return undefined;
+    }
+    return { url: validateFlowUrl(state.projectUrl), pinned: true, captchaRetry: true };
+  } catch {
+    return undefined;
+  }
+}
+
+async function saveCaptchaRetryNavigation(request, services, projectUrl) {
+  const statePath = captchaRetryStatePath(request, services);
+  if (!statePath || !projectUrl) return;
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      executionId: request.executionId,
+      blockId: request.blockId,
+      failedAttempt: Number(request.attempt),
+      projectUrl: validateFlowUrl(projectUrl),
+    }),
+    { encoding: "utf8", flag: "w" },
+  );
+}
+
+async function clearCaptchaRetryNavigation(request, services) {
+  const statePath = captchaRetryStatePath(request, services);
+  if (statePath) await rm(statePath, { force: true }).catch(() => undefined);
 }
 
 function defaultProfilePath() {
@@ -634,11 +681,9 @@ async function attachFlowPage(client, startUrl, pinned, signal) {
     /* best effort */
   }
 
-  const targetUrl = String(target?.url || "");
-  const canReuseProject = !pinned && /labs\.google\/fx\/.*tools\/flow\/project\//i.test(targetUrl);
-  if (!canReuseProject || pinned) {
-    await client.send("Page.navigate", { url: startUrl }, sessionId);
-  }
+  // Uma execução sem URL fixada representa um vídeo novo. Sempre voltamos à
+  // landing page para que o bootstrap crie um projeto isolado no Flow.
+  await client.send("Page.navigate", { url: startUrl }, sessionId);
 
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
@@ -885,6 +930,7 @@ async function ensureFlowProjectReady(
   signal,
   shortWait = false,
   trace,
+  createFreshProject = false,
 ) {
   const seconds = shortWait
     ? Math.min(
@@ -898,6 +944,8 @@ async function ensureFlowProjectReady(
   let last = null;
   let lastActionAt = 0;
   let actionCount = 0;
+  let freshProjectRequested = !createFreshProject;
+  let freshProjectRequestedAt = 0;
 
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
@@ -906,11 +954,34 @@ async function ensureFlowProjectReady(
       trace?.(
         `Flow state: projectLike=${Boolean(last?.projectLike)}; promptFound=${Boolean(last?.promptFound)}; newProject=${Boolean(last?.hasNewProject)}; projectLinks=${last?.projectLinks?.length ?? 0}`,
       );
-      if (last?.projectLike && last?.promptFound) return last;
+      if (last?.projectLike && last?.promptFound && freshProjectRequested) return last;
 
       // Durante login/CAPTCHA não fazemos nada: a janela fica disponível para intervenção humana.
       if (!last?.loginLike && !last?.challenge && Date.now() - lastActionAt > 2500) {
-        if (Array.isArray(last?.projectLinks) && last.projectLinks.length > 0) {
+        if (createFreshProject && !freshProjectRequested) {
+          if (settings?.autoCreateProject === false) {
+            throw codedError(
+              "INVALID_CONFIGURATION",
+              "A criação de um projeto novo por execução exige autoCreateProject ativo.",
+            );
+          }
+          const clicked = await clickBootstrapAction(client, sessionId, "new-project");
+          trace?.(
+            `Flow action fresh-project: matched=${Boolean(clicked?.ok)}; text=${String(clicked?.text ?? "").slice(0, 80)}`,
+          );
+          if (clicked?.ok) {
+            freshProjectRequested = true;
+            freshProjectRequestedAt = Date.now();
+            lastActionAt = Date.now();
+            actionCount += 1;
+          }
+        } else if (createFreshProject) {
+          // A rota do projeto novo ainda está carregando. Nunca abra um card
+          // antigo como fallback; se o clique não navegar, tente criar de novo.
+          if (!last?.projectLike && Date.now() - freshProjectRequestedAt >= 15_000) {
+            freshProjectRequested = false;
+          }
+        } else if (Array.isArray(last?.projectLinks) && last.projectLinks.length > 0) {
           const candidate = last.projectLinks[0]?.href;
           if (typeof candidate === "string" && candidate.startsWith("https://labs.google/")) {
             await client.send("Page.navigate", { url: candidate }, sessionId);
@@ -2095,6 +2166,8 @@ export async function execute(request, services) {
   const prompts = normalizePrompts(request?.inputs?.prompts);
   if (prompts.length === 0) return resultError("INVALID_INPUT", "Informe pelo menos um prompt.");
   const referenceImages = normalizeReferenceImages(request?.inputs?.reference_images);
+  const coreBatchIndex = Number.isInteger(request?.batch?.index) ? request.batch.index : undefined;
+  const coreBatchTotal = Number.isInteger(request?.batch?.total) ? request.batch.total : undefined;
 
   const maxPrompts = Number.isInteger(request?.configuration?.maxPrompts)
     ? request.configuration.maxPrompts
@@ -2183,7 +2256,11 @@ export async function execute(request, services) {
         `O perfil ${profileRuntime.accountProfile} ainda não foi salvo. Abra a configuração do Método e use Salvar perfil antes de executar.`,
       );
     }
-    navigation = resolveNavigationTarget(request);
+    navigation =
+      (await readCaptchaRetryNavigation(request, services)) ?? resolveNavigationTarget(request);
+    if (navigation.captchaRetry) {
+      step("Retomando o projeto recém-verificado após CAPTCHA.");
+    }
     chromeExecutables = await resolveChromeExecutables(settings);
     referencePaths = await prepareReferenceImagePaths(
       referenceImages,
@@ -2204,6 +2281,7 @@ export async function execute(request, services) {
   let client;
   let generationDefaults;
   let responseTracker;
+  let activeProjectUrl;
   const files = [];
   const artifacts = [];
   try {
@@ -2253,7 +2331,9 @@ export async function execute(request, services) {
       services.signal,
       false,
       trace,
+      !navigation.pinned,
     );
+    activeProjectUrl = initialProjectState?.url;
     step(`Projeto do Google Flow pronto: ${initialProjectState?.url || "URL não detectada"}.`);
     step("Editor Slate detectado.");
     await uploadReferenceImages(client, sessionId, referencePaths, settings, services.signal, step);
@@ -2263,7 +2343,9 @@ export async function execute(request, services) {
       : requestedConcurrentGenerations;
     const submit = async (task) => {
       if (services.signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-      const label = `Prompt ${task.index + 1}/${prompts.length} (tentativa ${task.attempt}/${retryAttempts + 1})`;
+      const absolutePromptIndex = coreBatchIndex ?? task.index;
+      const promptTotal = coreBatchTotal ?? prompts.length;
+      const label = `Prompt ${absolutePromptIndex + 1}/${promptTotal} (tentativa ${task.attempt}/${retryAttempts + 1})`;
       return {
         completion: (async () => {
           let modelFallbackUsed = false;
@@ -2334,7 +2416,7 @@ export async function execute(request, services) {
               const result = await downloadGeneratedImage(
                 selectedMedia[variantIndex],
                 task.prompt,
-                task.index + 1,
+                absolutePromptIndex + 1,
                 variantIndex + 1,
                 services,
               );
@@ -2400,6 +2482,7 @@ export async function execute(request, services) {
     await generationDefaults.disable();
     await maybeCloseBrowser(client, browserInfo, keepBrowserOpen);
     client = null;
+    await clearCaptchaRetryNavigation(request, services);
 
     return {
       status: "success",
@@ -2441,6 +2524,14 @@ export async function execute(request, services) {
       return resultError("CANCELLED", "Execução cancelada.", false);
     }
 
+    if (
+      cause?.code === "AUTHENTICATION_FAILED" &&
+      /recaptcha|captcha/i.test(String(cause?.message || "")) &&
+      activeProjectUrl
+    ) {
+      await saveCaptchaRetryNavigation(request, services, activeProjectUrl).catch(() => undefined);
+    }
+
     return resultError(
       cause?.code ?? "UPSTREAM_UNAVAILABLE",
       `${cause?.message ?? "Falha na automação do Chrome."}${suffix}`,
@@ -2455,6 +2546,10 @@ export const __test = {
   safeFilename,
   validateFlowUrl,
   resolveNavigationTarget,
+  captchaRetryStatePath,
+  readCaptchaRetryNavigation,
+  saveCaptchaRetryNavigation,
+  clearCaptchaRetryNavigation,
   defaultProfilePath,
   defaultProfilesRootPath,
   normalizeAccountProfile,

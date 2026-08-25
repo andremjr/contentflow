@@ -1,5 +1,14 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, Layers3, Play, Route, Sparkles, Workflow } from "lucide-react";
+import {
+  AlertCircle,
+  Layers3,
+  Play,
+  RotateCcw,
+  Route,
+  Sparkles,
+  Square,
+  Workflow,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,11 +18,14 @@ import { Progress } from "@/components/ui/progress";
 import { PROCESS_META } from "@/lib/domain";
 import {
   ACTIVE_ORCHESTRATOR_STATUSES,
+  STOPPABLE_ORCHESTRATOR_STATUSES,
   orchestratorProgress,
   type ExecutionOrchestratorMode,
 } from "@/lib/execution-orchestrator";
 import {
   startExecutionOrchestrator,
+  resumeExecutionOrchestrator,
+  stopExecutionOrchestrator,
   useChannelExecutionOrchestrator,
   useProjects,
 } from "@/lib/store";
@@ -41,7 +53,11 @@ export function ExecutionOrchestratorPanel({
   const [quantity, setQuantity] = useState(10);
   const [projectPrefix, setProjectPrefix] = useState("Produção");
   const [isStarting, setIsStarting] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
   const isActive = !!orchestrator && ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status);
+  const canStop = !!orchestrator && STOPPABLE_ORCHESTRATOR_STATUSES.has(orchestrator.status);
+  const canResume = orchestrator?.status === "failed";
   const currentProject = useMemo(
     () => projects.find((project) => project.id === orchestrator?.currentProjectId),
     [orchestrator?.currentProjectId, projects],
@@ -68,11 +84,52 @@ export function ExecutionOrchestratorPanel({
     }
   }
 
+  async function stop() {
+    if (!orchestrator) return;
+    if (
+      !window.confirm(
+        "Parar esta fila? A execução atual será cancelada e os projetos serão preservados.",
+      )
+    ) {
+      return;
+    }
+    setIsStopping(true);
+    try {
+      await stopExecutionOrchestrator(orchestrator.id);
+      toast.success("Fila parada", {
+        description: "Nenhuma nova etapa será iniciada. Os projetos criados foram preservados.",
+      });
+    } catch (error) {
+      toast.error("Não foi possível parar a fila", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsStopping(false);
+    }
+  }
+
+  async function resume() {
+    if (!orchestrator) return;
+    setIsResuming(true);
+    try {
+      await resumeExecutionOrchestrator(orchestrator.id);
+      toast.success("Fila retomada", {
+        description: "A execução continuará da última etapa preservada.",
+      });
+    } catch (error) {
+      toast.error("Não foi possível retomar a fila", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsResuming(false);
+    }
+  }
+
   return (
     <section className="overflow-hidden rounded-2xl border border-brand/25 bg-card">
       <div className="border-b border-border/60 bg-brand/5 px-4 py-4 sm:px-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 gap-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 gap-3">
             <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-soft">
               <Workflow className="size-5" />
             </div>
@@ -98,10 +155,37 @@ export function ExecutionOrchestratorPanel({
               </p>
             </div>
           </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {canResume && (
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1.5 text-white"
+                onClick={resume}
+                disabled={isResuming || isStopping}
+              >
+                <RotateCcw className="size-3.5" />
+                {isResuming ? "Retomando…" : "Retomar fila"}
+              </Button>
+            )}
+            {canStop && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={stop}
+                disabled={isStopping || isResuming}
+              >
+                <Square className="size-3.5 fill-current" />
+                {isStopping ? "Parando…" : isActive ? "Parar fila" : "Encerrar fila"}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
-      {isActive && orchestrator ? (
+      {canStop && orchestrator ? (
         <div className="space-y-4 p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
             <div>
@@ -153,6 +237,11 @@ export function ExecutionOrchestratorPanel({
           {orchestrator?.status === "completed" && (
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 text-xs text-emerald-300">
               A última orquestração foi concluída: {orchestrator.quantity} projetos processados.
+            </div>
+          )}
+          {orchestrator?.status === "cancelled" && (
+            <div className="rounded-xl border border-border/70 bg-background/35 px-3 py-2.5 text-xs text-muted-foreground">
+              A última fila foi interrompida. Os projetos criados continuam disponíveis na lista.
             </div>
           )}
 

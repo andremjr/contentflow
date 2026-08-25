@@ -1,8 +1,12 @@
 # Google Flow Browser Images — ContentFlow OS
 
-Versão **1.0.4**.
+Versão **1.0.7**.
 
 Plugin de geração de imagens reais no Google Flow por meio de um Chrome dedicado. A versão 1.0 oferece perfis de conta separados, seleção de modelo, fallback entre modelos da mesma conta, proporção configurável, imagens de referência e captura de múltiplas variantes.
+
+Por padrão, cada execução cria um projeto novo no Flow. Assim, cada vídeo e cada nova tentativa após erro ficam isolados de projetos anteriores. Uma `flowUrl` explicitamente configurada continua funcionando como exceção fixada pelo usuário.
+
+Exceção de CAPTCHA: quando o provedor exige verificação humana, a tentativa imediatamente seguinte retoma somente o projeto novo em que o CAPTCHA foi resolvido. Isso preserva o token de verificação sem misturar vídeos ou projetos anteriores.
 
 ## Garantia de resultado
 
@@ -86,3 +90,7 @@ npm run plugin:kit -- check <pasta-do-plugin>
 npm run plugin:kit -- test-contract <pasta-do-plugin>
 npm run plugin:kit -- test-sandbox <pasta-do-plugin>
 ```
+
+## Perfis e lote resiliente
+
+`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. O núcleo executa a lista de prompts um item por vez, persiste cada imagem com identidade e ordem antes de avançar e troca de perfil somente após falha técnica transitória. CAPTCHA, autenticação, limite, cota e bloqueio pausam a execução e nunca acionam rotação automática.

@@ -46,6 +46,18 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/channel/$channelId/")({ component: ChannelWorkspace });
 
+async function confirmProjectRemoval(project: Project) {
+  if (!confirm(`Excluir "${project.title}"?`)) return;
+  try {
+    await removeProject(project.id);
+    toast.success("Projeto excluído.");
+  } catch (error) {
+    toast.error("Não foi possível excluir o projeto", {
+      description: error instanceof Error ? error.message : undefined,
+    });
+  }
+}
+
 function ChannelWorkspace() {
   const { channelId } = Route.useParams();
   const channel = useChannel(channelId);
@@ -174,31 +186,41 @@ function ChannelWorkspace() {
                 className="h-9 border-border/60 bg-background/60 pl-8 text-xs"
               />
             </div>
-            <div className="inline-flex overflow-hidden rounded-md border border-border/60 bg-background/40 p-0.5">
+            <div
+              role="group"
+              aria-label="Visualização dos projetos"
+              className="inline-flex h-9 w-[7.5rem] items-center gap-0.5 rounded-lg border border-border/70 bg-background/60 p-0.5 shadow-sm"
+            >
               <button
+                type="button"
                 onClick={() => setView("cards")}
                 aria-label="Cards"
+                aria-pressed={view === "cards"}
+                title={view === "cards" ? undefined : "Cards"}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition",
+                  "inline-flex h-8 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-[width,background-color,color] duration-200",
                   view === "cards"
-                    ? "bg-brand/20 text-brand-soft"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "min-w-0 flex-1 bg-brand/20 px-2 text-brand-soft shadow-sm"
+                    : "w-8 shrink-0 text-foreground/70 hover:bg-secondary hover:text-foreground",
                 )}
               >
-                <LayoutGrid className="size-3.5" />
+                <LayoutGrid className="size-4 shrink-0" />
                 {view === "cards" && <span>Cards</span>}
               </button>
               <button
+                type="button"
                 onClick={() => setView("list")}
                 aria-label="List"
+                aria-pressed={view === "list"}
+                title={view === "list" ? undefined : "List"}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition",
+                  "inline-flex h-8 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-[width,background-color,color] duration-200",
                   view === "list"
-                    ? "bg-brand/20 text-brand-soft"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "min-w-0 flex-1 bg-brand/20 px-2 text-brand-soft shadow-sm"
+                    : "w-8 shrink-0 text-foreground/70 hover:bg-secondary hover:text-foreground",
                 )}
               >
-                <List className="size-3.5" />
+                <List className="size-4 shrink-0" />
                 {view === "list" && <span>List</span>}
               </button>
             </div>
@@ -251,7 +273,7 @@ function ProjectGrid({ projects, channel }: { projects: Project[]; channel: Chan
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onSelect={() => {
-                    if (confirm(`Excluir "${p.title}"?`)) removeProject(p.id);
+                    void confirmProjectRemoval(p);
                   }}
                 >
                   <Trash2 className="mr-2 size-3.5" />
@@ -393,7 +415,7 @@ function ProjectTable({ projects, channel }: { projects: Project[]; channel: Cha
                       size="icon"
                       className="size-8 text-muted-foreground hover:text-destructive"
                       onClick={() => {
-                        if (confirm(`Excluir "${p.title}"?`)) removeProject(p.id);
+                        void confirmProjectRemoval(p);
                       }}
                     >
                       <Trash2 className="size-3.5" />

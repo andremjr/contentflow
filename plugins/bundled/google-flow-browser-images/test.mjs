@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { __test } from "./handler.mjs";
 
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.0.4");
+assert.equal(manifest.version, "1.0.7");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
@@ -40,6 +42,27 @@ assert.deepEqual(__test.normalizeReferenceImages([{ id: "a" }, [{ id: "b" }]]), 
 ]);
 assert.equal(__test.normalizeAccountProfile("canal_01"), "canal_01");
 assert.throws(() => __test.normalizeAccountProfile("../perfil"), /accountProfile/);
+
+const retryDirectory = await mkdtemp(join(tmpdir(), "contentflow-flow-retry-"));
+const retryServices = { getWorkspacePath: (relativePath) => join(retryDirectory, relativePath) };
+const failedRequest = { executionId: "execution-1", blockId: "flow-1", attempt: 1 };
+await __test.saveCaptchaRetryNavigation(
+  failedRequest,
+  retryServices,
+  "https://labs.google/fx/pt/tools/flow/project/project-1",
+);
+const retryNavigation = await __test.readCaptchaRetryNavigation(
+  { ...failedRequest, attempt: 2 },
+  retryServices,
+);
+assert.equal(retryNavigation?.captchaRetry, true);
+assert.match(retryNavigation?.url ?? "", /\/tools\/flow\/project\/project-1/);
+assert.equal(
+  await __test.readCaptchaRetryNavigation({ ...failedRequest, attempt: 3 }, retryServices),
+  undefined,
+);
+await __test.clearCaptchaRetryNavigation(failedRequest, retryServices);
+await rm(retryDirectory, { recursive: true, force: true });
 
 const defaultRuntime = __test.resolveProfileRuntime({
   configuration: { accountProfile: "default" },
@@ -146,6 +169,9 @@ assert.equal(submissions, 1, "failFast não deve enviar os prompts restantes");
 
 const source = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 assert.ok(source.includes("Modo Automático do Flow"));
+assert.ok(source.includes("fresh-project"));
+assert.ok(source.includes("!navigation.pinned"));
+assert.ok(source.includes("Retomando o projeto recém-verificado após CAPTCHA"));
 assert.ok(source.includes("DOM.setFileInputFiles"));
 assert.ok(source.includes("limite do Nano Banana Pro atingido"));
 assert.ok(!source.includes("createFallbackArtifact"));
@@ -153,5 +179,5 @@ assert.ok(!source.includes("FALLBACK_IMAGE_BASE64"));
 await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), /ENOENT/);
 
 console.log(
-  "OK: v1.0.4 usa perfis dedicados, referências, modelos configuráveis e capacidade exclusiva de imagem.",
+  "OK: v1.0.7 isola projetos, aceita perfis de fallback e expõe lote sequencial ao núcleo.",
 );

@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.google-flow-batch-images",
   "name": "Google Flow Browser Images",
-  "version": "1.0.4",
+  "version": "1.0.7",
   "description": "Gera imagens reais no Google Flow com perfis de conta dedicados, modelos configuráveis, fallback entre modelos, referências visuais e fila segura sem imagens substitutas.",
   "author": "Local user",
   "license": "MIT",
@@ -21,7 +21,8 @@
     "configurationKey": "accountProfile",
     "label": "Salvar perfil",
     "description": "Abre o Google Flow para login e fecha o Chrome após validar a conta.",
-    "prepareTimeoutMs": 900000
+    "prepareTimeoutMs": 900000,
+    "fallbackConfigurationKey": "fallbackAccountProfiles"
   },
   "settingsSchema": {
     "type": "object",
@@ -89,12 +90,12 @@
       "promptSelector": {
         "type": "string",
         "default": "",
-        "description": "Override opcional. A v0.3.3 detecta automaticamente o editor Slate pelo placeholder “O que você quer criar?”."
+        "description": "Override opcional. A implementação atual detecta automaticamente o editor Slate pelo placeholder “O que você quer criar?”."
       },
       "generateSelector": {
         "type": "string",
         "default": "",
-        "description": "Override opcional. A v0.3.3 detecta automaticamente o botão pelo span “Criar”/“Gerar”."
+        "description": "Override opcional. A implementação atual detecta automaticamente o botão pelo span “Criar”/“Gerar”."
       },
       "typingChunkSize": {
         "type": "integer",
@@ -166,7 +167,12 @@
         "mode": "immediate",
         "defaultTimeoutMs": 900000,
         "supportsCancellation": true,
-        "maxConcurrency": 1
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "inputPort": "prompts",
+          "outputPort": "images",
+          "mode": "sequential"
+        }
       },
       "sideEffects": ["external_write", "local_artifact", "subprocess"],
       "cost": {
@@ -188,14 +194,31 @@
             "default": "default",
             "description": "Use a mesma chave para reutilizar a conta e uma chave diferente por canal para separar conta, projetos, personagens e referências. O plugin nunca troca de conta automaticamente por cota."
           },
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O núcleo troca somente após UPSTREAM_UNAVAILABLE, TIMEOUT ou JOB_FAILED; CAPTCHA, autenticação, bloqueio e cota sempre pausam."
+          },
           "imageModel": {
             "type": "string",
             "title": "Modelo de imagem",
             "default": "flow_auto",
             "oneOf": [
-              { "const": "flow_auto", "title": "Automático do Flow (recomendado)" },
-              { "const": "nano_banana", "title": "Nano Banana" },
-              { "const": "nano_banana_pro", "title": "Nano Banana Pro" }
+              {
+                "const": "flow_auto",
+                "title": "Automático do Flow (recomendado)"
+              },
+              {
+                "const": "nano_banana",
+                "title": "Nano Banana"
+              },
+              {
+                "const": "nano_banana_pro",
+                "title": "Nano Banana Pro"
+              }
             ],
             "description": "Automático preserva a seleção e os fallbacks nativos liberados pela conta."
           },
@@ -210,10 +233,22 @@
             "title": "Proporção",
             "default": "flow_current",
             "oneOf": [
-              { "const": "flow_current", "title": "Atual do Flow" },
-              { "const": "landscape", "title": "Paisagem" },
-              { "const": "portrait", "title": "Retrato" },
-              { "const": "square", "title": "Quadrada" }
+              {
+                "const": "flow_current",
+                "title": "Atual do Flow"
+              },
+              {
+                "const": "landscape",
+                "title": "Paisagem"
+              },
+              {
+                "const": "portrait",
+                "title": "Retrato"
+              },
+              {
+                "const": "square",
+                "title": "Quadrada"
+              }
             ]
           },
           "maxPrompts": {
