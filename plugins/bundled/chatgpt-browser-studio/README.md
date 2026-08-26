@@ -37,6 +37,10 @@ Cada bloco possui `accountProfile`. Use aliases como `canal-a`, `canal-b` e `can
 
 Depois de informar um alias no construtor do Método, use **Salvar perfil**. O Chrome dedicado abre para o login, o plugin aguarda a área real do ChatGPT, grava a validação no próprio perfil e fecha o navegador. A execução normal recusa perfis ainda não preparados e não digita prompts em páginas de login, CAPTCHA ou reautenticação.
 
+Por padrão, o perfil continua dedicado. Para reutilizar uma pasta Chrome escolhida conscientemente, configure `profilesBasePath`, selecione o alias correspondente e ative `allowExistingChromeProfile`. Feche outras instâncias que estejam usando o mesmo perfil antes de preparar ou executar.
+
+A espera de respostas combina `MutationObserver` com o polling anterior como watchdog e mantém o timeout máximo. O envio usa mouse/teclado via CDP, confirma o texto lido pelo editor e só recorre à digitação caractere a caractere quando a inserção rápida não é preservada integralmente.
+
 ## Anexos e artifacts
 
 O plugin aceita somente `StoredFile` liberado pelo núcleo e resolve cada entrada por `services.resolveInputFile()`. Caminhos arbitrários e URLs remotas não substituem arquivos autorizados.

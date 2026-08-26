@@ -4,7 +4,7 @@ Gerenciador estratégico de métodos para organizar e executar a produção de v
 
 ## Estado atual
 
-A versão `0.4.1` mantém os 8 Processos Universais, os 4 Blocos Essenciais e os 3 Operadores definidos na arquitetura. O aplicativo inclui:
+A versão `0.4.2` mantém os 8 Processos Universais, os 4 Blocos Essenciais e os 3 Operadores definidos na arquitetura. O aplicativo inclui:
 
 - execução linear de Métodos com pausa humana, plugins automáticos, outputs universais e histórico do canal;
 - Orquestrador de Projetos nos modos ponta a ponta e lote por processo, com fila persistente, parada, correção e retomada;

@@ -104,6 +104,7 @@ const capabilitySchema = z
   .object({
     id: z.string().min(1).max(100).regex(identifier),
     operator: z.enum(["IA", "Código"]),
+    instructionUsage: z.enum(["required", "optional", "not_applicable"]).optional(),
     blockTypes: z
       .array(z.enum(["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"]))
       .min(1)

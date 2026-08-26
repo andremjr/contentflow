@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.chatgpt-browser-studio",
   "name": "ChatGPT Browser Studio",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Automação modular do ChatGPT web para criar, pesquisar, escolher, validar, analisar arquivos e gerar imagens.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -37,6 +37,11 @@
         "type": "string",
         "default": "",
         "description": "Pasta-base opcional dos perfis ChatGPT. Vazio usa o workspace autorizado do plugin."
+      },
+      "allowExistingChromeProfile": {
+        "type": "boolean",
+        "default": false,
+        "description": "Permite usar uma pasta de perfil Chrome existente escolhida explicitamente. Feche outras instâncias que estejam usando o mesmo perfil."
       },
       "remoteDebuggingPort": {
         "type": "integer",
@@ -92,6 +97,7 @@
     {
       "id": "generate-text-in-browser",
       "operator": "IA",
+      "instructionUsage": "optional",
       "blockTypes": ["CRIAR"],
       "processTypes": [
         "theme",

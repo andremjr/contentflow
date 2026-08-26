@@ -13,6 +13,8 @@ Plugin Browser Studio para gerar texto, pesquisar a web e criar imagens e vídeo
 
 Cada `accountProfile` usa um perfil Chrome dedicado dentro do workspace persistente concedido pelo ContentFlow OS. Use **Salvar perfil** para fazer login de forma visível. O plugin não copia cookies, não alterna contas para contornar cotas e não tenta resolver CAPTCHA. O Chrome é fechado ao final por padrão (`keepBrowserOpen=false`).
 
+Para reutilizar uma pasta Chrome escolhida explicitamente, configure `profilesBasePath`, selecione o alias correspondente e ative `allowExistingChromeProfile`; o modo dedicado permanece como padrão. Feche qualquer Chrome que já esteja usando o perfil. A captura de respostas combina `MutationObserver`, polling de segurança, timeout máximo e confirmação do prompt, com digitação por eventos como fallback.
+
 Prompts e referências são enviados à xAI. Arquivos gerados são capturados da página, previews borrados e presets são rejeitados, e o resultado final é gravado somente na área de saída autorizada. Limites, assinatura e disponibilidade dependem da conta conectada.
 
 ## Validação

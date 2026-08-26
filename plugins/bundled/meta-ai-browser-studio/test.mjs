@@ -12,6 +12,7 @@ const manifest = JSON.parse(
 function request(overrides = {}) {
   return {
     capabilityId: overrides.capabilityId ?? "generate-text-in-browser",
+    resolvedInstruction: overrides.resolvedInstruction,
     configuration: {
       promptTemplate: "{{BLOCK_INSTRUCTIONS}}\nTema: {{CONTENT}}\nCanal: {{CHANNEL_NAME}}",
       generationMode: "single",
@@ -36,8 +37,9 @@ function request(overrides = {}) {
 
 test("manifesto declara capabilities reais de texto, imagem e vídeo", () => {
   assert.equal(manifest.id, "local.contentflow.meta-ai-browser-studio");
-  assert.equal(manifest.version, "0.1.3");
+  assert.equal(manifest.version, "0.1.4");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
+  assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
   assert.deepEqual(
     manifest.capabilities.map((item) => item.id),
     ["generate-text-in-browser", "generate-image-in-browser", "generate-video-in-browser"],
@@ -49,6 +51,25 @@ test("manifesto declara capabilities reais de texto, imagem e vídeo", () => {
     "process",
   ]);
   assert.deepEqual(manifest.secretKeys ?? [], []);
+});
+
+test("modela as fases observáveis da resposta", () => {
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: false, generating: false, stablePolls: 0 }),
+    "awaiting_response",
+  );
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: true, generating: true, stablePolls: 2 }),
+    "streaming",
+  );
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: true, generating: false, stablePolls: 1 }),
+    "stabilizing",
+  );
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: true, generating: false, stablePolls: 2 }),
+    "completed",
+  );
 });
 
 test("isola contas por alias e porta", () => {

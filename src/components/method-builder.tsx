@@ -23,6 +23,7 @@ import {
   Bot,
   Braces,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CircleUserRound,
   Code2,
@@ -58,6 +59,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -100,7 +109,13 @@ import {
 } from "@/lib/method-file";
 import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
 import { createChannelHistoryRecordFields, isChannelHistoryValueType } from "@/lib/channel-history";
-import type { JsonSchema, PluginManifest, PluginProfileSetup } from "@/lib/plugin-contract";
+import { instructionInputKey, instructionInputLabel } from "@/lib/instruction-template";
+import type {
+  JsonSchema,
+  PluginCapability,
+  PluginManifest,
+  PluginProfileSetup,
+} from "@/lib/plugin-contract";
 import { setChannelMethod, useChannel, useChannels, useLibraryCollections } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -828,7 +843,7 @@ export function MethodBuilder({
           <DialogHeader className="sr-only">
             <DialogTitle>Configurar bloco de ação</DialogTitle>
             <DialogDescription>
-              Edite operador, instruções, entradas, saídas e execução deste bloco.
+              Configure o que o bloco recebe, faz e entrega, além de quem executa a ação.
             </DialogDescription>
           </DialogHeader>
           {selectedBlock && (
@@ -963,6 +978,8 @@ function MethodBlockCardContent({
       ? `Coleção: ${collectionName}`
       : block.instructions?.trim() || "Sem instruções";
   const outputCount = block.outputs?.length ?? 0;
+  const inputLabels = (block.inputs ?? []).map(instructionInputLabel).filter(Boolean);
+  const outputLabels = (block.outputs ?? []).map(instructionInputLabel).filter(Boolean);
 
   return (
     <>
@@ -984,13 +1001,19 @@ function MethodBlockCardContent({
         <span className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
           {summary}
         </span>
+        {(inputLabels.length > 0 || outputLabels.length > 0) && (
+          <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+            {inputLabels.length > 0 && <span>Usa: {inputLabels.join(" · ")}</span>}
+            {outputLabels.length > 0 && <span>Entrega: {outputLabels.join(" · ")}</span>}
+          </span>
+        )}
         <span className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <OperatorIcon className="size-3" />
             {operator.label}
           </span>
           <span>
-            {outputCount} {outputCount === 1 ? "saída" : "saídas"}
+            {outputCount} {outputCount === 1 ? "entrega" : "entregas"}
           </span>
           {block.plugin && <span>{block.plugin.pluginId}</span>}
         </span>
@@ -1072,6 +1095,68 @@ function BlockEditor({
     (capability) => capability.id === block.plugin?.capabilityId,
   );
   const configProperties = selectedCapability?.blockConfigSchema.properties ?? {};
+  const profileConfigurationKey = selectedPlugin?.manifest.profileSetup?.configurationKey;
+  const generationModeSchema = configProperties.generationMode;
+  const generationModeOptions = [
+    ...(generationModeSchema?.enum ?? []),
+    ...(generationModeSchema?.oneOf?.map((option) => option.const) ?? []),
+  ];
+  const supportsOutlineSequence =
+    generationModeOptions.includes("single") && generationModeOptions.includes("outline_sequence");
+  const generationMode = block.plugin?.configuration.generationMode;
+  const simpleGenerationMode =
+    generationMode === "single" || generationMode === "outline_sequence"
+      ? generationMode
+      : "advanced";
+  const primaryConfigurationEntries = Object.entries(configProperties).filter(([key]) =>
+    [profileConfigurationKey, "model", "voice_id"].filter(Boolean).includes(key),
+  );
+  const advancedConfigurationEntries = Object.entries(configProperties).filter(
+    ([key]) =>
+      !(supportsOutlineSequence && key === "generationMode") &&
+      !primaryConfigurationEntries.some(([primaryKey]) => primaryKey === key),
+  );
+
+  const renderConfigurationField = ([key, schema]: [string, JsonSchema]) => {
+    const profileSetup =
+      selectedPlugin?.manifest.profileSetup?.configurationKey === key
+        ? selectedPlugin.manifest.profileSetup
+        : undefined;
+    return (
+      <div key={key} className={cn(profileSetup && "grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]")}>
+        <PluginConfigurationField
+          propertyKey={key}
+          schema={schema}
+          value={block.plugin?.configuration[key]}
+          options={
+            selectedPlugin?.id === "official-openai-gpt" && key === "model" && openAIModels.length
+              ? openAIModels.map((model) => ({ value: model.id, label: model.name }))
+              : selectedPlugin?.id === "official-anthropic-claude" &&
+                  key === "model" &&
+                  anthropicModels.length
+                ? anthropicModels.map((model) => ({ value: model.id, label: model.name }))
+                : undefined
+          }
+          onChange={(value) =>
+            onChange({
+              plugin: {
+                pluginId: block.plugin!.pluginId,
+                capabilityId: block.plugin!.capabilityId,
+                configuration: { ...block.plugin!.configuration, [key]: value },
+              },
+            })
+          }
+        />
+        {profileSetup && block.plugin && (
+          <ProfileSetupControl
+            pluginId={block.plugin.pluginId}
+            profileSetup={profileSetup}
+            configuration={block.plugin.configuration}
+          />
+        )}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -1110,15 +1195,15 @@ function BlockEditor({
         />
       </div>
 
-      <div className="mt-4 space-y-1.5">
-        <Label>Instruções para o operador</Label>
-        <Textarea
-          value={block.instructions ?? ""}
-          onChange={(event) => onChange({ instructions: event.target.value })}
-          placeholder="Explique o que deve ser feito e qual resultado é esperado."
-          rows={4}
-        />
-      </div>
+      <InstructionEditor
+        block={block}
+        capability={selectedCapability}
+        methodBlocks={methodBlocks}
+        blockIndex={index}
+        processType={processType}
+        channelMethods={channelMethods}
+        onChange={onChange}
+      />
 
       <div className="mt-5 space-y-1.5">
         <Label>Operador responsável</Label>
@@ -1219,7 +1304,7 @@ function BlockEditor({
       {block.operator !== "Humano" && (
         <div className="mt-5 space-y-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
           <div className="space-y-1.5">
-            <Label>Plugin executor</Label>
+            <Label>Executado por</Label>
             {compatibleCapabilities.length ? (
               <Select
                 value={block.plugin ? `${block.plugin.pluginId}::${block.plugin.capabilityId}` : ""}
@@ -1290,54 +1375,60 @@ function BlockEditor({
 
           {selectedCapability && (
             <div className="space-y-3">
-              {Object.entries(configProperties).map(([key, schema]) => {
-                const profileSetup =
-                  selectedPlugin?.manifest.profileSetup?.configurationKey === key
-                    ? selectedPlugin.manifest.profileSetup
-                    : undefined;
-                return (
-                  <div
-                    key={key}
-                    className={cn(profileSetup && "grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]")}
-                  >
-                    <PluginConfigurationField
-                      propertyKey={key}
-                      schema={schema}
-                      value={block.plugin?.configuration[key]}
-                      options={
-                        selectedPlugin?.id === "official-openai-gpt" &&
-                        key === "model" &&
-                        openAIModels.length
-                          ? openAIModels.map((model) => ({ value: model.id, label: model.name }))
-                          : selectedPlugin?.id === "official-anthropic-claude" &&
-                              key === "model" &&
-                              anthropicModels.length
-                            ? anthropicModels.map((model) => ({
-                                value: model.id,
-                                label: model.name,
-                              }))
-                            : undefined
-                      }
-                      onChange={(value) =>
-                        onChange({
-                          plugin: {
-                            pluginId: block.plugin!.pluginId,
-                            capabilityId: block.plugin!.capabilityId,
-                            configuration: { ...block.plugin!.configuration, [key]: value },
+              {primaryConfigurationEntries.map(renderConfigurationField)}
+              {supportsOutlineSequence && block.plugin && (
+                <div className="space-y-1.5">
+                  <Label>Como executar</Label>
+                  <Select
+                    value={simpleGenerationMode}
+                    onValueChange={(value) => {
+                      if (value !== "single" && value !== "outline_sequence") return;
+                      onChange({
+                        plugin: {
+                          pluginId: block.plugin!.pluginId,
+                          capabilityId: block.plugin!.capabilityId,
+                          configuration: {
+                            ...block.plugin!.configuration,
+                            generationMode: value,
                           },
-                        })
-                      }
-                    />
-                    {profileSetup && block.plugin && (
-                      <ProfileSetupControl
-                        pluginId={block.plugin.pluginId}
-                        profileSetup={profileSetup}
-                        configuration={block.plugin.configuration}
-                      />
-                    )}
+                        },
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single">Uma vez</SelectItem>
+                      <SelectItem value="outline_sequence">
+                        Uma vez para cada item da outline
+                      </SelectItem>
+                      {simpleGenerationMode === "advanced" && (
+                        <SelectItem value="advanced" disabled>
+                          Modo avançado existente
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    {simpleGenerationMode === "outline_sequence"
+                      ? "A quantidade de execuções acompanha os itens recebidos da outline, mantendo a mesma conversa."
+                      : simpleGenerationMode === "advanced"
+                        ? "A configuração anterior foi preservada e continua disponível nas opções avançadas."
+                        : "Executa este bloco uma única vez para o vídeo."}
+                  </p>
+                </div>
+              )}
+              {advancedConfigurationEntries.length > 0 && (
+                <details className="rounded-lg border border-border/70 bg-card/60 p-3">
+                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                    Configurações avançadas do executor ({advancedConfigurationEntries.length})
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {advancedConfigurationEntries.map(renderConfigurationField)}
                   </div>
-                );
-              })}
+                </details>
+              )}
               {selectedPlugin?.id === "official-openai-gpt" && (
                 <p className="text-[11px] text-muted-foreground">
                   {openAIModels.length
@@ -1355,6 +1446,262 @@ function BlockEditor({
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function InstructionEditor({
+  block,
+  capability,
+  methodBlocks,
+  blockIndex,
+  processType,
+  channelMethods,
+  onChange,
+}: {
+  block: ActionBlock;
+  capability?: PluginCapability;
+  methodBlocks: ActionBlock[];
+  blockIndex: number;
+  processType: UniversalProcess;
+  channelMethods: Record<UniversalProcess, ProcessMethod>;
+  onChange: (patch: Partial<ActionBlock>) => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const usage = capability?.instructionUsage ?? "optional";
+  const label =
+    block.operator === "IA" && usage !== "not_applicable"
+      ? "Prompt do bloco"
+      : block.operator === "Humano"
+        ? "Orientação para a pessoa"
+        : usage === "not_applicable"
+          ? "Observação do bloco"
+          : "Instrução da operação";
+  const description =
+    block.operator === "IA" && usage === "required"
+      ? "Esta é a instrução principal enviada ao executor. Use variáveis para inserir as informações recebidas pelo bloco."
+      : usage === "not_applicable"
+        ? "Opcional. Esta capability executa uma operação definida e não usa este texto como prompt."
+        : "Explique o que deve ser feito e qual resultado é esperado.";
+  const contextVariables = [
+    { label: "Nome do projeto", token: "{{project.title}}" },
+    { label: "Prazo do projeto", token: "{{project.deadline}}" },
+    { label: "Nome do canal", token: "{{channel.name}}" },
+    { label: "Idioma do canal", token: "{{channel.language}}" },
+    { label: "Nicho do canal", token: "{{channel.niche}}" },
+    { label: "Nome do bloco", token: "{{block.name}}" },
+    { label: "Tipo de ação", token: "{{block.type}}" },
+  ];
+  const inputVariables = (block.inputs ?? []).map((input) => ({
+    label: instructionInputLabel(input),
+    token: `{{inputs.${instructionInputKey(input)}}}`,
+  }));
+  const parameterVariables = (block.parameters ?? []).map((parameter) => ({
+    label: parameter.label,
+    token: `{{parameters.${parameter.key}}}`,
+  }));
+  const acceptsInputType = (type: HumanFieldType) =>
+    !capability || capability.inputPorts.some((port) => port.acceptedTypes.includes(type));
+  const isAlreadyConnected = (candidate: BlockInputBinding) =>
+    (block.inputs ?? []).some(
+      (input) =>
+        input.source === candidate.source &&
+        input.sourceProcessType === candidate.sourceProcessType &&
+        input.blockId === candidate.blockId &&
+        input.sourceKey === candidate.sourceKey,
+    );
+  const toAvailableInput = (input: Omit<BlockInputBinding, "id">, context: string, id: string) => {
+    const normalizedInput: BlockInputBinding = { ...input, id };
+    return {
+      id,
+      context,
+      input: normalizedInput,
+      label: instructionInputLabel(normalizedInput),
+    };
+  };
+  const previousBlockInputs = methodBlocks.slice(0, blockIndex).flatMap((sourceBlock) =>
+    (sourceBlock.outputs ?? [])
+      .filter((output) => acceptsInputType(output.type))
+      .map((output) =>
+        toAvailableInput(
+          {
+            label: instructionInputLabel(output),
+            type: output.type,
+            source: "previous_block",
+            sourceKey: output.key,
+            blockId: sourceBlock.id,
+            recordFields: output.recordFields,
+            presentation: output.presentation,
+          },
+          `Neste processo · ${sourceBlock.name ?? sourceBlock.type}`,
+          `${processType}::${sourceBlock.id}::${output.key}`,
+        ),
+      ),
+  );
+  const previousProcessInputs = PROCESS_ORDER.slice(0, PROCESS_ORDER.indexOf(processType)).flatMap(
+    (sourceProcessType) => {
+      const officialOutput = createProcessOutputFields(sourceProcessType)[0];
+      const sources = [
+        {
+          blockId: "__process_output__",
+          blockLabel: "Resultado oficial",
+          output: officialOutput,
+        },
+        ...(channelMethods[sourceProcessType]?.blocks ?? []).flatMap((sourceBlock) =>
+          (sourceBlock.outputs ?? []).map((output) => ({
+            blockId: sourceBlock.id,
+            blockLabel: sourceBlock.name ?? sourceBlock.type,
+            output,
+          })),
+        ),
+      ];
+      return sources
+        .filter(({ output }) => acceptsInputType(output.type))
+        .map(({ blockId, blockLabel, output }) =>
+          toAvailableInput(
+            {
+              label: instructionInputLabel(output),
+              type: output.type,
+              source: "previous_process",
+              sourceKey: output.key,
+              sourceProcessType,
+              blockId,
+              recordFields: output.recordFields,
+              presentation: output.presentation,
+            },
+            `${PROCESS_META[sourceProcessType].label} · ${blockLabel}`,
+            `${sourceProcessType}::${blockId}::${output.key}`,
+          ),
+        );
+    },
+  );
+  const availableInputs = [...previousBlockInputs, ...previousProcessInputs].filter(
+    ({ input }) => !isAlreadyConnected(input),
+  );
+
+  const insertVariable = (token: string, input?: BlockInputBinding) => {
+    const current = block.instructions ?? "";
+    const element = textareaRef.current;
+    const start = element?.selectionStart ?? current.length;
+    const end = element?.selectionEnd ?? start;
+    const prefix = start > 0 && !/\s$/.test(current.slice(0, start)) ? " " : "";
+    const suffix = end < current.length && !/^\s/.test(current.slice(end)) ? " " : "";
+    const next = `${current.slice(0, start)}${prefix}${token}${suffix}${current.slice(end)}`;
+    onChange({
+      instructions: next,
+      ...(input
+        ? { inputs: [...(block.inputs ?? []), { ...input, id: uid(`${block.id}-input`) }] }
+        : {}),
+    });
+    window.setTimeout(() => {
+      const cursor = start + prefix.length + token.length + suffix.length;
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const insertAvailableInput = (candidate: (typeof availableInputs)[number]) => {
+    const input = { ...candidate.input, label: candidate.label };
+    insertVariable(`{{inputs.${instructionInputKey(input)}}}`, input);
+  };
+
+  return (
+    <div className="mt-4 space-y-2">
+      <div className="space-y-1">
+        <Label>{label}</Label>
+        <p className="text-[11px] text-muted-foreground">{description}</p>
+      </div>
+      <Textarea
+        ref={textareaRef}
+        value={block.instructions ?? ""}
+        onChange={(event) => onChange({ instructions: event.target.value })}
+        placeholder="Explique o que deve ser feito e qual resultado é esperado."
+        rows={5}
+      />
+      {usage !== "not_applicable" && (
+        <div className="space-y-1.5">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 text-xs">
+                <Braces className="size-3.5" /> Inserir variável
+                <ChevronDown className="size-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-80">
+              {inputVariables.length > 0 && (
+                <>
+                  <DropdownMenuLabel>Informações usadas pelo bloco</DropdownMenuLabel>
+                  {inputVariables.map((variable) => (
+                    <DropdownMenuItem
+                      key={`${variable.token}-${variable.label}`}
+                      onSelect={() => insertVariable(variable.token)}
+                    >
+                      <Braces /> {variable.label}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                </>
+              )}
+
+              {availableInputs.length > 0 && (
+                <>
+                  <DropdownMenuLabel>Entregas anteriores disponíveis</DropdownMenuLabel>
+                  {availableInputs.map((candidate) => (
+                    <DropdownMenuItem
+                      key={candidate.id}
+                      className="items-start"
+                      onSelect={() => insertAvailableInput(candidate)}
+                    >
+                      <Braces className="mt-0.5" />
+                      <span className="min-w-0">
+                        <span className="block truncate">{candidate.label}</span>
+                        <span className="block truncate text-[10px] text-muted-foreground">
+                          {candidate.context}
+                        </span>
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                </>
+              )}
+
+              {parameterVariables.length > 0 && (
+                <>
+                  <DropdownMenuLabel>Parâmetros do Método</DropdownMenuLabel>
+                  {parameterVariables.map((variable) => (
+                    <DropdownMenuItem
+                      key={`${variable.token}-${variable.label}`}
+                      onSelect={() => insertVariable(variable.token)}
+                    >
+                      <Braces /> {variable.label}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                </>
+              )}
+
+              <DropdownMenuLabel>Projeto, canal e bloco</DropdownMenuLabel>
+              {contextVariables.map((variable) => (
+                <DropdownMenuItem
+                  key={`${variable.token}-${variable.label}`}
+                  onSelect={() => insertVariable(variable.token)}
+                >
+                  <Braces /> {variable.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <p className="text-[10px] text-muted-foreground">
+            Ao usar uma entrega anterior, ela também é conectada automaticamente como entrada deste
+            bloco.
+          </p>
+        </div>
+      )}
+      {usage === "required" && !block.instructions?.trim() && (
+        <p className="text-[11px] text-destructive">
+          Este executor exige um prompt antes de iniciar o bloco.
+        </p>
       )}
     </div>
   );
@@ -1897,9 +2244,11 @@ function DataContractEditor({
     <>
       <div className="mt-6 flex items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold">Dados de entrada</h3>
+          <h3 className="text-sm font-semibold">
+            {block.type === "BUSCAR" ? "Informações para a busca" : "Informações usadas"}
+          </h3>
           <p className="text-[11px] text-muted-foreground">
-            O que esta ação recebe. A saída compatível mais recente é conectada automaticamente.
+            O que esta ação recebe. Uma entrega compatível pode ser conectada automaticamente.
           </p>
         </div>
         <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
@@ -1934,7 +2283,9 @@ function DataContractEditor({
 
       <div className="mt-6 flex items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold">Dados de saída</h3>
+          <h3 className="text-sm font-semibold">
+            {block.type === "BUSCAR" ? "Resultados encontrados" : "Entregas"}
+          </h3>
           <p className="text-[11px] text-muted-foreground">
             O que esta ação deve entregar para o método continuar.
           </p>
@@ -1972,7 +2323,7 @@ function DataContractEditor({
         ))}
         {outputs.length === 0 && (
           <div className="rounded-lg border border-dashed border-destructive/50 p-4 text-center text-[11px] text-destructive">
-            Adicione ao menos uma saída para concluir esta ação.
+            Adicione ao menos uma entrega para concluir esta ação.
           </div>
         )}
       </div>
@@ -2050,7 +2401,7 @@ function InputBindingEditor({
     <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(150px,0.8fr)_32px] items-center gap-2">
         <Input
-          value={input.label}
+          value={instructionInputLabel(input)}
           onChange={(event) => onChange({ label: event.target.value })}
           placeholder="Nome da entrada"
           className="h-8 text-xs"
@@ -2071,7 +2422,7 @@ function InputBindingEditor({
       </div>
 
       <div className="space-y-1">
-        <Label className="text-[10px] text-muted-foreground">Tipo técnico do dado</Label>
+        <Label className="text-[10px] text-muted-foreground">Formato</Label>
         <Select
           value={input.type ?? "text"}
           disabled={input.source === "channel_history"}
@@ -2134,6 +2485,7 @@ function InputBindingEditor({
                 const output = selected?.output;
                 onChange({
                   source: "previous_process",
+                  label: output ? instructionInputLabel(output) : input.label,
                   sourceKey: output?.key,
                   sourceProcessType: selected?.processType,
                   blockId: selected?.blockId,
@@ -2214,6 +2566,7 @@ function InputBindingEditor({
                 );
                 const output = selected?.output;
                 onChange({
+                  label: output ? instructionInputLabel(output) : input.label,
                   sourceProcessType: selected?.processType,
                   blockId: selected?.blockId,
                   sourceKey: output?.key,
@@ -2230,7 +2583,7 @@ function InputBindingEditor({
                 {previousDeliverySources.map((source) => (
                   <SelectItem key={source.id} value={source.id}>
                     {PROCESS_META[source.processType].label} / {source.blockLabel} /{" "}
-                    {source.output.label}
+                    {instructionInputLabel(source.output)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -2267,7 +2620,7 @@ function InputBindingEditor({
                   {channelHistorySources.map((source) => (
                     <SelectItem key={source.id} value={source.id}>
                       {PROCESS_META[source.processType].label} / {source.blockLabel} /{" "}
-                      {source.output.label}
+                      {instructionInputLabel(source.output)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2351,6 +2704,7 @@ function InputBindingEditor({
             onValueChange={(sourceKey) => {
               const output = sourceBlock?.outputs?.find((candidate) => candidate.key === sourceKey);
               onChange({
+                label: output ? instructionInputLabel(output) : input.label,
                 sourceKey: sourceKey === "automatic" ? undefined : sourceKey,
                 type: output?.type ?? input.type,
                 presentation: output?.presentation ?? input.presentation,
@@ -2365,7 +2719,7 @@ function InputBindingEditor({
               <SelectItem value="automatic">Saída compatível</SelectItem>
               {(sourceBlock?.outputs ?? []).map((output) => (
                 <SelectItem key={output.id} value={output.key}>
-                  {output.label}
+                  {instructionInputLabel(output)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -2396,9 +2750,9 @@ function OutputFieldEditor({
     <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(150px,0.8fr)_32px] items-center gap-2">
         <Input
-          value={field.label}
+          value={instructionInputLabel(field)}
           onChange={(event) => onChange({ label: event.target.value })}
-          placeholder="Nome da saída"
+          placeholder="Nome da entrega"
           className="h-8 text-xs"
         />
         <PresentationSelector
@@ -2416,7 +2770,7 @@ function OutputFieldEditor({
         </Button>
       </div>
       <div className="space-y-1">
-        <Label className="text-[10px] text-muted-foreground">Tipo técnico do dado</Label>
+        <Label className="text-[10px] text-muted-foreground">Formato</Label>
         <Select
           value={field.type}
           onValueChange={(type) => {

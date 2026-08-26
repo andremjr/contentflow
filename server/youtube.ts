@@ -81,7 +81,109 @@ function readFirstGroup(html: string, pattern: RegExp) {
   return html.match(pattern)?.[1] ?? "";
 }
 
-function readSubscriberCount(html: string, handle: string) {
+export function readSubscriberCount(html: string, handle: string) {
+  return readStructuredSubscriberCount(html, handle) ?? readLegacySubscriberCount(html, handle);
+}
+
+function readStructuredSubscriberCount(html: string, handle: string) {
+  const marker = '"contentMetadataViewModel":';
+  const normalizedHandle = cleanDirectionalText(handle).toLocaleLowerCase();
+  let searchFrom = 0;
+
+  while (searchFrom < html.length) {
+    const markerIndex = html.indexOf(marker, searchFrom);
+    if (markerIndex < 0) return undefined;
+
+    const objectStart = html.indexOf("{", markerIndex + marker.length);
+    if (objectStart < 0) return undefined;
+
+    const source = readJsonObject(html, objectStart);
+    searchFrom = objectStart + Math.max(source?.length ?? 0, 1);
+    if (!source) continue;
+
+    try {
+      const viewModel = JSON.parse(source) as { metadataRows?: unknown };
+      if (!Array.isArray(viewModel.metadataRows)) continue;
+
+      const rows = viewModel.metadataRows
+        .map(readMetadataRow)
+        .filter((row): row is string[][] => Boolean(row));
+      const handleRowIndex = rows.findIndex((row) =>
+        row.some((part) =>
+          part.some(
+            (value) => cleanDirectionalText(value).toLocaleLowerCase() === normalizedHandle,
+          ),
+        ),
+      );
+      if (handleRowIndex < 0) continue;
+
+      for (const row of rows.slice(handleRowIndex + 1)) {
+        const explicit = row.flat().find(isPublicSubscriberCount);
+        if (explicit) return explicit.trim();
+
+        // In the channel header, the row immediately after the handle contains
+        // subscribers first and videos second. This positional fallback keeps
+        // localized labels working even when their language is not in our regex.
+        const firstMetric = row[0]?.find(Boolean)?.trim();
+        if (row.length >= 2 && firstMetric) return firstMetric;
+      }
+    } catch {
+      // Keep trying other view models, then fall back to the legacy strategies.
+    }
+  }
+
+  return undefined;
+}
+
+function readMetadataRow(value: unknown) {
+  if (!isRecord(value) || !Array.isArray(value.metadataParts)) return undefined;
+  return value.metadataParts.map(readMetadataPart).filter((part) => part.length > 0);
+}
+
+function readMetadataPart(value: unknown) {
+  if (!isRecord(value) || !isRecord(value.text)) return [];
+  return [value.text.content, value.text.simpleText, value.text.accessibilityLabel].filter(
+    (part): part is string => typeof part === "string" && part.trim().length > 0,
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readJsonObject(source: string, start: number) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (character === '"') {
+      inString = true;
+    } else if (character === "{") {
+      depth += 1;
+    } else if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, index + 1);
+    }
+  }
+
+  return undefined;
+}
+
+function readLegacySubscriberCount(html: string, handle: string) {
   const normalizedHandle = handle.toLocaleLowerCase();
   const subtitleCandidates = [...html.matchAll(/"subtitle":\{"content":"((?:\\.|[^"\\])*)"/g)].map(
     (match) => match[1],

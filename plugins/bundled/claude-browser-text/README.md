@@ -38,6 +38,10 @@ Não há rotação automática de contas. Limite de uso, cobrança, reautentica�
 
 Depois de informar o perfil no construtor do Método, use **Salvar perfil**. O Chrome dedicado abre em `https://claude.ai/new`, aguarda o login e fecha depois que a área real do chat for validada.
 
+Por padrão, o perfil continua dedicado. Para reutilizar uma pasta Chrome escolhida conscientemente, configure `profilePath` ou `profilesBasePath` e ative `allowExistingChromeProfile`. Feche outras instâncias que estejam usando o mesmo perfil antes de preparar ou executar.
+
+A espera de respostas combina `MutationObserver` com polling de segurança e timeout máximo. O editor confirma o prompt completo após `Input.insertText`; se houver perda de caracteres, o plugin limpa o campo e repete a entrada por eventos de teclado antes de falhar de forma explícita.
+
 ## Capabilities
 
 ### Buscar — `search-web-in-browser`

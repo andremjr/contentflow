@@ -8,13 +8,34 @@ const manifest = JSON.parse(
 );
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "0.3.9");
+  assert.equal(manifest.version, "0.3.10");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
+  assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
+});
+
+test("modela as fases observáveis da resposta", () => {
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: false, generating: false, stablePolls: 0 }),
+    "awaiting_response",
+  );
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: true, generating: true, stablePolls: 2 }),
+    "streaming",
+  );
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: true, generating: false, stablePolls: 1 }),
+    "stabilizing",
+  );
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: true, generating: false, stablePolls: 2 }),
+    "completed",
+  );
 });
 
 function request(overrides = {}) {
   return {
     capabilityId: overrides.capabilityId ?? "generate-text-in-browser",
+    resolvedInstruction: overrides.resolvedInstruction,
     configuration: {
       promptTemplate: "{{BLOCK_INSTRUCTIONS}}\n\nTema: {{CONTENT}}\nCanal: {{CHANNEL_NAME}}",
       generationMode: "single",
@@ -41,6 +62,7 @@ test("manifesto declara as seis capabilities do Claude Browser Studio", () => {
   assert.equal(manifest.id, "local.contentflow.claude-browser-text");
   const capability = manifest.capabilities.find((item) => item.id === "generate-text-in-browser");
   assert.ok(capability);
+  assert.equal(capability.instructionUsage, "optional");
   assert.deepEqual(capability.blockTypes, ["CRIAR"]);
   assert.deepEqual(
     capability.outputPorts.map((item) => item.key),
@@ -92,6 +114,16 @@ test("monta prompts especializados de visão e documentos", () => {
   );
   assert.equal(vision, "VISÃO thumbnail | Escreva com clareza.");
   assert.equal(documents, "DOC referências | Escreva com clareza.");
+});
+
+test("prioriza a instrução resolvida pelo núcleo", () => {
+  assert.equal(
+    __test.expandTemplate(
+      "{{BLOCK_INSTRUCTIONS}}",
+      request({ resolvedInstruction: "Prompt resolvido" }),
+    ),
+    "Prompt resolvido",
+  );
 });
 
 test("isola contas por alias sem aceitar traversal", () => {

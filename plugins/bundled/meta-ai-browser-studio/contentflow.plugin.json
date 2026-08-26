@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.meta-ai-browser-studio",
   "name": "Meta AI Browser Studio",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Gera texto e imagens no Meta AI e vídeos curtos no Vibes usando um perfil Chrome dedicado, sem API oficial.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -35,6 +35,11 @@
       "profilesBasePath": {
         "type": "string",
         "default": ""
+      },
+      "allowExistingChromeProfile": {
+        "type": "boolean",
+        "default": false,
+        "description": "Permite usar uma pasta de perfil Chrome existente escolhida explicitamente. Feche outras instâncias que estejam usando o mesmo perfil."
       },
       "remoteDebuggingPort": {
         "type": "integer",
@@ -88,6 +93,7 @@
     {
       "id": "generate-text-in-browser",
       "operator": "IA",
+      "instructionUsage": "optional",
       "blockTypes": ["CRIAR"],
       "processTypes": [
         "theme",

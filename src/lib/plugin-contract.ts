@@ -90,6 +90,9 @@ export type PluginExecutionPolicy = {
   };
 };
 
+/** Declares whether a capability consumes the Method block instruction. */
+export type PluginInstructionUsage = "required" | "optional" | "not_applicable";
+
 export type PluginSideEffect =
   "external_read" | "external_write" | "public_publish" | "local_artifact" | "subprocess";
 
@@ -115,6 +118,8 @@ export type PluginFieldContract = Pick<
 export type PluginCapability = {
   id: string;
   operator: PluginOperator;
+  /** Optional in API v1 for backwards compatibility; omitted means `optional`. */
+  instructionUsage?: PluginInstructionUsage;
   blockTypes: BlockType[];
   processTypes?: UniversalProcess[];
   inputPorts: PluginInputPort[];
@@ -241,6 +246,10 @@ export type PluginExecutionRequest = {
   outputContract: PluginFieldContract[];
   validation?: BlockValidationConfig;
   retryFeedback?: Record<string, RuntimeValue>;
+  /** Core-resolved block instruction. Updated plugins should prefer this over the raw template. */
+  resolvedInstruction?: string;
+  /** Variables left intact because no declared runtime source could resolve them. */
+  unresolvedInstructionVariables?: string[];
   /** Core-owned position when a declared list input is executed item by item. */
   batch?: { itemId: string; index: number; total: number };
   context: PluginExecutionContext;

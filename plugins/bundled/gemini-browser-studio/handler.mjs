@@ -89,7 +89,8 @@ function expand(template, request) {
     "{{NICHO}}": c.channel?.niche ?? "",
     "{{PROJECT_TITLE}}": c.project?.title ?? "",
     "{{PROCESS}}": c.processType ?? "",
-    "{{BLOCK_INSTRUCTIONS}}": c.block?.instructions || c.block?.name || "",
+    "{{BLOCK_INSTRUCTIONS}}":
+      request?.resolvedInstruction || c.block?.instructions || c.block?.name || "",
   }))
     out = replace(out, k, v);
   for (const [k, v] of Object.entries(request?.inputs ?? {}))
@@ -438,7 +439,8 @@ function profilePort(base, n) {
   }
   return base + (h % Math.min(1200, 65535 - base));
 }
-function assertProfile(p) {
+function assertProfile(p, allowExistingChromeProfile = false) {
+  if (allowExistingChromeProfile) return;
   const n = String(p).replaceAll("\\", "/").toLowerCase();
   if (n.endsWith("/google/chrome/user data") || n.includes("/google/chrome/user data/default"))
     throw err("INVALID_CONFIGURATION", "Use perfil Chrome dedicado.");
@@ -632,6 +634,47 @@ async function evaluate(c, s, expression) {
       r.exceptionDetails?.exception?.description || "Erro Gemini.",
     );
   return r.result?.value;
+}
+function responsePhase({ hasNewResponse, generating, stablePolls }) {
+  if (!hasNewResponse) return "awaiting_response";
+  if (generating) return "streaming";
+  if (stablePolls < 2) return "stabilizing";
+  return "completed";
+}
+async function waitForDomMutation(c, s, waitMs, signal) {
+  if (signal?.aborted) throw err("CANCELLED", "Execução cancelada.");
+  const timeoutMs = clamp(waitMs, 1_000, 100, 5_000);
+  try {
+    await evaluate(
+      c,
+      s,
+      `(() => new Promise(resolve => { const root=document.documentElement; if(!root){resolve('no-root');return} let settled=false; const finish=reason=>{if(settled)return;settled=true;observer.disconnect();clearTimeout(timer);resolve(reason)}; const observer=new MutationObserver(()=>finish('mutation')); observer.observe(root,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-busy','aria-disabled','data-test-id']}); const timer=setTimeout(()=>finish('watchdog'),${timeoutMs}); }))()`,
+    );
+  } catch {
+    await sleep(Math.min(timeoutMs, 250), signal);
+  }
+}
+function normalizeEditorText(value) {
+  return String(value ?? "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+async function replacePromptWithKeyEvents(c, s, promptText, signal) {
+  for (const event of [
+    { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 },
+    { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 },
+    { type: "keyDown", key: "Backspace", code: "Backspace" },
+    { type: "keyUp", key: "Backspace", code: "Backspace" },
+  ])
+    await c.send("Input.dispatchKeyEvent", event, s);
+  for (const character of Array.from(promptText)) {
+    if (signal?.aborted) throw err("CANCELLED", "Execução cancelada.");
+    await c.send(
+      "Input.dispatchKeyEvent",
+      { type: "char", text: character, unmodifiedText: character },
+      s,
+    );
+  }
 }
 async function attach(c, signal) {
   const { targetInfos = [] } = await c.send("Target.getTargets");
@@ -876,6 +919,27 @@ async function setPrompt(c, s, text, settings, signal) {
     await c.send("Input.insertText", { text: chars.slice(i, i + size).join("") }, s);
     if (delay) await sleep(delay, signal);
   }
+  await sleep(250, signal);
+  let readback = await evaluate(
+    c,
+    s,
+    `(()=>{${HELP};const e=prompt();return e?.value||e?.innerText||e?.textContent||''})()`,
+  );
+  if (normalizeEditorText(readback) !== normalizeEditorText(text)) {
+    await replacePromptWithKeyEvents(c, s, text, signal);
+    await sleep(250, signal);
+    readback = await evaluate(
+      c,
+      s,
+      `(()=>{${HELP};const e=prompt();return e?.value||e?.innerText||e?.textContent||''})()`,
+    );
+  }
+  if (normalizeEditorText(readback) !== normalizeEditorText(text))
+    throw err(
+      "OUTPUT_VALIDATION_FAILED",
+      "O Gemini não confirmou o prompt completo após as estratégias de entrada.",
+      true,
+    );
 }
 async function send(c, s, signal) {
   const clicked = await evaluate(
@@ -919,10 +983,15 @@ async function textTurn(c, s, promptText, settings, signal) {
       text = st.texts?.length > base ? st.texts.at(-1) : "";
     stable = text && text === last ? stable + 1 : 0;
     last = text;
-    if (text && !st.stop && stable >= 2) return { text, links: st.entries?.at(-1)?.links ?? [] };
+    const phase = responsePhase({
+      hasNewResponse: Boolean(text),
+      generating: Boolean(st.stop),
+      stablePolls: stable,
+    });
+    if (phase === "completed") return { text, links: st.entries?.at(-1)?.links ?? [] };
     if (/limite|rate limit|upgrade/i.test(st.body))
       throw err("RATE_LIMIT", "Gemini informou limite de uso.", true);
-    await sleep(1000, signal);
+    await waitForDomMutation(c, s, 1_000, signal);
   }
   throw err("TIMEOUT", "Gemini não concluiu resposta.", true);
 }
@@ -999,7 +1068,7 @@ async function configureProfile(request, services) {
     name = normalizeProfile(request?.configuration?.accountProfile);
     path = runtimeProfilePath(settings, name, services);
     port = profilePort(clamp(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000), name);
-    assertProfile(path);
+    assertProfile(path, settings.allowExistingChromeProfile === true);
   } catch (error) {
     return failure(error?.code || "INVALID_CONFIGURATION", error?.message || "Perfil inválido.");
   }
@@ -1096,7 +1165,7 @@ export async function execute(request, services) {
       path = runtimeProfilePath(settings, profile, services),
       port = profilePort(clamp(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000), profile),
       files = await resolveFiles(request, services);
-    assertProfile(path);
+    assertProfile(path, settings.allowExistingChromeProfile === true);
     if (!(await profileIsPrepared(path, profile))) {
       throw err(
         "AUTHENTICATION_FAILED",
@@ -1218,4 +1287,5 @@ export const __test = {
   profilePort,
   searchValues,
   summarize,
+  responsePhase,
 };

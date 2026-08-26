@@ -56,6 +56,8 @@
       "required": true
     }
   ],
+  "resolvedInstruction": "Produza a imagem final usando o título Uma promessa impossível? e o layout recebidos.",
+  "unresolvedInstructionVariables": [],
   "context": {
     "locale": "pt-BR",
     "timeZone": "America/Sao_Paulo",

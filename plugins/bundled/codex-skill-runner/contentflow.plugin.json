@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "com.contentflow.codex-skill-runner",
   "name": "Codex Skill Runner",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Executa skills locais do Codex dentro de blocos do ContentFlow OS e devolve entregas tipadas ao Método.",
   "author": "ContentFlow OS",
   "license": "LicenseRef-ContentFlow-Codex-Plugin-Proprietary-1.0",
@@ -28,6 +28,7 @@
     {
       "id": "run-production-skill",
       "operator": "IA",
+      "instructionUsage": "optional",
       "blockTypes": ["BUSCAR", "CRIAR", "VALIDAR"],
       "processTypes": [
         "theme",
@@ -211,6 +212,7 @@
     {
       "id": "choose-with-production-skill",
       "operator": "IA",
+      "instructionUsage": "optional",
       "blockTypes": ["ESCOLHER"],
       "processTypes": [
         "theme",

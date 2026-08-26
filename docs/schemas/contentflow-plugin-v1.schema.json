@@ -258,6 +258,10 @@
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },
         "operator": { "enum": ["IA", "Código"] },
+        "instructionUsage": {
+          "enum": ["required", "optional", "not_applicable"],
+          "description": "Declara se a capability consome a instrução resolvida do bloco. Ausência preserva compatibilidade e equivale a optional."
+        },
         "blockTypes": {
           "type": "array",
           "minItems": 1,

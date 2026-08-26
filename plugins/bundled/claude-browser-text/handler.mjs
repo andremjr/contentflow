@@ -92,7 +92,8 @@ function expandTemplate(template, request) {
     "{{NICHE}}": context?.channel?.niche ?? "",
     "{{PROJECT_TITLE}}": context?.project?.title ?? "",
     "{{PROCESS}}": context?.processType ?? "",
-    "{{BLOCK_INSTRUCTIONS}}": context?.block?.instructions || context?.block?.name || "",
+    "{{BLOCK_INSTRUCTIONS}}":
+      request?.resolvedInstruction || context?.block?.instructions || context?.block?.name || "",
     "{{TEMA}}": serializeInputs(request?.inputs),
     "{{NICHO}}": context?.channel?.niche ?? "",
   };
@@ -635,7 +636,8 @@ function profilePort(basePort, profileName) {
   return basePort + (hash % Math.min(1200, 65535 - basePort));
 }
 
-function assertDedicatedProfilePath(path) {
+function assertDedicatedProfilePath(path, allowExistingChromeProfile = false) {
+  if (allowExistingChromeProfile) return;
   const normalized = String(path).replaceAll("\\", "/").toLowerCase().replace(/\/+$/, "");
   if (
     normalized.endsWith("/google/chrome/user data") ||
@@ -927,6 +929,52 @@ async function evaluate(client, sessionId, expression) {
   return response.result?.value;
 }
 
+function responsePhase({ hasNewResponse, generating, stablePolls }) {
+  if (!hasNewResponse) return "awaiting_response";
+  if (generating) return "streaming";
+  if (stablePolls < 2) return "stabilizing";
+  return "completed";
+}
+
+async function waitForDomMutation(client, sessionId, waitMs, signal) {
+  if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+  const timeoutMs = clampInteger(waitMs, 1_000, 100, 5_000);
+  try {
+    await evaluate(
+      client,
+      sessionId,
+      `(() => new Promise(resolve => { const root=document.documentElement; if(!root){resolve('no-root');return} let settled=false; const finish=reason=>{if(settled)return;settled=true;observer.disconnect();clearTimeout(timer);resolve(reason)}; const observer=new MutationObserver(()=>finish('mutation')); observer.observe(root,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-busy','aria-disabled','data-testid']}); const timer=setTimeout(()=>finish('watchdog'),${timeoutMs}); }))()`,
+    );
+  } catch {
+    await sleep(Math.min(timeoutMs, 250), signal);
+  }
+}
+
+function normalizeEditorText(value) {
+  return String(value ?? "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+async function replacePromptWithKeyEvents(client, sessionId, prompt, signal) {
+  for (const event of [
+    { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 },
+    { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 },
+    { type: "keyDown", key: "Backspace", code: "Backspace" },
+    { type: "keyUp", key: "Backspace", code: "Backspace" },
+  ]) {
+    await client.send("Input.dispatchKeyEvent", event, sessionId);
+  }
+  for (const character of Array.from(prompt)) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    await client.send(
+      "Input.dispatchKeyEvent",
+      { type: "char", text: character, unmodifiedText: character },
+      sessionId,
+    );
+  }
+}
+
 async function attachClaudePage(client, signal) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
   let target = targetInfos.find(
@@ -1199,19 +1247,24 @@ async function setPrompt(client, sessionId, prompt, settings, signal) {
   // the editor observes a single input transaction.
   await client.send("Input.insertText", { text: prompt }, sessionId);
   await sleep(500, signal);
-  const readback = await evaluate(
+  let readback = await evaluate(
     client,
     sessionId,
     `(() => { ${PAGE_HELPERS}; const el=cfPrompt(); return (el?.value || el?.innerText || el?.textContent || '').trim(); })()`,
   );
-  const comparableReadback = String(readback ?? "")
-    .replace(/\s+/gu, " ")
-    .trim();
-  const comparablePrompt = prompt.replace(/\s+/gu, " ").trim();
-  if (comparableReadback !== comparablePrompt) {
+  if (normalizeEditorText(readback) !== normalizeEditorText(prompt)) {
+    await replacePromptWithKeyEvents(client, sessionId, prompt, signal);
+    await sleep(250, signal);
+    readback = await evaluate(
+      client,
+      sessionId,
+      `(() => { ${PAGE_HELPERS}; const el=cfPrompt(); return (el?.value || el?.innerText || el?.textContent || '').trim(); })()`,
+    );
+  }
+  if (normalizeEditorText(readback) !== normalizeEditorText(prompt)) {
     throw codedError(
       "OUTPUT_VALIDATION_FAILED",
-      "O Claude não confirmou o prompt completo sem perda de caracteres.",
+      "O Claude não confirmou o prompt completo após as estratégias de entrada.",
       true,
     );
   }
@@ -1340,7 +1393,12 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
     if (newest && newest === previous) stablePolls += 1;
     else stablePolls = 0;
     previous = newest;
-    if (newest && !state?.stop && stablePolls >= 2) {
+    const phase = responsePhase({
+      hasNewResponse: Boolean(newest),
+      generating: Boolean(state?.stop),
+      stablePolls,
+    });
+    if (phase === "completed") {
       const entry = Array.isArray(state?.entries) ? state.entries.at(-1) : undefined;
       return { text: newest.trim(), links: Array.isArray(entry?.links) ? entry.links : [] };
     }
@@ -1359,7 +1417,7 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
         true,
       );
     }
-    await sleep(1000, signal);
+    await waitForDomMutation(client, sessionId, 1_000, signal);
   }
   throw codedError(
     "TIMEOUT",
@@ -1387,7 +1445,7 @@ async function configureProfile(request, services) {
       clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
       profileName,
     );
-    assertDedicatedProfilePath(profilePath);
+    assertDedicatedProfilePath(profilePath, settings.allowExistingChromeProfile === true);
   } catch (error) {
     return resultError(
       error?.code || "INVALID_CONFIGURATION",
@@ -1530,7 +1588,7 @@ export async function execute(request, services) {
 
   try {
     const attachments = await resolveAttachments(request, services);
-    assertDedicatedProfilePath(profilePath);
+    assertDedicatedProfilePath(profilePath, settings.allowExistingChromeProfile === true);
     if (!(await profileIsPrepared(profilePath, profileName))) {
       throw codedError(
         "AUTHENTICATION_FAILED",
@@ -1687,4 +1745,5 @@ export const __test = {
   searchResponseValues,
   serializeInputs,
   summarizeBlock,
+  responsePhase,
 };

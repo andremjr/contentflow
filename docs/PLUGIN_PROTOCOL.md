@@ -247,6 +247,7 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 No nível do manifesto, `deliveryTypes` classifica o plugin para descoberta na galeria. Um plugin pode declarar qualquer combinação de `text`, `image`, `audio`, `video` e `processing`. O campo descreve a natureza das entregas e transformações do pacote inteiro; não substitui portas, formatos universais ou capacidades executáveis. Plugins legados sem o campo permanecem compatíveis e são apresentados como `processing` até atualizarem o manifesto.
 
 - `operator` aceita somente `IA` ou `Código`.
+- `instructionUsage` pode ser `required`, `optional` ou `not_applicable` e declara se a capability consome a instrução resolvida do bloco. A ausência preserva plugins v1 existentes e equivale a `optional`.
 - `blockTypes` contém um ou mais dos quatro blocos.
 - `processTypes` restringe a capacidade; ausência significa todos os processos.
 - `inputPorts` e `outputPorts` descrevem os papéis semânticos.
@@ -455,11 +456,13 @@ type PluginExecutionRequest = {
   }>;
   validation?: BlockValidationConfig;
   retryFeedback?: Record<string, RuntimeValue>;
+  resolvedInstruction?: string;
+  unresolvedInstructionVariables?: string[];
   context: PluginExecutionContext;
 };
 ```
 
-O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContract` serve para conhecer tipo e schema dos registros recebidos. `inputDeliveries` é metadado paralelo e opcional de proveniência; plugins v1 que leem somente `inputs` continuam compatíveis. `settings` contém somente preferências não secretas validadas por `settingsSchema`; secrets declarados são acessados por `services.getSecret()` e não aparecem no envelope serializável.
+O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContract` serve para conhecer tipo e schema dos registros recebidos. `inputDeliveries` é metadado paralelo e opcional de proveniência; plugins v1 que leem somente `inputs` continuam compatíveis. `resolvedInstruction` contém a instrução do Método após o núcleo resolver variáveis declaradas; capabilities que consomem instrução devem preferi-la ao template cru em `context.block.instructions`. `unresolvedInstructionVariables` informa placeholders preservados por compatibilidade. `settings` contém somente preferências não secretas validadas por `settingsSchema`; secrets declarados são acessados por `services.getSecret()` e não aparecem no envelope serializável.
 
 ## 11. Contexto permitido
 

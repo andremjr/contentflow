@@ -888,7 +888,9 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
         return (await response.json()) as AppPreferences;
       })
       .then((stored) => {
-        if (active && !hasLocalChange.current) setPreferences(stored);
+        if (active && !hasLocalChange.current) {
+          setPreferences({ ...DEFAULT_PREFERENCES, ...stored });
+        }
       })
       .catch((error) => console.error(error))
       .finally(() => {

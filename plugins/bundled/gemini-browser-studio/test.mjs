@@ -8,6 +8,7 @@ const manifest = JSON.parse(
 function req(o = {}) {
   return {
     capabilityId: o.capabilityId ?? "generate-text-in-browser",
+    resolvedInstruction: o.resolvedInstruction,
     configuration: {
       promptTemplate: "{{BLOCK_INSTRUCTIONS}} Tema: {{CONTENT}} Canal: {{CHANNEL_NAME}}",
       generationMode: "single",
@@ -31,8 +32,10 @@ function req(o = {}) {
 }
 test("manifesto possui oito capabilities e permissões mínimas", () => {
   assert.equal(manifest.id, "local.contentflow.gemini-browser-studio");
-  assert.equal(manifest.version, "0.1.14");
+  assert.equal(manifest.version, "0.1.15");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
+  assert.equal(manifest.capabilities[0].instructionUsage, "optional");
+  assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
   assert.equal(manifest.capabilities.length, 8);
   assert.deepEqual(
     manifest.capabilities.map((x) => x.id),
@@ -54,6 +57,25 @@ test("manifesto possui oito capabilities e permissões mínimas", () => {
     "process",
   ]);
   assert.deepEqual(manifest.secretKeys ?? [], []);
+});
+
+test("modela as fases observáveis da resposta", () => {
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: false, generating: false, stablePolls: 0 }),
+    "awaiting_response",
+  );
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: true, generating: true, stablePolls: 2 }),
+    "streaming",
+  );
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: true, generating: false, stablePolls: 1 }),
+    "stabilizing",
+  );
+  assert.equal(
+    __test.responsePhase({ hasNewResponse: true, generating: false, stablePolls: 2 }),
+    "completed",
+  );
 });
 test("separa contas por perfil dedicado", () => {
   assert.equal(__test.normalizeProfile("canal-a"), "canal-a");

@@ -193,7 +193,7 @@ function promptFor(request, configuration, schema, choosing) {
     `Projeto: ${context.project?.title ?? "não informado"}`,
     `Processo: ${context.processType ?? "não informado"}`,
     `Bloco: ${block.type ?? "não informado"} — ${block.name ?? "sem nome"}`,
-    `Instruções do bloco:\n${block.instructions || "Execute a ação indicada pelo nome do bloco."}`,
+    `Instruções do bloco:\n${request.resolvedInstruction || block.instructions || "Execute a ação indicada pelo nome do bloco."}`,
     `Orientação adicional do plugin:\n${configuration.taskPrompt}`,
     `<entradas_resolvidas>\n${safeJson(request.inputs ?? {})}\n</entradas_resolvidas>`,
   ];

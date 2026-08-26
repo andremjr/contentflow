@@ -10,6 +10,7 @@ type PluginRequest = {
   configuration: Record<string, unknown>;
   inputs: Record<string, unknown>;
   outputContract: OutputField[];
+  resolvedInstruction?: string;
   context: {
     channel: { name: string; language: string; niche: string };
     project: { title: string };
@@ -187,7 +188,7 @@ export async function execute(
     `Processo: ${request.context.processType}`,
     `Ação: ${request.context.block.name}`,
     `Tipo de ação: ${request.context.block.type}`,
-    `Instruções da ação:\n${request.context.block.instructions || "Execute a ação indicada pelo nome do bloco."}`,
+    `Instruções da ação:\n${request.resolvedInstruction || request.context.block.instructions || "Execute a ação indicada pelo nome do bloco."}`,
     inputText ? `Entradas resolvidas:\n${inputText}` : "Não há entradas explícitas.",
     isChoosing
       ? [

@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "official-anthropic-claude",
   "name": "Anthropic Claude",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Executa ações baseadas em linguagem com modelos Claude disponíveis na API da Anthropic.",
   "author": "ContentFlow OS",
   "license": "LicenseRef-ContentFlow-Source-Available-1.0",
@@ -23,6 +23,7 @@
     {
       "id": "generate-or-validate-text",
       "operator": "IA",
+      "instructionUsage": "optional",
       "blockTypes": ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
       "processTypes": [
         "theme",

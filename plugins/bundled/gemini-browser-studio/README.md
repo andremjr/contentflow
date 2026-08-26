@@ -35,6 +35,8 @@ canal-c → <workspace-do-plugin>/canal-c
 
 Cada alias recebe pasta Chrome, login, histórico e porta CDP próprios. Assim, a estratégia e o contexto de um canal não contaminam outro. Antes da primeira execução, use **Salvar perfil** no construtor do Método, conclua o login na janela visível e aguarde o navegador fechar. Perfis não preparados são recusados antes de qualquer prompt ser digitado.
 
+Para reutilizar uma pasta Chrome escolhida explicitamente, configure `profilesBasePath`, selecione o alias correspondente e ative `allowExistingChromeProfile`; o isolamento dedicado permanece como padrão. Feche qualquer Chrome que já esteja usando o perfil. A espera de respostas combina `MutationObserver`, polling de segurança e timeout máximo; o editor é relido após a entrada e usa eventos de teclado como fallback se a inserção rápida perder caracteres.
+
 Não existe rotação automática de contas. Cota, CAPTCHA, upgrade, reautenticação ou bloqueio pausam a operação para intervenção manual.
 
 ## Anexos e artifacts

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   MoreHorizontal,
@@ -65,6 +65,52 @@ function ChannelWorkspace() {
   const [view, setView] = useState<"cards" | "list">("cards");
   const [search, setSearch] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+  const hasLocalViewChange = useRef(false);
+  const viewPersistenceQueue = useRef(Promise.resolve());
+
+  useEffect(() => {
+    let active = true;
+    hasLocalViewChange.current = false;
+    setView("cards");
+    void fetch(`/api/channels/${encodeURIComponent(channelId)}/preferences`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load channel preferences");
+        return (await response.json()) as { projectView?: "cards" | "list" };
+      })
+      .then((stored) => {
+        if (
+          active &&
+          !hasLocalViewChange.current &&
+          (stored.projectView === "cards" || stored.projectView === "list")
+        ) {
+          setView(stored.projectView);
+        }
+      })
+      .catch((error) => console.error(error));
+    return () => {
+      active = false;
+    };
+  }, [channelId]);
+
+  function selectView(nextView: "cards" | "list") {
+    if (nextView === view) return;
+    hasLocalViewChange.current = true;
+    setView(nextView);
+    viewPersistenceQueue.current = viewPersistenceQueue.current
+      .catch(() => undefined)
+      .then(async () => {
+        const response = await fetch(`/api/channels/${encodeURIComponent(channelId)}/preferences`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectView: nextView }),
+        });
+        if (!response.ok) throw new Error("Could not save channel preferences");
+      })
+      .catch((error) => {
+        console.error(error);
+        toast.error("Não foi possível salvar a visualização deste canal.");
+      });
+  }
 
   const filtered = useMemo(() => {
     if (!search) return projects;
@@ -193,7 +239,7 @@ function ChannelWorkspace() {
             >
               <button
                 type="button"
-                onClick={() => setView("cards")}
+                onClick={() => selectView("cards")}
                 aria-label="Cards"
                 aria-pressed={view === "cards"}
                 title={view === "cards" ? undefined : "Cards"}
@@ -209,7 +255,7 @@ function ChannelWorkspace() {
               </button>
               <button
                 type="button"
-                onClick={() => setView("list")}
+                onClick={() => selectView("list")}
                 aria-label="List"
                 aria-pressed={view === "list"}
                 title={view === "list" ? undefined : "List"}

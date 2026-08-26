@@ -45,6 +45,7 @@ import {
   getPresentationRestrictionIssue,
 } from "../src/lib/presentation";
 import type { PluginExecutionRequest, PluginFieldContract } from "../src/lib/plugin-contract";
+import { resolveInstructionTemplate } from "../src/lib/instruction-template";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { attemptAfterRetryInvalidation } from "../src/lib/retry-attempt";
 import {
@@ -225,6 +226,11 @@ database.exec(`
     id TEXT PRIMARY KEY,
     theme TEXT NOT NULL,
     language TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS channel_preferences (
+    channel_id TEXT PRIMARY KEY,
+    project_view TEXT NOT NULL DEFAULT 'cards',
     updated_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS plugin_consents (
@@ -2713,7 +2719,37 @@ app.post("/api/execute-block", async (request, response) => {
             capability.outputPorts[0]?.key ??
             field.key,
         }));
-  const { api_key: transientApiKey, ...executionParameters } = body.parameters;
+  const methodParameterValues = Object.fromEntries(
+    (block.parameters ?? []).map((parameter) => [parameter.key, parameter.value]),
+  );
+  const { api_key: transientApiKey, ...providedExecutionParameters } = body.parameters;
+  const executionParameters = {
+    ...methodParameterValues,
+    ...providedExecutionParameters,
+  };
+  const resolvedInstruction = resolveInstructionTemplate(block.instructions ?? "", {
+    channel: {
+      name: channel.name,
+      language: channel.language,
+      niche: channel.niche,
+    },
+    project: { title: project.title, deadline: project.deadline },
+    block: { name: block.name ?? block.type, type: block.type },
+    inputs: assignedInputs.map(({ resolved, port }) => ({
+      id: resolved.input.id,
+      label: resolved.input.label,
+      sourceKey: resolved.input.sourceKey,
+      portKey: port?.key,
+      value: resolved.value ?? null,
+    })),
+    parameters: executionParameters,
+  });
+  if (capability.instructionUsage === "required" && !resolvedInstruction.instruction) {
+    response.status(422).json({
+      error: `Defina o prompt do bloco “${block.name ?? block.type}” antes de executar.`,
+    });
+    return;
+  }
   const secretKey =
     plugin.id === "official-openai-gpt"
       ? "OPENAI_API_KEY"
@@ -2757,6 +2793,8 @@ app.post("/api/execute-block", async (request, response) => {
     outputContract,
     validation: block.validation,
     retryFeedback: blockExecution.retryFeedback,
+    resolvedInstruction: resolvedInstruction.instruction,
+    unresolvedInstructionVariables: resolvedInstruction.unresolved,
     context: {
       locale: channel.language || "pt-BR",
       timeZone: "America/Sao_Paulo",
@@ -2898,6 +2936,45 @@ app.get("/api/channels", (_request, response) => {
   response.json(parseRows(rows));
 });
 
+app.get("/api/channels/:id/preferences", (request, response) => {
+  const channel = database.prepare("SELECT 1 FROM channels WHERE id = ?").get(request.params.id);
+  if (!channel) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+  const stored = database
+    .prepare("SELECT project_view AS projectView FROM channel_preferences WHERE channel_id = ?")
+    .get(request.params.id) as { projectView: "cards" | "list" } | undefined;
+  response.json({ projectView: stored?.projectView ?? "cards" });
+});
+
+app.put("/api/channels/:id/preferences", (request, response) => {
+  const projectView = request.body?.projectView;
+  if (!(["cards", "list"] as const).includes(projectView)) {
+    response.status(400).json({ error: "Preferência de visualização inválida." });
+    return;
+  }
+  const channel = database.prepare("SELECT 1 FROM channels WHERE id = ?").get(request.params.id);
+  if (!channel) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+  if (projectView === "cards") {
+    database.prepare("DELETE FROM channel_preferences WHERE channel_id = ?").run(request.params.id);
+  } else {
+    database
+      .prepare(
+        `INSERT INTO channel_preferences (channel_id, project_view, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(channel_id) DO UPDATE SET
+           project_view = excluded.project_view,
+           updated_at = excluded.updated_at`,
+      )
+      .run(request.params.id, projectView, new Date().toISOString());
+  }
+  response.json({ projectView });
+});
+
 app.post("/api/channels", (request, response) => {
   const channel = request.body as StoredPayload;
   if (!channel?.id || !channel.createdAt) {
@@ -3004,6 +3081,7 @@ app.delete("/api/channels/:id", (request, response) => {
     database.prepare("DELETE FROM library_items WHERE channel_id = ?").run(channelId);
     database.prepare("DELETE FROM library_collections WHERE channel_id = ?").run(channelId);
     database.prepare("DELETE FROM execution_orchestrators WHERE channel_id = ?").run(channelId);
+    database.prepare("DELETE FROM channel_preferences WHERE channel_id = ?").run(channelId);
     database.prepare("DELETE FROM channel_order WHERE channel_id = ?").run(channelId);
     return database.prepare("DELETE FROM channels WHERE id = ?").run(channelId);
   });
