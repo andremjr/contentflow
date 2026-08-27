@@ -1318,6 +1318,14 @@ function BlockEditor({
               index={index}
               onChange={onChange}
             />
+            <ContextInputsEditor
+              block={block}
+              methodBlocks={methodBlocks}
+              blockIndex={index}
+              processType={processType}
+              channelMethods={channelMethods}
+              onChange={onChange}
+            />
           </MethodEditorSection>
           <MethodEditorSection
             eyebrow="O que entrega"
@@ -2363,7 +2371,17 @@ function ContextInputsEditor({
   const inputs = block.inputs ?? [];
   const addInput = () => {
     const input: BlockInputBinding = {
-      id: uid(`${block.id}-context`),
+      id: uid(`${block.id}-input`),
+      label: "Nova entrada",
+      type: "text",
+      source: "previous_block",
+      presentation: { renderer: "auto" },
+    };
+    onChange({ inputs: [...inputs, input] });
+  };
+  const addChannelHistory = () => {
+    const input: BlockInputBinding = {
+      id: uid(`${block.id}-history`),
       label: "Histórico relevante",
       type: "records",
       source: "channel_history",
@@ -2380,15 +2398,27 @@ function ContextInputsEditor({
       <div className="flex items-center justify-between gap-2">
         <div>
           <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-            <History className="size-3.5 text-muted-foreground" /> Contexto para a decisão
+            <History className="size-3.5 text-muted-foreground" /> Entradas de contexto
           </h3>
           <p className="text-[11px] text-muted-foreground">
-            Opcional. Consulte entregas de projetos anteriores sem dar acesso direto à Biblioteca.
+            Opcional. Use uma entrega anterior quando ela ajudar nesta ação.
           </p>
         </div>
-        <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
-          <Plus className="size-3" /> Adicionar
-        </Button>
+        <div className="flex flex-wrap justify-end gap-1">
+          {block.type === "ESCOLHER" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 px-2 text-[10px]"
+              onClick={addChannelHistory}
+            >
+              Usar histórico
+            </Button>
+          )}
+          <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
+            <Plus className="size-3" /> Adicionar entrada
+          </Button>
+        </div>
       </div>
       <div className="mt-3 space-y-3">
         {inputs.map((input) => (
@@ -2400,7 +2430,7 @@ function ContextInputsEditor({
             currentBlockId={block.id}
             processType={processType}
             channelMethods={channelMethods}
-            allowChannelHistory
+            allowChannelHistory={block.type === "ESCOLHER"}
             onChange={(patch) =>
               onChange({
                 inputs: inputs.map((item) => (item.id === input.id ? { ...item, ...patch } : item)),
@@ -2411,8 +2441,8 @@ function ContextInputsEditor({
         ))}
         {!inputs.length && (
           <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
-            Sem contexto adicional. A coleção vinculada e os resultados do projeto continuam
-            disponíveis normalmente.
+            Nenhuma entrada adicional. Adicione somente quando esta ação precisar de um resultado
+            anterior como contexto.
           </div>
         )}
       </div>

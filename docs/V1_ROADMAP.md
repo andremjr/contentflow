@@ -275,6 +275,7 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 ### Entregas
 
 - Agrupar visualmente os campos existentes conforme quatro perguntas: o que o bloco faz, quem executa, o que precisa e o que entrega.
+- Expor **Adicionar entrada** de forma opcional nos quatro tipos de bloco, sem criar campos por padrão.
 - Reforçar a diferença entre prompt/orientação, informações de entrada e resultado da ação com títulos e textos auxiliares curtos.
 - Melhorar espaçamento, separação e ordem de leitura do modal existente sem esconder recursos avançados.
 - Manter as configurações do plugin no contexto do mesmo bloco e subordinadas ao operador escolhido.
@@ -284,6 +285,7 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 
 - [x] O usuário localiza rapidamente onde registrar o prompt ou orientação do bloco.
 - [x] Entradas e entregas possuem hierarquia visual e linguagem distintas.
+- [x] `BUSCAR`, `ESCOLHER`, `CRIAR` e `VALIDAR` permitem adicionar contexto de uma entrega anterior sem campo padrão.
 - [x] Operador, plugin, capacidade e conexão continuam no mesmo bloco e com o comportamento atual.
 - [x] Nenhum campo, modo de criação ou conceito novo foi acrescentado.
 - [x] Um Método existente permanece semanticamente idêntico após abrir e salvar sem alterações.
@@ -294,6 +296,7 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 
 - O editor existente foi reorganizado visualmente em quatro perguntas: o que faz, quem executa, o que precisa e o que entrega.
 - `BUSCAR`, `CRIAR`, `ESCOLHER` e `VALIDAR` mantiveram seus campos e contratos; os dois últimos receberam somente explicações visuais para suas entregas implícitas.
+- Após a revisão do titular, `ESCOLHER` e `VALIDAR` também passaram a expor o mesmo botão opcional **Adicionar entrada** já disponível em `BUSCAR` e `CRIAR`; o Histórico do Canal permanece como opção adicional exclusiva de `ESCOLHER`.
 - Nenhum handler, tipo de domínio, persistência, serialização, regra de execução ou Biblioteca Estratégica foi alterado.
 - A inspeção local confirmou o modal em desktop, `800 px` e `390 px`, sem rolagem horizontal na menor largura.
 - `npm run check` completo, incluindo lint, typecheck, testes e builds de cliente e servidor, passou em 2026-08-27.

@@ -144,6 +144,8 @@ As chaves técnicas, a persistência e a conexão padrão com resultados anterio
 
 Cada entrada declarada é conectada automaticamente a uma saída compatível já produzida. O motor prioriza os blocos anteriores mais próximos, depois os outputs dos Processos Universais anteriores, considera a semelhança entre os nomes e não reutiliza a mesma saída em duas entradas do mesmo bloco. Conexões explícitas legadas continuam sendo respeitadas. Se uma entrada não puder ser resolvida, o bloco permanece pausado e informa claramente qual dado está ausente.
 
+Todos os quatro tipos de bloco podem declarar zero ou mais entradas de contexto vindas de blocos anteriores ou Processos Universais anteriores. O editor começa sem campos opcionais e oferece somente a ação discreta **Adicionar entrada**; assim, um bloco simples permanece visualmente leve, mas `BUSCAR`, `ESCOLHER`, `CRIAR` e `VALIDAR` podem consumir qualquer entrega anterior compatível quando o Método exigir. No `ESCOLHER`, essas entradas apenas orientam a decisão e não substituem a coleção vinculada. No `VALIDAR`, elas complementam e não substituem o bloco-alvo obrigatório da validação.
+
 O operador `Humano` é o executor nativo desse mesmo contrato e não depende de plugin. Plugins de `IA` ou `Código` consomem as mesmas entradas e produzem as mesmas saídas; seus parâmetros particulares aparecem somente depois que o plugin é selecionado.
 
 O Método armazena esse esquema, suas instruções, parâmetros, configuração do executor, bindings e a referência local de conexão quando aplicável. Os valores efetivamente preenchidos pertencem à execução do Projeto/Vídeo e nunca são gravados como parte do Método.
