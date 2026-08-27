@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const FLOW_HOST = "labs.google";
 const FLOW_LANDING_URL = "https://labs.google/fx/pt/tools/flow";
@@ -10,6 +11,8 @@ const GENERATION_SUFFIX = "/flowMedia:batchGenerateImages";
 const MEDIA_HOST = "flow-content.google";
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const DEFAULT_PORT = 9333;
+const EXTENSION_PATH = fileURLToPath(new URL("./extension", import.meta.url));
+const EXTENSION_PROTOCOL_VERSION = 1;
 const IMAGE_MODELS = Object.freeze({
   flow_auto: null,
   nano_banana: "GEM_PIX",
@@ -69,16 +72,6 @@ function normalizePrompts(value) {
   };
   visit(value);
   return out;
-}
-
-function chunkTextForTyping(text, chunkSize) {
-  const characters = Array.from(String(text ?? ""));
-  const size = Math.max(1, Number.isInteger(chunkSize) ? chunkSize : 4);
-  const chunks = [];
-  for (let index = 0; index < characters.length; index += size) {
-    chunks.push(characters.slice(index, index + size).join(""));
-  }
-  return chunks;
 }
 
 function safeFilename(text, fallback) {
@@ -441,6 +434,7 @@ async function launchOrReuseChrome({
   startMinimized,
   keepBrowserOpen,
   startUrl,
+  extensionPath,
   signal,
 }) {
   const existing = await fetchBrowserVersion(port);
@@ -452,6 +446,8 @@ async function launchOrReuseChrome({
     `--user-data-dir=${profilePath}`,
     "--no-first-run",
     "--no-default-browser-check",
+    `--disable-extensions-except=${extensionPath}`,
+    `--load-extension=${extensionPath}`,
     startUrl,
   ];
   if (startMinimized) args.unshift("--start-minimized");
@@ -464,7 +460,7 @@ async function launchOrReuseChrome({
       child = spawn(executable, args, {
         detached: Boolean(keepBrowserOpen),
         stdio: "ignore",
-        windowsHide: false,
+        windowsHide: true,
         shell: false,
       });
     } catch (cause) {
@@ -506,11 +502,84 @@ async function launchOrReuseChrome({
   );
 }
 
-function describeCdpParams(method, params) {
-  if (method === "Input.insertText") {
-    const text = String(params?.text ?? "");
-    return `textLength=${text.length}; sha256=${createHash("sha256").update(text).digest("hex").slice(0, 16)}`;
+async function attachExtensionBridge(client, flowSessionId, signal) {
+  const deadline = Date.now() + 10000;
+  let workerTarget;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    const { targetInfos = [] } = await client.send("Target.getTargets");
+    workerTarget = targetInfos.find(
+      (item) =>
+        item.type === "service_worker" &&
+        /^chrome-extension:\/\/[^/]+\/service-worker\.js$/i.test(String(item.url || "")),
+    );
+    if (workerTarget) break;
+    await sleep(250, signal);
   }
+  if (!workerTarget?.targetId) {
+    throw codedError(
+      "INVALID_CONFIGURATION",
+      "A extensão dedicada do Google Flow não foi carregada. Feche o navegador do perfil e tente novamente; o plugin não continuará usando teclado ou mouse como alternativa.",
+    );
+  }
+
+  const { sessionId } = await client.send("Target.attachToTarget", {
+    targetId: workerTarget.targetId,
+    flatten: true,
+  });
+  await client.send("Runtime.enable", {}, sessionId);
+
+  const dispatch = async (action, payload = {}) => {
+    const page = await evaluate(
+      client,
+      flowSessionId,
+      "({ url: location.href, origin: location.origin })",
+    );
+    if (page?.origin !== `https://${FLOW_HOST}`) {
+      throw codedError("OUTPUT_VALIDATION_FAILED", "A aba anexada deixou de ser o Google Flow.");
+    }
+    const command = {
+      protocolVersion: EXTENSION_PROTOCOL_VERSION,
+      commandId: randomUUID(),
+      expectedUrl: page.url,
+      action,
+      payload,
+    };
+    const evaluated = await client.send(
+      "Runtime.evaluate",
+      {
+        expression: `globalThis.contentFlowBridge?.dispatch(${JSON.stringify(command)})`,
+        returnByValue: true,
+        awaitPromise: true,
+      },
+      sessionId,
+    );
+    if (evaluated.exceptionDetails) {
+      throw codedError(
+        "UPSTREAM_UNAVAILABLE",
+        evaluated.exceptionDetails?.exception?.description || "A extensão dedicada falhou.",
+      );
+    }
+    const response = evaluated.result?.value;
+    if (!response?.ok) {
+      throw codedError(
+        response?.code === "CONTENT_SCRIPT_UNAVAILABLE"
+          ? "UPSTREAM_UNAVAILABLE"
+          : "OUTPUT_VALIDATION_FAILED",
+        response?.message || `A extensão recusou a ação ${action}.`,
+      );
+    }
+    return response;
+  };
+
+  const ping = await dispatch("ping");
+  if (ping.protocolVersion !== EXTENSION_PROTOCOL_VERSION) {
+    throw codedError("INVALID_CONFIGURATION", "A extensão do Google Flow está desatualizada.");
+  }
+  return { dispatch, sessionId, targetId: workerTarget.targetId };
+}
+
+function describeCdpParams(method, params) {
   if (method === "Fetch.continueRequest") return "request body redacted";
   if (method === "Page.navigate" || method === "Target.createTarget") {
     try {
@@ -643,7 +712,7 @@ class CdpClient {
   }
 }
 
-async function attachFlowPage(client, startUrl, pinned, signal) {
+async function attachFlowPage(client, startUrl, pinned, signal, interactive = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
   const projectTarget = targetInfos.find(
     (item) =>
@@ -661,12 +730,12 @@ async function attachFlowPage(client, startUrl, pinned, signal) {
   }
 
   const { sessionId } = await client.send("Target.attachToTarget", { targetId, flatten: true });
-  // Input.dispatchMouseEvent/Input.insertText atuam sobre a página ativa.
-  // Ativamos explicitamente o target para não mandar eventos para uma aba Flow em background.
-  try {
-    await client.send("Target.activateTarget", { targetId });
-  } catch {
-    /* best effort */
+  if (interactive) {
+    try {
+      await client.send("Target.activateTarget", { targetId });
+    } catch {
+      /* A configuração de login ainda pode exigir intervenção humana. */
+    }
   }
   await client.send("Page.enable", {}, sessionId);
   await client.send("Runtime.enable", {}, sessionId);
@@ -675,10 +744,12 @@ async function attachFlowPage(client, startUrl, pinned, signal) {
     { maxTotalBufferSize: 50 * 1024 * 1024, maxResourceBufferSize: 25 * 1024 * 1024 },
     sessionId,
   );
-  try {
-    await client.send("Page.bringToFront", {}, sessionId);
-  } catch {
-    /* best effort */
+  if (interactive) {
+    try {
+      await client.send("Page.bringToFront", {}, sessionId);
+    } catch {
+      /* A configuração de login ainda pode exigir intervenção humana. */
+    }
   }
 
   // Uma execução sem URL fixada representa um vídeo novo. Sempre voltamos à
@@ -898,29 +969,8 @@ function bootstrapActionPointExpression(action) {
 }
 
 async function clickBootstrapAction(client, sessionId, action) {
-  try {
-    await client.send("Page.bringToFront", {}, sessionId);
-  } catch {
-    /* best effort */
-  }
   const point = await evaluate(client, sessionId, bootstrapActionPointExpression(action));
-  if (!point?.ok || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return { ok: false };
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseMoved", x: point.x, y: point.y },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  return point;
+  return point?.ok ? point : { ok: false };
 }
 
 async function ensureFlowProjectReady(
@@ -1248,150 +1298,11 @@ async function uploadReferenceImages(client, sessionId, filePaths, settings, sig
   await sleep(Math.min(15_000, 2_000 + filePaths.length * 1_000), signal);
 }
 
-function focusPromptExpression(customSelector) {
-  return String.raw`(() => { ${DEEP_HELPERS}
-    const el = cfPromptCandidate(${JSON.stringify(customSelector || "")});
-    if (!el) return { ok: false, reason: 'prompt-not-found' };
-    el.scrollIntoView({ block: 'center', inline: 'center' });
-    el.focus({ preventScroll: true });
-    const r = el.getBoundingClientRect();
-    return {
-      ok: true,
-      tag: el.tagName,
-      role: el.getAttribute('role') || '',
-      contenteditable: el.getAttribute('contenteditable') || '',
-      slate: el.getAttribute('data-slate-editor') || '',
-      x: r.left + r.width / 2,
-      y: r.top + r.height / 2
-    };
-  })()`;
-}
-
-function promptValueExpression(customSelector) {
-  return String.raw`(() => { ${DEEP_HELPERS}
-    const el = cfPromptCandidate(${JSON.stringify(customSelector || "")});
-    if (!el) return { found: false, text: '' };
-    const text = el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement
-      ? (el.value || '')
-      : (el.innerText || el.textContent || '');
-    return { found: true, text: String(text).replace(/\\uFEFF/g, '').trim() };
-  })()`;
-}
-
-async function setPrompt(client, sessionId, prompt, customSelector, signal, typing = {}) {
-  try {
-    await client.send("Page.bringToFront", {}, sessionId);
-  } catch {
-    /* best effort */
-  }
-  const target = await evaluate(client, sessionId, focusPromptExpression(customSelector));
-  if (!target?.ok)
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "Não encontrei o editor Slate do prompt do Google Flow.",
-    );
-
-  if (Number.isFinite(target.x) && Number.isFinite(target.y)) {
-    await client.send(
-      "Input.dispatchMouseEvent",
-      { type: "mouseMoved", x: target.x, y: target.y },
-      sessionId,
-    );
-    await client.send(
-      "Input.dispatchMouseEvent",
-      { type: "mousePressed", x: target.x, y: target.y, button: "left", clickCount: 1 },
-      sessionId,
-    );
-    await client.send(
-      "Input.dispatchMouseEvent",
-      { type: "mouseReleased", x: target.x, y: target.y, button: "left", clickCount: 1 },
-      sessionId,
-    );
-  }
-
-  // Seleciona tudo dentro do editor atualmente focado e substitui pelo prompt via CDP.
-  await client.send(
-    "Input.dispatchKeyEvent",
-    {
-      type: "keyDown",
-      key: "a",
-      code: "KeyA",
-      windowsVirtualKeyCode: 65,
-      modifiers: 2,
-      commands: ["SelectAll"],
-    },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    {
-      type: "keyUp",
-      key: "a",
-      code: "KeyA",
-      windowsVirtualKeyCode: 65,
-      modifiers: 2,
-    },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    {
-      type: "keyDown",
-      key: "Backspace",
-      code: "Backspace",
-      windowsVirtualKeyCode: 8,
-    },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    {
-      type: "keyUp",
-      key: "Backspace",
-      code: "Backspace",
-      windowsVirtualKeyCode: 8,
-    },
-    sessionId,
-  );
-  const chunkSize = Number.isInteger(typing.chunkSize) ? typing.chunkSize : 4;
-  const delayMs = Number.isInteger(typing.delayMs) ? typing.delayMs : 35;
-  for (const chunk of chunkTextForTyping(prompt, chunkSize)) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    await client.send("Input.insertText", { text: chunk }, sessionId);
-    if (delayMs > 0) await sleep(delayMs, signal);
-  }
-  await sleep(300, signal);
-
-  const readback = await evaluate(client, sessionId, promptValueExpression(customSelector));
-  const expected = String(prompt).replace(/\s+/g, " ").trim();
-  const actual = String(readback?.text || "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const sample = expected.slice(0, Math.min(60, expected.length));
-  if (!readback?.found || !actual || (sample && !actual.includes(sample))) {
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      `O editor Slate recebeu foco, mas o texto não apareceu. Editor ${target.tag || "?"} slate=${target.slate || "false"} contenteditable=${target.contenteditable || "n/a"}.`,
-    );
-  }
-  return { ...target, readbackLength: actual.length };
-}
-function generateButtonPointExpression(promptSelector, generateSelector) {
-  return String.raw`(() => { ${DEEP_HELPERS}
-    const prompt = cfPromptCandidate(${JSON.stringify(promptSelector || "")});
-    const btn = cfGenerateCandidate(prompt, ${JSON.stringify(generateSelector || "")}, false);
-    if (!btn) return { ok: false, reason: 'generate-not-found' };
-    btn.scrollIntoView({ block: 'center', inline: 'center' });
-    btn.focus({ preventScroll: true });
-    const r = btn.getBoundingClientRect();
-    return {
-      ok: true,
-      text: cfText(btn),
-      x: r.left + r.width / 2,
-      y: r.top + r.height / 2,
-      ariaDisabled: btn.getAttribute('aria-disabled') || ''
-    };
-  })()`;
+async function setPromptWithExtension(bridge, prompt, customSelector) {
+  return await bridge.dispatch("setPrompt", {
+    text: prompt,
+    promptSelector: customSelector || "",
+  });
 }
 
 async function waitGenerateEnabled(client, sessionId, settings, signal, timeoutMs = 15000) {
@@ -1426,39 +1337,11 @@ async function waitGenerateEnabled(client, sessionId, settings, signal, timeoutM
   );
 }
 
-async function clickGenerate(client, sessionId, settings) {
-  try {
-    await client.send("Page.bringToFront", {}, sessionId);
-  } catch {
-    /* best effort */
-  }
-  const target = await evaluate(
-    client,
-    sessionId,
-    generateButtonPointExpression(settings?.promptSelector || "", settings?.generateSelector || ""),
-  );
-  if (!target?.ok || !Number.isFinite(target.x) || !Number.isFinite(target.y)) {
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "Não encontrei o botão Criar/Gerar habilitado do Google Flow.",
-    );
-  }
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseMoved", x: target.x, y: target.y },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mousePressed", x: target.x, y: target.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseReleased", x: target.x, y: target.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  return target;
+async function clickGenerateWithExtension(bridge, settings) {
+  return await bridge.dispatch("clickGenerate", {
+    promptSelector: settings?.promptSelector || "",
+    generateSelector: settings?.generateSelector || "",
+  });
 }
 
 function applyGenerationPreferences(rawPostData, imageModelName, imageAspectRatio) {
@@ -2123,12 +2006,14 @@ async function configureProfile(request, services) {
       startMinimized: false,
       keepBrowserOpen: false,
       startUrl: FLOW_LANDING_URL,
+      extensionPath: EXTENSION_PATH,
       signal: services.signal,
     });
     child = launched.child;
     client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
-    const page = await attachFlowPage(client, FLOW_LANDING_URL, true, services.signal);
+    const page = await attachFlowPage(client, FLOW_LANDING_URL, true, services.signal, true);
     await waitForFlowProfile(client, page.sessionId, settings, services.signal);
+    await attachExtensionBridge(client, page.sessionId, services.signal);
     await markProfilePrepared(runtime.profilePath, runtime.accountProfile);
     return {
       status: "success",
@@ -2182,7 +2067,7 @@ export async function execute(request, services) {
 
   const settings = request?.settings ?? {};
   const keepBrowserOpen = settings.keepBrowserOpen !== false;
-  const startMinimized = settings.startMinimized === true;
+  const startMinimized = settings.startMinimized !== false;
   const requestTimeoutSeconds = Number.isInteger(settings.requestTimeoutSeconds)
     ? settings.requestTimeoutSeconds
     : 240;
@@ -2215,15 +2100,6 @@ export async function execute(request, services) {
   if (maxImagesPerPrompt < 1 || maxImagesPerPrompt > 4) {
     return resultError("INVALID_CONFIGURATION", "maxImagesPerPrompt deve ficar entre 1 e 4.");
   }
-  const typingChunkSize = Number.isInteger(settings.typingChunkSize) ? settings.typingChunkSize : 4;
-  const typingDelayMs = Number.isInteger(settings.typingDelayMs) ? settings.typingDelayMs : 35;
-  if (typingChunkSize < 1 || typingChunkSize > 20) {
-    return resultError("INVALID_CONFIGURATION", "typingChunkSize deve ficar entre 1 e 20.");
-  }
-  if (typingDelayMs < 0 || typingDelayMs > 200) {
-    return resultError("INVALID_CONFIGURATION", "typingDelayMs deve ficar entre 0 e 200.");
-  }
-
   const stepLogs = [];
   const diagnosticLogs = [];
   const step = (message) => {
@@ -2281,6 +2157,7 @@ export async function execute(request, services) {
   let client;
   let generationDefaults;
   let responseTracker;
+  let extensionBridge;
   let activeProjectUrl;
   const files = [];
   const artifacts = [];
@@ -2292,6 +2169,7 @@ export async function execute(request, services) {
       startMinimized,
       keepBrowserOpen,
       startUrl: navigation.url,
+      extensionPath: EXTENSION_PATH,
       signal: services.signal,
     });
     step(
@@ -2304,9 +2182,17 @@ export async function execute(request, services) {
       services.signal,
     );
     step(`CDP conectado em 127.0.0.1:${profileRuntime.port}.`);
-    const page = await attachFlowPage(client, navigation.url, navigation.pinned, services.signal);
+    const page = await attachFlowPage(
+      client,
+      navigation.url,
+      navigation.pinned,
+      services.signal,
+      false,
+    );
     const sessionId = page.sessionId;
     step("Página do Google Flow anexada ao CDP.");
+    extensionBridge = await attachExtensionBridge(client, sessionId, services.signal);
+    step("Extensão dedicada conectada; teclado e mouse do usuário permanecem isolados.");
 
     let activePreferences = { ...generationPreferences };
     generationDefaults = installGenerationPreferencesInterceptor(
@@ -2352,13 +2238,10 @@ export async function execute(request, services) {
           while (true) {
             step(`${label}: preparando interface.`);
             await ensureFlowProjectReady(client, sessionId, settings, services.signal, true, trace);
-            const promptResult = await setPrompt(
-              client,
-              sessionId,
+            const promptResult = await setPromptWithExtension(
+              extensionBridge,
               task.prompt,
               settings.promptSelector || "",
-              services.signal,
-              { chunkSize: typingChunkSize, delayMs: typingDelayMs },
             );
             step(`${label}: Slate preenchido (${promptResult?.readbackLength || 0} caracteres).`);
             const generateState = await waitGenerateEnabled(
@@ -2372,7 +2255,7 @@ export async function execute(request, services) {
 
             const reservation = responseTracker.reserve(requestTimeoutSeconds * 1000);
             try {
-              const clickResult = await clickGenerate(client, sessionId, settings);
+              const clickResult = await clickGenerateWithExtension(extensionBridge, settings);
               step(`${label}: envio confirmado (${clickResult?.text || "Criar"}).`);
             } catch (cause) {
               reservation.cancel(cause);
@@ -2542,7 +2425,6 @@ export async function execute(request, services) {
 }
 export const __test = {
   normalizePrompts,
-  chunkTextForTyping,
   safeFilename,
   validateFlowUrl,
   resolveNavigationTarget,

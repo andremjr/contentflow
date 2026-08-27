@@ -381,6 +381,14 @@ ContentFlow OS
 - [ ] Existe prova técnica da mesma ponte em headless ou uma limitação documentada do runtime, sem bloquear a operação minimizada da V1.
 - [ ] Typecheck, testes de contrato, sandbox, isolamento de foco e build são aprovados.
 
+### Estado da implementação — 2026-08-27
+
+- O piloto do Google Flow passou a empacotar uma extensão Manifest V3 própria, restrita a `https://labs.google/*`, com service worker e content script versionados.
+- O handler carrega a extensão no perfil dedicado e usa mensagens estruturadas para preencher o prompt e acionar a geração. A ausência da ponte encerra a execução e não reativa o caminho antigo.
+- A execução rotineira não ativa a aba, não traz a página para frente e não envia eventos CDP de teclado ou mouse. A janela visível permanece reservada à ação explícita **Salvar perfil**.
+- O modo minimizado agora é o padrão. A próxima validação necessária é confirmar o carregamento automático no runtime real distribuído aos alunos e ajustar o runtime compatível caso o Chrome instalado rejeite extensões desempacotadas.
+- Ainda faltam cancelamento e idempotência no envelope, teste real de isolamento enquanto o usuário digita em outro aplicativo, testes progressivos de 10/50/100/300 imagens, checkpoints e a jornada final **Adicionar conta**. Por isso a Fase 5 permanece em andamento.
+
 ## Fase 6 — Lote inteligente de Projetos
 
 **Objetivo:** substituir o lote sequencial por processo por uma única geração estruturada de temas, seguida da criação e execução dos Projetos.

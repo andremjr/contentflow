@@ -1,8 +1,10 @@
 # Google Flow Browser Images — ContentFlow OS
 
-Versão **1.0.7**.
+Versão **1.1.0**.
 
-Plugin de geração de imagens reais no Google Flow por meio de um Chrome dedicado. A versão 1.0 oferece perfis de conta separados, seleção de modelo, fallback entre modelos da mesma conta, proporção configurável, imagens de referência e captura de múltiplas variantes.
+Plugin de geração de imagens reais no Google Flow por meio de um navegador dedicado. A versão 1.1 inclui uma extensão Manifest V3 própria, carregada pelo plugin, para preencher o prompt e acionar a geração sem disputar teclado, mouse ou foco do sistema com o usuário.
+
+A execução normal começa minimizada. A janela só é trazida para frente quando o usuário inicia explicitamente **Salvar perfil** para login ou reautenticação. Se a extensão não estiver disponível, a execução termina com erro seguro; não existe fallback silencioso para eventos de teclado ou mouse.
 
 Por padrão, cada execução cria um projeto novo no Flow. Assim, cada vídeo e cada nova tentativa após erro ficam isolados de projetos anteriores. Uma `flowUrl` explicitamente configurada continua funcionando como exceção fixada pelo usuário.
 
@@ -74,13 +76,11 @@ O padrão é conservador: uma geração por vez e intervalo mínimo de 5 segundo
 - `requestTimeoutSeconds`
 - `promptSelector`
 - `generateSelector`
-- `typingChunkSize`
-- `typingDelayMs`
 - `diagnosticTrace`
 
 ## Segurança e intervenção humana
 
-Use somente perfis dedicados. Login, reautenticação e CAPTCHA são concluídos pelo usuário na janela visível. O plugin não extrai sessão, não salva token reCAPTCHA e não tenta contornar limites do provedor.
+Use somente perfis dedicados. Login, reautenticação e CAPTCHA são concluídos pelo usuário na janela visível. O plugin não extrai sessão nem salva token reCAPTCHA. A extensão é limitada a `https://labs.google/*`, pertence ao pacote externo deste plugin e tem finalidade exclusiva de produtividade, estabilidade e isolamento da automação.
 
 ## Validação
 

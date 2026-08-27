@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "ContentFlow OS — Google Flow",
+  "version": "1.0.0",
+  "description": "Ponte local do plugin Google Flow para executar comandos de interface sem disputar teclado ou mouse com o usuário.",
+  "permissions": ["tabs"],
+  "host_permissions": ["https://labs.google/*"],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://labs.google/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

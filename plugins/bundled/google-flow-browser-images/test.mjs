@@ -7,7 +7,7 @@ import { __test } from "./handler.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.0.7");
+assert.equal(manifest.version, "1.1.0");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
@@ -168,6 +168,26 @@ await assert.rejects(
 assert.equal(submissions, 1, "failFast não deve enviar os prompts restantes");
 
 const source = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
+const extensionManifest = JSON.parse(
+  await readFile(new URL("./extension/manifest.json", import.meta.url), "utf8"),
+);
+const extensionWorker = await readFile(
+  new URL("./extension/service-worker.js", import.meta.url),
+  "utf8",
+);
+const extensionContent = await readFile(
+  new URL("./extension/content-script.js", import.meta.url),
+  "utf8",
+);
+assert.equal(extensionManifest.manifest_version, 3);
+assert.deepEqual(extensionManifest.host_permissions, ["https://labs.google/*"]);
+assert.ok(extensionWorker.includes("globalThis.contentFlowBridge"));
+assert.ok(extensionWorker.includes("expectedUrl.origin !== FLOW_ORIGIN"));
+assert.ok(extensionContent.includes('action === "setPrompt"'));
+assert.ok(extensionContent.includes('action === "clickGenerate"'));
+assert.ok(source.includes("--load-extension="));
+assert.ok(source.includes("Extensão dedicada conectada"));
+assert.ok(!/client\.send\(\s*["']Input\./.test(source));
 assert.ok(source.includes("Modo Automático do Flow"));
 assert.ok(source.includes("fresh-project"));
 assert.ok(source.includes("!navigation.pinned"));
@@ -178,6 +198,4 @@ assert.ok(!source.includes("createFallbackArtifact"));
 assert.ok(!source.includes("FALLBACK_IMAGE_BASE64"));
 await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), /ENOENT/);
 
-console.log(
-  "OK: v1.0.7 isola projetos, aceita perfis de fallback e expõe lote sequencial ao núcleo.",
-);
+console.log("OK: v1.1.0 empacota extensão MV3, isola input do usuário e preserva lote sequencial.");
