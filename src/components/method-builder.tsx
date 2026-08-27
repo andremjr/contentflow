@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Bot,
   Braces,
@@ -1028,6 +1028,33 @@ function MethodBlockPreview({
   );
 }
 
+function MethodEditorSection({
+  eyebrow,
+  title,
+  description,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="min-w-0 rounded-xl border border-border/80 bg-card/35 p-4 sm:p-5">
+      <div className="mb-4 border-b border-border/60 pb-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          {eyebrow}
+        </p>
+        <h3 className="mt-1 text-sm font-semibold text-foreground">{title}</h3>
+        <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function BlockEditor({
   block,
   methodBlocks,
@@ -1130,9 +1157,9 @@ function BlockEditor({
   };
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="flex items-start justify-between gap-3 pr-8">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <span className={cn("grid size-10 place-items-center rounded-md border", meta.className)}>
             <Icon className="size-4" />
           </span>
@@ -1144,7 +1171,7 @@ function BlockEditor({
             </p>
           </div>
         </div>
-        <div className="flex gap-1">
+        <div className="flex shrink-0 gap-1">
           <Button
             variant="ghost"
             size="icon"
@@ -1157,108 +1184,151 @@ function BlockEditor({
         </div>
       </div>
 
-      <div className="mt-5 space-y-1.5">
-        <Label>Nome da ação</Label>
-        <Input
-          value={block.name ?? meta.label}
-          onChange={(event) => onChange({ name: event.target.value })}
-          placeholder={`Ex: ${meta.label} referências`}
-        />
-      </div>
-
-      <InstructionEditor
-        block={block}
-        capability={selectedCapability}
-        methodBlocks={methodBlocks}
-        blockIndex={index}
-        processType={processType}
-        channelMethods={channelMethods}
-        onChange={onChange}
-      />
-
-      <div className="mt-5 space-y-1.5">
-        <Label>Operador responsável</Label>
-        <Select
-          value={block.operator}
-          onValueChange={(value) =>
-            onChange({ operator: value as BlockOperator, plugin: undefined })
-          }
+      <div className="mt-6 space-y-4">
+        <MethodEditorSection
+          eyebrow="O que faz"
+          title="Ação e instrução"
+          description="Dê um nome claro ao bloco e registre o prompt ou a orientação usada para realizar esta ação."
         >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(OPERATOR_META) as BlockOperator[]).map((operator) => {
-              const item = OPERATOR_META[operator];
-              const OperatorIcon = item.icon;
-              return (
-                <SelectItem key={operator} value={operator}>
-                  <span className="flex items-center gap-2">
-                    <OperatorIcon className="size-3.5" /> {item.label}
-                  </span>
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
+          <div className="space-y-1.5">
+            <Label>Nome da ação</Label>
+            <Input
+              value={block.name ?? meta.label}
+              onChange={(event) => onChange({ name: event.target.value })}
+              placeholder={`Ex: ${meta.label} referências`}
+            />
+          </div>
+
+          <InstructionEditor
+            block={block}
+            capability={selectedCapability}
+            methodBlocks={methodBlocks}
+            blockIndex={index}
+            processType={processType}
+            channelMethods={channelMethods}
+            onChange={onChange}
+          />
+        </MethodEditorSection>
+
+        <MethodEditorSection
+          eyebrow="Quem executa"
+          title="Operador responsável"
+          description="Escolha se esta ação será realizada por uma pessoa, por IA ou por uma operação de código."
+        >
+          <Select
+            value={block.operator}
+            onValueChange={(value) =>
+              onChange({ operator: value as BlockOperator, plugin: undefined })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(OPERATOR_META) as BlockOperator[]).map((operator) => {
+                const item = OPERATOR_META[operator];
+                const OperatorIcon = item.icon;
+                return (
+                  <SelectItem key={operator} value={operator}>
+                    <span className="flex items-center gap-2">
+                      <OperatorIcon className="size-3.5" /> {item.label}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </MethodEditorSection>
       </div>
 
       {block.type === "ESCOLHER" && (
-        <div className="mt-5 space-y-1.5">
-          <Label>Coleção estratégica</Label>
-          {collections.length ? (
-            <Select
-              value={block.collectionId}
-              onValueChange={(collectionId) => onChange({ collectionId })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione a coleção deste bloco" />
-              </SelectTrigger>
-              <SelectContent>
-                {collections.map((collection) => (
-                  <SelectItem key={collection.id} value={collection.id}>
-                    {collection.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-              Nenhuma coleção criada. Acesse a{" "}
-              <a
-                href={`/channel/${channelId}/library`}
-                className="font-medium text-brand-soft hover:underline"
-              >
-                Biblioteca Estratégica
-              </a>{" "}
-              para criar a primeira.
+        <div className="mt-4 space-y-4">
+          <MethodEditorSection
+            eyebrow="O que precisa"
+            title="Coleção e contexto"
+            description="Indique onde estão as opções que já existem e, se necessário, quais informações ajudam na escolha."
+          >
+            <div className="space-y-1.5">
+              <Label>Coleção estratégica</Label>
+              {collections.length ? (
+                <Select
+                  value={block.collectionId}
+                  onValueChange={(collectionId) => onChange({ collectionId })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a coleção deste bloco" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {collections.map((collection) => (
+                      <SelectItem key={collection.id} value={collection.id}>
+                        {collection.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                  Nenhuma coleção criada. Acesse a{" "}
+                  <a
+                    href={`/channel/${channelId}/library`}
+                    className="font-medium text-brand-soft hover:underline"
+                  >
+                    Biblioteca Estratégica
+                  </a>{" "}
+                  para criar a primeira.
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                Obrigatório: Escolher sempre seleciona entre itens preexistentes desta coleção. Para
+                decidir entre resultados produzidos durante o método, use um bloco Validar.
+              </p>
             </div>
-          )}
-          <p className="text-[11px] text-muted-foreground">
-            Obrigatório: Escolher sempre seleciona entre itens preexistentes desta coleção. Para
-            decidir entre resultados produzidos durante o método, use um bloco Validar.
-          </p>
+
+            <ContextInputsEditor
+              block={block}
+              methodBlocks={methodBlocks}
+              blockIndex={index}
+              processType={processType}
+              channelMethods={channelMethods}
+              onChange={onChange}
+            />
+          </MethodEditorSection>
+          <MethodEditorSection
+            eyebrow="O que entrega"
+            title="Item escolhido"
+            description="O item selecionado e os campos definidos na coleção ficam disponíveis para os próximos blocos."
+          >
+            <p className="text-xs text-muted-foreground">
+              A estrutura desta entrega acompanha a coleção estratégica vinculada acima.
+            </p>
+          </MethodEditorSection>
         </div>
       )}
 
       {block.type === "VALIDAR" && (
-        <ValidationEditor
-          block={block}
-          methodBlocks={methodBlocks}
-          index={index}
-          onChange={onChange}
-        />
-      )}
-
-      {block.type === "ESCOLHER" && (
-        <ContextInputsEditor
-          block={block}
-          methodBlocks={methodBlocks}
-          blockIndex={index}
-          processType={processType}
-          channelMethods={channelMethods}
-          onChange={onChange}
-        />
+        <div className="mt-4 space-y-4">
+          <MethodEditorSection
+            eyebrow="O que precisa"
+            title="Resultado que será validado"
+            description="Escolha uma entrega anterior, defina a decisão esperada e o que acontece quando ela é reprovada."
+          >
+            <ValidationEditor
+              block={block}
+              methodBlocks={methodBlocks}
+              index={index}
+              onChange={onChange}
+            />
+          </MethodEditorSection>
+          <MethodEditorSection
+            eyebrow="O que entrega"
+            title="Decisão da validação"
+            description="A aprovação, reprovação ou seleção feita aqui fica disponível como resultado deste bloco."
+          >
+            <p className="text-xs text-muted-foreground">
+              O formato da decisão acompanha o modo de validação escolhido acima.
+            </p>
+          </MethodEditorSection>
+        </div>
       )}
 
       {block.type !== "ESCOLHER" && block.type !== "VALIDAR" && (
@@ -1273,9 +1343,12 @@ function BlockEditor({
       )}
 
       {block.operator !== "Humano" && (
-        <div className="mt-5 space-y-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
+        <div className="mt-4 space-y-4 rounded-xl border border-brand/30 bg-brand/5 p-4 sm:p-5">
           <div className="space-y-1.5">
-            <Label>Executado por</Label>
+            <Label>Plugin e capacidade</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Escolha a ferramenta que realizará esta ação com o contrato definido acima.
+            </p>
             {compatibleCapabilities.length ? (
               <Select
                 value={block.plugin ? `${block.plugin.pluginId}::${block.plugin.capabilityId}` : ""}
@@ -1759,7 +1832,7 @@ function InstructionEditor({
   };
 
   return (
-    <div className="mt-4 space-y-2">
+    <div className="mt-4 space-y-2 border-t border-border/60 pt-4">
       <div className="space-y-1">
         <Label>{label}</Label>
         <p className="text-[11px] text-muted-foreground">{description}</p>
@@ -2158,14 +2231,7 @@ function ValidationEditor({
   }
 
   return (
-    <div className="mt-6 space-y-4 border-t border-border pt-5">
-      <div>
-        <h3 className="text-sm font-semibold">Regra de validação</h3>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Relacione esta validação a uma ação anterior e defina o que acontece com o resultado.
-        </p>
-      </div>
-
+    <div className="space-y-4">
       <div className="space-y-1.5">
         <Label>Bloco validado</Label>
         <Select
@@ -2310,11 +2376,11 @@ function ContextInputsEditor({
   };
 
   return (
-    <div className="mt-6">
+    <div className="mt-5 border-t border-border/60 pt-4">
       <div className="flex items-center justify-between gap-2">
         <div>
           <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-            <History className="size-3.5 text-brand-soft" /> Contexto para a decisão
+            <History className="size-3.5 text-muted-foreground" /> Contexto para a decisão
           </h3>
           <p className="text-[11px] text-muted-foreground">
             Opcional. Consulte entregas de projetos anteriores sem dar acesso direto à Biblioteca.
@@ -2393,56 +2459,51 @@ function DataContractEditor({
     onChange({ outputs: [...outputs, output] });
   };
   return (
-    <>
-      <div className="mt-6 flex items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold">
-            {block.type === "BUSCAR" ? "Informações para a busca" : "Informações usadas"}
-          </h3>
-          <p className="text-[11px] text-muted-foreground">
-            O que esta ação recebe. Uma entrega compatível pode ser conectada automaticamente.
-          </p>
+    <div className="mt-4 space-y-4">
+      <MethodEditorSection
+        eyebrow="O que precisa"
+        title={block.type === "BUSCAR" ? "Informações para a busca" : "Informações de entrada"}
+        description="Defina o que precisa estar disponível antes desta ação começar. Entregas compatíveis podem ser conectadas automaticamente."
+      >
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
+            <Plus className="size-3" /> Adicionar entrada
+          </Button>
         </div>
-        <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
-          <Plus className="size-3" /> Adicionar
-        </Button>
-      </div>
-      <div className="mt-3 space-y-3">
-        {inputs.map((input) => (
-          <InputBindingEditor
-            key={input.id}
-            input={input}
-            availableBlocks={methodBlocks.slice(0, blockIndex)}
-            methodBlocks={methodBlocks}
-            currentBlockId={block.id}
-            processType={processType}
-            channelMethods={channelMethods}
-            onChange={(patch) =>
-              onChange({
-                inputs: inputs.map((item) => (item.id === input.id ? { ...item, ...patch } : item)),
-              })
-            }
-            onRemove={() => onChange({ inputs: inputs.filter((item) => item.id !== input.id) })}
-          />
-        ))}
-        {inputs.length === 0 && (
-          <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
-            Nenhuma entrada específica. Os resultados anteriores continuam disponíveis como contexto
-            durante a produção.
-          </div>
-        )}
-      </div>
+        <div className="mt-3 space-y-3">
+          {inputs.map((input) => (
+            <InputBindingEditor
+              key={input.id}
+              input={input}
+              availableBlocks={methodBlocks.slice(0, blockIndex)}
+              methodBlocks={methodBlocks}
+              currentBlockId={block.id}
+              processType={processType}
+              channelMethods={channelMethods}
+              onChange={(patch) =>
+                onChange({
+                  inputs: inputs.map((item) =>
+                    item.id === input.id ? { ...item, ...patch } : item,
+                  ),
+                })
+              }
+              onRemove={() => onChange({ inputs: inputs.filter((item) => item.id !== input.id) })}
+            />
+          ))}
+          {inputs.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
+              Este bloco não precisa de uma entrada específica para começar.
+            </div>
+          )}
+        </div>
+      </MethodEditorSection>
 
-      <div className="mt-6 flex items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold">
-            {block.type === "BUSCAR" ? "Resultados encontrados" : "Entregas"}
-          </h3>
-          <p className="text-[11px] text-muted-foreground">
-            O que esta ação deve entregar para o método continuar.
-          </p>
-        </div>
-        <div className="flex gap-1">
+      <MethodEditorSection
+        eyebrow="O que entrega"
+        title={block.type === "BUSCAR" ? "Resultados encontrados" : "Resultado desta ação"}
+        description="Defina o que ficará pronto quando esta ação terminar e poderá ser usado pelos próximos blocos."
+      >
+        <div className="flex flex-wrap justify-end gap-1">
           <Button
             size="sm"
             variant="ghost"
@@ -2454,32 +2515,34 @@ function DataContractEditor({
             Usar sugestão
           </Button>
           <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addOutput}>
-            <Plus className="size-3" /> Adicionar
+            <Plus className="size-3" /> Adicionar entrega
           </Button>
         </div>
-      </div>
-      <div className="mt-3 space-y-3">
-        {outputs.map((output) => (
-          <OutputFieldEditor
-            key={output.id}
-            field={output}
-            onChange={(patch) =>
-              onChange({
-                outputs: outputs.map((item) =>
-                  item.id === output.id ? { ...item, ...patch } : item,
-                ),
-              })
-            }
-            onRemove={() => onChange({ outputs: outputs.filter((item) => item.id !== output.id) })}
-          />
-        ))}
-        {outputs.length === 0 && (
-          <div className="rounded-lg border border-dashed border-destructive/50 p-4 text-center text-[11px] text-destructive">
-            Adicione ao menos uma entrega para concluir esta ação.
-          </div>
-        )}
-      </div>
-    </>
+        <div className="mt-3 space-y-3">
+          {outputs.map((output) => (
+            <OutputFieldEditor
+              key={output.id}
+              field={output}
+              onChange={(patch) =>
+                onChange({
+                  outputs: outputs.map((item) =>
+                    item.id === output.id ? { ...item, ...patch } : item,
+                  ),
+                })
+              }
+              onRemove={() =>
+                onChange({ outputs: outputs.filter((item) => item.id !== output.id) })
+              }
+            />
+          ))}
+          {outputs.length === 0 && (
+            <div className="rounded-lg border border-dashed border-destructive/50 p-4 text-center text-[11px] text-destructive">
+              Adicione ao menos uma entrega para concluir esta ação.
+            </div>
+          )}
+        </div>
+      </MethodEditorSection>
+    </div>
   );
 }
 

@@ -33,9 +33,10 @@ Estados usados neste documento:
 | 2     | Nova galeria e gerenciamento de Plugins       | CONCLUÍDA    | Baixa       | Fase 0             |
 | 3     | Conexões, contas e configurações no Método    | CONCLUÍDA    | Alta        | Fases 0 e 2        |
 | 3.5   | Release estável V0.4.3 e validação do updater | CONCLUÍDA    | Média       | Fases 1, 2 e 3     |
-| 5     | Jornada de contas dos plugins de navegador    | PENDENTE     | Média       | Fase 3.5           |
-| 6     | Lote inteligente de Projetos                  | PENDENTE     | Alta        | Fases 3 e 5        |
-| 7     | Estabilização e release V1.0.0                | PENDENTE     | Alta        | Fases 1–3.5, 5 e 6 |
+| 4     | Hierarquia visual do editor de Métodos        | CONCLUÍDA    | Baixa       | Fase 3.5           |
+| 5     | Jornada de contas dos plugins de navegador    | PENDENTE     | Média       | Fases 3.5 e 4      |
+| 6     | Lote inteligente de Projetos                  | PENDENTE     | Alta        | Fases 3, 4 e 5     |
+| 7     | Estabilização e release V1.0.0                | PENDENTE     | Alta        | Fases 1–6          |
 
 ## Fase 0 — Sincronização arquitetural
 
@@ -203,7 +204,7 @@ O núcleo continuará armazenando fora do Método:
 
 ## Fase 3.5 — Release estável V0.4.3 e validação do updater
 
-**Objetivo:** publicar um checkpoint estável depois das mudanças estruturais de Plugins e conexões, permitindo validar no aplicativo instalado todo o fluxo de atualização antes de avançar para a experiência guiada de Métodos.
+**Objetivo:** publicar um checkpoint estável depois das mudanças estruturais de Plugins e conexões, permitindo validar no aplicativo instalado todo o fluxo de atualização antes de avançar para o refinamento visual dos Métodos.
 
 ### Regra de autorização
 
@@ -257,7 +258,47 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 - O GitHub Actions recusou o job antes de iniciar qualquer etapa devido a uma pendência de cobrança contestada pelo titular. A publicação não ficou dependente dessa pendência: o build foi concluído localmente com a mesma configuração e os artefatos foram enviados diretamente pela API oficial do GitHub.
 - A release pública `v0.4.3` está estável, não é draft nem pre-release e é a resposta atual de `/releases/latest`; o instalador público responde com o tamanho esperado de `133120251` bytes.
 - O pacote final foi inspecionado e contém `0` diretórios de plugins incluídos. Os executáveis permanecem sem assinatura Authenticode comercial, conforme a política já documentada da V0; `latest.yml` contém o SHA-512 exigido pelo updater e a release publica também os SHA-256.
-- Próximo passo da fase: no aplicativo instalado `0.4.2`, verificar, baixar e instalar a `0.4.3`, confirmando a preservação dos dados locais.
+- A validação operacional no aplicativo instalado concluiu a atualização `0.4.2 → 0.4.3` e confirmou a preservação dos dados locais.
+
+## Fase 4 — Hierarquia visual do editor de Métodos
+
+**Objetivo:** tornar o editor atual mais autoexplicativo para quem usa o ContentFlow OS como ferramenta de organização, sem criar outro construtor, outro modo de criação ou qualquer novo conceito de domínio.
+
+### Limites obrigatórios
+
+- Preservar exatamente o mesmo fluxo de edição, os mesmos campos e o mesmo formato salvo do Método.
+- Não criar assistente, wizard, modo guiado, abas paralelas, templates automáticos ou etapas adicionais.
+- Não alterar os 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores, contratos de inputs/outputs ou regras de execução.
+- Não alterar a Biblioteca Estratégica nesta fase.
+- Manter a identidade visual simples, moderna e neutra, sem novas famílias de cores ou ornamentação.
+
+### Entregas
+
+- Agrupar visualmente os campos existentes conforme quatro perguntas: o que o bloco faz, quem executa, o que precisa e o que entrega.
+- Reforçar a diferença entre prompt/orientação, informações de entrada e resultado da ação com títulos e textos auxiliares curtos.
+- Melhorar espaçamento, separação e ordem de leitura do modal existente sem esconder recursos avançados.
+- Manter as configurações do plugin no contexto do mesmo bloco e subordinadas ao operador escolhido.
+- Validar a leitura do editor em desktop e em largura reduzida.
+
+### Critérios de aceite
+
+- [x] O usuário localiza rapidamente onde registrar o prompt ou orientação do bloco.
+- [x] Entradas e entregas possuem hierarquia visual e linguagem distintas.
+- [x] Operador, plugin, capacidade e conexão continuam no mesmo bloco e com o comportamento atual.
+- [x] Nenhum campo, modo de criação ou conceito novo foi acrescentado.
+- [x] Um Método existente permanece semanticamente idêntico após abrir e salvar sem alterações.
+- [x] Layout permanece legível em desktop e largura reduzida.
+- [x] Typecheck, suíte de testes e build aprovados.
+
+### Validação realizada em 2026-08-27
+
+- O editor existente foi reorganizado visualmente em quatro perguntas: o que faz, quem executa, o que precisa e o que entrega.
+- `BUSCAR`, `CRIAR`, `ESCOLHER` e `VALIDAR` mantiveram seus campos e contratos; os dois últimos receberam somente explicações visuais para suas entregas implícitas.
+- Nenhum handler, tipo de domínio, persistência, serialização, regra de execução ou Biblioteca Estratégica foi alterado.
+- A inspeção local confirmou o modal em desktop, `800 px` e `390 px`, sem rolagem horizontal na menor largura.
+- `npm run check` completo, incluindo lint, typecheck, testes e builds de cliente e servidor, passou em 2026-08-27.
+
+## Fase 5 — Jornada de contas dos plugins de navegador
 
 **Objetivo:** fazer o usuário conectar contas de navegador sem precisar entender pastas, portas de depuração ou extensões.
 
@@ -383,7 +424,8 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 | 2026-08-27 | Favicon público não será tratado como licença automática de redistribuição.                                                                  | A proveniência e o risco de redistribuição continuam documentados para revisão antes das releases.          |
 | 2026-08-27 | O titular decidiu manter os ícones atuais e encerrar a Fase 2 após a validação operacional.                                                  | A proveniência e as diretrizes identificadas permanecem registradas para revisão de release.                |
 | 2026-08-27 | Núcleo e plugins são produtos absolutamente separados; o ContentFlow OS deve ser útil com zero plugins.                                      | Releases não incluem integrações; todo plugin é externo, removível, consentido e submetido à mesma sandbox. |
-| 2026-08-27 | A atualização real `0.4.2 → 0.4.3` foi concluída preservando os dados locais.                                                                | Fases 1 e 3.5 foram concluídas; o desenvolvimento avança para a experiência guiada de Métodos.              |
+| 2026-08-27 | A atualização real `0.4.2 → 0.4.3` foi concluída preservando os dados locais.                                                                | Fases 1 e 3.5 foram concluídas; o desenvolvimento avança para o refinamento visual dos Métodos.             |
+| 2026-08-27 | A Fase 4 é exclusivamente um refinamento visual do editor de Métodos existente.                                                             | O layout explicita ação, operador, entradas e entregas sem criar modo guiado, lógica ou conceitos novos.    |
 
 ## Pendências de decisão do titular
 
@@ -395,7 +437,7 @@ Estas decisões não bloqueiam a criação do roadmap, mas devem ser resolvidas 
 
 O percentual abaixo mede fases concluídas, não quantidade de código. Deve ser atualizado somente quando todos os critérios obrigatórios da fase estiverem cumpridos.
 
-- Fases concluídas: `5 / 8`
-- Progresso operacional: `62,5%`
-- Fase concluída mais recente: **Fase 3.5 — Release estável V0.4.3 e validação do updater**.
+- Fases concluídas: `6 / 9`
+- Progresso operacional: `66,7%`
+- Fase concluída mais recente: **Fase 4 — Hierarquia visual do editor de Métodos**.
 - Próxima fase: **Fase 5 — Jornada de contas dos plugins de navegador**.
