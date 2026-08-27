@@ -26,17 +26,16 @@ Estados usados neste documento:
 
 ## Ordem de execução
 
-| Ordem | Fase                                           | Estado atual       | Dificuldade | Dependências           |
-| ----- | ---------------------------------------------- | ------------------ | ----------- | ---------------------- |
-| 0     | Sincronização arquitetural                     | CONCLUÍDA          | Baixa       | Nenhuma                |
-| 1     | Atualização pelo próprio aplicativo            | EM VALIDAÇÃO       | Média       | Fase 0                 |
-| 2     | Nova galeria e gerenciamento de Plugins        | CONCLUÍDA          | Baixa       | Fase 0                 |
-| 3     | Conexões, contas e configurações no Método     | CONCLUÍDA          | Alta        | Fases 0 e 2            |
-| 3.5   | Release estável V0.4.3 e validação do updater  | EM DESENVOLVIMENTO | Média       | Fases 1, 2 e 3         |
-| 4     | Construtor de Métodos e prompts mais intuitivo | PENDENTE           | Média       | Fase 3.5               |
-| 5     | Jornada de contas dos plugins de navegador     | PENDENTE           | Média       | Fases 3.5 e 4          |
-| 6     | Lote inteligente de Projetos                   | PENDENTE           | Alta        | Fases 3, 4 e 5         |
-| 7     | Estabilização e release V1.0.0                 | PENDENTE           | Alta        | Fases 1 a 6 e Fase 3.5 |
+| Ordem | Fase                                          | Estado atual | Dificuldade | Dependências       |
+| ----- | --------------------------------------------- | ------------ | ----------- | ------------------ |
+| 0     | Sincronização arquitetural                    | CONCLUÍDA    | Baixa       | Nenhuma            |
+| 1     | Atualização pelo próprio aplicativo           | CONCLUÍDA    | Média       | Fase 0             |
+| 2     | Nova galeria e gerenciamento de Plugins       | CONCLUÍDA    | Baixa       | Fase 0             |
+| 3     | Conexões, contas e configurações no Método    | CONCLUÍDA    | Alta        | Fases 0 e 2        |
+| 3.5   | Release estável V0.4.3 e validação do updater | CONCLUÍDA    | Média       | Fases 1, 2 e 3     |
+| 5     | Jornada de contas dos plugins de navegador    | PENDENTE     | Média       | Fase 3.5           |
+| 6     | Lote inteligente de Projetos                  | PENDENTE     | Alta        | Fases 3 e 5        |
+| 7     | Estabilização e release V1.0.0                | PENDENTE     | Alta        | Fases 1–3.5, 5 e 6 |
 
 ## Fase 0 — Sincronização arquitetural
 
@@ -80,12 +79,12 @@ Estados usados neste documento:
 
 ### Critérios de aceite
 
-- [ ] Botão “Verificar atualização” funcional no aplicativo instalado.
-- [ ] Download mostra progresso e não bloqueia o restante da interface.
-- [ ] “Reiniciar e atualizar” instala a nova versão de forma controlada.
-- [ ] Atualização real da versão N-1 para N validada em instalação limpa do Windows.
-- [ ] Banco, plugins instalados, conexões e perfis preservados após a atualização.
-- [ ] Release sem metadados, incompleta, corrompida ou incompatível falha com mensagem segura.
+- [x] Botão “Verificar atualização” funcional no aplicativo instalado.
+- [x] Download mostra progresso e não bloqueia o restante da interface.
+- [x] “Reiniciar e atualizar” instala a nova versão de forma controlada.
+- [x] Atualização real da versão N-1 para N validada no Windows (`0.4.2 → 0.4.3`).
+- [x] Banco, Canais, Projetos, plugins instalados, conexões e perfis preservados após a atualização.
+- [x] Release sem metadados, incompleta, corrompida ou incompatível falha com mensagem segura.
 - [x] Fluxo da versão portátil claramente diferenciado.
 - [x] Documentação de compilação, publicação e recuperação atualizada.
 
@@ -94,7 +93,8 @@ Estados usados neste documento:
 - Suíte completa `npm run check` aprovada, incluindo o ciclo IPC do updater e mensagens de erro seguras.
 - Instalador NSIS, `latest.yml`, `app-update.yml` e `.blockmap` gerados e inspecionados localmente.
 - Preload isolado, módulo do updater e dependências de runtime confirmados dentro do pacote.
-- Pendente para concluir a fase: executar na Fase 3.5 a atualização real `0.4.2 → 0.4.3`, incluindo preservação de dados e cenários de release inválida.
+- A atualização real `0.4.2 → 0.4.3` foi concluída em 2026-08-27: o aplicativo identificou a release estável, exibiu progresso, preparou o reinício e passou a informar `0.4.3` na instalação existente.
+- Os quatro Canais e seus dados permaneceram visíveis depois da atualização; plugins e dados locais continuaram fora da pasta substituída.
 - Bloqueio identificado: as releases publicadas até `v0.4.2` são pré-releases e não participam do canal estável `latest`; elas também não incluem `latest.yml` e `.blockmap`.
 - A validação operacional ficou deliberadamente adiada para a Fase 3.5 e não bloqueia o desenvolvimento das Fases 2 e 3.
 
@@ -238,11 +238,11 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 - [x] `npm run check` aprovado no commit exato `4e21983` da tag.
 - [x] Release publicada como estável e reconhecida pelo canal `latest`.
 - [x] Instalador, portátil, `latest.yml`, `.blockmap` e SHA-256 foram produzidos no mesmo build local e estão disponíveis publicamente.
-- [ ] Aplicativo instalado na `0.4.2` identifica a `0.4.3` sem configuração manual.
-- [ ] Download mostra progresso e a ação “Reiniciar e atualizar” conclui a instalação.
-- [ ] Banco, Projetos, Métodos, plugins, conexões, perfis e credenciais permanecem disponíveis após a atualização.
+- [x] Aplicativo instalado na `0.4.2` identifica a `0.4.3` sem configuração manual.
+- [x] Download mostra progresso e a ação “Reiniciar e atualizar” conclui a instalação.
+- [x] Banco, Projetos, Métodos, plugins, conexões, perfis e credenciais permanecem disponíveis após a atualização.
 - [x] Falhas simuladas de manifesto, integridade e rede apresentam mensagem segura e permitem nova tentativa nos testes do updater.
-- [ ] Critérios operacionais pendentes da Fase 1 foram reconciliados e marcados com evidências.
+- [x] Critérios operacionais pendentes da Fase 1 foram reconciliados e marcados com evidências.
 
 ### Estado da implementação
 
@@ -258,43 +258,6 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 - A release pública `v0.4.3` está estável, não é draft nem pre-release e é a resposta atual de `/releases/latest`; o instalador público responde com o tamanho esperado de `133120251` bytes.
 - O pacote final foi inspecionado e contém `0` diretórios de plugins incluídos. Os executáveis permanecem sem assinatura Authenticode comercial, conforme a política já documentada da V0; `latest.yml` contém o SHA-512 exigido pelo updater e a release publica também os SHA-256.
 - Próximo passo da fase: no aplicativo instalado `0.4.2`, verificar, baixar e instalar a `0.4.3`, confirmando a preservação dos dados locais.
-
-## Fase 4 — Construtor de Métodos e prompts mais intuitivo
-
-**Objetivo:** deixar evidente que o usuário primeiro descreve o Método e depois escolhe a ferramenta que executará cada etapa.
-
-### Jornada proposta para cada bloco
-
-1. O que esta ação fará?
-2. De quais informações ela precisa?
-3. Qual resultado deverá entregar?
-4. Quem executará: Humano, IA ou Código?
-5. Qual plugin, capability e conexão serão usados?
-
-### Entregas
-
-- Reorganizar o editor de bloco com divulgação progressiva de complexidade.
-- Criar modo guiado de prompt com ação, contexto, restrições, critério de qualidade e formato da entrega.
-- Manter modo completo para edição livre da instrução.
-- Exibir variáveis com nomes humanos e inserir a referência estrutural correta.
-- Ao inserir uma entrega anterior, criar também o binding tipado quando compatível.
-- Mostrar prévia do contrato de saída esperado.
-- Detectar divergências claras entre prompt, cardinalidade e schema de output.
-- Recolher configurações avançadas do executor sem escondê-las definitivamente.
-- Permitir construir e executar Métodos totalmente humanos antes de conectar plugins.
-- Conduzir testes de uso com tarefas representativas de alunos iniciantes.
-
-### Critérios de aceite
-
-- [ ] Usuário consegue criar um bloco humano sem conhecer plugins.
-- [ ] Usuário consegue converter o bloco para IA/Código sem reconstruir seu contrato.
-- [ ] Prompt guiado produz instrução observável e editável.
-- [ ] Variáveis inseridas sempre possuem origem resolvível.
-- [ ] Incompatibilidades de tipo/schema aparecem antes da execução.
-- [ ] Configuração básica não exige abrir opções avançadas.
-- [ ] Testes de uso identificam e resolvem os principais pontos de abandono.
-
-## Fase 5 — Jornada de contas dos plugins de navegador
 
 **Objetivo:** fazer o usuário conectar contas de navegador sem precisar entender pastas, portas de depuração ou extensões.
 
@@ -398,27 +361,29 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 
 ## Registro de decisões
 
-| Data       | Decisão                                                                                                                                      | Impacto                                                                                            |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| 2026-08-26 | Adotar este roadmap como guia operacional até a V1.0.0.                                                                                      | Toda implementação das fases deve atualizar seu estado e critérios.                                |
-| 2026-08-26 | Priorizar updater antes da reorganização estrutural de Plugins e Métodos.                                                                    | Permite entregar uma melhoria independente e simplifica as releases seguintes.                     |
-| 2026-08-26 | Reduzir a galeria de Plugins a cards quadrados com ícone e nome.                                                                             | Configuração deixa o card e vai para o contexto do Método/conexão.                                 |
-| 2026-08-26 | Configuração funcional e seleção de conta pertencem ao Método; secrets permanecem no cofre do núcleo.                                        | Exige múltiplas conexões nomeadas e referências opacas.                                            |
-| 2026-08-26 | Plugins de navegador atuais não exigirão extensões; usarão perfis dedicados preparados explicitamente.                                       | A interface deve ocultar detalhes técnicos e guiar o login.                                        |
-| 2026-08-26 | Substituir o lote sequencial por geração estruturada única seguida de revisão e criação de Projetos.                                         | O novo fluxo pertence ao Orquestrador, não ao Método de vídeo individual.                          |
-| 2026-08-27 | Conexões são registros locais nomeados e reutilizáveis; o Bloco guarda `connectionId` e a exportação preserva apenas o requisito de conexão. | Renomear não quebra Métodos, secrets não são exportados e importações exigem associação local.     |
-| 2026-08-27 | Branding opcional usa `branding.iconPath` com PNG/WebP local de até 512 KiB.                                                                 | Manifestos API v1 antigos usam fallback; favicon remoto e SVG não entram no contrato inicial.      |
-| 2026-08-27 | O lote inteligente exige `theme`; `angle`, `promise` e `notes` são opcionais.                                                                | Permite lista mínima e extensível sem transformar o Método em fluxo multivídeo.                    |
-| 2026-08-27 | A V1 usará somente o canal estável `latest` do GitHub Releases.                                                                              | Drafts, prereleases e canais beta não serão oferecidos pelo botão inicial.                         |
-| 2026-08-27 | Assinatura Authenticode é recomendada para a distribuição pública da V1 e suportada pelo workflow via secrets.                               | O mecanismo pode ser testado sem certificado; a release final deve registrar seu estado.           |
-| 2026-08-27 | Adiar a primeira validação pública do updater para a Fase 3.5, por meio da release estável `v0.4.3`.                                         | Fases 2 e 3 avançam sem publicar; versão, tag e release dependem de comando explícito do titular.  |
-| 2026-08-27 | Releases serão administradas pela API oficial ou workflow autenticado, não por automação de navegador.                                       | Operações externas ficam auditáveis e reproduzíveis no pipeline do repositório.                    |
-| 2026-08-27 | Cards de plugin mantêm ícone e nome, acrescentando descrição limitada a três linhas.                                                         | A galeria continua compacta em quatro colunas sem deixar a função do plugin ambígua.               |
-| 2026-08-27 | Ícones de provedores são incorporados como PNG local com origem documentada; o runtime nunca busca favicon remoto.                           | Assets passam por validação de caminho, assinatura e tamanho; ausência ou falha usa fallback.      |
-| 2026-08-27 | Remoção de plugin exige consulta prévia dos Métodos dependentes e confirmação informada.                                                     | Novas execuções ficam bloqueadas sem apagar outputs históricos já produzidos.                      |
-| 2026-08-27 | Atualização manual por pasta é atômica, aceita apenas SemVer superior e invalida o consentimento da versão anterior.                         | Falha restaura o pacote anterior; nova versão exige revisão de permissões antes da execução.       |
-| 2026-08-27 | Favicon público não será tratado como licença automática de redistribuição.                                                                  | A proveniência e o risco de redistribuição continuam documentados para revisão antes das releases. |
-| 2026-08-27 | O titular decidiu manter os ícones atuais e encerrar a Fase 2 após a validação operacional.                                                  | A proveniência e as diretrizes identificadas permanecem registradas para revisão de release.       |
+| Data       | Decisão                                                                                                                                      | Impacto                                                                                                     |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 2026-08-26 | Adotar este roadmap como guia operacional até a V1.0.0.                                                                                      | Toda implementação das fases deve atualizar seu estado e critérios.                                         |
+| 2026-08-26 | Priorizar updater antes da reorganização estrutural de Plugins e Métodos.                                                                    | Permite entregar uma melhoria independente e simplifica as releases seguintes.                              |
+| 2026-08-26 | Reduzir a galeria de Plugins a cards quadrados com ícone e nome.                                                                             | Configuração deixa o card e vai para o contexto do Método/conexão.                                          |
+| 2026-08-26 | Configuração funcional e seleção de conta pertencem ao Método; secrets permanecem no cofre do núcleo.                                        | Exige múltiplas conexões nomeadas e referências opacas.                                                     |
+| 2026-08-26 | Plugins de navegador atuais não exigirão extensões; usarão perfis dedicados preparados explicitamente.                                       | A interface deve ocultar detalhes técnicos e guiar o login.                                                 |
+| 2026-08-26 | Substituir o lote sequencial por geração estruturada única seguida de revisão e criação de Projetos.                                         | O novo fluxo pertence ao Orquestrador, não ao Método de vídeo individual.                                   |
+| 2026-08-27 | Conexões são registros locais nomeados e reutilizáveis; o Bloco guarda `connectionId` e a exportação preserva apenas o requisito de conexão. | Renomear não quebra Métodos, secrets não são exportados e importações exigem associação local.              |
+| 2026-08-27 | Branding opcional usa `branding.iconPath` com PNG/WebP local de até 512 KiB.                                                                 | Manifestos API v1 antigos usam fallback; favicon remoto e SVG não entram no contrato inicial.               |
+| 2026-08-27 | O lote inteligente exige `theme`; `angle`, `promise` e `notes` são opcionais.                                                                | Permite lista mínima e extensível sem transformar o Método em fluxo multivídeo.                             |
+| 2026-08-27 | A V1 usará somente o canal estável `latest` do GitHub Releases.                                                                              | Drafts, prereleases e canais beta não serão oferecidos pelo botão inicial.                                  |
+| 2026-08-27 | Assinatura Authenticode é recomendada para a distribuição pública da V1 e suportada pelo workflow via secrets.                               | O mecanismo pode ser testado sem certificado; a release final deve registrar seu estado.                    |
+| 2026-08-27 | Adiar a primeira validação pública do updater para a Fase 3.5, por meio da release estável `v0.4.3`.                                         | Fases 2 e 3 avançam sem publicar; versão, tag e release dependem de comando explícito do titular.           |
+| 2026-08-27 | Releases serão administradas pela API oficial ou workflow autenticado, não por automação de navegador.                                       | Operações externas ficam auditáveis e reproduzíveis no pipeline do repositório.                             |
+| 2026-08-27 | Cards de plugin mantêm ícone e nome, acrescentando descrição limitada a três linhas.                                                         | A galeria continua compacta em quatro colunas sem deixar a função do plugin ambígua.                        |
+| 2026-08-27 | Ícones de provedores são incorporados como PNG local com origem documentada; o runtime nunca busca favicon remoto.                           | Assets passam por validação de caminho, assinatura e tamanho; ausência ou falha usa fallback.               |
+| 2026-08-27 | Remoção de plugin exige consulta prévia dos Métodos dependentes e confirmação informada.                                                     | Novas execuções ficam bloqueadas sem apagar outputs históricos já produzidos.                               |
+| 2026-08-27 | Atualização manual por pasta é atômica, aceita apenas SemVer superior e invalida o consentimento da versão anterior.                         | Falha restaura o pacote anterior; nova versão exige revisão de permissões antes da execução.                |
+| 2026-08-27 | Favicon público não será tratado como licença automática de redistribuição.                                                                  | A proveniência e o risco de redistribuição continuam documentados para revisão antes das releases.          |
+| 2026-08-27 | O titular decidiu manter os ícones atuais e encerrar a Fase 2 após a validação operacional.                                                  | A proveniência e as diretrizes identificadas permanecem registradas para revisão de release.                |
+| 2026-08-27 | Núcleo e plugins são produtos absolutamente separados; o ContentFlow OS deve ser útil com zero plugins.                                      | Releases não incluem integrações; todo plugin é externo, removível, consentido e submetido à mesma sandbox. |
+| 2026-08-27 | A atualização real `0.4.2 → 0.4.3` foi concluída preservando os dados locais.                                                                | Fases 1 e 3.5 foram concluídas; o desenvolvimento avança para a experiência guiada de Métodos.              |
 
 ## Pendências de decisão do titular
 
@@ -430,8 +395,7 @@ Estas decisões não bloqueiam a criação do roadmap, mas devem ser resolvidas 
 
 O percentual abaixo mede fases concluídas, não quantidade de código. Deve ser atualizado somente quando todos os critérios obrigatórios da fase estiverem cumpridos.
 
-- Fases concluídas: `3 / 9`
-- Progresso operacional: `33,3%`
-- Fase concluída mais recente: **Fase 3 — Conexões, contas e configurações no Método**.
-- Próxima fase condicionada: **Fase 3.5**, que só começa após autorização explícita para preparar a `v0.4.3`.
-- Validação aguardando checkpoint: **Fase 1**, a ser concluída durante a **Fase 3.5**.
+- Fases concluídas: `5 / 8`
+- Progresso operacional: `62,5%`
+- Fase concluída mais recente: **Fase 3.5 — Release estável V0.4.3 e validação do updater**.
+- Próxima fase: **Fase 5 — Jornada de contas dos plugins de navegador**.

@@ -287,7 +287,7 @@ Os outputs concluídos dos processos anteriores e as demais entregas compatívei
 
 ## 12. Protocolo de Plugins
 
-O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), os requisitos para plugins que automatizam interfaces web em [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Plugins oficiais são confiáveis pelo núcleo; plugins locais e comunitários exigem consentimento local e executam na sandbox de permissões em processo separado.
+O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), os requisitos para plugins que automatizam interfaces web em [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Todos são externos, exigem consentimento local e executam na mesma sandbox de permissões em processo separado, inclusive os mantidos pelo autor do ContentFlow OS.
 
 A arquitetura não possui aprovação central: qualquer pessoa pode criar e compartilhar um plugin, inclusive por arquivo ou repositório, e qualquer usuário pode instalá-lo e autorizá-lo localmente. O núcleo aplica validações automáticas e pede consentimento para permissões; revisão humana do mantenedor existe apenas para selo `official`/`verified` ou publicação em catálogo opcional.
 
@@ -295,9 +295,7 @@ Uma capacidade de plugin pode ser internamente complexa e demorada. Ela pode pes
 
 Automações de navegador podem cadastrar vários perfis de conta explicitamente preparados. O núcleo mantém a ordem, o cursor e as entregas e permite fallback automático somente para falhas técnicas transitórias; CAPTCHA, autenticação, rate limit, cota, upgrade e bloqueio pausam para intervenção. Capacidades que declaram uma entrada em lote podem solicitar orquestração sequencial item a item pelo núcleo, que persiste cada texto ou mídia antes de avançar e nunca repete itens concluídos ao trocar de perfil.
 
-O plugin oficial `OpenAI Models` usa a Responses API e pode operar ações baseadas em linguagem nos quatro Blocos Essenciais e nos oito Processos Universais. Depois da conexão local, o servidor consulta `GET /v1/models` com a chave da sessão e o construtor substitui o catálogo de fallback pelos modelos de linguagem realmente disponíveis nessa conta. Os parâmetros declarados em `blockConfigSchema` aparecem imediatamente após a vinculação do plugin ao bloco. Modelos especializados de imagem, áudio, vídeo, transcrição ou embeddings continuam exigindo plugins próprios, pois usam contratos de mídia e APIs diferentes de um LLM com saída textual.
-
-O plugin oficial `Anthropic Claude` mantém o mesmo contrato de linguagem pela Messages API. A chave é protegida pelo cofre seguro do ambiente local, `GET /v1/models` fornece o catálogo disponível para a conta e blocos `BUSCAR` podem usar a ferramenta de pesquisa web declarada pela Anthropic. A integração é mantida pelo ContentFlow OS e não implica endosso do provedor.
+Qualquer integração com modelos de linguagem, catálogos de modelos, pesquisa web ou mídia especializada é responsabilidade do respectivo plugin externo. O núcleo apenas apresenta `blockConfigSchema`, capacidades e contratos declarados pelo pacote; ele não conhece fornecedor, endpoint, modelo ou ferramenta específica.
 
 ---
 
@@ -313,7 +311,7 @@ Plugins de operador `Código` podem consumir esses layouts pelo contrato `thumbn
 
 A distribuição Windows empacota a interface em Electron e inicia a API como processo filho com uma cópia privada do Node 26. Usuários finais não precisam instalar Node, npm ou abrir terminal. O processo Electron hospeda apenas a janela e os arquivos da interface; o runtime privado preserva para a API e para plugins comunitários o modelo de permissões documentado em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
 
-O programa instalado é substituível e os dados persistentes permanecem em `%APPDATA%\ContentFlow OS\data`. Plugins instalados e vínculos de desenvolvimento também vivem nessa área. Exemplos editáveis são copiados na primeira abertura para `Documentos\ContentFlow OS\Plugins`. Essa separação permite recompilar e reinstalar o núcleo sem apagar projetos, credenciais ou plugins do usuário.
+O programa instalado é substituível e os dados persistentes permanecem em `%APPDATA%\ContentFlow OS\data`. Plugins instalados e vínculos de desenvolvimento também vivem nessa área, mas são obtidos separadamente. O núcleo não inclui nem copia plugins ou exemplos na primeira abertura. Essa separação permite recompilar e reinstalar o núcleo sem apagar projetos, credenciais ou plugins externos instalados pelo usuário.
 
 O instalador NSIS consulta o canal estável público por um updater executado somente no processo principal do Electron. A interface recebe por preload isolado apenas estado, verificação, download, instalação e abertura da release oficial. O download é iniciado pelo usuário, mostra progresso e só reinicia depois de confirmação. Preview web não executa updater; a versão portátil abre a release mais recente em vez de prometer substituição automática.
 
