@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ContentFlow OS — Google Flow",
-  "version": "2.0.0",
-  "description": "Ponte local do plugin Google Flow para executar comandos de interface sem disputar teclado ou mouse com o usuário.",
+  "name": "ContentFlow Browser Bridge",
+  "version": "0.1.0",
+  "description": "Ponte comum dos plugins de automação de navegador compatíveis com o ContentFlow OS.",
   "permissions": ["tabs", "storage"],
   "host_permissions": ["https://labs.google/*"],
   "background": {

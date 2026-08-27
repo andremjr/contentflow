@@ -59,12 +59,12 @@ export async function testExtensionBridge(source) {
 
   const bridge = context.contentFlowBridge;
   assert.ok(bridge);
-  assert.equal(bridge.identity.pluginId, "local.contentflow.google-flow-batch-images");
+  assert.equal(bridge.identity.bridgeId, "com.contentflow.browser-bridge");
   assert.equal(bridge.identity.protocolVersion, 2);
   assert.equal(typeof runtimeListener, "function");
 
   const handshake = {
-    pluginId: bridge.identity.pluginId,
+    pluginId: "local.contentflow.google-flow-batch-images",
     protocolVersion: 2,
     profileId: "conta-principal",
     sessionToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

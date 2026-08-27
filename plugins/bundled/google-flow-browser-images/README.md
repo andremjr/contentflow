@@ -2,7 +2,7 @@
 
 Versão **1.2.0**.
 
-Plugin de geração de imagens reais no Google Flow por meio do Chrome normal com um perfil dedicado. A versão 1.2 inclui uma extensão Manifest V3 própria para preencher o prompt e acionar a geração sem disputar teclado, mouse ou foco do sistema com o usuário.
+Plugin de geração de imagens reais no Google Flow por meio do Chrome normal com um perfil dedicado. A versão 1.2 usa a única extensão companheira **ContentFlow Browser Bridge** para preencher o prompt e acionar a geração sem disputar teclado, mouse ou foco do sistema com o usuário.
 
 A execução normal começa minimizada. A janela só é trazida para frente quando o usuário inicia explicitamente **Adicionar conta** para instalar a extensão, fazer login ou reautenticar. Se a extensão não estiver disponível, a execução termina com erro seguro; não existe fallback silencioso para eventos de teclado ou mouse.
 
@@ -10,18 +10,14 @@ A execução normal começa minimizada. A janela só é trazida para frente quan
 
 Cada perfil dedicado do Chrome precisa receber a extensão uma vez:
 
-1. Mantenha a pasta completa deste plugin em um local definitivo; não mova a pasta depois da instalação.
+1. Mantenha a pasta `extensions/contentflow-browser-bridge` do repositório em um local definitivo; não a mova depois da instalação.
 2. No bloco do Método, informe o nome do perfil e clique em **Adicionar conta**.
 3. Na janela dedicada que abrir, acesse `chrome://extensions`.
 4. Ative **Modo do desenvolvedor**.
-5. Clique em **Carregar sem compactação** e selecione a pasta `extension` que fica dentro deste plugin.
+5. Clique em **Carregar sem compactação** e selecione a pasta `extensions/contentflow-browser-bridge`.
 6. Volte à aba do Google Flow. O plugin recarrega a página quando necessário, verifica a extensão e aguarda o login.
 
-Repita os passos para cada perfil/conta adicional. Não instale a extensão no perfil pessoal do Chrome se ele não será usado pelo plugin. Ao atualizar os arquivos do plugin, abra `chrome://extensions` no perfil dedicado e clique em **Recarregar** no card da extensão.
-
-### Instalação administrativa em todos os perfis
-
-O pacote [`windows-enterprise-install`](windows-enterprise-install/README.md) gera o CRX, o App ID e o `update.xml`, solicita UAC e registra uma política de máquina reversível. O Chrome só permite extensão local forçada fora da Chrome Web Store em Windows vinculado a AD, Azure AD ou Chrome Enterprise Core. Em computadores pessoais, o instalador encerra sem alterar o Registro; use a instalação manual acima até existir uma distribuição pela Chrome Web Store.
+Repita os passos para cada perfil/conta adicional. Não instale a extensão no perfil pessoal do Chrome se ele não será usado pelo plugin. Ao atualizar a ponte, abra `chrome://extensions` no perfil dedicado e clique em **Recarregar** no card da extensão. Os usuários fazem essa instalação manualmente; automações locais usadas pelo mantenedor não fazem parte do aplicativo.
 
 ### Sair ou remover uma conta
 
@@ -103,7 +99,7 @@ O padrão é conservador: uma geração por vez e intervalo mínimo de 5 segundo
 
 ## Segurança e intervenção humana
 
-Use somente perfis dedicados. Login, reautenticação e CAPTCHA são concluídos pelo usuário na janela visível. O plugin não extrai sessão nem salva token reCAPTCHA. A extensão é instalada manualmente, limitada a `https://labs.google/*`, pertence ao pacote externo deste plugin e tem finalidade exclusiva de produtividade, estabilidade e isolamento da automação.
+Use somente perfis dedicados. Login, reautenticação e CAPTCHA são concluídos pelo usuário na janela visível. O plugin não extrai sessão nem salva token reCAPTCHA. A ContentFlow Browser Bridge é instalada manualmente, habilita atualmente `https://labs.google/*` para este piloto e tem finalidade exclusiva de produtividade, estabilidade e isolamento da automação. Ela é comum a todos os plugins de navegador compatíveis e não pertence a este plugin.
 
 ## Validação
 

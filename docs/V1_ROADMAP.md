@@ -318,7 +318,7 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 ### Decisões de produto
 
 - Os plugins oficiais de navegador convergirão para uma extensão companheira Manifest V3 comum e externa ao núcleo. A ponte compartilha transporte, autenticação, isolamento e operações DOM limitadas; cada plugin mantém seu adapter, seletores, regras e validação do provedor.
-- A extensão precisa existir em cada perfil usado pela automação. Em desenvolvimento, pode ser carregada manualmente; para usuários pessoais, a distribuição automática suportada exige Chrome Web Store. CRX local forçada em todos os perfis fica restrita pelo próprio Chrome a dispositivos com AD, Azure AD ou Chrome Enterprise Core.
+- A extensão precisa existir em cada perfil usado pela automação. Na V1, os usuários fazem a instalação manual por **Carregar sem compactação**. Automação usada pelo mantenedor para preparar seus próprios perfis é uma tarefa paralela e não entra no aplicativo.
 - A extensão executará operações estruturadas na aba correta por content script e troca de mensagens. A execução rotineira não usará teclado, mouse, coordenadas de tela, foco do Windows ou ativação da janela como mecanismo de automação.
 - O navegador dedicado iniciará minimizado ou em background e permanecerá separado do que o usuário estiver fazendo. Só poderá ser exibido e receber foco mediante ação explícita para login, reautenticação ou diagnóstico.
 - Cada conta/provedor terá perfil persistente e isolado, preparado explicitamente uma vez pelo usuário por uma interface **Adicionar conta**.
@@ -351,15 +351,14 @@ ContentFlow OS
 4. Migrar primeiro o plugin **Google Flow Browser Images**, porque ele reproduz o problema de produtividade e estabilidade em volume relatado pelos alunos.
 5. Executar testes progressivos de 10, 50, 100 e, quando a conta permitir, 300 imagens, persistindo cada resultado antes de avançar e retomando sem duplicação.
 6. Depois da validação do Flow, extrair a ponte comum reutilizável e migrar ChatGPT, Gemini, Claude, Grok e Meta sem mover adapters de fornecedor para o núcleo ou para uma camada monolítica.
-7. Publicar a extensão companheira pelo canal oficial adequado e oferecer instalação administrativa apenas em Windows gerenciado; em PCs pessoais, manter a instalação por perfil até a publicação na Chrome Web Store.
+7. Documentar a instalação manual da extensão companheira uma vez por perfil dedicado, sem incorporar scripts pessoais de preparação ao produto.
 8. Concluir a jornada **Adicionar conta**, estados de atenção e remoção/revogação dos perfis dedicados.
 
 ### Entregas
 
 - Extensão MV3 mínima no piloto e ponte comum extraída após validação do protocolo.
-- Chrome normal com perfil dedicado e extensão instalada uma vez por perfil, ou por política de máquina quando o ambiente for oficialmente elegível.
+- Chrome normal com perfil dedicado e extensão instalada manualmente uma vez por perfil.
 - Ponte estruturada entre handler e extensão sem expor porta de depuração.
-- Empacotador administrativo com UAC, App ID estável, `update.xml`, política exata e rollback, recusando dispositivos Windows não gerenciados.
 - Execução normal minimizada/background, sem roubo de foco e sem input do sistema operacional.
 - Superfície visível sob demanda para login, reautenticação e diagnóstico.
 - Fila com checkpoint por item, reconciliação após timeout e coleta idempotente de artifacts.
@@ -371,7 +370,6 @@ ContentFlow OS
 ### Critérios de aceite
 
 - [ ] A extensão companheira pode ser instalada em cada perfil dedicado, com instruções reproduzíveis e sem tocar no perfil pessoal do usuário sem consentimento.
-- [x] O empacotador administrativo gera CRX3, extrai o App ID, gera `update.xml`, preserva a chave e se recusa a gravar HKLM quando o Windows não é elegível para extensão local forçada.
 - [ ] O transporte comum aceita mais de um plugin sem incorporar seletores ou regras de fornecedor.
 - [ ] Apagar ou adicionar uma conta não altera outros perfis nem apaga outputs já produzidos.
 - [ ] O usuário consegue trabalhar normalmente em outro aplicativo enquanto uma execução longa continua minimizada.
@@ -388,11 +386,11 @@ ContentFlow OS
 
 ### Estado da implementação — 2026-08-27
 
-- O piloto do Google Flow passou a empacotar uma extensão Manifest V3 própria, restrita a `https://labs.google/*`, com service worker e content script versionados. Ela ainda é específica do Flow; a extração da ponte comum permanece uma entrega desta fase.
+- A **ContentFlow Browser Bridge** passou a ser um pacote companheiro único em `extensions/contentflow-browser-bridge`, separado do núcleo e de qualquer plugin individual. A versão piloto habilita somente `https://labs.google/*`; novos plugins serão adicionados à mesma ponte por allowlist e protocolo versionados.
 - O handler usa a extensão instalada no perfil dedicado para preencher o prompt e acionar a geração. A ausência da ponte encerra a execução e não reativa o caminho antigo.
 - A execução rotineira não ativa a aba, não traz a página para frente e não envia eventos CDP de teclado ou mouse. A janela visível permanece reservada à ação explícita **Adicionar conta**.
-- O modo minimizado agora é o padrão e o Chromium empacotado foi descartado. A decisão mais recente do titular é convergir para uma única extensão no Chrome normal e, quando suportado, instalá-la para todos os perfis.
-- Foi criado um instalador administrativo reversível para o piloto. O teste local gerou CRX3 e XML com ID estável; esta máquina está em `WORKGROUP`, sem AD/Azure AD, portanto o instalador deve recusar a gravação da política conforme a restrição oficial do Chrome.
+- O modo minimizado agora é o padrão e o Chromium empacotado foi descartado. A decisão mais recente do titular é usar uma única extensão no Chrome normal, instalada manualmente pelos usuários em cada perfil dedicado.
+- A preparação automatizada dos perfis do mantenedor foi explicitamente classificada como tarefa local paralela. Para os usuários, a instalação da ponte permanece manual em cada perfil dedicado.
 - O envelope v2 agora vincula plugin, perfil, execução, comando, origem, aba, expiração e token efêmero; também inclui cancelamento e cache idempotente no service worker e na página. O teste automatizado simula 300 comandos sem repetir efeitos.
 - Ainda faltam o teste real de isolamento enquanto o usuário usa outro aplicativo, a instalação manual no perfil de desenvolvimento, os testes progressivos de imagens reais e a migração dos demais plugins de navegador. Por isso a Fase 5 permanece em andamento.
 
@@ -494,7 +492,7 @@ ContentFlow OS
 | 2026-08-27 | A Fase 4 é exclusivamente um refinamento visual do editor de Métodos existente.                                                                  | O layout explicita ação, operador, entradas e entregas sem criar modo guiado, lógica ou conceitos novos.                      |
 | 2026-08-27 | Histórico do Canal existe em `ESCOLHER` para escolhas anteriores do mesmo bloco e em `CRIAR` para resultados finais anteriores do Processo.      | O usuário ativa a memória e informa apenas a quantidade; schema, elegibilidade, origem técnica e proveniência ficam internas. |
 | 2026-08-27 | Plugins oficiais de navegador convergirão para uma extensão companheira comum e externa ao núcleo; adapters continuam nos plugins.              | A automação rotineira opera por mensagens/content scripts, minimizada e sem misturar regras de fornecedor ao ContentFlow OS. |
-| 2026-08-27 | CRX local só será forçada em todos os perfis quando o Windows estiver em AD, Azure AD ou Chrome Enterprise Core.                                  | Em PC pessoal, usar instalação por perfil ou Chrome Web Store; o instalador recusa política inválida e oferece rollback.      |
+| 2026-08-27 | Instalação automatizada em massa é uma ferramenta pessoal do mantenedor, não uma função do ContentFlow OS.                                      | Usuários instalam manualmente a ponte única em cada perfil dedicado; o aplicativo não executa RPA de instalação.              |
 | 2026-08-27 | Google Flow será o piloto da migração para extensão e isolamento de foco.                                                                        | Testes progressivos de até 300 imagens validarão checkpoint, retomada e produtividade antes das demais migrações.             |
 
 ## Pendências de decisão do titular

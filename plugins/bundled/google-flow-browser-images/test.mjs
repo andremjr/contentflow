@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { __test } from "./handler.mjs";
-import { testExtensionBridge } from "./extension-bridge.test.mjs";
+import { testExtensionBridge } from "../../../extensions/contentflow-browser-bridge/test.mjs";
 
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
@@ -176,28 +176,32 @@ assert.equal(submissions, 1, "failFast não deve enviar os prompts restantes");
 
 const source = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 const extensionManifest = JSON.parse(
-  await readFile(new URL("./extension/manifest.json", import.meta.url), "utf8"),
+  await readFile(
+    new URL("../../../extensions/contentflow-browser-bridge/manifest.json", import.meta.url),
+    "utf8",
+  ),
 );
 const extensionWorker = await readFile(
-  new URL("./extension/service-worker.js", import.meta.url),
+  new URL("../../../extensions/contentflow-browser-bridge/service-worker.js", import.meta.url),
   "utf8",
 );
 const extensionContent = await readFile(
-  new URL("./extension/content-script.js", import.meta.url),
+  new URL("../../../extensions/contentflow-browser-bridge/content-script.js", import.meta.url),
   "utf8",
 );
 assert.equal(extensionManifest.manifest_version, 3);
-assert.equal(extensionManifest.version, "2.0.0");
+assert.equal(extensionManifest.version, "0.1.0");
 assert.deepEqual(extensionManifest.host_permissions, ["https://labs.google/*"]);
 assert.deepEqual(extensionManifest.permissions, ["tabs", "storage"]);
 assert.ok(extensionWorker.includes("globalThis.contentFlowBridge"));
+assert.ok(extensionWorker.includes('BRIDGE_ID = "com.contentflow.browser-bridge"'));
 assert.ok(extensionWorker.includes("command.executionKey"));
 assert.ok(extensionWorker.includes("sessionToken"));
 assert.ok(extensionContent.includes('action === "setPrompt"'));
 assert.ok(extensionContent.includes('action === "clickGenerate"'));
 assert.ok(!source.includes("--load-extension="));
 assert.ok(source.includes("Carregar sem compactação"));
-assert.ok(source.includes("Extensão dedicada conectada"));
+assert.ok(source.includes("ContentFlow Browser Bridge conectada"));
 assert.ok(!/client\.send\(\s*["']Input\./.test(source));
 assert.equal((source.match(/Page\.bringToFront/g) || []).length, 1);
 assert.equal((source.match(/Target\.activateTarget/g) || []).length, 1);
@@ -213,5 +217,5 @@ await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), 
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v1.2.0 usa extensão manual no Chrome, isola input e valida 300 comandos idempotentes.",
+  "OK: v1.2.0 usa a ponte comum no Chrome, isola input e valida 300 comandos idempotentes.",
 );

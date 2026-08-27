@@ -1,9 +1,17 @@
-const PLUGIN_ID = "local.contentflow.google-flow-batch-images";
+const BRIDGE_ID = "com.contentflow.browser-bridge";
+const FLOW_PLUGIN_ID = "local.contentflow.google-flow-batch-images";
 const PROTOCOL_VERSION = 2;
 const FLOW_ORIGIN = "https://labs.google";
 const COMMAND_CACHE_KEY = "contentflowCommandCacheV2";
 const MAX_COMMAND_CACHE = 500;
-const ALLOWED_ACTIONS = new Set(["ping", "inspect", "setPrompt", "clickGenerate"]);
+const PLUGIN_POLICIES = Object.freeze({
+  [FLOW_PLUGIN_ID]: Object.freeze({
+    origin: FLOW_ORIGIN,
+    tabPattern: `${FLOW_ORIGIN}/*`,
+    requiredPath: "/tools/flow",
+    actions: new Set(["ping", "inspect", "setPrompt", "clickGenerate"]),
+  }),
+});
 const inFlight = new Map();
 let activeSession = null;
 
@@ -13,19 +21,23 @@ function bridgeError(code, message) {
 
 function identity() {
   return {
-    pluginId: PLUGIN_ID,
+    bridgeId: BRIDGE_ID,
     protocolVersion: PROTOCOL_VERSION,
     extensionVersion: chrome.runtime.getManifest().version,
   };
 }
 
-function selectFlowTab(tabs, expectedUrl) {
+function policyForPlugin(pluginId) {
+  return PLUGIN_POLICIES[pluginId] || null;
+}
+
+function selectPluginTab(tabs, expectedUrl, policy) {
   const expected = new URL(expectedUrl);
-  if (expected.origin !== FLOW_ORIGIN) return null;
+  if (expected.origin !== policy.origin) return null;
   const candidates = tabs.filter((tab) => {
     try {
       const url = new URL(tab.url || "");
-      return url.origin === FLOW_ORIGIN && url.pathname.includes("/tools/flow");
+      return url.origin === policy.origin && url.pathname.includes(policy.requiredPath);
     } catch {
       return false;
     }
@@ -73,7 +85,11 @@ function validateSession(command) {
       "A sessão efêmera da extensão não corresponde à execução.",
     );
   }
-  if (command.pluginId !== PLUGIN_ID || command.protocolVersion !== PROTOCOL_VERSION) {
+  if (
+    command.pluginId !== activeSession.pluginId ||
+    !policyForPlugin(command.pluginId) ||
+    command.protocolVersion !== PROTOCOL_VERSION
+  ) {
     return bridgeError("PROTOCOL_MISMATCH", "Plugin ou versão de protocolo incompatível.");
   }
   if (command.profileId !== activeSession.profileId) {
@@ -85,7 +101,7 @@ function validateSession(command) {
   if (!/^[a-f0-9]{64}$/i.test(String(command.commandId || ""))) {
     return bridgeError("INVALID_COMMAND", "commandId ausente ou inválido.");
   }
-  if (!ALLOWED_ACTIONS.has(command.action)) {
+  if (!policyForPlugin(command.pluginId).actions.has(command.action)) {
     return bridgeError("UNKNOWN_ACTION", `Ação não suportada: ${String(command.action)}`);
   }
   const now = Date.now();
@@ -122,14 +138,15 @@ function withTimeout(promise, timeoutMs) {
 }
 
 async function dispatchToPage(command) {
+  const policy = policyForPlugin(command.pluginId);
   let expectedUrl;
   try {
     expectedUrl = new URL(command.expectedUrl);
   } catch {
     return bridgeError("INVALID_COMMAND", "expectedUrl inválida.");
   }
-  if (expectedUrl.origin !== FLOW_ORIGIN) {
-    return bridgeError("ORIGIN_NOT_ALLOWED", "A extensão aceita somente páginas do Google Flow.");
+  if (!policy || expectedUrl.origin !== policy.origin) {
+    return bridgeError("ORIGIN_NOT_ALLOWED", "A origem não foi autorizada para este plugin.");
   }
 
   const cache = await readCommandCache();
@@ -142,8 +159,8 @@ async function dispatchToPage(command) {
     return { ...cached.response, replayed: true };
   }
 
-  const tabs = await chrome.tabs.query({ url: `${FLOW_ORIGIN}/*` });
-  const tab = selectFlowTab(tabs, expectedUrl.toString());
+  const tabs = await chrome.tabs.query({ url: policy.tabPattern });
+  const tab = selectPluginTab(tabs, expectedUrl.toString(), policy);
   if (!Number.isInteger(tab?.id)) {
     return bridgeError(
       "FLOW_TAB_NOT_FOUND",
@@ -156,7 +173,7 @@ async function dispatchToPage(command) {
     const response = await withTimeout(
       chrome.tabs.sendMessage(tab.id, {
         source: "contentflow-os",
-        pluginId: PLUGIN_ID,
+        pluginId: command.pluginId,
         protocolVersion: PROTOCOL_VERSION,
         profileId: command.profileId,
         executionKey: command.executionKey,
@@ -184,7 +201,7 @@ globalThis.contentFlowBridge = Object.freeze({
   identity: identity(),
   connect(handshake) {
     if (
-      handshake?.pluginId !== PLUGIN_ID ||
+      !policyForPlugin(handshake?.pluginId) ||
       handshake?.protocolVersion !== PROTOCOL_VERSION ||
       typeof handshake?.profileId !== "string" ||
       !/^[a-f0-9-]{32,64}$/i.test(String(handshake?.sessionToken || ""))
@@ -192,11 +209,12 @@ globalThis.contentFlowBridge = Object.freeze({
       return bridgeError("HANDSHAKE_REJECTED", "Handshake da extensão inválido.");
     }
     activeSession = {
+      pluginId: handshake.pluginId,
       profileId: handshake.profileId,
       sessionToken: handshake.sessionToken,
       connectedAt: Date.now(),
     };
-    return { ok: true, ...identity() };
+    return { ok: true, pluginId: handshake.pluginId, ...identity() };
   },
   async dispatch(command) {
     const invalid = validateSession(command);
@@ -215,14 +233,15 @@ globalThis.contentFlowBridge = Object.freeze({
     ) {
       return bridgeError("SESSION_MISMATCH", "Cancelamento recusado pela extensão.");
     }
-    const tabs = await chrome.tabs.query({ url: `${FLOW_ORIGIN}/*` });
+    const policy = policyForPlugin(activeSession.pluginId);
+    const tabs = await chrome.tabs.query({ url: policy.tabPattern });
     await Promise.allSettled(
       tabs
         .filter((tab) => Number.isInteger(tab.id))
         .map((tab) =>
           chrome.tabs.sendMessage(tab.id, {
             source: "contentflow-os",
-            pluginId: PLUGIN_ID,
+            pluginId: activeSession.pluginId,
             protocolVersion: PROTOCOL_VERSION,
             profileId: request.profileId,
             executionKey: request.executionKey,

@@ -11,6 +11,7 @@ const GENERATION_SUFFIX = "/flowMedia:batchGenerateImages";
 const MEDIA_HOST = "flow-content.google";
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const DEFAULT_PORT = 9333;
+const EXTENSION_BRIDGE_ID = "com.contentflow.browser-bridge";
 const EXTENSION_PROTOCOL_VERSION = 2;
 const IMAGE_MODELS = Object.freeze({
   flow_auto: null,
@@ -569,7 +570,7 @@ async function attachExtensionBridge(
         "globalThis.contentFlowBridge?.identity",
       );
       if (
-        identity?.pluginId === PLUGIN_ID &&
+        identity?.bridgeId === EXTENSION_BRIDGE_ID &&
         identity?.protocolVersion === EXTENSION_PROTOCOL_VERSION
       ) {
         workerTarget = candidate;
@@ -588,7 +589,7 @@ async function attachExtensionBridge(
   if (!workerTarget?.targetId || !workerSessionId) {
     throw codedError(
       "INVALID_CONFIGURATION",
-      "A extensão Google Flow Browser Images não está instalada neste perfil do Chrome. Abra chrome://extensions, ative o modo do desenvolvedor e use Carregar sem compactação na pasta extension do plugin. O plugin não continuará usando teclado ou mouse como alternativa.",
+      "A ContentFlow Browser Bridge não está instalada neste perfil do Chrome. Abra chrome://extensions, ative o modo do desenvolvedor e use Carregar sem compactação na pasta contentflow-browser-bridge. O plugin não continuará usando teclado ou mouse como alternativa.",
     );
   }
 
@@ -695,7 +696,7 @@ async function attachExtensionBridge(
     ping = await dispatch("ping", {}, "bridge-ready-after-reload");
   }
   if (ping.protocolVersion !== EXTENSION_PROTOCOL_VERSION) {
-    throw codedError("INVALID_CONFIGURATION", "A extensão do Google Flow está desatualizada.");
+    throw codedError("INVALID_CONFIGURATION", "A ContentFlow Browser Bridge está desatualizada.");
   }
   return {
     dispatch,
@@ -2353,7 +2354,7 @@ export async function execute(request, services) {
       profileId: profileRuntime.accountProfile,
       waitMs: 10000,
     });
-    step("Extensão dedicada conectada; teclado e mouse do usuário permanecem isolados.");
+    step("ContentFlow Browser Bridge conectada; teclado e mouse permanecem isolados.");
 
     let activePreferences = { ...generationPreferences };
     generationDefaults = installGenerationPreferencesInterceptor(

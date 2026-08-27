@@ -21,7 +21,7 @@
   "profileSetup": {
     "configurationKey": "accountProfile",
     "label": "Adicionar conta",
-    "description": "Abre o Chrome dedicado. Instale manualmente a pasta extension deste plugin no perfil e conclua o login do Google Flow.",
+    "description": "Abre o Chrome dedicado. Instale manualmente a ContentFlow Browser Bridge no perfil e conclua o login do Google Flow.",
     "prepareTimeoutMs": 900000,
     "fallbackConfigurationKey": "fallbackAccountProfiles"
   },
