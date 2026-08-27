@@ -4,7 +4,7 @@ Este guia define como planejar plugins que operam interfaces web de terceiros se
 
 Para o fluxo básico de criação e conversão, comece em [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md). Este documento trata apenas dos riscos e decisões adicionais de automação de interface.
 
-> Decisão de arquitetura: o núcleo não fornece um runtime ou broker específico de navegador. Cada plugin escolhe sua tecnologia de automação e seu mecanismo de autenticação — OAuth, login interativo, secret de sessão ou pasta de perfil escolhida pelo usuário — usando as permissões genéricas e o consentimento do protocolo. O ContentFlow OS não descobre nem entrega silenciosamente perfis, cookies ou sessões.
+> Decisão de arquitetura: o núcleo não fornece um runtime, extensão ou broker específico de navegador. Cada plugin oficial que automatize uma interface web na V1 empacota sua própria extensão Manifest V3 e o runtime compatível, além de definir seu mecanismo de autenticação. O ContentFlow OS não conhece seletores de fornecedor nem descobre ou entrega silenciosamente perfis, cookies ou sessões.
 
 ## 1. Princípio central
 
@@ -87,7 +87,8 @@ A automação do navegador é uma implementação interna da capacidade do plugi
 ```text
 Método
   -> capacidade do plugin
-  -> navegador/runtime escolhido pelo plugin
+  -> navegador/runtime dedicado escolhido pelo plugin
+  -> extensão MV3 e content script do plugin
   -> autenticação conectada explicitamente pelo usuário
   -> interface do provedor
   -> resultado validado
@@ -104,12 +105,13 @@ Responsabilidades do núcleo:
 
 Responsabilidades do plugin:
 
-- instalar ou incluir o navegador/runtime de que precisa, sem instalação arbitrária durante a execução;
+- empacotar a extensão MV3 e incluir o navegador/runtime compatível, sem instalação arbitrária durante a execução;
 - abrir login interativo, solicitar OAuth/secret ou pedir que o usuário escolha uma pasta de perfil quando necessário;
 - documentar claramente conta, perfil, domínios, dados, efeitos e riscos envolvidos;
 - pedir apenas operações necessárias à capacidade;
 - usar seletores resilientes baseados em papel, label e estado visível;
 - validar página, origem, conta e resultado antes de avançar;
+- executar a rotina por mensagens e operações de DOM na aba identificada, sem depender de foco, teclado ou mouse do sistema;
 - tratar mudanças de interface como erro compatível, não improvisar cliques;
 - respeitar `signal`, timeout, idempotência e `maxConcurrency`;
 - devolver `pending` enquanto o provedor processa o job;
@@ -123,9 +125,11 @@ Autenticação deve ocorrer em uma superfície clara para o usuário e ser defin
 
 Quando o perfil é referenciado por uma configuração do Método, o plugin pode declarar `profileSetup`. Nesse fluxo, o construtor oferece uma ação explícita para abrir o navegador e concluir o login antes de qualquer Projeto ser executado. A execução normal deve falhar fechada quando o perfil ainda não foi preparado ou quando a sessão expirou; nunca deve preencher um prompt enquanto a página estiver em login, onboarding, CAPTCHA ou reautenticação.
 
-Na experiência padrão da V1, essa preparação aparece no Bloco como **Adicionar conta** ou **Conectar conta**. O núcleo cria automaticamente a pasta dedicada dentro da raiz controlada do plugin, registra uma conexão local nomeada e abre a origem declarada para o usuário autenticar. O usuário não precisa localizar pastas, portas de depuração ou instalar extensão nos perfis pessoais. Cada conta é preparada separadamente e o Bloco guarda somente o `connectionId`; cookies e storage continuam confinados ao perfil dedicado.
+Na experiência padrão da V1, essa preparação aparece no Bloco como **Adicionar conta** ou **Conectar conta**. O núcleo cria automaticamente a pasta dedicada dentro da raiz controlada do plugin, registra uma conexão local nomeada e solicita ao plugin que abra a origem declarada para autenticação. O usuário não precisa localizar pastas, portas de depuração nem instalar extensões. Cada conta é preparada separadamente e o Bloco guarda somente o `connectionId`; cookies e storage continuam confinados ao perfil dedicado.
 
-Os plugins de navegador oficiais atuais não dependem de extensão. Se uma capacidade futura realmente exigir uma extensão, ela deve vir imutável no pacote do plugin, ser declarada e consentida e ser carregada apenas no navegador/perfil dedicado. O plugin nunca instala silenciosamente extensão no navegador pessoal nem baixa código de extensão em runtime.
+Todo plugin oficial que automatize uma interface web na V1 deve trazer sua extensão imutável no próprio pacote, declará-la no consentimento e carregá-la automaticamente apenas no navegador/perfil dedicado. O plugin nunca instala extensão no navegador pessoal, nunca exige instalação manual por perfil e nunca baixa código de extensão em runtime. A extensão é parte externa do plugin, não do núcleo.
+
+O canal entre handler, service worker e content script usa mensagens versionadas, origem e aba allowlisted, identificador de execução, token efêmero e validação estrutural. Content scripts são tratados como contexto menos confiável: não recebem secrets duráveis e não podem ampliar hosts, permissões, efeitos ou escopo da capability.
 
 Plugins com vários perfis podem declarar `profileSetup.fallbackConfigurationKey`. O campo contém aliases ordenados, nunca cookies ou credenciais. O núcleo valida e prepara cada alias separadamente, registra qual perfil foi usado e preserva o cursor e as entregas parciais ao fazer um fallback técnico permitido.
 
@@ -141,11 +145,13 @@ Requisitos:
 
 Se um provedor oferecer OAuth, prefira OAuth a reaproveitar uma sessão da interface.
 
-## 8. Headless e modo visível
+## 8. Background, modo visível e headless
 
 O modo headless só deve ser usado quando permitido pelo provedor e quando não esconder do usuário uma decisão relevante. Login, CAPTCHA, consentimento, compra, publicação e reautenticação exigem uma etapa visível ou confirmação específica.
 
-O plugin declara se a operação pode rodar em background e quais situações exigem interação visual. A capacidade deve reportar progresso pelo contrato do executor e pode abrir sua janela própria quando a tecnologia escolhida exigir login, CAPTCHA, diagnóstico ou confirmação.
+Na operação normal, o navegador dedicado inicia minimizado ou em background e não disputa foco com outros aplicativos. A extensão atua na aba explícita por content script; comandos rotineiros não usam `bringToFront`, ativação de target, coordenadas de tela nem fallback de teclado/mouse dependente do sistema operacional. A janela só é mostrada por uma transição explícita para login, reautenticação, diagnóstico ou confirmação.
+
+O plugin declara se a operação pode rodar em background e quais situações exigem interação visual. A capacidade reporta progresso pelo contrato do executor. A mesma ponte de mensagens deve ser projetada para funcionar posteriormente em headless sem alterar o Método, mas incompatibilidade do runtime deve falhar de forma explícita em vez de degradar silenciosamente para automação que rouba foco.
 
 ## 9. Filas, limites e custos
 
@@ -201,6 +207,9 @@ Além dos testes gerais do protocolo, cubra:
 - confirmação de publicação, compra, exclusão e envio externo;
 - ausência de cookies, tokens, prompts privados e screenshots integrais nos logs;
 - isolamento entre contas, canais, projetos e plugins;
+- usuário digitando, clicando e alternando janelas enquanto a automação permanece minimizada, sem vazamento de input entre aplicativos;
+- ausência de ativação de janela, `bringToFront` e fallbacks de teclado/mouse na execução rotineira;
+- extensão ausente, incompatível, atualizada ou desconectada durante uma execução;
 - mudança de interface que deve falhar sem clicar em alvo ambíguo.
 
 ## 14. Checklist para proposta de um plugin

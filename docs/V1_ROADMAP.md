@@ -26,17 +26,17 @@ Estados usados neste documento:
 
 ## Ordem de execução
 
-| Ordem | Fase                                          | Estado atual | Dificuldade | Dependências   |
-| ----- | --------------------------------------------- | ------------ | ----------- | -------------- |
-| 0     | Sincronização arquitetural                    | CONCLUÍDA    | Baixa       | Nenhuma        |
-| 1     | Atualização pelo próprio aplicativo           | CONCLUÍDA    | Média       | Fase 0         |
-| 2     | Nova galeria e gerenciamento de Plugins       | CONCLUÍDA    | Baixa       | Fase 0         |
-| 3     | Conexões, contas e configurações no Método    | CONCLUÍDA    | Alta        | Fases 0 e 2    |
-| 3.5   | Release estável V0.4.3 e validação do updater | CONCLUÍDA    | Média       | Fases 1, 2 e 3 |
-| 4     | Hierarquia visual do editor de Métodos        | CONCLUÍDA    | Baixa       | Fase 3.5       |
-| 5     | Jornada de contas dos plugins de navegador    | PENDENTE     | Média       | Fases 3.5 e 4  |
-| 6     | Lote inteligente de Projetos                  | PENDENTE     | Alta        | Fases 3, 4 e 5 |
-| 7     | Estabilização e release V1.0.0                | PENDENTE     | Alta        | Fases 1–6      |
+| Ordem | Fase                                           | Estado atual | Dificuldade | Dependências   |
+| ----- | ---------------------------------------------- | ------------ | ----------- | -------------- |
+| 0     | Sincronização arquitetural                     | CONCLUÍDA    | Baixa       | Nenhuma        |
+| 1     | Atualização pelo próprio aplicativo            | CONCLUÍDA    | Média       | Fase 0         |
+| 2     | Nova galeria e gerenciamento de Plugins        | CONCLUÍDA    | Baixa       | Fase 0         |
+| 3     | Conexões, contas e configurações no Método     | CONCLUÍDA    | Alta        | Fases 0 e 2    |
+| 3.5   | Release estável V0.4.3 e validação do updater  | CONCLUÍDA    | Média       | Fases 1, 2 e 3 |
+| 4     | Hierarquia visual do editor de Métodos         | CONCLUÍDA    | Baixa       | Fase 3.5       |
+| 5     | Extensão e isolamento dos plugins de navegador | EM ANDAMENTO | Alta        | Fases 3.5 e 4  |
+| 6     | Lote inteligente de Projetos                   | PENDENTE     | Alta        | Fases 3, 4 e 5 |
+| 7     | Estabilização e release V1.0.0                 | PENDENTE     | Alta        | Fases 1–6      |
 
 ## Fase 0 — Sincronização arquitetural
 
@@ -304,37 +304,82 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 - A inspeção local confirmou o modal em desktop, `800 px` e `390 px`, sem rolagem horizontal na menor largura.
 - `npm run check` completo, incluindo lint, typecheck, testes e builds de cliente e servidor, passou em 2026-08-27.
 
-## Fase 5 — Jornada de contas dos plugins de navegador
+## Fase 5 — Extensão e isolamento dos plugins de navegador
 
-**Objetivo:** fazer o usuário conectar contas de navegador sem precisar entender pastas, portas de depuração ou extensões.
+**Objetivo:** tornar a automação de interfaces web mais produtiva, estável e independente do uso cotidiano do computador. Os plugins de navegador devem executar comandos por uma extensão carregada automaticamente em um navegador dedicado, sem depender do foco da janela, do teclado ou do mouse do sistema.
+
+### Problemas que esta fase resolve
+
+- A automação atual pode ativar ou trazer a janela dedicada para frente e receber teclas que o usuário estava digitando em outro aplicativo.
+- Cliques, coordenadas, ativação de aba e fallbacks de teclado tornam execuções longas mais frágeis que o uso manual da mesma conta.
+- Uma sessão manual pode concluir centenas de imagens enquanto o plugin falha após poucas unidades por perda de foco, mudança de estado, timeout ou retomada incompleta.
+- O cadastro de contas ainda expõe aliases e detalhes técnicos que não pertencem à experiência normal do aluno.
 
 ### Decisões de produto
 
-- Os plugins atuais usarão Chrome com perfil dedicado e persistente; não exigirão extensão instalada no perfil pessoal do usuário.
-- Cada conta/provedor será preparada explicitamente uma vez pelo usuário.
-- O ContentFlow criará e localizará automaticamente as pastas dedicadas.
-- Login, CAPTCHA, consentimento, reautenticação, cota e bloqueio continuarão visíveis e não serão contornados.
-- O Chrome instalado pelo usuário será a opção inicial; empacotar Chromium só será reconsiderado com justificativa de compatibilidade e distribuição.
+- Todo plugin oficial que automatize uma interface web na V1 usará uma extensão Manifest V3 específica do plugin, incluída de forma imutável em seu próprio pacote externo.
+- A extensão será carregada automaticamente apenas no navegador e no perfil dedicados àquela conta. O usuário não instalará extensão no navegador pessoal nem repetirá instalação manual em cada perfil.
+- A extensão executará operações estruturadas na aba correta por content script e troca de mensagens. A execução rotineira não usará teclado, mouse, coordenadas de tela, foco do Windows ou ativação da janela como mecanismo de automação.
+- O navegador dedicado iniciará minimizado ou em background e permanecerá separado do que o usuário estiver fazendo. Só poderá ser exibido e receber foco mediante ação explícita para login, reautenticação ou diagnóstico.
+- Cada conta/provedor terá perfil persistente e isolado, preparado explicitamente uma vez pelo usuário por uma interface **Adicionar conta**.
+- O runtime compatível com carregamento automático da extensão será distribuído pelo próprio plugin ou por um componente externo versionado do ecossistema, nunca embutido no núcleo. A primeira implementação avaliará Chromium empacotado e contexto persistente; não dependerá de instalação silenciosa no Chrome pessoal.
+- Headless é o destino técnico, mas não será requisito para concluir a primeira migração. A mesma ponte de comandos deve funcionar inicialmente em modo visível minimizado e depois em headless sem alterar o Método.
+- A finalidade da extensão é exclusivamente produtividade, estabilidade, isolamento e observabilidade da automação.
+
+### Fronteira arquitetural
+
+```text
+ContentFlow OS
+  -> contrato público e execução do plugin
+  -> plugin externo do provedor
+  -> extensão MV3 empacotada pelo plugin
+  -> content script na origem configurada
+  -> interface e conta do próprio usuário
+```
+
+- O núcleo continua sem conhecer seletores, páginas, extensão, Chromium, conta ou regras de qualquer provedor.
+- O plugin mantém o adapter do site, a extensão, o runtime, a fila interna, os checkpoints e a validação dos resultados.
+- O núcleo mantém consentimento, conexão opaca, execução, cancelamento, outputs, artifacts e proveniência.
+- A comunicação local entre handler e extensão deve usar canal autenticado por execução, origem allowlisted, mensagens versionadas, payloads validados e nenhum secret persistido na página.
+
+### Ordem de implementação
+
+1. Definir o envelope de comandos e eventos entre handler, service worker e content script, incluindo timeout, cancelamento, idempotência e diagnóstico redigido.
+2. Criar um protótipo MV3 com runtime dedicado, perfil persistente e carregamento automático, validando modo visível minimizado e a viabilidade futura do headless.
+3. Eliminar da rotina chamadas que tragam a página para frente e qualquer input dependente do sistema operacional.
+4. Migrar primeiro o plugin **Google Flow Browser Images**, porque ele reproduz o problema de produtividade e estabilidade em volume relatado pelos alunos.
+5. Executar testes progressivos de 10, 50, 100 e, quando a conta permitir, 300 imagens, persistindo cada resultado antes de avançar e retomando sem duplicação.
+6. Depois da validação do Flow, extrair o transporte comum reutilizável e migrar ChatGPT, Gemini, Claude, Grok e Meta sem mover adapters de fornecedor para o núcleo.
+7. Concluir a jornada **Adicionar conta**, estados de atenção e remoção/revogação dos perfis dedicados.
 
 ### Entregas
 
-- Substituir aliases técnicos por uma interface “Adicionar conta”.
-- Abrir o provedor correto, orientar login e validar a área autenticada.
-- Mostrar conta pronta, requer atenção, cota esgotada, bloqueada ou desconectada.
-- Permitir múltiplas contas por provedor e seleção no bloco do Método.
-- Documentar onde os perfis vivem e como sair, revogar ou remover uma sessão.
-- Manter fallback automático restrito a falhas técnicas transitórias permitidas.
-- Se algum plugin futuro realmente exigir extensão, empacotá-la no plugin e carregá-la apenas no navegador dedicado após consentimento explícito.
+- Extensão MV3 mínima e específica do provedor empacotada no plugin piloto.
+- Runtime dedicado que carrega a extensão automaticamente em todo perfil criado pelo plugin.
+- Ponte estruturada entre handler e extensão sem expor porta, pasta ou instalação ao usuário.
+- Execução normal minimizada/background, sem roubo de foco e sem input do sistema operacional.
+- Superfície visível sob demanda para login, reautenticação e diagnóstico.
+- Fila com checkpoint por item, reconciliação após timeout e coleta idempotente de artifacts.
+- Interface **Adicionar conta**, com estados pronta, requer atenção, cota esgotada, bloqueada e desconectada.
+- Múltiplas contas isoladas por provedor, selecionáveis no bloco do Método.
+- Documentação para sair, revogar ou remover a sessão criada pelo próprio plugin.
+- Plano e prova técnica para modo headless.
 
 ### Critérios de aceite
 
-- [ ] Usuário não precisa escolher manualmente uma pasta para o caso padrão.
-- [ ] Nenhuma extensão é exigida para os plugins atuais.
-- [ ] Cada conta é autenticada pelo próprio usuário em janela visível.
-- [ ] Conta ativa e origem são verificadas antes de enviar conteúdo.
-- [ ] CAPTCHA, login, reautenticação, limite, cota e bloqueio pausam corretamente.
-- [ ] Várias contas podem coexistir sem compartilhar silenciosamente cookies ou sessões.
-- [ ] Remoção de conta não apaga outputs já produzidos.
+- [ ] A extensão do plugin é carregada automaticamente em cada perfil dedicado, sem instalação manual e sem tocar no navegador pessoal.
+- [ ] Apagar ou adicionar uma conta não altera outros perfis nem apaga outputs já produzidos.
+- [ ] O usuário consegue trabalhar normalmente em outro aplicativo enquanto uma execução longa continua minimizada.
+- [ ] Digitar, clicar ou alternar janelas no computador não modifica a aba automatizada nem interrompe o job.
+- [ ] A rotina não chama `bringToFront`, `activateTarget` nem APIs de teclado/mouse dependentes do foco do sistema.
+- [ ] Comandos da extensão são aceitos somente na origem, aba, perfil, plugin e execução esperados.
+- [ ] Conta ativa, origem e estado da página são verificados antes de enviar conteúdo.
+- [ ] Login e reautenticação solicitam atenção visível sem corromper ou perder a execução.
+- [ ] O plugin do Google Flow conclui testes progressivos de volume sem perder resultados já persistidos nem duplicá-los na retomada.
+- [ ] Fechar, minimizar ou usar outros programas não reduz a correção do teste de volume.
+- [ ] Falha, atualização ou ausência da extensão produz erro seguro e recuperável, nunca fallback silencioso para automação por foco.
+- [ ] Existe prova técnica da mesma ponte em headless ou uma limitação documentada do runtime, sem bloquear a operação minimizada da V1.
+- [ ] Typecheck, testes de contrato, sandbox, isolamento de foco e build são aprovados.
 
 ## Fase 6 — Lote inteligente de Projetos
 
@@ -414,7 +459,7 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 | 2026-08-26 | Priorizar updater antes da reorganização estrutural de Plugins e Métodos.                                                                    | Permite entregar uma melhoria independente e simplifica as releases seguintes.                                                |
 | 2026-08-26 | Reduzir a galeria de Plugins a cards quadrados com ícone e nome.                                                                             | Configuração deixa o card e vai para o contexto do Método/conexão.                                                            |
 | 2026-08-26 | Configuração funcional e seleção de conta pertencem ao Método; secrets permanecem no cofre do núcleo.                                        | Exige múltiplas conexões nomeadas e referências opacas.                                                                       |
-| 2026-08-26 | Plugins de navegador atuais não exigirão extensões; usarão perfis dedicados preparados explicitamente.                                       | A interface deve ocultar detalhes técnicos e guiar o login.                                                                   |
+| 2026-08-26 | Decisão substituída em 2026-08-27: os plugins de navegador usariam somente perfis dedicados, sem extensão.                                   | Registro histórico preservado; a estratégia foi revista após falhas reais de produtividade e interferência de foco.           |
 | 2026-08-26 | Substituir o lote sequencial por geração estruturada única seguida de revisão e criação de Projetos.                                         | O novo fluxo pertence ao Orquestrador, não ao Método de vídeo individual.                                                     |
 | 2026-08-27 | Conexões são registros locais nomeados e reutilizáveis; o Bloco guarda `connectionId` e a exportação preserva apenas o requisito de conexão. | Renomear não quebra Métodos, secrets não são exportados e importações exigem associação local.                                |
 | 2026-08-27 | Branding opcional usa `branding.iconPath` com PNG/WebP local de até 512 KiB.                                                                 | Manifestos API v1 antigos usam fallback; favicon remoto e SVG não entram no contrato inicial.                                 |
@@ -433,6 +478,8 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 | 2026-08-27 | A atualização real `0.4.2 → 0.4.3` foi concluída preservando os dados locais.                                                                | Fases 1 e 3.5 foram concluídas; o desenvolvimento avança para o refinamento visual dos Métodos.                               |
 | 2026-08-27 | A Fase 4 é exclusivamente um refinamento visual do editor de Métodos existente.                                                              | O layout explicita ação, operador, entradas e entregas sem criar modo guiado, lógica ou conceitos novos.                      |
 | 2026-08-27 | Histórico do Canal existe em `ESCOLHER` para escolhas anteriores do mesmo bloco e em `CRIAR` para resultados finais anteriores do Processo.  | O usuário ativa a memória e informa apenas a quantidade; schema, elegibilidade, origem técnica e proveniência ficam internas. |
+| 2026-08-27 | Plugins oficiais de navegador usarão extensão MV3 empacotada no próprio plugin e carregada automaticamente em navegador dedicado.            | A automação rotineira passa a operar por mensagens/content scripts, minimizada e sem disputar foco, teclado ou mouse.         |
+| 2026-08-27 | Google Flow será o piloto da migração para extensão e isolamento de foco.                                                                    | Testes progressivos de até 300 imagens validarão checkpoint, retomada e produtividade antes das demais migrações.             |
 
 ## Pendências de decisão do titular
 
@@ -447,4 +494,4 @@ O percentual abaixo mede fases concluídas, não quantidade de código. Deve ser
 - Fases concluídas: `6 / 9`
 - Progresso operacional: `66,7%`
 - Fase concluída mais recente: **Fase 4 — Hierarquia visual do editor de Métodos**.
-- Próxima fase: **Fase 5 — Jornada de contas dos plugins de navegador**.
+- Fase atual: **Fase 5 — Extensão e isolamento dos plugins de navegador**.
