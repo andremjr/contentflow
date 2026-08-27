@@ -1,9 +1,13 @@
 {
   "name": "contentflow-os",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "productName": "ContentFlow OS",
   "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andremjr/contentflow-os.git"
+  },
   "private": true,
   "main": "desktop/main.cjs",
   "license": "LicenseRef-ContentFlow-Source-Available-1.0",
@@ -26,6 +30,7 @@
     "desktop:portable": "npm run desktop:prepare && electron-builder --win portable --x64",
     "desktop:installer": "npm run desktop:prepare && electron-builder --win nsis --x64",
     "desktop:v0": "npm run desktop:prepare && electron-builder --win portable nsis --x64",
+    "desktop:release": "npm run desktop:prepare && electron-builder --win portable nsis --x64 --publish always",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "test:sandbox": "tsx server/plugin-sandbox-smoke.ts",
@@ -33,7 +38,6 @@
     "test:deliveries": "tsx --test server/deliveries.test.ts",
     "test:channel-history": "tsx --test server/channel-history.test.ts",
     "test:instructions": "tsx --test server/instruction-template.test.ts",
-    "test:youtube": "tsx --test server/youtube.test.ts",
     "test:remote-artifacts": "tsx server/remote-artifact-downloader.test.ts",
     "test:plugin-jobs": "tsx server/plugin-job-store.test.ts",
     "test:plugin-fallback": "tsx --test server/plugin-account-fallback.test.ts server/plugin-item-orchestration.test.ts server/plugin-account-fallback.integration.test.ts",
@@ -41,8 +45,14 @@
     "test:automatic-execution": "tsx --test server/automatic-plugin-execution.test.ts server/execution-retry.test.ts",
     "test:orchestrator": "tsx --test server/execution-orchestrator.test.ts server/execution-orchestrator.integration.test.ts",
     "test:plugin-kit": "tsx server/plugin-kit.test.ts",
+    "test:plugin-branding": "tsx --test server/plugin-branding.test.ts",
+    "test:plugin-dependencies": "tsx --test server/plugin-dependencies.test.ts",
+    "test:method-file": "tsx --test server/method-file.test.ts",
+    "test:plugin-connections": "tsx --test server/plugin-connections.test.ts",
+    "test:plugin-connection-runtime": "tsx --test server/plugin-connection-runtime.test.ts",
+    "test:updater": "node --test desktop/updater.test.cjs",
     "plugin:kit": "tsx tools/plugin-kit.ts",
-    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:instructions && npm run test:youtube && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-fallback && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:orchestrator && npm run test:plugin-kit && npm run build",
+    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:instructions && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-fallback && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:orchestrator && npm run test:plugin-kit && npm run test:plugin-branding && npm run test:plugin-dependencies && npm run test:method-file && npm run test:plugin-connections && npm run test:plugin-connection-runtime && npm run test:updater && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {
@@ -65,6 +75,8 @@
     "better-sqlite3": "13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9",
     "express": "^5.2.1",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
@@ -110,9 +122,20 @@
     },
     "files": [
       "desktop/main.cjs",
+      "desktop/preload.cjs",
+      "desktop/updater.cjs",
       "desktop-dist/**/*",
       "dist/**/*",
       "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "andremjr",
+        "repo": "contentflow-os",
+        "channel": "latest",
+        "releaseType": "release"
+      }
     ],
     "extraResources": [
       {
@@ -130,20 +153,6 @@
           "plugin-worker.ts"
         ]
       },
-      {
-        "from": "plugins/bundled",
-        "to": "plugins/bundled",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "plugins/examples",
-        "to": "examples/plugins",
-        "filter": [
-          "**/*"
-        ]
-      },
       "LICENSE",
       "AI_USAGE_POLICY.md",
       {
@@ -157,7 +166,6 @@
       }
     ],
     "win": {
-      "signAndEditExecutable": false,
       "target": [
         "portable",
         "nsis"

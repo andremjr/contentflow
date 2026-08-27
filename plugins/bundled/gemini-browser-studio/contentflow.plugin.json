@@ -7,6 +7,7 @@
   "description": "Automação modular do Gemini web para texto, pesquisa, escolha, validação, análise de arquivos, imagens e música.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
+  "branding": { "iconPath": "assets/icon.png" },
   "runtime": {
     "kind": "node",
     "version": ">=26 <27",

@@ -168,6 +168,14 @@ const validationSchema = z.object({
   maxAttempts: z.number().int().min(1).max(20),
 });
 
+const sharedPluginBindingSchema = z.object({
+  pluginId: z.string().min(1).max(160),
+  pluginVersion: z.string().max(80).optional(),
+  capabilityId: z.string().min(1).max(100),
+  configuration: z.record(z.union([z.string(), z.number(), z.boolean()])),
+  connectionRequired: z.boolean().optional(),
+});
+
 const actionBlockSchema = z.object({
   id: z.string(),
   type: z.enum(["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"]),
@@ -178,6 +186,7 @@ const actionBlockSchema = z.object({
   inputs: z.array(inputSchema).max(100).optional(),
   outputs: z.array(outputSchema).max(100).optional(),
   validation: validationSchema.optional(),
+  plugin: sharedPluginBindingSchema.optional(),
   parameters: z.array(parameterSchema).max(100),
   order: z.number().int().nonnegative(),
 });
@@ -196,12 +205,28 @@ const sharedMethodSchema = z.object({
 export type SharedMethodFile = z.infer<typeof sharedMethodSchema>;
 
 export function serializeMethodFile(name: string, method: ProcessMethod) {
+  const portableMethod = {
+    ...structuredClone(method),
+    blocks: method.blocks.map((block) => ({
+      ...structuredClone(block),
+      plugin: block.plugin
+        ? {
+            pluginId: block.plugin.pluginId,
+            pluginVersion: block.plugin.pluginVersion,
+            capabilityId: block.plugin.capabilityId,
+            configuration: structuredClone(block.plugin.configuration),
+            connectionRequired:
+              block.plugin.connectionRequired ?? Boolean(block.plugin.connectionId),
+          }
+        : undefined,
+    })),
+  };
   const file = sharedMethodSchema.parse({
     format: "contentflow-method",
     version: 1,
     name,
     exportedAt: new Date().toISOString(),
-    method,
+    method: portableMethod,
   });
   return JSON.stringify(file, null, 2);
 }
@@ -225,6 +250,7 @@ export function copyImportedBlocks(
   processType: UniversalProcess,
   sourceBlocks: ActionBlock[],
   createId: (prefix: string) => string,
+  options: { preserveLocalConnections?: boolean } = {},
 ) {
   const copied = structuredClone(sourceBlocks);
   const blockIds = new Map(
@@ -235,6 +261,12 @@ export function copyImportedBlocks(
     collectionId: undefined,
     id: blockIds.get(block.id)!,
     order,
+    plugin: block.plugin
+      ? {
+          ...block.plugin,
+          connectionId: options.preserveLocalConnections ? block.plugin.connectionId : undefined,
+        }
+      : undefined,
     parameters: block.parameters.map((parameter) => ({
       ...parameter,
       id: createId(`${processType}-parameter`),

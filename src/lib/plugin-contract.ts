@@ -145,6 +145,11 @@ export type PluginProfileSetup = {
 
 export type PluginDeliveryType = "text" | "image" | "audio" | "video" | "processing";
 
+export type PluginBranding = {
+  /** Relative PNG/WebP path inside the plugin package. The core validates and serves the asset. */
+  iconPath: string;
+};
+
 export type PluginManifest = {
   $schema?: string;
   apiVersion: typeof CONTENTFLOW_PLUGIN_API_VERSION;
@@ -156,6 +161,7 @@ export type PluginManifest = {
   license: string;
   homepage?: string;
   repository?: string;
+  branding?: PluginBranding;
   runtime: PluginRuntime;
   minCoreVersion?: string;
   entrypoint: string;

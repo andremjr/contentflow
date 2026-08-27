@@ -1,9 +1,10 @@
-const { app, BrowserWindow, dialog, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { createServer, request: httpRequest } = require("node:http");
 const { spawn } = require("node:child_process");
-const { cpSync, existsSync, mkdirSync, readFileSync, statSync } = require("node:fs");
+const { existsSync, readFileSync, statSync } = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
+const { configureDesktopUpdater } = require("./updater.cjs");
 
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
@@ -50,30 +51,11 @@ async function startDesktop() {
     ? path.join(resourcesRoot, "runtime")
     : path.join(appRoot, "desktop-runtime");
   const dataRoot = path.join(app.getPath("userData"), "data");
-  const examplesTarget = path.join(app.getPath("documents"), "ContentFlow OS", "Plugins");
-  const examplesSource = app.isPackaged
-    ? path.join(resourcesRoot, "examples", "plugins")
-    : path.join(appRoot, "plugins", "examples");
-  mkdirSync(examplesTarget, { recursive: true });
-  if (existsSync(examplesSource)) {
-    for (const entry of require("node:fs").readdirSync(examplesSource, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const destination = path.join(examplesTarget, entry.name);
-      if (!existsSync(destination)) {
-        cpSync(path.join(examplesSource, entry.name), destination, { recursive: true });
-      }
-    }
-  }
   const apiPort = await reservePort();
 
   process.env.CONTENTFLOW_API_PORT = String(apiPort);
   process.env.CONTENTFLOW_APP_ROOT = resourcesRoot;
   process.env.CONTENTFLOW_DATA_DIR = dataRoot;
-  process.env.CONTENTFLOW_BUNDLED_PLUGINS_DIR = path.join(
-    app.isPackaged ? resourcesRoot : appRoot,
-    "plugins",
-    "bundled",
-  );
   process.env.CONTENTFLOW_LOCAL_PLUGINS_DIR = path.join(dataRoot, "plugins", "local");
   process.env.CONTENTFLOW_INSTALLED_PLUGINS_DIR = path.join(dataRoot, "plugins", "installed");
   process.env.CONTENTFLOW_DEVELOPMENT_LINKS_DIR = path.join(dataRoot, "plugins", "development");
@@ -82,7 +64,6 @@ async function startDesktop() {
     : path.join(appRoot, "server");
   process.env.CONTENTFLOW_PLUGIN_NODE_EXECUTABLE = path.join(runtimeRoot, "node.exe");
   process.env.CONTENTFLOW_PLUGIN_NODE_MAJOR = "26";
-  process.env.CONTENTFLOW_EXAMPLES_DIR = examplesTarget;
   process.env.NODE_ENV = "production";
 
   const apiEntry = path.join(appRoot, "desktop-dist", "api.mjs");
@@ -116,13 +97,21 @@ async function startDesktop() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: path.join(__dirname, "preload.cjs"),
     },
   });
+  const appOrigin = `http://127.0.0.1:${webPort}`;
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://") || url.startsWith("http://")) void shell.openExternal(url);
     return { action: "deny" };
   });
-  await mainWindow.loadURL(`http://127.0.0.1:${webPort}/dashboard`);
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (url === appOrigin || url.startsWith(`${appOrigin}/`)) return;
+    event.preventDefault();
+    if (url.startsWith("https://") || url.startsWith("http://")) void shell.openExternal(url);
+  });
+  configureDesktopUpdater({ app, ipcMain, shell, getWindow: () => mainWindow });
+  await mainWindow.loadURL(`${appOrigin}/dashboard`);
 }
 
 async function startWebServer(appRoot, apiPort) {

@@ -40,17 +40,6 @@ import {
   type ExecutionOrchestratorMode,
 } from "@/lib/execution-orchestrator";
 
-export type YouTubeChannelProfile = Pick<
-  Channel,
-  | "youtubeChannelId"
-  | "name"
-  | "handle"
-  | "subscribers"
-  | "avatarUrl"
-  | "bannerUrl"
-  | "lastSyncedAt"
->;
-
 const db = {
   channels: [] as Channel[],
   projects: [] as Project[],
@@ -162,7 +151,6 @@ async function hydrate() {
         synchronizeOpenExecutionsWithMethod(channel.id, processType, channel.methods[processType]);
       }
     }
-    void syncAllChannelsFromYouTube();
   } catch (error) {
     console.error(error);
   } finally {
@@ -444,31 +432,6 @@ export function updateChannel(channel: Channel) {
   emit();
   void request(`/api/channels/${updated.id}`, "PUT", updated);
   return updated;
-}
-
-export async function resolveYouTubeChannel(handle: string): Promise<YouTubeChannelProfile> {
-  const response = await fetch(`/api/youtube/channel?handle=${encodeURIComponent(handle)}`);
-  if (!response.ok) throw new Error(await readApiError(response));
-  return response.json() as Promise<YouTubeChannelProfile>;
-}
-
-export async function syncChannelFromYouTube(channelId: string) {
-  const response = await fetch(`/api/channels/${channelId}/sync-youtube`, { method: "POST" });
-  if (!response.ok) throw new Error(await readApiError(response));
-  const updated = normalizeChannel((await response.json()) as Channel);
-  const index = db.channels.findIndex((channel) => channel.id === channelId);
-  if (index >= 0) {
-    db.channels[index] = updated;
-    emit();
-  }
-  return updated;
-}
-
-async function syncAllChannelsFromYouTube() {
-  const channelIds = db.channels.map((channel) => channel.id);
-  for (let index = 0; index < channelIds.length; index += 3) {
-    await Promise.allSettled(channelIds.slice(index, index + 3).map(syncChannelFromYouTube));
-  }
 }
 
 export async function setChannelMethod(

@@ -14,6 +14,9 @@ import { normalizeFieldPresentation } from "@/lib/presentation";
 export function getMethodConfigurationIssue(method?: ProcessMethod) {
   if (!method?.blocks.length) return "O processo ainda não possui um método.";
   for (const [blockIndex, block] of method.blocks.entries()) {
+    if (block.plugin?.connectionRequired && !block.plugin.connectionId) {
+      return `Associe uma conta ou conexão local ao bloco “${block.name ?? block.type}”.`;
+    }
     if (block.type === "ESCOLHER" && !block.collectionId) {
       return `Vincule uma coleção da Biblioteca Estratégica ao bloco “${block.name ?? "Escolher"}”.`;
     }

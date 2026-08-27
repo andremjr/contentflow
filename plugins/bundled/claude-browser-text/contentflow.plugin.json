@@ -7,6 +7,7 @@
   "description": "Super plugin do Claude web para criar, pesquisar, escolher, validar e analisar imagens ou documentos em conversas persistentes.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
+  "branding": { "iconPath": "assets/icon.png" },
   "runtime": {
     "kind": "node",
     "version": ">=26 <27",

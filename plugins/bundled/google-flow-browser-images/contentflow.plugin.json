@@ -7,6 +7,7 @@
   "description": "Gera imagens reais no Google Flow com perfis de conta dedicados, modelos configuráveis, fallback entre modelos, referências visuais e fila segura sem imagens substitutas.",
   "author": "Local user",
   "license": "MIT",
+  "branding": { "iconPath": "assets/icon.png" },
   "runtime": {
     "kind": "node",
     "version": ">=26 <27",

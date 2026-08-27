@@ -29,7 +29,7 @@ import {
 } from "./remote-artifact-downloader";
 import { findPluginManifest, validatePluginDirectory } from "./plugin-validation";
 
-export type PluginSource = "bundled" | "local" | "installed";
+export type PluginSource = "local" | "installed";
 
 export type RegisteredPlugin = {
   id: string;
@@ -54,11 +54,8 @@ const defaultDataRoot =
     ? path.join(process.env.APPDATA, "ContentFlow OS", "data")
     : path.join(applicationRoot, "data");
 const dataRoot = path.resolve(process.env.CONTENTFLOW_DATA_DIR ?? defaultDataRoot);
-const bundledPluginsRoot = path.resolve(
-  process.env.CONTENTFLOW_BUNDLED_PLUGINS_DIR ?? path.join(applicationRoot, "plugins", "bundled"),
-);
 const localPluginsRoot = path.resolve(
-  process.env.CONTENTFLOW_LOCAL_PLUGINS_DIR ?? path.join(applicationRoot, "plugins"),
+  process.env.CONTENTFLOW_LOCAL_PLUGINS_DIR ?? path.join(dataRoot, "plugins", "local"),
 );
 const installedPluginsRoot = path.resolve(
   process.env.CONTENTFLOW_INSTALLED_PLUGINS_DIR ?? path.join(dataRoot, "plugins", "installed"),
@@ -80,10 +77,9 @@ function scanPluginDirectory(
   const manifestPath = findPluginManifest(pluginDirectory);
   if (!manifestPath) return;
   try {
-    const validated = validatePluginDirectory(pluginDirectory, source !== "bundled");
+    const validated = validatePluginDirectory(pluginDirectory, true);
     const { manifest, absoluteDirectory: realDirectory, entrypoint: realEntrypoint } = validated;
     const registered = registry.get(manifest.id);
-    if (registered?.source === "bundled" && source !== "bundled") return;
     if (registered) {
       throw new Error(`O id ${manifest.id} já foi registrado por outro plugin.`);
     }
@@ -104,11 +100,10 @@ function scanPluginDirectory(
   }
 }
 
-function scanRoot(root: string, source: PluginSource, includeNestedBundled = false) {
+function scanRoot(root: string, source: PluginSource) {
   if (!existsSync(root)) return;
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    if (entry.name === "bundled" && !includeNestedBundled) continue;
     const pluginDirectory = path.resolve(root, entry.name);
     scanPluginDirectory(pluginDirectory, source);
   }
@@ -122,8 +117,6 @@ function scanDevelopmentLinks() {
     try {
       const link = JSON.parse(readFileSync(linkPath, "utf8")) as { path?: unknown };
       if (typeof link.path !== "string" || !existsSync(link.path)) {
-        const pluginId = entry.name.slice(0, -".json".length);
-        if (registry.get(pluginId)?.source === "bundled") continue;
         throw new Error("A pasta de desenvolvimento não existe mais.");
       }
       scanPluginDirectory(path.resolve(link.path), "local", path.resolve(link.path));
@@ -139,8 +132,7 @@ function scanDevelopmentLinks() {
 export function initializePluginRunner() {
   registry.clear();
   discoveryIssues = [];
-  scanRoot(bundledPluginsRoot, "bundled", true);
-  if (localPluginsRoot !== path.dirname(bundledPluginsRoot)) scanRoot(localPluginsRoot, "local");
+  scanRoot(localPluginsRoot, "local");
   scanDevelopmentLinks();
   scanRoot(installedPluginsRoot, "installed");
   return getPluginRegistrySnapshot();
@@ -165,11 +157,11 @@ export async function executeRegisteredPlugin(
     throw new Error("Este plugin não está disponível para execução.");
   }
 
-  const sandboxed = plugin.source !== "bundled";
+  const sandboxed = true;
   const workerRoot = path.resolve(
     process.env.CONTENTFLOW_PLUGIN_WORKER_DIR ?? path.join(applicationRoot, "server"),
   );
-  const workerPath = path.join(workerRoot, sandboxed ? "plugin-worker.mjs" : "plugin-worker.ts");
+  const workerPath = path.join(workerRoot, "plugin-worker.mjs");
   const uploadsDirectory = path.resolve(dataRoot, "uploads");
   const workspaceDirectory = path.resolve(
     options.workspaceDirectory ??
@@ -194,26 +186,21 @@ export async function executeRegisteredPlugin(
   const nodeMajor = Number(
     process.env.CONTENTFLOW_PLUGIN_NODE_MAJOR ?? process.versions.node.split(".")[0],
   );
-  const args = sandboxed ? ["--permission"] : [];
-  if (sandboxed) {
-    for (const readable of [plugin.absoluteDirectory, workerPath]) {
-      args.push(`--allow-fs-read=${readable}`);
-    }
-    if (permissions.has("filesystem:read")) {
-      args.push(`--allow-fs-read=${uploadsDirectory}`, `--allow-fs-read=${realWorkspaceDirectory}`);
-    }
-    if (permissions.has("filesystem:write")) {
-      args.push(`--allow-fs-write=${realWorkspaceDirectory}`);
-    }
-    if (permissions.has("process")) args.push("--allow-child-process");
-    if (permissions.has("worker")) args.push("--allow-worker");
-    if (permissions.has("native")) args.push("--allow-addons");
-    if (nodeMajor >= 26 && permissions.has("network")) args.push("--allow-net");
-    args.push(workerPath);
-  } else {
-    if (process.env.CONTENTFLOW_PLUGIN_NODE_EXECUTABLE) args.push(workerPath);
-    else args.push("--import", "tsx", workerPath);
+  const args = ["--permission"];
+  for (const readable of [plugin.absoluteDirectory, workerPath]) {
+    args.push(`--allow-fs-read=${readable}`);
   }
+  if (permissions.has("filesystem:read")) {
+    args.push(`--allow-fs-read=${uploadsDirectory}`, `--allow-fs-read=${realWorkspaceDirectory}`);
+  }
+  if (permissions.has("filesystem:write")) {
+    args.push(`--allow-fs-write=${realWorkspaceDirectory}`);
+  }
+  if (permissions.has("process")) args.push("--allow-child-process");
+  if (permissions.has("worker")) args.push("--allow-worker");
+  if (permissions.has("native")) args.push("--allow-addons");
+  if (nodeMajor >= 26 && permissions.has("network")) args.push("--allow-net");
+  args.push(workerPath);
   const runtimeExecutable = process.env.CONTENTFLOW_PLUGIN_NODE_EXECUTABLE ?? process.execPath;
   const child = spawn(runtimeExecutable, args, {
     cwd: plugin.absoluteDirectory,

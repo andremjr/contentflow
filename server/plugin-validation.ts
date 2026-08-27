@@ -204,6 +204,16 @@ export const pluginManifestSchema = z
     license: z.string().min(1).max(160),
     homepage: httpsUrl.optional(),
     repository: httpsUrl.optional(),
+    branding: z
+      .object({
+        iconPath: z
+          .string()
+          .min(1)
+          .max(260)
+          .regex(/^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$)).+\.(?:png|webp)$/i),
+      })
+      .strict()
+      .optional(),
     runtime: z
       .object({
         kind: z.literal("node"),
@@ -386,5 +396,23 @@ export function validatePluginDirectory(directory: string, checkSymlinks = true)
   if (!realEntrypoint.startsWith(`${absoluteDirectory}${path.sep}`))
     throw new Error("O entrypoint precisa permanecer dentro da pasta do plugin.");
   if (checkSymlinks) assertPluginTreeSafe(absoluteDirectory);
+  if (manifest.branding?.iconPath) {
+    const iconPath = path.resolve(absoluteDirectory, manifest.branding.iconPath);
+    if (!iconPath.startsWith(`${absoluteDirectory}${path.sep}`))
+      throw new Error("O ícone precisa permanecer dentro da pasta do plugin.");
+    if (!existsSync(iconPath) || !statSync(iconPath).isFile())
+      throw new Error(`Ícone não encontrado: ${manifest.branding.iconPath}`);
+    if (statSync(iconPath).size > 512 * 1024)
+      throw new Error("O ícone do plugin excede o limite de 512 KiB.");
+    const realIcon = realpathSync(iconPath);
+    if (!realIcon.startsWith(`${absoluteDirectory}${path.sep}`))
+      throw new Error("O ícone precisa permanecer dentro da pasta do plugin.");
+    const signature = readFileSync(realIcon).subarray(0, 12);
+    const isPng = signature.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const isWebp =
+      signature.subarray(0, 4).toString("ascii") === "RIFF" &&
+      signature.subarray(8, 12).toString("ascii") === "WEBP";
+    if (!isPng && !isWebp) throw new Error("O ícone precisa ser um PNG ou WebP válido.");
+  }
   return { manifest, manifestPath, absoluteDirectory, entrypoint: realEntrypoint };
 }

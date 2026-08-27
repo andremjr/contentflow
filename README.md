@@ -10,7 +10,9 @@ A versão `0.4.2` mantém os 8 Processos Universais, os 4 Blocos Essenciais e os
 - Orquestrador de Projetos nos modos ponta a ponta e lote por processo, com fila persistente, parada, correção e retomada;
 - retries de validação com novas tentativas identificadas sem reaproveitar jobs invalidados;
 - execução sequencial de inputs em lote e fallback entre perfis explicitamente preparados somente para falhas técnicas permitidas;
-- plugins oficiais para modelos de linguagem, navegador, narração, mídia de acervo, transcrição, remoção de silêncio e montagem de vídeo por sequência de imagens.
+- funcionamento completo como organizador de Métodos mesmo quando nenhum plugin está instalado.
+
+Plugins são software externo ao ContentFlow OS. A release do núcleo não inclui nem instala plugins; integrações mantidas pelo autor para seus alunos são distribuídas separadamente e obedecem ao mesmo protocolo, consentimento e sandbox de qualquer outro plugin.
 
 A descrição normativa do comportamento está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). O contrato de integrações está em [`docs/PLUGIN_PROTOCOL.md`](docs/PLUGIN_PROTOCOL.md).
 
@@ -18,7 +20,9 @@ A descrição normativa do comportamento está em [`docs/ARCHITECTURE.md`](docs/
 
 Usuários leigos podem baixar o instalador pronto na página [Releases](https://github.com/andremjr/contentflow-os/releases). O arquivo **Setup** é a opção recomendada: basta executar, escolher a pasta e abrir o atalho do ContentFlow OS. O arquivo **Portable** não instala nada, mas é mais lento para abrir porque descompacta o aplicativo a cada execução.
 
-O aplicativo inclui uma cópia privada do Node 26, abre como um programa comum do Windows e guarda projetos, plugins e credenciais fora da pasta de instalação. Veja [`docs/DESKTOP_V0.md`](docs/DESKTOP_V0.md) para uso, atualização e compilação.
+No aplicativo instalado, a página inicial permite verificar, baixar e instalar a release estável mais recente. A versão portátil abre a página oficial para baixar o instalador recomendado.
+
+O aplicativo inclui uma cópia privada do Node 26 para executar o núcleo e isolar plugins externos, abre como um programa comum do Windows e guarda projetos, plugins instalados e credenciais fora da pasta de instalação. Veja [`docs/DESKTOP_V0.md`](docs/DESKTOP_V0.md) para uso, atualização e compilação.
 
 ## Requisitos para desenvolver o núcleo
 
@@ -75,16 +79,11 @@ npm run dev
 
 ## Privacidade e integrações
 
-O ContentFlow OS não possui telemetria ou analytics. As informações permanecem locais, exceto quando o usuário aciona uma integração externa:
+O ContentFlow OS não possui telemetria ou analytics. As informações permanecem locais. Um plugin externo pode enviar entradas ao provedor declarado somente quando o usuário o instala, autoriza e executa; links externos só são abertos quando clicados.
 
-- a sincronização de canal consulta dados públicos do YouTube;
-- plugins podem enviar as entradas do bloco ao provedor declarado;
-- plugins oficiais de modelos utilizam a credencial do próprio usuário, podem gerar cobranças na conta dele e enviam ao provedor declarado o contexto necessário à execução;
-- links externos só são abertos quando clicados.
+Credenciais de plugins são armazenadas no cofre seguro do ambiente local, nunca no SQLite ou no Método, e são entregues somente à invocação autorizada. Cada Bloco do Método escolhe sua configuração funcional e referencia uma conexão local nomeada; o valor secreto permanece fora do Método. A página de Plugins cuida da instalação, atualização, permissões, ativação e remoção dos pacotes.
 
-Credenciais de plugins são armazenadas no cofre seguro do ambiente local, nunca no SQLite ou no Método, e são entregues somente à invocação autorizada. A execução usa as conexões configuradas na Central de Plugins para avançar automaticamente entre os blocos.
-
-Plugins não oficiais não são mantidos, revisados ou garantidos pelo ContentFlow OS apenas por serem carregados localmente. Eles não precisam de aprovação do projeto para ser criados, compartilhados, instalados ou ativados. A decisão é local: o aplicativo valida o manifesto, mostra as capacidades pedidas e só executa depois do consentimento do usuário, em um processo separado com a sandbox de permissões do Node. Autores e usuários respondem por seu código e uso conforme sua participação e a legislação aplicável; o núcleo continua responsável pelas proteções e dados que estiverem efetivamente sob seu controle. Consulte o [guia de desenvolvimento](docs/PLUGIN_DEVELOPMENT.md), o [plugin comunitário mínimo](plugins/examples/community-reference/README.md), a [governança do ecossistema](docs/PLUGIN_ECOSYSTEM.md) e a [proteção jurídica e licenciamento](docs/LEGAL_AND_LICENSING.md).
+Nenhum plugin faz parte do núcleo ou recebe confiança implícita, inclusive os mantidos pelo autor do ContentFlow OS. Plugins não precisam de aprovação do projeto para ser criados ou compartilhados. A decisão de instalar e ativar é local: o aplicativo valida o manifesto, mostra as permissões pedidas e só executa depois do consentimento do usuário, em processo separado com a sandbox de permissões do Node. Autores e usuários respondem por seu código e uso conforme sua participação e a legislação aplicável; o núcleo continua responsável pelas proteções e dados sob seu controle. Consulte o [guia de desenvolvimento](docs/PLUGIN_DEVELOPMENT.md), o [plugin comunitário mínimo](plugins/examples/community-reference/README.md), a [governança do ecossistema](docs/PLUGIN_ECOSYSTEM.md) e a [proteção jurídica e licenciamento](docs/LEGAL_AND_LICENSING.md).
 
 Por padrão, cada upload pode ter até 256 MB e a pasta local de uploads pode ocupar até 10 GB. Usuários avançados podem ajustar esses limites antes de iniciar a API com `CONTENTFLOW_MAX_UPLOAD_MB` e `CONTENTFLOW_MAX_UPLOAD_STORAGE_GB`.
 
@@ -111,6 +110,7 @@ npm run check
 ### Produto e manutenção
 
 - [Arquitetura e visão de produto](docs/ARCHITECTURE.md)
+- [Roadmap de finalização da V1.0.0](docs/V1_ROADMAP.md)
 - [V0 compilada para Windows](docs/DESKTOP_V0.md)
 - [Tradutor de Métodos](docs/gpt-method-translator/GPT_CONFIGURATION.md)
 - [Proteção jurídica e licenciamento](docs/LEGAL_AND_LICENSING.md)

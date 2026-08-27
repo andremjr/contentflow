@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, LoaderCircle, Plus, Youtube } from "lucide-react";
+import { Check, Layers3, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { createEmptyMethods, type Channel } from "@/lib/domain";
-import { createChannel, resolveYouTubeChannel, updateChannel } from "@/lib/store";
+import { createChannel, updateChannel } from "@/lib/store";
 
 const COLOR_PRESETS = ["#2563EB", "#4F6B8F", "#60727A", "#6B7080"];
 
@@ -44,13 +44,13 @@ export function NewChannelDialog({
   onOpenChange?: (open: boolean) => void;
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
+  const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [niche, setNiche] = useState("");
   const [language, setLanguage] = useState("PT-BR");
   const [frequency, setFrequency] = useState("1x / semana");
   const [color, setColor] = useState(COLOR_PRESETS[0]);
   const [description, setDescription] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
 
   const isEditing = Boolean(channel);
   const open = controlledOpen ?? internalOpen;
@@ -59,27 +59,27 @@ export function NewChannelDialog({
     onOpenChange?.(value);
   };
 
-  const canSubmit = handle.trim().length >= 3 && !isLoading;
+  const canSubmit = name.trim().length >= 2;
 
   function reset() {
+    setName(channel?.name ?? "");
     setHandle(channel?.handle ?? "");
     setNiche(channel?.niche ?? "");
     setLanguage(channel?.language ?? "PT-BR");
     setFrequency(channel?.frequency ?? "1x / semana");
     setColor(channel?.color ?? COLOR_PRESETS[0]);
     setDescription(channel?.description ?? "");
-    setIsLoading(false);
   }
 
   useEffect(() => {
     if (!open) return;
+    setName(channel?.name ?? "");
     setHandle(channel?.handle ?? "");
     setNiche(channel?.niche ?? "");
     setLanguage(channel?.language ?? "PT-BR");
     setFrequency(channel?.frequency ?? "1x / semana");
     setColor(channel?.color ?? COLOR_PRESETS[0]);
     setDescription(channel?.description ?? "");
-    setIsLoading(false);
   }, [open, channel]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -89,6 +89,8 @@ export function NewChannelDialog({
     if (channel) {
       const updated = updateChannel({
         ...channel,
+        name: name.trim(),
+        handle: handle.trim(),
         niche: niche.trim(),
         language,
         frequency,
@@ -100,38 +102,31 @@ export function NewChannelDialog({
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const youtube = await resolveYouTubeChannel(handle);
-      const newChannel: Omit<Channel, "createdAt"> = {
-        id: `ch-${crypto.randomUUID()}`,
-        ...youtube,
-        color,
-        description: description.trim(),
-        niche: niche.trim(),
-        language,
-        activeProjects: 0,
-        frequency,
-        nextPublish: "",
-        currentProjectProgress: 0,
-        status: "healthy",
-        trend: [],
-        methods: createEmptyMethods(),
-      };
+    const newChannel: Omit<Channel, "createdAt"> = {
+      id: `ch-${crypto.randomUUID()}`,
+      name: name.trim(),
+      handle: handle.trim(),
+      color,
+      subscribers: "—",
+      description: description.trim(),
+      niche: niche.trim(),
+      language,
+      activeProjects: 0,
+      frequency,
+      nextPublish: "",
+      currentProjectProgress: 0,
+      status: "healthy",
+      trend: [],
+      methods: createEmptyMethods(),
+    };
 
-      const persistedChannel = createChannel(newChannel);
-      onCreate?.(persistedChannel);
-      toast.success("Canal conectado", {
-        description: `${newChannel.name} foi identificado pelo YouTube.`,
-      });
-      reset();
-      setOpen(false);
-    } catch (error) {
-      toast.error("Não foi possível conectar o canal", {
-        description: error instanceof Error ? error.message : "Confira o @ e tente novamente.",
-      });
-      setIsLoading(false);
-    }
+    const persistedChannel = createChannel(newChannel);
+    onCreate?.(persistedChannel);
+    toast.success("Canal criado", {
+      description: "Agora você pode organizar Métodos, Projetos e a Biblioteca Estratégica.",
+    });
+    reset();
+    setOpen(false);
   }
 
   return (
@@ -160,12 +155,12 @@ export function NewChannelDialog({
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="grid size-10 place-items-center rounded-md bg-secondary">
-              <Youtube className="size-5" style={{ color }} />
+              <Layers3 className="size-5" style={{ color }} />
             </div>
             <div>
               <DialogTitle>{isEditing ? "Editar canal" : "Novo canal"}</DialogTitle>
               <DialogDescription>
-                Informe o @. Nome, inscritos e imagens serão buscados automaticamente.
+                O Canal organiza Métodos, Projetos e referências sem depender de serviços externos.
               </DialogDescription>
             </div>
           </div>
@@ -174,19 +169,28 @@ export function NewChannelDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="ch-handle">@ do canal *</Label>
+              <Label htmlFor="ch-name">Nome do canal *</Label>
+              <Input
+                id="ch-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex.: Meu canal de ciência"
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="ch-handle">Identificador ou @ (opcional)</Label>
               <Input
                 id="ch-handle"
                 value={handle}
                 onChange={(e) => setHandle(e.target.value)}
                 placeholder="@meucanal"
-                autoFocus
                 autoCapitalize="none"
                 autoCorrect="off"
-                disabled={isEditing}
               />
               <p className="text-[11px] text-muted-foreground">
-                Você também pode colar a URL completa do canal.
+                Serve apenas como referência local. Nenhuma consulta externa será feita.
               </p>
             </div>
 
@@ -268,12 +272,7 @@ export function NewChannelDialog({
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setOpen(false)}
-              disabled={isLoading}
-            >
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
             <Button
@@ -281,16 +280,8 @@ export function NewChannelDialog({
               disabled={!canSubmit}
               className="gap-1.5 gradient-brand text-white"
             >
-              {isLoading ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <Plus className="size-4" />
-              )}
-              {isLoading
-                ? "Buscando no YouTube..."
-                : isEditing
-                  ? "Salvar alterações"
-                  : "Conectar canal"}
+              <Plus className="size-4" />
+              {isEditing ? "Salvar alterações" : "Criar canal"}
             </Button>
           </DialogFooter>
         </form>

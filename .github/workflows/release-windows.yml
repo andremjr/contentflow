@@ -1,0 +1,60 @@
+name: Publicar release estável do Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Validar tag e versão
+        shell: pwsh
+        run: |
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $expectedTag = "v$packageVersion"
+          if ("${{ github.ref_name }}" -ne $expectedTag) {
+            throw "A tag ${{ github.ref_name }} não corresponde à versão $packageVersion do package.json."
+          }
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Verificar projeto
+        run: npm run check
+
+      - name: Montar e publicar instalador, portátil e latest.yml
+        run: npm run desktop:release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+
+      - name: Publicar hashes SHA-256
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $releaseVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $setup = "release/v0/ContentFlow-OS-V0-$releaseVersion-x64-Setup.exe"
+          $portable = "release/v0/ContentFlow-OS-V0-$releaseVersion-x64-Portable.exe"
+          $hashFile = "release/v0/ContentFlow-OS-V0-$releaseVersion-SHA256.txt"
+          Get-FileHash -Algorithm SHA256 $setup, $portable |
+            ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
+            Set-Content -Encoding ascii $hashFile
+          gh release upload "${{ github.ref_name }}" $hashFile --clobber

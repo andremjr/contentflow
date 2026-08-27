@@ -7,6 +7,7 @@
   "description": "Gera narração, efeitos sonoros e música, transcreve mídia e consulta vozes pela API oficial da ElevenLabs.",
   "author": "ContentFlow OS",
   "license": "LicenseRef-ContentFlow-Source-Available-1.0",
+  "branding": { "iconPath": "assets/icon.png" },
   "homepage": "https://github.com/andremjr/contentflow-os",
   "repository": "https://github.com/andremjr/contentflow-os",
   "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },

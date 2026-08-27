@@ -121,11 +121,22 @@ import { cn } from "@/lib/utils";
 
 type DiscoveredPlugin = {
   id: string;
-  source: "bundled" | "installed" | "local";
+  source: "installed" | "local";
   directory: string;
   manifest: PluginManifest;
   enabled?: boolean;
   executable?: boolean;
+};
+
+type LocalPluginConnection = {
+  id: string;
+  pluginId: string;
+  name: string;
+  connected: boolean;
+  updatedAt: string;
+  metadata: Record<string, unknown>;
+  requiredSecretKeys: string[];
+  connectedSecretKeys: string[];
 };
 
 const BLOCK_META: Record<
@@ -298,8 +309,6 @@ export function MethodBuilder({
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [pendingFileImport, setPendingFileImport] = useState<SharedMethodFile | null>(null);
   const [availablePlugins, setAvailablePlugins] = useState<DiscoveredPlugin[]>([]);
-  const [openAIModels, setOpenAIModels] = useState<Array<{ id: string; name: string }>>([]);
-  const [anthropicModels, setAnthropicModels] = useState<Array<{ id: string; name: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadedProcessRef = useRef<UniversalProcess | null>(null);
   const editVersionRef = useRef(0);
@@ -341,36 +350,12 @@ export function MethodBuilder({
       .then((result) => {
         if (active) {
           setAvailablePlugins(
-            result.plugins.filter(
-              (plugin) => plugin.source === "bundled" || (plugin.enabled && plugin.executable),
-            ),
+            result.plugins.filter((plugin) => plugin.enabled && plugin.executable),
           );
         }
       })
       .catch(() => {
         if (active) setAvailablePlugins([]);
-      });
-    void fetch("/api/plugins/official-openai-gpt/connection")
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Falha ao consultar a conexão OpenAI.");
-        return response.json() as Promise<{ models: Array<{ id: string; name: string }> }>;
-      })
-      .then((result) => {
-        if (active) setOpenAIModels(result.models);
-      })
-      .catch(() => {
-        if (active) setOpenAIModels([]);
-      });
-    void fetch("/api/plugins/official-anthropic-claude/connection")
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Falha ao consultar a conexão Anthropic.");
-        return response.json() as Promise<{ models: Array<{ id: string; name: string }> }>;
-      })
-      .then((result) => {
-        if (active) setAnthropicModels(result.models);
-      })
-      .catch(() => {
-        if (active) setAnthropicModels([]);
       });
     return () => {
       active = false;
@@ -462,7 +447,9 @@ export function MethodBuilder({
     setIsDirty(true);
     setPendingFileImport(null);
     toast.success(`${pendingFileImport.name} importado`, {
-      description: "Revise a cópia. As alterações serão salvas automaticamente.",
+      description: pendingFileImport.method.blocks.some((block) => block.plugin?.connectionRequired)
+        ? "Associe localmente as contas exigidas pelos blocos antes de executar. Nenhuma credencial foi importada."
+        : "Revise a cópia. As alterações serão salvas automaticamente.",
     });
   }, [pendingFileImport, processType]);
 
@@ -490,9 +477,9 @@ export function MethodBuilder({
   };
 
   const importMethod = (sourceChannelName: string, sourceBlocks: ActionBlock[]) => {
-    const importedBlocks = copyImportedBlocks(processType, sourceBlocks, uid).map((block) =>
-      normalizeActionBlock(block, processType),
-    );
+    const importedBlocks = copyImportedBlocks(processType, sourceBlocks, uid, {
+      preserveLocalConnections: true,
+    }).map((block) => normalizeActionBlock(block, processType));
     saveBlocks(importedBlocks);
     setSelectedBlockId(importedBlocks[0]?.id ?? null);
     setLibraryOpen(false);
@@ -855,8 +842,6 @@ export function MethodBuilder({
               processType={processType}
               channelMethods={channel.methods}
               plugins={availablePlugins}
-              openAIModels={openAIModels}
-              anthropicModels={anthropicModels}
               index={blocks.indexOf(selectedBlock)}
               total={blocks.length}
               onChange={(patch) => updateBlock(selectedBlock.id, patch)}
@@ -1051,8 +1036,6 @@ function BlockEditor({
   processType,
   channelMethods,
   plugins,
-  openAIModels,
-  anthropicModels,
   index,
   total,
   onChange,
@@ -1065,8 +1048,6 @@ function BlockEditor({
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
   plugins: DiscoveredPlugin[];
-  openAIModels: Array<{ id: string; name: string }>;
-  anthropicModels: Array<{ id: string; name: string }>;
   index: number;
   total: number;
   onChange: (patch: Partial<ActionBlock>) => void;
@@ -1128,20 +1109,10 @@ function BlockEditor({
           propertyKey={key}
           schema={schema}
           value={block.plugin?.configuration[key]}
-          options={
-            selectedPlugin?.id === "official-openai-gpt" && key === "model" && openAIModels.length
-              ? openAIModels.map((model) => ({ value: model.id, label: model.name }))
-              : selectedPlugin?.id === "official-anthropic-claude" &&
-                  key === "model" &&
-                  anthropicModels.length
-                ? anthropicModels.map((model) => ({ value: model.id, label: model.name }))
-                : undefined
-          }
           onChange={(value) =>
             onChange({
               plugin: {
-                pluginId: block.plugin!.pluginId,
-                capabilityId: block.plugin!.capabilityId,
+                ...block.plugin!,
                 configuration: { ...block.plugin!.configuration, [key]: value },
               },
             })
@@ -1346,7 +1317,13 @@ function BlockEditor({
                     };
                   });
                   onChange({
-                    plugin: { pluginId, capabilityId, configuration },
+                    plugin: {
+                      pluginId,
+                      pluginVersion: selection?.plugin.manifest.version,
+                      capabilityId,
+                      configuration,
+                      connectionRequired: Boolean(selection?.plugin.manifest.secretKeys?.length),
+                    },
                     inputs: requestedInputs,
                     outputs: requestedOutputs,
                   });
@@ -1375,6 +1352,21 @@ function BlockEditor({
 
           {selectedCapability && (
             <div className="space-y-3">
+              {selectedPlugin?.manifest.secretKeys?.length && block.plugin && (
+                <PluginConnectionSelector
+                  plugin={selectedPlugin}
+                  value={block.plugin.connectionId}
+                  onChange={(connectionId) =>
+                    onChange({
+                      plugin: {
+                        ...block.plugin!,
+                        connectionId,
+                        connectionRequired: true,
+                      },
+                    })
+                  }
+                />
+              )}
               {primaryConfigurationEntries.map(renderConfigurationField)}
               {supportsOutlineSequence && block.plugin && (
                 <div className="space-y-1.5">
@@ -1385,8 +1377,7 @@ function BlockEditor({
                       if (value !== "single" && value !== "outline_sequence") return;
                       onChange({
                         plugin: {
-                          pluginId: block.plugin!.pluginId,
-                          capabilityId: block.plugin!.capabilityId,
+                          ...block.plugin!,
                           configuration: {
                             ...block.plugin!.configuration,
                             generationMode: value,
@@ -1429,25 +1420,186 @@ function BlockEditor({
                   </div>
                 </details>
               )}
-              {selectedPlugin?.id === "official-openai-gpt" && (
-                <p className="text-[11px] text-muted-foreground">
-                  {openAIModels.length
-                    ? `${openAIModels.length} modelos disponíveis foram consultados na sua conta OpenAI.`
-                    : "Conecte sua chave em Plugins para atualizar os modelos disponíveis. A chave não é salva no Método."}
-                </p>
-              )}
-              {selectedPlugin?.id === "official-anthropic-claude" && (
-                <p className="text-[11px] text-muted-foreground">
-                  {anthropicModels.length
-                    ? `${anthropicModels.length} modelos disponíveis foram consultados na sua conta Anthropic.`
-                    : "Conecte sua chave em Plugins para atualizar os modelos disponíveis. A chave não é salva no Método."}
-                </p>
-              )}
             </div>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function PluginConnectionSelector({
+  plugin,
+  value,
+  onChange,
+}: {
+  plugin: DiscoveredPlugin;
+  value?: string;
+  onChange: (connectionId: string | undefined) => void;
+}) {
+  const [connections, setConnections] = useState<LocalPluginConnection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [name, setName] = useState("");
+  const [secrets, setSecrets] = useState<Record<string, string>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/connections`);
+      const result = (await response.json()) as {
+        connections?: LocalPluginConnection[];
+        error?: string;
+      };
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível listar as conexões.");
+      setConnections(result.connections ?? []);
+    } catch (error) {
+      toast.error("Não foi possível carregar as conexões", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [plugin.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function createConnection() {
+    setCreating(true);
+    try {
+      const response = await fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/connections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, secrets }),
+      });
+      const result = (await response.json()) as LocalPluginConnection & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível criar a conexão.");
+      setName("");
+      setSecrets({});
+      await load();
+      onChange(result.id);
+      toast.success("Conexão criada", { description: "Teste a conta antes da primeira execução." });
+    } catch (error) {
+      toast.error("Não foi possível criar a conexão", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function testConnection() {
+    if (!value) return;
+    setTesting(true);
+    try {
+      const response = await fetch(
+        `/api/plugins/${encodeURIComponent(plugin.id)}/connections/${encodeURIComponent(value)}/test`,
+        { method: "POST" },
+      );
+      const result = (await response.json()) as { valid?: boolean; error?: string };
+      if (!response.ok || !result.valid) {
+        throw new Error(result.error ?? "A conexão não foi validada.");
+      }
+      await load();
+      toast.success("Conexão validada");
+    } catch (error) {
+      toast.error("A conexão não pôde ser validada", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  const selected = connections.find((connection) => connection.id === value);
+  const canCreate =
+    Boolean(name.trim()) &&
+    (plugin.manifest.secretKeys ?? []).every((secretKey) => secrets[secretKey]?.trim());
+
+  return (
+    <section className="rounded-lg border border-border/70 bg-card/60 p-3">
+      <Label>Conta ou conexão</Label>
+      <div className="mt-2 flex gap-2">
+        <Select
+          value={value ?? ""}
+          onValueChange={(connectionId) => onChange(connectionId || undefined)}
+          disabled={loading || !connections.length}
+        >
+          <SelectTrigger className="min-w-0 flex-1">
+            <SelectValue
+              placeholder={loading ? "Carregando conexões..." : "Selecione uma conexão local"}
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {connections.map((connection) => (
+              <SelectItem key={connection.id} value={connection.id}>
+                {connection.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!selected || testing}
+          onClick={() => void testConnection()}
+        >
+          {testing && <LoaderCircle className="size-3.5 animate-spin" />}
+          Testar
+        </Button>
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        O Método salva somente o identificador local. A credencial permanece no cofre seguro.
+      </p>
+      {value && !loading && !selected && (
+        <p className="mt-2 text-xs text-destructive">
+          A conexão anteriormente associada não está mais disponível. Escolha outra conta.
+        </p>
+      )}
+
+      <details className="mt-3 rounded-md border border-border/70 bg-background/40 p-2.5">
+        <summary className="cursor-pointer text-xs font-medium">Criar nova conexão</summary>
+        <div className="mt-3 space-y-2">
+          <Input
+            value={name}
+            placeholder="Ex.: Conta principal do canal"
+            onChange={(event) => setName(event.target.value)}
+          />
+          {(plugin.manifest.secretKeys ?? []).map((secretKey) => (
+            <div key={secretKey} className="space-y-1">
+              <Label
+                htmlFor={`${plugin.id}-${secretKey}-connection`}
+                className="font-mono text-[10px]"
+              >
+                {secretKey}
+              </Label>
+              <Input
+                id={`${plugin.id}-${secretKey}-connection`}
+                type="password"
+                autoComplete="off"
+                value={secrets[secretKey] ?? ""}
+                onChange={(event) =>
+                  setSecrets((current) => ({ ...current, [secretKey]: event.target.value }))
+                }
+              />
+            </div>
+          ))}
+          <Button
+            type="button"
+            size="sm"
+            disabled={creating || !canCreate}
+            onClick={() => void createConnection()}
+          >
+            {creating && <LoaderCircle className="size-3.5 animate-spin" />}
+            Salvar no cofre local
+          </Button>
+        </div>
+      </details>
+    </section>
   );
 }
 

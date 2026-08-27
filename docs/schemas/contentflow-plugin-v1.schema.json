@@ -33,6 +33,19 @@
     "license": { "type": "string", "minLength": 1, "maxLength": 160 },
     "homepage": { "type": "string", "format": "uri", "pattern": "^https://" },
     "repository": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "branding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["iconPath"],
+      "properties": {
+        "iconPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 260,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.(?:png|webp)$"
+        }
+      }
+    },
     "runtime": {
       "type": "object",
       "additionalProperties": false,

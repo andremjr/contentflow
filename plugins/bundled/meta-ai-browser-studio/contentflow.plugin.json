@@ -7,6 +7,7 @@
   "description": "Gera texto e imagens no Meta AI e vídeos curtos no Vibes usando um perfil Chrome dedicado, sem API oficial.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
+  "branding": { "iconPath": "assets/icon.png" },
   "runtime": {
     "kind": "node",
     "version": ">=26 <27",

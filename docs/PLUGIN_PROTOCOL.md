@@ -2,7 +2,7 @@
 
 Este documento é o contrato normativo entre o núcleo do ContentFlow OS e plugins dos operadores `IA` e `Código`. Em caso de divergência, a tipagem em [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e este documento devem ser atualizados juntos.
 
-O executor isolado atende plugins oficiais, locais e comunitários. Plugins externos são validados automaticamente, exigem consentimento local por versão/permissões e executam em processo separado sob a sandbox do Node 26. Não existe aprovação central para criar, compartilhar, instalar ou ativar um plugin. A API v1 já é pública; qualquer alteração futura incompatível exige uma nova `apiVersion`.
+O executor isolado atende todos os plugins externos da mesma forma. Cada pacote é validado automaticamente, exige consentimento local por versão/permissões e executa em processo separado sob a sandbox do Node 26. Não existe plugin embutido ou confiança implícita, nem aprovação central para criar, compartilhar, instalar ou ativar um plugin. A API v1 já é pública; qualquer alteração futura incompatível exige uma nova `apiVersion`.
 
 Documentos relacionados:
 
@@ -48,6 +48,8 @@ Não fazem parte da API v1:
 - **Porta:** papel semântico de uma entrada ou saída, como `audio`, `script` ou `timeline`.
 - **Binding:** conexão entre uma entrada/saída do Método e uma porta da capacidade.
 - **Configuração do bloco:** parâmetros da capacidade salvos naquela instância do bloco.
+- **Conexão local:** conta, sessão ou conjunto de credenciais nomeado e identificado por `connectionId`, armazenado pelo núcleo e referenciado por um Bloco sem expor seus secrets.
+- **Requisito de conexão:** descrição portátil do plugin e dos recursos de autenticação exigidos, usada quando um Método é exportado sem o `connectionId` local.
 - **Setting:** preferência local global do plugin, compartilhada por blocos.
 - **Secret:** credencial local declarada por nome e nunca serializada no Método.
 - **Artifact:** arquivo produzido pelo plugin e importado pelo núcleo.
@@ -153,6 +155,9 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
   "license": "MIT",
   "homepage": "https://example.com/contentflow-plugin",
   "repository": "https://github.com/example/contentflow-plugin",
+  "branding": {
+    "iconPath": "assets/icon.png"
+  },
   "runtime": {
     "kind": "node",
     "version": ">=26 <27",
@@ -236,6 +241,12 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 - `homepage` e `repository`, quando informados, usam URLs HTTPS e apontam para páginas controladas pelo publicador.
 - Nome, descrição, autor, licença e URLs são metadados não confiáveis: a interface escapa o conteúdo e nunca renderiza HTML fornecido pelo manifesto.
 
+### Branding opcional
+
+`branding.iconPath`, quando presente, aponta para um PNG ou WebP empacotado dentro da pasta do plugin. O caminho é relativo, normalizado e não aceita URL, caminho absoluto, `..`, symlink para fora do pacote ou formato executável. O arquivo pode ter no máximo 512 KiB; recomenda-se imagem quadrada de 256 × 256 pixels.
+
+O núcleo valida assinatura, MIME, tamanho e confinamento antes de exibir o asset. Arquivo ausente ou inválido não impede a instalação de um manifesto API v1 existente: a interface usa um fallback local. O aplicativo nunca busca favicon ou logo remoto automaticamente. O publicador é responsável por possuir autorização para distribuir e exibir o asset e não pode sugerir endosso inexistente nem imitar a marca do ContentFlow OS.
+
 ### Runtime
 
 - `runtime.kind` é `node` na API v1.
@@ -311,21 +322,29 @@ Uma porta pode incluir `presentation` para solicitar uma forma padronizada de ex
 
 Os identificadores v1 são `auto`, `text-short`, `text-long`, `list`, `tags`, `table`, `cards`, `file-list`, `image-gallery`, `audio-player`, `video-player` e `decision`. O núcleo valida compatibilidade, normaliza valores inválidos para `auto` e implementa toda a interface. Plugins não podem registrar renderers, injetar React ou HTML, nem fornecer scripts ou componentes arbitrários. A ausência de `presentation` preserva o comportamento legado.
 
-## 7. Configuração, settings e secrets
+## 7. Configuração, conexões, settings e secrets
 
-Há três categorias distintas:
+Há cinco categorias distintas:
 
-| Categoria       | Escopo                     | Exemplo                               | Compartilhada no Método? |
-| --------------- | -------------------------- | ------------------------------------- | ------------------------ |
-| `configuration` | Instância do bloco         | modelo, formato, proporção, qualidade | Sim                      |
-| `settings`      | Instalação local do plugin | URL base, região, preferências        | Não                      |
-| `secrets`       | Cofre local                | API key, OAuth refresh token          | Nunca                    |
+| Categoria            | Escopo                          | Exemplo                                      | Portátil no Método?        |
+| -------------------- | ------------------------------- | -------------------------------------------- | -------------------------- |
+| `configuration`      | Instância do bloco              | modelo, formato, proporção, qualidade        | Sim                        |
+| `connectionId`       | Referência local estável        | conta OpenAI “Canal principal”               | Não; a exportação o remove |
+| requisito de conexão | Template exportado              | plugin, capability e secrets/perfil exigidos | Sim, sem valor secreto     |
+| `settings`           | Instalação local do plugin      | URL base, região, workspace, executável      | Não                        |
+| `secrets`            | Cofre local associado à conexão | API key, OAuth refresh token                 | Nunca                      |
 
 Regras:
 
 - Campo obrigatório sem valor ou default impede salvar/executar o bloco.
 - Defaults do JSON Schema são materializados de forma visível; não ficam implícitos no plugin.
 - Parâmetros como proporção de vídeo permanecem no plugin/bloco que os utiliza, não viram parâmetros globais do Projeto.
+- A configuração de uso e a seleção da conexão são apresentadas no Bloco do Método, não no card da galeria de Plugins.
+- Uma conexão possui ID opaco e estável, nome editável, `pluginId`, estado e referências aos secrets/perfis que o núcleo controla. Renomear não altera o ID.
+- O mesmo plugin pode possuir várias conexões, e blocos diferentes podem selecionar conexões diferentes.
+- O Método persistido localmente pode referenciar `connectionId`; uma exportação substitui essa referência por um requisito de conexão. A importação exige associação explícita a uma conexão local antes da execução.
+- O núcleo nunca escolhe entre várias conexões elegíveis por nome, ordem de criação ou conteúdo secreto. Ambiguidade gera bloqueio, não fallback silencioso.
+- Fallback entre perfis ou conexões só ocorre quando declarado e somente nas falhas técnicas permitidas; autenticação, CAPTCHA, rate limit, cota, upgrade e bloqueio nunca autorizam troca automática de identidade.
 - Configurações exportadas não podem conter secrets.
 - Secrets são disponibilizados apenas à execução que declarou a chave, por `services.getSecret()`.
 - O plugin não pode enumerar secrets de outros plugins.
@@ -756,13 +775,13 @@ Requisitos mínimos antes de executar plugins comunitários:
 - hash do pacote instalado;
 - registro de versão usada em cada snapshot de Método/execução.
 
-Plugins oficiais seguem as mesmas regras, mesmo quando distribuídos em `plugins/bundled`.
+Plugins mantidos pelo autor seguem exatamente as mesmas regras e são distribuídos separadamente da release do núcleo.
 
 ## 19. Instalação, atualização e remoção
 
 ```text
-plugins/bundled/          plugins oficiais versionados com o aplicativo
 data/plugins/installed/   plugins instalados apenas na máquina do usuário
+data/plugins/local/       pastas locais opcionais, externas ao núcleo
 ```
 
 O gerenciador descobre manifestos somente em subpastas diretas autorizadas e expõe caminhos relativos.
@@ -814,7 +833,7 @@ Alterações que exigem nova `apiVersion` do ContentFlow OS:
 - mudar representação universal de valores;
 - mudar regras obrigatórias de artifacts, bindings ou segurança.
 
-O Método deve salvar `pluginId`, `pluginVersion`, `capabilityId` e bindings. A execução salva um snapshot desses dados para ser reproduzível.
+O Método local deve salvar `pluginId`, `pluginVersion`, `capabilityId`, configuração, bindings e `connectionId` quando necessário. A exportação remove o ID local e conserva somente o requisito de conexão. A execução salva um snapshot da identidade do executor e da conexão usada, nunca do secret, para ser auditável e reproduzível dentro daquele ambiente.
 
 ## 21. Subconjunto de JSON Schema e validação
 
@@ -935,13 +954,14 @@ Plugins e conteúdos de terceiros possuem suas próprias licenças. A licença d
 
 ## 26. Dependências, snapshots e ausência de plugin
 
-Um Método referencia exatamente `pluginId`, `pluginVersion`, `capabilityId`, configuração e bindings. Na execução, o snapshot registra também hash do pacote e `apiVersion`.
+Um Método local referencia exatamente `pluginId`, `pluginVersion`, `capabilityId`, configuração, bindings e, quando exigido, `connectionId`. Na execução, o snapshot registra também hash do pacote, `apiVersion` e identidade não secreta da conexão. Templates exportados não levam o ID local: levam um requisito que precisa ser associado no destino.
 
 - Um plugin não pode importar código ou chamar capacidades de outro plugin diretamente.
 - Composição entre capacidades ocorre no Método, por blocos e contratos universais, mantendo dependências visíveis.
 - Se a versão exata não estiver instalada, o núcleo não substitui silenciosamente por outra versão.
 - Uma versão patch ou minor compatível pode ser proposta ao usuário; a decisão e a versão efetiva ficam no snapshot.
 - Plugin ausente, desativado pelo usuário, bloqueado por política técnica local ou incompatível gera `blocked_executor` com instrução de resolução, nunca sucesso fictício.
+- Conexão ausente, revogada, incompatível ou ambígua também gera `blocked_executor` e exige escolha explícita antes de uma nova execução.
 - Outputs já produzidos continuam acessíveis após remoção do plugin.
 - Importação de Método apresenta dependências, permissões, provedores, custos e versões antes de instalar qualquer pacote.
 
@@ -980,9 +1000,9 @@ O pacote deve documentar canal de suporte e de vulnerabilidades. Diagnósticos e
 
 Plugins podem ser distribuídos por arquivo, repositório, organização ou catálogo. Na versão atual, o usuário obtém a pasta do pacote e escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**; instalação direta por URL ainda não faz parte da interface. A execução local de um pacote compatível não exige submissão nem aprovação do mantenedor. Catálogos são superfícies opcionais de descoberta e confiança.
 
-Quando houver catálogo, ele diferencia plugins `official`, `verified`, `community` e `private`:
+Quando houver catálogo, ele diferencia plugins `maintained`, `verified`, `community` e `private`:
 
-- `official`: incluído, mantido e suportado pelo ContentFlow OS;
+- `maintained`: mantido pelo autor do ContentFlow OS, porém versionado e distribuído separadamente do núcleo;
 - `verified`: identidade, pacote e requisitos mínimos revisados, sem garantia de ausência de falhas;
 - `community`: distribuído pelo autor e ainda não verificado pelo projeto.
 - `private`: instalado diretamente pelo usuário ou por uma organização, fora do catálogo público.

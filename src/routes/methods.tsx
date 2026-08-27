@@ -139,13 +139,18 @@ function MethodsLibraryPage() {
       transfer.method.processType,
       transfer.method.blocks,
       createId,
+      { preserveLocalConnections: Boolean(transfer.sourceChannelId) },
     );
     await setChannelMethod(target.id, transfer.method.processType, {
       processType: transfer.method.processType,
       blocks: copiedBlocks,
     });
     toast.success(`Método copiado para ${target.name}`, {
-      description: "Blocos Escolher devem ser vinculados às coleções desse canal.",
+      description:
+        !transfer.sourceChannelId &&
+        transfer.method.blocks.some((block) => block.plugin?.connectionRequired)
+          ? "Associe localmente as contas exigidas pelos blocos. Nenhuma credencial foi importada."
+          : "Blocos Escolher devem ser vinculados às coleções desse canal.",
     });
     setTransfer(undefined);
     setTargetChannelId("");

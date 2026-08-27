@@ -17,12 +17,12 @@ O ecossistema existe para ampliar a execução dos Métodos sem transformar cada
 
 ## 2. Origem e sinais de confiança
 
-| Categoria   | Responsabilidade                                                   | Indicação visual |
-| ----------- | ------------------------------------------------------------------ | ---------------- |
-| `official`  | Incluído, mantido e suportado pelo ContentFlow OS.                 | Oficial          |
-| `verified`  | Autor e pacote revisados contra requisitos publicados.             | Verificado       |
-| `community` | Distribuído pelo autor, sem revisão integral do projeto.           | Comunidade       |
-| `private`   | Instalado localmente ou por organização, fora do catálogo público. | Privado          |
+| Categoria    | Responsabilidade                                                                   | Indicação visual   |
+| ------------ | ---------------------------------------------------------------------------------- | ------------------ |
+| `maintained` | Publicado e suportado pelo autor do ContentFlow OS, mas distribuído separadamente. | Mantido pelo autor |
+| `verified`   | Autor e pacote revisados contra requisitos publicados.                             | Verificado         |
+| `community`  | Distribuído pelo autor, sem revisão integral do projeto.                           | Comunidade         |
+| `private`    | Instalado localmente ou por organização, fora do catálogo público.                 | Privado            |
 
 Essas categorias comunicam origem e confiança; não formam níveis de permissão. “Verificado” confirma identidade/origem e uma revisão limitada, mas não garante disponibilidade do provedor, qualidade de outputs, adequação jurídica ou ausência absoluta de vulnerabilidades. `community` e `private` não significam “aguardando aprovação”.
 
@@ -39,7 +39,9 @@ Se alguém modificar o núcleo, executar o pacote por fora do ContentFlow OS ou 
 - `plugin.id` usa domínio reverso sob controle do publicador.
 - Transferência de namespace exige confirmação do titular anterior e do novo.
 - Nome e ícone não podem causar confusão com o ContentFlow OS ou outro publicador.
-- Pacotes oficiais usam namespace reservado pelo projeto.
+- O ícone opcional é um PNG ou WebP local declarado por `branding.iconPath`; favicon remoto não é usado como identidade implícita.
+- O publicador declara e conserva os direitos necessários sobre logos, marcas e demais assets incluídos no pacote.
+- Pacotes mantidos pelo autor usam namespace reservado pelo projeto.
 - `capability.id` é permanente dentro do plugin.
 - Versões seguem SemVer e cada artefato publicado é imutável.
 - O catálogo guarda URL de origem, hash, assinatura quando disponível e data de publicação.
@@ -69,6 +71,7 @@ Antes da instalação, o usuário deve conseguir avaliar:
 - permissões e justificativa de cada uma;
 - efeitos externos, inclusive publicação ou escrita remota;
 - secrets/settings necessários;
+- requisitos de conexão que aparecerão na configuração do Bloco do Método;
 - provedores que recebem dados;
 - políticas de retenção e uso para treinamento;
 - custos, unidades, limites e possibilidade de estimativa;
@@ -156,11 +159,13 @@ Autores mantêm um canal privado de segurança e respondem dentro do prazo divul
 
 Retaliação contra pesquisa de boa-fé, dentro do escopo autorizado, é incompatível com o ecossistema. Pesquisa não autoriza acesso a dados de terceiros, interrupção de serviço ou divulgação prematura.
 
-## 12. Plugins oficiais e independência do núcleo
+## 12. Plugins mantidos pelo autor e independência do núcleo
 
-Plugins oficiais também obedecem ao protocolo público, permissões, isolamento, versionamento e disclosure. Funcionalidades que pertencem ao domínio — processos, blocos, operadores, execução, persistência e consentimento — continuam no núcleo. Integrações com modelos, provedores, APIs, renderizadores e automações ficam em plugins sempre que possível.
+Plugins mantidos pelo autor são externos e distribuídos separadamente. Eles obedecem ao mesmo protocolo público, permissões, isolamento, versionamento, consentimento e disclosure de qualquer outro pacote. Funcionalidades que pertencem ao domínio — processos, blocos, operadores, execução, persistência e consentimento — continuam no núcleo. Integrações com modelos, provedores, APIs, renderizadores e automações ficam sempre nos plugins.
 
-Plugins não podem importar módulos privados do aplicativo, escrever no banco ou depender da interface React. Isso permite evoluir o núcleo sem quebrar o ecossistema e impede vantagens ocultas aos plugins oficiais.
+Plugins não podem importar módulos privados do aplicativo, escrever no banco ou depender da interface React. Isso permite evoluir o núcleo sem quebrar o ecossistema e impede vantagens ocultas aos pacotes mantidos pelo autor.
+
+O card da galeria representa o pacote instalado e seu ciclo de vida. Modelo, operação, parâmetros e conexão são escolhidos no Bloco do Método; permissões, integridade, runtime, settings técnicos, workspaces e secrets continuam sob controle local do núcleo. Uma página de detalhes pode informar esses requisitos e estados, mas não transforma configuração funcional em preferência global compartilhada por todos os Métodos.
 
 ## 13. Responsabilidade compartilhada e limites
 

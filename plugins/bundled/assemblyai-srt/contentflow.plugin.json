@@ -7,6 +7,7 @@
   "description": "Transcreve uma ou várias mídias com rotação circular de chaves AssemblyAI e compila legendas SRT configuráveis.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
+  "branding": { "iconPath": "assets/icon.png" },
   "runtime": {
     "kind": "node",
     "version": ">=26 <27",

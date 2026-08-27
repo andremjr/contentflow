@@ -123,6 +123,10 @@ Autenticação deve ocorrer em uma superfície clara para o usuário e ser defin
 
 Quando o perfil é referenciado por uma configuração do Método, o plugin pode declarar `profileSetup`. Nesse fluxo, o construtor oferece uma ação explícita para abrir o navegador e concluir o login antes de qualquer Projeto ser executado. A execução normal deve falhar fechada quando o perfil ainda não foi preparado ou quando a sessão expirou; nunca deve preencher um prompt enquanto a página estiver em login, onboarding, CAPTCHA ou reautenticação.
 
+Na experiência padrão da V1, essa preparação aparece no Bloco como **Adicionar conta** ou **Conectar conta**. O núcleo cria automaticamente a pasta dedicada dentro da raiz controlada do plugin, registra uma conexão local nomeada e abre a origem declarada para o usuário autenticar. O usuário não precisa localizar pastas, portas de depuração ou instalar extensão nos perfis pessoais. Cada conta é preparada separadamente e o Bloco guarda somente o `connectionId`; cookies e storage continuam confinados ao perfil dedicado.
+
+Os plugins de navegador oficiais atuais não dependem de extensão. Se uma capacidade futura realmente exigir uma extensão, ela deve vir imutável no pacote do plugin, ser declarada e consentida e ser carregada apenas no navegador/perfil dedicado. O plugin nunca instala silenciosamente extensão no navegador pessoal nem baixa código de extensão em runtime.
+
 Plugins com vários perfis podem declarar `profileSetup.fallbackConfigurationKey`. O campo contém aliases ordenados, nunca cookies ou credenciais. O núcleo valida e prepara cada alias separadamente, registra qual perfil foi usado e preserva o cursor e as entregas parciais ao fazer um fallback técnico permitido.
 
 Requisitos:

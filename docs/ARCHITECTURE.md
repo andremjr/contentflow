@@ -6,6 +6,23 @@ O **ContentFlow OS** é um **Gerenciador Estratégico de Métodos** para produç
 
 A plataforma permite que criadores desenhem, personalizem e automatizem seus próprios fluxos de trabalho através de uma arquitetura modular baseada em **4 Blocos Essenciais de Ação**, **3 Operadores** e um **Ecossistema Aberto de Plugins**.
 
+### 1.1. Invariante absoluta: núcleo e plugins são produtos separados
+
+O ContentFlow OS precisa ser completo e útil com **zero plugins instalados**. Sem integrações, ele continua sendo o Gerenciador Estratégico de Métodos: organiza Canais e Projetos, armazena Métodos, prompts, estruturas, CTAs e Biblioteca Estratégica, transporta dados tipados e conduz blocos do operador `Humano`.
+
+O núcleo pode conhecer somente o protocolo público de plugins, seus contratos tipados, ciclo de vida, permissões, sandbox, referências opacas de conexões e cofre genérico de secrets. Ele não pode conter IDs, endpoints, autenticação, listas de modelos, seletores de navegador, codecs ou regras de negócio de um fornecedor específico.
+
+Consequentemente:
+
+- APIs de OpenAI, Anthropic, YouTube ou qualquer outro fornecedor pertencem ao respectivo plugin;
+- FFmpeg, Python, executáveis auxiliares, automação de navegador e tratamento específico de mídia pertencem ao plugin que os utiliza;
+- um plugin mantido pelo autor do ContentFlow OS continua sendo software externo: possui versão, pacote, permissões, distribuição e instalação próprias;
+- a distribuição do núcleo não inclui, instala, ativa nem concede confiança especial a nenhum plugin;
+- todos os plugins são removíveis e passam pela mesma validação, consentimento e sandbox;
+- um Método que referencia um plugin ausente permanece legível e organizável, preserva seu contrato e outputs históricos, mas sua execução automática fica bloqueada até uma associação local válida.
+
+Manter pacotes de plugins no mesmo repositório de desenvolvimento, quando conveniente, não os transforma em parte do núcleo nem autoriza que sejam empacotados com sua release.
+
 ---
 
 ## 2. A Estrutura das 3 Interfaces da Aplicação (UX/UI)
@@ -26,8 +43,8 @@ A experiência do usuário no ContentFlow OS apoia-se em 3 camadas de interface 
                                     │
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│ INTERFACE 3: Gerenciamento de Plugins (Nível Operacional / Conexões)   │
-│ Plugins de IA/Código, automações, permissões e credenciais locais.     │
+│ INTERFACE 3: Gerenciamento de Plugins (Nível Operacional / Pacotes)    │
+│ Instalação, atualização, ativação, permissões e remoção de plugins.    │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,9 +56,9 @@ A experiência do usuário no ContentFlow OS apoia-se em 3 camadas de interface 
    - **Objetivo**: Construtor visual de fluxos de trabalho.
    - **Funcionamento**: Localizado no nível de Canal/Workspace. O criador desenha a sequência atômica de blocos para cada um dos 8 Processos Universais de Conteúdo.
 
-3. **Interface 3: Gerenciador de Plugins (Operação & Integrações)**
-   - **Objetivo**: Gestão de ferramentas e conexões técnicas.
-   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, ativação, consentimento, settings, workspaces e credenciais de plugins oficiais ou independentes.
+3. **Interface 3: Gerenciador de Plugins (Operação & Pacotes)**
+   - **Objetivo**: Gestão do ciclo de vida das ferramentas instaladas.
+   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, atualização, ativação, consentimento de permissões, inspeção de dependências e remoção de plugins oficiais ou independentes. A configuração de uso e a escolha de conexão acontecem no Bloco do Método; secrets, sessões, workspaces e preferências técnicas continuam protegidos pelo núcleo fora do arquivo do Método.
 
 No nível global, a navegação principal possui três áreas:
 
@@ -49,7 +66,9 @@ No nível global, a navegação principal possui três áreas:
 - `/methods`: Biblioteca de Métodos, derivada dos métodos salvos nos canais, com busca, reutilização, importação e compartilhamento.
 - `/plugins`: Gerenciador de Plugins locais, responsável por descobrir e apresentar manifestos reais instalados no aplicativo.
 
-O Gerenciador de Plugins organiza o catálogo em cards compactos e pesquisáveis. Cada manifesto pode declarar uma ou mais capacidades de entrega entre `text`, `image`, `audio`, `video` e `processing`; esses metadados, somados aos blocos e Processos Universais compatíveis, alimentam os filtros da galeria sem alterar o contrato universal de dados dos blocos.
+O Gerenciador de Plugins organiza o catálogo em cards quadrados, compactos e pesquisáveis. Em telas grandes, a galeria apresenta quatro cards por linha; cada card exibe somente o ícone local validado e o nome do plugin, além de uma sinalização mínima de erro ou desativação. Versão, origem, permissões, capacidades e ações de ciclo de vida aparecem nos detalhes abertos pelo card.
+
+Cada manifesto pode declarar uma ou mais capacidades de entrega entre `text`, `image`, `audio`, `video` e `processing`; esses metadados, somados aos blocos e Processos Universais compatíveis, alimentam os filtros da galeria sem alterar o contrato universal de dados dos blocos. O manifesto também pode declarar `branding.iconPath`, um caminho relativo para PNG ou WebP empacotado, com até 512 KiB. O núcleo valida caminho, assinatura, MIME e tamanho, nunca busca favicon remoto e usa fallback local quando o campo ou asset estiver ausente ou inválido. O autor responde pelos direitos de uso do ícone. Como `branding` é opcional, manifestos API v1 existentes permanecem compatíveis.
 
 ---
 
@@ -91,12 +110,18 @@ Cada Bloco de Ação em um Método é atribuído a um Operador:
 
 ## 6. Arquitetura de Parâmetros e Plugins
 
-### A. Onde vivem os parâmetros?
+### A. Onde vivem configuração, conexões e secrets?
 
-Os parâmetros funcionais vivem **dentro dos Plugins**.
+A experiência de configuração funcional vive **dentro do Bloco do Método**.
 
-- Quando o usuário adiciona um Bloco no Método (ex: `CRIAR`), ele seleciona o Operador (ex: `IA`) e o **Plugin** desejado (ex: `OpenAI Models`).
-- A interface do Bloco lê o manifesto do Plugin e renderiza automaticamente na tela os campos que AQUELE plugin precisa (ex: `System Prompt`, `Temperatura`, `Modelo`).
+- Quando o usuário adiciona um Bloco no Método (ex: `CRIAR`), ele seleciona o Operador (ex: `IA`), o **Plugin**, a capacidade e a conexão desejados.
+- A interface do Bloco lê o manifesto e renderiza os campos que aquela capacidade precisa, como modelo, temperatura, formato, voz ou perfil.
+- O Método local guarda `pluginId`, `pluginVersion`, `capabilityId`, configuração, bindings e uma referência opaca `connectionId` quando o executor exigir conta ou sessão.
+- Uma conexão é um registro local, estável e nomeado, pertencente ao plugin e reutilizável por vários blocos. O Bloco determina em qual Canal, Processo e ação ela será usada; renomear a conexão não muda seu ID nem quebra o Método.
+- O valor real de API keys, tokens, cookies e outros secrets nunca entra em `connectionId`, configuração, Método, exportação, SQLite, request, snapshot ou log. Ele permanece no cofre seguro e só é resolvido em memória para a invocação autorizada.
+- Permissões, consentimento, origem, integridade, runtime, workspace e preferências técnicas da instalação continuam sob responsabilidade do núcleo. A interface pode conduzir sua preparação a partir do Bloco, mas esses dados não se tornam configuração portátil do Método.
+
+Templates exportados não carregam o `connectionId` local. No lugar dele, preservam apenas o requisito de conexão — plugin, capacidade e secrets/perfil exigidos. Ao importar ou copiar para outro ambiente, o usuário associa cada requisito a uma conexão local existente ou cria uma nova antes de executar.
 
 ### B. Variáveis Dinâmicas do Projeto
 
@@ -121,9 +146,15 @@ Cada entrada declarada é conectada automaticamente a uma saída compatível já
 
 O operador `Humano` é o executor nativo desse mesmo contrato e não depende de plugin. Plugins de `IA` ou `Código` consomem as mesmas entradas e produzem as mesmas saídas; seus parâmetros particulares aparecem somente depois que o plugin é selecionado.
 
-O Método armazena apenas esse esquema. Os valores efetivamente preenchidos pertencem à execução do Projeto/Vídeo e nunca são gravados como parte do Método.
+O Método armazena esse esquema, suas instruções, parâmetros, configuração do executor, bindings e a referência local de conexão quando aplicável. Os valores efetivamente preenchidos pertencem à execução do Projeto/Vídeo e nunca são gravados como parte do Método.
 
-Métodos compostos integralmente por blocos humanos podem ser executados de ponta a ponta. Blocos `IA` e `Código` são liberados quando possuem um plugin oficial compatível configurado. A configuração funcional permanece no Método. Secrets como chaves de API nunca são serializados no Método ou no SQLite: credenciais conectadas na Central de Plugins são persistidas pelo cofre seguro do ambiente local e entregues somente a invocações autorizadas por `getSecret()`. Sem plugin configurado, o bloco permanece explicitamente bloqueado.
+Métodos compostos integralmente por blocos humanos podem ser executados de ponta a ponta. Blocos `IA` e `Código` são liberados quando possuem plugin, capacidade e, quando exigida, conexão local compatíveis. A configuração funcional permanece no Método; o secret permanece no cofre. Plugin, capacidade ou conexão ausentes, incompatíveis, desativados ou revogados mantêm o bloco explicitamente bloqueado.
+
+### D. Compatibilidade de Métodos e conexões legadas
+
+Na migração para múltiplas conexões, cada credencial global legada válida origina uma conexão local padrão com ID estável. O núcleo copia o secret para a nova entrada do cofre, valida a leitura e só então remove a entrada legada; uma falha mantém a origem intacta e apresenta recuperação, nunca apaga silenciosamente a credencial.
+
+Blocos existentes sem `connectionId` podem usar transitoriamente a conexão padrão somente quando houver uma única conexão elegível para o plugin. Ambiguidade bloqueia a execução e solicita escolha explícita. Ao salvar novamente o Método, a referência é materializada. Snapshots antigos permanecem legíveis e não são reescritos; exportações antigas continuam importáveis, mas exigem associação local antes da execução quando o plugin precisar de conta.
 
 ---
 
@@ -153,14 +184,24 @@ Renderers são componentes internos do ContentFlow OS. Plugins podem apenas indi
 
 Na visualização em lista do Canal, o Orquestrador de execução agenda vários Projetos sobre o mesmo motor linear. Ele não cria um novo Processo Universal, Bloco ou Operador e não altera o Método de cada Canal. Sua responsabilidade é somente criar a fila e iniciar a próxima combinação `Projeto / Processo Universal` quando a combinação atual terminar.
 
-Existem dois modos de ordenação:
+Na implementação anterior à V1 existem dois modos de ordenação:
 
 1. **Ponta a ponta**: executa os 8 Processos Universais de um Projeto antes de iniciar o Projeto seguinte.
-2. **Em lote por processo**: executa o mesmo Processo Universal em todos os Projetos, de forma sequencial, antes de avançar ao processo seguinte. Assim, um lote de 10 executa 10 Temas, depois 10 Títulos, 10 Thumbnails e assim por diante.
+2. **Em lote por processo — transitório**: executa o mesmo Processo Universal em todos os Projetos, de forma sequencial, antes de avançar ao processo seguinte. Assim, um lote de 10 executa 10 Temas, depois 10 Títulos, 10 Thumbnails e assim por diante. Esse modo permanece disponível somente até o substituto da V1 atingir equivalência de parada, retomada e recuperação.
 
 A fila do Orquestrador nunca inicia dois itens em paralelo. Estados `awaiting_human` e `awaiting_output` pausam a fila no item atual e continuam alimentando a Central Global de Pendências Humanas. Um executor ausente mantém a fila bloqueada. Uma falha pausa a fila com erro: depois que o usuário corrige ou repete a etapa no Projeto, pode retomar a mesma fila no cursor preservado, sem recriar Projetos nem repetir etapas concluídas. Enquanto não for retomada, a falha também não impede que uma nova fila seja criada.
 
 O usuário pode parar uma fila em execução, aguardando humano, bloqueada ou com erro. O Stop cancela também a execução atual, impede o início dos itens restantes e preserva os Projetos já criados. Enquanto uma fila estiver ativa, seus Projetos não podem ser excluídos; primeiro é necessário pará-la. A fila, seu cursor, modo e Projetos pertencentes são persistidos localmente para permitir retomada após reiniciar o aplicativo.
+
+### 7.2. Lote inteligente da V1
+
+O lote inteligente é uma função do Orquestrador para preparar vários Projetos; não é um Método, Processo Universal, Bloco ou Operador novo. Um Método continua descrevendo a execução de um vídeo individual.
+
+O usuário informa quantidade e critérios, escolhe plugin, capacidade e conexão, e autoriza uma única invocação que deve retornar `list` ou `records` estruturados. Cada candidato exige `theme`; `angle`, `promise` e `notes` são opcionais. O núcleo valida o contrato, quantidade e duplicidade e apresenta uma revisão editável. Nenhum Projeto é criado antes da confirmação humana dessa lista.
+
+Depois da confirmação, o núcleo materializa um Projeto por item, promove `theme` como output oficial com proveniência e continua os processos seguintes pelo motor linear existente, preferencialmente no modo ponta a ponta. O Orquestrador persiste candidatos, confirmação, IDs criados e cursor antes de avançar. Repetições após falha reutilizam esses IDs e nunca duplicam Projetos já materializados.
+
+O plugin apenas produz a lista estruturada. Revisão, criação de Projetos, identidade, persistência, deduplicação, parada e retomada pertencem ao núcleo. O lote inteligente não é a mesma coisa que `execution.itemOrchestration`: esse contrato continua servindo para expandir uma lista dentro de um único Bloco/Projeto e persistir cada item sequencialmente.
 
 ---
 
@@ -168,7 +209,7 @@ O usuário pode parar uma fila em execução, aguardando humano, bloqueada ou co
 
 O ContentFlow OS apoia-se em dois tipos de compartilhamento comunitário:
 
-1. **Templates de Métodos (Caixa-Aberta)**: Exportação e importação de sequências de blocos com prompts e regras prontas por arquivo. Referências de plugins permanecem explícitas; instalação e consentimento são ações separadas do usuário.
+1. **Templates de Métodos (Caixa-Aberta)**: Exportação e importação de sequências de blocos com prompts e regras prontas por arquivo. Referências de plugins e requisitos de conexão permanecem explícitos, mas IDs locais e secrets são removidos; instalação, consentimento e associação a uma conexão local são ações separadas do usuário.
 2. **Plugins Independentes**: Pastas instaláveis ou vinculadas podem adaptar APIs HTTPS, scripts, executáveis, filas externas, n8n/Make/FastAPI públicos e automações de navegador sem acrescentar um novo tipo de integração ao núcleo.
 
 A Biblioteca de Métodos global não cria uma segunda cópia independente no banco. Ela agrega os métodos existentes nos canais. Uma cópia só é criada quando o usuário escolhe usar um método em outro canal ou importa um arquivo compartilhado.
@@ -273,3 +314,7 @@ Plugins de operador `Código` podem consumir esses layouts pelo contrato `thumbn
 A distribuição Windows empacota a interface em Electron e inicia a API como processo filho com uma cópia privada do Node 26. Usuários finais não precisam instalar Node, npm ou abrir terminal. O processo Electron hospeda apenas a janela e os arquivos da interface; o runtime privado preserva para a API e para plugins comunitários o modelo de permissões documentado em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
 
 O programa instalado é substituível e os dados persistentes permanecem em `%APPDATA%\ContentFlow OS\data`. Plugins instalados e vínculos de desenvolvimento também vivem nessa área. Exemplos editáveis são copiados na primeira abertura para `Documentos\ContentFlow OS\Plugins`. Essa separação permite recompilar e reinstalar o núcleo sem apagar projetos, credenciais ou plugins do usuário.
+
+O instalador NSIS consulta o canal estável público por um updater executado somente no processo principal do Electron. A interface recebe por preload isolado apenas estado, verificação, download, instalação e abertura da release oficial. O download é iniciado pelo usuário, mostra progresso e só reinicia depois de confirmação. Preview web não executa updater; a versão portátil abre a release mais recente em vez de prometer substituição automática.
+
+Cada release atualizável publica instalador e `latest.yml` no mesmo build para preservar integridade. Falha de rede, metadata ausente, checksum ou assinatura mantém a versão atual. Logs locais do updater são redigidos. Assinatura Authenticode é a política recomendada para releases públicas da V1; o mecanismo pode ser validado tecnicamente antes da disponibilidade do certificado.

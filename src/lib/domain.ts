@@ -164,8 +164,11 @@ export type BlockValidationConfig = {
 
 export type BlockPluginBinding = {
   pluginId: string;
+  pluginVersion?: string;
   capabilityId: string;
   configuration: Record<string, string | number | boolean>;
+  connectionId?: string;
+  connectionRequired?: boolean;
 };
 
 export type ActionBlock = {

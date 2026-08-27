@@ -7,6 +7,7 @@
   "description": "Executa skills locais do Codex dentro de blocos do ContentFlow OS e devolve entregas tipadas ao Método.",
   "author": "ContentFlow OS",
   "license": "LicenseRef-ContentFlow-Codex-Plugin-Proprietary-1.0",
+  "branding": { "iconPath": "assets/icon.png" },
   "homepage": "https://github.com/andremjr/contentflow-os",
   "repository": "https://github.com/andremjr/contentflow-os",
   "runtime": {

@@ -10,7 +10,6 @@ import {
   LayoutGrid,
   List,
   FolderKanban,
-  RefreshCw,
   Trash2,
   UsersRound,
 } from "lucide-react";
@@ -41,7 +40,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PROCESS_META, type Channel, type Project } from "@/lib/domain";
-import { removeProject, syncChannelFromYouTube, useChannel, useProjects } from "@/lib/store";
+import { removeProject, useChannel, useProjects } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/channel/$channelId/")({ component: ChannelWorkspace });
@@ -64,7 +63,6 @@ function ChannelWorkspace() {
   const projects = useProjects(channelId);
   const [view, setView] = useState<"cards" | "list">("cards");
   const [search, setSearch] = useState("");
-  const [isSyncing, setIsSyncing] = useState(false);
   const hasLocalViewChange = useRef(false);
   const viewPersistenceQueue = useRef(Promise.resolve());
 
@@ -119,20 +117,6 @@ function ChannelWorkspace() {
   }, [projects, search]);
 
   if (!channel) return null;
-
-  async function syncYouTube() {
-    setIsSyncing(true);
-    try {
-      await syncChannelFromYouTube(channelId);
-      toast.success("Canal atualizado com os dados públicos do YouTube.");
-    } catch (error) {
-      toast.error("Não foi possível atualizar o canal", {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    } finally {
-      setIsSyncing(false);
-    }
-  }
 
   return (
     <AppShell>
@@ -201,17 +185,6 @@ function ChannelWorkspace() {
                 </div>
               </div>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="shrink-0 gap-1.5 bg-black/55 text-white hover:bg-black/70"
-              onClick={syncYouTube}
-              disabled={isSyncing}
-            >
-              <RefreshCw className={cn("size-3.5", isSyncing && "animate-spin")} />
-              <span className="hidden sm:inline">Atualizar YouTube</span>
-            </Button>
           </div>
         </section>
 
