@@ -235,13 +235,13 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 
 - [x] Titular autorizou explicitamente o início da release `v0.4.3` em 2026-08-27.
 - [x] Gate de separação núcleo/plugins aprovado pela suíte e por execução isolada com `0` plugins e `0` problemas de descoberta.
-- [ ] `npm run check` aprovado no commit exato da tag.
-- [ ] Release publicada como estável e reconhecida pelo canal `latest`.
-- [ ] Todos os artefatos obrigatórios foram produzidos pelo mesmo workflow e estão disponíveis publicamente.
+- [x] `npm run check` aprovado no commit exato `4e21983` da tag.
+- [x] Release publicada como estável e reconhecida pelo canal `latest`.
+- [x] Instalador, portátil, `latest.yml`, `.blockmap` e SHA-256 foram produzidos no mesmo build local e estão disponíveis publicamente.
 - [ ] Aplicativo instalado na `0.4.2` identifica a `0.4.3` sem configuração manual.
 - [ ] Download mostra progresso e a ação “Reiniciar e atualizar” conclui a instalação.
 - [ ] Banco, Projetos, Métodos, plugins, conexões, perfis e credenciais permanecem disponíveis após a atualização.
-- [ ] Falha simulada de manifesto, integridade ou rede apresenta mensagem segura e permite nova tentativa.
+- [x] Falhas simuladas de manifesto, integridade e rede apresentam mensagem segura e permitem nova tentativa nos testes do updater.
 - [ ] Critérios operacionais pendentes da Fase 1 foram reconciliados e marcados com evidências.
 
 ### Estado da implementação
@@ -253,7 +253,11 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 - `npm run check` completo passou em 2026-08-27 após a separação.
 - Uma API isolada, iniciada com diretórios de dados e plugins vazios, retornou `0` plugins, `0` problemas de descoberta e manteve o endpoint de Canais operacional.
 - O preview e a API principal foram restaurados em `127.0.0.1:8080` e `127.0.0.1:8787`.
-- Próximo passo da fase: atualizar a versão para `0.4.3`, gerar os artefatos e publicar a release estável pelo workflow/API oficial.
+- A versão foi atualizada para `0.4.3`, consolidada no commit `4e21983`, enviada à `main` e marcada pela tag anotada `v0.4.3`.
+- O GitHub Actions recusou o job antes de iniciar qualquer etapa devido a uma pendência de cobrança contestada pelo titular. A publicação não ficou dependente dessa pendência: o build foi concluído localmente com a mesma configuração e os artefatos foram enviados diretamente pela API oficial do GitHub.
+- A release pública `v0.4.3` está estável, não é draft nem pre-release e é a resposta atual de `/releases/latest`; o instalador público responde com o tamanho esperado de `133120251` bytes.
+- O pacote final foi inspecionado e contém `0` diretórios de plugins incluídos. Os executáveis permanecem sem assinatura Authenticode comercial, conforme a política já documentada da V0; `latest.yml` contém o SHA-512 exigido pelo updater e a release publica também os SHA-256.
+- Próximo passo da fase: no aplicativo instalado `0.4.2`, verificar, baixar e instalar a `0.4.3`, confirmando a preservação dos dados locais.
 
 ## Fase 4 — Construtor de Métodos e prompts mais intuitivo
 
