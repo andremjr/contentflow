@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.google-flow-batch-images",
   "name": "Google Flow Browser Images",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Gera imagens reais no Google Flow com perfis de conta dedicados, modelos configuráveis, fallback entre modelos, referências visuais e fila segura sem imagens substitutas.",
   "author": "Local user",
   "license": "MIT",
@@ -20,8 +20,8 @@
   "deliveryTypes": ["image"],
   "profileSetup": {
     "configurationKey": "accountProfile",
-    "label": "Salvar perfil",
-    "description": "Abre o Google Flow para login e fecha o Chrome após validar a conta.",
+    "label": "Adicionar conta",
+    "description": "Abre o Chrome dedicado. Instale manualmente a pasta extension deste plugin no perfil e conclua o login do Google Flow.",
     "prepareTimeoutMs": 900000,
     "fallbackConfigurationKey": "fallbackAccountProfiles"
   },
@@ -32,7 +32,7 @@
       "chromeExecutable": {
         "type": "string",
         "default": "",
-        "description": "Override opcional do caminho do Google Chrome. Vazio detecta automaticamente via Registro/where no Windows."
+        "description": "Override opcional do caminho do Chrome normal. Vazio detecta automaticamente via Registro/where no Windows."
       },
       "profilePath": {
         "type": "string",
@@ -68,7 +68,7 @@
       "startMinimized": {
         "type": "boolean",
         "default": true,
-        "description": "Mantém a execução normal no navegador dedicado minimizado. O login abre visível somente pela ação Salvar perfil."
+        "description": "Mantém a execução normal no Chrome dedicado minimizado. A janela abre visível somente pela ação Adicionar conta."
       },
       "minimizeWhenReady": {
         "type": "boolean",

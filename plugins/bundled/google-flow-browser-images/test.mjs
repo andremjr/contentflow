@@ -3,11 +3,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { __test } from "./handler.mjs";
+import { testExtensionBridge } from "./extension-bridge.test.mjs";
 
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.1.0");
+assert.equal(manifest.version, "1.2.0");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
@@ -83,6 +84,12 @@ assert.match(
   channelRuntime.profilePath.replaceAll("\\", "/"),
   /google-flow-chrome-profiles\/canal_a$/,
 );
+const profileDirectory = await mkdtemp(join(tmpdir(), "contentflow-flow-profile-"));
+assert.equal(await __test.profileIsPrepared(profileDirectory, "conta-a"), false);
+await __test.markProfilePrepared(profileDirectory, "conta-a", { extensionVersion: "2.0.0" });
+assert.equal(await __test.profileIsPrepared(profileDirectory, "conta-a"), true);
+assert.equal(await __test.profileIsPrepared(profileDirectory, "conta-b"), false);
+await rm(profileDirectory, { recursive: true, force: true });
 
 const automatic = __test.resolveGenerationPreferences({
   imageModel: "flow_auto",
@@ -180,14 +187,20 @@ const extensionContent = await readFile(
   "utf8",
 );
 assert.equal(extensionManifest.manifest_version, 3);
+assert.equal(extensionManifest.version, "2.0.0");
 assert.deepEqual(extensionManifest.host_permissions, ["https://labs.google/*"]);
+assert.deepEqual(extensionManifest.permissions, ["tabs", "storage"]);
 assert.ok(extensionWorker.includes("globalThis.contentFlowBridge"));
-assert.ok(extensionWorker.includes("expectedUrl.origin !== FLOW_ORIGIN"));
+assert.ok(extensionWorker.includes("command.executionKey"));
+assert.ok(extensionWorker.includes("sessionToken"));
 assert.ok(extensionContent.includes('action === "setPrompt"'));
 assert.ok(extensionContent.includes('action === "clickGenerate"'));
-assert.ok(source.includes("--load-extension="));
+assert.ok(!source.includes("--load-extension="));
+assert.ok(source.includes("Carregar sem compactação"));
 assert.ok(source.includes("Extensão dedicada conectada"));
 assert.ok(!/client\.send\(\s*["']Input\./.test(source));
+assert.equal((source.match(/Page\.bringToFront/g) || []).length, 1);
+assert.equal((source.match(/Target\.activateTarget/g) || []).length, 1);
 assert.ok(source.includes("Modo Automático do Flow"));
 assert.ok(source.includes("fresh-project"));
 assert.ok(source.includes("!navigation.pinned"));
@@ -197,5 +210,8 @@ assert.ok(source.includes("limite do Nano Banana Pro atingido"));
 assert.ok(!source.includes("createFallbackArtifact"));
 assert.ok(!source.includes("FALLBACK_IMAGE_BASE64"));
 await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), /ENOENT/);
+await testExtensionBridge(extensionWorker);
 
-console.log("OK: v1.1.0 empacota extensão MV3, isola input do usuário e preserva lote sequencial.");
+console.log(
+  "OK: v1.2.0 usa extensão manual no Chrome, isola input e valida 300 comandos idempotentes.",
+);

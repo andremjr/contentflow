@@ -4,7 +4,7 @@ Este guia define como planejar plugins que operam interfaces web de terceiros se
 
 Para o fluxo básico de criação e conversão, comece em [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md). Este documento trata apenas dos riscos e decisões adicionais de automação de interface.
 
-> Decisão de arquitetura: o núcleo não fornece um runtime, extensão ou broker específico de navegador. Cada plugin oficial que automatize uma interface web na V1 empacota sua própria extensão Manifest V3 e o runtime compatível, além de definir seu mecanismo de autenticação. O ContentFlow OS não conhece seletores de fornecedor nem descobre ou entrega silenciosamente perfis, cookies ou sessões.
+> Decisão de arquitetura: o núcleo não fornece runtime, extensão ou broker específico de navegador. Uma extensão companheira Manifest V3, externa ao núcleo, oferece transporte e operações limitadas reutilizáveis aos plugins compatíveis. Cada plugin continua responsável por autenticação, seletores, estados, regras e validação do seu provedor. O ContentFlow OS não descobre nem entrega silenciosamente perfis, cookies ou sessões.
 
 ## 1. Princípio central
 
@@ -88,7 +88,8 @@ A automação do navegador é uma implementação interna da capacidade do plugi
 Método
   -> capacidade do plugin
   -> navegador/runtime dedicado escolhido pelo plugin
-  -> extensão MV3 e content script do plugin
+  -> extensão companheira MV3 e content script compartilhado
+  -> adapter declarativo mantido pelo plugin
   -> autenticação conectada explicitamente pelo usuário
   -> interface do provedor
   -> resultado validado
@@ -105,7 +106,7 @@ Responsabilidades do núcleo:
 
 Responsabilidades do plugin:
 
-- empacotar a extensão MV3 e incluir o navegador/runtime compatível, sem instalação arbitrária durante a execução;
+- declarar a versão do protocolo da ponte, as origens necessárias e o adapter do provedor, sem baixar ou instalar código durante a execução;
 - abrir login interativo, solicitar OAuth/secret ou pedir que o usuário escolha uma pasta de perfil quando necessário;
 - documentar claramente conta, perfil, domínios, dados, efeitos e riscos envolvidos;
 - pedir apenas operações necessárias à capacidade;
@@ -125,9 +126,11 @@ Autenticação deve ocorrer em uma superfície clara para o usuário e ser defin
 
 Quando o perfil é referenciado por uma configuração do Método, o plugin pode declarar `profileSetup`. Nesse fluxo, o construtor oferece uma ação explícita para abrir o navegador e concluir o login antes de qualquer Projeto ser executado. A execução normal deve falhar fechada quando o perfil ainda não foi preparado ou quando a sessão expirou; nunca deve preencher um prompt enquanto a página estiver em login, onboarding, CAPTCHA ou reautenticação.
 
-Na experiência padrão da V1, essa preparação aparece no Bloco como **Adicionar conta** ou **Conectar conta**. O núcleo cria automaticamente a pasta dedicada dentro da raiz controlada do plugin, registra uma conexão local nomeada e solicita ao plugin que abra a origem declarada para autenticação. O usuário não precisa localizar pastas, portas de depuração nem instalar extensões. Cada conta é preparada separadamente e o Bloco guarda somente o `connectionId`; cookies e storage continuam confinados ao perfil dedicado.
+Na experiência padrão da V1, essa preparação aparece no Bloco como **Adicionar conta** ou **Conectar conta**. O núcleo cria automaticamente a pasta dedicada dentro da raiz controlada do plugin, registra uma conexão local nomeada e solicita ao plugin que abra a origem declarada para autenticação. Cada conta é preparada separadamente e o Bloco guarda somente o `connectionId`; cookies e storage continuam confinados ao perfil dedicado.
 
-Todo plugin oficial que automatize uma interface web na V1 deve trazer sua extensão imutável no próprio pacote, declará-la no consentimento e carregá-la automaticamente apenas no navegador/perfil dedicado. O plugin nunca instala extensão no navegador pessoal, nunca exige instalação manual por perfil e nunca baixa código de extensão em runtime. A extensão é parte externa do plugin, não do núcleo.
+A extensão companheira é instalada uma vez em cada perfil do Chrome que for usado por automação. Em desenvolvimento, o usuário pode usar **Carregar sem compactação**; na distribuição para computadores pessoais, o caminho oficial é a Chrome Web Store. Instalação silenciosa de CRX local para todos os perfis no Windows só é suportada em dispositivos vinculados a Active Directory, Azure AD ou Chrome Enterprise Core. O instalador administrativo deve validar essa condição, solicitar UAC, preservar outras políticas e oferecer remoção exata. A extensão permanece externa e substituível; nenhum adapter de fornecedor migra para o núcleo.
+
+Uma única extensão não significa autoridade irrestrita. Ela aceita somente plugins, versões de protocolo, origens e ações válidos; novas origens entram por atualização revisada da extensão. O adapter do plugin descreve como localizar e validar a interface, enquanto a ponte executa apenas operações genéricas autorizadas. O handler verifica ID, versão, origem e protocolo antes de usar a sessão e nunca baixa código durante a execução.
 
 O canal entre handler, service worker e content script usa mensagens versionadas, origem e aba allowlisted, identificador de execução, token efêmero e validação estrutural. Content scripts são tratados como contexto menos confiável: não recebem secrets duráveis e não podem ampliar hosts, permissões, efeitos ou escopo da capability.
 

@@ -1,10 +1,33 @@
 # Google Flow Browser Images — ContentFlow OS
 
-Versão **1.1.0**.
+Versão **1.2.0**.
 
-Plugin de geração de imagens reais no Google Flow por meio de um navegador dedicado. A versão 1.1 inclui uma extensão Manifest V3 própria, carregada pelo plugin, para preencher o prompt e acionar a geração sem disputar teclado, mouse ou foco do sistema com o usuário.
+Plugin de geração de imagens reais no Google Flow por meio do Chrome normal com um perfil dedicado. A versão 1.2 inclui uma extensão Manifest V3 própria para preencher o prompt e acionar a geração sem disputar teclado, mouse ou foco do sistema com o usuário.
 
-A execução normal começa minimizada. A janela só é trazida para frente quando o usuário inicia explicitamente **Salvar perfil** para login ou reautenticação. Se a extensão não estiver disponível, a execução termina com erro seguro; não existe fallback silencioso para eventos de teclado ou mouse.
+A execução normal começa minimizada. A janela só é trazida para frente quando o usuário inicia explicitamente **Adicionar conta** para instalar a extensão, fazer login ou reautenticar. Se a extensão não estiver disponível, a execução termina com erro seguro; não existe fallback silencioso para eventos de teclado ou mouse.
+
+## Instalação manual da extensão
+
+Cada perfil dedicado do Chrome precisa receber a extensão uma vez:
+
+1. Mantenha a pasta completa deste plugin em um local definitivo; não mova a pasta depois da instalação.
+2. No bloco do Método, informe o nome do perfil e clique em **Adicionar conta**.
+3. Na janela dedicada que abrir, acesse `chrome://extensions`.
+4. Ative **Modo do desenvolvedor**.
+5. Clique em **Carregar sem compactação** e selecione a pasta `extension` que fica dentro deste plugin.
+6. Volte à aba do Google Flow. O plugin recarrega a página quando necessário, verifica a extensão e aguarda o login.
+
+Repita os passos para cada perfil/conta adicional. Não instale a extensão no perfil pessoal do Chrome se ele não será usado pelo plugin. Ao atualizar os arquivos do plugin, abra `chrome://extensions` no perfil dedicado e clique em **Recarregar** no card da extensão.
+
+### Instalação administrativa em todos os perfis
+
+O pacote [`windows-enterprise-install`](windows-enterprise-install/README.md) gera o CRX, o App ID e o `update.xml`, solicita UAC e registra uma política de máquina reversível. O Chrome só permite extensão local forçada fora da Chrome Web Store em Windows vinculado a AD, Azure AD ou Chrome Enterprise Core. Em computadores pessoais, o instalador encerra sem alterar o Registro; use a instalação manual acima até existir uma distribuição pela Chrome Web Store.
+
+### Sair ou remover uma conta
+
+Abra a conta pelo botão **Adicionar conta**, faça logout no Google Flow e remova a extensão daquele perfil em `chrome://extensions`. Depois, retire o nome da conta do bloco. Isso não apaga imagens e outros outputs que o ContentFlow OS já persistiu. Cada perfil é isolado; sair de uma conta não altera os demais perfis.
+
+O Chrome normal não mantém extensões ativas no headless da mesma forma que na janela comum. Por isso a V1 usa uma janela dedicada minimizada. Essa limitação não autoriza fallback para foco, teclado ou mouse.
 
 Por padrão, cada execução cria um projeto novo no Flow. Assim, cada vídeo e cada nova tentativa após erro ficam isolados de projetos anteriores. Uma `flowUrl` explicitamente configurada continua funcionando como exceção fixada pelo usuário.
 
@@ -23,7 +46,7 @@ O plugin nunca cria imagens substitutas. CAPTCHA, sessão expirada, cota geral, 
 - configure a mesma chave nos blocos de um canal para reutilizar conta, projetos, personagens e referências;
 - use chaves diferentes entre canais quando quiser bases separadas.
 
-Depois de informar o perfil no construtor do Método, use **Salvar perfil**. O plugin abre uma janela para login, valida a conta quando a lista de projetos ou o editor aparece e fecha o navegador. A execução recusa perfis ainda não preparados. O plugin não copia cookies e não alterna contas automaticamente quando há limite ou cota.
+Depois de informar o perfil no construtor do Método, use **Adicionar conta**. O plugin abre uma janela para a instalação manual da extensão e o login, valida a conta quando a lista de projetos ou o editor aparece e fecha o navegador. A execução recusa perfis ainda não preparados. O plugin não copia cookies e não alterna contas automaticamente quando há limite ou cota.
 
 ## Modelos
 
@@ -80,7 +103,7 @@ O padrão é conservador: uma geração por vez e intervalo mínimo de 5 segundo
 
 ## Segurança e intervenção humana
 
-Use somente perfis dedicados. Login, reautenticação e CAPTCHA são concluídos pelo usuário na janela visível. O plugin não extrai sessão nem salva token reCAPTCHA. A extensão é limitada a `https://labs.google/*`, pertence ao pacote externo deste plugin e tem finalidade exclusiva de produtividade, estabilidade e isolamento da automação.
+Use somente perfis dedicados. Login, reautenticação e CAPTCHA são concluídos pelo usuário na janela visível. O plugin não extrai sessão nem salva token reCAPTCHA. A extensão é instalada manualmente, limitada a `https://labs.google/*`, pertence ao pacote externo deste plugin e tem finalidade exclusiva de produtividade, estabilidade e isolamento da automação.
 
 ## Validação
 

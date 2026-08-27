@@ -3,16 +3,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
+const PLUGIN_ID = "local.contentflow.google-flow-batch-images";
 const FLOW_HOST = "labs.google";
 const FLOW_LANDING_URL = "https://labs.google/fx/pt/tools/flow";
 const GENERATION_SUFFIX = "/flowMedia:batchGenerateImages";
 const MEDIA_HOST = "flow-content.google";
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const DEFAULT_PORT = 9333;
-const EXTENSION_PATH = fileURLToPath(new URL("./extension", import.meta.url));
-const EXTENSION_PROTOCOL_VERSION = 1;
+const EXTENSION_PROTOCOL_VERSION = 2;
 const IMAGE_MODELS = Object.freeze({
   flow_auto: null,
   nano_banana: "GEM_PIX",
@@ -215,15 +214,25 @@ function profileMarkerPath(path) {
 async function profileIsPrepared(path, name) {
   try {
     const marker = JSON.parse(await readFile(profileMarkerPath(path), "utf8"));
-    return marker?.provider === FLOW_HOST && marker?.profile === name;
+    return (
+      marker?.provider === FLOW_HOST &&
+      marker?.profile === name &&
+      marker?.extensionProtocol === EXTENSION_PROTOCOL_VERSION
+    );
   } catch {
     return false;
   }
 }
-async function markProfilePrepared(path, name) {
+async function markProfilePrepared(path, name, extensionIdentity) {
   await writeFile(
     profileMarkerPath(path),
-    JSON.stringify({ provider: FLOW_HOST, profile: name, preparedAt: new Date().toISOString() }),
+    JSON.stringify({
+      provider: FLOW_HOST,
+      profile: name,
+      extensionProtocol: EXTENSION_PROTOCOL_VERSION,
+      extensionVersion: extensionIdentity?.extensionVersion || "unknown",
+      preparedAt: new Date().toISOString(),
+    }),
     "utf8",
   );
 }
@@ -434,7 +443,6 @@ async function launchOrReuseChrome({
   startMinimized,
   keepBrowserOpen,
   startUrl,
-  extensionPath,
   signal,
 }) {
   const existing = await fetchBrowserVersion(port);
@@ -446,8 +454,6 @@ async function launchOrReuseChrome({
     `--user-data-dir=${profilePath}`,
     "--no-first-run",
     "--no-default-browser-check",
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`,
     startUrl,
   ];
   if (startMinimized) args.unshift("--start-minimized");
@@ -502,34 +508,111 @@ async function launchOrReuseChrome({
   );
 }
 
-async function attachExtensionBridge(client, flowSessionId, signal) {
-  const deadline = Date.now() + 10000;
+function extensionExecutionKey(request, profileId) {
+  return createHash("sha256")
+    .update(
+      [
+        request?.executionId || "configuration",
+        request?.blockId || "profile",
+        request?.capabilityId || "google-flow",
+        Number(request?.attempt) || 1,
+        request?.batch?.itemId || request?.batch?.index || "single",
+        profileId,
+      ].join(":"),
+    )
+    .digest("hex");
+}
+
+function extensionCommandId(executionKey, action, operationKey) {
+  return createHash("sha256").update(`${executionKey}:${action}:${operationKey}`).digest("hex");
+}
+
+async function evaluateWorker(client, sessionId, expression) {
+  const evaluated = await client.send(
+    "Runtime.evaluate",
+    { expression, returnByValue: true, awaitPromise: true },
+    sessionId,
+  );
+  if (evaluated.exceptionDetails) return undefined;
+  return evaluated.result?.value;
+}
+
+async function attachExtensionBridge(
+  client,
+  flowSessionId,
+  { signal, request, profileId, waitMs = 10000 },
+) {
+  const deadline = Date.now() + waitMs;
+  const rejectedTargets = new Set();
   let workerTarget;
-  while (Date.now() < deadline) {
+  let workerSessionId;
+  let extensionIdentity;
+
+  while (Date.now() < deadline && !workerSessionId) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     const { targetInfos = [] } = await client.send("Target.getTargets");
-    workerTarget = targetInfos.find(
+    const candidates = targetInfos.filter(
       (item) =>
         item.type === "service_worker" &&
-        /^chrome-extension:\/\/[^/]+\/service-worker\.js$/i.test(String(item.url || "")),
+        /^chrome-extension:\/\/[^/]+\/service-worker\.js$/i.test(String(item.url || "")) &&
+        !rejectedTargets.has(item.targetId),
     );
-    if (workerTarget) break;
-    await sleep(250, signal);
+    for (const candidate of candidates) {
+      const attached = await client.send("Target.attachToTarget", {
+        targetId: candidate.targetId,
+        flatten: true,
+      });
+      await client.send("Runtime.enable", {}, attached.sessionId);
+      const identity = await evaluateWorker(
+        client,
+        attached.sessionId,
+        "globalThis.contentFlowBridge?.identity",
+      );
+      if (
+        identity?.pluginId === PLUGIN_ID &&
+        identity?.protocolVersion === EXTENSION_PROTOCOL_VERSION
+      ) {
+        workerTarget = candidate;
+        workerSessionId = attached.sessionId;
+        extensionIdentity = identity;
+        break;
+      }
+      rejectedTargets.add(candidate.targetId);
+      await client
+        .send("Target.detachFromTarget", { sessionId: attached.sessionId })
+        .catch(() => undefined);
+    }
+    if (!workerSessionId) await sleep(250, signal);
   }
-  if (!workerTarget?.targetId) {
+
+  if (!workerTarget?.targetId || !workerSessionId) {
     throw codedError(
       "INVALID_CONFIGURATION",
-      "A extensão dedicada do Google Flow não foi carregada. Feche o navegador do perfil e tente novamente; o plugin não continuará usando teclado ou mouse como alternativa.",
+      "A extensão Google Flow Browser Images não está instalada neste perfil do Chrome. Abra chrome://extensions, ative o modo do desenvolvedor e use Carregar sem compactação na pasta extension do plugin. O plugin não continuará usando teclado ou mouse como alternativa.",
     );
   }
 
-  const { sessionId } = await client.send("Target.attachToTarget", {
-    targetId: workerTarget.targetId,
-    flatten: true,
-  });
-  await client.send("Runtime.enable", {}, sessionId);
+  const sessionToken = randomUUID();
+  const executionKey = extensionExecutionKey(request, profileId);
+  const handshake = await evaluateWorker(
+    client,
+    workerSessionId,
+    `globalThis.contentFlowBridge.connect(${JSON.stringify({
+      pluginId: PLUGIN_ID,
+      protocolVersion: EXTENSION_PROTOCOL_VERSION,
+      profileId,
+      sessionToken,
+    })})`,
+  );
+  if (!handshake?.ok) {
+    throw codedError(
+      "INVALID_CONFIGURATION",
+      handshake?.message || "A extensão recusou a conexão efêmera do plugin.",
+    );
+  }
 
-  const dispatch = async (action, payload = {}) => {
+  const dispatch = async (action, payload = {}, operationKey = action, timeoutMs = 30000) => {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     const page = await evaluate(
       client,
       flowSessionId,
@@ -538,45 +621,91 @@ async function attachExtensionBridge(client, flowSessionId, signal) {
     if (page?.origin !== `https://${FLOW_HOST}`) {
       throw codedError("OUTPUT_VALIDATION_FAILED", "A aba anexada deixou de ser o Google Flow.");
     }
+    const issuedAt = Date.now();
     const command = {
+      pluginId: PLUGIN_ID,
       protocolVersion: EXTENSION_PROTOCOL_VERSION,
-      commandId: randomUUID(),
+      profileId,
+      sessionToken,
+      executionKey,
+      commandId: extensionCommandId(executionKey, action, operationKey),
+      issuedAt,
+      expiresAt: issuedAt + Math.max(1000, Math.min(30000, timeoutMs)),
       expectedUrl: page.url,
       action,
       payload,
     };
-    const evaluated = await client.send(
-      "Runtime.evaluate",
-      {
-        expression: `globalThis.contentFlowBridge?.dispatch(${JSON.stringify(command)})`,
-        returnByValue: true,
-        awaitPromise: true,
-      },
-      sessionId,
+    const response = await evaluateWorker(
+      client,
+      workerSessionId,
+      `globalThis.contentFlowBridge.dispatch(${JSON.stringify(command)})`,
     );
-    if (evaluated.exceptionDetails) {
-      throw codedError(
-        "UPSTREAM_UNAVAILABLE",
-        evaluated.exceptionDetails?.exception?.description || "A extensão dedicada falhou.",
-      );
-    }
-    const response = evaluated.result?.value;
     if (!response?.ok) {
+      const code = String(response?.code || "");
+      if (code === "CANCELLED") throw codedError("CANCELLED", "Execução cancelada.");
+      if (["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code)) {
+        throw codedError(
+          "UPSTREAM_UNAVAILABLE",
+          response?.message || "A extensão deixou de responder.",
+          true,
+        );
+      }
+      if (["SESSION_MISMATCH", "PROFILE_MISMATCH", "PROTOCOL_MISMATCH"].includes(code)) {
+        throw codedError(
+          "INVALID_CONFIGURATION",
+          response?.message || "A extensão instalada é incompatível.",
+        );
+      }
       throw codedError(
-        response?.code === "CONTENT_SCRIPT_UNAVAILABLE"
-          ? "UPSTREAM_UNAVAILABLE"
-          : "OUTPUT_VALIDATION_FAILED",
+        "OUTPUT_VALIDATION_FAILED",
         response?.message || `A extensão recusou a ação ${action}.`,
       );
     }
     return response;
   };
 
-  const ping = await dispatch("ping");
+  const cancel = () => {
+    const requestPayload = {
+      sessionToken,
+      profileId,
+      executionKey,
+      commandId: extensionCommandId(executionKey, "cancel", "execution"),
+    };
+    void client
+      .send(
+        "Runtime.evaluate",
+        {
+          expression: `globalThis.contentFlowBridge?.cancel(${JSON.stringify(requestPayload)})`,
+          returnByValue: true,
+          awaitPromise: true,
+        },
+        workerSessionId,
+      )
+      .catch(() => undefined);
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
+
+  let ping;
+  try {
+    ping = await dispatch("ping", {}, "bridge-ready");
+  } catch (error) {
+    if (error?.code !== "UPSTREAM_UNAVAILABLE") throw error;
+    await client.send("Page.reload", { ignoreCache: true }, flowSessionId);
+    await sleep(1500, signal);
+    ping = await dispatch("ping", {}, "bridge-ready-after-reload");
+  }
   if (ping.protocolVersion !== EXTENSION_PROTOCOL_VERSION) {
     throw codedError("INVALID_CONFIGURATION", "A extensão do Google Flow está desatualizada.");
   }
-  return { dispatch, sessionId, targetId: workerTarget.targetId };
+  return {
+    dispatch,
+    identity: extensionIdentity,
+    sessionId: workerSessionId,
+    targetId: workerTarget.targetId,
+    dispose() {
+      signal?.removeEventListener("abort", cancel);
+    },
+  };
 }
 
 function describeCdpParams(method, params) {
@@ -1298,11 +1427,15 @@ async function uploadReferenceImages(client, sessionId, filePaths, settings, sig
   await sleep(Math.min(15_000, 2_000 + filePaths.length * 1_000), signal);
 }
 
-async function setPromptWithExtension(bridge, prompt, customSelector) {
-  return await bridge.dispatch("setPrompt", {
-    text: prompt,
-    promptSelector: customSelector || "",
-  });
+async function setPromptWithExtension(bridge, prompt, customSelector, operationKey) {
+  return await bridge.dispatch(
+    "setPrompt",
+    {
+      text: prompt,
+      promptSelector: customSelector || "",
+    },
+    operationKey,
+  );
 }
 
 async function waitGenerateEnabled(client, sessionId, settings, signal, timeoutMs = 15000) {
@@ -1337,11 +1470,15 @@ async function waitGenerateEnabled(client, sessionId, settings, signal, timeoutM
   );
 }
 
-async function clickGenerateWithExtension(bridge, settings) {
-  return await bridge.dispatch("clickGenerate", {
-    promptSelector: settings?.promptSelector || "",
-    generateSelector: settings?.generateSelector || "",
-  });
+async function clickGenerateWithExtension(bridge, settings, operationKey) {
+  return await bridge.dispatch(
+    "clickGenerate",
+    {
+      promptSelector: settings?.promptSelector || "",
+      generateSelector: settings?.generateSelector || "",
+    },
+    operationKey,
+  );
 }
 
 function applyGenerationPreferences(rawPostData, imageModelName, imageAspectRatio) {
@@ -1578,8 +1715,8 @@ function createBatchResponseTracker(client, sessionId, signal) {
           false,
           codedError(
             "TIMEOUT",
-            "Nenhuma resposta de geração chegou a tempo. Verifique a janela do Chrome para login, CAPTCHA/reautenticação ou erro da interface.",
-            true,
+            "Nenhuma resposta de geração chegou a tempo. Como o envio pode ter sido aceito pelo Flow, o plugin não repetirá automaticamente esta imagem. Verifique a janela do Chrome para login, CAPTCHA/reautenticação ou erro da interface.",
+            false,
           ),
         );
       }, timeoutMs);
@@ -1997,7 +2134,7 @@ async function configureProfile(request, services) {
     return resultError("INVALID_CONFIGURATION", "Ação de configuração de perfil inválida.");
   }
 
-  let client, child;
+  let client, child, extensionBridge;
   try {
     const launched = await launchOrReuseChrome({
       executables: await resolveChromeExecutables(settings),
@@ -2006,15 +2143,34 @@ async function configureProfile(request, services) {
       startMinimized: false,
       keepBrowserOpen: false,
       startUrl: FLOW_LANDING_URL,
-      extensionPath: EXTENSION_PATH,
       signal: services.signal,
     });
     child = launched.child;
     client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
     const page = await attachFlowPage(client, FLOW_LANDING_URL, true, services.signal, true);
-    await waitForFlowProfile(client, page.sessionId, settings, services.signal);
-    await attachExtensionBridge(client, page.sessionId, services.signal);
-    await markProfilePrepared(runtime.profilePath, runtime.accountProfile);
+    const extensionWaitMs = Math.max(
+      30000,
+      Math.min(
+        895000,
+        (Number.isInteger(settings.interactiveWaitSeconds)
+          ? settings.interactiveWaitSeconds
+          : 600) * 1000,
+      ),
+    );
+    [extensionBridge] = await Promise.all([
+      attachExtensionBridge(client, page.sessionId, {
+        signal: services.signal,
+        request,
+        profileId: runtime.accountProfile,
+        waitMs: extensionWaitMs,
+      }),
+      waitForFlowProfile(client, page.sessionId, settings, services.signal),
+    ]);
+    await markProfilePrepared(
+      runtime.profilePath,
+      runtime.accountProfile,
+      extensionBridge.identity,
+    );
     return {
       status: "success",
       values: {
@@ -2029,6 +2185,7 @@ async function configureProfile(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
+    extensionBridge?.dispose();
     try {
       await client?.send("Browser.close");
     } catch {}
@@ -2169,7 +2326,6 @@ export async function execute(request, services) {
       startMinimized,
       keepBrowserOpen,
       startUrl: navigation.url,
-      extensionPath: EXTENSION_PATH,
       signal: services.signal,
     });
     step(
@@ -2191,7 +2347,12 @@ export async function execute(request, services) {
     );
     const sessionId = page.sessionId;
     step("Página do Google Flow anexada ao CDP.");
-    extensionBridge = await attachExtensionBridge(client, sessionId, services.signal);
+    extensionBridge = await attachExtensionBridge(client, sessionId, {
+      signal: services.signal,
+      request,
+      profileId: profileRuntime.accountProfile,
+      waitMs: 10000,
+    });
     step("Extensão dedicada conectada; teclado e mouse do usuário permanecem isolados.");
 
     let activePreferences = { ...generationPreferences };
@@ -2242,6 +2403,7 @@ export async function execute(request, services) {
               extensionBridge,
               task.prompt,
               settings.promptSelector || "",
+              `${task.index}:${task.attempt}:prompt`,
             );
             step(`${label}: Slate preenchido (${promptResult?.readbackLength || 0} caracteres).`);
             const generateState = await waitGenerateEnabled(
@@ -2255,7 +2417,11 @@ export async function execute(request, services) {
 
             const reservation = responseTracker.reserve(requestTimeoutSeconds * 1000);
             try {
-              const clickResult = await clickGenerateWithExtension(extensionBridge, settings);
+              const clickResult = await clickGenerateWithExtension(
+                extensionBridge,
+                settings,
+                `${task.index}:${task.attempt}:generate`,
+              );
               step(`${label}: envio confirmado (${clickResult?.text || "Criar"}).`);
             } catch (cause) {
               reservation.cancel(cause);
@@ -2363,6 +2529,8 @@ export async function execute(request, services) {
     responseTracker.close();
     responseTracker = null;
     await generationDefaults.disable();
+    extensionBridge.dispose();
+    extensionBridge = null;
     await maybeCloseBrowser(client, browserInfo, keepBrowserOpen);
     client = null;
     await clearCaptchaRetryNavigation(request, services);
@@ -2400,6 +2568,7 @@ export async function execute(request, services) {
         /* noop */
       }
     }
+    extensionBridge?.dispose();
     const recent = stepLogs.slice(-8).join(" | ");
     const suffix = recent ? ` Etapas: ${recent}` : "";
 

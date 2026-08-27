@@ -1,4 +1,6 @@
-const PROTOCOL_VERSION = 1;
+const PLUGIN_ID = "local.contentflow.google-flow-batch-images";
+const PROTOCOL_VERSION = 2;
+const cancelledExecutions = new Set();
 
 function visible(element) {
   if (!(element instanceof Element)) return false;
@@ -152,6 +154,15 @@ async function dispatchAction(action, payload) {
     return { ok: false, code: "WRONG_PAGE", message: "A aba selecionada não é do Google Flow." };
   }
   if (action === "ping") return { ok: true, protocolVersion: PROTOCOL_VERSION, url: location.href };
+  if (action === "inspect") {
+    return {
+      ok: true,
+      protocolVersion: PROTOCOL_VERSION,
+      url: location.href,
+      title: document.title,
+      promptReady: Boolean(promptCandidate(payload.promptSelector || "")),
+    };
+  }
   if (action === "setPrompt") {
     const prompt = promptCandidate(payload.promptSelector || "");
     if (!prompt)
@@ -191,13 +202,45 @@ async function dispatchAction(action, payload) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (
     message?.source !== "contentflow-os" ||
+    message?.pluginId !== PLUGIN_ID ||
     message?.protocolVersion !== PROTOCOL_VERSION ||
-    typeof message?.commandId !== "string"
+    typeof message?.commandId !== "string" ||
+    typeof message?.profileId !== "string" ||
+    typeof message?.executionKey !== "string"
   ) {
     return false;
   }
+  if (message.action === "cancel") {
+    cancelledExecutions.add(message.executionKey);
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (cancelledExecutions.has(message.executionKey)) {
+    sendResponse({ ok: false, code: "CANCELLED", message: "Execução cancelada." });
+    return false;
+  }
+  const cacheKey = `contentflow:${message.commandId}`;
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(cacheKey) || "null");
+    if (cached?.executionKey === message.executionKey && cached?.response) {
+      sendResponse({ ...cached.response, replayed: true });
+      return false;
+    }
+  } catch {
+    sessionStorage.removeItem(cacheKey);
+  }
   dispatchAction(message.action, message.payload || {})
-    .then(sendResponse)
+    .then((response) => {
+      try {
+        sessionStorage.setItem(
+          cacheKey,
+          JSON.stringify({ executionKey: message.executionKey, response, storedAt: Date.now() }),
+        );
+      } catch {
+        // A idempotência principal também existe no storage.session do service worker.
+      }
+      sendResponse(response);
+    })
     .catch((error) =>
       sendResponse({
         ok: false,
@@ -207,3 +250,5 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     );
   return true;
 });
+
+chrome.runtime.sendMessage({ source: "contentflow-flow-page", action: "wake" }).catch(() => {});

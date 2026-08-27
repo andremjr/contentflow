@@ -306,7 +306,7 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 
 ## Fase 5 — Extensão e isolamento dos plugins de navegador
 
-**Objetivo:** tornar a automação de interfaces web mais produtiva, estável e independente do uso cotidiano do computador. Os plugins de navegador devem executar comandos por uma extensão carregada automaticamente em um navegador dedicado, sem depender do foco da janela, do teclado ou do mouse do sistema.
+**Objetivo:** tornar a automação de interfaces web mais produtiva, estável e independente do uso cotidiano do computador. Os plugins compatíveis devem executar comandos por uma única extensão companheira no Chrome normal, sem depender do foco da janela, do teclado ou do mouse do sistema.
 
 ### Problemas que esta fase resolve
 
@@ -317,12 +317,12 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 
 ### Decisões de produto
 
-- Todo plugin oficial que automatize uma interface web na V1 usará uma extensão Manifest V3 específica do plugin, incluída de forma imutável em seu próprio pacote externo.
-- A extensão será carregada automaticamente apenas no navegador e no perfil dedicados àquela conta. O usuário não instalará extensão no navegador pessoal nem repetirá instalação manual em cada perfil.
+- Os plugins oficiais de navegador convergirão para uma extensão companheira Manifest V3 comum e externa ao núcleo. A ponte compartilha transporte, autenticação, isolamento e operações DOM limitadas; cada plugin mantém seu adapter, seletores, regras e validação do provedor.
+- A extensão precisa existir em cada perfil usado pela automação. Em desenvolvimento, pode ser carregada manualmente; para usuários pessoais, a distribuição automática suportada exige Chrome Web Store. CRX local forçada em todos os perfis fica restrita pelo próprio Chrome a dispositivos com AD, Azure AD ou Chrome Enterprise Core.
 - A extensão executará operações estruturadas na aba correta por content script e troca de mensagens. A execução rotineira não usará teclado, mouse, coordenadas de tela, foco do Windows ou ativação da janela como mecanismo de automação.
 - O navegador dedicado iniciará minimizado ou em background e permanecerá separado do que o usuário estiver fazendo. Só poderá ser exibido e receber foco mediante ação explícita para login, reautenticação ou diagnóstico.
 - Cada conta/provedor terá perfil persistente e isolado, preparado explicitamente uma vez pelo usuário por uma interface **Adicionar conta**.
-- O runtime compatível com carregamento automático da extensão será distribuído pelo próprio plugin ou por um componente externo versionado do ecossistema, nunca embutido no núcleo. A primeira implementação avaliará Chromium empacotado e contexto persistente; não dependerá de instalação silenciosa no Chrome pessoal.
+- O plugin usará o Chrome normal já instalado no computador. Não haverá Chromium empacotado. A presença e a compatibilidade da extensão serão verificadas antes de qualquer comando; instaladores nunca fingirão sucesso quando a política do Chrome não for elegível.
 - Headless é o destino técnico, mas não será requisito para concluir a primeira migração. A mesma ponte de comandos deve funcionar inicialmente em modo visível minimizado e depois em headless sem alterar o Método.
 - A finalidade da extensão é exclusivamente produtividade, estabilidade, isolamento e observabilidade da automação.
 
@@ -332,42 +332,47 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 ContentFlow OS
   -> contrato público e execução do plugin
   -> plugin externo do provedor
-  -> extensão MV3 empacotada pelo plugin
-  -> content script na origem configurada
+  -> extensão companheira MV3 externa ao núcleo
+  -> adapter do provedor mantido pelo plugin
+  -> content script na origem autorizada
   -> interface e conta do próprio usuário
 ```
 
 - O núcleo continua sem conhecer seletores, páginas, extensão, Chromium, conta ou regras de qualquer provedor.
-- O plugin mantém o adapter do site, a extensão, o runtime, a fila interna, os checkpoints e a validação dos resultados.
+- O plugin mantém o adapter do site, a integração com o Chrome normal, a fila interna e a validação dos resultados; a extensão comum mantém somente a ponte reutilizável.
 - O núcleo mantém consentimento, conexão opaca, execução, cancelamento, outputs, artifacts e proveniência.
 - A comunicação local entre handler e extensão deve usar canal autenticado por execução, origem allowlisted, mensagens versionadas, payloads validados e nenhum secret persistido na página.
 
 ### Ordem de implementação
 
 1. Definir o envelope de comandos e eventos entre handler, service worker e content script, incluindo timeout, cancelamento, idempotência e diagnóstico redigido.
-2. Criar um protótipo MV3 com runtime dedicado, perfil persistente e carregamento automático, validando modo visível minimizado e a viabilidade futura do headless.
+2. Criar um protótipo MV3 com Chrome normal, perfil persistente e instalação verificável, validando o modo visível minimizado.
 3. Eliminar da rotina chamadas que tragam a página para frente e qualquer input dependente do sistema operacional.
 4. Migrar primeiro o plugin **Google Flow Browser Images**, porque ele reproduz o problema de produtividade e estabilidade em volume relatado pelos alunos.
 5. Executar testes progressivos de 10, 50, 100 e, quando a conta permitir, 300 imagens, persistindo cada resultado antes de avançar e retomando sem duplicação.
-6. Depois da validação do Flow, extrair o transporte comum reutilizável e migrar ChatGPT, Gemini, Claude, Grok e Meta sem mover adapters de fornecedor para o núcleo.
-7. Concluir a jornada **Adicionar conta**, estados de atenção e remoção/revogação dos perfis dedicados.
+6. Depois da validação do Flow, extrair a ponte comum reutilizável e migrar ChatGPT, Gemini, Claude, Grok e Meta sem mover adapters de fornecedor para o núcleo ou para uma camada monolítica.
+7. Publicar a extensão companheira pelo canal oficial adequado e oferecer instalação administrativa apenas em Windows gerenciado; em PCs pessoais, manter a instalação por perfil até a publicação na Chrome Web Store.
+8. Concluir a jornada **Adicionar conta**, estados de atenção e remoção/revogação dos perfis dedicados.
 
 ### Entregas
 
-- Extensão MV3 mínima e específica do provedor empacotada no plugin piloto.
-- Runtime dedicado que carrega a extensão automaticamente em todo perfil criado pelo plugin.
-- Ponte estruturada entre handler e extensão sem expor porta, pasta ou instalação ao usuário.
+- Extensão MV3 mínima no piloto e ponte comum extraída após validação do protocolo.
+- Chrome normal com perfil dedicado e extensão instalada uma vez por perfil, ou por política de máquina quando o ambiente for oficialmente elegível.
+- Ponte estruturada entre handler e extensão sem expor porta de depuração.
+- Empacotador administrativo com UAC, App ID estável, `update.xml`, política exata e rollback, recusando dispositivos Windows não gerenciados.
 - Execução normal minimizada/background, sem roubo de foco e sem input do sistema operacional.
 - Superfície visível sob demanda para login, reautenticação e diagnóstico.
 - Fila com checkpoint por item, reconciliação após timeout e coleta idempotente de artifacts.
-- Interface **Adicionar conta**, com estados pronta, requer atenção, cota esgotada, bloqueada e desconectada.
+- Interface **Adicionar conta**, com estado simples de conta pronta ou requer atenção. Cota, bloqueio e reautenticação continuam sendo erros explícitos da execução, sem criar um painel paralelo.
 - Múltiplas contas isoladas por provedor, selecionáveis no bloco do Método.
 - Documentação para sair, revogar ou remover a sessão criada pelo próprio plugin.
-- Plano e prova técnica para modo headless.
+- Limitação do Chrome normal em headless documentada; a V1 opera de forma visível e minimizada.
 
 ### Critérios de aceite
 
-- [ ] A extensão do plugin é carregada automaticamente em cada perfil dedicado, sem instalação manual e sem tocar no navegador pessoal.
+- [ ] A extensão companheira pode ser instalada em cada perfil dedicado, com instruções reproduzíveis e sem tocar no perfil pessoal do usuário sem consentimento.
+- [x] O empacotador administrativo gera CRX3, extrai o App ID, gera `update.xml`, preserva a chave e se recusa a gravar HKLM quando o Windows não é elegível para extensão local forçada.
+- [ ] O transporte comum aceita mais de um plugin sem incorporar seletores ou regras de fornecedor.
 - [ ] Apagar ou adicionar uma conta não altera outros perfis nem apaga outputs já produzidos.
 - [ ] O usuário consegue trabalhar normalmente em outro aplicativo enquanto uma execução longa continua minimizada.
 - [ ] Digitar, clicar ou alternar janelas no computador não modifica a aba automatizada nem interrompe o job.
@@ -378,16 +383,18 @@ ContentFlow OS
 - [ ] O plugin do Google Flow conclui testes progressivos de volume sem perder resultados já persistidos nem duplicá-los na retomada.
 - [ ] Fechar, minimizar ou usar outros programas não reduz a correção do teste de volume.
 - [ ] Falha, atualização ou ausência da extensão produz erro seguro e recuperável, nunca fallback silencioso para automação por foco.
-- [ ] Existe prova técnica da mesma ponte em headless ou uma limitação documentada do runtime, sem bloquear a operação minimizada da V1.
+- [ ] A limitação do Chrome normal para extensão em headless está documentada, sem bloquear a operação minimizada da V1.
 - [ ] Typecheck, testes de contrato, sandbox, isolamento de foco e build são aprovados.
 
 ### Estado da implementação — 2026-08-27
 
-- O piloto do Google Flow passou a empacotar uma extensão Manifest V3 própria, restrita a `https://labs.google/*`, com service worker e content script versionados.
-- O handler carrega a extensão no perfil dedicado e usa mensagens estruturadas para preencher o prompt e acionar a geração. A ausência da ponte encerra a execução e não reativa o caminho antigo.
-- A execução rotineira não ativa a aba, não traz a página para frente e não envia eventos CDP de teclado ou mouse. A janela visível permanece reservada à ação explícita **Salvar perfil**.
-- O modo minimizado agora é o padrão. A próxima validação necessária é confirmar o carregamento automático no runtime real distribuído aos alunos e ajustar o runtime compatível caso o Chrome instalado rejeite extensões desempacotadas.
-- Ainda faltam cancelamento e idempotência no envelope, teste real de isolamento enquanto o usuário digita em outro aplicativo, testes progressivos de 10/50/100/300 imagens, checkpoints e a jornada final **Adicionar conta**. Por isso a Fase 5 permanece em andamento.
+- O piloto do Google Flow passou a empacotar uma extensão Manifest V3 própria, restrita a `https://labs.google/*`, com service worker e content script versionados. Ela ainda é específica do Flow; a extração da ponte comum permanece uma entrega desta fase.
+- O handler usa a extensão instalada no perfil dedicado para preencher o prompt e acionar a geração. A ausência da ponte encerra a execução e não reativa o caminho antigo.
+- A execução rotineira não ativa a aba, não traz a página para frente e não envia eventos CDP de teclado ou mouse. A janela visível permanece reservada à ação explícita **Adicionar conta**.
+- O modo minimizado agora é o padrão e o Chromium empacotado foi descartado. A decisão mais recente do titular é convergir para uma única extensão no Chrome normal e, quando suportado, instalá-la para todos os perfis.
+- Foi criado um instalador administrativo reversível para o piloto. O teste local gerou CRX3 e XML com ID estável; esta máquina está em `WORKGROUP`, sem AD/Azure AD, portanto o instalador deve recusar a gravação da política conforme a restrição oficial do Chrome.
+- O envelope v2 agora vincula plugin, perfil, execução, comando, origem, aba, expiração e token efêmero; também inclui cancelamento e cache idempotente no service worker e na página. O teste automatizado simula 300 comandos sem repetir efeitos.
+- Ainda faltam o teste real de isolamento enquanto o usuário usa outro aplicativo, a instalação manual no perfil de desenvolvimento, os testes progressivos de imagens reais e a migração dos demais plugins de navegador. Por isso a Fase 5 permanece em andamento.
 
 ## Fase 6 — Lote inteligente de Projetos
 
@@ -461,33 +468,34 @@ ContentFlow OS
 
 ## Registro de decisões
 
-| Data       | Decisão                                                                                                                                      | Impacto                                                                                                                       |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| 2026-08-26 | Adotar este roadmap como guia operacional até a V1.0.0.                                                                                      | Toda implementação das fases deve atualizar seu estado e critérios.                                                           |
-| 2026-08-26 | Priorizar updater antes da reorganização estrutural de Plugins e Métodos.                                                                    | Permite entregar uma melhoria independente e simplifica as releases seguintes.                                                |
-| 2026-08-26 | Reduzir a galeria de Plugins a cards quadrados com ícone e nome.                                                                             | Configuração deixa o card e vai para o contexto do Método/conexão.                                                            |
-| 2026-08-26 | Configuração funcional e seleção de conta pertencem ao Método; secrets permanecem no cofre do núcleo.                                        | Exige múltiplas conexões nomeadas e referências opacas.                                                                       |
-| 2026-08-26 | Decisão substituída em 2026-08-27: os plugins de navegador usariam somente perfis dedicados, sem extensão.                                   | Registro histórico preservado; a estratégia foi revista após falhas reais de produtividade e interferência de foco.           |
-| 2026-08-26 | Substituir o lote sequencial por geração estruturada única seguida de revisão e criação de Projetos.                                         | O novo fluxo pertence ao Orquestrador, não ao Método de vídeo individual.                                                     |
-| 2026-08-27 | Conexões são registros locais nomeados e reutilizáveis; o Bloco guarda `connectionId` e a exportação preserva apenas o requisito de conexão. | Renomear não quebra Métodos, secrets não são exportados e importações exigem associação local.                                |
-| 2026-08-27 | Branding opcional usa `branding.iconPath` com PNG/WebP local de até 512 KiB.                                                                 | Manifestos API v1 antigos usam fallback; favicon remoto e SVG não entram no contrato inicial.                                 |
-| 2026-08-27 | O lote inteligente exige `theme`; `angle`, `promise` e `notes` são opcionais.                                                                | Permite lista mínima e extensível sem transformar o Método em fluxo multivídeo.                                               |
-| 2026-08-27 | A V1 usará somente o canal estável `latest` do GitHub Releases.                                                                              | Drafts, prereleases e canais beta não serão oferecidos pelo botão inicial.                                                    |
-| 2026-08-27 | Assinatura Authenticode é recomendada para a distribuição pública da V1 e suportada pelo workflow via secrets.                               | O mecanismo pode ser testado sem certificado; a release final deve registrar seu estado.                                      |
-| 2026-08-27 | Adiar a primeira validação pública do updater para a Fase 3.5, por meio da release estável `v0.4.3`.                                         | Fases 2 e 3 avançam sem publicar; versão, tag e release dependem de comando explícito do titular.                             |
-| 2026-08-27 | Releases serão administradas pela API oficial ou workflow autenticado, não por automação de navegador.                                       | Operações externas ficam auditáveis e reproduzíveis no pipeline do repositório.                                               |
-| 2026-08-27 | Cards de plugin mantêm ícone e nome, acrescentando descrição limitada a três linhas.                                                         | A galeria continua compacta em quatro colunas sem deixar a função do plugin ambígua.                                          |
-| 2026-08-27 | Ícones de provedores são incorporados como PNG local com origem documentada; o runtime nunca busca favicon remoto.                           | Assets passam por validação de caminho, assinatura e tamanho; ausência ou falha usa fallback.                                 |
-| 2026-08-27 | Remoção de plugin exige consulta prévia dos Métodos dependentes e confirmação informada.                                                     | Novas execuções ficam bloqueadas sem apagar outputs históricos já produzidos.                                                 |
-| 2026-08-27 | Atualização manual por pasta é atômica, aceita apenas SemVer superior e invalida o consentimento da versão anterior.                         | Falha restaura o pacote anterior; nova versão exige revisão de permissões antes da execução.                                  |
-| 2026-08-27 | Favicon público não será tratado como licença automática de redistribuição.                                                                  | A proveniência e o risco de redistribuição continuam documentados para revisão antes das releases.                            |
-| 2026-08-27 | O titular decidiu manter os ícones atuais e encerrar a Fase 2 após a validação operacional.                                                  | A proveniência e as diretrizes identificadas permanecem registradas para revisão de release.                                  |
-| 2026-08-27 | Núcleo e plugins são produtos absolutamente separados; o ContentFlow OS deve ser útil com zero plugins.                                      | Releases não incluem integrações; todo plugin é externo, removível, consentido e submetido à mesma sandbox.                   |
-| 2026-08-27 | A atualização real `0.4.2 → 0.4.3` foi concluída preservando os dados locais.                                                                | Fases 1 e 3.5 foram concluídas; o desenvolvimento avança para o refinamento visual dos Métodos.                               |
-| 2026-08-27 | A Fase 4 é exclusivamente um refinamento visual do editor de Métodos existente.                                                              | O layout explicita ação, operador, entradas e entregas sem criar modo guiado, lógica ou conceitos novos.                      |
-| 2026-08-27 | Histórico do Canal existe em `ESCOLHER` para escolhas anteriores do mesmo bloco e em `CRIAR` para resultados finais anteriores do Processo.  | O usuário ativa a memória e informa apenas a quantidade; schema, elegibilidade, origem técnica e proveniência ficam internas. |
-| 2026-08-27 | Plugins oficiais de navegador usarão extensão MV3 empacotada no próprio plugin e carregada automaticamente em navegador dedicado.            | A automação rotineira passa a operar por mensagens/content scripts, minimizada e sem disputar foco, teclado ou mouse.         |
-| 2026-08-27 | Google Flow será o piloto da migração para extensão e isolamento de foco.                                                                    | Testes progressivos de até 300 imagens validarão checkpoint, retomada e produtividade antes das demais migrações.             |
+| Data       | Decisão                                                                                                                                          | Impacto                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-26 | Adotar este roadmap como guia operacional até a V1.0.0.                                                                                          | Toda implementação das fases deve atualizar seu estado e critérios.                                                           |
+| 2026-08-26 | Priorizar updater antes da reorganização estrutural de Plugins e Métodos.                                                                        | Permite entregar uma melhoria independente e simplifica as releases seguintes.                                                |
+| 2026-08-26 | Reduzir a galeria de Plugins a cards quadrados com ícone e nome.                                                                                 | Configuração deixa o card e vai para o contexto do Método/conexão.                                                            |
+| 2026-08-26 | Configuração funcional e seleção de conta pertencem ao Método; secrets permanecem no cofre do núcleo.                                            | Exige múltiplas conexões nomeadas e referências opacas.                                                                       |
+| 2026-08-26 | Decisão substituída em 2026-08-27: os plugins de navegador usariam somente perfis dedicados, sem extensão.                                       | Registro histórico preservado; a estratégia foi revista após falhas reais de produtividade e interferência de foco.           |
+| 2026-08-26 | Substituir o lote sequencial por geração estruturada única seguida de revisão e criação de Projetos.                                             | O novo fluxo pertence ao Orquestrador, não ao Método de vídeo individual.                                                     |
+| 2026-08-27 | Conexões são registros locais nomeados e reutilizáveis; o Bloco guarda `connectionId` e a exportação preserva apenas o requisito de conexão.     | Renomear não quebra Métodos, secrets não são exportados e importações exigem associação local.                                |
+| 2026-08-27 | Branding opcional usa `branding.iconPath` com PNG/WebP local de até 512 KiB.                                                                     | Manifestos API v1 antigos usam fallback; favicon remoto e SVG não entram no contrato inicial.                                 |
+| 2026-08-27 | O lote inteligente exige `theme`; `angle`, `promise` e `notes` são opcionais.                                                                    | Permite lista mínima e extensível sem transformar o Método em fluxo multivídeo.                                               |
+| 2026-08-27 | A V1 usará somente o canal estável `latest` do GitHub Releases.                                                                                  | Drafts, prereleases e canais beta não serão oferecidos pelo botão inicial.                                                    |
+| 2026-08-27 | Assinatura Authenticode é recomendada para a distribuição pública da V1 e suportada pelo workflow via secrets.                                   | O mecanismo pode ser testado sem certificado; a release final deve registrar seu estado.                                      |
+| 2026-08-27 | Adiar a primeira validação pública do updater para a Fase 3.5, por meio da release estável `v0.4.3`.                                             | Fases 2 e 3 avançam sem publicar; versão, tag e release dependem de comando explícito do titular.                             |
+| 2026-08-27 | Releases serão administradas pela API oficial ou workflow autenticado, não por automação de navegador.                                           | Operações externas ficam auditáveis e reproduzíveis no pipeline do repositório.                                               |
+| 2026-08-27 | Cards de plugin mantêm ícone e nome, acrescentando descrição limitada a três linhas.                                                             | A galeria continua compacta em quatro colunas sem deixar a função do plugin ambígua.                                          |
+| 2026-08-27 | Ícones de provedores são incorporados como PNG local com origem documentada; o runtime nunca busca favicon remoto.                               | Assets passam por validação de caminho, assinatura e tamanho; ausência ou falha usa fallback.                                 |
+| 2026-08-27 | Remoção de plugin exige consulta prévia dos Métodos dependentes e confirmação informada.                                                         | Novas execuções ficam bloqueadas sem apagar outputs históricos já produzidos.                                                 |
+| 2026-08-27 | Atualização manual por pasta é atômica, aceita apenas SemVer superior e invalida o consentimento da versão anterior.                             | Falha restaura o pacote anterior; nova versão exige revisão de permissões antes da execução.                                  |
+| 2026-08-27 | Favicon público não será tratado como licença automática de redistribuição.                                                                      | A proveniência e o risco de redistribuição continuam documentados para revisão antes das releases.                            |
+| 2026-08-27 | O titular decidiu manter os ícones atuais e encerrar a Fase 2 após a validação operacional.                                                      | A proveniência e as diretrizes identificadas permanecem registradas para revisão de release.                                  |
+| 2026-08-27 | Núcleo e plugins são produtos absolutamente separados; o ContentFlow OS deve ser útil com zero plugins.                                          | Releases não incluem integrações; todo plugin é externo, removível, consentido e submetido à mesma sandbox.                   |
+| 2026-08-27 | A atualização real `0.4.2 → 0.4.3` foi concluída preservando os dados locais.                                                                    | Fases 1 e 3.5 foram concluídas; o desenvolvimento avança para o refinamento visual dos Métodos.                               |
+| 2026-08-27 | A Fase 4 é exclusivamente um refinamento visual do editor de Métodos existente.                                                                  | O layout explicita ação, operador, entradas e entregas sem criar modo guiado, lógica ou conceitos novos.                      |
+| 2026-08-27 | Histórico do Canal existe em `ESCOLHER` para escolhas anteriores do mesmo bloco e em `CRIAR` para resultados finais anteriores do Processo.      | O usuário ativa a memória e informa apenas a quantidade; schema, elegibilidade, origem técnica e proveniência ficam internas. |
+| 2026-08-27 | Plugins oficiais de navegador convergirão para uma extensão companheira comum e externa ao núcleo; adapters continuam nos plugins.              | A automação rotineira opera por mensagens/content scripts, minimizada e sem misturar regras de fornecedor ao ContentFlow OS. |
+| 2026-08-27 | CRX local só será forçada em todos os perfis quando o Windows estiver em AD, Azure AD ou Chrome Enterprise Core.                                  | Em PC pessoal, usar instalação por perfil ou Chrome Web Store; o instalador recusa política inválida e oferece rollback.      |
+| 2026-08-27 | Google Flow será o piloto da migração para extensão e isolamento de foco.                                                                        | Testes progressivos de até 300 imagens validarão checkpoint, retomada e produtividade antes das demais migrações.             |
 
 ## Pendências de decisão do titular
 

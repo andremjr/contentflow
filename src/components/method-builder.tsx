@@ -1949,8 +1949,10 @@ function ProfileSetupControl({
   const prepare = async (profileName: string) => {
     if (!profileName || statuses[profileName] === "preparing") return;
     setStatuses((current) => ({ ...current, [profileName]: "preparing" }));
-    toast.info("Conclua o login na janela do navegador", {
-      description: `O perfil ${profileName} será guardado quando a área do provedor estiver pronta.`,
+    toast.info("Prepare a conta na janela do navegador", {
+      description:
+        profileSetup.description ??
+        `A conta ${profileName} será guardada quando a área do provedor estiver pronta.`,
     });
     try {
       const response = await fetch(`/api/plugins/${encodeURIComponent(pluginId)}/profile`, {
@@ -1970,12 +1972,12 @@ function ProfileSetupControl({
         throw new Error(payload.error ?? "O login não foi confirmado pelo plugin.");
       }
       setStatuses((current) => ({ ...current, [profileName]: "ready" }));
-      toast.success("Perfil salvo e validado", {
-        description: payload.message ?? `${profileName} está pronto para futuras execuções.`,
+      toast.success("Conta pronta", {
+        description: payload.message ?? `${profileName} está pronta para futuras execuções.`,
       });
     } catch (error) {
       setStatuses((current) => ({ ...current, [profileName]: "missing" }));
-      toast.error("Não foi possível salvar o perfil", {
+      toast.error("Não foi possível preparar a conta", {
         description: error instanceof Error ? error.message : undefined,
       });
     }
@@ -1985,6 +1987,7 @@ function ProfileSetupControl({
     <div className="flex min-w-44 flex-col justify-end gap-1.5 sm:pt-5">
       {profileNames.map((profileName, index) => {
         const status = statuses[profileName] ?? "checking";
+        const accountLabel = index === 0 ? "Conta principal" : `Conta alternativa ${index}`;
         return (
           <Button
             key={profileName}
@@ -2001,14 +2004,14 @@ function ProfileSetupControl({
             ) : (
               <CircleUserRound className="size-3.5" />
             )}
-            {status === "ready" ? `${profileName} salvo` : `${profileSetup.label}: ${profileName}`}
-            {index > 0 && <span className="ml-auto text-[10px] opacity-70">fallback {index}</span>}
+            {status === "ready" ? `${accountLabel} pronta` : profileSetup.label}
+            <span className="ml-auto text-[10px] opacity-70">{profileName}</span>
           </Button>
         );
       })}
       <p className="text-[10px] text-muted-foreground">
         {profileNames.length
-          ? "Cada alias mantém login separado. O fallback ocorre somente em falhas técnicas permitidas."
+          ? "Cada conta mantém login separado. Uma conta alternativa só é usada após falha técnica permitida."
           : (profileSetup.description ?? "Informe pelo menos um perfil de conta.")}
       </p>
     </div>
