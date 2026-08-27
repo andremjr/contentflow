@@ -15,6 +15,7 @@ import { LineListTextarea } from "@/components/line-list-textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -179,14 +180,12 @@ export function RuntimeFieldsForm({
                 onChange={(event) => update(field.key, toIsoDatetime(event.target.value))}
               />
             ) : field.type === "number" ? (
-              <Input
+              <NumberInput
                 id={field.id}
-                type="number"
-                value={typeof value === "number" ? value : ""}
+                value={typeof value === "number" ? value : null}
+                nullable
                 placeholder={field.placeholder}
-                onChange={(event) =>
-                  update(field.key, event.target.value === "" ? null : Number(event.target.value))
-                }
+                onValueChange={(nextValue) => update(field.key, nextValue)}
               />
             ) : field.type === "boolean" ? (
               <label className="flex items-center gap-2 rounded-lg border border-border/70 p-3 text-sm">
@@ -431,12 +430,10 @@ function RecordValueInput({
           onChange={(event) => onChange(event.target.value)}
         />
       ) : field.type === "number" ? (
-        <Input
-          type="number"
-          value={typeof value === "number" ? value : ""}
-          onChange={(event) =>
-            onChange(event.target.value === "" ? null : Number(event.target.value))
-          }
+        <NumberInput
+          value={typeof value === "number" ? value : null}
+          nullable
+          onValueChange={onChange}
         />
       ) : field.type === "boolean" ? (
         <label className="flex items-center gap-2 rounded-lg border border-border/70 p-3 text-sm">

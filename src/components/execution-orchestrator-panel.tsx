@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { PROCESS_META } from "@/lib/domain";
@@ -276,15 +277,13 @@ export function ExecutionOrchestratorPanel({
               <Label htmlFor="orchestrator-quantity">
                 {mode === "batch" ? "Temas / projetos" : "Projetos"}
               </Label>
-              <Input
+              <NumberInput
                 id="orchestrator-quantity"
-                type="number"
                 min={1}
                 max={50}
+                integer
                 value={quantity}
-                onChange={(event) =>
-                  setQuantity(Math.min(50, Math.max(1, Number(event.target.value) || 1)))
-                }
+                onValueChange={(nextQuantity) => setQuantity(nextQuantity ?? quantity)}
               />
             </div>
             <Button

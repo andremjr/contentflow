@@ -68,6 +68,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -2102,20 +2103,20 @@ function PluginConfigurationField({
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <Input
-        type={schema.type === "number" || schema.type === "integer" ? "number" : "text"}
-        min={schema.minimum}
-        max={schema.maximum}
-        step={schema.type === "number" ? "0.1" : undefined}
-        value={String(value ?? "")}
-        onChange={(event) =>
-          onChange(
-            schema.type === "number" || schema.type === "integer"
-              ? Number(event.target.value)
-              : event.target.value,
-          )
-        }
-      />
+      {schema.type === "number" || schema.type === "integer" ? (
+        <NumberInput
+          value={typeof value === "number" ? value : null}
+          integer={schema.type === "integer"}
+          min={schema.minimum}
+          max={schema.maximum}
+          step={schema.type === "number" ? "0.1" : undefined}
+          onValueChange={(nextValue) => {
+            if (nextValue !== null) onChange(nextValue);
+          }}
+        />
+      ) : (
+        <Input value={String(value ?? "")} onChange={(event) => onChange(event.target.value)} />
+      )}
       {schema.description && (
         <p className="text-[11px] text-muted-foreground">{schema.description}</p>
       )}
@@ -2272,15 +2273,13 @@ function ValidationEditor({
           {validation.onReject === "retry_target" && (
             <div className="space-y-1.5">
               <Label>Máximo de tentativas</Label>
-              <Input
-                type="number"
+              <NumberInput
                 min={1}
                 max={20}
+                integer
                 value={validation.maxAttempts}
-                onChange={(event) =>
-                  applyValidation({
-                    maxAttempts: Math.min(20, Math.max(1, Number(event.target.value) || 1)),
-                  })
+                onValueChange={(maxAttempts) =>
+                  applyValidation({ maxAttempts: maxAttempts ?? validation.maxAttempts })
                 }
               />
               <p className="text-[10px] text-muted-foreground">
@@ -2367,16 +2366,14 @@ function ChannelHistoryToggle({
           >
             Últimos
           </Label>
-          <Input
+          <NumberInput
             id={`${block.id}-channel-history-limit`}
-            type="number"
             min={1}
             max={100}
+            integer
             className="h-8 text-xs"
             value={historyInputs[0]?.historyLimit ?? 10}
-            onChange={(event) =>
-              setLimit(Math.min(100, Math.max(1, Number(event.target.value) || 1)))
-            }
+            onValueChange={(historyLimit) => setLimit(historyLimit ?? 10)}
           />
         </div>
       )}
