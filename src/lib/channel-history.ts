@@ -32,9 +32,14 @@ export function isChannelHistoryValueType(type: HumanFieldType): type is RecordF
 export function createChannelHistoryRecordFields(
   valueType: HumanFieldType,
 ): RecordFieldDefinition[] {
-  const normalizedValueType: RecordFieldType = isChannelHistoryValueType(valueType)
-    ? valueType
-    : "text";
+  const normalizedValueType: RecordFieldType =
+    valueType === "files"
+      ? "file"
+      : valueType === "list" || valueType === "multiselect"
+        ? "text"
+        : isChannelHistoryValueType(valueType)
+          ? valueType
+          : "text";
   return [
     {
       id: "channel-history-value",

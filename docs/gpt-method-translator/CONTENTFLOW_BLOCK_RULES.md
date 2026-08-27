@@ -30,7 +30,7 @@ Só use `ESCOLHER` se a transcrição ou o usuário identificar uma coleção es
 
 Se qualquer ponto faltar, faça uma pergunta ou classifique como `VALIDAR` se a decisão for sobre resultado da execução. Um arquivo JSON portátil não pode conter `ESCOLHER`, porque não conhece o `collectionId` do canal de destino.
 
-O `ESCOLHER` pode consultar `channel_history` para orientar a seleção sem mudar sua classificação. A coleção continua sendo fornecida exclusivamente pelo vínculo do bloco; o histórico é contexto de decisões passadas, não acesso alternativo à Biblioteca. A regra editorial fica em `instructions` para Humano/IA ou na configuração do plugin de Código.
+O `ESCOLHER` pode consultar `channel_history` para orientar a seleção com escolhas anteriores do próprio bloco, sem mudar sua classificação. A coleção continua sendo fornecida exclusivamente pelo vínculo do bloco; o histórico é contexto de decisões passadas, não acesso alternativo à Biblioteca. O `CRIAR` também pode consultar `channel_history`, mas recebe os resultados oficiais anteriores do mesmo Processo. `BUSCAR` e `VALIDAR` não usam Histórico do Canal. A regra editorial fica em `instructions` para Humano/IA ou na configuração do plugin de Código.
 
 ## Regras de `VALIDAR`
 

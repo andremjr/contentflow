@@ -108,7 +108,7 @@ import {
   type SharedMethodFile,
 } from "@/lib/method-file";
 import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
-import { createChannelHistoryRecordFields, isChannelHistoryValueType } from "@/lib/channel-history";
+import { createChannelHistoryRecordFields } from "@/lib/channel-history";
 import { instructionInputKey, instructionInputLabel } from "@/lib/instruction-template";
 import type {
   JsonSchema,
@@ -226,65 +226,6 @@ function newRecordField(index: number): RecordFieldDefinition {
     type: index === 0 ? "text" : "textarea",
     required: true,
   };
-}
-
-type ChannelHistorySource = {
-  id: string;
-  processType: UniversalProcess;
-  blockId: string;
-  blockLabel: string;
-  output: BlockFieldDefinition;
-};
-
-function collectChannelHistorySources(
-  processType: UniversalProcess,
-  methodBlocks: ActionBlock[],
-  channelMethods: Record<UniversalProcess, ProcessMethod>,
-) {
-  return PROCESS_ORDER.flatMap<ChannelHistorySource>((sourceProcessType) => {
-    const blocks =
-      sourceProcessType === processType
-        ? methodBlocks
-        : (channelMethods[sourceProcessType]?.blocks ?? []);
-    const blockOutputs = blocks.flatMap((sourceBlock) => {
-      const outputs =
-        sourceBlock.type === "ESCOLHER"
-          ? [
-              {
-                id: `${sourceBlock.id}-selected-item`,
-                label: "Item estratégico escolhido",
-                key: "selectedItemId",
-                type: "text" as const,
-                required: true,
-              },
-            ]
-          : (sourceBlock.outputs ?? []);
-      return outputs
-        .filter((output) => isChannelHistoryValueType(output.type))
-        .map((output) => ({
-          id: `${sourceProcessType}::${sourceBlock.id}::${output.key}`,
-          processType: sourceProcessType,
-          blockId: sourceBlock.id,
-          blockLabel: sourceBlock.name ?? sourceBlock.type,
-          output,
-        }));
-    });
-    const officialOutput = createProcessOutputFields(sourceProcessType)[0];
-    return [
-      ...(isChannelHistoryValueType(officialOutput.type)
-        ? [
-            {
-              id: `${sourceProcessType}::__process_output__::${officialOutput.key}`,
-              processType: sourceProcessType,
-              blockId: "__process_output__",
-              blockLabel: "Resultado oficial",
-              output: officialOutput,
-            },
-          ]
-        : []),
-      ...blockOutputs,
-    ];
-  });
 }
 
 export function MethodBuilder({
@@ -2353,6 +2294,96 @@ function ValidationEditor({
   );
 }
 
+function ChannelHistoryToggle({
+  block,
+  processType,
+  onChange,
+}: {
+  block: ActionBlock;
+  processType: UniversalProcess;
+  onChange: (patch: Partial<ActionBlock>) => void;
+}) {
+  const inputs = block.inputs ?? [];
+  const historyInputs = inputs.filter((input) => input.source === "channel_history");
+  const regularInputs = inputs.filter((input) => input.source !== "channel_history");
+  const usesChoiceHistory = block.type === "ESCOLHER";
+
+  const setEnabled = (enabled: boolean) => {
+    if (!enabled) {
+      onChange({ inputs: regularInputs });
+      return;
+    }
+    if (historyInputs.length) return;
+    const processOutput = createProcessOutputFields(processType)[0];
+    const input: BlockInputBinding = {
+      id: uid(`${block.id}-history`),
+      label: usesChoiceHistory ? "Histórico de escolhas" : "Histórico de criações",
+      type: "records",
+      source: "channel_history",
+      sourceProcessType: processType,
+      blockId: usesChoiceHistory ? block.id : "__process_output__",
+      sourceKey: usesChoiceHistory ? "selectedItemId" : processOutput.key,
+      historyLimit: 10,
+      historyEligibility: "completed",
+      recordFields: createChannelHistoryRecordFields(
+        usesChoiceHistory ? "text" : processOutput.type,
+      ),
+      presentation: { renderer: "table", itemType: "record" },
+    };
+    onChange({ inputs: [...regularInputs, input] });
+  };
+
+  const setLimit = (historyLimit: number) => {
+    onChange({
+      inputs: inputs.map((input) =>
+        input.source === "channel_history" ? { ...input, historyLimit } : input,
+      ),
+    });
+  };
+
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border/70 bg-background/30 p-3">
+      <Checkbox
+        id={`${block.id}-channel-history`}
+        className="mt-0.5"
+        checked={historyInputs.length > 0}
+        onCheckedChange={(checked) => setEnabled(checked === true)}
+      />
+      <label htmlFor={`${block.id}-channel-history`} className="min-w-0 flex-1 cursor-pointer">
+        <span className="block text-xs font-medium">
+          {usesChoiceHistory ? "Considerar escolhas anteriores" : "Considerar criações anteriores"}
+        </span>
+        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+          {usesChoiceHistory
+            ? "Consulte o que este mesmo bloco escolheu nos projetos anteriores do canal."
+            : "Use como contexto os resultados finais deste processo nos projetos anteriores do canal."}
+        </span>
+      </label>
+      {historyInputs.length > 0 && (
+        <div className="w-20 shrink-0 space-y-1">
+          <Label
+            htmlFor={`${block.id}-channel-history-limit`}
+            className="text-[10px] text-muted-foreground"
+          >
+            Últimos
+          </Label>
+          <Input
+            id={`${block.id}-channel-history-limit`}
+            type="number"
+            min={1}
+            max={100}
+            className="h-8 text-xs"
+            value={historyInputs[0]?.historyLimit ?? 10}
+            onChange={(event) =>
+              setLimit(Math.min(100, Math.max(1, Number(event.target.value) || 1)))
+            }
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ContextInputsEditor({
   block,
   methodBlocks,
@@ -2369,6 +2400,7 @@ function ContextInputsEditor({
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const inputs = block.inputs ?? [];
+  const regularInputs = inputs.filter((input) => input.source !== "channel_history");
   const addInput = () => {
     const input: BlockInputBinding = {
       id: uid(`${block.id}-input`),
@@ -2376,19 +2408,6 @@ function ContextInputsEditor({
       type: "text",
       source: "previous_block",
       presentation: { renderer: "auto" },
-    };
-    onChange({ inputs: [...inputs, input] });
-  };
-  const addChannelHistory = () => {
-    const input: BlockInputBinding = {
-      id: uid(`${block.id}-history`),
-      label: "Histórico relevante",
-      type: "records",
-      source: "channel_history",
-      historyLimit: 10,
-      historyEligibility: "completed",
-      recordFields: createChannelHistoryRecordFields("text"),
-      presentation: { renderer: "table", itemType: "record" },
     };
     onChange({ inputs: [...inputs, input] });
   };
@@ -2405,32 +2424,24 @@ function ContextInputsEditor({
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-1">
-          {block.type === "ESCOLHER" && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 px-2 text-[10px]"
-              onClick={addChannelHistory}
-            >
-              Usar histórico
-            </Button>
-          )}
           <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
             <Plus className="size-3" /> Adicionar entrada
           </Button>
         </div>
       </div>
+      {block.type === "ESCOLHER" && (
+        <div className="mt-3">
+          <ChannelHistoryToggle block={block} processType={processType} onChange={onChange} />
+        </div>
+      )}
       <div className="mt-3 space-y-3">
-        {inputs.map((input) => (
+        {regularInputs.map((input) => (
           <InputBindingEditor
             key={input.id}
             input={input}
             availableBlocks={methodBlocks.slice(0, blockIndex)}
-            methodBlocks={methodBlocks}
-            currentBlockId={block.id}
             processType={processType}
             channelMethods={channelMethods}
-            allowChannelHistory={block.type === "ESCOLHER"}
             onChange={(patch) =>
               onChange({
                 inputs: inputs.map((item) => (item.id === input.id ? { ...item, ...patch } : item)),
@@ -2439,7 +2450,7 @@ function ContextInputsEditor({
             onRemove={() => onChange({ inputs: inputs.filter((item) => item.id !== input.id) })}
           />
         ))}
-        {!inputs.length && (
+        {!regularInputs.length && (
           <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
             Nenhuma entrada adicional. Adicione somente quando esta ação precisar de um resultado
             anterior como contexto.
@@ -2466,6 +2477,7 @@ function DataContractEditor({
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const inputs = block.inputs ?? [];
+  const regularInputs = inputs.filter((input) => input.source !== "channel_history");
   const outputs = block.outputs ?? [];
   const addInput = () => {
     const input: BlockInputBinding = {
@@ -2495,19 +2507,22 @@ function DataContractEditor({
         title={block.type === "BUSCAR" ? "Informações para a busca" : "Informações de entrada"}
         description="Defina o que precisa estar disponível antes desta ação começar. Entregas compatíveis podem ser conectadas automaticamente."
       >
+        {block.type === "CRIAR" && (
+          <div className="mb-3">
+            <ChannelHistoryToggle block={block} processType={processType} onChange={onChange} />
+          </div>
+        )}
         <div className="flex justify-end">
           <Button size="sm" variant="outline" className="h-8 gap-1" onClick={addInput}>
             <Plus className="size-3" /> Adicionar entrada
           </Button>
         </div>
         <div className="mt-3 space-y-3">
-          {inputs.map((input) => (
+          {regularInputs.map((input) => (
             <InputBindingEditor
               key={input.id}
               input={input}
               availableBlocks={methodBlocks.slice(0, blockIndex)}
-              methodBlocks={methodBlocks}
-              currentBlockId={block.id}
               processType={processType}
               channelMethods={channelMethods}
               onChange={(patch) =>
@@ -2520,7 +2535,7 @@ function DataContractEditor({
               onRemove={() => onChange({ inputs: inputs.filter((item) => item.id !== input.id) })}
             />
           ))}
-          {inputs.length === 0 && (
+          {regularInputs.length === 0 && (
             <div className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
               Este bloco não precisa de uma entrada específica para começar.
             </div>
@@ -2579,21 +2594,15 @@ function DataContractEditor({
 function InputBindingEditor({
   input,
   availableBlocks,
-  methodBlocks,
-  currentBlockId,
   processType,
   channelMethods,
-  allowChannelHistory = false,
   onChange,
   onRemove,
 }: {
   input: BlockInputBinding;
   availableBlocks: ActionBlock[];
-  methodBlocks: ActionBlock[];
-  currentBlockId: string;
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
-  allowChannelHistory?: boolean;
   onChange: (patch: Partial<BlockInputBinding>) => void;
   onRemove: () => void;
 }) {
@@ -2632,16 +2641,6 @@ function InputBindingEditor({
     previousDeliverySources.find(
       (source) => !input.sourceProcessType && source.output.key === input.sourceKey,
     );
-  const channelHistorySources = allowChannelHistory
-    ? collectChannelHistorySources(processType, methodBlocks, channelMethods)
-    : [];
-  const selectedChannelHistory = channelHistorySources.find(
-    (source) =>
-      source.processType === input.sourceProcessType &&
-      source.blockId === input.blockId &&
-      source.output.key === input.sourceKey,
-  );
-
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(150px,0.8fr)_32px] items-center gap-2">
@@ -2670,7 +2669,6 @@ function InputBindingEditor({
         <Label className="text-[10px] text-muted-foreground">Formato</Label>
         <Select
           value={input.type ?? "text"}
-          disabled={input.source === "channel_history"}
           onValueChange={(type) => {
             const nextType = type as HumanFieldType;
             onChange({
@@ -2692,11 +2690,6 @@ function InputBindingEditor({
             ))}
           </SelectContent>
         </Select>
-        {input.source === "channel_history" && (
-          <p className="text-[10px] text-muted-foreground">
-            O histórico sempre chega como lista de registros com valor, projeto e data.
-          </p>
-        )}
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
@@ -2705,26 +2698,6 @@ function InputBindingEditor({
           <Select
             value={input.source}
             onValueChange={(source) => {
-              if (source === "channel_history") {
-                const selected =
-                  channelHistorySources.find(
-                    (candidate) =>
-                      candidate.processType === processType && candidate.blockId === currentBlockId,
-                  ) ?? channelHistorySources[0];
-                onChange({
-                  source: "channel_history",
-                  sourceKey: selected?.output.key,
-                  sourceProcessType: selected?.processType,
-                  blockId: selected?.blockId,
-                  staticValue: undefined,
-                  historyLimit: 10,
-                  historyEligibility: "completed",
-                  type: "records",
-                  presentation: { renderer: "table", itemType: "record" },
-                  recordFields: createChannelHistoryRecordFields(selected?.output.type ?? "text"),
-                });
-                return;
-              }
               if (source === "previous_process") {
                 const selected = previousDeliverySources.at(-1);
                 const output = selected?.output;
@@ -2762,11 +2735,6 @@ function InputBindingEditor({
               <SelectItem value="previous_process" disabled={!previousDeliverySources.length}>
                 Entrega anterior
               </SelectItem>
-              {allowChannelHistory && (
-                <SelectItem value="channel_history" disabled={!channelHistorySources.length}>
-                  Histórico do canal
-                </SelectItem>
-              )}
               <SelectItem value="project">Dados do projeto</SelectItem>
               <SelectItem value="static">Valor fixo</SelectItem>
             </SelectContent>
@@ -2836,80 +2804,6 @@ function InputBindingEditor({
           </div>
         )}
 
-        {input.source === "channel_history" && (
-          <div className="space-y-2 sm:col-span-2">
-            <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground">
-                Processo, bloco e decisão anteriores
-              </Label>
-              <Select
-                value={selectedChannelHistory?.id}
-                onValueChange={(sourceId) => {
-                  const selected = channelHistorySources.find(
-                    (candidate) => candidate.id === sourceId,
-                  );
-                  onChange({
-                    sourceProcessType: selected?.processType,
-                    blockId: selected?.blockId,
-                    sourceKey: selected?.output.key,
-                    type: "records",
-                    presentation: { renderer: "table", itemType: "record" },
-                    recordFields: createChannelHistoryRecordFields(selected?.output.type ?? "text"),
-                  });
-                }}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Selecione o histórico consultado" />
-                </SelectTrigger>
-                <SelectContent>
-                  {channelHistorySources.map((source) => (
-                    <SelectItem key={source.id} value={source.id}>
-                      {PROCESS_META[source.processType].label} / {source.blockLabel} /{" "}
-                      {instructionInputLabel(source.output)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Últimos registros</Label>
-                <Input
-                  className="h-8 text-xs"
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={input.historyLimit ?? 10}
-                  onChange={(event) =>
-                    onChange({
-                      historyLimit: Math.min(100, Math.max(1, Number(event.target.value) || 1)),
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Considerar</Label>
-                <Select
-                  value={input.historyEligibility ?? "completed"}
-                  onValueChange={(historyEligibility) =>
-                    onChange({
-                      historyEligibility: historyEligibility as "completed" | "published",
-                    })
-                  }
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="completed">Decisões concluídas</SelectItem>
-                    <SelectItem value="published">Somente projetos publicados</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-        )}
-
         {input.source === "project" && (
           <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground">Dado</Label>
@@ -2971,7 +2865,7 @@ function InputBindingEditor({
           </Select>
         </div>
       )}
-      {input.type === "records" && (
+      {input.type === "records" && input.source !== "channel_history" && (
         <RecordFieldsEditor
           fields={input.recordFields ?? []}
           onChange={(recordFields) => onChange({ recordFields })}

@@ -75,7 +75,7 @@ export function resolveBlockInputs({
   const usedCandidateIds = new Set<string>();
 
   return (block.inputs ?? []).map((input) => {
-    if (input.source === "channel_history" && block.type !== "ESCOLHER") {
+    if (input.source === "channel_history" && block.type !== "ESCOLHER" && block.type !== "CRIAR") {
       return { input, resolved: false };
     }
     const explicit = resolveExplicitInput(input, project, candidates, {

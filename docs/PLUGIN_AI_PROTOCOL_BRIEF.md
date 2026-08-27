@@ -4,7 +4,7 @@ Um plugin é uma pasta independente com `contentflow.plugin.json` e um entrypoin
 
 ## Fronteira pública
 
-`request.inputs` contém valores indexados pela `portKey`. `request.inputContract` e `request.outputContract` descrevem o binding vigente. `request.inputDeliveries`, quando presente, informa `deliveryId` e `itemIds` das origens; `request.context.previousDeliveries` contém entregas anteriores autorizadas do Projeto atual. Quando um bloco `ESCOLHER` conecta `channel_history`, o histórico limitado de outros Projetos chega como um input `records` normal antes da escolha. Não acesse banco, rotas, componentes ou arquivos internos do ContentFlow.
+`request.inputs` contém valores indexados pela `portKey`. `request.inputContract` e `request.outputContract` descrevem o binding vigente. `request.inputDeliveries`, quando presente, informa `deliveryId` e `itemIds` das origens; `request.context.previousDeliveries` contém entregas anteriores autorizadas do Projeto atual. Um `channel_history` chega como um input `records` normal, limitado a outros Projetos do mesmo Canal: em `ESCOLHER`, traz escolhas anteriores do próprio bloco; em `CRIAR`, traz os resultados oficiais anteriores do mesmo Processo. Não acesse banco, rotas, componentes ou arquivos internos do ContentFlow.
 
 Serviços disponíveis:
 

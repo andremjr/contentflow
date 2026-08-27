@@ -28,8 +28,12 @@ export function getMethodConfigurationIssue(method?: ProcessMethod) {
       return `As chaves das entregas do bloco “${block.name ?? block.type}” precisam ser únicas.`;
     }
     for (const input of block.inputs ?? []) {
-      if (input.source === "channel_history" && block.type !== "ESCOLHER") {
-        return `O Histórico do Canal só pode orientar um bloco “Escolher”. Remova-o do bloco “${block.name ?? block.type}”.`;
+      if (
+        input.source === "channel_history" &&
+        block.type !== "ESCOLHER" &&
+        block.type !== "CRIAR"
+      ) {
+        return `O Histórico do Canal só pode orientar um bloco “Escolher” ou “Criar”. Remova-o do bloco “${block.name ?? block.type}”.`;
       }
       if (
         input.source === "channel_history" &&

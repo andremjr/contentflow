@@ -7,10 +7,10 @@ import type {
   RuntimeValue,
   UniversalProcess,
 } from "../src/lib/domain";
-import { recordBlockDeliveries } from "../src/lib/deliveries";
+import { recordBlockDeliveries, recordProcessOutputDelivery } from "../src/lib/deliveries";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { createChannelHistoryRecordFields } from "../src/lib/channel-history";
-import { getMethodConfigurationIssue } from "../src/lib/human-workflow";
+import { createProcessOutputFields, getMethodConfigurationIssue } from "../src/lib/human-workflow";
 
 const now = "2026-08-22T12:00:00.000Z";
 
@@ -115,9 +115,10 @@ function choiceBlockWithHistory(input: NonNullable<ActionBlock["inputs"]>[number
   };
 }
 
-test("histórico do canal só pode ser configurado no bloco ESCOLHER", () => {
+test("histórico do canal só pode ser configurado nos blocos ESCOLHER e CRIAR", () => {
   const invalidBlock: ActionBlock = {
     ...sizeBlock,
+    type: "BUSCAR",
     inputs: [
       {
         id: "invalid-history",
@@ -134,7 +135,15 @@ test("histórico do canal só pode ser configurado no bloco ESCOLHER", () => {
 
   assert.match(
     getMethodConfigurationIssue({ processType: "script", blocks: [invalidBlock] }) ?? "",
-    /só pode orientar um bloco “Escolher”/,
+    /só pode orientar um bloco “Escolher” ou “Criar”/,
+  );
+
+  assert.equal(
+    getMethodConfigurationIssue({
+      processType: "script",
+      blocks: [{ ...invalidBlock, type: "CRIAR" }],
+    }),
+    undefined,
   );
 });
 
@@ -160,6 +169,69 @@ test("ESCOLHER materializa o item selecionado como entrega histórica", () => {
   assert.equal(result.deliveries?.length, 1);
   assert.equal(result.deliveries?.[0].outputKey, "selectedItemId");
   assert.equal(result.deliveries?.[0].items[0].value, "structure-4");
+});
+
+test("CRIAR recebe os resultados finais anteriores do mesmo processo", () => {
+  const [officialOutput] = createProcessOutputFields("script");
+  const currentProject = project("current-create");
+  const createBlock: ActionBlock = {
+    id: "create-script",
+    type: "CRIAR",
+    operator: "IA",
+    name: "Criar roteiro",
+    inputs: [
+      {
+        id: "creation-history",
+        label: "Histórico de criações",
+        type: "records",
+        source: "channel_history",
+        sourceProcessType: "script",
+        blockId: "__process_output__",
+        sourceKey: officialOutput.key,
+        historyLimit: 10,
+        historyEligibility: "completed",
+        recordFields: createChannelHistoryRecordFields(officialOutput.type),
+      },
+    ],
+    outputs: [officialOutput],
+    parameters: [],
+    order: 0,
+  };
+  const currentExecution = execution({
+    id: "current-create-execution",
+    projectId: currentProject.id,
+    block: createBlock,
+    values: {},
+    status: "blocked_executor",
+  });
+  const previousExecution = execution({
+    id: "previous-create-execution",
+    projectId: "previous-create",
+    block: createBlock,
+    values: { [officialOutput.key]: "Roteiro anterior" },
+  });
+  recordProcessOutputDelivery(previousExecution, {
+    [officialOutput.key]: "Roteiro anterior",
+  });
+
+  const [resolved] = resolveBlockInputs({
+    block: createBlock,
+    execution: currentExecution,
+    project: currentProject,
+    projectExecutions: [currentExecution],
+    channelExecutions: [currentExecution, previousExecution],
+    channelProjects: [currentProject, project("previous-create")],
+    collections: [],
+    libraryItems: [],
+  });
+
+  assert.equal(resolved.resolved, true);
+  assert.equal(Array.isArray(resolved.value), true);
+  const [historyRecord] = resolved.value as Array<Record<string, unknown>>;
+  assert.equal(historyRecord.value, "Roteiro anterior");
+  assert.equal(historyRecord.project_id, "previous-create");
+  assert.equal(historyRecord.project_title, "Projeto previous-create");
+  assert.equal(typeof historyRecord.recorded_at, "string");
 });
 
 test("histórico consulta somente outros projetos do mesmo canal e respeita o limite", () => {

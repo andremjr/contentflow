@@ -88,7 +88,7 @@ Use este contrato para criar um arquivo de método importável. O JSON represent
 - `project`: use `sourceKey` `title` ou `deadline`;
 - `previous_process`: use uma entrega de qualquer Processo Universal anterior; informe `sourceProcessType` e `sourceKey`. `blockId` é opcional em arquivo portátil; use `__process_output__` apenas para exigir o output oficial;
 - `previous_block`: use saída de bloco anterior. `blockId` e `sourceKey` são opcionais; se presentes, devem existir;
-- `channel_history`: use somente como contexto de `ESCOLHER`; consulta entregas escalares de outros Projetos do mesmo Canal antes da seleção. Informe `sourceProcessType`, `blockId`, `sourceKey`, `historyLimit` (1–100) e `historyEligibility` (`completed` ou `published`). A entrada usa `type: "records"` e declara campos `value`, `project_id`, `project_title` e `recorded_at`;
+- `channel_history`: use somente em `ESCOLHER` ou `CRIAR`, como memória entre Projetos do mesmo Canal. Em `ESCOLHER`, consulta escolhas anteriores do próprio bloco; em `CRIAR`, consulta os resultados oficiais anteriores do mesmo Processo. Informe `historyLimit` (1–100); origem, elegibilidade e schema são definidos internamente pelo núcleo. A entrada usa `type: "records"`;
 - `channel_library`: origem legada reservada; a Biblioteca Estratégica continua sendo consumida exclusivamente por `ESCOLHER` e esta fonte não deve ser gerada;
 - `static`: contexto fixo; informe `staticValue`.
 
@@ -167,7 +167,7 @@ Use em bloco `VALIDAR`:
 
 ## Regra exclusiva do bloco `ESCOLHER`
 
-`ESCOLHER` só pode selecionar elementos pré-existentes de uma Coleção da Biblioteca Estratégica do mesmo canal e exige `collectionId`. Ele pode receber inputs de contexto, inclusive `channel_history`, mas não possui outputs configuráveis: o núcleo materializa o item escolhido como `selectedItemId` e só aceita o ID de um item real da coleção. Todo uso deve ser acompanhado, na prévia, da coleção esperada, justificativa de pré-existência e formato dos itens. Como um arquivo importável não conhece os IDs das coleções do canal de destino, **não use `ESCOLHER` em JSON portátil**. Para toda escolha de resultado pesquisado ou criado durante o fluxo, use `VALIDAR` com `select_one` ou `select_many`.
+`ESCOLHER` só pode selecionar elementos pré-existentes de uma Coleção da Biblioteca Estratégica do mesmo canal e exige `collectionId`. Ele pode receber inputs de contexto; quando `channel_history` estiver ativo, o núcleo fornece escolhas anteriores daquele mesmo bloco em outros Projetos. O bloco não possui outputs configuráveis: o núcleo materializa o item escolhido como `selectedItemId` e só aceita o ID de um item real da coleção. Todo uso deve ser acompanhado, na prévia, da coleção esperada, justificativa de pré-existência e formato dos itens. Como um arquivo importável não conhece os IDs das coleções do canal de destino, **não use `ESCOLHER` em JSON portátil**. Para toda escolha de resultado pesquisado ou criado durante o fluxo, use `VALIDAR` com `select_one` ou `select_many`.
 
 ## Checklist antes de entregar
 
