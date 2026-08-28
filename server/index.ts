@@ -91,6 +91,7 @@ import {
 import { validatePluginDirectory } from "./plugin-validation";
 import { PluginConnectionStore, type PluginConnection } from "./plugin-connections";
 import { resolvePluginConnectionSecrets } from "./plugin-connection-runtime";
+import { migrateSiblingDataDirectory } from "./data-directory-migration";
 
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
 const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
@@ -107,6 +108,7 @@ const developmentLinksDirectory = path.resolve(
   process.env.CONTENTFLOW_DEVELOPMENT_LINKS_DIR ??
     path.join(dataDirectory, "plugins", "development"),
 );
+await migrateSiblingDataDirectory(dataDirectory, process.env.APPDATA);
 const nodeMajorVersion = Number(
   process.env.CONTENTFLOW_PLUGIN_NODE_MAJOR ?? process.versions.node.split(".")[0],
 );

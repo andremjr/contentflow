@@ -1,6 +1,7 @@
 import { AsyncEntry } from "@napi-rs/keyring";
 
 const SERVICE_NAME = "ContentFlow";
+const PREVIOUS_SERVICE_NAME = [SERVICE_NAME, String.fromCharCode(79, 83)].join(" ");
 
 function accountName(pluginId: string, secretKey: string) {
   if (!/^[a-z0-9.-]+$/.test(pluginId) || !/^[A-Z0-9_]+$/.test(secretKey)) {
@@ -9,8 +10,8 @@ function accountName(pluginId: string, secretKey: string) {
   return `plugin:${pluginId}:${secretKey}`;
 }
 
-function entry(pluginId: string, secretKey: string) {
-  return new AsyncEntry(SERVICE_NAME, accountName(pluginId, secretKey));
+function entry(pluginId: string, secretKey: string, serviceName = SERVICE_NAME) {
+  return new AsyncEntry(serviceName, accountName(pluginId, secretKey));
 }
 
 function connectionAccountName(pluginId: string, connectionId: string, secretKey: string) {
@@ -24,8 +25,34 @@ function connectionAccountName(pluginId: string, connectionId: string, secretKey
   return `plugin:${pluginId}:connection:${connectionId}:${secretKey}`;
 }
 
-function connectionEntry(pluginId: string, connectionId: string, secretKey: string) {
-  return new AsyncEntry(SERVICE_NAME, connectionAccountName(pluginId, connectionId, secretKey));
+function connectionEntry(
+  pluginId: string,
+  connectionId: string,
+  secretKey: string,
+  serviceName = SERVICE_NAME,
+) {
+  return new AsyncEntry(serviceName, connectionAccountName(pluginId, connectionId, secretKey));
+}
+
+async function readAndMigrateCredential(current: AsyncEntry, previous: AsyncEntry) {
+  const currentValue = await current.getPassword();
+  if (currentValue) return currentValue;
+  const previousValue = await previous.getPassword();
+  if (!previousValue) return undefined;
+  await current.setPassword(previousValue);
+  if ((await current.getPassword()) !== previousValue) {
+    throw new Error("A credencial migrada não pôde ser validada no cofre atual.");
+  }
+  await previous.deleteCredential();
+  return previousValue;
+}
+
+async function deleteCredentialEntries(current: AsyncEntry, previous: AsyncEntry) {
+  const currentDeleted = (await current.getPassword()) ? await current.deleteCredential() : false;
+  const previousDeleted = (await previous.getPassword())
+    ? await previous.deleteCredential()
+    : false;
+  return currentDeleted || previousDeleted;
 }
 
 export async function setPluginSecret(pluginId: string, secretKey: string, value: string) {
@@ -35,11 +62,17 @@ export async function setPluginSecret(pluginId: string, secretKey: string, value
 }
 
 export async function getPluginSecret(pluginId: string, secretKey: string) {
-  return (await entry(pluginId, secretKey).getPassword()) ?? undefined;
+  return readAndMigrateCredential(
+    entry(pluginId, secretKey),
+    entry(pluginId, secretKey, PREVIOUS_SERVICE_NAME),
+  );
 }
 
 export async function deletePluginSecret(pluginId: string, secretKey: string) {
-  return entry(pluginId, secretKey).deleteCredential();
+  return deleteCredentialEntries(
+    entry(pluginId, secretKey),
+    entry(pluginId, secretKey, PREVIOUS_SERVICE_NAME),
+  );
 }
 
 export async function setPluginConnectionSecret(
@@ -58,7 +91,10 @@ export async function getPluginConnectionSecret(
   connectionId: string,
   secretKey: string,
 ) {
-  return (await connectionEntry(pluginId, connectionId, secretKey).getPassword()) ?? undefined;
+  return readAndMigrateCredential(
+    connectionEntry(pluginId, connectionId, secretKey),
+    connectionEntry(pluginId, connectionId, secretKey, PREVIOUS_SERVICE_NAME),
+  );
 }
 
 export async function deletePluginConnectionSecret(
@@ -66,7 +102,10 @@ export async function deletePluginConnectionSecret(
   connectionId: string,
   secretKey: string,
 ) {
-  return connectionEntry(pluginId, connectionId, secretKey).deleteCredential();
+  return deleteCredentialEntries(
+    connectionEntry(pluginId, connectionId, secretKey),
+    connectionEntry(pluginId, connectionId, secretKey, PREVIOUS_SERVICE_NAME),
+  );
 }
 
 export function credentialStoreName() {

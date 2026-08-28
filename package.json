@@ -51,8 +51,9 @@
     "test:plugin-connections": "tsx --test server/plugin-connections.test.ts",
     "test:plugin-connection-runtime": "tsx --test server/plugin-connection-runtime.test.ts",
     "test:updater": "node --test desktop/updater.test.cjs",
+    "test:data-migration": "tsx --test server/data-directory-migration.test.ts",
     "plugin:kit": "tsx tools/plugin-kit.ts",
-    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:instructions && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-fallback && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:orchestrator && npm run test:plugin-kit && npm run test:plugin-branding && npm run test:plugin-dependencies && npm run test:method-file && npm run test:plugin-connections && npm run test:plugin-connection-runtime && npm run test:updater && npm run build",
+    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:instructions && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-fallback && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:orchestrator && npm run test:plugin-kit && npm run test:plugin-branding && npm run test:plugin-dependencies && npm run test:method-file && npm run test:plugin-connections && npm run test:plugin-connection-runtime && npm run test:updater && npm run test:data-migration && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {
