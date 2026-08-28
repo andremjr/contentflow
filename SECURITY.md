@@ -24,4 +24,4 @@ Pesquisa de boa-fé não autoriza indisponibilidade deliberada, engenharia socia
 
 O projeto buscará confirmar o recebimento, reproduzir o problema, avaliar severidade, preparar correção e coordenar a divulgação. Prazos dependem da complexidade e do estágio do produto; o relator será atualizado quando houver mudança material.
 
-Para o modelo completo de ameaças de plugins, consulte [`docs/PLUGIN_SECURITY.md`](docs/PLUGIN_SECURITY.md).
+Para o modelo completo de ameaças de plugins, consulte [`ecosystem/docs/security.md`](ecosystem/docs/security.md).

@@ -9,8 +9,8 @@ Leia integralmente:
 - [`LICENSE`](LICENSE);
 - [`AI_USAGE_POLICY.md`](AI_USAGE_POLICY.md);
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md);
-- [`docs/PLUGIN_START_HERE.md`](docs/PLUGIN_START_HERE.md), para integrações externas;
-- [`docs/PLUGIN_DEVELOPMENT.md`](docs/PLUGIN_DEVELOPMENT.md), quando precisar do contrato detalhado.
+- [`ecosystem/docs/quickstart.md`](ecosystem/docs/quickstart.md), para integrações externas;
+- [`ecosystem/docs/development.md`](ecosystem/docs/development.md), quando precisar do contrato detalhado.
 
 O ContentFlow é source-available proprietário, não open source. Contribuições destinam-se ao produto oficial. A licença pública não autoriza clones, distribuições modificadas, produtos concorrentes, white-label, rebranding ou reskins.
 

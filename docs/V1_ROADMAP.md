@@ -248,7 +248,7 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 ### Estado da implementação
 
 - As integrações diretas com YouTube, OpenAI e Anthropic foram removidas do núcleo; fornecedores passam a existir somente por plugins externos.
-- O runner não descobre mais `plugins/bundled`, não concede confiança especial por origem e aplica a mesma validação, consentimento e sandbox a todos os plugins.
+- O runner não descobre mais `ecosystem/plugins/reference`, não concede confiança especial por origem e aplica a mesma validação, consentimento e sandbox a todos os plugins.
 - O pacote desktop deixou de incluir plugins ou exemplos e não os copia para a máquina do usuário.
 - A criação de Canal passou a ser local e manual; recursos de fornecedor podem ser adicionados posteriormente por plugin sem alterar o domínio.
 - `npm run check` completo passou em 2026-08-27 após a separação.
@@ -317,7 +317,7 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 
 ### Decisões de produto
 
-- Os plugins oficiais de navegador convergirão para uma extensão companheira Manifest V3 comum e externa ao núcleo. A ponte compartilha transporte, autenticação, isolamento e operações DOM limitadas; cada plugin mantém seu adapter, seletores, regras e validação do provedor.
+- Os plugins de referência para navegador usam uma extensão companheira Manifest V3 comum e externa ao núcleo. A ponte compartilha transporte, autenticação, isolamento e operações DOM limitadas; cada plugin mantém seu adapter, seletores, regras e validação do provedor.
 - A extensão precisa existir em cada perfil usado pela automação. Na V1, os usuários fazem a instalação manual por **Carregar sem compactação**. Automação usada pelo mantenedor para preparar seus próprios perfis é uma tarefa paralela e não entra no aplicativo.
 - A extensão executará operações estruturadas na aba correta por content script e troca de mensagens. A execução rotineira não usará teclado, mouse, coordenadas de tela, foco do Windows ou ativação da janela como mecanismo de automação.
 - O navegador dedicado iniciará minimizado ou em background e permanecerá separado do que o usuário estiver fazendo. Só poderá ser exibido e receber foco mediante ação explícita para login, reautenticação ou diagnóstico.
@@ -386,7 +386,7 @@ ContentFlow
 
 ### Estado da implementação — 2026-08-27
 
-- A **ContentFlow Browser Bridge v0.2.0** é um pacote companheiro único em `extensions/contentflow-browser-bridge`, separado do núcleo e de qualquer plugin individual. Sua allowlist versionada atende Google Flow, ChatGPT, Claude, Gemini, Grok e Meta AI; seletores e regras de fornecedor permanecem nos respectivos plugins.
+- A **ContentFlow Browser Bridge v0.2.0** é um pacote companheiro único em `ecosystem/browser-bridge`, separado do núcleo e de qualquer plugin individual. Sua allowlist versionada atende Google Flow, ChatGPT, Claude, Gemini, Grok e Meta AI; seletores e regras de fornecedor permanecem nos respectivos plugins.
 - Os seis handlers de navegador usam a extensão instalada no perfil dedicado para preenchimento e cliques. A ausência ou incompatibilidade da ponte encerra a execução e não reativa o caminho antigo.
 - A execução rotineira não ativa a aba, não traz a página para frente e não envia eventos CDP de teclado ou mouse. A janela visível permanece reservada à ação explícita **Adicionar conta**.
 - O modo minimizado agora é o padrão e o Chromium empacotado foi descartado. A decisão mais recente do titular é usar uma única extensão no Chrome normal, instalada manualmente pelos usuários em cada perfil dedicado.
@@ -447,7 +447,7 @@ ContentFlow
 ### Entregas
 
 - Congelar contratos públicos necessários à V1 e registrar política de compatibilidade.
-- Executar testes completos do núcleo, plugins oficiais, migrações e distribuição desktop.
+- Executar testes completos do núcleo, plugins de referência, migrações e distribuição desktop.
 - Revisar onboarding inicial, estados vazios, mensagens de erro e recuperação.
 - Validar instalação limpa e atualização a partir da última versão V0 distribuída.
 - Revisar privacidade, consentimentos, licenças, proveniência e uso de marcas.
@@ -460,7 +460,7 @@ ContentFlow
 - [ ] Instalação limpa validada em ambiente Windows suportado.
 - [ ] Atualização N-1 → V1 validada sem perda de dados.
 - [ ] Migrações de Métodos, credenciais, plugins e filas cobertas por testes.
-- [ ] Plugins oficiais essenciais executam casos mínimos reais.
+- [ ] Plugins de referência essenciais executam casos mínimos reais.
 - [ ] Fluxos de Humano, IA e Código validados nos 8 Processos Universais aplicáveis.
 - [ ] Backup e recuperação documentados e testados.
 - [ ] Nenhum problema crítico ou alto conhecido permanece aberto.
@@ -493,7 +493,7 @@ ContentFlow
 | 2026-08-27 | A atualização real `0.4.2 → 0.4.3` foi concluída preservando os dados locais.                                                                    | Fases 1 e 3.5 foram concluídas; o desenvolvimento avança para o refinamento visual dos Métodos.                               |
 | 2026-08-27 | A Fase 4 é exclusivamente um refinamento visual do editor de Métodos existente.                                                                  | O layout explicita ação, operador, entradas e entregas sem criar modo guiado, lógica ou conceitos novos.                      |
 | 2026-08-27 | Histórico do Canal existe em `ESCOLHER` para escolhas anteriores do mesmo bloco e em `CRIAR` para resultados finais anteriores do Processo.      | O usuário ativa a memória e informa apenas a quantidade; schema, elegibilidade, origem técnica e proveniência ficam internas. |
-| 2026-08-27 | Plugins oficiais de navegador convergirão para uma extensão companheira comum e externa ao núcleo; adapters continuam nos plugins.              | A automação rotineira opera por mensagens/content scripts, minimizada e sem misturar regras de fornecedor ao ContentFlow. |
+| 2026-08-27 | Plugins de referência para navegador convergirão para uma extensão companheira comum e externa ao núcleo; adapters continuam nos plugins.              | A automação rotineira opera por mensagens/content scripts, minimizada e sem misturar regras de fornecedor ao ContentFlow. |
 | 2026-08-27 | Instalação automatizada em massa é uma ferramenta pessoal do mantenedor, não uma função do ContentFlow.                                      | Usuários instalam manualmente a ponte única em cada perfil dedicado; o aplicativo não executa RPA de instalação.              |
 | 2026-08-27 | Google Flow será o piloto da migração para extensão e isolamento de foco.                                                                        | Testes progressivos de até 300 imagens validarão checkpoint, retomada e produtividade antes das demais migrações.             |
 

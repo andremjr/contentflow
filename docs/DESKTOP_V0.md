@@ -33,7 +33,7 @@ No Windows, a execução de desenvolvimento e a versão instalada compartilham e
 
 ## Criar e testar um plugin
 
-O ponto de entrada para autores é [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md). Ele explica como converter APIs, scripts, ferramentas locais e automações de navegador.
+O ponto de entrada para autores é [`quickstart.md`](../ecosystem/docs/quickstart.md). Ele explica como converter APIs, scripts, ferramentas locais e automações de navegador.
 
 Abra **Plugins**, informe a pasta que contém `contentflow.plugin.json` e escolha:
 

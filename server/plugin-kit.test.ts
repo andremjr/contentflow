@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { contractCommand, createPlugin, type Answers } from "../tools/plugin-kit";
+import { contractCommand, createPlugin, type Answers } from "../ecosystem/plugin-kit/cli";
 import { PluginValidationError, validatePluginDirectory } from "./plugin-validation";
 
 function answers(template: Answers["template"]): Answers {

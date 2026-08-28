@@ -10,7 +10,7 @@ process.env.CONTENTFLOW_DATA_DIR = temporaryDataDirectory;
 const { executeRegisteredPlugin } = await import("./plugin-runner");
 
 const pluginDirectory = realpathSync(
-  path.resolve(process.cwd(), "plugins", "examples", "community-reference"),
+  path.resolve(process.cwd(), "ecosystem", "plugins", "examples", "community-reference"),
 );
 const manifest = JSON.parse(
   readFileSync(path.join(pluginDirectory, "contentflow.plugin.json"), "utf8"),
@@ -20,7 +20,7 @@ function registered(entrypoint: string): RegisteredPlugin {
   return {
     id: manifest.id,
     source: "installed",
-    directory: "plugins/examples/community-reference",
+    directory: "ecosystem/plugins/examples/community-reference",
     absoluteDirectory: pluginDirectory,
     entrypoint: path.join(pluginDirectory, entrypoint),
     manifest,

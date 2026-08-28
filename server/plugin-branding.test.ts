@@ -19,7 +19,7 @@ async function copyFixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "contentflow-branding-"));
   temporaryDirectories.push(root);
   const target = path.join(root, "plugin");
-  await cp(path.resolve("plugins/bundled/openai-gpt"), target, { recursive: true });
+  await cp(path.resolve("ecosystem/plugins/reference/openai-gpt"), target, { recursive: true });
   return target;
 }
 

@@ -59,7 +59,13 @@ test("encadeia blocos de plugin automaticamente sem ação por etapa", async () 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        path: path.join(repositoryRoot, "plugins", "examples", "kit-generated-text-transform"),
+        path: path.join(
+          repositoryRoot,
+          "ecosystem",
+          "plugins",
+          "examples",
+          "kit-generated-text-transform",
+        ),
       }),
     });
     await request("/api/plugins/com.contentflow.kit-text-demo/consent", {

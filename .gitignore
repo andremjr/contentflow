@@ -18,9 +18,14 @@ dist-ssr
 *.local
 mini-curso-contentflow/
 app-screenshots-local/
+local-tools/
 .tmp-*/
 __pycache__/
 *.py[cod]
+
+# Local plugin packaging and browser-extension signing artifacts
+plugins/distributable/
+ecosystem/plugins/reference/*/windows-enterprise-install/artifacts/
 
 # Desktop build intermediates (the distributable V0 lives in compiled/)
 desktop-dist/

@@ -94,10 +94,10 @@ const PHRASES: Record<string, Translation> = {
       "Enter the key to validate the connection and load available models in real time. It remains in memory only while the app is open.",
       "Introduce la clave para validar la conexión y cargar los modelos disponibles en tiempo real. Solo permanece en memoria mientras la aplicación está abierta.",
     ],
-  "Plugins oficiais ficam em plugins/bundled. Plugins adicionados por cada usuário ficam em data/plugins/installed. Coloque a pasta completa do plugin em um desses locais e use “Atualizar” para o ContentFlow ler o manifesto.":
+  "Plugins de referência ficam separados do núcleo no repositório. Plugins adicionados por cada usuário ficam em data/plugins/installed. Use “Instalar uma cópia” ou “Usar pasta ao vivo” para o ContentFlow validar o manifesto.":
     [
-      "Official plugins live in plugins/bundled. User-added plugins live in data/plugins/installed. Place the complete plugin folder in either location and select “Refresh” so ContentFlow can read its manifest.",
-      "Los plugins oficiales están en plugins/bundled. Los plugins añadidos por el usuario están en data/plugins/installed. Coloca la carpeta completa del plugin en una de esas ubicaciones y selecciona “Actualizar” para que ContentFlow lea el manifiesto.",
+      "Reference plugins are kept outside the core in the repository. User-added plugins live in data/plugins/installed. Use “Install a copy” or “Use live folder” so ContentFlow can validate the manifest.",
+      "Los plugins de referencia están separados del núcleo en el repositorio. Los plugins añadidos por el usuario están en data/plugins/installed. Usa “Instalar una copia” o “Usar carpeta activa” para que ContentFlow valide el manifiesto.",
     ],
   Progresso: ["Progress", "Progreso"],
   Não: ["No", "No"],
@@ -516,16 +516,6 @@ const PHRASES: Record<string, Translation> = {
     "No installed plugin is compatible with this block, process, and output contract.",
     "Ningún plugin instalado es compatible con este bloque, proceso y contrato de salida.",
   ],
-  "Plugins oficiais ficam em": ["Official plugins are stored in", "Los plugins oficiales están en"],
-  "Plugins adicionados por cada usuário ficam em": [
-    "Plugins added by each user are stored in",
-    "Los plugins añadidos por cada usuario están en",
-  ],
-  "Coloque a pasta completa do plugin em um desses locais e use “Atualizar” para o ContentFlow ler o manifesto.":
-    [
-      "Place the complete plugin folder in either location and select “Refresh” so ContentFlow can read the manifest.",
-      "Coloca la carpeta completa del plugin en una de esas ubicaciones y selecciona “Actualizar” para que ContentFlow lea el manifiesto.",
-    ],
   "permissões declaradas": ["declared permissions", "permisos declarados"],
   "Executa qualquer bloco baseado em linguagem com um modelo de texto compatível com a Responses API da OpenAI.":
     [

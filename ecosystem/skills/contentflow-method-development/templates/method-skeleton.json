@@ -1,0 +1,30 @@
+{
+  "format": "contentflow-method",
+  "version": 1,
+  "name": "Nome do Método",
+  "exportedAt": "2026-08-12T12:00:00.000Z",
+  "method": {
+    "processType": "theme",
+    "blocks": [
+      {
+        "id": "first-block",
+        "type": "CRIAR",
+        "operator": "Humano",
+        "name": "Primeiro bloco",
+        "instructions": "Descreva a ação, o critério de qualidade e a entrega.",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "first-output",
+            "label": "Saída",
+            "key": "output_value",
+            "type": "textarea",
+            "required": true
+          }
+        ],
+        "parameters": [],
+        "order": 0
+      }
+    ]
+  }
+}

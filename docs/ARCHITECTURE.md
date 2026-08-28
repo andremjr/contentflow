@@ -58,7 +58,7 @@ A experiência do usuário no ContentFlow apoia-se em 3 camadas de interface cla
 
 3. **Interface 3: Gerenciador de Plugins (Operação & Pacotes)**
    - **Objetivo**: Gestão do ciclo de vida das ferramentas instaladas.
-   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, atualização, ativação, consentimento de permissões, inspeção de dependências e remoção de plugins oficiais ou independentes. A configuração de uso e a escolha de conexão acontecem no Bloco do Método; secrets, sessões, workspaces e preferências técnicas continuam protegidos pelo núcleo fora do arquivo do Método.
+   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, atualização, ativação, consentimento de permissões, inspeção de dependências e remoção de plugins de referência ou independentes. A configuração de uso e a escolha de conexão acontecem no Bloco do Método; secrets, sessões, workspaces e preferências técnicas continuam protegidos pelo núcleo fora do arquivo do Método.
 
 No nível global, a navegação principal possui três áreas:
 
@@ -167,7 +167,7 @@ O orquestrador do sistema funciona em modelo de **Máquina de Estados Concorrent
 1. Lê o JSON do Método do Canal para o processo atual.
 2. Executa os blocos sequencialmente injetando as saídas do bloco anterior no bloco seguinte.
 3. **Pausa e Retomada para Operador Humano**: Se um bloco for atribuído ao operador `Humano`, o motor pausa o estado da execução (`awaiting_human`), gera uma notificação e um cartão interativo no Projeto, e aguarda a entrega ou seleção do usuário para continuar a esteira.
-4. **Execução por plugin**: Blocos `IA` e `Código` disparam automaticamente o plugin compatível configurado assim que suas entradas ficam disponíveis. O servidor resolve as entradas, executa plugins oficiais, instalados ou vinculados em um processo separado, valida a resposta, registra entregas e artifacts no snapshot e ativa a próxima etapa sem exigir um botão por bloco.
+4. **Execução por plugin**: Blocos `IA` e `Código` disparam automaticamente o plugin compatível configurado assim que suas entradas ficam disponíveis. O servidor resolve as entradas, executa plugins instalados ou vinculados em um processo separado, valida a resposta, registra entregas e artifacts no snapshot e ativa a próxima etapa sem exigir um botão por bloco.
 5. **Bloqueio de executores ausentes**: Blocos sem plugin compatível permanecem em `blocked_executor`. Eles nunca são concluídos de forma fictícia.
 
 Os métodos permanecem lineares: não existem ramificações, junções, paralelismo ou loops genéricos no canvas. Uma entrada pode apontar explicitamente para a saída de qualquer bloco anterior ou processo universal anterior, e um bloco pode declarar várias entradas.
@@ -293,13 +293,13 @@ Os outputs concluídos dos processos anteriores e as demais entregas compatívei
 
 ## 12. Protocolo de Plugins
 
-O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), os requisitos para plugins que automatizam interfaces web em [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Todos são externos, exigem consentimento local e executam na mesma sandbox de permissões em processo separado, inclusive os mantidos pelo autor do ContentFlow.
+O contrato técnico está documentado em [`protocol.md`](../ecosystem/docs/protocol.md), o guia prático em [`development.md`](../ecosystem/docs/development.md), os requisitos do executor em [`security.md`](../ecosystem/docs/security.md), os requisitos para plugins que automatizam interfaces web em [`browser-automation.md`](../ecosystem/docs/browser-automation.md), a governança do catálogo em [`distribution.md`](../ecosystem/docs/distribution.md) e a ordem estratégica de implementação em [`roadmap.md`](../ecosystem/docs/roadmap.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Todos são externos, exigem consentimento local e executam na mesma sandbox de permissões em processo separado, inclusive os publicados pelo autor do ContentFlow.
 
-A arquitetura não possui aprovação central: qualquer pessoa pode criar e compartilhar um plugin, inclusive por arquivo ou repositório, e qualquer usuário pode instalá-lo e autorizá-lo localmente. O núcleo aplica validações automáticas e pede consentimento para permissões; revisão humana do mantenedor existe apenas para selo `official`/`verified` ou publicação em catálogo opcional.
+A arquitetura não possui aprovação central: qualquer pessoa pode criar e compartilhar um plugin, inclusive por arquivo ou repositório, e qualquer usuário pode instalá-lo e autorizá-lo localmente. O núcleo aplica validações automáticas e pede consentimento para permissões; revisão humana do mantenedor existe apenas para selo `verified` ou publicação em catálogo opcional.
 
 Uma capacidade de plugin pode ser internamente complexa e demorada. Ela pode pesquisar, chamar várias APIs, usar uma sessão conectada pelo usuário, gerar centenas de arquivos, manter checkpoints ou renderizar durante horas, desde que sua interface externa continue sendo a entrega daquele bloco. Pastas de trabalho escolhidas pelo usuário podem ser montadas como raízes autorizadas; artifacts preservam IDs, ordem e proveniência para que plugins posteriores encontrem cada arquivo sem depender de caminhos frágeis gravados no Método.
 
-Automações de navegador podem cadastrar vários perfis de conta explicitamente preparados. Os plugins oficiais de interface web convergem para uma única extensão companheira Manifest V3, distribuída fora do núcleo e compatível com o protocolo público da ponte. Transporte, autenticação de comandos, isolamento de aba e operações DOM limitadas podem ser compartilhados; seletores, estados, regras e validação de cada provedor permanecem no respectivo plugin externo. O núcleo não inclui extensão, navegador, seletores ou adapters de provedor.
+Automações de navegador podem cadastrar vários perfis de conta explicitamente preparados. Os plugins de referência que operam interfaces web usam uma única extensão companheira Manifest V3, distribuída fora do núcleo e compatível com o protocolo público da ponte. Transporte, autenticação de comandos, isolamento de aba e operações DOM limitadas podem ser compartilhados; seletores, estados, regras e validação de cada provedor permanecem no respectivo plugin externo. O núcleo não inclui extensão, navegador, seletores ou adapters de provedor.
 
 Na V1, a extensão companheira é instalada manualmente em cada perfil dedicado por **Carregar sem compactação**. Ferramentas pessoais que o mantenedor use para preparar vários perfis da própria máquina são paralelas ao aplicativo, não são distribuídas aos usuários e nunca são chamadas pelo núcleo ou pelos plugins.
 
@@ -321,7 +321,7 @@ Plugins de operador `Código` podem consumir esses layouts pelo contrato `thumbn
 
 ## 14. Distribuição desktop V0
 
-A distribuição Windows empacota a interface em Electron e inicia a API como processo filho com uma cópia privada do Node 26. Usuários finais não precisam instalar Node, npm ou abrir terminal. O processo Electron hospeda apenas a janela e os arquivos da interface; o runtime privado preserva para a API e para plugins comunitários o modelo de permissões documentado em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
+A distribuição Windows empacota a interface em Electron e inicia a API como processo filho com uma cópia privada do Node 26. Usuários finais não precisam instalar Node, npm ou abrir terminal. O processo Electron hospeda apenas a janela e os arquivos da interface; o runtime privado preserva para a API e para plugins comunitários o modelo de permissões documentado em [`security.md`](../ecosystem/docs/security.md).
 
 O programa instalado é substituível e os dados persistentes permanecem em `%APPDATA%\ContentFlow\data`. Plugins instalados e vínculos de desenvolvimento também vivem nessa área, mas são obtidos separadamente. O núcleo não inclui nem copia plugins ou exemplos na primeira abertura. Essa separação permite recompilar e reinstalar o núcleo sem apagar projetos, credenciais ou plugins externos instalados pelo usuário.
 

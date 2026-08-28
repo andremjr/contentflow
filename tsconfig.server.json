@@ -1,6 +1,11 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["server/**/*.ts", "plugins/bundled/**/*.ts", "src/lib/plugin-contract.ts"],
+  "include": [
+    "server/**/*.ts",
+    "ecosystem/plugin-kit/**/*.ts",
+    "ecosystem/plugins/reference/**/*.ts",
+    "src/lib/plugin-contract.ts"
+  ],
   "exclude": ["node_modules", "dist"],
   "compilerOptions": {
     "module": "ESNext",
