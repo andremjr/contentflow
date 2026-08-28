@@ -85,12 +85,14 @@ async function startDesktop() {
   await waitForApi(apiPort);
 
   const webPort = await startWebServer(appRoot, apiPort);
+  const windowIcon = path.join(appRoot, "build", "icon.png");
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 940,
     minWidth: 1080,
     minHeight: 700,
     title: "ContentFlow",
+    icon: windowIcon,
     backgroundColor: "#08111f",
     autoHideMenuBar: true,
     webPreferences: {

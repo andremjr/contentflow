@@ -1,6 +1,6 @@
 {
   "name": "contentflow",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "productName": "ContentFlow",
   "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
@@ -126,6 +126,7 @@
       "desktop/main.cjs",
       "desktop/preload.cjs",
       "desktop/updater.cjs",
+      "build/icon.png",
       "desktop-dist/**/*",
       "dist/**/*",
       "package.json"
@@ -168,6 +169,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon.png",
       "target": [
         "portable",
         "nsis"

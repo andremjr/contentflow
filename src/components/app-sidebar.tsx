@@ -38,12 +38,20 @@ export function AppSidebar() {
     <aside className="sticky top-0 z-30 flex h-screen w-16 shrink-0 flex-col border-r border-sidebar-border bg-sidebar sm:w-64">
       <Link
         to="/dashboard"
-        className="flex h-16 items-center justify-center gap-2 border-b border-sidebar-border px-2 hover:bg-sidebar-accent/40 sm:justify-start sm:px-4"
+        aria-label="ContentFlow — Visão geral"
+        className="flex h-16 items-center justify-center gap-2.5 border-b border-sidebar-border px-2 hover:bg-sidebar-accent/40 sm:justify-start sm:px-3.5"
       >
-        <div className="grid size-8 place-items-center rounded-md bg-brand">
-          <span className="text-xs font-bold text-white">CF</span>
-        </div>
-        <span className="hidden truncate text-sm font-semibold sm:block" data-display-type>
+        <img
+          src="/brand/contentflow-mark.png"
+          alt=""
+          className="size-10 shrink-0 object-contain"
+          width={40}
+          height={40}
+        />
+        <span
+          className="hidden truncate text-base font-semibold tracking-tight sm:block"
+          data-display-type
+        >
           ContentFlow
         </span>
       </Link>
