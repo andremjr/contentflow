@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   AudioLines,
   Bot,
+  Boxes,
   Code2,
   Download,
   ExternalLink,
@@ -17,6 +18,7 @@ import {
   Search,
   SlidersHorizontal,
   ShieldCheck,
+  SquareArrowOutUpRight,
   Trash2,
   Video,
 } from "lucide-react";
@@ -43,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PROCESS_META, type BlockType, type UniversalProcess } from "@/lib/domain";
+import { ECOSYSTEM_DOWNLOADS } from "@/lib/ecosystem-downloads";
 import type { PluginDeliveryType, PluginManifest } from "@/lib/plugin-contract";
 
 export const Route = createFileRoute("/plugins")({
@@ -196,6 +199,44 @@ function PluginsPage() {
       />
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <section className="mb-4 rounded-xl border border-brand/25 bg-card/55 p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-xl">
+              <h2 className="text-sm font-semibold">Componentes externos</h2>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                O ContentFlow é instalado sem plugins. Baixe somente o que quiser usar e instale
+                cada plugin informando a pasta que contém contentflow.plugin.json.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[34rem]">
+              <Button asChild variant="outline" className="h-auto justify-start gap-3 px-3 py-2.5">
+                <a href={ECOSYSTEM_DOWNLOADS.plugins} target="_blank" rel="noreferrer">
+                  <Boxes className="size-4 shrink-0 text-brand-soft" />
+                  <span className="min-w-0 text-left">
+                    <span className="block text-xs font-semibold">Baixar plugins</span>
+                    <span className="block text-[10px] font-normal text-muted-foreground">
+                      Mesmo fluxo para qualquer autor
+                    </span>
+                  </span>
+                  <Download className="ml-auto size-3.5 shrink-0" />
+                </a>
+              </Button>
+              <Button asChild variant="outline" className="h-auto justify-start gap-3 px-3 py-2.5">
+                <a href={ECOSYSTEM_DOWNLOADS.browserBridge} target="_blank" rel="noreferrer">
+                  <SquareArrowOutUpRight className="size-4 shrink-0 text-brand-soft" />
+                  <span className="min-w-0 text-left">
+                    <span className="block text-xs font-semibold">Baixar Browser Bridge</span>
+                    <span className="block text-[10px] font-normal text-muted-foreground">
+                      Somente para automação web
+                    </span>
+                  </span>
+                  <Download className="ml-auto size-3.5 shrink-0" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </section>
+
         <section className="rounded-xl border border-border bg-card/40 p-3 sm:p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{data.plugins.length} plugins</Badge>

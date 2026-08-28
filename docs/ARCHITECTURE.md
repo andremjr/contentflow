@@ -58,7 +58,7 @@ A experiência do usuário no ContentFlow apoia-se em 3 camadas de interface cla
 
 3. **Interface 3: Gerenciador de Plugins (Operação & Pacotes)**
    - **Objetivo**: Gestão do ciclo de vida das ferramentas instaladas.
-   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, atualização, ativação, consentimento de permissões, inspeção de dependências e remoção de plugins de referência ou independentes. A configuração de uso e a escolha de conexão acontecem no Bloco do Método; secrets, sessões, workspaces e preferências técnicas continuam protegidos pelo núcleo fora do arquivo do Método.
+   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, atualização, ativação, consentimento de permissões, inspeção de dependências e remoção de qualquer plugin pelo mesmo fluxo, sem distinção baseada no autor. A configuração de uso e a escolha de conexão acontecem no Bloco do Método; secrets, sessões, workspaces e preferências técnicas continuam protegidos pelo núcleo fora do arquivo do Método.
 
 No nível global, a navegação principal possui três áreas:
 
@@ -299,7 +299,7 @@ A arquitetura não possui aprovação central: qualquer pessoa pode criar e comp
 
 Uma capacidade de plugin pode ser internamente complexa e demorada. Ela pode pesquisar, chamar várias APIs, usar uma sessão conectada pelo usuário, gerar centenas de arquivos, manter checkpoints ou renderizar durante horas, desde que sua interface externa continue sendo a entrega daquele bloco. Pastas de trabalho escolhidas pelo usuário podem ser montadas como raízes autorizadas; artifacts preservam IDs, ordem e proveniência para que plugins posteriores encontrem cada arquivo sem depender de caminhos frágeis gravados no Método.
 
-Automações de navegador podem cadastrar vários perfis de conta explicitamente preparados. Os plugins de referência que operam interfaces web usam uma única extensão companheira Manifest V3, distribuída fora do núcleo e compatível com o protocolo público da ponte. Transporte, autenticação de comandos, isolamento de aba e operações DOM limitadas podem ser compartilhados; seletores, estados, regras e validação de cada provedor permanecem no respectivo plugin externo. O núcleo não inclui extensão, navegador, seletores ou adapters de provedor.
+Automações de navegador podem cadastrar vários perfis de conta explicitamente preparados. Os plugins que operam interfaces web podem usar uma única extensão companheira Manifest V3, distribuída fora do núcleo e compatível com o protocolo público da ponte. Transporte, autenticação de comandos, isolamento de aba e operações DOM limitadas podem ser compartilhados; seletores, estados, regras e validação de cada provedor permanecem no respectivo plugin externo. O núcleo não inclui extensão, navegador, seletores ou adapters de provedor.
 
 Na V1, a extensão companheira é instalada manualmente em cada perfil dedicado por **Carregar sem compactação**. Ferramentas pessoais que o mantenedor use para preparar vários perfis da própria máquina são paralelas ao aplicativo, não são distribuídas aos usuários e nunca são chamadas pelo núcleo ou pelos plugins.
 

@@ -1,6 +1,6 @@
 # Anthropic Claude
 
-Plugin oficial incluído no ContentFlow para executar ações baseadas em linguagem com a Messages API da Anthropic.
+Plugin independente para executar ações baseadas em linguagem com a Messages API da Anthropic.
 
 - `BUSCAR` usa a ferramenta de pesquisa web da Anthropic e pode gerar custos adicionais de busca.
 - `ESCOLHER` recebe os itens da coleção estratégica vinculada e devolve o ID de um deles.

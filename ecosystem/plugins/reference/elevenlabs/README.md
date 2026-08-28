@@ -1,4 +1,4 @@
-# ElevenLabs Audio — plugin oficial
+# ElevenLabs Audio
 
 Integração oficial mantida pelo ContentFlow para a API HTTPS da ElevenLabs. O pacote usa somente APIs documentadas e não inclui SDK ou dependências de runtime.
 

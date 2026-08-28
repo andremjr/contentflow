@@ -6,13 +6,13 @@ O ContentFlow é um gerenciador estratégico de Métodos para produção de cont
 
 ## Encontre o que precisa
 
-| Área | Conteúdo | Comece aqui |
-| --- | --- | --- |
-| Núcleo | Interface React, API local, execução de Métodos, persistência e desktop Electron | [`docs/README.md`](docs/README.md) |
-| Ecossistema | Protocolo público, plugins de referência, exemplos, Browser Bridge, Plugin Kit e skills | [`ecosystem/README.md`](ecosystem/README.md) |
-| Criar plugin | Guia rápido, templates, testes e contratos da Plugin API v1 | [`ecosystem/docs/quickstart.md`](ecosystem/docs/quickstart.md) |
-| Criar Método | Skill portátil para modelar e validar arquivos `.contentflow-method.json` | [`ecosystem/skills/contentflow-method-development/`](ecosystem/skills/contentflow-method-development/) |
-| Releases | Instaladores e versões portáteis para Windows | [GitHub Releases](https://github.com/andremjr/contentflow/releases) |
+| Área         | Conteúdo                                                                         | Comece aqui                                                                                            |
+| ------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Núcleo       | Interface React, API local, execução de Métodos, persistência e desktop Electron | [`docs/README.md`](docs/README.md)                                                                     |
+| Ecossistema  | Protocolo público, plugins, exemplos, Browser Bridge, Plugin Kit e skills        | [`ecosystem/README.md`](ecosystem/README.md)                                                           |
+| Criar plugin | Guia rápido, templates, testes e contratos da Plugin API v1                      | [`ecosystem/docs/quickstart.md`](ecosystem/docs/quickstart.md)                                         |
+| Criar Método | Skill portátil para modelar e validar arquivos `.contentflow-method.json`        | [`ecosystem/skills/contentflow-method-development/`](ecosystem/skills/contentflow-method-development/) |
+| Releases     | Instaladores e versões portáteis para Windows                                    | [GitHub Releases](https://github.com/andremjr/contentflow/releases)                                    |
 
 ## Estrutura do repositório
 
@@ -33,11 +33,15 @@ contentflow/
 
 As pastas `src`, `server` e `desktop` compõem o produto ContentFlow. A pasta `ecosystem` contém ferramentas e pacotes interoperáveis, publicados no mesmo repositório apenas para facilitar descoberta, estudo e desenvolvimento.
 
-## Plugins de referência
+## Plugins
 
-Os pacotes em [`ecosystem/plugins/reference`](ecosystem/plugins/reference/) são implementações iniciais e exemplos funcionais disponibilizados separadamente. Eles não fazem parte do núcleo e sua presença neste repositório não representa promessa de manutenção contínua, suporte, disponibilidade de provedores ou compatibilidade futura. Cada plugin possui identidade, versão, permissões, dependências e licença próprias; quem cria ou distribui um plugin é responsável por seu pacote.
+Os pacotes atualmente disponíveis em [`ecosystem/plugins/reference`](ecosystem/plugins/reference/) são plugins independentes disponibilizados separadamente. Eles não fazem parte do núcleo e sua presença neste repositório não representa promessa de manutenção contínua, suporte, disponibilidade de provedores ou compatibilidade futura. Cada plugin possui identidade, versão, permissões, dependências e licença próprias; quem cria ou distribui um plugin é responsável por seu pacote.
 
 O ContentFlow valida todos os plugins pela mesma Plugin API v1, solicita consentimento local e executa o código em processo separado com a sandbox de permissões do Node. APIs oficiais, automações de navegador, FFmpeg, Python e regras específicas de fornecedores permanecem dentro dos respectivos plugins.
+
+Não existe categoria especial baseada no autor: os plugins criados pelo autor do ContentFlow e os
+criados por qualquer participante da comunidade usam o mesmo download por pasta, a mesma validação,
+o mesmo consentimento, a mesma ativação e a mesma sandbox.
 
 ## Desenvolvimento local
 

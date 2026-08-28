@@ -1,6 +1,6 @@
 # Microsoft Edge TTS
 
-Plugin oficial Plugin API v1 para gerar narração MP3 no processo universal **Narração** usando o serviço online de leitura do Microsoft Edge.
+Plugin independente Plugin API v1 para gerar narração MP3 no processo universal **Narração** usando o serviço online de leitura do Microsoft Edge.
 
 O pacote inclui Python 3.12.10 para Windows x64 e `edge-tts` 7.2.8 com dependências fixadas. Nada é instalado em runtime e o computador não precisa ter Python. O texto é enviado para `speech.platform.bing.com`; não há API key nem consumo de créditos da ElevenLabs.
 

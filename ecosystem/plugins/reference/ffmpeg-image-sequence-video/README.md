@@ -1,6 +1,6 @@
 # Vídeo por Sequência de Imagens (FFmpeg)
 
-Plugin oficial Plugin API v1 para o processo universal **Edição**. Recebe imagens na ordem definida pelo Método e uma faixa de áudio; mede a duração real do áudio e gera um MP4 H.264 com áudio AAC. As imagens podem ocupar partes iguais ou seguir os intervalos de um arquivo SRT.
+Plugin independente Plugin API v1 para o processo universal **Edição**. Recebe imagens na ordem definida pelo Método e uma faixa de áudio; mede a duração real do áudio e gera um MP4 H.264 com áudio AAC. As imagens podem ocupar partes iguais ou seguir os intervalos de um arquivo SRT.
 
 ## Capability
 

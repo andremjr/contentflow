@@ -1,6 +1,6 @@
 # OpenAI Models
 
-Plugin oficial incluído no ContentFlow para executar, pela Responses API da OpenAI, ações baseadas em linguagem nos quatro blocos e nos oito Processos Universais.
+Plugin independente para executar, pela Responses API da OpenAI, ações baseadas em linguagem nos quatro blocos e nos oito Processos Universais.
 
 - `BUSCAR` usa a ferramenta de pesquisa web e requer um modelo que a suporte.
 - `ESCOLHER` recebe somente os itens da coleção estratégica vinculada e devolve o ID de um deles.
@@ -20,4 +20,4 @@ As chamadas usam `store: false`; os dados ainda são transmitidos ao provedor pa
 
 ## Licença
 
-Este plugin oficial faz parte da distribuição do ContentFlow e segue a licença proprietária source-available do repositório raiz.
+Este plugin é distribuído separadamente do aplicativo e segue a licença indicada no próprio pacote.

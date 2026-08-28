@@ -94,10 +94,10 @@ const PHRASES: Record<string, Translation> = {
       "Enter the key to validate the connection and load available models in real time. It remains in memory only while the app is open.",
       "Introduce la clave para validar la conexión y cargar los modelos disponibles en tiempo real. Solo permanece en memoria mientras la aplicación está abierta.",
     ],
-  "Plugins de referência ficam separados do núcleo no repositório. Plugins adicionados por cada usuário ficam em data/plugins/installed. Use “Instalar uma cópia” ou “Usar pasta ao vivo” para o ContentFlow validar o manifesto.":
+  "Plugins ficam separados do núcleo. Todos usam “Instalar uma cópia” ou “Usar pasta ao vivo” para o ContentFlow validar o manifesto, independentemente do autor.":
     [
-      "Reference plugins are kept outside the core in the repository. User-added plugins live in data/plugins/installed. Use “Install a copy” or “Use live folder” so ContentFlow can validate the manifest.",
-      "Los plugins de referencia están separados del núcleo en el repositorio. Los plugins añadidos por el usuario están en data/plugins/installed. Usa “Instalar una copia” o “Usar carpeta activa” para que ContentFlow valide el manifiesto.",
+      "Plugins are kept outside the core. All of them use “Install a copy” or “Use live folder” so ContentFlow can validate the manifest, regardless of the author.",
+      "Los plugins están separados del núcleo. Todos usan “Instalar una copia” o “Usar carpeta activa” para que ContentFlow valide el manifiesto, independientemente del autor.",
     ],
   Progresso: ["Progress", "Progreso"],
   Não: ["No", "No"],
