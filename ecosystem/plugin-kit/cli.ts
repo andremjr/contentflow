@@ -531,14 +531,20 @@ export async function sandboxCommand(directory: string) {
       },
       request,
       30_000,
-      Object.fromEntries((result.manifest.secretKeys ?? []).map((key) => [key, "test-only"])),
+      {},
     );
-    if (response.status !== "success")
-      throw new Error(
-        `Execução no sandbox falhou: ${response.status === "error" ? response.message : "resposta pending inesperada"}`,
-      );
+    if (
+      response.status === "error" &&
+      (!response.code || !response.message || typeof response.retryable !== "boolean")
+    )
+      throw new Error("O plugin devolveu um erro fora do contrato da API v1.");
+    if (
+      response.status === "pending" &&
+      (!response.jobId || !Number.isFinite(response.pollAfterMs))
+    )
+      throw new Error("O plugin devolveu uma pendência fora do contrato da API v1.");
     output.write(
-      `✓ Execução real encerrada no sandbox do ContentFlow.\n✓ Permissões concedidas somente conforme manifesto: ${result.manifest.permissions.join(", ") || "nenhuma"}.\n`,
+      `✓ Execução real encerrada no sandbox do ContentFlow (${response.status}).\n✓ Permissões concedidas somente conforme manifesto: ${result.manifest.permissions.join(", ") || "nenhuma"}.\n`,
     );
   } finally {
     await rm(dataDirectory, { recursive: true, force: true });

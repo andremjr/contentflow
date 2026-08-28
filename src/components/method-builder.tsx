@@ -1066,6 +1066,17 @@ function BlockEditor({
       !(supportsOutlineSequence && key === "generationMode") &&
       !primaryConfigurationEntries.some(([primaryKey]) => primaryKey === key),
   );
+  const conversationSources = PROCESS_ORDER.flatMap((candidateProcess) => {
+    const processIndex = PROCESS_ORDER.indexOf(candidateProcess);
+    const currentProcessIndex = PROCESS_ORDER.indexOf(processType);
+    if (processIndex > currentProcessIndex) return [];
+    return (channelMethods[candidateProcess]?.blocks ?? []).flatMap((candidate, candidateIndex) => {
+      if (candidateProcess === processType && candidateIndex >= index) return [];
+      if (candidate.plugin?.pluginId !== block.plugin?.pluginId) return [];
+      if (candidate.plugin?.connectionId !== block.plugin?.connectionId) return [];
+      return [{ processType: candidateProcess, block: candidate }];
+    });
+  });
 
   const renderConfigurationField = ([key, schema]: [string, JsonSchema]) => {
     const profileSetup =
@@ -1389,6 +1400,54 @@ function BlockEditor({
                     })
                   }
                 />
+              )}
+              {selectedPlugin?.manifest.supportsConversationContinuation && block.plugin && (
+                <div className="space-y-1.5">
+                  <Label>Conversa</Label>
+                  <Select
+                    value={
+                      block.plugin.conversation?.mode === "reuse"
+                        ? `${block.plugin.conversation.sourceProcessType}::${block.plugin.conversation.sourceBlockId}`
+                        : "new"
+                    }
+                    onValueChange={(value) => {
+                      const [sourceProcessType, sourceBlockId] = value.split("::");
+                      onChange({
+                        plugin: {
+                          ...block.plugin!,
+                          conversation:
+                            value === "new"
+                              ? { mode: "new" }
+                              : {
+                                  mode: "reuse",
+                                  sourceProcessType: sourceProcessType as UniversalProcess,
+                                  sourceBlockId,
+                                },
+                        },
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new">Iniciar uma conversa nova</SelectItem>
+                      {conversationSources.map((source) => (
+                        <SelectItem
+                          key={`${source.processType}::${source.block.id}`}
+                          value={`${source.processType}::${source.block.id}`}
+                        >
+                          Continuar: {PROCESS_META[source.processType].label} ·{" "}
+                          {source.block.name ?? source.block.type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Use a mesma conversa para preservar o contexto do provedor. Só aparecem blocos
+                    anteriores com o mesmo plugin e a mesma conta.
+                  </p>
+                </div>
               )}
               {primaryConfigurationEntries.map(renderConfigurationField)}
               {supportsOutlineSequence && block.plugin && (

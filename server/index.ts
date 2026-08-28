@@ -91,6 +91,7 @@ import {
 import { validatePluginDirectory } from "./plugin-validation";
 import { PluginConnectionStore, type PluginConnection } from "./plugin-connections";
 import { resolvePluginConnectionSecrets } from "./plugin-connection-runtime";
+import { normalizePluginConversationId, resolvePluginConversation } from "./plugin-conversation";
 import { migrateSiblingDataDirectory } from "./data-directory-migration";
 
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
@@ -463,6 +464,7 @@ function finishPluginBlock(
           item.progress = undefined;
           item.progressMessage = undefined;
           item.retryFeedback = undefined;
+          item.pluginConversation = undefined;
           item.status = "pending";
         }
         targetExecution.retryFeedback = structuredClone(values);
@@ -1374,6 +1376,9 @@ async function processPluginJob(
     if (restrictionIssues.length) {
       throw new Error(`O plugin entregou valores incompatíveis: ${restrictionIssues.join("; ")}.`);
     }
+    const completedConversationId = pluginResponse.conversation?.id
+      ? normalizePluginConversationId(pluginResponse.conversation.id)
+      : undefined;
     const saved = pluginJobs.save(
       claim,
       {
@@ -1391,6 +1396,13 @@ async function processPluginJob(
       (saved) => {
         if (saved.status === "cancel_requested") return;
         finishPluginBlock(execution, block, blockExecution, values);
+        if (completedConversationId) {
+          blockExecution.pluginConversation = {
+            pluginId: plugin.id,
+            connectionId: block.plugin?.connectionId,
+            id: completedConversationId,
+          };
+        }
         blockExecution.logs = pluginResponse.logs;
         blockExecution.progress = 1;
         blockExecution.progressMessage = undefined;
@@ -2777,6 +2789,21 @@ app.post("/api/execute-block", async (request, response) => {
       .prepare("SELECT payload FROM process_executions WHERE project_id = ?")
       .all(project.id) as { payload: string }[]
   ).map((row) => normalizeExecutionDeliveries(JSON.parse(row.payload) as ProcessExecution));
+  let conversation: PluginExecutionRequest["conversation"];
+  try {
+    conversation = resolvePluginConversation({
+      block,
+      execution,
+      projectExecutions,
+      pluginId: plugin.id,
+      supportsContinuation: plugin.manifest.supportsConversationContinuation === true,
+    });
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível resolver a conversa.",
+    });
+    return;
+  }
   const channelProjects = (
     database.prepare("SELECT payload FROM projects WHERE channel_id = ?").all(channel.id) as {
       payload: string;
@@ -3082,6 +3109,7 @@ app.post("/api/execute-block", async (request, response) => {
     retryFeedback: blockExecution.retryFeedback,
     resolvedInstruction: resolvedInstruction.instruction,
     unresolvedInstructionVariables: resolvedInstruction.unresolved,
+    conversation,
     context: {
       locale: channel.language || "pt-BR",
       timeZone: "America/Sao_Paulo",

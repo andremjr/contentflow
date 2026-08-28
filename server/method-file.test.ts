@@ -50,3 +50,32 @@ test("cópia interna pode preservar a referência local sem copiar secrets", () 
   });
   assert.equal(copied.plugin?.connectionId, "local-account-id");
 });
+
+test("exporta e remapeia continuidade de conversa sem expor a conta local", () => {
+  const continued: ProcessMethod = {
+    processType: "script",
+    blocks: [
+      method.blocks[0],
+      {
+        ...structuredClone(method.blocks[0]),
+        id: "revise-script",
+        order: 1,
+        plugin: {
+          ...structuredClone(method.blocks[0].plugin!),
+          conversation: {
+            mode: "reuse",
+            sourceProcessType: "script",
+            sourceBlockId: "write-script",
+          },
+        },
+      },
+    ],
+  };
+  const parsed = parseMethodFile(serializeMethodFile("Roteiro contínuo", continued));
+  assert.equal(parsed.method.blocks[1].plugin?.conversation?.mode, "reuse");
+  const copied = copyImportedBlocks("script", parsed.method.blocks, (prefix) => `${prefix}-new`);
+  assert.equal(copied[1].plugin?.conversation?.mode, "reuse");
+  if (copied[1].plugin?.conversation?.mode === "reuse")
+    assert.equal(copied[1].plugin.conversation.sourceBlockId, copied[0].id);
+  assert.equal(copied[1].plugin?.connectionId, undefined);
+});

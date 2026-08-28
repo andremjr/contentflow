@@ -1,0 +1,24 @@
+{
+  "executionId": "fixture-anthropic-claude",
+  "traceId": "fixture-trace",
+  "blockId": "fixture-block",
+  "capabilityId": "generate-text",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": { "model": "claude-sonnet-4-6", "temperature": 0, "max_tokens": 100 },
+  "settings": {},
+  "inputs": { "context": "Tema de teste" },
+  "inputContract": [{ "id": "context", "portKey": "context", "label": "Contexto", "type": "text" }],
+  "outputContract": [{ "portKey": "result", "key": "title", "label": "Título", "type": "text", "required": true }],
+  "resolvedInstruction": "Crie um título curto.",
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": { "id": "channel", "name": "Canal teste", "language": "pt-BR", "niche": "Educação" },
+    "project": { "id": "project", "title": "Projeto teste" },
+    "processType": "title",
+    "block": { "type": "CRIAR", "name": "Criar título", "instructions": "Crie um título curto." },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

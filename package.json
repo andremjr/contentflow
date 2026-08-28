@@ -1,6 +1,6 @@
 {
   "name": "contentflow",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "productName": "ContentFlow",
   "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
@@ -51,10 +51,11 @@
     "test:method-file": "tsx --test server/method-file.test.ts",
     "test:plugin-connections": "tsx --test server/plugin-connections.test.ts",
     "test:plugin-connection-runtime": "tsx --test server/plugin-connection-runtime.test.ts",
+    "test:plugin-conversation": "tsx --test server/plugin-conversation.test.ts",
     "test:updater": "node --test desktop/updater.test.cjs",
     "test:data-migration": "tsx --test server/data-directory-migration.test.ts",
     "plugin:kit": "tsx ecosystem/plugin-kit/cli.ts",
-    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:instructions && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-fallback && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:orchestrator && npm run test:plugin-kit && npm run test:plugin-branding && npm run test:plugin-dependencies && npm run test:method-file && npm run test:plugin-connections && npm run test:plugin-connection-runtime && npm run test:updater && npm run test:data-migration && npm run build",
+    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:instructions && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-fallback && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:orchestrator && npm run test:plugin-kit && npm run test:plugin-branding && npm run test:plugin-dependencies && npm run test:method-file && npm run test:plugin-connections && npm run test:plugin-connection-runtime && npm run test:plugin-conversation && npm run test:updater && npm run test:data-migration && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {

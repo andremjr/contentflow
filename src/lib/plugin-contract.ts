@@ -173,6 +173,8 @@ export type PluginManifest = {
   deliveryTypes?: PluginDeliveryType[];
   /** Optional interactive preparation for a dedicated browser profile referenced by block configuration. */
   profileSetup?: PluginProfileSetup;
+  /** O pacote pode retomar entre capabilities uma conversa opaca produzida por um bloco anterior. */
+  supportsConversationContinuation?: boolean;
   capabilities: PluginCapability[];
 };
 
@@ -256,6 +258,7 @@ export type PluginExecutionRequest = {
   resolvedInstruction?: string;
   /** Variables left intact because no declared runtime source could resolve them. */
   unresolvedInstructionVariables?: string[];
+  conversation?: { mode: "new" } | { mode: "reuse"; id: string };
   /** Core-owned position when a declared list input is executed item by item. */
   batch?: { itemId: string; index: number; total: number };
   context: PluginExecutionContext;
@@ -270,6 +273,7 @@ export type PluginExecutionResponse =
       storedArtifacts?: StoredFile[];
       usage?: PluginUsage;
       logs?: string[];
+      conversation?: { id: string };
     }
   | {
       status: "pending";

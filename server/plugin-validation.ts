@@ -252,6 +252,7 @@ export const pluginManifestSchema = z
       .refine(unique, "não pode conter duplicatas")
       .optional(),
     profileSetup: profileSetupSchema.optional(),
+    supportsConversationContinuation: z.boolean().optional(),
     settingsSchema: jsonSchema.optional(),
     capabilities: z.array(capabilitySchema).min(1),
   })

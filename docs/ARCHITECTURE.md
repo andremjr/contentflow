@@ -150,6 +150,8 @@ O operador `Humano` é o executor nativo desse mesmo contrato e não depende de 
 
 O Método armazena esse esquema, suas instruções, parâmetros, configuração do executor, bindings e a referência local de conexão quando aplicável. Os valores efetivamente preenchidos pertencem à execução do Projeto/Vídeo e nunca são gravados como parte do Método.
 
+Plugins que declaram suporte à continuidade de conversa podem devolver ao núcleo uma referência opaca da conversa criada. Em outro bloco compatível, o usuário escolhe iniciar uma conversa nova ou continuar a conversa de um bloco anterior do mesmo Projeto, inclusive de um Processo Universal anterior. O núcleo só permite a reutilização com o mesmo plugin e a mesma conexão local, preserva a referência no snapshot da execução e nunca interpreta cookies, tokens ou o conteúdo interno da conversa. Plugins sem essa declaração continuam sempre iniciando uma execução independente.
+
 Métodos compostos integralmente por blocos humanos podem ser executados de ponta a ponta. Blocos `IA` e `Código` são liberados quando possuem plugin, capacidade e, quando exigida, conexão local compatíveis. A configuração funcional permanece no Método; o secret permanece no cofre. Plugin, capacidade ou conexão ausentes, incompatíveis, desativados ou revogados mantêm o bloco explicitamente bloqueado.
 
 ### D. Compatibilidade de Métodos e conexões legadas

@@ -174,6 +174,16 @@ const sharedPluginBindingSchema = z.object({
   capabilityId: z.string().min(1).max(100),
   configuration: z.record(z.union([z.string(), z.number(), z.boolean()])),
   connectionRequired: z.boolean().optional(),
+  conversation: z
+    .discriminatedUnion("mode", [
+      z.object({ mode: z.literal("new") }),
+      z.object({
+        mode: z.literal("reuse"),
+        sourceProcessType: universalProcessSchema,
+        sourceBlockId: z.string().min(1),
+      }),
+    ])
+    .optional(),
 });
 
 const actionBlockSchema = z.object({
@@ -217,6 +227,7 @@ export function serializeMethodFile(name: string, method: ProcessMethod) {
             configuration: structuredClone(block.plugin.configuration),
             connectionRequired:
               block.plugin.connectionRequired ?? Boolean(block.plugin.connectionId),
+            conversation: block.plugin.conversation,
           }
         : undefined,
     })),
@@ -265,6 +276,16 @@ export function copyImportedBlocks(
       ? {
           ...block.plugin,
           connectionId: options.preserveLocalConnections ? block.plugin.connectionId : undefined,
+          conversation:
+            block.plugin.conversation?.mode === "reuse" &&
+            block.plugin.conversation.sourceProcessType === processType
+              ? {
+                  ...block.plugin.conversation,
+                  sourceBlockId:
+                    blockIds.get(block.plugin.conversation.sourceBlockId) ??
+                    block.plugin.conversation.sourceBlockId,
+                }
+              : block.plugin.conversation,
         }
       : undefined,
     parameters: block.parameters.map((parameter) => ({

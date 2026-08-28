@@ -14,6 +14,18 @@ O ContentFlow é um gerenciador estratégico de Métodos para produção de cont
 | Criar Método | Skill portátil para modelar e validar arquivos `.contentflow-method.json`        | [`ecosystem/skills/contentflow-method-development/`](ecosystem/skills/contentflow-method-development/) |
 | Releases     | Instaladores e versões portáteis para Windows                                    | [GitHub Releases](https://github.com/andremjr/contentflow/releases)                                    |
 
+## Quero apenas usar o ContentFlow no Windows
+
+Você não precisa instalar Git, Node, npm nem abrir terminal.
+
+1. Abra a [release estável mais recente](https://github.com/andremjr/contentflow/releases/latest).
+2. Em **Assets**, baixe o arquivo que termina em `x64-Setup.exe` — esta é a opção recomendada.
+3. Instale e abra o ContentFlow. O aviso do Windows pode aparecer enquanto o aplicativo ainda não possui assinatura digital comercial; confirme que o download veio deste repositório oficial.
+4. Crie um Canal, monte ou importe um Método e crie seu primeiro Projeto.
+5. Plugins são opcionais e baixados separadamente. O aplicativo funciona sem eles; quando quiser automação, abra **Plugins** e siga a instalação guiada.
+
+Projetos, plugins e credenciais ficam na área de dados do usuário e são preservados nas atualizações. Veja o [guia completo para Windows](docs/DESKTOP_V0.md) e, se algo falhar, consulte primeiro as mensagens exibidas no próprio bloco ou plugin.
+
 ## Estrutura do repositório
 
 ```text

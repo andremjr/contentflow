@@ -3,11 +3,20 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { __test, execute } from "./handler.mjs";
+import { __test, execute, validateConversationUrl } from "./handler.mjs";
 
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
+
+test("aceita somente referências de conversa do ChatGPT", () => {
+  assert.equal(
+    validateConversationUrl("https://chatgpt.com/c/12345678-1234-1234-1234-123456789abc"),
+    "https://chatgpt.com/c/12345678-1234-1234-1234-123456789abc",
+  );
+  assert.throws(() => validateConversationUrl("https://example.com/c/123"), /não pertence/);
+  assert.throws(() => validateConversationUrl("javascript:alert(1)"), /não pertence/);
+});
 
 function request(overrides = {}) {
   return {
@@ -37,7 +46,8 @@ function request(overrides = {}) {
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "0.2.0");
+  assert.equal(manifest.version, "0.3.0");
+  assert.equal(manifest.supportsConversationContinuation, true);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
   const generation = manifest.capabilities.find((item) => item.id === "generate-text-in-browser");

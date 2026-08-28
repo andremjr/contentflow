@@ -63,6 +63,7 @@
       "maxLength": 260,
       "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
     },
+    "supportsConversationContinuation": { "type": "boolean" },
     "permissions": {
       "type": "array",
       "uniqueItems": true,

@@ -20,6 +20,8 @@ A heurística pode priorizar o bloco anterior mais próximo, outputs de processo
 
 O executor materializa inputs, aplica parâmetros e configuração do executor, executa IA/Humano/Código, valida outputs pelo schema e registra entregas. Um bloco só deve ser considerado concluído quando seus outputs obrigatórios estiverem preenchidos e compatíveis. O Método não contém valores de projeto nem IDs transitórios.
 
+Quando um plugin declara continuidade de conversa, o runtime pode reutilizar o ID opaco produzido por um bloco anterior do mesmo projeto. A origem deve ser anterior na ordem dos processos/blocos e usar o mesmo plugin e a mesma conexão; retries que invalidam o resultado também invalidam esse metadado. O Método guarda apenas a referência estrutural ao bloco de origem.
+
 ## Outputs oficiais
 
 | Processo | Campo oficial | Type |

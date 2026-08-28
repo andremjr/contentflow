@@ -18,7 +18,9 @@ O handler deve usar `request.inputs[portKey]`, nunca labels. Outputs usam as cha
 
 ## Request e services
 
-A requisição inclui, entre outros campos, `executionId`, `traceId`, `blockId`, `capabilityId`, `attempt`, `invocation`, `configuration`, `settings`, `inputs`, `inputContract`, `inputDeliveries`, `outputContract`, `validation`, `retryFeedback` e `context`.
+A requisição inclui, entre outros campos, `executionId`, `traceId`, `blockId`, `capabilityId`, `attempt`, `invocation`, `configuration`, `settings`, `inputs`, `inputContract`, `inputDeliveries`, `outputContract`, `validation`, `retryFeedback`, `conversation` e `context`.
+
+Plugins que preservam uma conversa no provedor podem declarar `supportsConversationContinuation: true`. O request recebe `conversation: { mode: "new" }` ou `conversation: { mode: "reuse", id: "..." }`; o sucesso devolve opcionalmente `conversation: { id: "..." }`. Trate o ID como opaco, valide que pertence ao provedor esperado e nunca inclua tokens. O núcleo só permite reutilização entre blocos anteriores com o mesmo plugin e a mesma conexão local.
 
 A assinatura é `execute(request, services)`. Serviços:
 

@@ -112,6 +112,7 @@ Responsabilidades do plugin:
 - pedir apenas operações necessárias à capacidade;
 - usar seletores resilientes baseados em papel, label e estado visível;
 - validar página, origem, conta e resultado antes de avançar;
+- ao reutilizar conversa, aceitar somente referência HTTPS da origem declarada e da rota esperada do provedor;
 - executar a rotina por mensagens e operações de DOM na aba identificada, sem depender de foco, teclado ou mouse do sistema;
 - tratar mudanças de interface como erro compatível, não improvisar cliques;
 - respeitar `signal`, timeout, idempotência e `maxConcurrency`;

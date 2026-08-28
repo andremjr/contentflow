@@ -73,6 +73,8 @@ Toda saída contém `id`, `label`, `key`, `type` e `required`. Pode conter `plac
 
 `optionsSourceBlockId`/`optionsSourceKey` permitem que `select` ou `multiselect` use opções de uma saída anterior. Para VALIDAR, use convencionalmente `decision`, `selected_value`, `selected_values` e `feedback`.
 
+Quando um bloco usa plugin com continuidade declarada, `plugin.conversation` pode ser `{ "mode": "new" }` ou `{ "mode": "reuse", "sourceProcessType": "script", "sourceBlockId": "draft-script" }`. A referência é estrutural e só pode apontar para bloco anterior que use o mesmo plugin. IDs de conversa do provedor e IDs de conexão local nunca pertencem ao arquivo portátil.
+
 ## Records
 
 Para `type: "records"`, declare `recordFields` com `id`, `label`, `key`, `type` e `required`. Tipos de record field: `text`, `textarea`, `number`, `boolean`, `select`, `datetime`, `url`, `file`, `image`, `audio`, `video`. Keys internas devem ser únicas e não vazias.

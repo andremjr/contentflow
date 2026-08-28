@@ -169,6 +169,13 @@ export type BlockPluginBinding = {
   configuration: Record<string, string | number | boolean>;
   connectionId?: string;
   connectionRequired?: boolean;
+  conversation?:
+    | { mode: "new" }
+    | {
+        mode: "reuse";
+        sourceProcessType: UniversalProcess;
+        sourceBlockId: string;
+      };
 };
 
 export type ActionBlock = {
@@ -326,6 +333,12 @@ export type BlockExecution = {
   progressMessage?: string;
   startedAt?: string;
   completedAt?: string;
+  /** Referência opaca devolvida pelo plugin para continuidade entre blocos. */
+  pluginConversation?: {
+    pluginId: string;
+    connectionId?: string;
+    id: string;
+  };
 };
 
 export type ProcessExecutionStatus =

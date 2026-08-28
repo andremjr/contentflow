@@ -875,6 +875,24 @@ async function openNewConversation(client, sessionId, signal) {
   throw codedError("UPSTREAM_UNAVAILABLE", "O ChatGPT não abriu uma conversa nova no prazo.", true);
 }
 
+async function openConversation(client, sessionId, conversation, signal) {
+  if (conversation?.mode !== "reuse") return await openNewConversation(client, sessionId, signal);
+  const conversationUrl = validateConversationUrl(conversation.id);
+  await client.send("Page.navigate", { url: conversationUrl }, sessionId);
+}
+
+export function validateConversationUrl(id) {
+  let url;
+  try {
+    url = new URL(id);
+  } catch {
+    throw codedError("INVALID_INPUT", "A referência da conversa do ChatGPT é inválida.");
+  }
+  if (url.protocol !== "https:" || url.hostname !== CHATGPT_HOST || !url.pathname.startsWith("/c/"))
+    throw codedError("INVALID_INPUT", "A referência não pertence a uma conversa do ChatGPT.");
+  return url.href;
+}
+
 async function waitForPrompt(client, sessionId, waitMs, signal) {
   const deadline = Date.now() + waitMs;
   let state;
@@ -1308,7 +1326,7 @@ export async function execute(request, services) {
       services.signal,
     );
     const { sessionId } = await attachChatGptPage(client, services.signal);
-    await openNewConversation(client, sessionId, services.signal);
+    await openConversation(client, sessionId, request.conversation, services.signal);
     await waitForPrompt(
       client,
       sessionId,
@@ -1380,6 +1398,9 @@ export async function execute(request, services) {
       sources = [
         ...new Set(responses.flatMap((response) => response.links).map((link) => link.href)),
       ].slice(0, clampInteger(configuration.maxSources, 10, 1, 50));
+    const conversationId = validateConversationUrl(
+      await evaluate(client, sessionId, "location.href"),
+    );
     let values;
     if (capabilityId === "generate-image-in-browser") {
       const captured = await captureGeneratedImage(
@@ -1398,6 +1419,7 @@ export async function execute(request, services) {
           outputUnits: captured.file.size,
           unit: "bytes",
         },
+        conversation: { id: conversationId },
       };
     }
     if (["search-web-in-browser", "deep-research-in-browser"].includes(capabilityId))
@@ -1422,6 +1444,7 @@ export async function execute(request, services) {
       status: "success",
       values,
       usage: { provider: "OpenAI / ChatGPT web", outputUnits: combined.length, unit: "characters" },
+      conversation: { id: conversationId },
     };
   } catch (error) {
     if (services.signal?.aborted || error?.code === "CANCELLED")

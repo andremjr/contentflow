@@ -477,11 +477,14 @@ type PluginExecutionRequest = {
   retryFeedback?: Record<string, RuntimeValue>;
   resolvedInstruction?: string;
   unresolvedInstructionVariables?: string[];
+  conversation?: { mode: "new" } | { mode: "reuse"; id: string };
   context: PluginExecutionContext;
 };
 ```
 
 O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContract` serve para conhecer tipo e schema dos registros recebidos. `inputDeliveries` é metadado paralelo e opcional de proveniência; plugins v1 que leem somente `inputs` continuam compatíveis. `resolvedInstruction` contém a instrução do Método após o núcleo resolver variáveis declaradas; capabilities que consomem instrução devem preferi-la ao template cru em `context.block.instructions`. `unresolvedInstructionVariables` informa placeholders preservados por compatibilidade. `settings` contém somente preferências não secretas validadas por `settingsSchema`; secrets declarados são acessados por `services.getSecret()` e não aparecem no envelope serializável.
+
+Um manifesto pode declarar `supportsConversationContinuation: true`. Nesse caso, o request informa se o plugin deve iniciar ou reutilizar uma conversa, e uma resposta bem-sucedida pode devolver `conversation: { id }`. O ID é opaco para o núcleo: o plugin valida origem e formato antes de usá-lo. O núcleo só resolve referências produzidas por bloco anterior do mesmo Projeto, plugin e conexão local; cookies, tokens e o histórico integral nunca entram nesse campo.
 
 ## 11. Contexto permitido
 

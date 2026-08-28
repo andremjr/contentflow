@@ -972,6 +972,7 @@ function retryValidatedBlock(
     blockExecution.progress = undefined;
     blockExecution.progressMessage = undefined;
     blockExecution.retryFeedback = undefined;
+    blockExecution.pluginConversation = undefined;
     if (index === targetIndex) {
       blockExecution.startedAt = now;
       blockExecution.retryFeedback = structuredClone(validationValues);
@@ -1188,6 +1189,7 @@ export function retryBlockExecution(executionId: string, blockId: string) {
   blockExecution.attempt = (blockExecution.attempt ?? 1) + 1;
   invalidateBlockDeliveries(execution, [blockId]);
   blockExecution.error = undefined;
+  blockExecution.pluginConversation = undefined;
   blockExecution.status = block.operator === "Humano" ? "awaiting_human" : "blocked_executor";
   execution.error = undefined;
   execution.status =
