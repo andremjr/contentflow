@@ -9,12 +9,14 @@ export function TopBar({
   breadcrumbs = [],
   title,
   subtitle,
+  utilityActions,
   actions,
   showNewProject = true,
 }: {
   breadcrumbs?: Crumb[];
   title: string;
   subtitle?: string;
+  utilityActions?: React.ReactNode;
   actions?: React.ReactNode;
   showNewProject?: boolean;
 }) {
@@ -38,6 +40,7 @@ export function TopBar({
         </div>
 
         <div className="flex items-center gap-2">
+          {utilityActions}
           <HumanTaskCenter />
           {actions}
 

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { LoaderCircle, Plus, Radio } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { AppUpdateCard } from "@/components/app-update-card";
+import { AppUpdateControl } from "@/components/app-update-card";
 import { NewChannelDialog } from "@/components/new-channel-dialog";
 import { SortableChannelGrid } from "@/components/sortable-channel-grid";
 import { TopBar } from "@/components/top-bar";
@@ -39,11 +39,11 @@ function DashboardPage() {
         title="Visão geral"
         subtitle="Escolha um canal para abrir sua produção"
         showNewProject={false}
+        utilityActions={<AppUpdateControl />}
         actions={<NewChannelDialog />}
       />
 
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <AppUpdateCard />
         {!databaseReady ? (
           <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-2">
