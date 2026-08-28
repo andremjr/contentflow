@@ -1,6 +1,6 @@
 # ChatGPT Browser Studio
 
-Versão **0.1.17** para ContentFlow OS Plugin API v1.
+Versão **0.2.0** para ContentFlow Plugin API v1.
 
 Super plugin independente que usa a interface web do ChatGPT em um Google Chrome real com perfil persistente dedicado. Não usa a API oficial da OpenAI, não solicita chave de API e nunca exporta cookies, tokens ou storage da sessão.
 
@@ -39,7 +39,7 @@ Depois de informar um alias no construtor do Método, use **Salvar perfil**. O C
 
 Por padrão, o perfil continua dedicado. Para reutilizar uma pasta Chrome escolhida conscientemente, configure `profilesBasePath`, selecione o alias correspondente e ative `allowExistingChromeProfile`. Feche outras instâncias que estejam usando o mesmo perfil antes de preparar ou executar.
 
-A espera de respostas combina `MutationObserver` com o polling anterior como watchdog e mantém o timeout máximo. O envio usa mouse/teclado via CDP, confirma o texto lido pelo editor e só recorre à digitação caractere a caractere quando a inserção rápida não é preservada integralmente.
+A espera de respostas combina `MutationObserver` com polling de segurança e timeout máximo. Em execução normal, preenchimento e cliques passam pela ContentFlow Browser Bridge v2, sem mouse, teclado ou foco de janela via CDP.
 
 ## Anexos e artifacts
 
@@ -51,11 +51,12 @@ Na geração de imagem, os bytes são recuperados pela própria sessão autentic
 
 ## Instalação
 
-1. Abra **Plugins** no ContentFlow OS.
+1. Abra **Plugins** no ContentFlow.
 2. Escolha **Usar pasta ao vivo**.
 3. Selecione esta pasta.
-4. Revise `network`, `filesystem:read`, `filesystem:write` e `process`.
-5. Vincule a capability desejada ao bloco correspondente.
+4. No perfil Chrome dedicado, carregue manualmente `extensions/contentflow-browser-bridge` em `chrome://extensions` e conclua o login.
+5. Revise `network`, `filesystem:read`, `filesystem:write` e `process`.
+6. Vincule a capability desejada ao bloco correspondente.
 
 O Chrome abre em `https://chatgpt.com/`. A permissão `process` inicia esse Chrome dedicado; `network` acessa o ChatGPT; `filesystem:read` alcança apenas arquivos liberados; `filesystem:write` produz artifacts e mantém o workspace autorizado.
 
@@ -71,7 +72,7 @@ Projetos, compartilhamento, conectores, plugins de terceiros, voz, billing, muda
 
 ## Validação
 
-Na raiz do ContentFlow OS:
+Na raiz do ContentFlow:
 
 ```powershell
 npm run plugin:kit -- check ./plugins/bundled/chatgpt-browser-studio
@@ -84,7 +85,7 @@ Em 20/08/2026, a interface real foi validada com: dois prompts consecutivos na m
 
 ## Revogação
 
-Saia da conta na janela Chrome dedicada e, se desejar remover a sessão, exclua manualmente somente a pasta do alias dentro da pasta de trabalho conectada ao plugin. Remover o plugin não apaga outputs já promovidos pelo ContentFlow OS.
+Saia da conta na janela Chrome dedicada e, se desejar remover a sessão, exclua manualmente somente a pasta do alias dentro da pasta de trabalho conectada ao plugin. Remover o plugin não apaga outputs já promovidos pelo ContentFlow.
 
 ## Perfis de fallback
 

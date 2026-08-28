@@ -1,6 +1,6 @@
 # Segurança de plugins
 
-Este documento define o modelo de ameaças e os controles mínimos para executar plugins no ContentFlow OS. Ele complementa o contrato normativo de [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md).
+Este documento define o modelo de ameaças e os controles mínimos para executar plugins no ContentFlow. Ele complementa o contrato normativo de [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md).
 
 Autores começando um plugin não precisam ler este documento inteiro antes do primeiro teste; use [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md) e retorne aqui antes de distribuir uma capacidade com rede, arquivos, subprocessos, navegador, credenciais ou efeitos externos.
 
@@ -102,7 +102,7 @@ Containers, sandboxes nativas do ambiente hospedeiro ou processos restritos pode
 
 ### Implementação v1
 
-O executor comunitário atual usa `node --permission`. O pacote e o worker são somente leitura; entradas são resolvidas pelo serviço controlado; a escrita fica limitada à pasta exclusiva da invocação; e a rede só é liberada com `network`. O pacote é rejeitado se contiver symlinks e todo artifact local passa por `realpath` antes de ser copiado para o armazenamento do ContentFlow OS. Artifacts HTTPS são baixados pelo núcleo com proteção SSRF, DNS fixado, redirects revalidados, streaming, limite, timeout e SHA-256. A resposta e os streams do processo possuem limites, e o processo é encerrado no timeout configurado, até o máximo de 24 horas.
+O executor comunitário atual usa `node --permission`. O pacote e o worker são somente leitura; entradas são resolvidas pelo serviço controlado; a escrita fica limitada à pasta exclusiva da invocação; e a rede só é liberada com `network`. O pacote é rejeitado se contiver symlinks e todo artifact local passa por `realpath` antes de ser copiado para o armazenamento do ContentFlow. Artifacts HTTPS são baixados pelo núcleo com proteção SSRF, DNS fixado, redirects revalidados, streaming, limite, timeout e SHA-256. A resposta e os streams do processo possuem limites, e o processo é encerrado no timeout configurado, até o máximo de 24 horas.
 
 O manifesto pode declarar `networkHosts`. Essa lista é mostrada e renovada no consentimento, além de ser obrigatória para o downloader do núcleo quando presente. Entretanto, o `--allow-net` do Node 26 é binário e não impõe hosts ao código do plugin. Um plugin comunitário com `network` ainda deve ser tratado como capaz de abrir conexões para qualquer destino público; a ausência de `networkHosts` recebe aviso reforçado.
 
@@ -219,4 +219,4 @@ Alertas não apagam outputs nem criam aprovação central. O núcleo deve mostra
 
 Os controles concluídos formam a fronteira mínima executável da v1. Os itens restantes não criam aprovação central: são camadas incrementais de proteção. A interface deve distinguir permissões básicas de permissões avançadas e nunca apresentar `process` ou `native` como equivalentes a um plugin puramente isolado.
 
-Um aviso de “plugin não oficial” complementa esses gates, mas não substitui sandbox, permissões e validação. A opção de sideload não deve equivaler a executar código nativo com a autoridade completa do usuário. Pacotes executados deliberadamente fora do ContentFlow OS, ou por um núcleo modificado que removeu essas barreiras, ficam fora da superfície autorizada e suportada pelo projeto.
+Um aviso de “plugin não oficial” complementa esses gates, mas não substitui sandbox, permissões e validação. A opção de sideload não deve equivaler a executar código nativo com a autoridade completa do usuário. Pacotes executados deliberadamente fora do ContentFlow, ou por um núcleo modificado que removeu essas barreiras, ficam fora da superfície autorizada e suportada pelo projeto.

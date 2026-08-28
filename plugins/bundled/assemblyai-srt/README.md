@@ -1,6 +1,6 @@
 # AssemblyAI SRT Studio
 
-Plugin privado compatível com ContentFlow OS Plugin API v1. Ele converte a lógica de `legendas.py` para uma capability assíncrona de transcrição e geração de SRT, sem exigir Python ou instalar dependências em runtime.
+Plugin privado compatível com ContentFlow Plugin API v1. Ele converte a lógica de `legendas.py` para uma capability assíncrona de transcrição e geração de SRT, sem exigir Python ou instalar dependências em runtime.
 
 ## Comportamento preservado
 
@@ -16,11 +16,11 @@ Como as chaves da AssemblyAI são vinculadas a projetos, o arquivo é reenviado 
 
 ## Credenciais
 
-Na página **Plugins**, configure `ASSEMBLYAI_API_KEYS`. Informe uma ou várias chaves separadas por vírgula, espaço, ponto e vírgula ou quebra de linha. O valor fica no cofre do ContentFlow OS e não entra no Método, logs, artifacts ou estado do job. Não altere nem reordene as chaves enquanto houver um job em andamento.
+Na página **Plugins**, configure `ASSEMBLYAI_API_KEYS`. Informe uma ou várias chaves separadas por vírgula, espaço, ponto e vírgula ou quebra de linha. O valor fica no cofre do ContentFlow e não entra no Método, logs, artifacts ou estado do job. Não altere nem reordene as chaves enquanto houver um job em andamento.
 
 ## Divisão do SRT
 
-No ContentFlow OS, “entrada” significa um cue SRT numerado com timestamp; o texto de uma entrada fica em uma linha no arquivo.
+No ContentFlow, “entrada” significa um cue SRT numerado com timestamp; o texto de uma entrada fica em uma linha no arquivo.
 
 - **Por frases (lógica original):** reprodução do script Python.
 - **Máximo de palavras:** cria grupos contíguos com até o número configurado.

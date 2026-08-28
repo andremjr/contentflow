@@ -5,7 +5,7 @@
   "name": "Plugin comunitário de referência",
   "version": "1.0.0",
   "description": "Exemplo mínimo que recebe texto, cria um arquivo e devolve o resultado.",
-  "author": "ContentFlow OS",
+  "author": "ContentFlow",
   "license": "MIT",
   "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
   "entrypoint": "handler.mjs",

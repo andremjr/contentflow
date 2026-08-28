@@ -1,10 +1,10 @@
 # Proteção jurídica e licenciamento
 
-Este documento explica a intenção da licença do ContentFlow OS. Ele não substitui assessoria jurídica.
+Este documento explica a intenção da licença do ContentFlow. Ele não substitui assessoria jurídica.
 
 ## Modelo adotado
 
-O ContentFlow OS é **source-available proprietário**, não open source. O código pode ser lido e o aplicativo original pode ser usado nos limites da licença, mas não há autorização pública para distribuir versões modificadas, clones, derivados concorrentes, white-label, rebranding ou reskins.
+O ContentFlow é **source-available proprietário**, não open source. O código pode ser lido e o aplicativo original pode ser usado nos limites da licença, mas não há autorização pública para distribuir versões modificadas, clones, derivados concorrentes, white-label, rebranding ou reskins.
 
 A exceção central permite desenvolver e comercializar plugins independentes que utilizem o protocolo público sem incorporar o código do núcleo. Isso direciona extensões para um ecossistema interoperável em vez de incentivar cópias da ferramenta.
 
@@ -27,7 +27,7 @@ Isso significa que a combinação prática recomendada é:
 
 1. licença contratual restritiva para o código e a documentação;
 2. registro das versões relevantes do software;
-3. registro da marca `ContentFlow OS` e identidade visual;
+3. registro da marca `ContentFlow` e identidade visual;
 4. preservação de histórico, hashes, commits e provas de autoria;
 5. avaliação jurídica específica sobre outros mecanismos de proteção, quando cabíveis.
 
@@ -39,7 +39,7 @@ Recomenda-se registrar versões estáveis relevantes e preservar exatamente os a
 
 ## Marca
 
-O direito autoral não protege adequadamente um nome isolado. Para exclusividade sobre `ContentFlow OS`, logo e sinais associados, avalie o registro de marca no INPI. O próprio INPI informa que a exclusividade sobre a marca depende de registro. Consulte o [guia básico de marcas](https://www.gov.br/inpi/pt-br/servicos/marcas/guia-basico/guia-basico).
+O direito autoral não protege adequadamente um nome isolado. Para exclusividade sobre `ContentFlow`, logo e sinais associados, avalie o registro de marca no INPI. O próprio INPI informa que a exclusividade sobre a marca depende de registro. Consulte o [guia básico de marcas](https://www.gov.br/inpi/pt-br/servicos/marcas/guia-basico/guia-basico).
 
 ## Repositório público e forks
 
@@ -55,7 +55,7 @@ O arquivo [`AI_USAGE_POLICY.md`](../AI_USAGE_POLICY.md), as instruções de agen
 
 ## Plugins independentes e responsabilidade
 
-Um plugin independente não precisa de aprovação do ContentFlow OS para ser criado, distribuído diretamente ou instalado localmente. Ele também não se torna produto oficial, verificado ou mantido pelo projeto apenas por implementar o protocolo. O autor continua responsável pela origem do código, dependências, permissões declaradas, tratamento de dados, integrações e efeitos que implementa; o usuário continua responsável por escolher a origem e utilizar o pacote dentro da lei e dos contratos aplicáveis.
+Um plugin independente não precisa de aprovação do ContentFlow para ser criado, distribuído diretamente ou instalado localmente. Ele também não se torna produto oficial, verificado ou mantido pelo projeto apenas por implementar o protocolo. O autor continua responsável pela origem do código, dependências, permissões declaradas, tratamento de dados, integrações e efeitos que implementa; o usuário continua responsável por escolher a origem e utilizar o pacote dentro da lei e dos contratos aplicáveis.
 
 O projeto pode informar que não oferece suporte, revisão ou garantia para plugins não oficiais e pode exigir que o usuário reconheça os riscos antes de habilitá-los. Um catálogo mantido pelo projeto pode aceitar ou recusar uma listagem, mas essa decisão não impede distribuição direta. O aplicativo aplica automaticamente compatibilidade, integridade, permissões e sandbox sem criar uma fila de aprovação pelo titular.
 

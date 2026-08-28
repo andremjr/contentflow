@@ -1,12 +1,12 @@
 {
-  "name": "contentflow-os",
-  "version": "0.4.3",
-  "productName": "ContentFlow OS",
+  "name": "contentflow",
+  "version": "0.4.4",
+  "productName": "ContentFlow",
   "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/andremjr/contentflow-os.git"
+    "url": "https://github.com/andremjr/contentflow.git"
   },
   "private": true,
   "main": "desktop/main.cjs",
@@ -112,8 +112,8 @@
     "vite": "^8.0.16"
   },
   "build": {
-    "appId": "com.contentflow.os",
-    "productName": "ContentFlow OS",
+    "appId": "com.contentflow.app",
+    "productName": "ContentFlow",
     "asar": false,
     "npmRebuild": false,
     "directories": {
@@ -132,7 +132,7 @@
       {
         "provider": "github",
         "owner": "andremjr",
-        "repo": "contentflow-os",
+        "repo": "contentflow",
         "channel": "latest",
         "releaseType": "release"
       }
@@ -170,10 +170,10 @@
         "portable",
         "nsis"
       ],
-      "artifactName": "ContentFlow-OS-V0-${version}-${arch}.${ext}"
+      "artifactName": "ContentFlow-V0-${version}-${arch}.${ext}"
     },
     "nsis": {
-      "artifactName": "ContentFlow-OS-V0-${version}-${arch}-Setup.${ext}",
+      "artifactName": "ContentFlow-V0-${version}-${arch}-Setup.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
@@ -181,7 +181,7 @@
       "deleteAppDataOnUninstall": false
     },
     "portable": {
-      "artifactName": "ContentFlow-OS-V0-${version}-${arch}-Portable.${ext}"
+      "artifactName": "ContentFlow-V0-${version}-${arch}-Portable.${ext}"
     }
   }
 }

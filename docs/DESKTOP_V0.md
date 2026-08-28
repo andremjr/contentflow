@@ -1,14 +1,14 @@
 # V0 compilada para Windows
 
-A V0 transforma o ContentFlow OS em um aplicativo comum do Windows. Ela não exige Node, npm, Git ou terminal para uso normal.
+A V0 transforma o ContentFlow em um aplicativo comum do Windows. Ela não exige Node, npm, Git ou terminal para uso normal.
 
 ## Qual arquivo usar
 
-Os binários são publicados na página [Releases do projeto](https://github.com/andremjr/contentflow-os/releases):
+Os binários são publicados na página [Releases do projeto](https://github.com/andremjr/contentflow/releases):
 
-- `ContentFlow-OS-V0-<versão>-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
-- `ContentFlow-OS-V0-<versão>-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
-- `ContentFlow-OS-V0-<versão>-SHA256.txt`: hashes para conferir a integridade dos dois executáveis.
+- `ContentFlow-V0-<versão>-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
+- `ContentFlow-V0-<versão>-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
+- `ContentFlow-V0-<versão>-SHA256.txt`: hashes para conferir a integridade dos dois executáveis.
 
 O Windows pode mostrar um aviso porque esta V0 ainda não possui assinatura digital comercial. Confira se o arquivo veio do repositório oficial antes de executá-lo.
 
@@ -16,15 +16,15 @@ O Windows pode mostrar um aviso porque esta V0 ainda não possui assinatura digi
 
 No instalador NSIS, abra a página inicial e use **Verificar atualização**. O aplicativo consulta somente o canal estável público do repositório oficial. Quando houver uma versão mais recente, o usuário inicia o download, acompanha o progresso e escolhe **Reiniciar e atualizar**. O pacote e o `latest.yml` são publicados pelo mesmo build, e o updater valida os metadados e a integridade antes de instalar.
 
-A versão portátil não é atualizada no lugar. Seu cartão abre a release estável mais recente para baixar o instalador recomendado. Projetos, plugins, perfis e credenciais continuam em `%APPDATA%\ContentFlow OS\data` e não são removidos ao substituir o programa.
+A versão portátil não é atualizada no lugar. Seu cartão abre a release estável mais recente para baixar o instalador recomendado. Projetos, plugins, perfis e credenciais continuam em `%APPDATA%\ContentFlow\data` e não são removidos ao substituir o programa.
 
 Se a release estiver incompleta, a rede falhar ou a integridade não puder ser confirmada, o aplicativo mantém a versão atual e permite tentar novamente. O log local do mecanismo fica no arquivo `updates.log` da pasta de logs do aplicativo e registra somente estados e versões, sem chaves, conteúdo de Projetos ou caminhos privados.
 
 ## Onde ficam os dados
 
-- projetos e banco local: `%APPDATA%\ContentFlow OS\data`;
+- projetos e banco local: `%APPDATA%\ContentFlow\data`;
 - plugins instalados e pastas vinculadas: dentro da mesma área de dados;
-- exemplos editáveis de plugins: `Documentos\ContentFlow OS\Plugins`;
+- exemplos editáveis de plugins: `Documentos\ContentFlow\Plugins`;
 - programa instalado: pasta escolhida no instalador.
 
 Reinstalar uma compilação nova substitui o programa, mas não remove os dados. Ainda assim, faça backup da área de dados antes de uma atualização importante.
@@ -42,7 +42,7 @@ Abra **Plugins**, informe a pasta que contém `contentflow.plugin.json` e escolh
 
 Depois, revise as capacidades e permissões, aceite o consentimento local e ative o plugin. Nenhuma aprovação central é necessária.
 
-A distribuição do ContentFlow OS não contém, copia nem ativa plugins ou exemplos. Todo plugin, inclusive um mantido pelo autor para seus alunos, é obtido separadamente e exige instalação ou vínculo, revisão de permissões e consentimento local. Todos executam sob a mesma sandbox e podem ser removidos sem remover o núcleo ou os dados organizacionais.
+A distribuição do ContentFlow não contém, copia nem ativa plugins ou exemplos. Todo plugin, inclusive um mantido pelo autor para seus alunos, é obtido separadamente e exige instalação ou vínculo, revisão de permissões e consentimento local. Todos executam sob a mesma sandbox e podem ser removidos sem remover o núcleo ou os dados organizacionais.
 
 ## Recompilar o núcleo
 
@@ -65,10 +65,10 @@ Depois do build, gere o manifesto de integridade no PowerShell:
 ```powershell
 $releaseVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
 Get-FileHash -Algorithm SHA256 `
-  "release/v0/ContentFlow-OS-V0-$releaseVersion-x64-Setup.exe", `
-  "release/v0/ContentFlow-OS-V0-$releaseVersion-x64-Portable.exe" |
+  "release/v0/ContentFlow-V0-$releaseVersion-x64-Setup.exe", `
+  "release/v0/ContentFlow-V0-$releaseVersion-x64-Portable.exe" |
   ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
-  Set-Content -Encoding ascii "release/v0/ContentFlow-OS-V0-$releaseVersion-SHA256.txt"
+  Set-Content -Encoding ascii "release/v0/ContentFlow-V0-$releaseVersion-SHA256.txt"
 ```
 
 Antes de enviar a tag estável, atualize `package.json`, valide localmente e prepare as notas da versão. O push da tag dispara o workflow; não reutilize uma versão ou tag já publicada. Builds beta devem usar outra política futura e não entram no canal `latest` da V1.

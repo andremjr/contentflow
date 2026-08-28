@@ -134,7 +134,7 @@ async function resolvePythonExecutable() {
   } catch {
     throw new PluginFailure(
       "NOT_FOUND",
-      "O runtime Python empacotado do Edge TTS não foi encontrado. Reinstale ou atualize o ContentFlow OS.",
+      "O runtime Python empacotado do Edge TTS não foi encontrado. Reinstale ou atualize o ContentFlow.",
     );
   }
 }

@@ -1,6 +1,6 @@
 # Fontes dos ícones dos plugins empacotados
 
-Os ícones abaixo são cópias locais em PNG dos favicons publicamente associados aos domínios oficiais dos provedores. Eles foram obtidos em 2026-08-27 por meio do serviço de favicons do Google apenas durante o desenvolvimento e são servidos localmente pelo ContentFlow OS. O aplicativo não consulta esse serviço nem os sites dos provedores para montar a galeria.
+Os ícones abaixo são cópias locais em PNG dos favicons publicamente associados aos domínios oficiais dos provedores. Eles foram obtidos em 2026-08-27 por meio do serviço de favicons do Google apenas durante o desenvolvimento e são servidos localmente pelo ContentFlow. O aplicativo não consulta esse serviço nem os sites dos provedores para montar a galeria.
 
 O uso do ícone identifica a integração correspondente e não implica patrocínio, parceria ou propriedade da marca. Antes de cada distribuição pública, mudanças relevantes nas diretrizes das marcas devem ser revisadas. Quando não há uma única marca representativa, o produto usa fallback neutro.
 

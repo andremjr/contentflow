@@ -14,8 +14,8 @@ let webServer;
 let apiProcess;
 let quitting = false;
 
-app.setName("ContentFlow OS");
-app.setAppUserModelId("com.contentflow.os");
+app.setName("ContentFlow");
+app.setAppUserModelId("com.contentflow.app");
 
 app.on("second-instance", () => {
   if (!mainWindow) return;
@@ -28,7 +28,7 @@ app
   .then(startDesktop)
   .catch((error) => {
     dialog.showErrorBox(
-      "O ContentFlow OS não conseguiu iniciar",
+      "O ContentFlow não conseguiu iniciar",
       error instanceof Error ? (error.stack ?? error.message) : String(error),
     );
     app.quit();
@@ -90,7 +90,7 @@ async function startDesktop() {
     height: 940,
     minWidth: 1080,
     minHeight: 700,
-    title: "ContentFlow OS",
+    title: "ContentFlow",
     backgroundColor: "#08111f",
     autoHideMenuBar: true,
     webPreferences: {

@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, extname, join } from "node:path";
+import { attachContentFlowBridge } from "./browser-bridge-client.mjs";
 
+const PLUGIN_ID = "local.contentflow.gemini-browser-studio";
 const URL_NEW = "https://gemini.google.com/app",
   HOST = "gemini.google.com",
   DEFAULT_PORT = 9644,
@@ -404,7 +406,7 @@ function normalizeProfile(v) {
 function profilePath(settings, n) {
   return join(
     settings?.profilesBasePath?.trim?.() ||
-      join(homedir(), ".contentflow-os", "gemini-browser-profiles"),
+      join(homedir(), ".contentflow", "gemini-browser-profiles"),
     n,
   );
 }
@@ -418,7 +420,7 @@ function profileMarkerPath(path) {
 async function profileIsPrepared(path, name) {
   try {
     const marker = JSON.parse(await readFile(profileMarkerPath(path), "utf8"));
-    return marker?.provider === HOST && marker?.profile === name;
+    return marker?.provider === HOST && marker?.profile === name && marker?.bridgeProtocol === 2;
   } catch {
     return false;
   }
@@ -426,7 +428,12 @@ async function profileIsPrepared(path, name) {
 async function markProfilePrepared(path, name) {
   await writeFile(
     profileMarkerPath(path),
-    JSON.stringify({ provider: HOST, profile: name, preparedAt: new Date().toISOString() }),
+    JSON.stringify({
+      provider: HOST,
+      profile: name,
+      bridgeProtocol: 2,
+      preparedAt: new Date().toISOString(),
+    }),
     "utf8",
   );
 }
@@ -659,24 +666,7 @@ function normalizeEditorText(value) {
     .replace(/\s+/gu, " ")
     .trim();
 }
-async function replacePromptWithKeyEvents(c, s, promptText, signal) {
-  for (const event of [
-    { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 },
-    { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 },
-    { type: "keyDown", key: "Backspace", code: "Backspace" },
-    { type: "keyUp", key: "Backspace", code: "Backspace" },
-  ])
-    await c.send("Input.dispatchKeyEvent", event, s);
-  for (const character of Array.from(promptText)) {
-    if (signal?.aborted) throw err("CANCELLED", "Execução cancelada.");
-    await c.send(
-      "Input.dispatchKeyEvent",
-      { type: "char", text: character, unmodifiedText: character },
-      s,
-    );
-  }
-}
-async function attach(c, signal) {
+async function attach(c, signal, activate = false) {
   const { targetInfos = [] } = await c.send("Target.getTargets");
   let t = targetInfos.find((x) => x.type === "page" && String(x.url).includes(HOST));
   if (!t) {
@@ -687,7 +677,7 @@ async function attach(c, signal) {
     targetId: t.targetId,
     flatten: true,
   });
-  await c.send("Target.activateTarget", { targetId: t.targetId });
+  if (activate) await c.send("Target.activateTarget", { targetId: t.targetId });
   await c.send("Page.enable", {}, sessionId);
   await c.send("Runtime.enable", {}, sessionId);
   return { sessionId };
@@ -717,23 +707,16 @@ async function waitPrompt(c, s, ms, signal) {
     throw err("AUTHENTICATION_FAILED", "Gemini exige verificação manual.", true);
   throw err("AUTHENTICATION_FAILED", "Faça login no Gemini no Chrome dedicado.", true);
 }
-async function clickText(c, s, selector, regex, signal) {
-  const p = await evaluate(
-    c,
-    s,
-    `(()=>{${HELP};const matches=[...document.querySelectorAll(${JSON.stringify(selector)})].filter(x=>vis(x)&&/${regex}/i.test(txt(x))).sort((a,b)=>txt(a).length-txt(b).length);const e=matches[0];if(!e)return null;const r=e.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
-  );
-  if (!p) return false;
-  for (const type of ["mousePressed", "mouseReleased"])
-    await c.send(
-      "Input.dispatchMouseEvent",
-      { type, x: p.x, y: p.y, button: "left", clickCount: 1 },
-      s,
-    );
-  await sleep(300, signal);
-  return true;
+async function clickText(bridge, selector, terms, operationKey) {
+  try {
+    await bridge.dispatch("click", { selectors: [selector], textIncludes: terms }, operationKey);
+    return true;
+  } catch (error) {
+    if (error?.code === "OUTPUT_VALIDATION_FAILED") return false;
+    throw error;
+  }
 }
-async function selectModel(c, s, name, signal) {
+async function selectModel(bridge, name) {
   if (!name || name === "current") return;
   const map = {
     flash_lite: "3.5 Flash Lite",
@@ -744,92 +727,50 @@ async function selectModel(c, s, name, signal) {
   // A interface do Gemini muda com frequência e algumas contas exibem o
   // modelo ativo sem um seletor acessível. Nesse caso, mantenha o modelo
   // atual da conta em vez de abortar uma geração que não depende da troca.
-  if (!(await clickText(c, s, "button", "Abrir seletor de modo|Open mode selector", signal)))
+  if (
+    !(await clickText(
+      bridge,
+      "button",
+      ["abrir seletor de modo", "open mode selector"],
+      "model-menu",
+    ))
+  )
     return;
-  if (!(await clickText(c, s, "[role=menuitem],[role=option]", map[name] || map.pro, signal)))
+  if (
+    !(await clickText(
+      bridge,
+      "[role=menuitem],[role=option]",
+      [map[name] || map.pro],
+      `model:${name}`,
+    ))
+  )
     throw err("PERMISSION_DENIED", `Modelo ${name} indisponível nesta conta.`);
 }
-async function selectTool(c, s, type, signal) {
+async function selectTool(bridge, type) {
   if (!type) return;
   if (
-    !(await clickText(c, s, "button", "Envio (?:e|&) ferramentas|Upload (?:and|&) tools", signal))
+    !(await clickText(
+      bridge,
+      "button",
+      ["envio e ferramentas", "envio & ferramentas", "upload and tools", "upload & tools"],
+      "tools-menu",
+    ))
   )
     throw err("OUTPUT_VALIDATION_FAILED", "Menu de ferramentas não encontrado.", true);
-  const label = type === "image" ? "Criar imagem|Create image" : "Criar música|Create music";
-  if (!(await clickText(c, s, "[role=menu] *", label, signal)))
+  const labels =
+    type === "image" ? ["criar imagem", "create image"] : ["criar música", "create music"];
+  if (!(await clickText(bridge, "[role=menu] *", labels, `tool:${type}`)))
     throw err("PERMISSION_DENIED", `Ferramenta ${type} indisponível.`);
 }
-async function pasteImageFromClipboard(c, s, file, signal) {
-  if (platform() !== "win32") return false;
-  const attachmentState = `(()=>{const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>20&&r.height>20&&s.display!=='none'&&s.visibility!=='hidden'};const images=[...document.querySelectorAll('img')].filter(visible).filter(e=>/blob:|data:image/i.test(e.currentSrc||e.src||''));const controls=[...document.querySelectorAll('[data-test-id*="attachment" i],[class*="attachment" i],[aria-label*="remove" i]')].filter(visible);return images.length+controls.length})()`;
-  const baseline = await evaluate(c, s, attachmentState);
-  const escapedPath = file.path.replaceAll("'", "''");
-  const script = `$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Windows.Forms;Add-Type -AssemblyName System.Drawing;$image=[System.Drawing.Image]::FromFile('${escapedPath}');try{[System.Windows.Forms.Clipboard]::SetImage($image)}finally{$image.Dispose()}`;
-  const encoded = Buffer.from(script, "utf16le").toString("base64");
-  await new Promise((resolve, reject) => {
-    const child = spawn(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-STA", "-EncodedCommand", encoded],
-      { stdio: ["ignore", "ignore", "pipe"], windowsHide: true, shell: false },
-    );
-    let stderr = "";
-    child.stderr.on("data", (chunk) => (stderr += String(chunk)));
-    child.once("error", reject);
-    child.once("exit", (code) =>
-      code === 0
-        ? resolve()
-        : reject(new Error(stderr || `PowerShell encerrou com código ${code}.`)),
-    );
-    signal?.addEventListener("abort", () => child.kill(), { once: true });
-  });
-  const point = await evaluate(
-    c,
-    s,
-    `(()=>{${HELP};const e=prompt();if(!e)return null;e.focus();const r=e.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
-  );
-  if (!point) return false;
-  for (const type of ["mousePressed", "mouseReleased"])
-    await c.send(
-      "Input.dispatchMouseEvent",
-      { type, x: point.x, y: point.y, button: "left", clickCount: 1 },
-      s,
-    );
-  await c.send(
-    "Input.dispatchKeyEvent",
-    {
-      type: "rawKeyDown",
-      key: "v",
-      code: "KeyV",
-      windowsVirtualKeyCode: 86,
-      nativeVirtualKeyCode: 86,
-      modifiers: 2,
-      commands: ["Paste"],
-    },
-    s,
-  );
-  await c.send(
-    "Input.dispatchKeyEvent",
-    {
-      type: "keyUp",
-      key: "v",
-      code: "KeyV",
-      windowsVirtualKeyCode: 86,
-      nativeVirtualKeyCode: 86,
-      modifiers: 2,
-    },
-    s,
-  );
-  const pasteDeadline = Date.now() + 10000;
-  while (Date.now() < pasteDeadline) {
-    if ((await evaluate(c, s, attachmentState)) > baseline) return true;
-    await sleep(250, signal);
-  }
-  return false;
-}
-async function attachFiles(c, s, files, signal) {
+async function attachFiles(c, s, bridge, files, signal) {
   if (!files.length) return;
   if (
-    !(await clickText(c, s, "button", "Envio (?:e|&) ferramentas|Upload (?:and|&) tools", signal))
+    !(await clickText(
+      bridge,
+      "button",
+      ["envio e ferramentas", "envio & ferramentas", "upload and tools", "upload & tools"],
+      "upload-menu",
+    ))
   )
     throw err("OUTPUT_VALIDATION_FAILED", "Menu de upload não encontrado.", true);
   // Abrir o menu já materializa os inputs ocultos de arquivo. Clicar em
@@ -856,22 +797,8 @@ async function attachFiles(c, s, files, signal) {
     s,
   );
   const objectId = target?.result?.objectId;
-  if (
-    !objectId &&
-    onlyImages &&
-    files.length === 1 &&
-    (await pasteImageFromClipboard(c, s, files[0], signal))
-  )
-    return;
   if (!objectId) throw err("OUTPUT_VALIDATION_FAILED", "Input de upload não encontrado.", true);
   const { nodeId } = await c.send("DOM.requestNode", { objectId }, s);
-  if (
-    !nodeId &&
-    onlyImages &&
-    files.length === 1 &&
-    (await pasteImageFromClipboard(c, s, files[0], signal))
-  )
-    return;
   if (!nodeId)
     throw err("OUTPUT_VALIDATION_FAILED", "Input de upload não pôde ser resolvido.", true);
   await c.send("DOM.setFileInputFiles", { files: files.map((x) => x.path), nodeId }, s);
@@ -884,74 +811,26 @@ async function attachFiles(c, s, files, signal) {
   }
   throw err("TIMEOUT", "Upload não concluiu.", true);
 }
-async function setPrompt(c, s, text, settings, signal) {
-  const p = await evaluate(
-    c,
-    s,
-    `(()=>{${HELP};const e=prompt();if(!e)return null;e.focus();const r=e.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
+async function setPrompt(bridge, text, operationKey) {
+  await bridge.dispatch(
+    "setText",
+    {
+      selectors: [
+        '[contenteditable="true"][role="textbox"]',
+        '[role="textbox"][aria-label*="Gemini" i]',
+        '[role="textbox"][aria-label*="comando" i]',
+      ],
+      text,
+    },
+    operationKey,
   );
-  if (!p) throw err("OUTPUT_VALIDATION_FAILED", "Prompt não encontrado.", true);
-  for (const type of ["mousePressed", "mouseReleased"])
-    await c.send(
-      "Input.dispatchMouseEvent",
-      { type, x: p.x, y: p.y, button: "left", clickCount: 1 },
-      s,
-    );
-  await c.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 },
-    s,
-  );
-  await c.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 },
-    s,
-  );
-  await c.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyDown", key: "Backspace", code: "Backspace" },
-    s,
-  );
-  const size = clamp(settings.typingChunkSize, 10, 1, 50),
-    delay = clamp(settings.typingDelayMs, 10, 0, 200),
-    chars = Array.from(text);
-  for (let i = 0; i < chars.length; i += size) {
-    await c.send("Input.insertText", { text: chars.slice(i, i + size).join("") }, s);
-    if (delay) await sleep(delay, signal);
-  }
-  await sleep(250, signal);
-  let readback = await evaluate(
-    c,
-    s,
-    `(()=>{${HELP};const e=prompt();return e?.value||e?.innerText||e?.textContent||''})()`,
-  );
-  if (normalizeEditorText(readback) !== normalizeEditorText(text)) {
-    await replacePromptWithKeyEvents(c, s, text, signal);
-    await sleep(250, signal);
-    readback = await evaluate(
-      c,
-      s,
-      `(()=>{${HELP};const e=prompt();return e?.value||e?.innerText||e?.textContent||''})()`,
-    );
-  }
-  if (normalizeEditorText(readback) !== normalizeEditorText(text))
-    throw err(
-      "OUTPUT_VALIDATION_FAILED",
-      "O Gemini não confirmou o prompt completo após as estratégias de entrada.",
-      true,
-    );
 }
-async function send(c, s, signal) {
-  const clicked = await evaluate(
-    c,
-    s,
-    `(()=>{${HELP};const e=[...document.querySelectorAll('button')].filter(x=>vis(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true'&&/Enviar mensagem|Send message|Enviar|Send/i.test(txt(x))).sort((a,b)=>txt(a).length-txt(b).length)[0];if(!e)return false;e.click();return true})()`,
+async function send(c, s, bridge, signal, operationKey) {
+  await bridge.dispatch(
+    "click",
+    { selectors: ["button"], textIncludes: ["enviar mensagem", "send message", "enviar", "send"] },
+    operationKey,
   );
-  if (
-    !clicked &&
-    !(await clickText(c, s, "button", "Enviar mensagem|Send message|Enviar|Send", signal))
-  )
-    throw err("OUTPUT_VALIDATION_FAILED", "Botão Enviar não disponível.", true);
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw err("CANCELLED", "Execução cancelada.");
@@ -970,11 +849,11 @@ async function send(c, s, signal) {
 async function responseState(c, s) {
   return await evaluate(c, s, `(()=>{${HELP};return state()})()`);
 }
-async function textTurn(c, s, promptText, settings, signal) {
+async function textTurn(c, s, bridge, promptText, settings, signal, operationKey) {
   const before = await responseState(c, s),
     base = before.texts?.length ?? 0;
-  await setPrompt(c, s, promptText, settings, signal);
-  await send(c, s, signal);
+  await setPrompt(bridge, promptText, `prompt:${operationKey}`);
+  await send(c, s, bridge, signal, `send:${operationKey}`);
   const d = Date.now() + clamp(settings.responseTimeoutSeconds, 600, 30, 3600) * 1000;
   let last = "",
     stable = 0;
@@ -995,11 +874,11 @@ async function textTurn(c, s, promptText, settings, signal) {
   }
   throw err("TIMEOUT", "Gemini não concluiu resposta.", true);
 }
-async function mediaTurn(c, s, promptText, settings, signal, type) {
+async function mediaTurn(c, s, bridge, promptText, settings, signal, type, operationKey) {
   const selector = type === "image" ? "img" : "audio,video",
     base = await evaluate(c, s, `document.querySelectorAll(${JSON.stringify(selector)}).length`);
-  await setPrompt(c, s, promptText, settings, signal);
-  await send(c, s, signal);
+  await setPrompt(bridge, promptText, `media-prompt:${operationKey}`);
+  await send(c, s, bridge, signal, `media-send:${operationKey}`);
   const d = Date.now() + clamp(settings.responseTimeoutSeconds, 600, 30, 3600) * 1000;
   while (Date.now() < d) {
     const st = await evaluate(
@@ -1079,7 +958,7 @@ async function configureProfile(request, services) {
     return failure("INVALID_CONFIGURATION", "Ação de configuração de perfil inválida.");
   }
 
-  let client, child;
+  let client, child, bridge;
   try {
     const launched = await launch(
       { ...settings, keepBrowserOpen: false },
@@ -1089,7 +968,7 @@ async function configureProfile(request, services) {
     );
     child = launched.child;
     client = await new CDP(launched.version.webSocketDebuggerUrl).connect(services.signal);
-    const { sessionId } = await attach(client, services.signal);
+    const { sessionId } = await attach(client, services.signal, true);
     await newChat(client, sessionId, services.signal);
     await waitPrompt(
       client,
@@ -1097,6 +976,15 @@ async function configureProfile(request, services) {
       clamp(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
       services.signal,
     );
+    bridge = await attachContentFlowBridge({
+      client,
+      pageSessionId: sessionId,
+      pluginId: PLUGIN_ID,
+      profileId: name,
+      request,
+      signal: services.signal,
+      allowedOrigins: ["https://gemini.google.com"],
+    });
     await markProfilePrepared(path, name);
     return {
       status: "success",
@@ -1109,6 +997,7 @@ async function configureProfile(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
+    bridge?.dispose();
     try {
       await client?.send("Browser.close");
     } catch {}
@@ -1158,7 +1047,7 @@ export async function execute(request, services) {
   } catch (e) {
     return failure(e.code || "INVALID_CONFIGURATION", e.message);
   }
-  let client, child;
+  let client, child, bridge;
   try {
     const cfg = request.configuration ?? {},
       profile = normalizeProfile(cfg.accountProfile),
@@ -1186,10 +1075,18 @@ export async function execute(request, services) {
       clamp(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
       services.signal,
     );
-    await selectModel(client, sessionId, cfg.modelPreference, services.signal);
-    if (files.length) await attachFiles(client, sessionId, files, services.signal);
-    if (media)
-      await selectTool(client, sessionId, media === "image" ? "image" : "music", services.signal);
+    bridge = await attachContentFlowBridge({
+      client,
+      pageSessionId: sessionId,
+      pluginId: PLUGIN_ID,
+      profileId: profile,
+      request,
+      signal: services.signal,
+      allowedOrigins: ["https://gemini.google.com"],
+    });
+    await selectModel(bridge, cfg.modelPreference);
+    if (files.length) await attachFiles(client, sessionId, bridge, files, services.signal);
+    if (media) await selectTool(bridge, media === "image" ? "image" : "music");
     const responses = [],
       retries = clamp(cfg.retryAttempts, 1, 0, 3);
     for (let i = 0; i < parts.length; i++) {
@@ -1198,8 +1095,25 @@ export async function execute(request, services) {
         try {
           responses.push(
             media
-              ? await mediaTurn(client, sessionId, parts[i], settings, services.signal, media)
-              : await textTurn(client, sessionId, parts[i], settings, services.signal),
+              ? await mediaTurn(
+                  client,
+                  sessionId,
+                  bridge,
+                  parts[i],
+                  settings,
+                  services.signal,
+                  media,
+                  `${i}:${a}`,
+                )
+              : await textTurn(
+                  client,
+                  sessionId,
+                  bridge,
+                  parts[i],
+                  settings,
+                  services.signal,
+                  `${i}:${a}`,
+                ),
           );
           last = null;
           break;
@@ -1253,6 +1167,7 @@ export async function execute(request, services) {
       return failure("CANCELLED", "Execução cancelada.");
     return failure(e.code || "UPSTREAM_UNAVAILABLE", e.message || "Falha Gemini.", !!e.retryable);
   } finally {
+    bridge?.dispose();
     if (settings.keepBrowserOpen !== true)
       try {
         await client?.send("Browser.close");

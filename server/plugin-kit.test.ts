@@ -13,7 +13,7 @@ function answers(template: Answers["template"]): Answers {
     template,
     name: `Kit ${template}`,
     id: `com.contentflow.kit-${template}`,
-    author: "ContentFlow OS",
+    author: "ContentFlow",
     license: "Proprietary",
     description: "Plugin gerado durante os testes oficiais do kit.",
     operator: "Código",

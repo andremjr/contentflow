@@ -1,6 +1,6 @@
-# Google Flow Browser Images — ContentFlow OS
+# Google Flow Browser Images — ContentFlow
 
-Versão **1.2.0**.
+Versão **1.2.1**.
 
 Plugin de geração de imagens reais no Google Flow por meio do Chrome normal com um perfil dedicado. A versão 1.2 usa a única extensão companheira **ContentFlow Browser Bridge** para preencher o prompt e acionar a geração sem disputar teclado, mouse ou foco do sistema com o usuário.
 
@@ -21,7 +21,7 @@ Repita os passos para cada perfil/conta adicional. Não instale a extensão no p
 
 ### Sair ou remover uma conta
 
-Abra a conta pelo botão **Adicionar conta**, faça logout no Google Flow e remova a extensão daquele perfil em `chrome://extensions`. Depois, retire o nome da conta do bloco. Isso não apaga imagens e outros outputs que o ContentFlow OS já persistiu. Cada perfil é isolado; sair de uma conta não altera os demais perfis.
+Abra a conta pelo botão **Adicionar conta**, faça logout no Google Flow e remova a extensão daquele perfil em `chrome://extensions`. Depois, retire o nome da conta do bloco. Isso não apaga imagens e outros outputs que o ContentFlow já persistiu. Cada perfil é isolado; sair de uma conta não altera os demais perfis.
 
 O Chrome normal não mantém extensões ativas no headless da mesma forma que na janela comum. Por isso a V1 usa uma janela dedicada minimizada. Essa limitação não autoriza fallback para foco, teclado ou mouse.
 
@@ -58,7 +58,7 @@ A porta opcional `reference_images` aceita `image`, `file` ou `files`. As refer�
 
 - máximo configurável: 0 a 10;
 - cada arquivo precisa ser uma imagem de até 25 MB;
-- arquivos são resolvidos pelo staging autorizado do ContentFlow OS;
+- arquivos são resolvidos pelo staging autorizado do ContentFlow;
 - a conta e o projeto ativos continuam sendo a fonte de verdade para recursos persistentes do Flow.
 
 ## Fila e limites

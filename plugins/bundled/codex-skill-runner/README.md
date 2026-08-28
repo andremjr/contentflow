@@ -1,6 +1,6 @@
 # Codex Skill Runner
 
-Plugin independente compatível com ContentFlow OS Plugin API v1. Ele permite executar skills do Codex como operadores de blocos do Método, mantendo a sequência, os bindings, as tentativas e as entregas sob controle do ContentFlow OS.
+Plugin independente compatível com ContentFlow Plugin API v1. Ele permite executar skills do Codex como operadores de blocos do Método, mantendo a sequência, os bindings, as tentativas e as entregas sob controle do ContentFlow.
 
 Este pacote não é afiliado, patrocinado nem mantido pela OpenAI. “Codex” e “OpenAI” são usados apenas para identificar o provedor interoperado.
 
@@ -11,11 +11,11 @@ Este pacote não é afiliado, patrocinado nem mantido pela OpenAI. “Codex” e
 - Invocação não interativa por `codex exec`, schema de saída obrigatório e sessão efêmera.
 - Workspace e `CODEX_HOME` dedicados ao plugin; o perfil pessoal do usuário não é examinado nem reutilizado silenciosamente.
 
-Arquivos, imagens, áudio e vídeo ainda não são outputs desta versão. Eles exigem uma capability própria que promova artifacts pelo protocolo do ContentFlow OS.
+Arquivos, imagens, áudio e vídeo ainda não são outputs desta versão. Eles exigem uma capability própria que promova artifacts pelo protocolo do ContentFlow.
 
 ## Pré-requisitos
 
-1. ContentFlow OS 0.3.5 ou superior.
+1. ContentFlow 0.3.5 ou superior.
 2. Codex CLI oficial instalado e disponível como `codex` no `PATH` do aplicativo. A instalação do plugin não instala executáveis nem dependências.
 3. Uma chave de API da OpenAI com acesso ao modelo escolhido. Salve-a como `OPENAI_API_KEY` no cofre da Central de Plugins.
 4. Uma pasta de trabalho conectada ao plugin.
@@ -61,7 +61,7 @@ Consulte as políticas atuais do provedor em <https://platform.openai.com/docs/g
 
 ## Instalação e teste
 
-No ContentFlow OS, abra **Plugins → Instalar plugin → Usar pasta ao vivo**, selecione esta pasta, revise as permissões, conecte uma pasta de trabalho e cadastre `OPENAI_API_KEY`.
+No ContentFlow, abra **Plugins → Instalar plugin → Usar pasta ao vivo**, selecione esta pasta, revise as permissões, conecte uma pasta de trabalho e cadastre `OPENAI_API_KEY`.
 
 Na raiz do repositório:
 
@@ -80,4 +80,4 @@ Desative ou desinstale o plugin na Central de Plugins, remova `OPENAI_API_KEY` d
 
 ## Suporte
 
-Compatibilidade inicial: Windows desktop, Node 26, ContentFlow OS 0.3.5 e Codex CLI com suporte aos flags documentados de `codex exec`.
+Compatibilidade inicial: Windows desktop, Node 26, ContentFlow 0.3.5 e Codex CLI com suporte aos flags documentados de `codex exec`.

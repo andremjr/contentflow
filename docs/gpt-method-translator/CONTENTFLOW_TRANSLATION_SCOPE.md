@@ -1,6 +1,6 @@
 # Escopo de tradução — estratégia de canal não é método de vídeo
 
-O ContentFlow OS usa métodos para executar a produção de **um vídeo individual**. Ao traduzir uma explicação, não transforme automaticamente toda etapa ensinada em bloco. Primeiro classifique cada trecho em uma destas quatro categorias.
+O ContentFlow usa métodos para executar a produção de **um vídeo individual**. Ao traduzir uma explicação, não transforme automaticamente toda etapa ensinada em bloco. Primeiro classifique cada trecho em uma destas quatro categorias.
 
 ## 1. Contexto estratégico do canal — não vira bloco
 

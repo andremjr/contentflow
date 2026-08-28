@@ -1,4 +1,4 @@
-# Regras inegociáveis dos blocos — ContentFlow OS
+# Regras inegociáveis dos blocos — ContentFlow
 
 Classifique cada passo pela **origem do item que está sendo manipulado**, não pelo verbo casual usado na transcrição. A palavra “escolher” dita pelo autor não significa automaticamente o bloco `ESCOLHER`.
 

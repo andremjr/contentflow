@@ -1,4 +1,4 @@
-# ContentFlow OS
+# ContentFlow
 
 Gerenciador estratégico de métodos para organizar e executar a produção de vídeos. O frontend e a API rodam localmente na máquina do usuário.
 
@@ -12,13 +12,13 @@ A versão `0.4.2` mantém os 8 Processos Universais, os 4 Blocos Essenciais e os
 - execução sequencial de inputs em lote e fallback entre perfis explicitamente preparados somente para falhas técnicas permitidas;
 - funcionamento completo como organizador de Métodos mesmo quando nenhum plugin está instalado.
 
-Plugins são software externo ao ContentFlow OS. A release do núcleo não inclui nem instala plugins; integrações mantidas pelo autor para seus alunos são distribuídas separadamente e obedecem ao mesmo protocolo, consentimento e sandbox de qualquer outro plugin.
+Plugins são software externo ao ContentFlow. A release do núcleo não inclui nem instala plugins; integrações mantidas pelo autor para seus alunos são distribuídas separadamente e obedecem ao mesmo protocolo, consentimento e sandbox de qualquer outro plugin.
 
 A descrição normativa do comportamento está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). O contrato de integrações está em [`docs/PLUGIN_PROTOCOL.md`](docs/PLUGIN_PROTOCOL.md).
 
 ## V0 para Windows — sem Node ou terminal
 
-Usuários leigos podem baixar o instalador pronto na página [Releases](https://github.com/andremjr/contentflow-os/releases). O arquivo **Setup** é a opção recomendada: basta executar, escolher a pasta e abrir o atalho do ContentFlow OS. O arquivo **Portable** não instala nada, mas é mais lento para abrir porque descompacta o aplicativo a cada execução.
+Usuários leigos podem baixar o instalador pronto na página [Releases](https://github.com/andremjr/contentflow/releases). O arquivo **Setup** é a opção recomendada: basta executar, escolher a pasta e abrir o atalho do ContentFlow. O arquivo **Portable** não instala nada, mas é mais lento para abrir porque descompacta o aplicativo a cada execução.
 
 No aplicativo instalado, a página inicial permite verificar, baixar e instalar a release estável mais recente. A versão portátil abre a página oficial para baixar o instalador recomendado.
 
@@ -38,8 +38,8 @@ node --version
 ## Como executar pelo código-fonte
 
 ```sh
-git clone https://github.com/andremjr/contentflow-os.git
-cd contentflow-os
+git clone https://github.com/andremjr/contentflow.git
+cd contentflow
 npm ci
 npm run dev
 ```
@@ -59,7 +59,7 @@ Para criar com ChatGPT, Claude, Gemini ou outro agente, use o [pacote compacto p
 
 ## Dados locais
 
-No Windows, tanto a execução pelo código-fonte quanto a versão instalada usam o mesmo banco SQLite em `%APPDATA%\ContentFlow OS\data\contentflow-os.sqlite`. Assim, canais, projetos e métodos vistos no preview também aparecem no aplicativo compilado. Em outros sistemas, o desenvolvimento continua usando `data/contentflow-os.sqlite` dentro do repositório.
+No Windows, tanto a execução pelo código-fonte quanto a versão instalada usam o mesmo banco SQLite em `%APPDATA%\ContentFlow\data\contentflow.sqlite`. Assim, canais, projetos e métodos vistos no preview também aparecem no aplicativo compilado. Em outros sistemas, o desenvolvimento continua usando `data/contentflow.sqlite` dentro do repositório.
 
 Na primeira execução da versão atual pelo código-fonte no Windows, um banco legado encontrado em `data/` é migrado automaticamente para a área compartilhada quando ainda não existe um banco no destino.
 
@@ -69,7 +69,7 @@ O bloco `ESCOLHER` pode declarar **Histórico do canal** como contexto para cons
 
 Não há login nem sincronização em nuvem nesta fase.
 
-Faça backup de `%APPDATA%\ContentFlow OS\data` antes de atualizar ou trocar de computador. Para atualizar o código-fonte:
+Faça backup de `%APPDATA%\ContentFlow\data` antes de atualizar ou trocar de computador. Para atualizar o código-fonte:
 
 ```sh
 git pull
@@ -79,11 +79,11 @@ npm run dev
 
 ## Privacidade e integrações
 
-O ContentFlow OS não possui telemetria ou analytics. As informações permanecem locais. Um plugin externo pode enviar entradas ao provedor declarado somente quando o usuário o instala, autoriza e executa; links externos só são abertos quando clicados.
+O ContentFlow não possui telemetria ou analytics. As informações permanecem locais. Um plugin externo pode enviar entradas ao provedor declarado somente quando o usuário o instala, autoriza e executa; links externos só são abertos quando clicados.
 
 Credenciais de plugins são armazenadas no cofre seguro do ambiente local, nunca no SQLite ou no Método, e são entregues somente à invocação autorizada. Cada Bloco do Método escolhe sua configuração funcional e referencia uma conexão local nomeada; o valor secreto permanece fora do Método. A página de Plugins cuida da instalação, atualização, permissões, ativação e remoção dos pacotes.
 
-Nenhum plugin faz parte do núcleo ou recebe confiança implícita, inclusive os mantidos pelo autor do ContentFlow OS. Plugins não precisam de aprovação do projeto para ser criados ou compartilhados. A decisão de instalar e ativar é local: o aplicativo valida o manifesto, mostra as permissões pedidas e só executa depois do consentimento do usuário, em processo separado com a sandbox de permissões do Node. Autores e usuários respondem por seu código e uso conforme sua participação e a legislação aplicável; o núcleo continua responsável pelas proteções e dados sob seu controle. Consulte o [guia de desenvolvimento](docs/PLUGIN_DEVELOPMENT.md), o [plugin comunitário mínimo](plugins/examples/community-reference/README.md), a [governança do ecossistema](docs/PLUGIN_ECOSYSTEM.md) e a [proteção jurídica e licenciamento](docs/LEGAL_AND_LICENSING.md).
+Nenhum plugin faz parte do núcleo ou recebe confiança implícita, inclusive os mantidos pelo autor do ContentFlow. Plugins não precisam de aprovação do projeto para ser criados ou compartilhados. A decisão de instalar e ativar é local: o aplicativo valida o manifesto, mostra as permissões pedidas e só executa depois do consentimento do usuário, em processo separado com a sandbox de permissões do Node. Autores e usuários respondem por seu código e uso conforme sua participação e a legislação aplicável; o núcleo continua responsável pelas proteções e dados sob seu controle. Consulte o [guia de desenvolvimento](docs/PLUGIN_DEVELOPMENT.md), o [plugin comunitário mínimo](plugins/examples/community-reference/README.md), a [governança do ecossistema](docs/PLUGIN_ECOSYSTEM.md) e a [proteção jurídica e licenciamento](docs/LEGAL_AND_LICENSING.md).
 
 Por padrão, cada upload pode ter até 256 MB e a pasta local de uploads pode ocupar até 10 GB. Usuários avançados podem ajustar esses limites antes de iniciar a API com `CONTENTFLOW_MAX_UPLOAD_MB` e `CONTENTFLOW_MAX_UPLOAD_STORAGE_GB`.
 
@@ -118,6 +118,6 @@ npm run check
 
 ## Licença
 
-Copyright © 2026 André Marinho Jr. O ContentFlow OS é distribuído sob uma [licença proprietária source-available](LICENSE), não sob uma licença open source.
+Copyright © 2026 André Marinho Jr. O ContentFlow é distribuído sob uma [licença proprietária source-available](LICENSE), não sob uma licença open source.
 
 É permitido usar o produto original e desenvolver plugins independentes pelo protocolo público. Não é concedida autorização para clones, versões modificadas distribuídas, produtos concorrentes, white-label, rebranding ou reskins. Consulte também a [política para ferramentas de IA](AI_USAGE_POLICY.md).

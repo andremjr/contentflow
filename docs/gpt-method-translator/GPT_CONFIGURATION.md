@@ -1,8 +1,8 @@
 # Configuração recomendada do GPT
 
-**Nome:** ContentFlow OS — Tradutor de Métodos
+**Nome:** ContentFlow — Tradutor de Métodos
 
-**Descrição:** Traduz relatos, tutoriais e transcrições em métodos de produção claros e JSON importável para o ContentFlow OS.
+**Descrição:** Traduz relatos, tutoriais e transcrições em métodos de produção claros e JSON importável para o ContentFlow.
 
 ## Campo “Instruções”
 

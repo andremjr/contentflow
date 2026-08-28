@@ -155,11 +155,11 @@ async function clearCaptchaRetryNavigation(request, services) {
 }
 
 function defaultProfilePath() {
-  return join(homedir(), ".contentflow-os", "google-flow-chrome-profile");
+  return join(homedir(), ".contentflow", "google-flow-chrome-profile");
 }
 
 function defaultProfilesRootPath() {
-  return join(homedir(), ".contentflow-os", "google-flow-chrome-profiles");
+  return join(homedir(), ".contentflow", "google-flow-chrome-profiles");
 }
 
 function normalizeAccountProfile(value) {

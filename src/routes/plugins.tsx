@@ -48,10 +48,10 @@ import type { PluginDeliveryType, PluginManifest } from "@/lib/plugin-contract";
 export const Route = createFileRoute("/plugins")({
   head: () => ({
     meta: [
-      { title: "Plugins — ContentFlow OS" },
+      { title: "Plugins — ContentFlow" },
       {
         name: "description",
-        content: "Gerenciamento dos plugins locais do ContentFlow OS.",
+        content: "Gerenciamento dos plugins locais do ContentFlow.",
       },
     ],
   }),
@@ -181,7 +181,7 @@ function PluginsPage() {
   return (
     <AppShell>
       <TopBar
-        breadcrumbs={[{ label: "ContentFlow OS" }, { label: "Plugins" }]}
+        breadcrumbs={[{ label: "ContentFlow" }, { label: "Plugins" }]}
         title="Plugins"
         subtitle="Gerencie as ferramentas que executam blocos de IA e Código"
         showNewProject={false}
@@ -404,7 +404,7 @@ function InstallPluginDialog({ onInstalled }: { onInstalled: () => Promise<void>
           />
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             {mode === "install"
-              ? "O ContentFlow OS guarda uma cópia. Você poderá apagar a pasta original sem remover o plugin."
+              ? "O ContentFlow guarda uma cópia. Você poderá apagar a pasta original sem remover o plugin."
               : "Ideal para criar com IA: alterações na pasta aparecem ao atualizar, e desconectar não apaga seus arquivos."}
           </p>
         </div>
@@ -779,7 +779,7 @@ function CommunityAccessPanel({
     <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
       <p className="text-xs font-semibold">Acesso deste plugin</p>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-        Este plugin foi instalado localmente. O ContentFlow OS executa seu código em um processo
+        Este plugin foi instalado localmente. O ContentFlow executa seu código em um processo
         separado e entrega somente os recursos declarados abaixo.
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -822,8 +822,8 @@ function CommunityAccessPanel({
         ))}
       {!plugin.networkIsolation && (
         <p className="mt-2 text-[10px] leading-relaxed text-warning">
-          Reinicie o ContentFlow OS com Node 26 antes de ativar código não confiável. O runtime
-          atual não consegue impor o bloqueio técnico de rede da sandbox.
+          Reinicie o ContentFlow com Node 26 antes de ativar código não confiável. O runtime atual
+          não consegue impor o bloqueio técnico de rede da sandbox.
         </p>
       )}
       {plugin.manifest.permissions.some((permission) =>
@@ -977,7 +977,7 @@ export function CommunityWorkspaceField({ pluginId }: { pluginId: string }) {
       </Label>
       <p className="text-[10px] leading-relaxed text-muted-foreground">
         Use uma pasta sua para arquivos persistentes e checkpoints. Deixe vazio para usar a pasta
-        interna e isolada do ContentFlow OS.
+        interna e isolada do ContentFlow.
       </p>
       <div className="flex gap-2">
         <Input

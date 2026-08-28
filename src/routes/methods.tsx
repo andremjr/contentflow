@@ -48,7 +48,7 @@ import { setChannelMethod, useChannels } from "@/lib/store";
 export const Route = createFileRoute("/methods")({
   head: () => ({
     meta: [
-      { title: "Métodos — ContentFlow OS" },
+      { title: "Métodos — ContentFlow" },
       {
         name: "description",
         content: "Biblioteca global de métodos de criação salvos nos canais.",
@@ -159,7 +159,7 @@ function MethodsLibraryPage() {
   return (
     <AppShell>
       <TopBar
-        breadcrumbs={[{ label: "ContentFlow OS" }, { label: "Métodos" }]}
+        breadcrumbs={[{ label: "ContentFlow" }, { label: "Métodos" }]}
         title="Métodos"
         subtitle="Use, compartilhe e gerencie métodos salvos nos seus canais"
         showNewProject={false}

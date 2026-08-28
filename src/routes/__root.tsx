@@ -74,15 +74,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "ContentFlow OS — Gerenciador estratégico de métodos" },
+      { title: "ContentFlow — Gerenciador estratégico de métodos" },
       {
         name: "description",
         content:
           "Gerenciador estratégico de métodos para a produção completa de canais do YouTube: tema, roteiro, narração, edição e publicação.",
       },
-      { name: "author", content: "ContentFlow OS" },
+      { name: "author", content: "ContentFlow" },
       { name: "theme-color", content: "#08111F" },
-      { property: "og:title", content: "ContentFlow OS" },
+      { property: "og:title", content: "ContentFlow" },
       {
         property: "og:description",
         content:

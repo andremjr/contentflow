@@ -39,7 +39,7 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
       name: "Browser fallback test",
       version: "1.0.0",
       description: "Fixture isolada para fallback técnico.",
-      author: "ContentFlow OS tests",
+      author: "ContentFlow tests",
       license: "MIT",
       runtime: { kind: "node", version: ">=26 <27", module: "esm" },
       entrypoint: "handler.mjs",

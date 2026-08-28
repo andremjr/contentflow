@@ -1,10 +1,10 @@
 # ContentFlow Kit Text Demo
 
-Plugin gerado pelo kit oficial do ContentFlow OS usando a API pública v1.
+Plugin gerado pelo kit oficial do ContentFlow usando a API pública v1.
 
 ## Desenvolvimento
 
-Na raiz do ContentFlow OS, substitua `<pasta-do-plugin>` pela pasta deste plugin:
+Na raiz do ContentFlow, substitua `<pasta-do-plugin>` pela pasta deste plugin:
 
 ```powershell
 npm run plugin:kit -- validate <pasta-do-plugin>

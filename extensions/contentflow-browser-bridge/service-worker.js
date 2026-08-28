@@ -1,16 +1,35 @@
 const BRIDGE_ID = "com.contentflow.browser-bridge";
 const FLOW_PLUGIN_ID = "local.contentflow.google-flow-batch-images";
 const PROTOCOL_VERSION = 2;
-const FLOW_ORIGIN = "https://labs.google";
 const COMMAND_CACHE_KEY = "contentflowCommandCacheV2";
 const MAX_COMMAND_CACHE = 500;
+const COMMON_ACTIONS = new Set(["ping", "inspect", "setText", "click"]);
+const policy = (origins, tabPatterns, options = {}) =>
+  Object.freeze({
+    origins: new Set(origins),
+    tabPatterns,
+    requiredPath: options.requiredPath || "",
+    actions: new Set([...(options.actions || []), ...COMMON_ACTIONS]),
+  });
 const PLUGIN_POLICIES = Object.freeze({
-  [FLOW_PLUGIN_ID]: Object.freeze({
-    origin: FLOW_ORIGIN,
-    tabPattern: `${FLOW_ORIGIN}/*`,
+  "local.contentflow.chatgpt-browser-studio": policy(
+    ["https://chatgpt.com"],
+    ["https://chatgpt.com/*"],
+  ),
+  "local.contentflow.claude-browser-text": policy(["https://claude.ai"], ["https://claude.ai/*"]),
+  "local.contentflow.gemini-browser-studio": policy(
+    ["https://gemini.google.com"],
+    ["https://gemini.google.com/*"],
+  ),
+  [FLOW_PLUGIN_ID]: policy(["https://labs.google"], ["https://labs.google/*"], {
     requiredPath: "/tools/flow",
-    actions: new Set(["ping", "inspect", "setPrompt", "clickGenerate"]),
+    actions: ["setPrompt", "clickGenerate"],
   }),
+  "local.contentflow.grok-browser-studio": policy(["https://grok.com"], ["https://grok.com/*"]),
+  "local.contentflow.meta-ai-browser-studio": policy(
+    ["https://meta.ai", "https://www.meta.ai"],
+    ["https://meta.ai/*", "https://www.meta.ai/*"],
+  ),
 });
 const inFlight = new Map();
 let activeSession = null;
@@ -33,11 +52,11 @@ function policyForPlugin(pluginId) {
 
 function selectPluginTab(tabs, expectedUrl, policy) {
   const expected = new URL(expectedUrl);
-  if (expected.origin !== policy.origin) return null;
+  if (!policy.origins.has(expected.origin)) return null;
   const candidates = tabs.filter((tab) => {
     try {
       const url = new URL(tab.url || "");
-      return url.origin === policy.origin && url.pathname.includes(policy.requiredPath);
+      return policy.origins.has(url.origin) && url.pathname.includes(policy.requiredPath);
     } catch {
       return false;
     }
@@ -145,7 +164,7 @@ async function dispatchToPage(command) {
   } catch {
     return bridgeError("INVALID_COMMAND", "expectedUrl inválida.");
   }
-  if (!policy || expectedUrl.origin !== policy.origin) {
+  if (!policy || !policy.origins.has(expectedUrl.origin)) {
     return bridgeError("ORIGIN_NOT_ALLOWED", "A origem não foi autorizada para este plugin.");
   }
 
@@ -159,12 +178,12 @@ async function dispatchToPage(command) {
     return { ...cached.response, replayed: true };
   }
 
-  const tabs = await chrome.tabs.query({ url: policy.tabPattern });
+  const tabs = await chrome.tabs.query({ url: policy.tabPatterns });
   const tab = selectPluginTab(tabs, expectedUrl.toString(), policy);
   if (!Number.isInteger(tab?.id)) {
     return bridgeError(
-      "FLOW_TAB_NOT_FOUND",
-      "A aba exata do Google Flow não foi encontrada no perfil dedicado.",
+      "PLUGIN_TAB_NOT_FOUND",
+      "A aba exata do provedor não foi encontrada no perfil dedicado.",
     );
   }
 
@@ -172,7 +191,7 @@ async function dispatchToPage(command) {
   try {
     const response = await withTimeout(
       chrome.tabs.sendMessage(tab.id, {
-        source: "contentflow-os",
+        source: "contentflow",
         pluginId: command.pluginId,
         protocolVersion: PROTOCOL_VERSION,
         profileId: command.profileId,
@@ -234,13 +253,13 @@ globalThis.contentFlowBridge = Object.freeze({
       return bridgeError("SESSION_MISMATCH", "Cancelamento recusado pela extensão.");
     }
     const policy = policyForPlugin(activeSession.pluginId);
-    const tabs = await chrome.tabs.query({ url: policy.tabPattern });
+    const tabs = await chrome.tabs.query({ url: policy.tabPatterns });
     await Promise.allSettled(
       tabs
         .filter((tab) => Number.isInteger(tab.id))
         .map((tab) =>
           chrome.tabs.sendMessage(tab.id, {
-            source: "contentflow-os",
+            source: "contentflow",
             pluginId: activeSession.pluginId,
             protocolVersion: PROTOCOL_VERSION,
             profileId: request.profileId,
@@ -256,7 +275,7 @@ globalThis.contentFlowBridge = Object.freeze({
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.source === "contentflow-flow-page" && message?.action === "wake") {
+  if (message?.source === "contentflow-provider-page" && message?.action === "wake") {
     sendResponse({ ok: true, ...identity() });
   }
   return false;

@@ -2,7 +2,7 @@
 
 ## Reporte vulnerabilidades de forma privada
 
-Não abra uma issue pública para vulnerabilidades ainda não corrigidas. Use **Security > Report a vulnerability** no repositório GitHub do ContentFlow OS para enviar o relato por GitHub Private Vulnerability Reporting.
+Não abra uma issue pública para vulnerabilidades ainda não corrigidas. Use **Security > Report a vulnerability** no repositório GitHub do ContentFlow para enviar o relato por GitHub Private Vulnerability Reporting.
 
 Inclua, quando possível:
 

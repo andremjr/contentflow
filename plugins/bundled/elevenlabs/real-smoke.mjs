@@ -70,7 +70,7 @@ try {
     await execute(
       request(
         "text-to-speech",
-        { text: "Olá. Este é um teste curto do ContentFlow OS." },
+        { text: "Olá. Este é um teste curto do ContentFlow." },
         {
           voice_id: voiceId,
           model_id: "eleven_multilingual_v2",

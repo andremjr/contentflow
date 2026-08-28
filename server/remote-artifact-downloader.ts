@@ -356,7 +356,7 @@ function requestPinnedHttps(
           Host: url.host,
           Accept: "*/*",
           "Accept-Encoding": "identity",
-          "User-Agent": "ContentFlow-OS/1 remote-artifact-importer",
+          "User-Agent": "ContentFlow/1 remote-artifact-importer",
         },
       },
       (response) => resolve(response as RemoteArtifactResponse),

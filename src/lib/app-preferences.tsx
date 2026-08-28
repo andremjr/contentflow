@@ -650,9 +650,9 @@ const PHRASES: Record<string, Translation> = {
   Projetos: ["Projects", "Proyectos"],
   Publicação: ["Publishing", "Publicación"],
   Quinzenal: ["Every two weeks", "Quincenal"],
-  "Quer participar do desenvolvimento do ContentFlow OS?": [
-    "Want to help develop ContentFlow OS?",
-    "¿Quieres participar en el desarrollo de ContentFlow OS?",
+  "Quer participar do desenvolvimento do ContentFlow?": [
+    "Want to help develop ContentFlow?",
+    "¿Quieres participar en el desarrollo de ContentFlow?",
   ],
   "Regra de validação": ["Validation rule", "Regla de validación"],
   "Remover bloco": ["Remove block", "Eliminar bloque"],

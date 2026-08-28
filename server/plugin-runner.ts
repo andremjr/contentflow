@@ -51,7 +51,7 @@ const maxArtifactsPerResponse = 100;
 const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
 const defaultDataRoot =
   process.platform === "win32" && process.env.APPDATA
-    ? path.join(process.env.APPDATA, "ContentFlow OS", "data")
+    ? path.join(process.env.APPDATA, "ContentFlow", "data")
     : path.join(applicationRoot, "data");
 const dataRoot = path.resolve(process.env.CONTENTFLOW_DATA_DIR ?? defaultDataRoot);
 const localPluginsRoot = path.resolve(

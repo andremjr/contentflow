@@ -1,6 +1,6 @@
 # Plugins oficiais
 
-Esta pasta contém os plugins oficiais distribuídos junto com o ContentFlow OS.
+Esta pasta contém os plugins oficiais distribuídos junto com o ContentFlow.
 
 Todos os plugins desta pasta são carregados automaticamente e executam como código confiável, sem a sandbox reservada a plugins locais e instalados. A inclusão aqui exige revisão integral do pacote, das dependências, permissões, efeitos externos, subprocessos e política de dados.
 

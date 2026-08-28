@@ -1,9 +1,9 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow-os/main/docs/schemas/contentflow-plugin-v1.schema.json",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
   "id": "local.contentflow.claude-browser-text",
   "name": "Claude Browser Studio",
-  "version": "0.3.10",
+  "version": "0.4.0",
   "description": "Super plugin do Claude web para criar, pesquisar, escolher, validar e analisar imagens ou documentos em conversas persistentes.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",

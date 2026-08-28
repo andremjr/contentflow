@@ -4,7 +4,7 @@ Este guia define como planejar plugins que operam interfaces web de terceiros se
 
 Para o fluxo básico de criação e conversão, comece em [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md). Este documento trata apenas dos riscos e decisões adicionais de automação de interface.
 
-> Decisão de arquitetura: o núcleo não fornece runtime, extensão ou broker específico de navegador. Uma extensão companheira Manifest V3, externa ao núcleo, oferece transporte e operações limitadas reutilizáveis aos plugins compatíveis. Cada plugin continua responsável por autenticação, seletores, estados, regras e validação do seu provedor. O ContentFlow OS não descobre nem entrega silenciosamente perfis, cookies ou sessões.
+> Decisão de arquitetura: o núcleo não fornece runtime, extensão ou broker específico de navegador. Uma extensão companheira Manifest V3, externa ao núcleo, oferece transporte e operações limitadas reutilizáveis aos plugins compatíveis. Cada plugin continua responsável por autenticação, seletores, estados, regras e validação do seu provedor. O ContentFlow não descobre nem entrega silenciosamente perfis, cookies ou sessões.
 
 ## 1. Princípio central
 
@@ -16,7 +16,7 @@ O limite efetivo de uma integração é sempre o mais restritivo entre:
 2. os termos, políticas e meios técnicos autorizados pelo provedor;
 3. o plano, a cota, o rate limit e os controles da conta;
 4. as permissões declaradas pelo plugin;
-5. os limites impostos pelo ContentFlow OS.
+5. os limites impostos pelo ContentFlow.
 
 Capacidade técnica não equivale a autorização. A ausência de um bloqueio visível também não prova que automação, endpoints privados ou reutilização de sessão sejam permitidos. O autor deve verificar e documentar as regras atuais de cada provedor antes de publicar o plugin.
 
@@ -65,7 +65,7 @@ Quando surgir um CAPTCHA, bloqueio antiabuso ou pedido de nova autenticação, o
 
 Múltiplas contas conectadas explicitamente são permitidas para continuidade operacional. A troca automática fica restrita a falhas técnicas transitórias (`UPSTREAM_UNAVAILABLE`, `TIMEOUT` e `JOB_FAILED`) e não pode ser usada em resposta a CAPTCHA, autenticação, rate limit, cota, upgrade ou bloqueio. Todas as contas precisam ser preparadas individualmente pelo usuário e permanecem em perfis dedicados separados.
 
-Um autor pode escrever, compartilhar e instalar diretamente código que ignore essas regras. A documentação não afirma aprovar previamente nem controlar esse comportamento. Ela define o que recebe selo oficial, listagem nos catálogos do projeto e suporte. Independentemente da origem ou finalidade, todo plugin executado dentro do ContentFlow OS recebe somente os recursos consentidos; se tentar ampliar essa autoridade, a sandbox deve impedir ou encerrar a operação automaticamente.
+Um autor pode escrever, compartilhar e instalar diretamente código que ignore essas regras. A documentação não afirma aprovar previamente nem controlar esse comportamento. Ela define o que recebe selo oficial, listagem nos catálogos do projeto e suporte. Independentemente da origem ou finalidade, todo plugin executado dentro do ContentFlow recebe somente os recursos consentidos; se tentar ampliar essa autoridade, a sandbox deve impedir ou encerrar a operação automaticamente.
 
 ## 5. Uma capacidade pode ser internamente complexa
 

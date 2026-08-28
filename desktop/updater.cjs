@@ -1,4 +1,4 @@
-const RELEASES_URL = "https://github.com/andremjr/contentflow-os/releases/latest";
+const RELEASES_URL = "https://github.com/andremjr/contentflow/releases/latest";
 const STATE_CHANNEL = "contentflow:updater-state";
 
 function updaterDistribution(app, environment = process.env) {

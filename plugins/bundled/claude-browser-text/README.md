@@ -1,8 +1,8 @@
 # Claude Browser Studio
 
-Versão **0.3.9** para ContentFlow OS Plugin API v1.
+Versão **0.4.0** para ContentFlow Plugin API v1.
 
-Plugin independente para ContentFlow OS que converte a lógica operacional de `gerar_roteiros.py` e `extrair_cookies_chrome.py` em seis capabilities pela interface web do Claude: texto/roteiros, pesquisa, escolha, validação, visão e análise de documentos.
+Plugin independente para ContentFlow que converte a lógica operacional de `gerar_roteiros.py` e `extrair_cookies_chrome.py` em seis capabilities pela interface web do Claude: texto/roteiros, pesquisa, escolha, validação, visão e análise de documentos.
 
 Ele não usa a API oficial da Anthropic. O plugin abre um Google Chrome real com perfil persistente dedicado, mantém a conversa entre as partes da mesma geração e lê a resposta visível do Claude. Cookies e tokens permanecem sob controle do Chrome e nunca são exportados para TXT, manifesto, logs, outputs ou artifacts.
 
@@ -30,17 +30,18 @@ Não há rotação automática de contas. Limite de uso, cobrança, reautentica�
 
 ## Instalação
 
-1. No ContentFlow OS, abra **Plugins**.
+1. No ContentFlow, abra **Plugins**.
 2. Escolha **Usar pasta ao vivo**.
 3. Selecione a pasta que contém este `README.md` e `contentflow.plugin.json`.
-4. Revise e conceda `network`, `filesystem:read`, `filesystem:write` e `process`. A leitura alcança somente arquivos liberados pelo núcleo.
-5. Vincule a capability correspondente ao bloco `BUSCAR`, `ESCOLHER`, `CRIAR` ou `VALIDAR`.
+4. No perfil Chrome dedicado, carregue manualmente `extensions/contentflow-browser-bridge` em `chrome://extensions` e conclua o login.
+5. Revise e conceda `network`, `filesystem:read`, `filesystem:write` e `process`. A leitura alcança somente arquivos liberados pelo núcleo.
+6. Vincule a capability correspondente ao bloco `BUSCAR`, `ESCOLHER`, `CRIAR` ou `VALIDAR`.
 
 Depois de informar o perfil no construtor do Método, use **Salvar perfil**. O Chrome dedicado abre em `https://claude.ai/new`, aguarda o login e fecha depois que a área real do chat for validada.
 
 Por padrão, o perfil continua dedicado. Para reutilizar uma pasta Chrome escolhida conscientemente, configure `profilePath` ou `profilesBasePath` e ative `allowExistingChromeProfile`. Feche outras instâncias que estejam usando o mesmo perfil antes de preparar ou executar.
 
-A espera de respostas combina `MutationObserver` com polling de segurança e timeout máximo. O editor confirma o prompt completo após `Input.insertText`; se houver perda de caracteres, o plugin limpa o campo e repete a entrada por eventos de teclado antes de falhar de forma explícita.
+A espera de respostas combina `MutationObserver` com polling de segurança e timeout máximo. Em execução normal, preenchimento e cliques passam pela ContentFlow Browser Bridge v2, sem mouse, teclado ou foco de janela via CDP.
 
 ## Capabilities
 
@@ -107,7 +108,7 @@ O plugin deriva perfis separados em:
 
 Antes da primeira execução com um alias, use **Salvar perfil** no bloco do Método e faça login manualmente na conta Claude daquele canal. Nas execuções seguintes, o Método escolhe a conta pelo alias configurado, sem ler ou exportar cookies. Um perfil não preparado é recusado antes de qualquer prompt ser preenchido.
 
-O ContentFlow OS v0.3 ainda envia `settings: {}` para plugins comunitários, portanto a página de Plugins não mantém hoje uma lista dinâmica de contas. A escolha por `accountProfile` no bloco é a solução compatível com a API v1 atual e fica naturalmente no nível do Método/canal. `settingsSchema` permanece preparado para um futuro suporte do núcleo a settings persistentes.
+O ContentFlow v0.3 ainda envia `settings: {}` para plugins comunitários, portanto a página de Plugins não mantém hoje uma lista dinâmica de contas. A escolha por `accountProfile` no bloco é a solução compatível com a API v1 atual e fica naturalmente no nível do Método/canal. `settingsSchema` permanece preparado para um futuro suporte do núcleo a settings persistentes.
 
 ## Modos de geração
 
@@ -152,7 +153,7 @@ Use aliases dedicados. O plugin rejeita aliases com barras, `..` ou outros carac
 
 ## Validação
 
-Na raiz do ContentFlow OS:
+Na raiz do ContentFlow:
 
 ```powershell
 npm run plugin:kit -- check ./plugins/bundled/claude-browser-text

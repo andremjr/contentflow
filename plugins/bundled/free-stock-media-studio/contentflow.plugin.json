@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow-os/main/docs/schemas/contentflow-plugin-v1.schema.json",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
   "id": "local.contentflow.free-stock-media-studio",
   "name": "Free Stock Media Studio",

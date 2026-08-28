@@ -12,7 +12,7 @@
     "pitchHz": 0
   },
   "settings": {},
-  "inputs": { "text": "This is a short ContentFlow OS Edge TTS integration test." },
+  "inputs": { "text": "This is a short ContentFlow Edge TTS integration test." },
   "inputContract": [
     { "id": "text", "portKey": "text", "label": "Texto da narração", "type": "textarea" }
   ],

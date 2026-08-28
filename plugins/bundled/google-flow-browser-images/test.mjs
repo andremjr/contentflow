@@ -8,7 +8,7 @@ import { testExtensionBridge } from "../../../extensions/contentflow-browser-bri
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.2.0");
+assert.equal(manifest.version, "1.2.1");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
@@ -190,8 +190,16 @@ const extensionContent = await readFile(
   "utf8",
 );
 assert.equal(extensionManifest.manifest_version, 3);
-assert.equal(extensionManifest.version, "0.1.0");
-assert.deepEqual(extensionManifest.host_permissions, ["https://labs.google/*"]);
+assert.equal(extensionManifest.version, "0.2.0");
+assert.deepEqual(extensionManifest.host_permissions, [
+  "https://chatgpt.com/*",
+  "https://claude.ai/*",
+  "https://gemini.google.com/*",
+  "https://grok.com/*",
+  "https://labs.google/*",
+  "https://meta.ai/*",
+  "https://www.meta.ai/*",
+]);
 assert.deepEqual(extensionManifest.permissions, ["tabs", "storage"]);
 assert.ok(extensionWorker.includes("globalThis.contentFlowBridge"));
 assert.ok(extensionWorker.includes('BRIDGE_ID = "com.contentflow.browser-bridge"'));
@@ -217,5 +225,5 @@ await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), 
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v1.2.0 usa a ponte comum no Chrome, isola input e valida 300 comandos idempotentes.",
+  "OK: v1.2.1 usa a ponte comum no Chrome, isola input e valida 300 comandos idempotentes.",
 );

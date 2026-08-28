@@ -1,6 +1,6 @@
 # Gemini Browser Studio
 
-Versão **0.1.14** para ContentFlow OS Plugin API v1.
+Versão **0.2.0** para ContentFlow Plugin API v1.
 
 Super plugin independente que usa a interface web do Gemini em um Google Chrome real com perfil persistente dedicado. Não usa a API oficial do Gemini, não pede chave e não exporta cookies, tokens ou storage.
 
@@ -35,7 +35,7 @@ canal-c → <workspace-do-plugin>/canal-c
 
 Cada alias recebe pasta Chrome, login, histórico e porta CDP próprios. Assim, a estratégia e o contexto de um canal não contaminam outro. Antes da primeira execução, use **Salvar perfil** no construtor do Método, conclua o login na janela visível e aguarde o navegador fechar. Perfis não preparados são recusados antes de qualquer prompt ser digitado.
 
-Para reutilizar uma pasta Chrome escolhida explicitamente, configure `profilesBasePath`, selecione o alias correspondente e ative `allowExistingChromeProfile`; o isolamento dedicado permanece como padrão. Feche qualquer Chrome que já esteja usando o perfil. A espera de respostas combina `MutationObserver`, polling de segurança e timeout máximo; o editor é relido após a entrada e usa eventos de teclado como fallback se a inserção rápida perder caracteres.
+Para reutilizar uma pasta Chrome escolhida explicitamente, configure `profilesBasePath`, selecione o alias correspondente e ative `allowExistingChromeProfile`; o isolamento dedicado permanece como padrão. Feche qualquer Chrome que já esteja usando o perfil. A espera de respostas combina `MutationObserver`, polling de segurança e timeout máximo; em execução normal, preenchimento e cliques passam pela ContentFlow Browser Bridge v2, sem mouse, teclado, clipboard ou foco de janela via CDP.
 
 Não existe rotação automática de contas. Cota, CAPTCHA, upgrade, reautenticação ou bloqueio pausam a operação para intervenção manual.
 
@@ -49,11 +49,12 @@ Imagem e música geradas são recuperadas pela própria sessão autenticada, gra
 
 ## Instalação
 
-1. Abra **Plugins** no ContentFlow OS.
+1. Abra **Plugins** no ContentFlow.
 2. Escolha **Usar pasta ao vivo**.
 3. Selecione esta pasta.
-4. Revise `network`, `filesystem:read`, `filesystem:write` e `process`.
-5. Vincule a capability desejada ao bloco.
+4. No perfil Chrome dedicado, carregue manualmente `extensions/contentflow-browser-bridge` em `chrome://extensions` e conclua o login.
+5. Revise `network`, `filesystem:read`, `filesystem:write` e `process`.
+6. Vincule a capability desejada ao bloco.
 
 `network` acessa `gemini.google.com` e mídia Google; `process` inicia o Chrome dedicado; as permissões de arquivo operam somente nas raízes concedidas pelo núcleo.
 
@@ -80,7 +81,7 @@ Em 20/08/2026, a interface real foi validada com dois prompts consecutivos na me
 
 ## Revogação
 
-Saia da conta na janela Chrome dedicada. Para remover uma sessão, exclua manualmente apenas a pasta do alias correspondente dentro da pasta de trabalho conectada ao plugin. Outputs já promovidos permanecem no ContentFlow OS.
+Saia da conta na janela Chrome dedicada. Para remover uma sessão, exclua manualmente apenas a pasta do alias correspondente dentro da pasta de trabalho conectada ao plugin. Outputs já promovidos permanecem no ContentFlow.
 
 ## Perfis de fallback
 

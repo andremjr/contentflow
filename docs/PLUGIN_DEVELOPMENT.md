@@ -13,16 +13,16 @@ Ele oferece `create`, `validate`, `test-contract`, `test-sandbox`, `fixture`, `r
 
 > Estado atual: plugins locais e comunitários podem ser instalados por pasta, ativados pelo próprio usuário e executados sem aprovação central. O núcleo valida o manifesto, exige novo consentimento quando versão ou permissões mudam e executa o código em processo separado com filesystem, rede, subprocessos, workers e módulos nativos negados por padrão.
 
-Se você está usando uma IA para criar o plugin, prefira o conjunto pequeno listado em [`PLUGIN_AI_KIT.md`](PLUGIN_AI_KIT.md). Para o primeiro plugin, o autor precisa se concentrar em três coisas: o manifesto, o valor recebido em `request.inputs` e o valor devolvido em `response.values`. Instalação, consentimento, cofre, sandbox e importação de artifacts ficam a cargo do ContentFlow OS.
+Se você está usando uma IA para criar o plugin, prefira o conjunto pequeno listado em [`PLUGIN_AI_KIT.md`](PLUGIN_AI_KIT.md). Para o primeiro plugin, o autor precisa se concentrar em três coisas: o manifesto, o valor recebido em `request.inputs` e o valor devolvido em `response.values`. Instalação, consentimento, cofre, sandbox e importação de artifacts ficam a cargo do ContentFlow.
 
 ## Teste local sem terminal
 
 Na tela **Plugins**, use uma destas opções:
 
-- **Usar pasta ao vivo**: recomendado durante o desenvolvimento. O ContentFlow OS mantém um vínculo com a pasta escolhida; salvar uma alteração no código basta para a próxima execução usar a nova versão. Para remover, clique em **Desconectar pasta**.
+- **Usar pasta ao vivo**: recomendado durante o desenvolvimento. O ContentFlow mantém um vínculo com a pasta escolhida; salvar uma alteração no código basta para a próxima execução usar a nova versão. Para remover, clique em **Desconectar pasta**.
 - **Instalar uma cópia**: recomendado para distribuição. O aplicativo copia o pacote para a área local e ele continua instalado mesmo se a pasta original for apagada. Para remover, clique em **Desinstalar**.
 
-O botão de exemplo preenche a pasta `Documentos\ContentFlow OS\Plugins\community-reference`, criada automaticamente pela V0. Atualizar a página apenas relê os plugins conectados ou instalados; apagar a pasta de origem não desinstala uma cópia. Essa distinção evita perda acidental de um plugin já instalado.
+O botão de exemplo preenche a pasta `Documentos\ContentFlow\Plugins\community-reference`, criada automaticamente pela V0. Atualizar a página apenas relê os plugins conectados ou instalados; apagar a pasta de origem não desinstala uma cópia. Essa distinção evita perda acidental de um plugin já instalado.
 
 ## 1. Escolha uma entrega clara
 
@@ -122,7 +122,7 @@ export async function execute(request, services) {
 }
 ```
 
-Não existe import obrigatório do núcleo. Se usar TypeScript durante o desenvolvimento, consulte [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) ou copie somente as declarações públicas necessárias para o projeto do plugin. O pacote distribuído não deve importar caminhos internos do ContentFlow OS.
+Não existe import obrigatório do núcleo. Se usar TypeScript durante o desenvolvimento, consulte [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) ou copie somente as declarações públicas necessárias para o projeto do plugin. O pacote distribuído não deve importar caminhos internos do ContentFlow.
 
 Use `services.getSecret()` somente para chaves declaradas, `services.resolveInputFile()` para arquivos recebidos, `services.getOutputPath()` para artifacts e `services.getWorkspacePath()` para arquivos persistentes/checkpoints. O usuário pode conectar uma pasta própria na Central de Plugins; sem isso, o núcleo fornece uma pasta interna isolada. Encaminhe `services.signal` a `fetch` e SDKs que aceitem cancelamento.
 
@@ -259,7 +259,7 @@ return { status: "error", code: "CANCELLED", message: "Job cancelado.", retryabl
 
 O `jobId` precisa ser suficiente para retomar em outro processo, sem memória global. `start`, `resume` e `cancel` devem ser idempotentes. Não invente progresso quando o provedor não o informar.
 
-Uma resposta `pending` encerra a requisição HTTP. O ContentFlow OS persiste e retoma o job, inclusive depois de reiniciar o aplicativo. Não dependa de variável global, timer ou processo filho ainda vivo. Credenciais necessárias ao `resume` precisam estar salvas no cofre da Central de Plugins; uma chave transitória enviada somente no formulário não é persistida.
+Uma resposta `pending` encerra a requisição HTTP. O ContentFlow persiste e retoma o job, inclusive depois de reiniciar o aplicativo. Não dependa de variável global, timer ou processo filho ainda vivo. Credenciais necessárias ao `resume` precisam estar salvas no cofre da Central de Plugins; uma chave transitória enviada somente no formulário não é persistida.
 
 Para resultados progressivos, envie em `partialValues` o snapshot acumulado de cada campo alterado. Use `partialArtifacts` para todo `artifact://` novo. O núcleo importa esses arquivos com as mesmas regras dos resultados finais e a interface reutiliza os renderizadores reais, portanto galerias, listas, tabelas e cartões são atualizados sem recarregar a página.
 
@@ -309,7 +309,7 @@ artifacts: [
 ];
 ```
 
-O servidor remoto precisa devolver status `200`, MIME compatível e, quando enviar `Content-Length`, tamanho coerente. Redirects também precisam usar HTTPS, permanecer nos hosts declarados e resolver apenas para endereços públicos. O ContentFlow OS baixa em streaming, calcula SHA-256 e substitui `artifact://final-video` pelo arquivo local gerenciado.
+O servidor remoto precisa devolver status `200`, MIME compatível e, quando enviar `Content-Length`, tamanho coerente. Redirects também precisam usar HTTPS, permanecer nos hosts declarados e resolver apenas para endereços públicos. O ContentFlow baixa em streaming, calcula SHA-256 e substitui `artifact://final-video` pelo arquivo local gerenciado.
 
 ## 9. Respeite validações e tentativas
 

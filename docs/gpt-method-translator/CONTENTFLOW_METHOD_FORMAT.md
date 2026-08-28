@@ -1,4 +1,4 @@
-# Contrato de arquivo importável — ContentFlow OS
+# Contrato de arquivo importável — ContentFlow
 
 Use este contrato para criar um arquivo de método importável. O JSON representa **um único Processo Universal** por vez.
 

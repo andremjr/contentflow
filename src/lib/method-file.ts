@@ -241,7 +241,7 @@ export function parseMethodFile(contents: string): SharedMethodFile {
 
   const result = sharedMethodSchema.safeParse(parsed);
   if (!result.success) {
-    throw new Error("Este não é um arquivo de método válido do ContentFlow OS.");
+    throw new Error("Este não é um arquivo de método válido do ContentFlow.");
   }
   return result.data;
 }

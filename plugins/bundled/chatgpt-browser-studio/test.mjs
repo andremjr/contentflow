@@ -37,7 +37,7 @@ function request(overrides = {}) {
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "0.1.18");
+  assert.equal(manifest.version, "0.2.0");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
   const generation = manifest.capabilities.find((item) => item.id === "generate-text-in-browser");

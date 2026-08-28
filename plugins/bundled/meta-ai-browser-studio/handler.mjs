@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, extname, join } from "node:path";
+import { attachContentFlowBridge } from "./browser-bridge-client.mjs";
 
+const PLUGIN_ID = "local.contentflow.meta-ai-browser-studio";
 const CHATGPT_HOST = "www.meta.ai";
 const CHATGPT_NEW_URL = "https://www.meta.ai/create";
 const CHATGPT_CHAT_URL = "https://www.meta.ai/";
@@ -474,7 +476,7 @@ async function resolveAttachments(request, services) {
 }
 
 function defaultProfilesBasePath() {
-  return join(homedir(), ".contentflow-os", "meta-ai-browser-profiles");
+  return join(homedir(), ".contentflow", "meta-ai-browser-profiles");
 }
 function normalizeAccountProfile(value) {
   const name = String(value ?? "default").trim() || "default";
@@ -498,7 +500,9 @@ function profileMarkerPath(path) {
 async function profileIsPrepared(path, name) {
   try {
     const marker = JSON.parse(await readFile(profileMarkerPath(path), "utf8"));
-    return marker?.provider === CHATGPT_HOST && marker?.profile === name;
+    return (
+      marker?.provider === CHATGPT_HOST && marker?.profile === name && marker?.bridgeProtocol === 2
+    );
   } catch {
     return false;
   }
@@ -506,7 +510,12 @@ async function profileIsPrepared(path, name) {
 async function markProfilePrepared(path, name) {
   await writeFile(
     profileMarkerPath(path),
-    JSON.stringify({ provider: CHATGPT_HOST, profile: name, preparedAt: new Date().toISOString() }),
+    JSON.stringify({
+      provider: CHATGPT_HOST,
+      profile: name,
+      bridgeProtocol: 2,
+      preparedAt: new Date().toISOString(),
+    }),
     "utf8",
   );
 }
@@ -814,25 +823,7 @@ function normalizeEditorText(value) {
     .trim();
 }
 
-async function replacePromptWithKeyEvents(client, sessionId, prompt, signal) {
-  for (const event of [
-    { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 },
-    { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 },
-    { type: "keyDown", key: "Backspace", code: "Backspace" },
-    { type: "keyUp", key: "Backspace", code: "Backspace" },
-  ])
-    await client.send("Input.dispatchKeyEvent", event, sessionId);
-  for (const character of Array.from(prompt)) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    await client.send(
-      "Input.dispatchKeyEvent",
-      { type: "char", text: character, unmodifiedText: character },
-      sessionId,
-    );
-  }
-}
-
-async function attachChatGptPage(client, signal) {
+async function attachChatGptPage(client, signal, activate = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
   let target = targetInfos.find(
     (item) => item.type === "page" && String(item.url).includes(CHATGPT_HOST),
@@ -845,14 +836,13 @@ async function attachChatGptPage(client, signal) {
     targetId: target.targetId,
     flatten: true,
   });
-  await client.send("Target.activateTarget", { targetId: target.targetId });
+  if (activate) await client.send("Target.activateTarget", { targetId: target.targetId });
   await client.send("Page.enable", {}, sessionId);
   await client.send("Runtime.enable", {}, sessionId);
-  try {
-    await client.send("Page.bringToFront", {}, sessionId);
-  } catch {
-    // Target.activateTarget is still sufficient on Chrome builds without this command.
-  }
+  if (activate)
+    try {
+      await client.send("Page.bringToFront", {}, sessionId);
+    } catch {}
   await sleep(300, signal);
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
@@ -866,7 +856,7 @@ async function attachChatGptPage(client, signal) {
   return { sessionId };
 }
 
-async function attachExistingProviderPage(client, signal) {
+async function attachExistingProviderPage(client, signal, activate = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
   const target = targetInfos.find(
     (item) => item.type === "page" && String(item.url).includes(CHATGPT_HOST),
@@ -876,12 +866,13 @@ async function attachExistingProviderPage(client, signal) {
     targetId: target.targetId,
     flatten: true,
   });
-  await client.send("Target.activateTarget", { targetId: target.targetId });
+  if (activate) await client.send("Target.activateTarget", { targetId: target.targetId });
   await client.send("Page.enable", {}, sessionId);
   await client.send("Runtime.enable", {}, sessionId);
-  try {
-    await client.send("Page.bringToFront", {}, sessionId);
-  } catch {}
+  if (activate)
+    try {
+      await client.send("Page.bringToFront", {}, sessionId);
+    } catch {}
   await sleep(250, signal);
   return { sessionId };
 }
@@ -1008,141 +999,71 @@ async function attachFiles(client, sessionId, attachments, signal) {
   throw codedError("TIMEOUT", "Anexos não ficaram prontos em 120 segundos.", true);
 }
 
-async function clickMode(client, sessionId, mode, signal) {
+async function clickMode(bridge, mode) {
   if (!mode || mode === "standard" || mode === "image") return;
-  const pattern =
+  const terms =
     mode === "search"
-      ? "search the web|pesquisar na web"
+      ? ["search the web", "pesquisar na web"]
       : mode === "deep"
-        ? "deep research|pesquisa aprofundada"
+        ? ["deep research", "pesquisa aprofundada"]
         : mode === "video"
-          ? "video|animate|motion|vídeo|animar"
-          : "think|pensar";
-  const point = await evaluate(
-    client,
-    sessionId,
-    `(() => {${PAGE_HELPERS};const p=/${pattern}/i;const el=[...document.querySelectorAll('button,[role="menuitem"]')].find(x=>cfVisible(x)&&p.test(cfText(x)));if(!el)return null;const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
-  );
+          ? ["video", "animate", "motion", "vídeo", "animar"]
+          : ["think", "pensar"];
   // A geração de imagens também funciona no chat padrão quando a conta não
   // exibe o atalho "Criar uma imagem". Nesse caso o próprio prompt explícito
   // aciona a ferramenta, portanto não devemos abortar antes de enviá-lo.
-  if (!point && ["image", "video"].includes(mode)) return false;
-  if (!point)
+  try {
+    await bridge.dispatch(
+      "click",
+      { selectors: ["button", '[role="menuitem"]'], textIncludes: terms },
+      `mode:${mode}`,
+    );
+    return true;
+  } catch (error) {
+    if (["image", "video"].includes(mode) && error?.code === "OUTPUT_VALIDATION_FAILED")
+      return false;
     throw codedError("PERMISSION_DENIED", `A conta atual não oferece o modo ${mode}.`, false);
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  await sleep(300, signal);
-  return true;
+  }
 }
 
-async function setPrompt(client, sessionId, prompt, settings, signal) {
-  const target = await evaluate(
-    client,
-    sessionId,
-    `(() => {${PAGE_HELPERS};const el=cfPrompt();if(!el)return null;el.focus();const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
+async function setPrompt(bridge, prompt, operationKey) {
+  await bridge.dispatch(
+    "setText",
+    {
+      selectors: [
+        "textarea[placeholder]",
+        '[contenteditable="true"][role="textbox"]',
+        '[contenteditable="true"]',
+        '[role="textbox"]',
+      ],
+      text: prompt,
+    },
+    operationKey,
   );
-  if (!target)
-    throw codedError("OUTPUT_VALIDATION_FAILED", "Caixa de prompt não encontrada.", true);
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mousePressed", x: target.x, y: target.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseReleased", x: target.x, y: target.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyDown", key: "Backspace", code: "Backspace" },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyUp", key: "Backspace", code: "Backspace" },
-    sessionId,
-  );
-  const size = clampInteger(settings?.typingChunkSize, 10, 1, 50),
-    delay = clampInteger(settings?.typingDelayMs, 10, 0, 200),
-    chars = Array.from(prompt);
-  for (let index = 0; index < chars.length; index += size) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    await client.send(
-      "Input.insertText",
-      { text: chars.slice(index, index + size).join("") },
-      sessionId,
-    );
-    if (delay) await sleep(delay, signal);
-  }
-  // The ChatGPT ProseMirror editor can expose an enabled submit button before
-  // the final inserted chunks reach its internal state. Give it one render
-  // cycle before dispatching the trusted CDP click.
-  await sleep(1_000, signal);
-  let readback = await evaluate(
-    client,
-    sessionId,
-    `(() => {${PAGE_HELPERS};const el=cfPrompt();return el?.value||el?.innerText||el?.textContent||''})()`,
-  );
-  if (normalizeEditorText(readback) !== normalizeEditorText(prompt)) {
-    await replacePromptWithKeyEvents(client, sessionId, prompt, signal);
-    await sleep(250, signal);
-    readback = await evaluate(
-      client,
-      sessionId,
-      `(() => {${PAGE_HELPERS};const el=cfPrompt();return el?.value||el?.innerText||el?.textContent||''})()`,
-    );
-  }
-  if (normalizeEditorText(readback) !== normalizeEditorText(prompt))
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "O Meta AI não confirmou o prompt completo após as estratégias de entrada.",
-      true,
-    );
 }
 
-async function clickSend(client, sessionId, signal) {
+async function clickSend(client, sessionId, bridge, signal, operationKey) {
   const deadline = Date.now() + 10_000;
-  let point;
+  let available;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    point = await evaluate(
+    available = await evaluate(
       client,
       sessionId,
-      `(() => {${PAGE_HELPERS};const el=[...document.querySelectorAll('button')].find(x=>cfVisible(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true'&&(x.getAttribute('data-testid')==='send-button'||/send|generate|create|submit|enviar|gerar|criar/i.test(cfText(x))));if(!el)return null;const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`,
+      `(() => {${PAGE_HELPERS};return [...document.querySelectorAll('button')].some(x=>cfVisible(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true'&&(x.getAttribute('data-testid')==='send-button'||/send|generate|create|submit|enviar|gerar|criar/i.test(cfText(x))))})()`,
     );
-    if (point) break;
+    if (available) break;
     await sleep(200, signal);
   }
-  if (!point)
+  if (!available)
     throw codedError("OUTPUT_VALIDATION_FAILED", "Botão Enviar não ficou disponível.", true);
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 },
-    sessionId,
+  await bridge.dispatch(
+    "click",
+    {
+      selectors: ['button[data-testid="send-button"]', "button"],
+      textIncludes: ["send", "generate", "create", "submit", "enviar", "gerar", "criar"],
+    },
+    operationKey,
   );
   const sent = async (deadline) => {
     while (Date.now() < deadline) {
@@ -1158,30 +1079,7 @@ async function clickSend(client, sessionId, signal) {
     return false;
   };
   if (await sent(Date.now() + 2_500)) return;
-  await client.send(
-    "Input.dispatchKeyEvent",
-    {
-      type: "keyDown",
-      key: "Enter",
-      code: "Enter",
-      windowsVirtualKeyCode: 13,
-      nativeVirtualKeyCode: 13,
-    },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    {
-      type: "keyUp",
-      key: "Enter",
-      code: "Enter",
-      windowsVirtualKeyCode: 13,
-      nativeVirtualKeyCode: 13,
-    },
-    sessionId,
-  );
-  if (await sent(Date.now() + 2_500)) return;
-  throw codedError("OUTPUT_VALIDATION_FAILED", "O ChatGPT não confirmou o envio do prompt.", true);
+  throw codedError("OUTPUT_VALIDATION_FAILED", "O Meta AI não confirmou o envio do prompt.", true);
 }
 
 async function responseState(client, sessionId) {
@@ -1215,11 +1113,11 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
   throw codedError("TIMEOUT", "O ChatGPT não concluiu a resposta no prazo.", true);
 }
 
-async function generatePart(client, sessionId, prompt, settings, signal) {
+async function generatePart(client, sessionId, bridge, prompt, settings, signal, operationKey) {
   const before = await responseState(client, sessionId),
     baseline = before?.texts?.length ?? 0;
-  await setPrompt(client, sessionId, prompt, settings, signal);
-  await clickSend(client, sessionId, signal);
+  await setPrompt(bridge, prompt, `prompt:${operationKey}`);
+  await clickSend(client, sessionId, bridge, signal, `send:${operationKey}`);
   return await waitForResponse(
     client,
     sessionId,
@@ -1229,14 +1127,22 @@ async function generatePart(client, sessionId, prompt, settings, signal) {
   );
 }
 
-async function generateImagePart(client, sessionId, prompt, settings, signal) {
+async function generateImagePart(
+  client,
+  sessionId,
+  bridge,
+  prompt,
+  settings,
+  signal,
+  operationKey,
+) {
   const baseline = await evaluate(
     client,
     sessionId,
     `(() => [...document.querySelectorAll('main img, img')].filter(img=>img.complete&&img.naturalWidth>=512&&img.naturalHeight>=512&&!/avatar|logo|profile/i.test(img.alt||'')).map(img=>img.currentSrc||img.src).filter(Boolean))()`,
   );
-  await setPrompt(client, sessionId, prompt, settings, signal);
-  await clickSend(client, sessionId);
+  await setPrompt(bridge, prompt, `image-prompt:${operationKey}`);
+  await clickSend(client, sessionId, bridge, signal, `image-send:${operationKey}`);
   const deadline =
     Date.now() + clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000;
   while (Date.now() < deadline) {
@@ -1348,14 +1254,22 @@ async function captureGeneratedImage(
   };
 }
 
-async function generateVideoPart(client, sessionId, prompt, settings, signal) {
+async function generateVideoPart(
+  client,
+  sessionId,
+  bridge,
+  prompt,
+  settings,
+  signal,
+  operationKey,
+) {
   const baseline = await evaluate(
     client,
     sessionId,
     `(() => [...document.querySelectorAll('main video, video')].map(v=>v.currentSrc||v.src||v.querySelector('source')?.src||'').filter(Boolean))()`,
   );
-  await setPrompt(client, sessionId, prompt, settings, signal);
-  await clickSend(client, sessionId, signal);
+  await setPrompt(bridge, prompt, `video-prompt:${operationKey}`);
+  await clickSend(client, sessionId, bridge, signal, `video-send:${operationKey}`);
   const deadline =
     Date.now() + clampInteger(settings?.responseTimeoutSeconds, 900, 30, 3600) * 1000;
   while (Date.now() < deadline) {
@@ -1472,7 +1386,7 @@ async function configureProfile(request, services) {
     return resultError("INVALID_CONFIGURATION", "Ação de configuração de perfil inválida.");
   }
 
-  let client, child;
+  let client, child, bridge;
   try {
     const launched = await launchOrReuseChrome({
       executables: await resolveChromeExecutables(settings),
@@ -1484,7 +1398,7 @@ async function configureProfile(request, services) {
     });
     child = launched.child;
     client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
-    const { sessionId } = await attachChatGptPage(client, services.signal);
+    const { sessionId } = await attachChatGptPage(client, services.signal, true);
     await openNewConversation(client, sessionId, services.signal);
     let authenticatedSessionId = await waitForPrompt(
       client,
@@ -1503,6 +1417,15 @@ async function configureProfile(request, services) {
       clampInteger(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
       services.signal,
     );
+    bridge = await attachContentFlowBridge({
+      client,
+      pageSessionId: authenticatedSessionId,
+      pluginId: PLUGIN_ID,
+      profileId: profileName,
+      request,
+      signal: services.signal,
+      allowedOrigins: ["https://meta.ai", "https://www.meta.ai"],
+    });
     await persistMetaSessionCookies(client, authenticatedSessionId);
     await sleep(3000, services.signal);
     await markProfilePrepared(profilePath, profileName);
@@ -1517,6 +1440,7 @@ async function configureProfile(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
+    bridge?.dispose();
     try {
       await client?.send("Browser.close");
     } catch {}
@@ -1609,7 +1533,7 @@ export async function execute(request, services) {
   }
 
   const configuration = request?.configuration ?? {};
-  let client, child;
+  let client, child, bridge;
   try {
     const profileName = normalizeAccountProfile(configuration.accountProfile),
       profilePath = runtimeProfilePath(settings, profileName, services),
@@ -1643,7 +1567,8 @@ export async function execute(request, services) {
     client = await new CdpClient(launched.version.webSocketDebuggerUrl, trace).connect(
       services.signal,
     );
-    const { sessionId } = await attachChatGptPage(client, services.signal);
+    const attached = await attachChatGptPage(client, services.signal);
+    let sessionId = attached.sessionId;
     await openNewConversation(
       client,
       sessionId,
@@ -1654,17 +1579,26 @@ export async function execute(request, services) {
           ? CHATGPT_NEW_URL
           : CHATGPT_CHAT_URL,
     );
-    await waitForPrompt(
+    sessionId = await waitForPrompt(
       client,
       sessionId,
       clampInteger(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
       services.signal,
     );
+    bridge = await attachContentFlowBridge({
+      client,
+      pageSessionId: sessionId,
+      pluginId: PLUGIN_ID,
+      profileId: profileName,
+      request,
+      signal: services.signal,
+      allowedOrigins: ["https://meta.ai", "https://www.meta.ai"],
+    });
     if (attachments.length) {
       step(`Enviando ${attachments.length} anexo(s) autorizado(s).`);
       await attachFiles(client, sessionId, attachments, services.signal);
     }
-    await clickMode(client, sessionId, mode, services.signal);
+    await clickMode(bridge, mode);
     const responses = [],
       retryAttempts = clampInteger(configuration.retryAttempts, 1, 0, 3),
       delayBetweenPartsMs = clampInteger(configuration.delayBetweenPartsMs, 2000, 0, 30000);
@@ -1677,16 +1611,34 @@ export async function execute(request, services) {
           );
           responses.push(
             capabilityId === "generate-image-in-browser"
-              ? await generateImagePart(client, sessionId, parts[index], settings, services.signal)
+              ? await generateImagePart(
+                  client,
+                  sessionId,
+                  bridge,
+                  parts[index],
+                  settings,
+                  services.signal,
+                  `${index}:${attempt}`,
+                )
               : capabilityId === "generate-video-in-browser"
                 ? await generateVideoPart(
                     client,
                     sessionId,
+                    bridge,
                     parts[index],
                     settings,
                     services.signal,
+                    `${index}:${attempt}`,
                   )
-                : await generatePart(client, sessionId, parts[index], settings, services.signal),
+                : await generatePart(
+                    client,
+                    sessionId,
+                    bridge,
+                    parts[index],
+                    settings,
+                    services.signal,
+                    `${index}:${attempt}`,
+                  ),
           );
           lastError = undefined;
           break;
@@ -1777,6 +1729,7 @@ export async function execute(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
+    bridge?.dispose();
     if (settings.keepBrowserOpen !== true)
       try {
         await client?.send("Browser.close");

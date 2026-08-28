@@ -231,7 +231,7 @@ function buildManifest(answers: Answers, defaults: TemplateDefaults): PluginMani
   const sends = answers.sendsDataToThirdParties;
   return {
     $schema:
-      "https://raw.githubusercontent.com/andremjr/contentflow-os/main/docs/schemas/contentflow-plugin-v1.schema.json",
+      "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/schemas/contentflow-plugin-v1.schema.json",
     apiVersion: "1",
     id: answers.id,
     name: answers.name,
@@ -379,7 +379,7 @@ function executionFixture(manifest: PluginManifest, answers: Answers) {
 }
 
 function generatedReadme(answers: Answers) {
-  return `# ${answers.name}\n\nPlugin gerado pelo kit oficial do ContentFlow OS usando a API pública v1.\n\n## Desenvolvimento\n\nNa raiz do ContentFlow OS, substitua \`<pasta-do-plugin>\` pela pasta deste plugin:\n\n\`\`\`powershell\nnpm run plugin:kit -- validate <pasta-do-plugin>\nnpm run plugin:kit -- test-contract <pasta-do-plugin>\nnpm run plugin:kit -- test-sandbox <pasta-do-plugin>\nnpm run plugin:kit -- report <pasta-do-plugin>\n\`\`\`\n\nCredenciais declaradas: ${answers.secretKeys.length ? answers.secretKeys.map((key) => `\`${key}\``).join(", ") : "nenhuma"}. Não grave valores secretos no manifesto.\n\nPolítica de dados: ${answers.sendsDataToThirdParties ? `envia dados para ${answers.providers.join(", ")}` : "não envia dados a terceiros"}.\n`;
+  return `# ${answers.name}\n\nPlugin gerado pelo kit oficial do ContentFlow usando a API pública v1.\n\n## Desenvolvimento\n\nNa raiz do ContentFlow, substitua \`<pasta-do-plugin>\` pela pasta deste plugin:\n\n\`\`\`powershell\nnpm run plugin:kit -- validate <pasta-do-plugin>\nnpm run plugin:kit -- test-contract <pasta-do-plugin>\nnpm run plugin:kit -- test-sandbox <pasta-do-plugin>\nnpm run plugin:kit -- report <pasta-do-plugin>\n\`\`\`\n\nCredenciais declaradas: ${answers.secretKeys.length ? answers.secretKeys.map((key) => `\`${key}\``).join(", ") : "nenhuma"}. Não grave valores secretos no manifesto.\n\nPolítica de dados: ${answers.sendsDataToThirdParties ? `envia dados para ${answers.providers.join(", ")}` : "não envia dados a terceiros"}.\n`;
 }
 
 async function generatedTest(answers: Answers) {
@@ -546,7 +546,7 @@ export async function sandboxCommand(directory: string) {
 }
 
 export async function compatibilityReport(directory: string) {
-  const lines = ["RELATÓRIO DE COMPATIBILIDADE — CONTENTFLOW OS PLUGIN API v1", ""];
+  const lines = ["RELATÓRIO DE COMPATIBILIDADE — CONTENTFLOW PLUGIN API v1", ""];
   let compatible = true;
   try {
     const result = validatePluginDirectory(directory);
@@ -594,7 +594,7 @@ export async function compatibilityReport(directory: string) {
 
 function help() {
   output.write(
-    `ContentFlow OS Plugin Kit\n\nComandos:\n  create <pasta> [--template text-transform|hosted-api|file-artifact] [--answers respostas.json]\n  validate <pasta>\n  test-contract <pasta>\n  test-sandbox <pasta>\n  fixture <pasta> [--output arquivo.json]\n  report <pasta>\n  check <pasta>\n\nO kit não instala dependências nem executa scripts de instalação de terceiros.\n`,
+    `ContentFlow Plugin Kit\n\nComandos:\n  create <pasta> [--template text-transform|hosted-api|file-artifact] [--answers respostas.json]\n  validate <pasta>\n  test-contract <pasta>\n  test-sandbox <pasta>\n  fixture <pasta> [--output arquivo.json]\n  report <pasta>\n  check <pasta>\n\nO kit não instala dependências nem executa scripts de instalação de terceiros.\n`,
   );
 }
 

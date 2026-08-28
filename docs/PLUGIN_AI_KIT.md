@@ -2,7 +2,7 @@
 
 Este é o índice de um pacote pequeno que pode ser enviado integralmente a ChatGPT, Claude ou Gemini sem compartilhar o repositório inteiro. Envie somente estes quatro itens:
 
-Compatibilidade: ContentFlow OS v0.4.2, Plugin API v1 e Node 26.
+Compatibilidade: ContentFlow v0.4.2, Plugin API v1 e Node 26.
 
 1. este arquivo;
 2. [`PLUGIN_AI_PROTOCOL_BRIEF.md`](PLUGIN_AI_PROTOCOL_BRIEF.md);
@@ -13,7 +13,7 @@ Opcionalmente acrescente um dos handlers em [`../plugin-kit/templates`](../plugi
 
 ## Prompt sugerido
 
-> Crie ou adapte um plugin independente para o ContentFlow OS API v1. Preserve a lógica da automação anexada quando ela já existir e crie apenas o adapter necessário para `execute(request, services)`. Use exclusivamente o contrato e o schema anexos. Não importe arquivos internos do aplicativo, não injete React/HTML, não grave credenciais e não crie scripts de instalação. Entregue `contentflow.plugin.json`, `handler.mjs`, `README.md`, `test.mjs` e `fixtures/execution.json`. Liste claramente dados enviados a terceiros, permissões, dependências empacotadas e riscos. Antes de encerrar, confira cada item de `PLUGIN_AI_REVIEW_CHECKLIST.md`.
+> Crie ou adapte um plugin independente para o ContentFlow API v1. Preserve a lógica da automação anexada quando ela já existir e crie apenas o adapter necessário para `execute(request, services)`. Use exclusivamente o contrato e o schema anexos. Não importe arquivos internos do aplicativo, não injete React/HTML, não grave credenciais e não crie scripts de instalação. Entregue `contentflow.plugin.json`, `handler.mjs`, `README.md`, `test.mjs` e `fixtures/execution.json`. Liste claramente dados enviados a terceiros, permissões, dependências empacotadas e riscos. Antes de encerrar, confira cada item de `PLUGIN_AI_REVIEW_CHECKLIST.md`.
 
 Inclua no mesmo pedido:
 

@@ -1,16 +1,32 @@
 {
   "manifest_version": 3,
   "name": "ContentFlow Browser Bridge",
-  "version": "0.1.0",
-  "description": "Ponte comum dos plugins de automação de navegador compatíveis com o ContentFlow OS.",
+  "version": "0.2.0",
+  "description": "Ponte comum dos plugins de automação de navegador compatíveis com o ContentFlow.",
   "permissions": ["tabs", "storage"],
-  "host_permissions": ["https://labs.google/*"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://grok.com/*",
+    "https://labs.google/*",
+    "https://meta.ai/*",
+    "https://www.meta.ai/*"
+  ],
   "background": {
     "service_worker": "service-worker.js"
   },
   "content_scripts": [
     {
-      "matches": ["https://labs.google/*"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://grok.com/*",
+        "https://labs.google/*",
+        "https://meta.ai/*",
+        "https://www.meta.ai/*"
+      ],
       "js": ["content-script.js"],
       "run_at": "document_idle",
       "all_frames": false

@@ -10,9 +10,9 @@ Plugin Browser Studio para gerar texto e imagens no Meta AI e solicitar vídeos 
 
 ## Perfil e segurança
 
-Cada `accountProfile` usa um perfil Chrome dedicado dentro do workspace persistente concedido pelo ContentFlow OS. Use **Salvar perfil** para fazer login de forma visível. Quando a Meta reconhece a conta, o plugin aciona sozinho os botões seguros de entrar/continuar e persiste os cookies temporários apenas nesse perfil. Senha, 2FA, CAPTCHA ou escolha de conta continuam exigindo ação humana. O Chrome é fechado ao final por padrão (`keepBrowserOpen=false`).
+Cada `accountProfile` usa um perfil Chrome dedicado dentro do workspace persistente concedido pelo ContentFlow. Use **Salvar perfil** para fazer login de forma visível. Quando a Meta reconhece a conta, o plugin aciona sozinho os botões seguros de entrar/continuar e persiste os cookies temporários apenas nesse perfil. Senha, 2FA, CAPTCHA ou escolha de conta continuam exigindo ação humana. O Chrome é fechado ao final por padrão (`keepBrowserOpen=false`).
 
-Para reutilizar uma pasta Chrome escolhida explicitamente, configure `profilesBasePath`, selecione o alias correspondente e ative `allowExistingChromeProfile`; o modo dedicado permanece como padrão. Feche qualquer Chrome que já esteja usando o perfil. A captura de respostas combina `MutationObserver`, polling de segurança, timeout máximo e confirmação do prompt, com digitação por eventos como fallback.
+Para reutilizar uma pasta Chrome escolhida explicitamente, configure `profilesBasePath`, selecione o alias correspondente e ative `allowExistingChromeProfile`; o modo dedicado permanece como padrão. Feche qualquer Chrome que já esteja usando o perfil. Instale manualmente `extensions/contentflow-browser-bridge` nesse perfil antes de usar **Salvar perfil**. Em execução normal, preenchimento e cliques passam pela ponte v2, sem mouse, teclado ou foco de janela via CDP.
 
 Prompts e referências são enviados à Meta. Arquivos gerados são capturados da página, baixados do CDN autorizado e gravados somente na área de saída autorizada. Se vídeo não estiver disponível para a conta, o plugin retorna `PERMISSION_DENIED` sem capturar vídeos do feed. Recursos podem variar conforme conta e país.
 

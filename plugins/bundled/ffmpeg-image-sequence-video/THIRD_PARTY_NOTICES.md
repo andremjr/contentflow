@@ -9,4 +9,4 @@
 - Código-fonte correspondente informado pelo distribuidor: <https://github.com/FFmpeg/FFmpeg/commit/e38092ef93>.
 - Projeto que distribui o pacote: <https://github.com/eugeneware/ffmpeg-static>.
 
-O pacote inclui ao lado do executável os arquivos `ffmpeg.exe.LICENSE` e `ffmpeg.exe.README` recebidos do distribuidor. FFmpeg é independente do ContentFlow OS e permanece sujeito à sua própria licença.
+O pacote inclui ao lado do executável os arquivos `ffmpeg.exe.LICENSE` e `ffmpeg.exe.README` recebidos do distribuidor. FFmpeg é independente do ContentFlow e permanece sujeito à sua própria licença.

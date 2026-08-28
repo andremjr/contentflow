@@ -1,6 +1,6 @@
 # Governança do ecossistema de plugins
 
-Este documento define como plugins podem ser distribuídos diretamente, publicados em catálogos opcionais, encontrados, avaliados e atualizados no ecossistema do ContentFlow OS. O contrato técnico está em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), e a segurança operacional em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
+Este documento define como plugins podem ser distribuídos diretamente, publicados em catálogos opcionais, encontrados, avaliados e atualizados no ecossistema do ContentFlow. O contrato técnico está em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), e a segurança operacional em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
 
 Ele é voltado à distribuição. Para criar ou converter o plugin, comece em [`PLUGIN_START_HERE.md`](PLUGIN_START_HERE.md).
 
@@ -19,7 +19,7 @@ O ecossistema existe para ampliar a execução dos Métodos sem transformar cada
 
 | Categoria    | Responsabilidade                                                                   | Indicação visual   |
 | ------------ | ---------------------------------------------------------------------------------- | ------------------ |
-| `maintained` | Publicado e suportado pelo autor do ContentFlow OS, mas distribuído separadamente. | Mantido pelo autor |
+| `maintained` | Publicado e suportado pelo autor do ContentFlow, mas distribuído separadamente. | Mantido pelo autor |
 | `verified`   | Autor e pacote revisados contra requisitos publicados.                             | Verificado         |
 | `community`  | Distribuído pelo autor, sem revisão integral do projeto.                           | Comunidade         |
 | `private`    | Instalado localmente ou por organização, fora do catálogo público.                 | Privado            |
@@ -32,13 +32,13 @@ Um arquivo compartilhado por mensagem, download direto, repositório ou mídia r
 
 Na versão atual, plugins locais e comunitários podem ser instalados por uma pasta ou conectados como pasta ao vivo, validados, consentidos, ativados e executados na sandbox do Node 26 sem análise manual do mantenedor. A interface ainda não baixa pacotes diretamente de URL ou catálogo: o usuário primeiro obtém a pasta do autor e então escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**.
 
-Se alguém modificar o núcleo, executar o pacote por fora do ContentFlow OS ou remover suas proteções, essa atividade não é uma execução autorizada pelo protocolo nem recebe status, suporte ou garantia do projeto.
+Se alguém modificar o núcleo, executar o pacote por fora do ContentFlow ou remover suas proteções, essa atividade não é uma execução autorizada pelo protocolo nem recebe status, suporte ou garantia do projeto.
 
 ## 3. Identidade e namespace
 
 - `plugin.id` usa domínio reverso sob controle do publicador.
 - Transferência de namespace exige confirmação do titular anterior e do novo.
-- Nome e ícone não podem causar confusão com o ContentFlow OS ou outro publicador.
+- Nome e ícone não podem causar confusão com o ContentFlow ou outro publicador.
 - O ícone opcional é um PNG ou WebP local declarado por `branding.iconPath`; favicon remoto não é usado como identidade implícita.
 - O publicador declara e conserva os direitos necessários sobre logos, marcas e demais assets incluídos no pacote.
 - Pacotes mantidos pelo autor usam namespace reservado pelo projeto.
@@ -58,7 +58,7 @@ Um plugin independente pode ser gratuito, pago, proprietário ou de código aber
 - suporte, atualizações e política de reembolso quando aplicável;
 - licenças de dependências e assets distribuídos.
 
-A licença do plugin não se estende ao núcleo. A exceção de desenvolvimento de plugins está no [`LICENSE`](../LICENSE): ela permite integração pelo protocolo documentado, mas não copiar implementação protegida, criar clone, edição white-label, rebranding ou reskin do ContentFlow OS.
+A licença do plugin não se estende ao núcleo. A exceção de desenvolvimento de plugins está no [`LICENSE`](../LICENSE): ela permite integração pelo protocolo documentado, mas não copiar implementação protegida, criar clone, edição white-label, rebranding ou reskin do ContentFlow.
 
 ## 5. Página obrigatória do plugin
 
@@ -109,7 +109,7 @@ Revisão pode pedir escopo menor, documentação adicional ou correção para aq
 - ausência de comportamento oculto, telemetria não declarada ou conteúdo enganoso;
 - comprovação de que automação de interface, quando existir, é permitida pelo provedor e preserva plano, cota e identidade da conta;
 - ausência de extração silenciosa de cookies/tokens, evasão de CAPTCHA, rotação de contas ou dependência de API privada não autorizada; autenticação de navegador explicitamente conectada segue o guia específico;
-- respeito à licença e às marcas do ContentFlow OS.
+- respeito à licença e às marcas do ContentFlow.
 
 Esses critérios governam a listagem no catálogo. A instalação direta depende das regras técnicas do protocolo, das permissões solicitadas e da sandbox, verificadas automaticamente pelo aplicativo; não depende de julgamento ou aprovação do mantenedor.
 
@@ -155,7 +155,7 @@ Malware, exfiltração, credencial comprometida ou risco grave permitem retirar 
 
 ## 11. Vulnerabilidades e resposta
 
-Autores mantêm um canal privado de segurança e respondem dentro do prazo divulgado. Relatos coordenados seguem [`../SECURITY.md`](../SECURITY.md). O ContentFlow OS pode compartilhar detalhes mínimos com o autor, reservar identificador, preparar correção e publicar advisory depois da mitigação.
+Autores mantêm um canal privado de segurança e respondem dentro do prazo divulgado. Relatos coordenados seguem [`../SECURITY.md`](../SECURITY.md). O ContentFlow pode compartilhar detalhes mínimos com o autor, reservar identificador, preparar correção e publicar advisory depois da mitigação.
 
 Retaliação contra pesquisa de boa-fé, dentro do escopo autorizado, é incompatível com o ecossistema. Pesquisa não autoriza acesso a dados de terceiros, interrupção de serviço ou divulgação prematura.
 
@@ -171,9 +171,9 @@ O card da galeria representa o pacote instalado e seu ciclo de vida. Modelo, ope
 
 O autor de um plugin independente é responsável por seu código, dependências, declarações, licenças, tratamento de dados, integrações e efeitos. Quem instala e utiliza o plugin é responsável por avaliar sua origem, conceder apenas permissões necessárias e usá-lo de acordo com a lei, contratos e políticas dos provedores.
 
-O ContentFlow OS não mantém, endossa nem garante plugins não oficiais apenas porque eles usam o protocolo ou podem ser carregados localmente. Problemas de qualidade, disponibilidade, cobrança, violação contratual ou comportamento oculto de um plugin independente devem ser atribuídos conforme a participação de cada agente e a legislação aplicável.
+O ContentFlow não mantém, endossa nem garante plugins não oficiais apenas porque eles usam o protocolo ou podem ser carregados localmente. Problemas de qualidade, disponibilidade, cobrança, violação contratual ou comportamento oculto de um plugin independente devem ser atribuídos conforme a participação de cada agente e a legislação aplicável.
 
-Essa separação não elimina as responsabilidades próprias do núcleo. O ContentFlow OS continua responsável por representar corretamente o status do pacote, não prometer revisão inexistente, aplicar as proteções que documenta, proteger dados que efetivamente trata e corrigir vulnerabilidades da superfície de instalação ou execução sob seu controle. Nenhum aviso deve ser interpretado como exclusão de direitos ou responsabilidades que a lei não permita afastar.
+Essa separação não elimina as responsabilidades próprias do núcleo. O ContentFlow continua responsável por representar corretamente o status do pacote, não prometer revisão inexistente, aplicar as proteções que documenta, proteger dados que efetivamente trata e corrigir vulnerabilidades da superfície de instalação ou execução sob seu controle. Nenhum aviso deve ser interpretado como exclusão de direitos ou responsabilidades que a lei não permita afastar.
 
 Quando houver indício de malware, exfiltração, fraude ou outra atividade ilícita, um catálogo mantido pelo projeto pode recusar ou remover sua listagem. O executor nega apenas violações técnicas detectáveis das permissões, integridade, contrato ou sandbox; ele não cria uma fila de aprovação humana nem tenta julgar previamente toda finalidade possível do código. Não é necessário inspecionar ou controlar tudo que o autor faz fora do aplicativo para manter uma fronteira segura dentro dele.
 
@@ -189,4 +189,4 @@ Quando houver indício de malware, exfiltração, fraude ou outra atividade ilí
 - [ ] Dependências e proveniência foram revisadas.
 - [ ] Changelog e política de descontinuação existem.
 - [ ] Canal privado de vulnerabilidades está ativo.
-- [ ] Nome, marketing e código respeitam a licença e as marcas do ContentFlow OS.
+- [ ] Nome, marketing e código respeitam a licença e as marcas do ContentFlow.

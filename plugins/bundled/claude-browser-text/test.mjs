@@ -8,7 +8,7 @@ const manifest = JSON.parse(
 );
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "0.3.10");
+  assert.equal(manifest.version, "0.4.0");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
 });

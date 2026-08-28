@@ -1,14 +1,14 @@
-# 📄 Documento de Arquitetura e Visão de Produto: ContentFlow OS
+# 📄 Documento de Arquitetura e Visão de Produto: ContentFlow
 
 ## 1. Visão Geral do Produto
 
-O **ContentFlow OS** é um **Gerenciador Estratégico de Métodos** para produção de conteúdo. Diferente das ferramentas tradicionais "caixa-preta" (geradores de 1 clique que ocultam o processo e geram conteúdo repetitivo e vulnerável à desmonetização no YouTube), o ContentFlow OS desacopla a **Estratégia do Método** da **Execução Funcional**.
+O **ContentFlow** é um **Gerenciador Estratégico de Métodos** para produção de conteúdo. Diferente das ferramentas tradicionais "caixa-preta" (geradores de 1 clique que ocultam o processo e geram conteúdo repetitivo e vulnerável à desmonetização no YouTube), o ContentFlow desacopla a **Estratégia do Método** da **Execução Funcional**.
 
 A plataforma permite que criadores desenhem, personalizem e automatizem seus próprios fluxos de trabalho através de uma arquitetura modular baseada em **4 Blocos Essenciais de Ação**, **3 Operadores** e um **Ecossistema Aberto de Plugins**.
 
 ### 1.1. Invariante absoluta: núcleo e plugins são produtos separados
 
-O ContentFlow OS precisa ser completo e útil com **zero plugins instalados**. Sem integrações, ele continua sendo o Gerenciador Estratégico de Métodos: organiza Canais e Projetos, armazena Métodos, prompts, estruturas, CTAs e Biblioteca Estratégica, transporta dados tipados e conduz blocos do operador `Humano`.
+O ContentFlow precisa ser completo e útil com **zero plugins instalados**. Sem integrações, ele continua sendo o Gerenciador Estratégico de Métodos: organiza Canais e Projetos, armazena Métodos, prompts, estruturas, CTAs e Biblioteca Estratégica, transporta dados tipados e conduz blocos do operador `Humano`.
 
 O núcleo pode conhecer somente o protocolo público de plugins, seus contratos tipados, ciclo de vida, permissões, sandbox, referências opacas de conexões e cofre genérico de secrets. Ele não pode conter IDs, endpoints, autenticação, listas de modelos, seletores de navegador, codecs ou regras de negócio de um fornecedor específico.
 
@@ -16,7 +16,7 @@ Consequentemente:
 
 - APIs de OpenAI, Anthropic, YouTube ou qualquer outro fornecedor pertencem ao respectivo plugin;
 - FFmpeg, Python, executáveis auxiliares, automação de navegador e tratamento específico de mídia pertencem ao plugin que os utiliza;
-- um plugin mantido pelo autor do ContentFlow OS continua sendo software externo: possui versão, pacote, permissões, distribuição e instalação próprias;
+- um plugin mantido pelo autor do ContentFlow continua sendo software externo: possui versão, pacote, permissões, distribuição e instalação próprias;
 - a distribuição do núcleo não inclui, instala, ativa nem concede confiança especial a nenhum plugin;
 - todos os plugins são removíveis e passam pela mesma validação, consentimento e sandbox;
 - um Método que referencia um plugin ausente permanece legível e organizável, preserva seu contrato e outputs históricos, mas sua execução automática fica bloqueada até uma associação local válida.
@@ -27,7 +27,7 @@ Manter pacotes de plugins no mesmo repositório de desenvolvimento, quando conve
 
 ## 2. A Estrutura das 3 Interfaces da Aplicação (UX/UI)
 
-A experiência do usuário no ContentFlow OS apoia-se em 3 camadas de interface claramente delimitadas:
+A experiência do usuário no ContentFlow apoia-se em 3 camadas de interface claramente delimitadas:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -180,7 +180,7 @@ Cada execução mantém um snapshot do Método utilizado, o estado individual do
 
 A página do processo mantém um painel expansível de resultados concluídos. O tipo técnico do campo continua sendo a autoridade para validação e compatibilidade, enquanto `presentation` pode solicitar, de forma opcional, um renderer padronizado do núcleo. O registro central oferece modo automático, texto curto ou longo, lista ou etiquetas, tabela ou cartões, lista de arquivos, galeria de imagens, players de áudio e vídeo e decisão/aprovação. Assim, por exemplo, um mesmo valor `files` pode aparecer como lista de arquivos ou galeria sem alterar seu contrato técnico. Métodos e snapshots antigos, sem `presentation`, são normalizados para `auto`.
 
-Renderers são componentes internos do ContentFlow OS. Plugins podem apenas indicar um identificador permitido e restrições declarativas de item ou MIME; nunca fornecem React, HTML, scripts ou outra interface arbitrária. Preferências incompatíveis ou desconhecidas são ignoradas pelo núcleo e recaem no modo automático.
+Renderers são componentes internos do ContentFlow. Plugins podem apenas indicar um identificador permitido e restrições declarativas de item ou MIME; nunca fornecem React, HTML, scripts ou outra interface arbitrária. Preferências incompatíveis ou desconhecidas são ignoradas pelo núcleo e recaem no modo automático.
 
 ### 7.1. Orquestrador de execução entre Projetos
 
@@ -209,7 +209,7 @@ O plugin apenas produz a lista estruturada. Revisão, criação de Projetos, ide
 
 ## 8. Ecossistema e Compartilhamento
 
-O ContentFlow OS apoia-se em dois tipos de compartilhamento comunitário:
+O ContentFlow apoia-se em dois tipos de compartilhamento comunitário:
 
 1. **Templates de Métodos (Caixa-Aberta)**: Exportação e importação de sequências de blocos com prompts e regras prontas por arquivo. Referências de plugins e requisitos de conexão permanecem explícitos, mas IDs locais e secrets são removidos; instalação, consentimento e associação a uma conexão local são ações separadas do usuário.
 2. **Plugins Independentes**: Pastas instaláveis ou vinculadas podem adaptar APIs HTTPS, scripts, executáveis, filas externas, n8n/Make/FastAPI públicos e automações de navegador sem acrescentar um novo tipo de integração ao núcleo.
@@ -293,7 +293,7 @@ Os outputs concluídos dos processos anteriores e as demais entregas compatívei
 
 ## 12. Protocolo de Plugins
 
-O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), os requisitos para plugins que automatizam interfaces web em [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Todos são externos, exigem consentimento local e executam na mesma sandbox de permissões em processo separado, inclusive os mantidos pelo autor do ContentFlow OS.
+O contrato técnico está documentado em [`PLUGIN_PROTOCOL.md`](PLUGIN_PROTOCOL.md), o guia prático em [`PLUGIN_DEVELOPMENT.md`](PLUGIN_DEVELOPMENT.md), os requisitos do executor em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md), os requisitos para plugins que automatizam interfaces web em [`PLUGIN_BROWSER_AUTOMATION.md`](PLUGIN_BROWSER_AUTOMATION.md), a governança do catálogo em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md) e a ordem estratégica de implementação em [`PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Todos são externos, exigem consentimento local e executam na mesma sandbox de permissões em processo separado, inclusive os mantidos pelo autor do ContentFlow.
 
 A arquitetura não possui aprovação central: qualquer pessoa pode criar e compartilhar um plugin, inclusive por arquivo ou repositório, e qualquer usuário pode instalá-lo e autorizá-lo localmente. O núcleo aplica validações automáticas e pede consentimento para permissões; revisão humana do mantenedor existe apenas para selo `official`/`verified` ou publicação em catálogo opcional.
 
@@ -323,7 +323,7 @@ Plugins de operador `Código` podem consumir esses layouts pelo contrato `thumbn
 
 A distribuição Windows empacota a interface em Electron e inicia a API como processo filho com uma cópia privada do Node 26. Usuários finais não precisam instalar Node, npm ou abrir terminal. O processo Electron hospeda apenas a janela e os arquivos da interface; o runtime privado preserva para a API e para plugins comunitários o modelo de permissões documentado em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
 
-O programa instalado é substituível e os dados persistentes permanecem em `%APPDATA%\ContentFlow OS\data`. Plugins instalados e vínculos de desenvolvimento também vivem nessa área, mas são obtidos separadamente. O núcleo não inclui nem copia plugins ou exemplos na primeira abertura. Essa separação permite recompilar e reinstalar o núcleo sem apagar projetos, credenciais ou plugins externos instalados pelo usuário.
+O programa instalado é substituível e os dados persistentes permanecem em `%APPDATA%\ContentFlow\data`. Plugins instalados e vínculos de desenvolvimento também vivem nessa área, mas são obtidos separadamente. O núcleo não inclui nem copia plugins ou exemplos na primeira abertura. Essa separação permite recompilar e reinstalar o núcleo sem apagar projetos, credenciais ou plugins externos instalados pelo usuário.
 
 O instalador NSIS consulta o canal estável público por um updater executado somente no processo principal do Electron. A interface recebe por preload isolado apenas estado, verificação, download, instalação e abertura da release oficial. O download é iniciado pelo usuário, mostra progresso e só reinicia depois de confirmação. Preview web não executa updater; a versão portátil abre a release mais recente em vez de prometer substituição automática.
 

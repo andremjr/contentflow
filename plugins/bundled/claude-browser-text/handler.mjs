@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, extname, join } from "node:path";
+import { attachContentFlowBridge } from "./browser-bridge-client.mjs";
 
+const PLUGIN_ID = "local.contentflow.claude-browser-text";
 const CLAUDE_HOST = "claude.ai";
 const CLAUDE_NEW_URL = "https://claude.ai/new";
 const DEFAULT_PORT = 9444;
@@ -581,7 +583,7 @@ function cleanGeneratedText(input) {
 }
 
 function defaultProfilesBasePath() {
-  return join(homedir(), ".contentflow-os", "claude-browser-profiles");
+  return join(homedir(), ".contentflow", "claude-browser-profiles");
 }
 
 function normalizeAccountProfile(value) {
@@ -613,7 +615,9 @@ function profileMarkerPath(path) {
 async function profileIsPrepared(path, name) {
   try {
     const marker = JSON.parse(await readFile(profileMarkerPath(path), "utf8"));
-    return marker?.provider === CLAUDE_HOST && marker?.profile === name;
+    return (
+      marker?.provider === CLAUDE_HOST && marker?.profile === name && marker?.bridgeProtocol === 2
+    );
   } catch {
     return false;
   }
@@ -621,7 +625,12 @@ async function profileIsPrepared(path, name) {
 async function markProfilePrepared(path, name) {
   await writeFile(
     profileMarkerPath(path),
-    JSON.stringify({ provider: CLAUDE_HOST, profile: name, preparedAt: new Date().toISOString() }),
+    JSON.stringify({
+      provider: CLAUDE_HOST,
+      profile: name,
+      bridgeProtocol: 2,
+      preparedAt: new Date().toISOString(),
+    }),
     "utf8",
   );
 }
@@ -956,26 +965,7 @@ function normalizeEditorText(value) {
     .trim();
 }
 
-async function replacePromptWithKeyEvents(client, sessionId, prompt, signal) {
-  for (const event of [
-    { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 },
-    { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 },
-    { type: "keyDown", key: "Backspace", code: "Backspace" },
-    { type: "keyUp", key: "Backspace", code: "Backspace" },
-  ]) {
-    await client.send("Input.dispatchKeyEvent", event, sessionId);
-  }
-  for (const character of Array.from(prompt)) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    await client.send(
-      "Input.dispatchKeyEvent",
-      { type: "char", text: character, unmodifiedText: character },
-      sessionId,
-    );
-  }
-}
-
-async function attachClaudePage(client, signal) {
+async function attachClaudePage(client, signal, activate = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
   let target = targetInfos.find(
     (item) => item.type === "page" && String(item.url).includes(CLAUDE_HOST),
@@ -988,14 +978,10 @@ async function attachClaudePage(client, signal) {
     targetId: target.targetId,
     flatten: true,
   });
-  await client.send("Target.activateTarget", { targetId: target.targetId });
+  if (activate) await client.send("Target.activateTarget", { targetId: target.targetId });
   await client.send("Page.enable", {}, sessionId);
   await client.send("Runtime.enable", {}, sessionId);
-  try {
-    await client.send("Page.bringToFront", {}, sessionId);
-  } catch {
-    /* best effort */
-  }
+  if (activate) await client.send("Page.bringToFront", {}, sessionId).catch(() => undefined);
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
@@ -1015,34 +1001,7 @@ async function attachClaudePage(client, signal) {
 }
 
 async function openNewConversation(client, sessionId, signal) {
-  const point = await evaluate(
-    client,
-    sessionId,
-    `(() => { const link=[...document.querySelectorAll('a[href="/new"]')].find(el => { const r=el.getBoundingClientRect(); return r.width>8 && r.height>8; }); if(!link)return null; link.scrollIntoView({block:'center'}); const r=link.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()`,
-  );
-  if (point) {
-    await client.send(
-      "Input.dispatchMouseEvent",
-      { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 },
-      sessionId,
-    );
-    await client.send(
-      "Input.dispatchMouseEvent",
-      { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 },
-      sessionId,
-    );
-    const deadline = Date.now() + 10_000;
-    while (Date.now() < deadline) {
-      if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-      try {
-        const url = await evaluate(client, sessionId, "location.href");
-        if (/claude\.ai\/new(?:$|[?#])/.test(String(url))) return;
-      } catch {
-        /* contexto trocando durante a navegação */
-      }
-      await sleep(250, signal);
-    }
-  }
+  if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
   await client.send("Page.navigate", { url: CLAUDE_NEW_URL }, sessionId);
 }
 
@@ -1199,130 +1158,39 @@ async function attachFiles(client, sessionId, attachments, signal) {
   );
 }
 
-async function setPrompt(client, sessionId, prompt, settings, signal) {
-  const target = await evaluate(
-    client,
-    sessionId,
-    `(() => { ${PAGE_HELPERS}; const el=cfPrompt(); if(!el)return null; el.scrollIntoView({block:'center'}); el.focus(); const r=el.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()`,
+async function setPrompt(bridge, prompt, operationKey) {
+  await bridge.dispatch(
+    "setText",
+    {
+      selectors: [
+        'textarea[placeholder*="prompt" i]',
+        '[contenteditable="true"][role="textbox"]',
+        '[contenteditable="true"][aria-label*="prompt" i]',
+        '[contenteditable="true"]',
+        '[role="textbox"]',
+      ],
+      text: prompt,
+    },
+    operationKey,
   );
-  if (!target)
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "A caixa de mensagem do Claude não foi encontrada.",
-      true,
-    );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mousePressed", x: target.x, y: target.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseReleased", x: target.x, y: target.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyDown", key: "Backspace", code: "Backspace" },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyUp", key: "Backspace", code: "Backspace" },
-    sessionId,
-  );
-  if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-  // Claude's rich-text editor can drop characters while reconciling a rapid
-  // sequence of small CDP insertions. Insert the complete prompt atomically so
-  // the editor observes a single input transaction.
-  await client.send("Input.insertText", { text: prompt }, sessionId);
-  await sleep(500, signal);
-  let readback = await evaluate(
-    client,
-    sessionId,
-    `(() => { ${PAGE_HELPERS}; const el=cfPrompt(); return (el?.value || el?.innerText || el?.textContent || '').trim(); })()`,
-  );
-  if (normalizeEditorText(readback) !== normalizeEditorText(prompt)) {
-    await replacePromptWithKeyEvents(client, sessionId, prompt, signal);
-    await sleep(250, signal);
-    readback = await evaluate(
-      client,
-      sessionId,
-      `(() => { ${PAGE_HELPERS}; const el=cfPrompt(); return (el?.value || el?.innerText || el?.textContent || '').trim(); })()`,
-    );
-  }
-  if (normalizeEditorText(readback) !== normalizeEditorText(prompt)) {
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "O Claude não confirmou o prompt completo após as estratégias de entrada.",
-      true,
-    );
-  }
 }
 
-async function clickSend(client, sessionId, signal) {
-  const deadline = Date.now() + 10_000;
-  let point;
-  while (Date.now() < deadline) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    point = await evaluate(
-      client,
-      sessionId,
-      `(() => { ${PAGE_HELPERS}; const buttons=[...document.querySelectorAll('button')].filter(cfVisible); const button=buttons.find(el => /send message|enviar mensagem|send$/i.test(cfText(el)) && !el.disabled && el.getAttribute('aria-disabled')!=='true'); if(!button)return null; button.scrollIntoView({block:'center'}); const r=button.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()`,
-    );
-    if (point) break;
-    await sleep(200, signal);
-  }
-  if (!point)
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "O botão Enviar do Claude não ficou disponível.",
-      true,
-    );
-  const clicked = await evaluate(
-    client,
-    sessionId,
-    `(() => { ${PAGE_HELPERS}; const button=[...document.querySelectorAll('button')].filter(cfVisible).find(el => /send message|enviar mensagem|send$/i.test(cfText(el)) && !el.disabled && el.getAttribute('aria-disabled')!=='true'); if(!button)return false; button.click(); return true; })()`,
+async function clickSend(bridge, operationKey) {
+  await bridge.dispatch(
+    "click",
+    { selectors: ["button"], textIncludes: ["send message", "enviar mensagem", "send"] },
+    operationKey,
   );
-  if (!clicked)
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "O botão Enviar do Claude não aceitou o clique.",
-      true,
-    );
 }
 
-async function ensureWebSearchEnabled(client, sessionId, signal) {
-  const toolsPoint = await evaluate(
-    client,
-    sessionId,
-    `(() => { ${PAGE_HELPERS}; const button=[...document.querySelectorAll('button')].find(el => cfVisible(el) && /add files, connectors, and more|adicionar arquivos, conectores/i.test(el.getAttribute('aria-label') || '')); if(!button)return null; const r=button.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()`,
-  );
-  if (!toolsPoint)
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "Não encontrei o menu de ferramentas do Claude para ativar Web search.",
-      true,
-    );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mousePressed", x: toolsPoint.x, y: toolsPoint.y, button: "left", clickCount: 1 },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchMouseEvent",
-    { type: "mouseReleased", x: toolsPoint.x, y: toolsPoint.y, button: "left", clickCount: 1 },
-    sessionId,
+async function ensureWebSearchEnabled(client, sessionId, bridge, signal) {
+  await bridge.dispatch(
+    "click",
+    {
+      selectors: ["button"],
+      textIncludes: ["add files, connectors, and more", "adicionar arquivos, conectores"],
+    },
+    "open-tools",
   );
   await sleep(300, signal);
   const searchState = await evaluate(
@@ -1331,16 +1199,6 @@ async function ensureWebSearchEnabled(client, sessionId, signal) {
     `(() => { ${PAGE_HELPERS}; const item=[...document.querySelectorAll('[role="menuitemcheckbox"]')].find(el => cfVisible(el) && /web search|pesquisa web/i.test(cfText(el))); if(!item)return null; const r=item.getBoundingClientRect(); return {checked:item.getAttribute('aria-checked')==='true' || item.hasAttribute('data-checked'),x:r.left+r.width/2,y:r.top+r.height/2}; })()`,
   );
   if (!searchState) {
-    await client.send(
-      "Input.dispatchKeyEvent",
-      { type: "keyDown", key: "Escape", code: "Escape" },
-      sessionId,
-    );
-    await client.send(
-      "Input.dispatchKeyEvent",
-      { type: "keyUp", key: "Escape", code: "Escape" },
-      sessionId,
-    );
     throw codedError(
       "PERMISSION_DENIED",
       "A conta ou a interface atual do Claude não apresentou a opção Web search.",
@@ -1348,28 +1206,16 @@ async function ensureWebSearchEnabled(client, sessionId, signal) {
     );
   }
   if (!searchState.checked) {
-    await client.send(
-      "Input.dispatchMouseEvent",
-      { type: "mousePressed", x: searchState.x, y: searchState.y, button: "left", clickCount: 1 },
-      sessionId,
-    );
-    await client.send(
-      "Input.dispatchMouseEvent",
-      { type: "mouseReleased", x: searchState.x, y: searchState.y, button: "left", clickCount: 1 },
-      sessionId,
+    await bridge.dispatch(
+      "click",
+      {
+        selectors: ['[role="menuitemcheckbox"]'],
+        textIncludes: ["web search", "pesquisa web"],
+      },
+      "enable-web-search",
     );
     await sleep(250, signal);
   }
-  await client.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyDown", key: "Escape", code: "Escape" },
-    sessionId,
-  );
-  await client.send(
-    "Input.dispatchKeyEvent",
-    { type: "keyUp", key: "Escape", code: "Escape" },
-    sessionId,
-  );
 }
 
 async function responseState(client, sessionId) {
@@ -1426,11 +1272,11 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
   );
 }
 
-async function generatePart(client, sessionId, prompt, settings, signal) {
+async function generatePart(client, sessionId, bridge, prompt, settings, signal, operationKey) {
   const before = await responseState(client, sessionId);
   const baselineCount = Array.isArray(before?.texts) ? before.texts.length : 0;
-  await setPrompt(client, sessionId, prompt, settings, signal);
-  await clickSend(client, sessionId, signal);
+  await setPrompt(bridge, prompt, `prompt:${operationKey}`);
+  await clickSend(bridge, `send:${operationKey}`);
   const timeoutSeconds = clampInteger(settings?.responseTimeoutSeconds, 600, 30, 900);
   return await waitForResponse(client, sessionId, baselineCount, timeoutSeconds * 1000, signal);
 }
@@ -1462,7 +1308,7 @@ async function configureProfile(request, services) {
     return resultError("INVALID_CONFIGURATION", "Ação de configuração de perfil inválida.");
   }
 
-  let client, child;
+  let client, child, bridge;
   try {
     const launched = await launchOrReuseChrome({
       executables: await resolveChromeExecutables(settings),
@@ -1474,7 +1320,7 @@ async function configureProfile(request, services) {
     });
     child = launched.child;
     client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
-    const { sessionId } = await attachClaudePage(client, services.signal);
+    const { sessionId } = await attachClaudePage(client, services.signal, true);
     await openNewConversation(client, sessionId, services.signal);
     await waitForPrompt(
       client,
@@ -1482,6 +1328,15 @@ async function configureProfile(request, services) {
       clampInteger(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
       services.signal,
     );
+    bridge = await attachContentFlowBridge({
+      client,
+      pageSessionId: sessionId,
+      pluginId: PLUGIN_ID,
+      profileId: profileName,
+      request,
+      signal: services.signal,
+      allowedOrigins: ["https://claude.ai"],
+    });
     await markProfilePrepared(profilePath, profileName);
     return {
       status: "success",
@@ -1494,6 +1349,7 @@ async function configureProfile(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
+    bridge?.dispose();
     try {
       await client?.send("Browser.close");
     } catch {}
@@ -1585,6 +1441,7 @@ export async function execute(request, services) {
   const minCharacters = clampInteger(configuration.minCharacters, 1, 1, 1_000_000);
   let client;
   let child;
+  let bridge;
 
   try {
     const attachments = await resolveAttachments(request, services);
@@ -1613,13 +1470,22 @@ export async function execute(request, services) {
     await openNewConversation(client, sessionId, services.signal);
     const interactiveWaitSeconds = clampInteger(settings.interactiveWaitSeconds, 600, 30, 900);
     await waitForPrompt(client, sessionId, interactiveWaitSeconds * 1000, services.signal);
+    bridge = await attachContentFlowBridge({
+      client,
+      pageSessionId: sessionId,
+      pluginId: PLUGIN_ID,
+      profileId: profileName,
+      request,
+      signal: services.signal,
+      allowedOrigins: ["https://claude.ai"],
+    });
     if (attachments.length) {
       step(`Enviando ${attachments.length} anexo(s) autorizado(s) ao Claude.`);
       await attachFiles(client, sessionId, attachments, services.signal);
       step("Anexos prontos para análise.");
     }
     if (capabilityId === "search-web-in-browser") {
-      await ensureWebSearchEnabled(client, sessionId, services.signal);
+      await ensureWebSearchEnabled(client, sessionId, bridge, services.signal);
       step("Web search confirmado para o bloco Buscar.");
     }
 
@@ -1634,9 +1500,11 @@ export async function execute(request, services) {
           const response = await generatePart(
             client,
             sessionId,
+            bridge,
             parts[index],
             settings,
             services.signal,
+            `${index}:${attempt}`,
           );
           responses.push(response);
           lastError = undefined;
@@ -1706,6 +1574,7 @@ export async function execute(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
+    bridge?.dispose();
     if (settings.keepBrowserOpen !== true)
       try {
         await client?.send("Browser.close");

@@ -18,7 +18,7 @@ Voz padrão: `en-US-GuyNeural`. As vozes disponíveis podem mudar no serviço. O
 
 Permissões: `network`, `filesystem:write` e `process`. O plugin grava somente em `getOutputPath()`, chama o Python empacotado com argumentos estruturados e sem shell, aplica timeout e respeita o sinal de cancelamento. O texto da narração é transferido ao serviço online da Microsoft; nenhum secret é usado ou armazenado.
 
-O serviço é online e não constitui uma API contratada pelo ContentFlow OS. Disponibilidade, vozes e condições de uso podem mudar. Não use para conteúdo cuja transferência ao serviço não seja permitida.
+O serviço é online e não constitui uma API contratada pelo ContentFlow. Disponibilidade, vozes e condições de uso podem mudar. Não use para conteúdo cuja transferência ao serviço não seja permitida.
 
 ## Validação
 
@@ -26,4 +26,4 @@ O serviço é online e não constitui uma API contratada pelo ContentFlow OS. Di
 npm run plugin:kit -- check ./plugins/bundled/edge-tts
 ```
 
-Versão do ContentFlow OS testada: 0.4.1. Consulte `THIRD_PARTY_NOTICES.md` para versões, licenças, fontes e hashes do runtime.
+Versão do ContentFlow testada: 0.4.1. Consulte `THIRD_PARTY_NOTICES.md` para versões, licenças, fontes e hashes do runtime.

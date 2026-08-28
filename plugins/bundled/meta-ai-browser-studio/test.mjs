@@ -37,7 +37,7 @@ function request(overrides = {}) {
 
 test("manifesto declara capabilities reais de texto, imagem e vídeo", () => {
   assert.equal(manifest.id, "local.contentflow.meta-ai-browser-studio");
-  assert.equal(manifest.version, "0.1.4");
+  assert.equal(manifest.version, "0.2.0");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
   assert.deepEqual(

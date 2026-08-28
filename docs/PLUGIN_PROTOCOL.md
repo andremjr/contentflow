@@ -1,6 +1,6 @@
-# Protocolo de Plugins do ContentFlow OS — API v1
+# Protocolo de Plugins do ContentFlow — API v1
 
-Este documento é o contrato normativo entre o núcleo do ContentFlow OS e plugins dos operadores `IA` e `Código`. Em caso de divergência, a tipagem em [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e este documento devem ser atualizados juntos.
+Este documento é o contrato normativo entre o núcleo do ContentFlow e plugins dos operadores `IA` e `Código`. Em caso de divergência, a tipagem em [`src/lib/plugin-contract.ts`](../src/lib/plugin-contract.ts) e este documento devem ser atualizados juntos.
 
 O executor isolado atende todos os plugins externos da mesma forma. Cada pacote é validado automaticamente, exige consentimento local por versão/permissões e executa em processo separado sob a sandbox do Node 26. Não existe plugin embutido ou confiança implícita, nem aprovação central para criar, compartilhar, instalar ou ativar um plugin. A API v1 já é pública; qualquer alteração futura incompatível exige uma nova `apiVersion`.
 
@@ -62,7 +62,7 @@ Não fazem parte da API v1:
 
 ### Núcleo
 
-O ContentFlow OS controla:
+O ContentFlow controla:
 
 - canais, projetos e Métodos;
 - ordem e estado dos blocos;
@@ -117,7 +117,7 @@ Regras:
 - `entrypoint` é relativo à raiz e não pode conter travessia (`..`).
 - O entrypoint exporta uma função assíncrona chamada `execute(request, services)`.
 - O pacote distribuído contém o build e todas as dependências de runtime necessárias.
-- Um plugin pronto precisa ser autossuficiente na plataforma declarada: não pode exigir que o usuário instale Python, FFmpeg, bibliotecas, CLIs, navegadores ou qualquer outro software além do ContentFlow OS. Binários e runtimes adicionais necessários ficam dentro da pasta do plugin, com plataforma, arquitetura, versão, integridade e licenças documentadas; o handler os resolve por caminho relativo ao próprio pacote e nunca pelo `PATH` da máquina.
+- Um plugin pronto precisa ser autossuficiente na plataforma declarada: não pode exigir que o usuário instale Python, FFmpeg, bibliotecas, CLIs, navegadores ou qualquer outro software além do ContentFlow. Binários e runtimes adicionais necessários ficam dentro da pasta do plugin, com plataforma, arquitetura, versão, integridade e licenças documentadas; o handler os resolve por caminho relativo ao próprio pacote e nunca pelo `PATH` da máquina.
 - Scripts de instalação não são executados automaticamente.
 - Arquivos `.env`, caches, credenciais e dados de usuário são proibidos.
 - Symlinks que escapem da pasta do plugin são rejeitados.
@@ -145,7 +145,7 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow-os/main/docs/schemas/contentflow-plugin-v1.schema.json",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
   "id": "com.exemplo.gerador-texto",
   "name": "Gerador de texto",
@@ -245,7 +245,7 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 
 `branding.iconPath`, quando presente, aponta para um PNG ou WebP empacotado dentro da pasta do plugin. O caminho é relativo, normalizado e não aceita URL, caminho absoluto, `..`, symlink para fora do pacote ou formato executável. O arquivo pode ter no máximo 512 KiB; recomenda-se imagem quadrada de 256 × 256 pixels.
 
-O núcleo valida assinatura, MIME, tamanho e confinamento antes de exibir o asset. Arquivo ausente ou inválido não impede a instalação de um manifesto API v1 existente: a interface usa um fallback local. O aplicativo nunca busca favicon ou logo remoto automaticamente. O publicador é responsável por possuir autorização para distribuir e exibir o asset e não pode sugerir endosso inexistente nem imitar a marca do ContentFlow OS.
+O núcleo valida assinatura, MIME, tamanho e confinamento antes de exibir o asset. Arquivo ausente ou inválido não impede a instalação de um manifesto API v1 existente: a interface usa um fallback local. O aplicativo nunca busca favicon ou logo remoto automaticamente. O publicador é responsável por possuir autorização para distribuir e exibir o asset e não pode sugerir endosso inexistente nem imitar a marca do ContentFlow.
 
 ### Runtime
 
@@ -826,7 +826,7 @@ Alterações que exigem major do plugin:
 - remover processo ou formato suportado;
 - alterar efeitos colaterais ou permissões de forma significativa.
 
-Alterações que exigem nova `apiVersion` do ContentFlow OS:
+Alterações que exigem nova `apiVersion` do ContentFlow:
 
 - mudar envelopes de manifesto, requisição ou resposta de forma incompatível;
 - alterar semântica dos estados de execução;
@@ -839,7 +839,7 @@ O Método local deve salvar `pluginId`, `pluginVersion`, `capabilityId`, configu
 
 `settingsSchema`, `blockConfigSchema` e `outputSchema` usam JSON Schema Draft 2020-12, limitado aos recursos que o núcleo consegue validar e renderizar de forma idêntica em todas as plataformas.
 
-O schema canônico do manifesto fica versionado em [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json). Durante o desenvolvimento, `$schema` pode apontar para a cópia local ou para `https://raw.githubusercontent.com/andremjr/contentflow-os/main/docs/schemas/contentflow-plugin-v1.schema.json`; esse campo ajuda editores, mas não substitui a validação feita pelo núcleo.
+O schema canônico do manifesto fica versionado em [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json). Durante o desenvolvimento, `$schema` pode apontar para a cópia local ou para `https://raw.githubusercontent.com/andremjr/contentflow/main/docs/schemas/contentflow-plugin-v1.schema.json`; esse campo ajuda editores, mas não substitui a validação feita pelo núcleo.
 
 Recursos aceitos na API v1:
 
@@ -886,7 +886,7 @@ Uma capacidade não deve implementar mutex global para serializar silenciosament
 | `external_read`  | Consulta ou download em serviço externo.                    |
 | `external_write` | Criação, alteração ou exclusão em conta/serviço externo.    |
 | `public_publish` | Conteúdo pode se tornar público ou ser enviado a audiência. |
-| `local_artifact` | Geração de arquivo importado pelo ContentFlow OS.           |
+| `local_artifact` | Geração de arquivo importado pelo ContentFlow.           |
 | `subprocess`     | Execução de programa permitido pelo executor.               |
 
 O array vazio significa que a capacidade é computacional e não produz efeitos fora de `values`. Permissões e efeitos são complementares: `network` autoriza o meio técnico; `external_write` declara a consequência.
@@ -950,7 +950,7 @@ Um resultado tecnicamente válido não implica autorização jurídica de uso. O
 
 O README do plugin informa quem é responsável por contas, termos do provedor, direitos de imagem, voz, música, marcas, dados pessoais e publicação. Metadados de proveniência devem acompanhar `records` ou artifacts por campos definidos na capacidade; o núcleo poderá padronizar um envelope de proveniência em versão compatível futura.
 
-Plugins e conteúdos de terceiros possuem suas próprias licenças. A licença do ContentFlow OS não relicencia automaticamente plugins independentes, e a licença de um plugin não concede direito de copiar o núcleo.
+Plugins e conteúdos de terceiros possuem suas próprias licenças. A licença do ContentFlow não relicencia automaticamente plugins independentes, e a licença de um plugin não concede direito de copiar o núcleo.
 
 ## 26. Dependências, snapshots e ausência de plugin
 
@@ -1002,7 +1002,7 @@ Plugins podem ser distribuídos por arquivo, repositório, organização ou cat�
 
 Quando houver catálogo, ele diferencia plugins `maintained`, `verified`, `community` e `private`:
 
-- `maintained`: mantido pelo autor do ContentFlow OS, porém versionado e distribuído separadamente do núcleo;
+- `maintained`: mantido pelo autor do ContentFlow, porém versionado e distribuído separadamente do núcleo;
 - `verified`: identidade, pacote e requisitos mínimos revisados, sem garantia de ausência de falhas;
 - `community`: distribuído pelo autor e ainda não verificado pelo projeto.
 - `private`: instalado diretamente pelo usuário ou por uma organização, fora do catálogo público.
@@ -1011,7 +1011,7 @@ Todo anúncio exibe autor, licença, versão, origem, hash/assinatura quando dis
 
 O processo opcional de publicação, revisão, denúncia, remoção de catálogo e recurso está detalhado em [`PLUGIN_ECOSYSTEM.md`](PLUGIN_ECOSYSTEM.md). Requisitos técnicos automáticos de instalação e execução estão em [`PLUGIN_SECURITY.md`](PLUGIN_SECURITY.md).
 
-Plugins podem ser gratuitos, pagos, proprietários ou de código aberto conforme a licença de cada autor, desde que sejam integrações independentes construídas sobre o protocolo público. Não podem incorporar código protegido do núcleo nem se apresentar como clone, edição white-label ou substituto rebatizado do ContentFlow OS. A exceção para plugins e os limites de uso do código principal estão no [`LICENSE`](../LICENSE).
+Plugins podem ser gratuitos, pagos, proprietários ou de código aberto conforme a licença de cada autor, desde que sejam integrações independentes construídas sobre o protocolo público. Não podem incorporar código protegido do núcleo nem se apresentar como clone, edição white-label ou substituto rebatizado do ContentFlow. A exceção para plugins e os limites de uso do código principal estão no [`LICENSE`](../LICENSE).
 
 ## 30. Conformidade mínima
 

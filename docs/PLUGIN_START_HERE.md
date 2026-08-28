@@ -1,14 +1,14 @@
 # Comece aqui: crie ou converta um plugin
 
-Um plugin do ContentFlow OS é uma pasta com um manifesto e uma função JavaScript. O manifesto diz **quando** a capacidade pode ser usada; a função recebe os inputs do bloco e devolve os outputs. O núcleo cuida de instalação, consentimento, cofre de credenciais, sandbox, persistência, arquivos, IDs universais e continuidade do Método.
+Um plugin do ContentFlow é uma pasta com um manifesto e uma função JavaScript. O manifesto diz **quando** a capacidade pode ser usada; a função recebe os inputs do bloco e devolve os outputs. O núcleo cuida de instalação, consentimento, cofre de credenciais, sandbox, persistência, arquivos, IDs universais e continuidade do Método.
 
-Compatibilidade deste guia: ContentFlow OS v0.4.2, Plugin API v1 e Node 26.
+Compatibilidade deste guia: ContentFlow v0.4.2, Plugin API v1 e Node 26.
 
 Para o primeiro plugin, você não precisa estudar o protocolo completo nem alterar o núcleo.
 
 ## O caminho mais curto
 
-Requisitos para gerar e testar pelo código-fonte: Node 26 e o repositório do ContentFlow OS.
+Requisitos para gerar e testar pelo código-fonte: Node 26 e o repositório do ContentFlow.
 
 ```powershell
 npm run plugin:kit -- create ./meu-plugin --template text-transform
@@ -102,7 +102,7 @@ Não existe pacote obrigatório para importar nesse exemplo. A referência TypeS
 - `worker`: workers do Node.
 - `native`: addons nativos empacotados.
 
-Dependências podem ser usadas, mas devem estar compiladas ou incluídas no pacote final. O ContentFlow OS não executa `npm install`, `pip install`, `preinstall` ou `postinstall` ao instalar ou executar um plugin.
+Dependências podem ser usadas, mas devem estar compiladas ou incluídas no pacote final. O ContentFlow não executa `npm install`, `pip install`, `preinstall` ou `postinstall` ao instalar ou executar um plugin.
 
 ## Navegador e autenticação
 

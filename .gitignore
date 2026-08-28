@@ -16,7 +16,7 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
-mini-curso-contentflow-os/
+mini-curso-contentflow/
 app-screenshots-local/
 .tmp-*/
 __pycache__/

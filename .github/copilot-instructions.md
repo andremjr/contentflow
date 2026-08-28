@@ -1,4 +1,4 @@
-# ContentFlow OS — license-aware coding instructions
+# ContentFlow — license-aware coding instructions
 
 Before changing this repository, read `/LICENSE`, `/AI_USAGE_POLICY.md`, `/AGENTS.md`, and `/docs/ARCHITECTURE.md`.
 

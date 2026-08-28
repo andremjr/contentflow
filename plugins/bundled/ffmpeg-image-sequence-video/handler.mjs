@@ -292,7 +292,7 @@ async function resolveFfmpegExecutable() {
   } catch {
     throw new PluginFailure(
       "NOT_FOUND",
-      "O runtime FFmpeg oficial não foi encontrado. Reinstale ou atualize o ContentFlow OS.",
+      "O runtime FFmpeg oficial não foi encontrado. Reinstale ou atualize o ContentFlow.",
     );
   }
 }

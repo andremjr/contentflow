@@ -531,7 +531,7 @@ async function searchOpenverse(query, config, request, services) {
     url,
     {
       headers: {
-        "Api-User-Agent": "ContentFlowOS/0.4.1 (https://github.com/andremjr/contentflow-os)",
+        "Api-User-Agent": "ContentFlow/0.4.1 (https://github.com/andremjr/contentflow)",
       },
     },
     request,
@@ -561,7 +561,7 @@ async function searchWikimedia(mediaType, query, config, request, services) {
     url,
     {
       headers: {
-        "Api-User-Agent": "ContentFlowOS/0.4.1 (https://github.com/andremjr/contentflow-os)",
+        "Api-User-Agent": "ContentFlow/0.4.1 (https://github.com/andremjr/contentflow)",
       },
     },
     request,

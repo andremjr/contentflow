@@ -12,12 +12,12 @@ import { useChannels, useDatabaseReady } from "@/lib/store";
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
-      { title: "Visão geral — ContentFlow OS" },
+      { title: "Visão geral — ContentFlow" },
       {
         name: "description",
         content: "Cada canal é um workspace independente de produção de conteúdo.",
       },
-      { property: "og:title", content: "Visão geral — ContentFlow OS" },
+      { property: "og:title", content: "Visão geral — ContentFlow" },
       {
         property: "og:description",
         content: "Escolha um canal para abrir sua produção.",
@@ -35,7 +35,7 @@ function DashboardPage() {
   return (
     <AppShell>
       <TopBar
-        breadcrumbs={[{ label: "ContentFlow OS" }, { label: "Visão geral" }]}
+        breadcrumbs={[{ label: "ContentFlow" }, { label: "Visão geral" }]}
         title="Visão geral"
         subtitle="Escolha um canal para abrir sua produção"
         showNewProject={false}

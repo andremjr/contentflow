@@ -97,7 +97,7 @@ export function AppUpdateCard() {
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-semibold">Atualização do ContentFlow OS</h2>
+              <h2 className="text-sm font-semibold">Atualização do ContentFlow</h2>
               <Badge variant="outline" className="text-[10px]">
                 v{state.currentVersion}
               </Badge>

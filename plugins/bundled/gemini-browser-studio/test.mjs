@@ -32,7 +32,7 @@ function req(o = {}) {
 }
 test("manifesto possui oito capabilities e permissões mínimas", () => {
   assert.equal(manifest.id, "local.contentflow.gemini-browser-studio");
-  assert.equal(manifest.version, "0.1.15");
+  assert.equal(manifest.version, "0.2.0");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.capabilities[0].instructionUsage, "optional");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);

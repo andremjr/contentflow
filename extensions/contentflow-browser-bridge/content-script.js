@@ -1,5 +1,13 @@
-const PLUGIN_ID = "local.contentflow.google-flow-batch-images";
 const PROTOCOL_VERSION = 2;
+const ORIGIN_PLUGINS = Object.freeze({
+  "https://chatgpt.com": new Set(["local.contentflow.chatgpt-browser-studio"]),
+  "https://claude.ai": new Set(["local.contentflow.claude-browser-text"]),
+  "https://gemini.google.com": new Set(["local.contentflow.gemini-browser-studio"]),
+  "https://grok.com": new Set(["local.contentflow.grok-browser-studio"]),
+  "https://labs.google": new Set(["local.contentflow.google-flow-batch-images"]),
+  "https://meta.ai": new Set(["local.contentflow.meta-ai-browser-studio"]),
+  "https://www.meta.ai": new Set(["local.contentflow.meta-ai-browser-studio"]),
+});
 const cancelledExecutions = new Set();
 
 function visible(element) {
@@ -10,8 +18,8 @@ function visible(element) {
     style.display !== "none" &&
     style.visibility !== "hidden" &&
     Number(style.opacity) !== 0 &&
-    rect.width > 12 &&
-    rect.height > 12
+    rect.width > 8 &&
+    rect.height > 8
   );
 }
 
@@ -28,6 +36,27 @@ function allDeep(selector, root = document) {
   return [...new Set(output)];
 }
 
+function normalizedSelectors(value, fallback) {
+  const candidates = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+  const normalized = candidates
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .slice(0, 20);
+  return normalized.length ? normalized : fallback;
+}
+
+function elementsFor(selectors) {
+  const output = [];
+  for (const selector of selectors) {
+    try {
+      output.push(...allDeep(selector));
+    } catch {
+      // O adapter forneceu um seletor inválido; a ponte não amplia a origem autorizada.
+    }
+  }
+  return [...new Set(output)];
+}
+
 function textOf(element) {
   return [
     element?.innerText,
@@ -35,6 +64,8 @@ function textOf(element) {
     element?.getAttribute?.("aria-label"),
     element?.getAttribute?.("title"),
     element?.getAttribute?.("placeholder"),
+    element?.getAttribute?.("data-testid"),
+    element?.getAttribute?.("data-test-id"),
   ]
     .filter(Boolean)
     .join(" ")
@@ -56,68 +87,44 @@ function isEditable(element) {
   );
 }
 
-function promptCandidate(customSelector) {
-  if (customSelector) {
-    try {
-      const custom = allDeep(customSelector).find(isEditable);
-      if (custom) return custom;
-    } catch {
-      // O seletor customizado inválido não bloqueia as heurísticas seguras.
-    }
-  }
-  const placeholders = allDeep('[data-slate-placeholder="true"]').filter((element) =>
-    /^(o que você quer criar\?|what do you want to create\?)$/i.test(
-      (element.textContent || "").replace(/\s+/g, " ").trim(),
-    ),
-  );
-  for (const placeholder of placeholders) {
-    const closest = placeholder.closest(
-      '[data-slate-editor="true"], [contenteditable="true"], [contenteditable="plaintext-only"], [role="textbox"]',
-    );
-    if (isEditable(closest)) return closest;
-    let current = placeholder.parentElement;
-    for (let depth = 0; depth < 20 && current; depth += 1, current = current.parentElement) {
-      if (isEditable(current)) return current;
-      const slate = current.querySelector?.('[data-slate-editor="true"]');
-      if (isEditable(slate)) return slate;
-    }
-  }
-  return allDeep(
-    '[data-slate-editor="true"], [contenteditable="true"], [contenteditable="plaintext-only"], textarea, input[type="text"], [role="textbox"]',
-  ).find(isEditable);
+function editableCandidate(payload) {
+  const selectors = normalizedSelectors(payload?.selectors || payload?.selector, [
+    '[data-slate-editor="true"]',
+    '[contenteditable="true"][role="textbox"]',
+    '[contenteditable="true"]',
+    '[contenteditable="plaintext-only"]',
+    "textarea",
+    'input[type="text"]',
+    '[role="textbox"]',
+  ]);
+  return elementsFor(selectors).find(isEditable) || null;
 }
 
-function generateCandidate(prompt, customSelector, requireEnabled) {
-  if (customSelector) {
-    try {
-      const custom = allDeep(customSelector).find(
-        (element) => visible(element) && (!requireEnabled || !element.disabled),
-      );
-      if (custom) return custom;
-    } catch {
-      // Continua com a busca semântica.
-    }
-  }
-  const promptRect = prompt?.getBoundingClientRect?.();
-  const candidates = allDeep('button, [role="button"]').filter((element) => {
-    if (!visible(element)) return false;
-    if (requireEnabled && (element.disabled || element.getAttribute("aria-disabled") === "true")) {
-      return false;
-    }
-    const text = textOf(element);
-    return /(^|\s)(criar|create|gerar|generate)(\s|$)/i.test(text);
-  });
-  if (!promptRect) return candidates[0] || null;
+function clickableCandidate(payload) {
+  const selectors = normalizedSelectors(payload?.selectors || payload?.selector, [
+    "button",
+    '[role="button"]',
+    '[role="menuitem"]',
+    '[role="option"]',
+  ]);
+  const terms = (Array.isArray(payload?.textIncludes) ? payload.textIncludes : [])
+    .map((item) =>
+      String(item || "")
+        .trim()
+        .toLowerCase(),
+    )
+    .filter(Boolean)
+    .slice(0, 30);
   return (
-    candidates
-      .map((element) => {
-        const rect = element.getBoundingClientRect();
-        const distance =
-          Math.abs(rect.left + rect.width / 2 - (promptRect.left + promptRect.width / 2)) +
-          Math.abs(rect.top + rect.height / 2 - (promptRect.top + promptRect.height / 2));
-        return { element, distance };
-      })
-      .sort((a, b) => a.distance - b.distance)[0]?.element || null
+    elementsFor(selectors)
+      .filter(
+        (element) =>
+          visible(element) &&
+          !element.disabled &&
+          element.getAttribute("aria-disabled") !== "true" &&
+          (!terms.length || terms.some((term) => textOf(element).includes(term))),
+      )
+      .sort((left, right) => textOf(left).length - textOf(right).length)[0] || null
   );
 }
 
@@ -136,7 +143,6 @@ function replaceText(element, value) {
     element.dispatchEvent(new Event("change", { bubbles: true }));
     return element.value;
   }
-
   const selection = document.getSelection();
   const range = document.createRange();
   range.selectNodeContents(element);
@@ -146,13 +152,11 @@ function replaceText(element, value) {
   element.dispatchEvent(
     new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }),
   );
+  element.dispatchEvent(new Event("change", { bubbles: true }));
   return element.innerText || element.textContent || "";
 }
 
 async function dispatchAction(action, payload) {
-  if (location.origin !== "https://labs.google" || !location.pathname.includes("/tools/flow")) {
-    return { ok: false, code: "WRONG_PAGE", message: "A aba selecionada não é do Google Flow." };
-  }
   if (action === "ping") return { ok: true, protocolVersion: PROTOCOL_VERSION, url: location.href };
   if (action === "inspect") {
     return {
@@ -160,49 +164,55 @@ async function dispatchAction(action, payload) {
       protocolVersion: PROTOCOL_VERSION,
       url: location.href,
       title: document.title,
-      promptReady: Boolean(promptCandidate(payload.promptSelector || "")),
+      editableReady: Boolean(editableCandidate(payload)),
     };
   }
-  if (action === "setPrompt") {
-    const prompt = promptCandidate(payload.promptSelector || "");
-    if (!prompt)
-      return { ok: false, code: "PROMPT_NOT_FOUND", message: "Editor do prompt não encontrado." };
-    const expected = String(payload.text || "")
+  if (action === "setText" || action === "setPrompt") {
+    const editable = editableCandidate(payload);
+    if (!editable) {
+      return { ok: false, code: "EDITOR_NOT_FOUND", message: "Editor não encontrado." };
+    }
+    const expected = String(payload?.text || "")
       .replace(/\s+/g, " ")
       .trim();
-    const actual = String(replaceText(prompt, String(payload.text || "")))
+    const actual = String(replaceText(editable, String(payload?.text || "")))
       .replace(/\uFEFF/g, "")
       .replace(/\s+/g, " ")
       .trim();
-    if (!actual || (expected.slice(0, 60) && !actual.includes(expected.slice(0, 60)))) {
+    if (expected && actual !== expected && !actual.includes(expected.slice(0, 80))) {
       return {
         ok: false,
-        code: "PROMPT_WRITE_FAILED",
+        code: "EDITOR_WRITE_FAILED",
         message: "O texto não permaneceu no editor.",
       };
     }
     return { ok: true, readbackLength: actual.length };
   }
-  if (action === "clickGenerate") {
-    const prompt = promptCandidate(payload.promptSelector || "");
-    const button = generateCandidate(prompt, payload.generateSelector || "", true);
-    if (!button)
+  if (action === "click" || action === "clickGenerate") {
+    const normalizedPayload =
+      action === "clickGenerate" && !payload?.textIncludes
+        ? { ...payload, textIncludes: ["criar", "create", "gerar", "generate"] }
+        : payload;
+    const clickable = clickableCandidate(normalizedPayload);
+    if (!clickable) {
       return {
         ok: false,
-        code: "GENERATE_NOT_FOUND",
-        message: "Botão Criar/Gerar não encontrado ou desabilitado.",
+        code: "CONTROL_NOT_FOUND",
+        message: "Controle não encontrado ou desabilitado.",
       };
-    const label = textOf(button);
-    button.click();
+    }
+    const label = textOf(clickable);
+    clickable.click();
     return { ok: true, text: label };
   }
   return { ok: false, code: "UNKNOWN_ACTION", message: `Ação não suportada: ${String(action)}` };
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  const allowedPlugins = ORIGIN_PLUGINS[location.origin];
   if (
-    message?.source !== "contentflow-os" ||
-    message?.pluginId !== PLUGIN_ID ||
+    message?.source !== "contentflow" ||
+    !allowedPlugins?.has(message?.pluginId) ||
     message?.protocolVersion !== PROTOCOL_VERSION ||
     typeof message?.commandId !== "string" ||
     typeof message?.profileId !== "string" ||
@@ -237,7 +247,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           JSON.stringify({ executionKey: message.executionKey, response, storedAt: Date.now() }),
         );
       } catch {
-        // A idempotência principal também existe no storage.session do service worker.
+        // O cache principal também existe no storage.session do service worker.
       }
       sendResponse(response);
     })
@@ -251,4 +261,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
-chrome.runtime.sendMessage({ source: "contentflow-flow-page", action: "wake" }).catch(() => {});
+chrome.runtime.sendMessage({ source: "contentflow-provider-page", action: "wake" }).catch(() => {});

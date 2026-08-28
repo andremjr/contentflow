@@ -1,4 +1,4 @@
-# Como contribuir com o ContentFlow OS
+# Como contribuir com o ContentFlow
 
 Obrigado pelo interesse em contribuir com o repositório oficial.
 
@@ -12,15 +12,15 @@ Leia integralmente:
 - [`docs/PLUGIN_START_HERE.md`](docs/PLUGIN_START_HERE.md), para integrações externas;
 - [`docs/PLUGIN_DEVELOPMENT.md`](docs/PLUGIN_DEVELOPMENT.md), quando precisar do contrato detalhado.
 
-O ContentFlow OS é source-available proprietário, não open source. Contribuições destinam-se ao produto oficial. A licença pública não autoriza clones, distribuições modificadas, produtos concorrentes, white-label, rebranding ou reskins.
+O ContentFlow é source-available proprietário, não open source. Contribuições destinam-se ao produto oficial. A licença pública não autoriza clones, distribuições modificadas, produtos concorrentes, white-label, rebranding ou reskins.
 
 ## Ambiente
 
 Use Node.js 26 (`26.x`). Essa major é necessária para executar a mesma sandbox de permissões usada pelo aplicativo:
 
 ```sh
-git clone https://github.com/andremjr/contentflow-os.git
-cd contentflow-os
+git clone https://github.com/andremjr/contentflow.git
+cd contentflow
 npm ci
 npm run dev
 ```

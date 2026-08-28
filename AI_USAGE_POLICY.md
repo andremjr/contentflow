@@ -4,7 +4,7 @@ Este repositório usa a licença proprietária source-available definida em [`LI
 
 ## Atividades permitidas
 
-- Analisar o código para operar o ContentFlow OS de forma autorizada.
+- Analisar o código para operar o ContentFlow de forma autorizada.
 - Desenvolver plugins independentes pelo protocolo documentado.
 - Revisar segurança e comunicar vulnerabilidades de boa-fé.
 - Preparar correções e contribuições destinadas ao repositório oficial.

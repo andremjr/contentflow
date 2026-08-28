@@ -1,6 +1,6 @@
 # Roadmap de finalização da V1.0.0
 
-Este documento é o guia operacional para levar o ContentFlow OS da versão atual `0.4.2` até a primeira versão estável `1.0.0`. Ele registra a ordem de desenvolvimento, as decisões já tomadas, as dependências entre frentes e os critérios mínimos para considerar cada fase concluída.
+Este documento é o guia operacional para levar o ContentFlow da versão atual `0.4.2` até a primeira versão estável `1.0.0`. Ele registra a ordem de desenvolvimento, as decisões já tomadas, as dependências entre frentes e os critérios mínimos para considerar cada fase concluída.
 
 O roadmap complementa [`ARCHITECTURE.md`](ARCHITECTURE.md). A arquitetura continua sendo a fonte normativa do produto; quando uma decisão aprovada neste roadmap alterar o comportamento normativo, a arquitetura e os documentos técnicos afetados devem ser atualizados antes ou junto da implementação.
 
@@ -14,7 +14,7 @@ O roadmap complementa [`ARCHITECTURE.md`](ARCHITECTURE.md). A arquitetura contin
 - Preservar os 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores e 3 interfaces do produto.
 - Tratar Métodos como processos de um vídeo individual. Coordenação de vários Projetos pertence ao Orquestrador.
 - Nunca serializar chaves, tokens, cookies ou outros secrets em Métodos, SQLite, logs ou arquivos exportados.
-- Preservar a separação absoluta entre núcleo e plugins: o ContentFlow OS deve permanecer útil com zero plugins, e nenhuma integração, API de fornecedor, FFmpeg ou automação de navegador pode ser incorporada ao núcleo.
+- Preservar a separação absoluta entre núcleo e plugins: o ContentFlow deve permanecer útil com zero plugins, e nenhuma integração, API de fornecedor, FFmpeg ou automação de navegador pode ser incorporada ao núcleo.
 
 Estados usados neste documento:
 
@@ -262,7 +262,7 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 
 ## Fase 4 — Hierarquia visual do editor de Métodos
 
-**Objetivo:** tornar o editor atual mais autoexplicativo para quem usa o ContentFlow OS como ferramenta de organização, sem criar outro construtor, outro modo de criação ou qualquer novo conceito de domínio.
+**Objetivo:** tornar o editor atual mais autoexplicativo para quem usa o ContentFlow como ferramenta de organização, sem criar outro construtor, outro modo de criação ou qualquer novo conceito de domínio.
 
 ### Limites obrigatórios
 
@@ -329,7 +329,7 @@ Antes de publicar, a `v0.4.3` deve consolidar a separação absoluta entre núcl
 ### Fronteira arquitetural
 
 ```text
-ContentFlow OS
+ContentFlow
   -> contrato público e execução do plugin
   -> plugin externo do provedor
   -> extensão companheira MV3 externa ao núcleo
@@ -369,30 +369,32 @@ ContentFlow OS
 
 ### Critérios de aceite
 
-- [ ] A extensão companheira pode ser instalada em cada perfil dedicado, com instruções reproduzíveis e sem tocar no perfil pessoal do usuário sem consentimento.
-- [ ] O transporte comum aceita mais de um plugin sem incorporar seletores ou regras de fornecedor.
+- [x] A extensão companheira pode ser instalada em cada perfil dedicado, com instruções reproduzíveis e sem tocar no perfil pessoal do usuário sem consentimento.
+- [x] O transporte comum aceita mais de um plugin sem incorporar seletores ou regras de fornecedor.
 - [ ] Apagar ou adicionar uma conta não altera outros perfis nem apaga outputs já produzidos.
 - [ ] O usuário consegue trabalhar normalmente em outro aplicativo enquanto uma execução longa continua minimizada.
 - [ ] Digitar, clicar ou alternar janelas no computador não modifica a aba automatizada nem interrompe o job.
-- [ ] A rotina não chama `bringToFront`, `activateTarget` nem APIs de teclado/mouse dependentes do foco do sistema.
-- [ ] Comandos da extensão são aceitos somente na origem, aba, perfil, plugin e execução esperados.
-- [ ] Conta ativa, origem e estado da página são verificados antes de enviar conteúdo.
+- [x] A rotina não chama `bringToFront`, `activateTarget` nem APIs de teclado/mouse dependentes do foco do sistema.
+- [x] Comandos da extensão são aceitos somente na origem, aba, perfil, plugin e execução esperados.
+- [x] Conta ativa, origem e estado da página são verificados antes de enviar conteúdo.
 - [ ] Login e reautenticação solicitam atenção visível sem corromper ou perder a execução.
 - [ ] O plugin do Google Flow conclui testes progressivos de volume sem perder resultados já persistidos nem duplicá-los na retomada.
 - [ ] Fechar, minimizar ou usar outros programas não reduz a correção do teste de volume.
-- [ ] Falha, atualização ou ausência da extensão produz erro seguro e recuperável, nunca fallback silencioso para automação por foco.
+- [x] Falha, atualização ou ausência da extensão produz erro seguro e recuperável, nunca fallback silencioso para automação por foco.
 - [ ] A limitação do Chrome normal para extensão em headless está documentada, sem bloquear a operação minimizada da V1.
 - [ ] Typecheck, testes de contrato, sandbox, isolamento de foco e build são aprovados.
 
 ### Estado da implementação — 2026-08-27
 
-- A **ContentFlow Browser Bridge** passou a ser um pacote companheiro único em `extensions/contentflow-browser-bridge`, separado do núcleo e de qualquer plugin individual. A versão piloto habilita somente `https://labs.google/*`; novos plugins serão adicionados à mesma ponte por allowlist e protocolo versionados.
-- O handler usa a extensão instalada no perfil dedicado para preencher o prompt e acionar a geração. A ausência da ponte encerra a execução e não reativa o caminho antigo.
+- A **ContentFlow Browser Bridge v0.2.0** é um pacote companheiro único em `extensions/contentflow-browser-bridge`, separado do núcleo e de qualquer plugin individual. Sua allowlist versionada atende Google Flow, ChatGPT, Claude, Gemini, Grok e Meta AI; seletores e regras de fornecedor permanecem nos respectivos plugins.
+- Os seis handlers de navegador usam a extensão instalada no perfil dedicado para preenchimento e cliques. A ausência ou incompatibilidade da ponte encerra a execução e não reativa o caminho antigo.
 - A execução rotineira não ativa a aba, não traz a página para frente e não envia eventos CDP de teclado ou mouse. A janela visível permanece reservada à ação explícita **Adicionar conta**.
 - O modo minimizado agora é o padrão e o Chromium empacotado foi descartado. A decisão mais recente do titular é usar uma única extensão no Chrome normal, instalada manualmente pelos usuários em cada perfil dedicado.
 - A preparação automatizada dos perfis do mantenedor foi explicitamente classificada como tarefa local paralela. Para os usuários, a instalação da ponte permanece manual em cada perfil dedicado.
 - O envelope v2 agora vincula plugin, perfil, execução, comando, origem, aba, expiração e token efêmero; também inclui cancelamento e cache idempotente no service worker e na página. O teste automatizado simula 300 comandos sem repetir efeitos.
-- Ainda faltam o teste real de isolamento enquanto o usuário usa outro aplicativo, a instalação manual no perfil de desenvolvimento, os testes progressivos de imagens reais e a migração dos demais plugins de navegador. Por isso a Fase 5 permanece em andamento.
+- Plugins baseados em API oficial ou processamento local — OpenAI, Anthropic, ElevenLabs, AssemblyAI, Free Stock, Edge TTS, FFmpeg, Removedor de Silêncios e Codex Skill Runner — permanecem fora da extensão, pois não automatizam interfaces web.
+- Os contratos e sandboxes dos seis plugins de navegador passaram no Plugin Kit; lint, typecheck e build também passaram após a migração.
+- Ainda faltam o teste real de isolamento enquanto o usuário usa outro aplicativo, a instalação manual da ponte nos perfis usados pela demonstração e os testes progressivos de 10, 50, 100 e, quando a conta permitir, 300 imagens reais. Por isso a Fase 5 permanece em andamento.
 
 ## Fase 6 — Lote inteligente de Projetos
 
@@ -487,12 +489,12 @@ ContentFlow OS
 | 2026-08-27 | Atualização manual por pasta é atômica, aceita apenas SemVer superior e invalida o consentimento da versão anterior.                             | Falha restaura o pacote anterior; nova versão exige revisão de permissões antes da execução.                                  |
 | 2026-08-27 | Favicon público não será tratado como licença automática de redistribuição.                                                                      | A proveniência e o risco de redistribuição continuam documentados para revisão antes das releases.                            |
 | 2026-08-27 | O titular decidiu manter os ícones atuais e encerrar a Fase 2 após a validação operacional.                                                      | A proveniência e as diretrizes identificadas permanecem registradas para revisão de release.                                  |
-| 2026-08-27 | Núcleo e plugins são produtos absolutamente separados; o ContentFlow OS deve ser útil com zero plugins.                                          | Releases não incluem integrações; todo plugin é externo, removível, consentido e submetido à mesma sandbox.                   |
+| 2026-08-27 | Núcleo e plugins são produtos absolutamente separados; o ContentFlow deve ser útil com zero plugins.                                          | Releases não incluem integrações; todo plugin é externo, removível, consentido e submetido à mesma sandbox.                   |
 | 2026-08-27 | A atualização real `0.4.2 → 0.4.3` foi concluída preservando os dados locais.                                                                    | Fases 1 e 3.5 foram concluídas; o desenvolvimento avança para o refinamento visual dos Métodos.                               |
 | 2026-08-27 | A Fase 4 é exclusivamente um refinamento visual do editor de Métodos existente.                                                                  | O layout explicita ação, operador, entradas e entregas sem criar modo guiado, lógica ou conceitos novos.                      |
 | 2026-08-27 | Histórico do Canal existe em `ESCOLHER` para escolhas anteriores do mesmo bloco e em `CRIAR` para resultados finais anteriores do Processo.      | O usuário ativa a memória e informa apenas a quantidade; schema, elegibilidade, origem técnica e proveniência ficam internas. |
-| 2026-08-27 | Plugins oficiais de navegador convergirão para uma extensão companheira comum e externa ao núcleo; adapters continuam nos plugins.              | A automação rotineira opera por mensagens/content scripts, minimizada e sem misturar regras de fornecedor ao ContentFlow OS. |
-| 2026-08-27 | Instalação automatizada em massa é uma ferramenta pessoal do mantenedor, não uma função do ContentFlow OS.                                      | Usuários instalam manualmente a ponte única em cada perfil dedicado; o aplicativo não executa RPA de instalação.              |
+| 2026-08-27 | Plugins oficiais de navegador convergirão para uma extensão companheira comum e externa ao núcleo; adapters continuam nos plugins.              | A automação rotineira opera por mensagens/content scripts, minimizada e sem misturar regras de fornecedor ao ContentFlow. |
+| 2026-08-27 | Instalação automatizada em massa é uma ferramenta pessoal do mantenedor, não uma função do ContentFlow.                                      | Usuários instalam manualmente a ponte única em cada perfil dedicado; o aplicativo não executa RPA de instalação.              |
 | 2026-08-27 | Google Flow será o piloto da migração para extensão e isolamento de foco.                                                                        | Testes progressivos de até 300 imagens validarão checkpoint, retomada e produtividade antes das demais migrações.             |
 
 ## Pendências de decisão do titular

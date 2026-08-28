@@ -51,9 +51,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $releaseVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $setup = "release/v0/ContentFlow-OS-V0-$releaseVersion-x64-Setup.exe"
-          $portable = "release/v0/ContentFlow-OS-V0-$releaseVersion-x64-Portable.exe"
-          $hashFile = "release/v0/ContentFlow-OS-V0-$releaseVersion-SHA256.txt"
+          $setup = "release/v0/ContentFlow-V0-$releaseVersion-x64-Setup.exe"
+          $portable = "release/v0/ContentFlow-V0-$releaseVersion-x64-Portable.exe"
+          $hashFile = "release/v0/ContentFlow-V0-$releaseVersion-SHA256.txt"
           Get-FileHash -Algorithm SHA256 $setup, $portable |
             ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
             Set-Content -Encoding ascii $hashFile

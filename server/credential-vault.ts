@@ -1,6 +1,6 @@
 import { AsyncEntry } from "@napi-rs/keyring";
 
-const SERVICE_NAME = "ContentFlow OS";
+const SERVICE_NAME = "ContentFlow";
 
 function accountName(pluginId: string, secretKey: string) {
   if (!/^[a-z0-9.-]+$/.test(pluginId) || !/^[A-Z0-9_]+$/.test(secretKey)) {

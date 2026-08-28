@@ -96,7 +96,7 @@ const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
 const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
 const defaultDataDirectory =
   process.platform === "win32" && process.env.APPDATA
-    ? path.join(process.env.APPDATA, "ContentFlow OS", "data")
+    ? path.join(process.env.APPDATA, "ContentFlow", "data")
     : path.join(applicationRoot, "data");
 const dataDirectory = path.resolve(process.env.CONTENTFLOW_DATA_DIR ?? defaultDataDirectory);
 const uploadsDirectory = path.join(dataDirectory, "uploads");
@@ -142,15 +142,15 @@ const activeUploadMimeTypes = new Set([
 ]);
 mkdirSync(dataDirectory, { recursive: true });
 
-const databasePath = path.join(dataDirectory, "contentflow-os.sqlite");
+const databasePath = path.join(dataDirectory, "contentflow.sqlite");
 const legacyDataDirectory = path.join(applicationRoot, "data");
-const legacyDatabasePath = path.join(legacyDataDirectory, "contentflow-os.sqlite");
-const shouldMigrateLegacyData =
-  databasePath !== legacyDatabasePath &&
-  !existsSync(databasePath) &&
-  existsSync(legacyDatabasePath);
+const legacyDatabasePath = path.join(legacyDataDirectory, "contentflow.sqlite");
 
-if (shouldMigrateLegacyData) {
+if (
+  !existsSync(databasePath) &&
+  databasePath !== legacyDatabasePath &&
+  existsSync(legacyDatabasePath)
+) {
   const legacyDatabase = new Database(legacyDatabasePath, { readonly: true });
   try {
     await legacyDatabase.backup(databasePath);
@@ -3853,7 +3853,7 @@ const payloadErrorHandler: ErrorRequestHandler = (error, _request, response, nex
 app.use(payloadErrorHandler);
 
 app.listen(port, "127.0.0.1", () => {
-  console.log(`ContentFlow OS API local pronta em http://127.0.0.1:${port}`);
+  console.log(`ContentFlow API local pronta em http://127.0.0.1:${port}`);
   resumeExecutionOrchestrators();
 });
 

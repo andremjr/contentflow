@@ -11,4 +11,4 @@
 
 O pacote do plugin inclui ao lado do executável os arquivos `ffmpeg.exe.LICENSE` e `ffmpeg.exe.README` recebidos do distribuidor. O README registra a configuração integral do build e as bibliotecas externas habilitadas.
 
-FFmpeg é um projeto independente. Sua inclusão não altera a licença das partes separadas do ContentFlow OS, e a licença proprietária do ContentFlow OS não restringe os direitos concedidos pela GPL sobre o executável FFmpeg.
+FFmpeg é um projeto independente. Sua inclusão não altera a licença das partes separadas do ContentFlow, e a licença proprietária do ContentFlow não restringe os direitos concedidos pela GPL sobre o executável FFmpeg.

@@ -1,6 +1,6 @@
 # ContentFlow Browser Bridge
 
-Extensão companheira Manifest V3 única para todos os plugins de automação de navegador compatíveis com o ContentFlow OS. Ela é externa ao núcleo e não pertence a nenhum plugin individual.
+Extensão companheira Manifest V3 única para todos os plugins de automação de navegador compatíveis com o ContentFlow. Ela é externa ao núcleo e não pertence a nenhum plugin individual.
 
 ## Regra de arquitetura
 
@@ -8,9 +8,9 @@ Extensão companheira Manifest V3 única para todos os plugins de automação de
 - cada comando identifica plugin, perfil, execução, origem, aba e versão do protocolo;
 - apenas plugins, ações e origens registrados na allowlist da versão instalada são aceitos;
 - novos provedores entram por atualização desta mesma extensão, nunca por uma segunda extensão;
-- o núcleo do ContentFlow OS não recebe seletores, cookies, sessões ou regras de fornecedor.
+- o núcleo do ContentFlow não recebe seletores, cookies, sessões ou regras de fornecedor.
 
-A versão `0.1.0` contém somente o adapter piloto do Google Flow em `https://labs.google/*`. ChatGPT, Gemini, Claude, Grok e Meta serão migrados posteriormente para a mesma ponte.
+A versão `0.2.0` atende Google Flow, ChatGPT, Claude, Gemini, Grok e Meta AI. A ponte mantém apenas transporte, autenticação efêmera, isolamento por origem/aba/perfil, idempotência e operações DOM limitadas. Seletores e regras de cada provedor continuam no adapter do respectivo plugin.
 
 ## Instalação
 

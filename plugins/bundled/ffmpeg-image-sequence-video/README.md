@@ -30,4 +30,4 @@ O plugin contém o FFmpeg 6.1.1 estático para Windows x64. Consulte `THIRD_PART
 npm run plugin:kit -- check ./plugins/bundled/ffmpeg-image-sequence-video
 ```
 
-Versão do ContentFlow OS testada: 0.4.1. Runtime: Node 26/ESM. Não há secrets, autenticação ou credenciais para revogar.
+Versão do ContentFlow testada: 0.4.1. Runtime: Node 26/ESM. Não há secrets, autenticação ou credenciais para revogar.

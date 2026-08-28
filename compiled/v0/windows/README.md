@@ -1,6 +1,6 @@
-# ContentFlow OS V0 para Windows x64
+# ContentFlow V0 para Windows x64
 
-Os executáveis desta versão são publicados manualmente na página [Releases do projeto](https://github.com/andremjr/contentflow-os/releases), sem Git LFS ou automação. Escolha um dos arquivos da Release:
+Os executáveis desta versão são publicados na página [Releases do projeto](https://github.com/andremjr/contentflow/releases), sem Git LFS. Escolha um dos arquivos da Release:
 
 - **Setup.exe — recomendado:** instala o aplicativo e cria atalhos. Não exige Node, npm ou terminal.
 - **Portable.exe:** não instala, mas pode levar alguns minutos para abrir porque descompacta o aplicativo a cada execução.

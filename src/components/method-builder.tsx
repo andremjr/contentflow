@@ -440,8 +440,8 @@ export function MethodBuilder({
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
       try {
         await navigator.share({
-          title: `Método de ${processLabel} — ContentFlow OS`,
-          text: `Método de ${processLabel} criado no ContentFlow OS.`,
+          title: `Método de ${processLabel} — ContentFlow`,
+          text: `Método de ${processLabel} criado no ContentFlow.`,
           files: [file],
         });
         return;

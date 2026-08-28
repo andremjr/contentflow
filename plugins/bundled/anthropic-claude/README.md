@@ -1,6 +1,6 @@
 # Anthropic Claude
 
-Plugin oficial incluído no ContentFlow OS para executar ações baseadas em linguagem com a Messages API da Anthropic.
+Plugin oficial incluído no ContentFlow para executar ações baseadas em linguagem com a Messages API da Anthropic.
 
 - `BUSCAR` usa a ferramenta de pesquisa web da Anthropic e pode gerar custos adicionais de busca.
 - `ESCOLHER` recebe os itens da coleção estratégica vinculada e devolve o ID de um deles.
@@ -17,6 +17,6 @@ O usuário é responsável pelos custos e termos aplicáveis à API da Anthropic
 
 ## Licença e marca
 
-Este plugin é mantido pelo ContentFlow OS e integra a API da Anthropic. “Anthropic” e “Claude” pertencem aos respectivos titulares; a integração não implica patrocínio ou endosso do provedor.
+Este plugin é mantido pelo ContentFlow e integra a API da Anthropic. “Anthropic” e “Claude” pertencem aos respectivos titulares; a integração não implica patrocínio ou endosso do provedor.
 
-O código faz parte da distribuição oficial do ContentFlow OS e segue a licença proprietária source-available do repositório raiz.
+O código faz parte da distribuição oficial do ContentFlow e segue a licença proprietária source-available do repositório raiz.

@@ -2,7 +2,7 @@
   "template": "text-transform",
   "name": "ContentFlow Kit Text Demo",
   "id": "com.contentflow.kit-text-demo",
-  "author": "ContentFlow OS",
+  "author": "ContentFlow",
   "license": "LicenseRef-ContentFlow-Plugin-Example-1.0",
   "description": "Exemplo mínimo criado pelo próprio Plugin Kit oficial.",
   "operator": "Código",

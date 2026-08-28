@@ -123,7 +123,7 @@ function ChannelWorkspace() {
       <TopBar
         showNewProject={false}
         breadcrumbs={[
-          { label: "ContentFlow OS", to: "/dashboard" },
+          { label: "ContentFlow", to: "/dashboard" },
           { label: "Canais", to: "/dashboard" },
           { label: channel.name },
         ]}

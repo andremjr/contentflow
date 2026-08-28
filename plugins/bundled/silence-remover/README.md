@@ -1,6 +1,6 @@
 # Removedor de Silêncios
 
-Plugin independente mantido para o ContentFlow OS. Ele recebe um áudio ou vídeo, detecta intervalos silenciosos na primeira faixa de áudio e gera uma nova mídia com esses intervalos removidos.
+Plugin independente mantido para o ContentFlow. Ele recebe um áudio ou vídeo, detecta intervalos silenciosos na primeira faixa de áudio e gera uma nova mídia com esses intervalos removidos.
 
 No vídeo, imagem e áudio são recortados nos mesmos pontos. O plugin não usa `silenceremove` isoladamente e preserva o deslocamento temporal original entre as primeiras faixas de áudio e vídeo.
 
@@ -21,11 +21,11 @@ As duas capacidades usam o bloco `CRIAR` e o operador `Código` porque produzem 
 | Limiar de silêncio          | -40 dB |   -96 a -1 dB | Som abaixo do limiar é tratado como silêncio. Um valor mais próximo de zero é mais agressivo. |
 | Margem preservada           | 100 ms |    0–2.000 ms | Mantém áudio em cada transição para reduzir cortes secos.                                     |
 
-Os parâmetros são declarados em `blockConfigSchema`. O ContentFlow OS os apresenta automaticamente quando o usuário vincula uma das capacidades ao bloco.
+Os parâmetros são declarados em `blockConfigSchema` e aparecem automaticamente quando o usuário vincula uma das capacidades ao bloco no ContentFlow.
 
 ## Disponibilidade
 
-O plugin é instalado separadamente e não exige atualizar ou reinstalar o ContentFlow OS:
+O plugin é instalado separadamente e não exige atualizar ou reinstalar o ContentFlow:
 
 1. Remova uma instalação anterior com o mesmo ID, se existir.
 2. Abra **Plugins → Instalar plugin → Instalar uma cópia**.
@@ -64,7 +64,7 @@ O handler nunca procura `ffmpeg` no `PATH`. O plugin contém o FFmpeg 6.1.1 est�
 ## Comportamento e limites conhecidos
 
 - Formatos de áudio aceitos: AAC, FLAC, MP3, M4A/MP4, Ogg/Opus, WAV e WebM. Formatos de vídeo aceitos: AVI, MP4/MOV, WebM e Matroska. O handler força o demuxer correspondente ao MIME e permite apenas os protocolos locais `file` e `pipe`; playlists e referências externas não são autodetectadas.
-- O ContentFlow OS v0.2 concede no máximo 120 segundos a cada invocação do plugin; o handler reserva 110 segundos para detectar e renderizar. Arquivos que excedam esse tempo retornam `TIMEOUT` não repetível e precisam ser divididos ou processados em uma futura capability assíncrona reiniciável.
+- O ContentFlow v0.2 concede no máximo 120 segundos a cada invocação do plugin; o handler reserva 110 segundos para detectar e renderizar. Arquivos que excedam esse tempo retornam `TIMEOUT` não repetível e precisam ser divididos ou processados em uma futura capability assíncrona reiniciável.
 - Seis horas são apenas o teto de validação defensiva da entrada, não uma promessa de processamento. O limite prático é a mídia que concluir dentro dos 110 segundos. O artifact final pode ter no máximo 4 GB.
 - No máximo 400 segmentos falados são concatenados por execução. Se o limite for atingido, aumente a duração mínima do silêncio.
 - Somente o primeiro stream de áudio é analisado. A capability de vídeo usa o primeiro stream de vídeo.
@@ -75,7 +75,7 @@ O handler nunca procura `ffmpeg` no `PATH`. O plugin contém o FFmpeg 6.1.1 est�
 
 ## Validação
 
-Na raiz do ContentFlow OS:
+Na raiz do ContentFlow:
 
 ```powershell
 npm run plugin:kit -- validate ./plugins/bundled/silence-remover
@@ -91,4 +91,4 @@ O teste de contrato gera mídias sintéticas localmente, inclusive um vídeo cuj
 
 O código do plugin segue a licença proprietária source-available incluída em [`LICENSE`](LICENSE). O executável FFmpeg é um programa separado, distribuído sob GPLv3 ou posterior, com licença, configuração do build, origem e acesso ao código-fonte preservados na distribuição.
 
-Para suporte, use o repositório do ContentFlow OS. Vulnerabilidades devem seguir o canal privado indicado no arquivo `SECURITY.md` do projeto.
+Para suporte, use o repositório do ContentFlow. Vulnerabilidades devem seguir o canal privado indicado no arquivo `SECURITY.md` do projeto.

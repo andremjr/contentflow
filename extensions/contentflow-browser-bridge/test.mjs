@@ -103,7 +103,7 @@ export async function testExtensionBridge(source) {
   const wrongTab = await bridge.dispatch(
     command(5, { expectedUrl: "https://labs.google/fx/pt/tools/flow/project/other-project" }),
   );
-  assert.equal(wrongTab.code, "FLOW_TAB_NOT_FOUND");
+  assert.equal(wrongTab.code, "PLUGIN_TAB_NOT_FOUND");
   const wrongProfile = await bridge.dispatch(command(3, { profileId: "outra-conta" }));
   assert.equal(wrongProfile.code, "PROFILE_MISMATCH");
   const expired = await bridge.dispatch(command(4, { expiresAt: Date.now() - 1 }));
@@ -124,4 +124,15 @@ export async function testExtensionBridge(source) {
   });
   assert.equal(cancelResult.ok, true);
   assert.equal(sentMessages.at(-1).message.action, "cancel");
+
+  for (const provider of [
+    ["local.contentflow.chatgpt-browser-studio", "https://chatgpt.com/"],
+    ["local.contentflow.claude-browser-text", "https://claude.ai/new"],
+    ["local.contentflow.gemini-browser-studio", "https://gemini.google.com/app"],
+    ["local.contentflow.grok-browser-studio", "https://grok.com/"],
+    ["local.contentflow.meta-ai-browser-studio", "https://www.meta.ai/"],
+  ]) {
+    const result = bridge.connect({ ...handshake, pluginId: provider[0] });
+    assert.equal(result.ok, true, `${provider[0]} deve estar na allowlist da ponte v2`);
+  }
 }

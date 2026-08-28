@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const METHOD_AGENT_URL =
-  "https://chatgpt.com/g/g-6a74d7da8edc8191950f36481a113904-contentflow-os-tradutor-de-metodos";
+  "https://chatgpt.com/g/g-6a74d7da8edc8191950f36481a113904-contentflow-tradutor-de-metodos";
 
 export function MethodAgentCta({ className }: { className?: string }) {
   return (

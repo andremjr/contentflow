@@ -1,4 +1,4 @@
-# ContentFlow OS — orientações para alterações futuras
+# ContentFlow — orientações para alterações futuras
 
 - Antes de qualquer alteração, leia `LICENSE` e `AI_USAGE_POLICY.md`. O código é source-available proprietário, não open source.
 - Antes de alterar arquitetura, domínio, navegação, métodos, execução, parâmetros, plugins ou persistência, leia integralmente `docs/ARCHITECTURE.md`.

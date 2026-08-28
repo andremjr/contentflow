@@ -1,6 +1,6 @@
 # ElevenLabs Audio — plugin oficial
 
-Integração oficial mantida pelo ContentFlow OS para a API HTTPS da ElevenLabs. O pacote usa somente APIs documentadas e não inclui SDK ou dependências de runtime.
+Integração oficial mantida pelo ContentFlow para a API HTTPS da ElevenLabs. O pacote usa somente APIs documentadas e não inclui SDK ou dependências de runtime.
 
 ## Capacidades
 
@@ -14,7 +14,7 @@ Clonagem/criação de voz e dubbing não fazem parte da versão 1.0.0 porque cri
 
 ## Credencial e dados
 
-Configure `ELEVENLABS_API_KEY` na Central de Plugins. Texto, prompts e arquivos usados nas capacidades de IA são enviados à ElevenLabs. A chave é obtida exclusivamente pelo cofre do ContentFlow OS e nunca entra no Método, outputs, cache ou logs.
+Configure `ELEVENLABS_API_KEY` na Central de Plugins. Texto, prompts e arquivos usados nas capacidades de IA são enviados à ElevenLabs. A chave é obtida exclusivamente pelo cofre do ContentFlow e nunca entra no Método, outputs, cache ou logs.
 
 As gerações e transcrições são cobradas de acordo com o plano ElevenLabs. A mesma tentativa é idempotente: seu resultado fica no workspace autorizado e retries reutilizam o arquivo ou JSON sem repetir a chamada cobrada.
 

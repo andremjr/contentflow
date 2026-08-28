@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/andremjr/contentflow-os/main/docs/schemas/contentflow-plugin-v1.schema.json",
-  "title": "ContentFlow OS Plugin Manifest API v1",
+  "$id": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/schemas/contentflow-plugin-v1.schema.json",
+  "title": "ContentFlow Plugin Manifest API v1",
   "type": "object",
   "additionalProperties": false,
   "required": [

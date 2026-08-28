@@ -13,4 +13,4 @@ Para experimentar:
 5. confira `Criar arquivos do projeto` e clique em **Ativar e permitir**;
 6. selecione o plugin em um bloco `CRIAR` com entrada de texto e saída de arquivo.
 
-O autor não precisa implementar instalação, cofre, banco, sandbox ou persistência. Essas responsabilidades pertencem ao ContentFlow OS.
+O autor não precisa implementar instalação, cofre, banco, sandbox ou persistência. Essas responsabilidades pertencem ao ContentFlow.
