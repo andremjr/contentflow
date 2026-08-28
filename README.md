@@ -22,9 +22,9 @@ Você não precisa instalar Git, Node, npm nem abrir terminal.
 2. Em **Assets**, baixe o arquivo que termina em `x64-Setup.exe` — esta é a opção recomendada.
 3. Instale e abra o ContentFlow. O aviso do Windows pode aparecer enquanto o aplicativo ainda não possui assinatura digital comercial; confirme que o download veio deste repositório oficial.
 4. Crie um Canal, monte ou importe um Método e crie seu primeiro Projeto.
-5. Plugins são opcionais e baixados separadamente. O aplicativo funciona sem eles; quando quiser automação, abra **Plugins** e siga a instalação guiada.
+5. Plugins são opcionais e baixados separadamente. O aplicativo funciona sem eles; quando quiser automação, abra **Plugins**, baixe o pacote, extraia-o e instale todos de uma vez informando a pasta raiz.
 
-Projetos, plugins e credenciais ficam na área de dados do usuário e são preservados nas atualizações. Veja o [guia completo para Windows](docs/DESKTOP_V0.md) e, se algo falhar, consulte primeiro as mensagens exibidas no próprio bloco ou plugin.
+Projetos, plugins e credenciais ficam na área de dados do usuário e são preservados nas atualizações. Por isso, quem atualiza continua vendo os plugins que já instalou. Em uma instalação realmente nova, com a área de dados vazia, a tela **Plugins** começa zerada: os plugins não estão no instalador nem no portátil e só aparecem depois que a pessoa baixa o ZIP separado e instala cada pacote pelo aplicativo. Veja o [guia completo para Windows](docs/DESKTOP_V0.md) e, se algo falhar, consulte primeiro as mensagens exibidas no próprio bloco ou plugin.
 
 ## Estrutura do repositório
 
@@ -50,6 +50,8 @@ As pastas `src`, `server` e `desktop` compõem o produto ContentFlow. A pasta `e
 Os pacotes atualmente disponíveis em [`ecosystem/plugins/reference`](ecosystem/plugins/reference/) são plugins independentes disponibilizados separadamente. Eles não fazem parte do núcleo e sua presença neste repositório não representa promessa de manutenção contínua, suporte, disponibilidade de provedores ou compatibilidade futura. Cada plugin possui identidade, versão, permissões, dependências e licença próprias; quem cria ou distribui um plugin é responsável por seu pacote.
 
 O ContentFlow valida todos os plugins pela mesma Plugin API v1, solicita consentimento local e executa o código em processo separado com a sandbox de permissões do Node. APIs oficiais, automações de navegador, FFmpeg, Python e regras específicas de fornecedores permanecem dentro dos respectivos plugins.
+
+O instalador aceita tanto a pasta de um plugin quanto a raiz extraída de `ContentFlow-Plugins.zip`. No segundo caso, valida o conjunto antes de instalar, adiciona todos os plugins novos em lote e preserva sem sobrescrever os que já estavam instalados.
 
 Não existe categoria especial baseada no autor: os plugins criados pelo autor do ContentFlow e os
 criados por qualquer participante da comunidade usam o mesmo download por pasta, a mesma validação,

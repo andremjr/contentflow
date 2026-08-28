@@ -45,10 +45,10 @@ jobs:
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
 
-      - name: Empacotar plugins e Browser Bridge
+      - name: Empacotar recursos do ecossistema
         run: npm run ecosystem:package
 
-      - name: Publicar plugins e Browser Bridge
+      - name: Publicar plugins, Browser Bridge e skills
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -56,6 +56,8 @@ jobs:
           gh release upload "${{ github.ref_name }}" `
             "release/ecosystem/ContentFlow-Plugins.zip" `
             "release/ecosystem/ContentFlow-Browser-Bridge.zip" `
+            "release/ecosystem/ContentFlow-Skill-Plugin-Development.zip" `
+            "release/ecosystem/ContentFlow-Skill-Method-Development.zip" `
             --clobber
 
       - name: Publicar hashes SHA-256

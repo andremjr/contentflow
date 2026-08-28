@@ -30,7 +30,7 @@ Essas categorias comunicam origem e confiança; não formam níveis de permissã
 
 Um arquivo compartilhado por mensagem, download direto, repositório ou mídia removível não se torna oficial ou verificado por poder ser descoberto pelo aplicativo. Isso não impede sua instalação ou execução pelo usuário. A interface apenas informa que a origem não passou por revisão do projeto e apresenta permissões, efeitos e riscos antes da ativação.
 
-Na versão atual, plugins locais e comunitários podem ser instalados por uma pasta ou conectados como pasta ao vivo, validados, consentidos, ativados e executados na sandbox do Node 26 sem análise manual do mantenedor. A interface ainda não baixa pacotes diretamente de URL ou catálogo: o usuário primeiro obtém a pasta do autor e então escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**.
+Na versão atual, plugins locais e comunitários podem ser instalados individualmente ou em lote pela raiz de um pacote extraído, ou conectados como pasta ao vivo. Todos são validados, consentidos, ativados e executados na sandbox do Node 26 sem análise manual do mantenedor. A interface ainda não baixa e instala pacotes diretamente de URL ou catálogo: o usuário primeiro obtém e extrai o pacote do autor e então escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**.
 
 Se alguém modificar o núcleo, executar o pacote por fora do ContentFlow ou remover suas proteções, essa atividade não é uma execução autorizada pelo protocolo nem recebe status, suporte ou garantia do projeto.
 

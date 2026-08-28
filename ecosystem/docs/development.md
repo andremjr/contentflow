@@ -20,7 +20,7 @@ Se você está usando uma IA para criar o plugin, prefira o conjunto pequeno lis
 Na tela **Plugins**, use uma destas opções:
 
 - **Usar pasta ao vivo**: recomendado durante o desenvolvimento. O ContentFlow mantém um vínculo com a pasta escolhida; salvar uma alteração no código basta para a próxima execução usar a nova versão. Para remover, clique em **Desconectar pasta**.
-- **Instalar uma cópia**: recomendado para distribuição. O aplicativo copia o pacote para a área local e ele continua instalado mesmo se a pasta original for apagada. Para remover, clique em **Desinstalar**.
+- **Instalar uma cópia**: recomendado para distribuição. Informe a pasta de um plugin ou a raiz de um pacote extraído; o aplicativo valida o conjunto e instala todos os novos em lote. As cópias continuam instaladas mesmo se a pasta original for apagada. Para remover, clique em **Desinstalar**.
 
 O botão de exemplo preenche a pasta `Documentos\ContentFlow\Plugins\community-reference`, criada automaticamente pela V0. Atualizar a página apenas relê os plugins conectados ou instalados; apagar a pasta de origem não desinstala uma cópia. Essa distinção evita perda acidental de um plugin já instalado.
 

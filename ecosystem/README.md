@@ -17,10 +17,11 @@ Nenhum item desta pasta é empacotado como parte confiável do núcleo. Os plugi
 
 ## Distribuição
 
-O aplicativo principal, os plugins e a Browser Bridge são distribuídos separadamente. As releases
-podem oferecer `ContentFlow-Plugins.zip` e `ContentFlow-Browser-Bridge.zip` como atalhos de download,
-mas todo plugin é instalado da mesma forma em **Plugins → Instalar plugin**, por uma pasta que
-contenha `contentflow.plugin.json`, seguida da mesma validação, consentimento e ativação local.
+O aplicativo principal, os plugins, a Browser Bridge e as skills são distribuídos separadamente. As releases
+podem oferecer `ContentFlow-Plugins.zip`, `ContentFlow-Browser-Bridge.zip`,
+`ContentFlow-Skill-Plugin-Development.zip` e `ContentFlow-Skill-Method-Development.zip` como atalhos de download,
+mas todo plugin é instalado da mesma forma em **Plugins → Instalar plugin**, por sua pasta individual
+ou pela raiz extraída do pacote em lote, seguida da mesma validação, consentimento e ativação local.
 
 O pacote de plugins é apenas uma coleção conveniente de pastas independentes. Ele não é incorporado
 ao executável, não é instalado automaticamente e pode ser substituído por qualquer plugin compatível

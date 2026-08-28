@@ -791,11 +791,11 @@ O gerenciador descobre manifestos somente em subpastas diretas autorizadas e exp
 
 ### Instalação
 
-1. Extrair em pasta temporária.
-2. Validar estrutura, manifesto, runtime e integridade.
+1. Extrair em pasta temporária. A raiz pode conter um plugin ou várias subpastas de plugins.
+2. Validar estrutura, manifesto, runtime, IDs únicos e integridade de todo o conjunto antes de copiar.
 3. Exibir autor, versão, permissões, settings e secrets.
 4. Obter consentimento.
-5. Mover atomicamente para a pasta instalada.
+5. Mover atomicamente cada plugin novo para a pasta instalada; uma falha reverte todo o lote novo e nunca sobrescreve plugins existentes.
 6. Executar teste de saúde sem secrets, quando declarado.
 
 ### Atualização

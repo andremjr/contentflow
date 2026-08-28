@@ -92,6 +92,7 @@ import { validatePluginDirectory } from "./plugin-validation";
 import { PluginConnectionStore, type PluginConnection } from "./plugin-connections";
 import { resolvePluginConnectionSecrets } from "./plugin-connection-runtime";
 import { normalizePluginConversationId, resolvePluginConversation } from "./plugin-conversation";
+import { discoverPluginDirectories } from "./plugin-package";
 import { migrateSiblingDataDirectory } from "./data-directory-migration";
 
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
@@ -2066,57 +2067,71 @@ app.post("/api/plugins/:pluginId/profile", async (request, response) => {
 app.post("/api/plugins/install-from-folder", (request, response) => {
   const requestedPath = typeof request.body?.path === "string" ? request.body.path.trim() : "";
   if (!requestedPath) {
-    response.status(400).json({ error: "Informe a pasta criada pelo autor ou pela IA." });
+    response.status(400).json({ error: "Informe a pasta de um plugin ou do pacote extraído." });
     return;
   }
-  const sourceDirectory = path.resolve(requestedPath);
-  const manifestPath = path.join(sourceDirectory, "contentflow.plugin.json");
-  if (!existsSync(sourceDirectory) || !statSync(sourceDirectory).isDirectory()) {
-    response.status(404).json({ error: "A pasta informada não existe." });
-    return;
-  }
-  if (!existsSync(manifestPath)) {
-    response.status(422).json({ error: "A pasta não contém contentflow.plugin.json." });
-    return;
-  }
-  let temporaryDestination: string | undefined;
+  const temporaryDestinations: string[] = [];
+  const installedDestinations: string[] = [];
   try {
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
-    if (!isPluginManifest(manifest)) throw new Error("O manifesto do plugin é inválido.");
-    const pluginId = String(manifest.id);
-    if (!/^[a-z0-9.-]+$/.test(pluginId)) throw new Error("O id do plugin é inválido.");
-    const destination = path.resolve(installedPluginsDirectory, pluginId);
-    if (!destination.startsWith(`${path.resolve(installedPluginsDirectory)}${path.sep}`)) {
-      throw new Error("O destino calculado para o plugin é inválido.");
+    const pluginDirectories = discoverPluginDirectories(requestedPath);
+    const candidates = pluginDirectories.map((sourceDirectory) => {
+      const validated = validatePluginDirectory(sourceDirectory, true);
+      const pluginId = validated.manifest.id;
+      const destination = path.resolve(installedPluginsDirectory, pluginId);
+      if (!destination.startsWith(`${path.resolve(installedPluginsDirectory)}${path.sep}`))
+        throw new Error("O destino calculado para o plugin é inválido.");
+      return { sourceDirectory, pluginId, destination };
+    });
+    if (new Set(candidates.map((candidate) => candidate.pluginId)).size !== candidates.length) {
+      throw new Error("O pacote contém IDs de plugin duplicados.");
     }
-    if (existsSync(destination)) {
-      response.status(409).json({ error: "Esta versão já possui uma pasta instalada." });
-      return;
-    }
+    const skipped = candidates
+      .filter((candidate) => existsSync(candidate.destination))
+      .map((candidate) => candidate.pluginId);
+    const pending = candidates.filter((candidate) => !existsSync(candidate.destination));
     mkdirSync(installedPluginsDirectory, { recursive: true });
-    temporaryDestination = path.join(installedPluginsDirectory, `.install-${randomUUID()}`);
-    cpSync(sourceDirectory, temporaryDestination, {
-      recursive: true,
-      dereference: false,
-      errorOnExist: true,
+    const staged = pending.map((candidate) => {
+      const temporaryDestination = path.join(installedPluginsDirectory, `.install-${randomUUID()}`);
+      temporaryDestinations.push(temporaryDestination);
+      cpSync(candidate.sourceDirectory, temporaryDestination, {
+        recursive: true,
+        dereference: false,
+        errorOnExist: true,
+      });
+      validatePluginDirectory(temporaryDestination, true);
+      return { ...candidate, temporaryDestination };
     });
     const registry = initializePluginRunner();
-    const installed = registry.plugins.find(
-      (plugin) => plugin.id === pluginId && plugin.source === "installed",
-    );
-    if (!installed) {
-      const issue = registry.issues.find((item) => item.directory.includes(pluginId));
-      throw new Error(issue?.message ?? "O pacote não passou pela validação automática.");
+    for (const candidate of staged) {
+      const installed = registry.plugins.find(
+        (plugin) => plugin.id === candidate.pluginId && plugin.source === "installed",
+      );
+      if (!installed) {
+        const issue = registry.issues.find((item) =>
+          item.directory.includes(path.basename(candidate.temporaryDestination)),
+        );
+        throw new Error(issue?.message ?? `${candidate.pluginId} não passou pela validação.`);
+      }
     }
-    renameSync(temporaryDestination, destination);
-    temporaryDestination = undefined;
+    for (const candidate of staged) {
+      renameSync(candidate.temporaryDestination, candidate.destination);
+      temporaryDestinations.splice(
+        temporaryDestinations.indexOf(candidate.temporaryDestination),
+        1,
+      );
+      installedDestinations.push(candidate.destination);
+    }
     initializePluginRunner();
-    response.status(201).json({ id: pluginId, installed: true });
+    response.status(staged.length ? 201 : 200).json({
+      installed: staged.map((candidate) => candidate.pluginId),
+      skipped,
+    });
   } catch (error) {
-    if (temporaryDestination) rmSync(temporaryDestination, { recursive: true, force: true });
+    for (const destination of [...temporaryDestinations, ...installedDestinations])
+      if (existsSync(destination)) rmSync(destination, { recursive: true, force: true });
     initializePluginRunner();
     response.status(422).json({
-      error: error instanceof Error ? error.message : "Não foi possível instalar o plugin.",
+      error: error instanceof Error ? error.message : "Não foi possível instalar os plugins.",
     });
   }
 });

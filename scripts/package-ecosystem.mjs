@@ -62,5 +62,27 @@ const bridgeArchive = await createArchive("ContentFlow-Browser-Bridge.zip", (arc
   }
 });
 
+const pluginSkillArchive = await createArchive(
+  "ContentFlow-Skill-Plugin-Development.zip",
+  (archive) => {
+    archive.directory(
+      path.join(repositoryRoot, "ecosystem", "skills", "contentflow-plugin-development"),
+      "contentflow-plugin-development",
+    );
+  },
+);
+
+const methodSkillArchive = await createArchive(
+  "ContentFlow-Skill-Method-Development.zip",
+  (archive) => {
+    archive.directory(
+      path.join(repositoryRoot, "ecosystem", "skills", "contentflow-method-development"),
+      "contentflow-method-development",
+    );
+  },
+);
+
 console.log(`Pacote de plugins: ${pluginsArchive}`);
 console.log(`Browser Bridge: ${bridgeArchive}`);
+console.log(`Skill de plugins: ${pluginSkillArchive}`);
+console.log(`Skill de Métodos: ${methodSkillArchive}`);

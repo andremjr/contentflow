@@ -16,6 +16,7 @@ import {
   Plug,
   RefreshCw,
   Search,
+  Sparkles,
   SlidersHorizontal,
   ShieldCheck,
   SquareArrowOutUpRight,
@@ -201,14 +202,14 @@ function PluginsPage() {
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
         <section className="mb-4 rounded-xl border border-brand/25 bg-card/55 p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-xl">
+            <div className="max-w-md">
               <h2 className="text-sm font-semibold">Componentes externos</h2>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                O ContentFlow é instalado sem plugins. Baixe somente o que quiser usar e instale
-                cada plugin informando a pasta que contém contentflow.plugin.json.
+                O ContentFlow é instalado sem plugins. Baixe o pacote, extraia uma vez e instale
+                todos de uma vez pela pasta raiz — ou informe a pasta de apenas um plugin.
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[34rem]">
+            <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[44rem]">
               <Button asChild variant="outline" className="h-auto justify-start gap-3 px-3 py-2.5">
                 <a href={ECOSYSTEM_DOWNLOADS.plugins} target="_blank" rel="noreferrer">
                   <Boxes className="size-4 shrink-0 text-brand-soft" />
@@ -228,6 +229,22 @@ function PluginsPage() {
                     <span className="block text-xs font-semibold">Baixar Browser Bridge</span>
                     <span className="block text-[10px] font-normal text-muted-foreground">
                       Somente para automação web
+                    </span>
+                  </span>
+                  <Download className="ml-auto size-3.5 shrink-0" />
+                </a>
+              </Button>
+              <Button asChild variant="outline" className="h-auto justify-start gap-3 px-3 py-2.5">
+                <a
+                  href={ECOSYSTEM_DOWNLOADS.pluginDevelopmentSkill}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Sparkles className="size-4 shrink-0 text-brand-soft" />
+                  <span className="min-w-0 text-left">
+                    <span className="block text-xs font-semibold">Baixar skill de plugins</span>
+                    <span className="block text-[10px] font-normal text-muted-foreground">
+                      Para criar com um agente de IA
                     </span>
                   </span>
                   <Download className="ml-auto size-3.5 shrink-0" />
@@ -384,12 +401,23 @@ function InstallPluginDialog({ onInstalled }: { onInstalled: () => Promise<void>
           body: JSON.stringify({ path: folderPath }),
         },
       );
-      const result = (await response.json()) as { id?: string; error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Não foi possível instalar o plugin.");
+      const result = (await response.json()) as {
+        installed?: string[];
+        skipped?: string[];
+        error?: string;
+      };
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível instalar os plugins.");
       toast.success(
-        mode === "install" ? "Plugin instalado" : "Pasta de desenvolvimento conectada",
+        mode === "install"
+          ? result.installed?.length === 1
+            ? "Plugin instalado"
+            : `${result.installed?.length ?? 0} plugins instalados`
+          : "Pasta de desenvolvimento conectada",
         {
-          description: "Confira as permissões e clique em Ativar e permitir.",
+          description:
+            mode === "install" && result.skipped?.length
+              ? `${result.skipped.length} já estavam instalados. Confira as permissões dos novos plugins.`
+              : "Confira as permissões e clique em Ativar e permitir.",
         },
       );
       setFolderPath("");
@@ -415,8 +443,8 @@ function InstallPluginDialog({ onInstalled }: { onInstalled: () => Promise<void>
         <DialogHeader>
           <DialogTitle>Instalar plugin criado por você ou pela comunidade</DialogTitle>
           <DialogDescription>
-            Cole o caminho da pasta que contém contentflow.plugin.json. Nenhuma publicação ou
-            aprovação é necessária.
+            Cole o caminho da pasta de um plugin ou da raiz do pacote extraído. O pacote instala
+            vários plugins de uma vez, sem sobrescrever os já instalados.
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-1">
@@ -436,16 +464,16 @@ function InstallPluginDialog({ onInstalled }: { onInstalled: () => Promise<void>
           </Button>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="plugin-folder-path">Pasta do plugin</Label>
+          <Label htmlFor="plugin-folder-path">Pasta do plugin ou pacote</Label>
           <Input
             id="plugin-folder-path"
             value={folderPath}
-            placeholder="C:\\Meus Plugins\\meu-plugin"
+            placeholder="C:\\Downloads\\ContentFlow-Plugins"
             onChange={(event) => setFolderPath(event.target.value)}
           />
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             {mode === "install"
-              ? "O ContentFlow guarda uma cópia. Você poderá apagar a pasta original sem remover o plugin."
+              ? "O ContentFlow valida todo o conjunto antes de instalar e guarda uma cópia de cada plugin."
               : "Ideal para criar com IA: alterações na pasta aparecem ao atualizar, e desconectar não apaga seus arquivos."}
           </p>
         </div>
