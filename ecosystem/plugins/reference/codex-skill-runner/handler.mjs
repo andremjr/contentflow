@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
 
 const MAX_PROMPT_BYTES = 256_000;
 const MAX_STDOUT_BYTES = 1_000_000;
@@ -355,7 +354,7 @@ function runCodexProcess({ args, cwd, env, prompt, signal, timeoutMs }) {
                   ? "RATE_LIMIT"
                   : "CODEX_EXECUTION_FAILED",
               authenticationFailure
-                ? "A OpenAI recusou a credencial usada pelo Codex. Revise OPENAI_API_KEY."
+                ? "O Codex CLI não possui uma sessão válida. Execute `codex login`, conclua o acesso com sua conta ChatGPT e reinicie o ContentFlow."
                 : rateLimit
                   ? "A OpenAI aplicou um limite temporário à execução do Codex."
                   : "O Codex encerrou a etapa sem produzir uma entrega válida.",
@@ -387,17 +386,7 @@ export async function executeWithRunner(request, services, runner = runCodexProc
       return { status: "success", values: diagnosticResult(request, choosing) };
     }
 
-    const apiKey = String((await services.getSecret("OPENAI_API_KEY")) ?? "").trim();
-    if (!apiKey) {
-      throw new PluginFailure(
-        "AUTHENTICATION_FAILED",
-        "Conecte OPENAI_API_KEY no cofre do plugin antes de executar o Codex.",
-      );
-    }
-
-    const codexHome = services.getWorkspacePath(".contentflow-codex-home");
-    const workspaceRoot = path.dirname(codexHome);
-    await mkdir(codexHome, { recursive: true });
+    const workspaceRoot = services.getWorkspacePath(".");
     const schemaPath = services.getOutputPath("codex-output-schema.json");
     const resultPath = services.getOutputPath("codex-last-message.json");
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, "utf8");
@@ -415,18 +404,6 @@ export async function executeWithRunner(request, services, runner = runCodexProc
       "--ignore-user-config",
       "--model",
       configuration.model,
-      "--config",
-      'model_provider="contentflow_openai"',
-      "--config",
-      'model_providers.contentflow_openai.name="OpenAI via ContentFlow"',
-      "--config",
-      'model_providers.contentflow_openai.base_url="https://api.openai.com/v1"',
-      "--config",
-      'model_providers.contentflow_openai.env_key="OPENAI_API_KEY"',
-      "--config",
-      'model_providers.contentflow_openai.wire_api="responses"',
-      "--config",
-      "model_providers.contentflow_openai.supports_websockets=false",
       "--config",
       "features.plugins=false",
       "--config",
@@ -448,8 +425,6 @@ export async function executeWithRunner(request, services, runner = runCodexProc
         SYSTEMROOT: process.env.SYSTEMROOT,
         TEMP: process.env.TEMP,
         TMP: process.env.TMP,
-        CODEX_HOME: codexHome,
-        OPENAI_API_KEY: apiKey,
       },
       prompt,
       signal: services.signal,

@@ -45,7 +45,9 @@ async function harness(overrides = {}) {
   };
   const services = {
     signal: AbortSignal.timeout(5000),
-    getSecret: async () => "sk-test-only",
+    getSecret: async () => {
+      throw new Error("o runner não deve solicitar secrets");
+    },
     resolveInputFile: async () => "",
     getOutputPath: (name) => path.join(output, name),
     getWorkspacePath: (name) => path.join(root, name),
@@ -65,14 +67,13 @@ test("monta uma execução não interativa e devolve a entrega tipada", async ()
   assert.deepEqual(observed.args.slice(0, 3), ["--ask-for-approval", "never", "exec"]);
   assert.ok(observed.args.includes("--ephemeral"));
   assert.ok(observed.args.includes("--ignore-user-config"));
-  assert.ok(observed.args.includes('model_provider="contentflow_openai"'));
-  assert.ok(observed.args.includes('model_providers.contentflow_openai.env_key="OPENAI_API_KEY"'));
   assert.equal(
-    observed.args.some((arg) => arg.includes("sk-test-only")),
+    observed.args.some((arg) => arg.includes("model_provider")),
     false,
   );
+  assert.equal(Object.hasOwn(observed.env, "OPENAI_API_KEY"), false);
+  assert.equal(Object.hasOwn(observed.env, "CODEX_HOME"), false);
   assert.match(observed.prompt, /\$roteiro-youtube/);
-  assert.equal(observed.env.OPENAI_API_KEY, "sk-test-only");
 });
 
 test("rejeita nome de skill inseguro antes de criar subprocesso", async () => {
@@ -85,12 +86,15 @@ test("rejeita nome de skill inseguro antes de criar subprocesso", async () => {
   assert.equal(response.code, "INVALID_CONFIGURATION");
 });
 
-test("exige a chave da OpenAI fora do diagnóstico", async () => {
+test("traduz falha de login do Codex sem solicitar chave de API", async () => {
   const { request, services } = await harness();
-  services.getSecret = async () => undefined;
-  const response = await execute(request, services);
+  const response = await executeWithRunner(request, services, async () => {
+    const error = new Error("authentication required");
+    error.code = "AUTHENTICATION_FAILED";
+    throw error;
+  });
   assert.equal(response.status, "error");
-  assert.equal(response.code, "AUTHENTICATION_FAILED");
+  assert.equal(response.code, "CODEX_EXECUTION_FAILED");
 });
 
 test("a escolha aceita somente um ID real da coleção", async () => {
@@ -140,7 +144,6 @@ test("rejeita itens incompatíveis em uma lista tipada", async () => {
 test("o modo de diagnóstico passa pelo sandbox sem Codex instalado", async () => {
   const { request, services } = await harness();
   request.configuration.diagnostic_mode = true;
-  services.getSecret = async () => undefined;
   const response = await execute(request, services);
   assert.equal(response.status, "success");
   assert.equal(response.values.result, "Diagnóstico concluído sem chamar o Codex.");
