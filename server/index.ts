@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import {
   cpSync,
   existsSync,
+  mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -95,6 +96,12 @@ import { PluginConnectionStore, type PluginConnection } from "./plugin-connectio
 import { resolvePluginConnectionSecrets } from "./plugin-connection-runtime";
 import { normalizePluginConversationId, resolvePluginConversation } from "./plugin-conversation";
 import { discoverPluginDirectories } from "./plugin-package";
+import {
+  downloadCatalogPlugin,
+  extractPluginArchive,
+  fetchPluginCatalog,
+  type PluginCatalog,
+} from "./plugin-catalog";
 import { migrateSiblingDataDirectory } from "./data-directory-migration";
 import { fetchYouTubeChannel } from "./youtube";
 
@@ -113,6 +120,9 @@ const developmentLinksDirectory = path.resolve(
   process.env.CONTENTFLOW_DEVELOPMENT_LINKS_DIR ??
     path.join(dataDirectory, "plugins", "development"),
 );
+const pluginCatalogUrl =
+  process.env.CONTENTFLOW_PLUGIN_CATALOG_URL ??
+  "https://github.com/andremjr/contentflow/releases/latest/download/ContentFlow-Plugin-Catalog.json";
 await migrateSiblingDataDirectory(dataDirectory, process.env.APPDATA);
 const nodeMajorVersion = Number(
   process.env.CONTENTFLOW_PLUGIN_NODE_MAJOR ?? process.versions.node.split(".")[0],
@@ -2206,26 +2216,42 @@ function isNewerPluginVersion(candidate: string, current: string) {
   return next.prerelease.localeCompare(previous.prerelease, undefined, { numeric: true }) > 0;
 }
 
-app.put("/api/plugins/:pluginId/update-from-folder", (request, response) => {
-  initializePluginRunner();
-  const plugin = getRegisteredPlugin(request.params.pluginId);
-  if (!plugin) {
-    response.status(404).json({ error: "Plugin não encontrado." });
-    return;
-  }
-  if (plugin.source !== "installed") {
-    response.status(409).json({
-      error: "Plugins vinculados usam a própria pasta e não precisam ser substituídos.",
-    });
-    return;
-  }
-  const requestedPath = typeof request.body?.path === "string" ? request.body.path.trim() : "";
-  if (!requestedPath) {
-    response.status(400).json({ error: "Informe a pasta da nova versão do plugin." });
-    return;
-  }
+let pluginCatalogCache: { catalog: PluginCatalog; loadedAt: number } | undefined;
 
-  const sourceDirectory = path.resolve(requestedPath);
+async function currentPluginCatalog(force = false) {
+  if (!force && pluginCatalogCache && Date.now() - pluginCatalogCache.loadedAt < 5 * 60_000)
+    return pluginCatalogCache.catalog;
+  const catalog = await fetchPluginCatalog(pluginCatalogUrl);
+  pluginCatalogCache = { catalog, loadedAt: Date.now() };
+  return catalog;
+}
+
+app.get("/api/plugins/updates", async (request, response) => {
+  try {
+    const catalog = await currentPluginCatalog(request.query.refresh === "true");
+    const registry = initializePluginRunner();
+    const updates = registry.plugins
+      .filter((plugin) => plugin.source === "installed")
+      .map((plugin) => {
+        const available = catalog.plugins.find((entry) => entry.id === plugin.id);
+        return {
+          id: plugin.id,
+          currentVersion: plugin.manifest.version,
+          version: available?.version,
+          updateAvailable: Boolean(
+            available && isNewerPluginVersion(available.version, plugin.manifest.version),
+          ),
+        };
+      });
+    response.json({ generatedAt: catalog.generatedAt, updates });
+  } catch (error) {
+    response.status(502).json({
+      error: error instanceof Error ? error.message : "Não foi possível consultar as atualizações.",
+    });
+  }
+});
+
+function replaceInstalledPluginFromDirectory(plugin: RegisteredPlugin, sourceDirectory: string) {
   const installedRoot = path.resolve(installedPluginsDirectory);
   const destination = path.resolve(plugin.absoluteDirectory);
   const updateBackupsDirectory = path.resolve(dataDirectory, "plugins", "update-backups");
@@ -2233,21 +2259,17 @@ app.put("/api/plugins/:pluginId/update-from-folder", (request, response) => {
   let backupDestination: string | undefined;
   let replacementInstalled = false;
   try {
-    if (!existsSync(sourceDirectory) || !statSync(sourceDirectory).isDirectory()) {
+    if (!existsSync(sourceDirectory) || !statSync(sourceDirectory).isDirectory())
       throw new Error("A pasta informada não existe.");
-    }
-    if (!destination.startsWith(`${installedRoot}${path.sep}`)) {
+    if (!destination.startsWith(`${installedRoot}${path.sep}`))
       throw new Error("A instalação atual não está dentro do armazenamento autorizado.");
-    }
     const source = validatePluginDirectory(sourceDirectory, true);
-    if (source.manifest.id !== plugin.id) {
+    if (source.manifest.id !== plugin.id)
       throw new Error("A pasta selecionada pertence a outro plugin.");
-    }
-    if (!isNewerPluginVersion(source.manifest.version, plugin.manifest.version)) {
+    if (!isNewerPluginVersion(source.manifest.version, plugin.manifest.version))
       throw new Error(
         `A atualização precisa ser superior à versão atual v${plugin.manifest.version}.`,
       );
-    }
 
     mkdirSync(installedRoot, { recursive: true });
     mkdirSync(updateBackupsDirectory, { recursive: true });
@@ -2277,23 +2299,87 @@ app.put("/api/plugins/:pluginId/update-from-folder", (request, response) => {
     }
     rmSync(backupDestination, { recursive: true, force: true });
     backupDestination = undefined;
-    response.json({
+    return {
       id: plugin.id,
       previousVersion: plugin.manifest.version,
       version: source.manifest.version,
-    });
+    };
   } catch (error) {
     if (temporaryDestination) rmSync(temporaryDestination, { recursive: true, force: true });
-    if (replacementInstalled && existsSync(destination)) {
+    if (replacementInstalled && existsSync(destination))
       rmSync(destination, { recursive: true, force: true });
-    }
-    if (backupDestination && existsSync(backupDestination)) {
+    if (backupDestination && existsSync(backupDestination))
       renameSync(backupDestination, destination);
-    }
     initializePluginRunner();
+    throw error;
+  }
+}
+
+app.put("/api/plugins/:pluginId/update-from-folder", (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Plugin não encontrado." });
+    return;
+  }
+  if (plugin.source !== "installed") {
+    response.status(409).json({
+      error: "Plugins vinculados usam a própria pasta e não precisam ser substituídos.",
+    });
+    return;
+  }
+  const requestedPath = typeof request.body?.path === "string" ? request.body.path.trim() : "";
+  if (!requestedPath) {
+    response.status(400).json({ error: "Informe a pasta da nova versão do plugin." });
+    return;
+  }
+
+  try {
+    response.json(replaceInstalledPluginFromDirectory(plugin, path.resolve(requestedPath)));
+  } catch (error) {
     response.status(422).json({
       error: error instanceof Error ? error.message : "Não foi possível atualizar o plugin.",
     });
+  }
+});
+
+app.put("/api/plugins/:pluginId/update-from-catalog", async (request, response) => {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Plugin não encontrado." });
+    return;
+  }
+  if (plugin.source !== "installed") {
+    response.status(409).json({
+      error: "Plugins vinculados usam a própria pasta e não recebem atualizações do catálogo.",
+    });
+    return;
+  }
+
+  const downloadsRoot = path.resolve(dataDirectory, "plugins", "catalog-downloads");
+  mkdirSync(downloadsRoot, { recursive: true });
+  const temporaryRoot = mkdtempSync(path.join(downloadsRoot, "update-"));
+  try {
+    const catalog = await currentPluginCatalog(true);
+    const entry = catalog.plugins.find((candidate) => candidate.id === plugin.id);
+    if (!entry) throw new Error("Este plugin não possui atualização no catálogo configurado.");
+    if (!isNewerPluginVersion(entry.version, plugin.manifest.version))
+      throw new Error(`O plugin já está na versão mais recente (v${plugin.manifest.version}).`);
+
+    const archivePath = path.join(temporaryRoot, entry.asset);
+    const extractedRoot = path.join(temporaryRoot, "extracted");
+    await downloadCatalogPlugin(pluginCatalogUrl, entry, archivePath);
+    await extractPluginArchive(archivePath, extractedRoot);
+    const directories = discoverPluginDirectories(extractedRoot);
+    if (directories.length !== 1) throw new Error("O pacote individual contém plugins extras.");
+    response.json(replaceInstalledPluginFromDirectory(plugin, directories[0]));
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível atualizar o plugin.",
+    });
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
   }
 });
 

@@ -78,6 +78,12 @@ type PluginResponse = {
   plugins: DiscoveredPlugin[];
   issues: PluginIssue[];
 };
+type PluginUpdate = {
+  id: string;
+  currentVersion: string;
+  version?: string;
+  updateAvailable: boolean;
+};
 type PluginMethodDependency = {
   channelId: string;
   channelName: string;
@@ -127,6 +133,8 @@ function deliveryTypes(plugin: DiscoveredPlugin) {
 function PluginsPage() {
   const [data, setData] = useState<PluginResponse>({ plugins: [], issues: [] });
   const [loading, setLoading] = useState(true);
+  const [updates, setUpdates] = useState<Record<string, PluginUpdate>>({});
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [search, setSearch] = useState("");
   const [deliveryFilter, setDeliveryFilter] = useState<"all" | PluginDeliveryType>("all");
   const [blockFilter, setBlockFilter] = useState<"all" | BlockType>("all");
@@ -147,9 +155,42 @@ function PluginsPage() {
     }
   }, []);
 
+  const checkUpdates = useCallback(async (notify = false) => {
+    setCheckingUpdates(true);
+    try {
+      const response = await fetch(`/api/plugins/updates${notify ? "?refresh=true" : ""}`);
+      const result = (await response.json()) as { updates?: PluginUpdate[]; error?: string };
+      if (!response.ok)
+        throw new Error(result.error ?? "Não foi possível consultar as atualizações.");
+      const next = Object.fromEntries((result.updates ?? []).map((update) => [update.id, update]));
+      setUpdates(next);
+      if (notify) {
+        const count = Object.values(next).filter((update) => update.updateAvailable).length;
+        toast.success(
+          count
+            ? `${count} ${count === 1 ? "plugin tem" : "plugins têm"} atualização`
+            : "Todos os plugins estão atualizados",
+        );
+      }
+    } catch (error) {
+      if (notify)
+        toast.error("Não foi possível verificar atualizações", {
+          description: error instanceof Error ? error.message : undefined,
+        });
+    } finally {
+      setCheckingUpdates(false);
+    }
+  }, []);
+
+  const refreshPluginsAndUpdates = useCallback(async () => {
+    await refresh();
+    await checkUpdates();
+  }, [checkUpdates, refresh]);
+
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    void checkUpdates();
+  }, [checkUpdates, refresh]);
 
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredPlugins = data.plugins.filter((plugin) => {
@@ -192,8 +233,20 @@ function PluginsPage() {
         actions={
           <div className="flex items-center gap-2">
             <InstallPluginDialog onInstalled={refresh} />
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => void refresh()}>
-              <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} /> Atualizar
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={checkingUpdates}
+              onClick={() => {
+                void refresh();
+                void checkUpdates(true);
+              }}
+            >
+              <RefreshCw
+                className={loading || checkingUpdates ? "size-4 animate-spin" : "size-4"}
+              />
+              Verificar atualizações
             </Button>
           </div>
         }
@@ -336,7 +389,8 @@ function PluginsPage() {
               <PluginCard
                 key={`${plugin.source}-${plugin.id}`}
                 plugin={plugin}
-                onChanged={refresh}
+                update={updates[plugin.id]}
+                onChanged={refreshPluginsAndUpdates}
               />
             ))}
           </section>
@@ -488,9 +542,11 @@ function InstallPluginDialog({ onInstalled }: { onInstalled: () => Promise<void>
 
 function PluginCard({
   plugin,
+  update,
   onChanged,
 }: {
   plugin: DiscoveredPlugin;
+  update?: PluginUpdate;
   onChanged: () => Promise<void>;
 }) {
   const { manifest } = plugin;
@@ -564,9 +620,24 @@ function PluginCard({
           aria-label={`Abrir detalhes de ${manifest.name}`}
           className="group relative flex aspect-square min-h-40 flex-col items-center justify-center overflow-hidden rounded-2xl border border-border bg-card/55 p-4 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-brand/45 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
         >
-          {!plugin.enabled && (
-            <span className="absolute right-3 top-3 size-2 rounded-full bg-warning ring-4 ring-warning/10" />
-          )}
+          <span className="absolute right-3 top-3 flex items-center gap-2">
+            {update?.updateAvailable && (
+              <span
+                className="size-2 rounded-full bg-sky-500 ring-4 ring-sky-500/10"
+                title={`Atualização disponível: v${update.version}`}
+              >
+                <span className="sr-only">Atualização disponível</span>
+              </span>
+            )}
+            {!plugin.enabled && (
+              <span
+                className="size-2 rounded-full bg-warning ring-4 ring-warning/10"
+                title="Plugin ainda não ativado"
+              >
+                <span className="sr-only">Plugin ainda não ativado</span>
+              </span>
+            )}
+          </span>
           <span className="grid size-14 place-items-center rounded-2xl border border-border/70 bg-gradient-to-br from-brand/15 to-secondary text-xl font-semibold tracking-tight text-brand-soft transition-transform group-hover:scale-105">
             {manifest.branding?.iconPath && !iconFailed ? (
               <img
@@ -704,7 +775,7 @@ function PluginCard({
         <CommunityAccessPanel plugin={plugin} onChanged={onChanged} />
 
         {plugin.source === "installed" && (
-          <UpdateInstalledPluginPanel plugin={plugin} onChanged={onChanged} />
+          <UpdateInstalledPluginPanel plugin={plugin} update={update} onChanged={onChanged} />
         )}
 
         <footer className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
@@ -745,13 +816,37 @@ function PluginCard({
 
 function UpdateInstalledPluginPanel({
   plugin,
+  update,
   onChanged,
 }: {
   plugin: DiscoveredPlugin;
+  update?: PluginUpdate;
   onChanged: () => Promise<void>;
 }) {
   const [folderPath, setFolderPath] = useState("");
   const [updating, setUpdating] = useState(false);
+
+  async function updateFromCatalog() {
+    setUpdating(true);
+    try {
+      const response = await fetch(
+        `/api/plugins/${encodeURIComponent(plugin.id)}/update-from-catalog`,
+        { method: "PUT" },
+      );
+      const result = (await response.json()) as { version?: string; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível atualizar o plugin.");
+      toast.success(`Plugin atualizado para v${result.version}`, {
+        description: "Revise as permissões e reative o plugin para usar a nova versão.",
+      });
+      await onChanged();
+    } catch (error) {
+      toast.error("Não foi possível atualizar o plugin", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setUpdating(false);
+    }
+  }
 
   async function updatePlugin() {
     setUpdating(true);
@@ -783,11 +878,35 @@ function UpdateInstalledPluginPanel({
   return (
     <section className="rounded-xl border border-border bg-muted/15 p-3">
       <div className="flex items-center gap-2 text-xs font-semibold">
-        <RefreshCw className="size-3.5 text-brand-soft" /> Atualizar por pasta
+        <RefreshCw className="size-3.5 text-brand-soft" /> Atualizações
       </div>
+      {update?.updateAvailable && (
+        <div className="mt-3 flex flex-col gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-sky-600">Versão {update.version} disponível</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              O pacote será baixado, conferido e validado antes da substituição.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="shrink-0 gap-1.5"
+            disabled={updating}
+            onClick={() => void updateFromCatalog()}
+          >
+            {updating ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <Download className="size-3.5" />
+            )}
+            Atualizar plugin
+          </Button>
+        </div>
+      )}
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-        Selecione a pasta de uma versão superior do mesmo plugin. A versão atual só é substituída
-        depois que o novo pacote passar pela validação.
+        {update?.updateAvailable
+          ? "Como alternativa, você ainda pode atualizar manualmente usando uma pasta."
+          : "Se você recebeu uma versão por fora do catálogo, pode atualizá-la manualmente pela pasta."}
       </p>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <Input

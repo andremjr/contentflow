@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import type { Archiver, ArchiverOptions } from "archiver";
+
+const archiver = createRequire(import.meta.url)("archiver") as (
+  format: "zip",
+  options?: ArchiverOptions,
+) => Archiver;
 
 const port = 8796;
 const apiBase = `http://127.0.0.1:${port}`;
@@ -28,6 +38,19 @@ async function waitForServer() {
   throw new Error("A API isolada não iniciou no prazo.");
 }
 
+async function createPluginArchive(sourceDirectory: string, destination: string) {
+  await new Promise<void>((resolve, reject) => {
+    const output = createWriteStream(destination);
+    const archive = archiver("zip", { zlib: { level: 1 } });
+    output.on("close", resolve);
+    output.on("error", reject);
+    archive.on("error", reject);
+    archive.pipe(output);
+    archive.directory(sourceDirectory, path.basename(sourceDirectory));
+    void archive.finalize();
+  });
+}
+
 test(
   "instala pacote em lote, pula existentes e não deixa instalação parcial",
   { timeout: 30_000 },
@@ -47,6 +70,50 @@ test(
       { recursive: true },
     );
 
+    const updateSource = path.join(testRoot, "community-reference-update");
+    await cp(path.join(bundle, "community-reference"), updateSource, { recursive: true });
+    const updateManifestPath = path.join(updateSource, "contentflow.plugin.json");
+    const updateManifest = JSON.parse(await readFile(updateManifestPath, "utf8")) as {
+      version: string;
+    };
+    updateManifest.version = "1.1.0";
+    await writeFile(updateManifestPath, `${JSON.stringify(updateManifest, null, 2)}\n`);
+    const updateAsset = "ContentFlow-Plugin-community-reference.zip";
+    const updateArchive = path.join(testRoot, updateAsset);
+    await createPluginArchive(updateSource, updateArchive);
+    const updateBytes = await readFile(updateArchive);
+    const catalog = Buffer.from(
+      JSON.stringify({
+        schemaVersion: 1,
+        generatedAt: "2026-08-30T12:00:00.000Z",
+        plugins: [
+          {
+            id: "com.contentflow.reference-community",
+            name: "Plugin comunitário de referência",
+            version: "1.1.0",
+            asset: updateAsset,
+            sha256: createHash("sha256").update(updateBytes).digest("hex"),
+            size: updateBytes.length,
+          },
+        ],
+      }),
+    );
+    const catalogServer = createServer((request, response) => {
+      if (request.url === "/ContentFlow-Plugin-Catalog.json") {
+        response.setHeader("content-length", String(catalog.length));
+        response.end(catalog);
+      } else if (request.url === `/${updateAsset}`) {
+        response.setHeader("content-length", String(updateBytes.length));
+        response.end(updateBytes);
+      } else {
+        response.statusCode = 404;
+        response.end();
+      }
+    });
+    await new Promise<void>((resolve) => catalogServer.listen(0, "127.0.0.1", resolve));
+    const catalogAddress = catalogServer.address();
+    assert.ok(catalogAddress && typeof catalogAddress === "object");
+
     const output: string[] = [];
     const server = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
       cwd: repositoryRoot,
@@ -55,6 +122,7 @@ test(
         CONTENTFLOW_API_PORT: String(port),
         CONTENTFLOW_APP_ROOT: repositoryRoot,
         CONTENTFLOW_DATA_DIR: dataDirectory,
+        CONTENTFLOW_PLUGIN_CATALOG_URL: `http://127.0.0.1:${catalogAddress.port}/ContentFlow-Plugin-Catalog.json`,
       },
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -71,6 +139,21 @@ test(
       });
       assert.equal(first.response.status, 201, JSON.stringify(first.result));
       assert.equal((first.result.installed as string[]).length, 2);
+
+      const updates = await request("/api/plugins/updates?refresh=true");
+      assert.equal(updates.response.status, 200, JSON.stringify(updates.result));
+      const available = updates.result.updates as Array<Record<string, unknown>>;
+      assert.equal(
+        available.find((entry) => entry.id === "com.contentflow.reference-community")
+          ?.updateAvailable,
+        true,
+      );
+      const updated = await request(
+        "/api/plugins/com.contentflow.reference-community/update-from-catalog",
+        { method: "PUT" },
+      );
+      assert.equal(updated.response.status, 200, JSON.stringify(updated.result));
+      assert.equal(updated.result.version, "1.1.0");
 
       const repeated = await request("/api/plugins/install-from-folder", {
         method: "POST",
@@ -100,6 +183,7 @@ test(
     } finally {
       server.kill();
       await new Promise<void>((resolve) => server.once("exit", () => resolve()));
+      await new Promise<void>((resolve) => catalogServer.close(() => resolve()));
       await rm(testRoot, { recursive: true, force: true });
     }
   },

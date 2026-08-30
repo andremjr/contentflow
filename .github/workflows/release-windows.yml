@@ -55,6 +55,8 @@ jobs:
         run: |
           gh release upload "${{ github.ref_name }}" `
             "release/ecosystem/ContentFlow-Plugins.zip" `
+            "release/ecosystem/ContentFlow-Plugin-Catalog.json" `
+            release/ecosystem/ContentFlow-Plugin-*.zip `
             "release/ecosystem/ContentFlow-Browser-Bridge.zip" `
             "release/ecosystem/ContentFlow-Skill-Plugin-Development.zip" `
             "release/ecosystem/ContentFlow-Skill-Method-Development.zip" `

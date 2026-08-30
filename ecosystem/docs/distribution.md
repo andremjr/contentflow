@@ -30,7 +30,7 @@ Essas categorias comunicam origem e confiança; não formam níveis de permissã
 
 Um arquivo compartilhado por mensagem, download direto, repositório ou mídia removível não se torna oficial ou verificado por poder ser descoberto pelo aplicativo. Isso não impede sua instalação ou execução pelo usuário. A interface apenas informa que a origem não passou por revisão do projeto e apresenta permissões, efeitos e riscos antes da ativação.
 
-Na versão atual, plugins locais e comunitários podem ser instalados individualmente ou em lote pela raiz de um pacote extraído, ou conectados como pasta ao vivo. Todos são validados, consentidos, ativados e executados na sandbox do Node 26 sem análise manual do mantenedor. A interface ainda não baixa e instala pacotes diretamente de URL ou catálogo: o usuário primeiro obtém e extrai o pacote do autor e então escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**.
+Plugins locais e comunitários podem ser instalados individualmente ou em lote pela raiz de um pacote extraído, ou conectados como pasta ao vivo. Todos são validados, consentidos, ativados e executados na sandbox do Node 26 sem análise manual do mantenedor. Plugins instalados a partir de uma cópia também podem consultar um catálogo configurado para receber atualização individual: o núcleo compara SemVer, baixa apenas o pacote selecionado, confere tamanho e SHA-256, valida o ZIP e o manifesto e preserva a versão anterior até a substituição passar no health check. A instalação direta por pasta continua disponível para pacotes distribuídos fora de catálogo.
 
 Se alguém modificar o núcleo, executar o pacote por fora do ContentFlow ou remover suas proteções, essa atividade não é uma execução autorizada pelo protocolo nem recebe status, suporte ou garantia do projeto.
 
@@ -129,6 +129,8 @@ O catálogo pode apresentar sinais separados, sem combiná-los em uma falsa nota
 Downloads e avaliações não substituem segurança. Métricas suspeitas podem ser removidas ou investigadas.
 
 ## 9. Atualizações e consentimento
+
+O card de cada plugin instalado mostra um indicador azul quando o catálogo configurado publica uma versão superior. O botão de atualização é individual; ele não instala plugins ausentes nem substitui pastas de desenvolvimento. Catálogo e pacotes são artefatos externos ao núcleo e usam o mesmo protocolo e as mesmas validações das instalações manuais.
 
 Atualizações automáticas só são elegíveis quando:
 

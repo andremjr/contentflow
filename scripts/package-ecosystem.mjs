@@ -1,4 +1,13 @@
-import { createWriteStream, mkdirSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  createWriteStream,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import archiver from "archiver";
@@ -49,6 +58,48 @@ const pluginsArchive = await createArchive("ContentFlow-Plugins.zip", (archive) 
   );
 });
 
+const referencePluginsDirectory = path.join(repositoryRoot, "ecosystem", "plugins", "reference");
+const catalogPlugins = [];
+for (const directoryEntry of readdirSync(referencePluginsDirectory, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .sort((left, right) => left.name.localeCompare(right.name))) {
+  const pluginDirectory = path.join(referencePluginsDirectory, directoryEntry.name);
+  const manifestPath = path.join(pluginDirectory, "contentflow.plugin.json");
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  } catch {
+    continue;
+  }
+  const asset = `ContentFlow-Plugin-${directoryEntry.name}.zip`;
+  const archivePath = await createArchive(asset, (archive) => {
+    archive.directory(pluginDirectory, directoryEntry.name);
+  });
+  const bytes = readFileSync(archivePath);
+  catalogPlugins.push({
+    id: manifest.id,
+    name: manifest.name,
+    version: manifest.version,
+    asset,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    size: statSync(archivePath).size,
+  });
+}
+const pluginCatalogPath = path.join(outputDirectory, "ContentFlow-Plugin-Catalog.json");
+writeFileSync(
+  pluginCatalogPath,
+  `${JSON.stringify(
+    {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      plugins: catalogPlugins.sort((left, right) => left.id.localeCompare(right.id)),
+    },
+    null,
+    2,
+  )}\n`,
+  "utf8",
+);
+
 const bridgeArchive = await createArchive("ContentFlow-Browser-Bridge.zip", (archive) => {
   const bridgeRoot = path.join(repositoryRoot, "ecosystem", "browser-bridge");
   for (const fileName of [
@@ -85,6 +136,8 @@ const methodSkillArchive = await createArchive(
 );
 
 console.log(`Pacote de plugins: ${pluginsArchive}`);
+console.log(`Catálogo de plugins: ${pluginCatalogPath}`);
+console.log(`Pacotes individuais: ${catalogPlugins.length}`);
 console.log(`Browser Bridge: ${bridgeArchive}`);
 console.log(`Skill de plugins: ${pluginSkillArchive}`);
 console.log(`Skill de Métodos: ${methodSkillArchive}`);
