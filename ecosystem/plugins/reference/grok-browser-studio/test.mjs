@@ -23,6 +23,7 @@ function request(overrides = {}) {
     },
     settings: { diagnosticMockResponse: "TESTE OK", ...overrides.settings },
     inputs: { content: "Tema principal", ...overrides.inputs },
+    instructionContextInputs: overrides.instructionContextInputs,
     context: {
       channel: { name: "Canal A", niche: "Histórias" },
       project: { title: "Projeto A" },
@@ -35,9 +36,19 @@ function request(overrides = {}) {
   };
 }
 
+test("não repete no contexto uma entrada já interpolada na instrução", () => {
+  assert.equal(
+    __test.expandTemplate(
+      "{{BLOCK_INSTRUCTIONS}} | contexto={{CONTENT}}",
+      request({ resolvedInstruction: "Use Tema principal.", instructionContextInputs: {} }),
+    ),
+    "Use Tema principal. | contexto=",
+  );
+});
+
 test("manifesto declara capabilities reais de texto, pesquisa, imagem e vídeo", () => {
   assert.equal(manifest.id, "local.contentflow.grok-browser-studio");
-  assert.equal(manifest.version, "0.2.0");
+  assert.equal(manifest.version, "0.2.2");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
   assert.deepEqual(

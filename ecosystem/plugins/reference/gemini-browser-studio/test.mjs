@@ -19,6 +19,7 @@ function req(o = {}) {
     },
     settings: { diagnosticMockResponse: "TESTE OK", ...o.settings },
     inputs: { content: "Tema principal", ...o.inputs },
+    instructionContextInputs: o.instructionContextInputs,
     context: {
       channel: { name: "Canal A", niche: "Histórias" },
       project: { title: "Projeto A" },
@@ -30,9 +31,19 @@ function req(o = {}) {
     outputContract: o.outputContract,
   };
 }
+
+test("não repete no contexto uma entrada já interpolada na instrução", () => {
+  assert.equal(
+    __test.expand(
+      "{{BLOCK_INSTRUCTIONS}} | contexto={{CONTENT}}",
+      req({ resolvedInstruction: "Use Tema principal.", instructionContextInputs: {} }),
+    ),
+    "Use Tema principal. | contexto=",
+  );
+});
 test("manifesto possui oito capabilities e permissões mínimas", () => {
   assert.equal(manifest.id, "local.contentflow.gemini-browser-studio");
-  assert.equal(manifest.version, "0.2.0");
+  assert.equal(manifest.version, "0.2.2");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.capabilities[0].instructionUsage, "optional");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);

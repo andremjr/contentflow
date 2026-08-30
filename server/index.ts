@@ -3068,18 +3068,50 @@ app.post("/api/execute-block", async (request, response) => {
     inputs: assignedInputs.map(({ resolved, port }) => ({
       id: resolved.input.id,
       label: resolved.input.label,
-      sourceKey: resolved.input.sourceKey,
+      sourceKey: resolved.resolvedSourceKey ?? resolved.input.sourceKey,
       portKey: port?.key,
       value: resolved.value ?? null,
     })),
     parameters: executionParameters,
   });
+  if (resolvedInstruction.unresolved.length) {
+    response.status(422).json({
+      error: `Variáveis sem valor no prompt: ${resolvedInstruction.unresolved
+        .map((variable) => `{{${variable}}}`)
+        .join(", ")}. Revise as entradas conectadas ao bloco.`,
+    });
+    return;
+  }
   if (capability.instructionUsage === "required" && !resolvedInstruction.instruction) {
     response.status(422).json({
       error: `Defina o prompt do bloco “${block.name ?? block.type}” antes de executar.`,
     });
     return;
   }
+  const referencedInstructionInputIds = new Set(resolvedInstruction.referencedInputIds);
+  const instructionContextInputs = Object.fromEntries(
+    capability.inputPorts.flatMap((port) => {
+      const assigned = assignedInputs.filter((item) => item.port?.key === port.key);
+      if (!assigned.length) {
+        return inputs[port.key] === undefined ? [] : [[port.key, inputs[port.key]]];
+      }
+      const unreferenced = assigned.filter(
+        (item) => !referencedInstructionInputIds.has(item.resolved.input.id),
+      );
+      if (!unreferenced.length) return [];
+      return [
+        [
+          port.key,
+          composePluginPortValue(
+            unreferenced.map(({ resolved }) => ({
+              label: resolved.input.label,
+              value: resolved.value ?? null,
+            })),
+          ),
+        ],
+      ];
+    }),
+  ) as Record<string, RuntimeValue>;
   let resolvedConnection: Awaited<ReturnType<typeof resolvePluginConnection>>;
   try {
     resolvedConnection = await resolvePluginConnection(plugin, block.plugin.connectionId);
@@ -3114,6 +3146,7 @@ app.post("/api/execute-block", async (request, response) => {
       ? { connectionId: resolvedConnection.connectionId }
       : {},
     inputs,
+    instructionContextInputs,
     inputContract,
     inputDeliveries: resolvedInputs.map((item, index) => ({
       inputId: item.input.id,

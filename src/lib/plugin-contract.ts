@@ -248,6 +248,8 @@ export type PluginExecutionRequest = {
   settings: Record<string, unknown>;
   /** `inputs` is keyed by the semantic `portKey` declared in `inputContract`. */
   inputs: Record<string, RuntimeValue>;
+  /** Inputs not already interpolated into `resolvedInstruction`, for prompt context composition. */
+  instructionContextInputs?: Record<string, RuntimeValue>;
   inputContract: PluginInputContract[];
   /** Metadados paralelos aos valores, sem quebrar plugins v1 que leem apenas `inputs`. */
   inputDeliveries?: PluginInputDelivery[];

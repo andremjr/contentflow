@@ -1386,6 +1386,12 @@ function BlockEditor({
 
           {selectedCapability && (
             <div className="space-y-3">
+              {selectedCapability.instructionUsage !== "not_applicable" && (
+                <p className="rounded-lg border border-brand/20 bg-brand/5 p-3 text-[11px] text-muted-foreground">
+                  A instrução do bloco define o que deve ser feito. Os templates editáveis do plugin
+                  definem como essa instrução e o contexto são montados e enviados ao provedor.
+                </p>
+              )}
               {selectedPlugin?.manifest.secretKeys?.length && block.plugin && (
                 <PluginConnectionSelector
                   plugin={selectedPlugin}
@@ -1927,8 +1933,8 @@ function InstructionEditor({
             </DropdownMenuContent>
           </DropdownMenu>
           <p className="text-[10px] text-muted-foreground">
-            Ao usar uma entrega anterior, ela também é conectada automaticamente como entrada deste
-            bloco.
+            Toda entrada conectada já é enviada como contexto. Use a variável somente para escolher
+            onde ela aparece no prompt; o sistema não repetirá o mesmo conteúdo.
           </p>
         </div>
       )}
@@ -2479,7 +2485,8 @@ function ContextInputsEditor({
             <History className="size-3.5 text-muted-foreground" /> Entradas de contexto
           </h3>
           <p className="text-[11px] text-muted-foreground">
-            Opcional. Use uma entrega anterior quando ela ajudar nesta ação.
+            Opcional. Entradas conectadas são enviadas automaticamente; não é necessário repeti-las
+            no prompt.
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-1">

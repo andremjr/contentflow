@@ -76,6 +76,10 @@ function serializeInputs(inputs) {
   if (e.length === 1 && e[0][0] === "content") return serialize(e[0][1]);
   return e.map(([k, v]) => `${k}:\n${serialize(v)}`).join("\n\n");
 }
+
+function promptContextInputs(request) {
+  return request?.instructionContextInputs ?? request?.inputs;
+}
 function replace(t, k, v) {
   return String(t ?? "")
     .split(k)
@@ -85,8 +89,8 @@ function expand(template, request) {
   const c = request?.context ?? {};
   let out = String(template ?? "");
   for (const [k, v] of Object.entries({
-    "{{CONTENT}}": serializeInputs(request?.inputs),
-    "{{TEMA}}": serializeInputs(request?.inputs),
+    "{{CONTENT}}": serializeInputs(promptContextInputs(request)),
+    "{{TEMA}}": serializeInputs(promptContextInputs(request)),
     "{{CHANNEL_NAME}}": c.channel?.name ?? "",
     "{{NICHE}}": c.channel?.niche ?? "",
     "{{NICHO}}": c.channel?.niche ?? "",
@@ -96,7 +100,7 @@ function expand(template, request) {
       request?.resolvedInstruction || c.block?.instructions || c.block?.name || "",
   }))
     out = replace(out, k, v);
-  for (const [k, v] of Object.entries(request?.inputs ?? {}))
+  for (const [k, v] of Object.entries(promptContextInputs(request) ?? {}))
     out = replace(out, `{{INPUT:${k}}}`, serialize(v));
   return out.trim();
 }
@@ -219,7 +223,10 @@ function buildChoose(r) {
   if (!c?.items?.length) throw err("INVALID_INPUT", "O bloco Escolher precisa de coleção.");
   return expandCap(
     r?.configuration?.selectionPromptTemplate,
-    { "{{COLLECTION_ITEMS}}": c.items, "{{CONTENT}}": serializeInputs(r?.inputs) },
+    {
+      "{{COLLECTION_ITEMS}}": c.items,
+      "{{CONTENT}}": serializeInputs(promptContextInputs(r)),
+    },
     r,
   );
 }
@@ -242,7 +249,7 @@ function buildValidation(r) {
     {
       "{{VALIDATION_MODE}}": m,
       "{{CRITERIA}}": serialize(r?.inputs?.criteria ?? ""),
-      "{{CONTENT}}": serialize(r?.inputs?.content),
+      "{{CONTENT}}": serialize(promptContextInputs(r)?.content),
       "{{VALIDATION_OUTPUT_INSTRUCTION}}": validationInstruction(m),
     },
     r,

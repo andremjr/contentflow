@@ -85,6 +85,10 @@ function serializeInputs(inputs) {
   return entries.map(([key, value]) => `${key}:\n${serialize(value)}`).join("\n\n");
 }
 
+function promptContextInputs(request) {
+  return request?.instructionContextInputs ?? request?.inputs;
+}
+
 function replaceAllLiteral(text, token, value) {
   return String(text)
     .split(token)
@@ -94,20 +98,20 @@ function replaceAllLiteral(text, token, value) {
 function expandTemplate(template, request) {
   const context = request?.context ?? {};
   const replacements = {
-    "{{CONTENT}}": serializeInputs(request?.inputs),
+    "{{CONTENT}}": serializeInputs(promptContextInputs(request)),
     "{{CHANNEL_NAME}}": context?.channel?.name ?? "",
     "{{NICHE}}": context?.channel?.niche ?? "",
     "{{PROJECT_TITLE}}": context?.project?.title ?? "",
     "{{PROCESS}}": context?.processType ?? "",
     "{{BLOCK_INSTRUCTIONS}}":
       request?.resolvedInstruction || context?.block?.instructions || context?.block?.name || "",
-    "{{TEMA}}": serializeInputs(request?.inputs),
+    "{{TEMA}}": serializeInputs(promptContextInputs(request)),
     "{{NICHO}}": context?.channel?.niche ?? "",
   };
   let output = String(template ?? "");
   for (const [token, value] of Object.entries(replacements))
     output = replaceAllLiteral(output, token, value);
-  for (const [key, value] of Object.entries(request?.inputs ?? {}))
+  for (const [key, value] of Object.entries(promptContextInputs(request) ?? {}))
     output = replaceAllLiteral(output, `{{INPUT:${key}}}`, serialize(value));
   return output.trim();
 }
@@ -253,7 +257,10 @@ function buildChoosePrompt(request) {
     throw codedError("INVALID_INPUT", "O bloco Escolher precisa de uma coleção com itens.");
   return expandCapabilityTemplate(
     request?.configuration?.selectionPromptTemplate,
-    { "{{COLLECTION_ITEMS}}": collection.items, "{{CONTENT}}": serializeInputs(request?.inputs) },
+    {
+      "{{COLLECTION_ITEMS}}": collection.items,
+      "{{CONTENT}}": serializeInputs(promptContextInputs(request)),
+    },
     request,
   );
 }
@@ -279,7 +286,7 @@ function buildValidationPrompt(request) {
     {
       "{{VALIDATION_MODE}}": mode,
       "{{CRITERIA}}": serialize(request?.inputs?.criteria ?? ""),
-      "{{CONTENT}}": serialize(request?.inputs?.content),
+      "{{CONTENT}}": serialize(promptContextInputs(request)?.content),
       "{{VALIDATION_OUTPUT_INSTRUCTION}}": validationOutputInstruction(mode),
     },
     request,

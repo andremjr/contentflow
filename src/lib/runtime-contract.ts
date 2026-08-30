@@ -32,6 +32,7 @@ export type ResolvedBlockInput = {
   input: BlockInputBinding;
   resolved: boolean;
   value?: RuntimeValue;
+  resolvedSourceKey?: string;
   sourceLabel?: string;
   sourceBlockId?: string;
   sourceProcessType?: ProcessExecution["processType"];
@@ -102,6 +103,7 @@ export function resolveBlockInputs({
       input,
       resolved: true,
       value: selected.value,
+      resolvedSourceKey: selected.key,
       sourceLabel: selected.sourceLabel,
       sourceBlockId: selected.sourceBlockId,
       sourceProcessType: selected.sourceProcessType,
@@ -299,6 +301,7 @@ function resolveExplicitInput(
           result: {
             resolved: true,
             value: candidate.value,
+            resolvedSourceKey: candidate.key,
             sourceLabel: candidate.sourceLabel,
             sourceBlockId: candidate.sourceBlockId,
             sourceDeliveryId: candidate.deliveryId,
@@ -322,6 +325,7 @@ function resolveExplicitInput(
           result: {
             resolved: true,
             value: candidate.value,
+            resolvedSourceKey: candidate.key,
             sourceLabel: candidate.sourceLabel,
             sourceProcessType: candidate.sourceProcessType,
             sourceBlockId: candidate.sourceBlockId,

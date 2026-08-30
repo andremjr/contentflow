@@ -33,6 +33,7 @@ test("resolve variáveis universais, parâmetros e entradas declaradas", () => {
     "Captain Workout | Knee workout | Protect Your Knees | Protect Your Knees | 20000",
   );
   assert.deepEqual(result.unresolved, []);
+  assert.deepEqual(result.referencedInputIds, ["input-title"]);
 });
 
 test("preserva placeholders desconhecidos para compatibilidade e os reporta", () => {
@@ -42,6 +43,26 @@ test("preserva placeholders desconhecidos para compatibilidade e os reporta", ()
   );
   assert.equal(result.instruction, "Use {{inputs.outline}} e {{LEGACY_TOKEN.value}}.");
   assert.deepEqual(result.unresolved, ["inputs.outline", "LEGACY_TOKEN.value"]);
+  assert.deepEqual(result.referencedInputIds, []);
+});
+
+test("resolve a chave efetivamente escolhida pelo binding automático", () => {
+  const result = resolveInstructionTemplate("Resultados: {{inputs.items_found}}", {
+    ...context,
+    inputs: [
+      {
+        id: "automatic-input",
+        label: "Nova entrada",
+        sourceKey: "items_found",
+        portKey: "content",
+        value: ["Título A", "Título B"],
+      },
+    ],
+  });
+
+  assert.equal(result.instruction, 'Resultados: [\n  "Título A",\n  "Título B"\n]');
+  assert.deepEqual(result.unresolved, []);
+  assert.deepEqual(result.referencedInputIds, ["automatic-input"]);
 });
 
 test("gera chaves humanas estáveis para o seletor de variáveis", () => {

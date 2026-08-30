@@ -147,6 +147,7 @@ export function resolveInstructionTemplate(template: string, context: Instructio
   for (const [key, value] of Object.entries(context.parameters)) {
     values.set(`parameters.${normalizeVariableKey(key)}`, value);
   }
+  const inputOwners = new Map<string, string>();
   for (const input of context.inputs) {
     const aliases = new Set([
       instructionInputKey(input),
@@ -156,11 +157,16 @@ export function resolveInstructionTemplate(template: string, context: Instructio
       normalizeVariableKey(input.id),
     ]);
     for (const alias of aliases) {
-      if (alias) values.set(`inputs.${alias}`, input.value);
+      if (alias) {
+        const variable = `inputs.${alias}`;
+        values.set(variable, input.value);
+        inputOwners.set(variable, input.id);
+      }
     }
   }
 
   const unresolved = new Set<string>();
+  const referencedInputIds = new Set<string>();
   const instruction = String(template ?? "").replace(VARIABLE, (token, variable: string) => {
     const normalized = variable
       .split(".")
@@ -170,8 +176,14 @@ export function resolveInstructionTemplate(template: string, context: Instructio
       unresolved.add(variable);
       return token;
     }
+    const inputId = inputOwners.get(normalized);
+    if (inputId) referencedInputIds.add(inputId);
     return serializeInstructionValue(values.get(normalized));
   });
 
-  return { instruction: instruction.trim(), unresolved: [...unresolved] };
+  return {
+    instruction: instruction.trim(),
+    unresolved: [...unresolved],
+    referencedInputIds: [...referencedInputIds],
+  };
 }

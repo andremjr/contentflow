@@ -245,4 +245,8 @@ test("resolve campos diferentes do mesmo item escolhido sem repetir o primeiro",
     resolved.map((item) => item.value),
     ["Imersivo", "Coloca o espectador dentro do evento."],
   );
+  assert.deepEqual(
+    resolved.map((item) => item.resolvedSourceKey),
+    ["name", "description"],
+  );
 });

@@ -451,6 +451,7 @@ type PluginExecutionRequest = {
   configuration: Record<string, unknown>;
   settings: Record<string, unknown>;
   inputs: Record<string, RuntimeValue>; // chave = portKey
+  instructionContextInputs?: Record<string, RuntimeValue>; // exclui entradas já interpoladas
   inputContract: Array<{
     id: string;
     portKey: string;
@@ -482,7 +483,7 @@ type PluginExecutionRequest = {
 };
 ```
 
-O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContract` serve para conhecer tipo e schema dos registros recebidos. `inputDeliveries` é metadado paralelo e opcional de proveniência; plugins v1 que leem somente `inputs` continuam compatíveis. `resolvedInstruction` contém a instrução do Método após o núcleo resolver variáveis declaradas; capabilities que consomem instrução devem preferi-la ao template cru em `context.block.instructions`. `unresolvedInstructionVariables` informa placeholders preservados por compatibilidade. `settings` contém somente preferências não secretas validadas por `settingsSchema`; secrets declarados são acessados por `services.getSecret()` e não aparecem no envelope serializável.
+O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContract` serve para conhecer tipo e schema dos registros recebidos. `inputDeliveries` é metadado paralelo e opcional de proveniência; plugins v1 que leem somente `inputs` continuam compatíveis. `resolvedInstruction` contém a instrução do Método após o núcleo resolver variáveis declaradas; capabilities que consomem instrução devem preferi-la ao template cru em `context.block.instructions`. Ao compor contexto textual adicional, o plugin deve preferir `instructionContextInputs` a `inputs`: o núcleo remove desse mapa as entradas que já foram interpoladas em `resolvedInstruction`, evitando enviar o mesmo conteúdo duas vezes. A ausência do campo preserva o comportamento de plugins v1 existentes. `unresolvedInstructionVariables` informa placeholders preservados por compatibilidade. `settings` contém somente preferências não secretas validadas por `settingsSchema`; secrets declarados são acessados por `services.getSecret()` e não aparecem no envelope serializável.
 
 Um manifesto pode declarar `supportsConversationContinuation: true`. Nesse caso, o request informa se o plugin deve iniciar ou reutilizar uma conversa, e uma resposta bem-sucedida pode devolver `conversation: { id }`. O ID é opaco para o núcleo: o plugin valida origem e formato antes de usá-lo. O núcleo só resolve referências produzidas por bloco anterior do mesmo Projeto, plugin e conexão local; cookies, tokens e o histórico integral nunca entram nesse campo.
 
@@ -889,7 +890,7 @@ Uma capacidade não deve implementar mutex global para serializar silenciosament
 | `external_read`  | Consulta ou download em serviço externo.                    |
 | `external_write` | Criação, alteração ou exclusão em conta/serviço externo.    |
 | `public_publish` | Conteúdo pode se tornar público ou ser enviado a audiência. |
-| `local_artifact` | Geração de arquivo importado pelo ContentFlow.           |
+| `local_artifact` | Geração de arquivo importado pelo ContentFlow.              |
 | `subprocess`     | Execução de programa permitido pelo executor.               |
 
 O array vazio significa que a capacidade é computacional e não produz efeitos fora de `values`. Permissões e efeitos são complementares: `network` autoriza o meio técnico; `external_write` declara a consequência.
