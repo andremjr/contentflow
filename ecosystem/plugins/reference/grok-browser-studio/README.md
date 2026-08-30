@@ -1,5 +1,9 @@
 # Grok Browser Studio
 
+Versão **1.0.0** para ContentFlow Plugin API v1.
+
+O plugin usa a instrução resolvida do bloco como único prompt editável. As entradas conectadas são acrescentadas automaticamente como contexto. O bloco expõe apenas o perfil da conta, abre uma conversa nova e realiza um único envio por execução. Configurações antigas permanecem aceitas apenas para compatibilidade e são ignoradas.
+
 Plugin Browser Studio para gerar texto, pesquisar a web e criar imagens e vídeos reais no Grok, sem usar a API oficial.
 
 ## Capabilities
@@ -25,7 +29,3 @@ npm run plugin:kit -- check ./ecosystem/plugins/reference/grok-browser-studio
 npm run plugin:kit -- test-contract ./ecosystem/plugins/reference/grok-browser-studio
 npm run plugin:kit -- test-sandbox ./ecosystem/plugins/reference/grok-browser-studio
 ```
-
-## Perfis de fallback
-
-`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. Cada alias deve ser salvo separadamente. O núcleo troca de perfil somente em falhas técnicas transitórias; CAPTCHA, autenticação, limite, cota e bloqueio pausam a execução.

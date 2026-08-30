@@ -9,7 +9,7 @@ const manifest = JSON.parse(
 const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "0.4.4");
+  assert.equal(manifest.version, "1.0.0");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
 });
@@ -36,7 +36,7 @@ test("modela as fases observáveis da resposta", () => {
 function request(overrides = {}) {
   return {
     capabilityId: overrides.capabilityId ?? "generate-text-in-browser",
-    resolvedInstruction: overrides.resolvedInstruction,
+    resolvedInstruction: overrides.resolvedInstruction ?? "Escreva com clareza.",
     configuration: {
       promptTemplate: "{{BLOCK_INSTRUCTIONS}}\n\nTema: {{CONTENT}}\nCanal: {{CHANNEL_NAME}}",
       generationMode: "single",
@@ -74,7 +74,8 @@ test("manifesto declara as seis capabilities do Claude Browser Studio", () => {
   assert.equal(manifest.id, "local.contentflow.claude-browser-text");
   const capability = manifest.capabilities.find((item) => item.id === "generate-text-in-browser");
   assert.ok(capability);
-  assert.equal(capability.instructionUsage, "optional");
+  assert.equal(capability.instructionUsage, "required");
+  assert.deepEqual(Object.keys(capability.blockConfigSchema.properties), ["accountProfile"]);
   assert.deepEqual(capability.blockTypes, ["CRIAR"]);
   assert.deepEqual(
     capability.outputPorts.map((item) => item.key),
@@ -102,7 +103,7 @@ test("reúne anexos autorizados sem duplicar arquivos", () => {
   assert.deepEqual(__test.collectStoredFiles([image, { nested: image }]), [image, image]);
 });
 
-test("monta prompts especializados de visão e documentos", () => {
+test("usa instrução e contexto para visão e documentos", () => {
   const vision = __test.buildImageAnalysisPrompt(
     request({
       capabilityId: "analyze-images-in-browser",
@@ -124,8 +125,8 @@ test("monta prompts especializados de visão e documentos", () => {
       },
     }),
   );
-  assert.equal(vision, "VISÃO thumbnail | Escreva com clareza.");
-  assert.equal(documents, "DOC referências | Escreva com clareza.");
+  assert.match(vision, /CONTEXTO DAS ENTRADAS:[\s\S]*thumbnail/);
+  assert.match(documents, /CONTEXTO DAS ENTRADAS:[\s\S]*referências/);
 });
 
 test("prioriza a instrução resolvida pelo núcleo", () => {
@@ -197,17 +198,15 @@ test("monta uma resposta genérica", () => {
   assert.match(parts[0], /texto puro/i);
 });
 
-test("preserva o roteiro legado em três partes", () => {
+test("ignora o roteiro legado e faz somente um envio", () => {
   const parts = __test.buildParts(
     request({ configuration: { generationMode: "legacy_script_3_parts" } }),
   );
-  assert.equal(parts.length, 3);
-  assert.match(parts[0], /TÓPICOS 1, 2 e 3/);
-  assert.match(parts[1], /TÓPICOS 4, 5 e 6/);
-  assert.match(parts[2], /TÓPICOS 7 e 8/);
+  assert.equal(parts.length, 1);
+  assert.doesNotMatch(parts[0], /TÓPICOS 1, 2 e 3/);
 });
 
-test("transforma records em uma parte por bloco", () => {
+test("mantém records no contexto de um único envio", () => {
   const parts = __test.buildParts(
     request({
       configuration: { generationMode: "legacy_script_blocks" },
@@ -219,13 +218,13 @@ test("transforma records em uma parte por bloco", () => {
       },
     }),
   );
-  assert.equal(parts.length, 2);
+  assert.equal(parts.length, 1);
   assert.match(parts[0], /Abertura/);
   assert.match(parts[0], /Criar curiosidade/);
-  assert.match(parts[1], /Virada/);
+  assert.match(parts[0], /Virada/);
 });
 
-test("desenvolve outlines de quantidade variável com templates configuráveis", () => {
+test("não divide outlines em múltiplos envios", () => {
   const outline = Array.from({ length: 12 }, (_, index) => ({
     titulo_bloco: `Ponto ${index + 1}`,
     objetivo: `Objetivo ${index + 1}`,
@@ -242,15 +241,13 @@ test("desenvolve outlines de quantidade variável com templates configuráveis",
       inputs: { content: "Contexto geral", outline },
     }),
   );
-  assert.equal(parts.length, 12);
-  assert.match(parts[0], /INÍCIO 1\/12/);
+  assert.equal(parts.length, 1);
+  assert.doesNotMatch(parts[0], /INÍCIO 1\/12/);
   assert.match(parts[0], /Ponto 1/);
-  assert.match(parts[6], /MEIO 7\/12/);
-  assert.match(parts[11], /FIM 12\/12/);
-  assert.match(parts[11], /Ponto 12/);
+  assert.match(parts[0], /Ponto 12/);
 });
 
-test("separa partes personalizadas", () => {
+test("ignora partes personalizadas", () => {
   const parts = __test.buildParts(
     request({
       configuration: {
@@ -259,9 +256,8 @@ test("separa partes personalizadas", () => {
       },
     }),
   );
-  assert.equal(parts.length, 2);
-  assert.match(parts[0], /Comece agora/);
-  assert.match(parts[1], /Continue e finalize/);
+  assert.equal(parts.length, 1);
+  assert.doesNotMatch(parts[0], /Comece agora/);
 });
 
 test("preserva cada resposta quando a saída parts é conectada", () => {
@@ -286,10 +282,7 @@ test("monta pesquisa web com consulta e contexto", () => {
       inputs: { query: "tendências atuais", context: "YouTube" },
     }),
   );
-  assert.equal(
-    prompt,
-    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nPESQUISE tendências atuais | YouTube",
-  );
+  assert.match(prompt, /CONTEXTO DAS ENTRADAS:[\s\S]*tendências atuais[\s\S]*YouTube/);
   assert.doesNotMatch(handlerSource, /ensureWebSearchEnabled|enable-web-search|open-tools/);
 });
 

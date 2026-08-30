@@ -12,7 +12,7 @@ const manifest = JSON.parse(
 function request(overrides = {}) {
   return {
     capabilityId: overrides.capabilityId ?? "generate-text-in-browser",
-    resolvedInstruction: overrides.resolvedInstruction,
+    resolvedInstruction: overrides.resolvedInstruction ?? "Escreva com clareza.",
     configuration: {
       promptTemplate: "{{BLOCK_INSTRUCTIONS}}\nTema: {{CONTENT}}\nCanal: {{CHANNEL_NAME}}",
       generationMode: "single",
@@ -48,8 +48,12 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara capabilities reais de texto, imagem e vídeo", () => {
   assert.equal(manifest.id, "local.contentflow.meta-ai-browser-studio");
-  assert.equal(manifest.version, "0.2.3");
+  assert.equal(manifest.version, "1.0.0");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
+  assert.equal(manifest.capabilities[0].instructionUsage, "required");
+  assert.deepEqual(Object.keys(manifest.capabilities[0].blockConfigSchema.properties), [
+    "accountProfile",
+  ]);
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
   assert.deepEqual(
     manifest.capabilities.map((item) => item.id),
@@ -147,16 +151,15 @@ test("sempre inclui as entradas resolvidas quando o prompt do plugin está vazio
   assert.match(prompt, /Investigue o ponto de ruptura/);
 });
 
-test("preserva o roteiro legado em três envios", () => {
+test("ignora modos antigos e faz somente um envio", () => {
   const parts = __test.buildParts(
     request({ configuration: { generationMode: "legacy_script_3_parts" } }),
   );
-  assert.equal(parts.length, 3);
-  assert.match(parts[0], /TÓPICOS 1, 2 e 3/);
-  assert.match(parts[2], /TÓPICOS 7 e 8/);
+  assert.equal(parts.length, 1);
+  assert.doesNotMatch(parts[0], /TÓPICOS 1, 2 e 3/);
 });
 
-test("desenvolve outline variável na mesma conversa", () => {
+test("não divide outline em várias chamadas", () => {
   const outline = Array.from({ length: 12 }, (_, index) => ({
     titulo_bloco: `Ponto ${index + 1}`,
     objetivo: `Objetivo ${index + 1}`,
@@ -172,20 +175,18 @@ test("desenvolve outline variável na mesma conversa", () => {
       inputs: { content: "Contexto", outline },
     }),
   );
-  assert.equal(parts.length, 12);
-  assert.match(parts[0], /INÍCIO 1\/12/);
-  assert.match(parts[6], /MEIO 7\/12/);
-  assert.match(parts[11], /FIM 12\/12/);
+  assert.equal(parts.length, 1);
+  assert.doesNotMatch(parts[0], /INÍCIO 1\/12/);
 });
 
-test("separa partes personalizadas", () => {
+test("ignora partes personalizadas", () => {
   assert.equal(
     __test.buildParts(
       request({
         configuration: { generationMode: "custom_parts", customParts: "A\n---PARTE---\nB" },
       }),
     ).length,
-    2,
+    1,
   );
 });
 
@@ -196,17 +197,17 @@ test("preserva respostas individuais quando parts está conectada", () => {
   assert.deepEqual(values, { result: "A\n\nB", parts: ["A", "B"] });
 });
 
-test("monta pesquisa web e deep research", () => {
-  assert.equal(
+test("monta pesquisa com instrução e entradas", () => {
+  assert.match(
     __test.buildSearchPrompt(
       request({
         configuration: { searchPromptTemplate: "WEB {{QUERY}} | {{SEARCH_CONTEXT}}" },
         inputs: { query: "tendências", context: "YouTube" },
       }),
     ),
-    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nWEB tendências | YouTube",
+    /CONTEXTO DAS ENTRADAS:[\s\S]*tendências[\s\S]*YouTube/,
   );
-  assert.equal(
+  assert.match(
     __test.buildSearchPrompt(
       request({
         configuration: { researchPromptTemplate: "DEEP {{QUERY}}" },
@@ -214,7 +215,7 @@ test("monta pesquisa web e deep research", () => {
       }),
       true,
     ),
-    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nDEEP mercado",
+    /CONTEXTO DAS ENTRADAS:[\s\S]*mercado/,
   );
 });
 
@@ -260,8 +261,8 @@ test("Validar interpreta aprovação e seleções", () => {
   );
 });
 
-test("monta prompts especializados de visão e documentos", () => {
-  assert.equal(
+test("usa instrução e contexto para análise", () => {
+  assert.match(
     __test.buildAnalysisPrompt(
       request({
         configuration: {
@@ -271,7 +272,7 @@ test("monta prompts especializados de visão e documentos", () => {
       }),
       true,
     ),
-    "ANALISE thumb | Escreva com clareza.",
+    /CONTEXTO DAS ENTRADAS:[\s\S]*thumb/,
   );
 });
 
@@ -283,7 +284,7 @@ test("monta prompt para criação de imagem", () => {
       inputs: { prompt: "thumbnail cinematográfica" },
     }),
   );
-  assert.equal(prompt, "IMAGEM thumbnail cinematográfica | Escreva com clareza.");
+  assert.match(prompt, /CONTEXTO DAS ENTRADAS:[\s\S]*thumbnail cinematográfica/);
 });
 
 test("identifica StoredFiles aninhados", () => {

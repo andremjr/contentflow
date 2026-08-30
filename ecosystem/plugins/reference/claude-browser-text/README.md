@@ -1,26 +1,14 @@
 # Claude Browser Studio
 
-Versão **0.4.4** para ContentFlow Plugin API v1.
+Versão **1.0.0** para ContentFlow Plugin API v1.
 
 Plugin independente para ContentFlow que converte a lógica operacional de `gerar_roteiros.py` e `extrair_cookies_chrome.py` em seis capabilities pela interface web do Claude: texto/roteiros, pesquisa, escolha, validação, visão e análise de documentos.
 
-Ele não usa a API oficial da Anthropic. O plugin abre um Google Chrome real com perfil persistente dedicado, mantém a conversa entre as partes da mesma geração e lê a resposta visível do Claude. Cookies e tokens permanecem sob controle do Chrome e nunca são exportados para TXT, manifesto, logs, outputs ou artifacts.
+Ele não usa a API oficial da Anthropic. O plugin abre um Google Chrome real com perfil persistente dedicado, inicia uma conversa nova, faz um único envio e lê a resposta visível do Claude. Cookies e tokens permanecem sob controle do Chrome e nunca são exportados para TXT, manifesto, logs, outputs ou artifacts.
 
-## O que foi preservado dos scripts
+## Contrato simplificado
 
-- template de prompt com substituição de `{{TEMA}}` e `{{NICHO}}`;
-- placeholders adicionais do ContentFlow para canal, projeto, processo e instruções do bloco;
-- geração simples para títulos, textos de thumbnail, prompts de assets e outros textos;
-- roteiro legado dividido em três respostas na mesma conversa;
-- roteiro orientado por uma porta `outline` (`records` ou `list`), com um bloco de estrutura por resposta;
-- outlines de tamanho dinâmico: 8, 12 ou até 32 blocos por execução;
-- templates separados e configuráveis para primeiro bloco, blocos intermediários e último bloco;
-- partes personalizadas separadas por `---PARTE---`;
-- continuidade dentro da mesma conversa;
-- intervalo configurável entre partes;
-- retries técnicos por parte;
-- limpeza de artefatos, código, JSON e títulos Markdown baseada em `limpar_roteiro`;
-- validação de tamanho mínimo.
+O plugin usa a instrução resolvida do bloco como único prompt editável. As entradas conectadas são acrescentadas automaticamente como contexto. No Método, ele expõe apenas o perfil da conta. Configurações antigas de templates, modos, partes, retries e fallback continuam aceitas silenciosamente para não quebrar Métodos salvos, mas são ignoradas.
 
 ## Mudança de segurança na autenticação
 
@@ -110,38 +98,14 @@ Antes da primeira execução com um alias, use **Salvar perfil** no bloco do Mé
 
 O ContentFlow v0.3 ainda envia `settings: {}` para plugins comunitários, portanto a página de Plugins não mantém hoje uma lista dinâmica de contas. A escolha por `accountProfile` no bloco é a solução compatível com a API v1 atual e fica naturalmente no nível do Método/canal. `settingsSchema` permanece preparado para um futuro suporte do núcleo a settings persistentes.
 
-## Modos de geração
+## Execução
 
-- `single`: uma mensagem e uma resposta; indicado para título, thumb copy, descrição e prompt de asset.
-- `legacy_script_3_parts`: preserva as três instruções do roteiro original.
-- `outline_sequence`: conta os itens recebidos em `outline` e envia um bloco da estrutura por mensagem.
-- `legacy_script_blocks`: alias de compatibilidade para métodos já montados com a lógica anterior.
-- `custom_parts`: usa `customParts`, separando mensagens por uma linha `---PARTE---`.
-
-Todos os modos aceitam `languageInstruction`, `plainTextOnly`, `cleanOutput`, `minCharacters`, `delayBetweenPartsMs` e `retryAttempts`.
-
-No modo `outline_sequence`, configure:
-
-- `outlineFirstPromptTemplate`: primeira mensagem da conversa;
-- `outlineNextPromptTemplate`: repetida para cada bloco intermediário;
-- `outlineLastPromptTemplate`: usada somente no último bloco para orientar a conclusão.
-
-Esses templates aceitam `{{PROMPT_BASE}}`, `{{BLOCK}}`, `{{BLOCK_JSON}}`, `{{BLOCK_NUMBER}}`, `{{BLOCK_TOTAL}}`, `{{IS_FIRST}}` e `{{IS_LAST}}`. Assim, uma outline de 8 itens gera 8 envios e captura 8 respostas; uma outline de 12 itens faz o mesmo em 12 ciclos, sem mudar o plugin.
-
-## Placeholders
-
-- `{{CONTENT}}` e o legado `{{TEMA}}`;
-- `{{CHANNEL_NAME}}`;
-- `{{NICHE}}` e o legado `{{NICHO}}`;
-- `{{PROJECT_TITLE}}`;
-- `{{PROCESS}}`;
-- `{{BLOCK_INSTRUCTIONS}}`;
-- `{{INPUT:content}}`.
+Cada bloco realiza um único envio. A instrução define a tarefa e o contexto das entradas é anexado automaticamente. A saída opcional `parts`, quando ainda conectada por um Método antigo, contém somente a resposta dessa chamada.
 
 ## Segurança e dados
 
 - Provedor: Anthropic / Claude web.
-- Dados enviados: prompt, contexto conectado ao bloco e mensagens de continuação.
+- Dados enviados: instrução do bloco, contexto conectado e anexos autorizados.
 - Quando uma capability recebe anexos, os arquivos autorizados são enviados ao Claude web. O plugin não aceita caminhos arbitrários nem URLs remotas como substituto de `StoredFile`.
 - Efeitos externos: criação de conversa e mensagens na conta Claude conectada.
 - Custo: depende do plano e dos limites da conta Claude.
@@ -167,20 +131,16 @@ node --test ./ecosystem/plugins/reference/claude-browser-text/test.mjs
 
 `diagnosticMockResponse` existe apenas para o teste local do contrato e não abre o navegador quando preenchido.
 
-Em 20/08/2026, o fluxo real foi validado na interface web do Claude com dois prompts consecutivos na mesma conversa. A segunda resposta recuperou corretamente o dado enviado na primeira, e cada resposta permaneceu disponível separadamente para captura.
+Em 20/08/2026, o fluxo real foi validado na interface web do Claude. A versão 1.0.0 passa a iniciar uma conversa nova e enviar somente a instrução resolvida com o contexto conectado.
 
 ## Limitações conhecidas
 
 - A automação depende da interface web do Claude e pode exigir atualização se labels ou estrutura mudarem.
 - O Chrome precisa estar instalado.
 - Login, reautenticação, CAPTCHA e escolha de plano são sempre manuais.
-- Uma execução cria uma conversa nova; as partes daquela execução permanecem na mesma conversa.
+- Uma execução cria uma conversa nova e faz um único envio.
 - O plugin tenta iniciar cada execução pelo link visível **New** do Claude e usa `https://claude.ai/new` como fallback determinístico.
 - Cada conversa aceita no máximo 20 anexos e 500 MB por arquivo; limites adicionais do plano/contexto continuam valendo.
 - O plugin mapeia, mas não automatiza billing, mudança de plano, conectores, plugins de terceiros, compartilhamento, microfone ou captura da tela. Esses recursos ampliariam dados e permissões sem necessidade para os blocos do ContentFlow.
 - A criação de arquivos pelo ambiente de código do Claude não é importada como artifact nesta versão; o foco do plugin é produzir texto e analisar entradas autorizadas.
 - Os scripts Python originais não são alterados nem apagados.
-
-## Perfis de fallback
-
-`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. Cada alias deve ser salvo separadamente. O núcleo troca de perfil somente em falhas técnicas transitórias; CAPTCHA, autenticação, limite, cota e bloqueio pausam a execução.

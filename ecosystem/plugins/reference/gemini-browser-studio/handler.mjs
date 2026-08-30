@@ -138,6 +138,15 @@ function expandPrimary(template, request) {
     request,
   );
 }
+function buildInstructionPrompt(request, additions = []) {
+  const instruction = String(request?.resolvedInstruction ?? "").trim();
+  if (!instruction) throw err("INVALID_INPUT", "A instrução resolvida do bloco é obrigatória.");
+  const prompt = [expandPrimary("", request), ...additions.map(String).filter(Boolean)]
+    .join("\n\n")
+    .trim();
+  if (prompt.length > MAX_PROMPT) throw err("INVALID_INPUT", "O prompt ultrapassou o limite.");
+  return prompt;
+}
 function expandCap(template, repls, request) {
   let out = String(template ?? "");
   for (const [k, v] of Object.entries(repls))
@@ -182,72 +191,24 @@ function outlinePrompt(t, r, b, i, n, base) {
   return o.trim();
 }
 function buildParts(r) {
-  const c = r?.configuration ?? {},
-    base = expandPrimary(c.promptTemplate, r),
-    mode = c.generationMode ?? "single",
-    suffix =
-      c.plainTextOnly === false
-        ? ""
-        : "\n\nFORMATO OBRIGATÓRIO: entregue diretamente como texto; não crie Canvas nem arquivos.";
-  let parts;
-  if (mode === "legacy_script_3_parts")
-    parts = [
-      `${base}\n\nDesenvolva os TÓPICOS 1, 2 e 3. Faça abertura e introdução, sem concluir.`,
-      `Continue exatamente de onde parou e desenvolva os TÓPICOS 4, 5 e 6. Não repita.`,
-      `Continue exatamente de onde parou, desenvolva os TÓPICOS 7 e 8 e finalize.`,
-    ];
-  else if (mode === "outline_sequence") {
-    const items = outline(r);
-    if (!items.length) throw err("INVALID_INPUT", "O modo outline_sequence exige uma outline.");
-    parts = items.map((b, i) =>
-      outlinePrompt(
-        i === 0
-          ? c.outlineFirstPromptTemplate
-          : i === items.length - 1
-            ? c.outlineLastPromptTemplate
-            : c.outlineNextPromptTemplate,
-        r,
-        b,
-        i,
-        items.length,
-        base,
-      ),
-    );
-  } else if (mode === "custom_parts") {
-    parts = String(c.customParts ?? "")
-      .split(/^\s*---PARTE---\s*$/gim)
-      .map((x) => expand(x, r))
-      .filter(Boolean);
-    if (!parts.length) throw err("INVALID_INPUT", "Partes personalizadas vazias.");
-  } else parts = [base];
-  parts = parts.map((x) => (x.trim() + suffix).trim()).filter(Boolean);
-  if (parts.some((x) => x.length > MAX_PROMPT))
-    throw err("INVALID_INPUT", "Uma parte ultrapassou o limite de prompt.");
-  return parts;
+  return [
+    buildInstructionPrompt(r, [
+      "FORMATO OBRIGATÓRIO: entregue diretamente como texto; não crie Canvas nem arquivos.",
+    ]),
+  ];
 }
 function buildSearch(r) {
-  const p = expandCap(
-    r?.configuration?.searchPromptTemplate,
-    {
-      "{{QUERY}}": serialize(r?.inputs?.query),
-      "{{SEARCH_CONTEXT}}": serialize(r?.inputs?.context ?? ""),
-    },
-    r,
-  );
+  const p = buildInstructionPrompt(r);
   if (!p) throw err("INVALID_INPUT", "Consulta vazia.");
   return p;
 }
 function buildChoose(r) {
   const c = r?.context?.selectedCollection;
   if (!c?.items?.length) throw err("INVALID_INPUT", "O bloco Escolher precisa de coleção.");
-  return expandCap(
-    r?.configuration?.selectionPromptTemplate,
-    {
-      "{{COLLECTION_ITEMS}}": c.items,
-      "{{CONTENT}}": serializeInputs(promptContextInputs(r)),
-    },
-    r,
-  );
+  return buildInstructionPrompt(r, [
+    `ITENS DISPONÍVEIS:\n${serialize(c.items)}`,
+    'Responda somente JSON válido: {"selectedItemId":"ID_EXATO_DO_ITEM"}.',
+  ]);
 }
 function validationMode(r) {
   return ["approval", "select_one", "select_many"].includes(r?.validation?.mode)
@@ -263,31 +224,13 @@ function validationInstruction(m) {
 }
 function buildValidation(r) {
   const m = validationMode(r);
-  return expandCap(
-    r?.configuration?.validationPromptTemplate,
-    {
-      "{{VALIDATION_MODE}}": m,
-      "{{CRITERIA}}": serialize(r?.inputs?.criteria ?? ""),
-      "{{CONTENT}}": serialize(promptContextInputs(r)?.content),
-      "{{VALIDATION_OUTPUT_INSTRUCTION}}": validationInstruction(m),
-    },
-    r,
-  );
+  return buildInstructionPrompt(r, [validationInstruction(m)]);
 }
 function buildAnalysis(r) {
-  return expandCap(
-    r?.configuration?.analysisPromptTemplate,
-    { "{{ANALYSIS_CONTEXT}}": serialize(r?.inputs?.context ?? "") },
-    r,
-  );
+  return buildInstructionPrompt(r);
 }
 function buildMedia(r, type) {
-  const token = type === "image" ? "{{IMAGE_PROMPT}}" : "{{MUSIC_PROMPT}}",
-    template =
-      type === "image"
-        ? r?.configuration?.imagePromptTemplate
-        : r?.configuration?.musicPromptTemplate,
-    p = expandCap(template, { [token]: serialize(r?.inputs?.prompt) }, r);
+  const p = buildInstructionPrompt(r);
   if (!p) throw err("INVALID_INPUT", "Briefing de mídia vazio.");
   return p;
 }
@@ -1122,11 +1065,10 @@ export async function execute(request, services) {
       signal: services.signal,
       allowedOrigins: ["https://gemini.google.com"],
     });
-    await selectModel(bridge, cfg.modelPreference);
     if (files.length) await attachFiles(client, sessionId, bridge, files, services.signal);
     if (media) await selectTool(bridge, media === "image" ? "image" : "music");
     const responses = [],
-      retries = clamp(cfg.retryAttempts, 1, 0, 3);
+      retries = 0;
     for (let i = 0; i < parts.length; i++) {
       let last;
       for (let a = 0; a <= retries; a++) {
@@ -1162,8 +1104,7 @@ export async function execute(request, services) {
         }
       }
       if (last) throw last;
-      if (i < parts.length - 1)
-        await sleep(clamp(cfg.delayBetweenPartsMs, 2000, 0, 30000), services.signal);
+      if (i < parts.length - 1) await sleep(0, services.signal);
     }
     const combined = responses.map((x) => x.text).join("\n\n");
     if (media) {
@@ -1181,7 +1122,7 @@ export async function execute(request, services) {
     }
     const sources = [...new Set(responses.flatMap((x) => x.links ?? []).map((x) => x.href))].slice(
       0,
-      clamp(cfg.maxSources, 10, 1, 30),
+      10,
     );
     let values;
     if (id === "search-web-in-browser") values = searchValues(combined, sources, request);
@@ -1189,8 +1130,8 @@ export async function execute(request, services) {
       values = { result: parseChoice(combined, request) };
     else if (id === "validate-content-in-browser") values = parseValidation(combined, request);
     else {
-      const result = cfg.cleanOutput === false ? combined.trim() : clean(combined),
-        min = clamp(cfg.minCharacters, 1, 1, 1000000);
+      const result = clean(combined),
+        min = 1;
       if (result.length < min)
         throw err("OUTPUT_VALIDATION_FAILED", `Resultado abaixo de ${min} caracteres.`, true);
       values = generationValues(result, responses, request);

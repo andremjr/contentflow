@@ -9,7 +9,7 @@ const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), 
 function req(o = {}) {
   return {
     capabilityId: o.capabilityId ?? "generate-text-in-browser",
-    resolvedInstruction: o.resolvedInstruction,
+    resolvedInstruction: o.resolvedInstruction ?? "Escreva com clareza.",
     configuration: {
       promptTemplate: "{{BLOCK_INSTRUCTIONS}} Tema: {{CONTENT}} Canal: {{CHANNEL_NAME}}",
       generationMode: "single",
@@ -44,9 +44,12 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 });
 test("manifesto possui oito capabilities e permissões mínimas", () => {
   assert.equal(manifest.id, "local.contentflow.gemini-browser-studio");
-  assert.equal(manifest.version, "0.2.4");
+  assert.equal(manifest.version, "1.0.0");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
-  assert.equal(manifest.capabilities[0].instructionUsage, "optional");
+  assert.equal(manifest.capabilities[0].instructionUsage, "required");
+  assert.deepEqual(Object.keys(manifest.capabilities[0].blockConfigSchema.properties), [
+    "accountProfile",
+  ]);
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
   assert.equal(manifest.capabilities.length, 8);
   assert.deepEqual(
@@ -141,13 +144,12 @@ test("sempre inclui as entradas resolvidas quando o prompt do plugin está vazio
   assert.match(prompt, /O momento em que tudo deu errado/);
   assert.match(prompt, /Investigue o ponto de ruptura/);
 });
-test("mantém roteiro legado em três partes", () => {
+test("ignora roteiro legado e faz somente um envio", () => {
   const p = __test.buildParts(req({ configuration: { generationMode: "legacy_script_3_parts" } }));
-  assert.equal(p.length, 3);
-  assert.match(p[0], /TÓPICOS 1, 2 e 3/);
-  assert.match(p[2], /TÓPICOS 7 e 8/);
+  assert.equal(p.length, 1);
+  assert.doesNotMatch(p[0], /TÓPICOS 1, 2 e 3/);
 });
-test("outline variável gera doze envios", () => {
+test("outline variável permanece em um envio", () => {
   const outline = Array.from({ length: 12 }, (_, i) => ({ titulo_bloco: `Ponto ${i + 1}` }));
   const p = __test.buildParts(
     req({
@@ -160,16 +162,15 @@ test("outline variável gera doze envios", () => {
       inputs: { outline },
     }),
   );
-  assert.equal(p.length, 12);
-  assert.match(p[0], /I 1\/12/);
-  assert.match(p[11], /F 12\/12/);
+  assert.equal(p.length, 1);
+  assert.doesNotMatch(p[0], /I 1\/12/);
 });
-test("partes personalizadas", () =>
+test("ignora partes personalizadas", () =>
   assert.equal(
     __test.buildParts(
       req({ configuration: { generationMode: "custom_parts", customParts: "A\n---PARTE---\nB" } }),
     ).length,
-    2,
+    1,
   ));
 test("preserva partes individuais", () =>
   assert.deepEqual(
@@ -178,15 +179,15 @@ test("preserva partes individuais", () =>
     }),
     { result: "A B", parts: ["A", "B"] },
   ));
-test("monta busca", () =>
-  assert.equal(
+test("monta busca com instrução e entradas", () =>
+  assert.match(
     __test.buildSearch(
       req({
         configuration: { searchPromptTemplate: "BUSCA {{QUERY}} {{SEARCH_CONTEXT}}" },
         inputs: { query: "tema", context: "hoje" },
       }),
     ),
-    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nBUSCA tema hoje",
+    /CONTEXTO DAS ENTRADAS:[\s\S]*tema[\s\S]*hoje/,
   ));
 test("busca do Gemini é guiada pelo prompt, sem ativar opção visual", () => {
   assert.doesNotMatch(
@@ -233,16 +234,16 @@ test("Validar interpreta três modos", () => {
   );
 });
 test("monta visão, imagem e música", () => {
-  assert.equal(
+  assert.match(
     __test.buildAnalysis(
       req({
         configuration: { analysisPromptTemplate: "ANALISE {{ANALYSIS_CONTEXT}}" },
         inputs: { context: "thumb" },
       }),
     ),
-    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nANALISE thumb",
+    /CONTEXTO DAS ENTRADAS:[\s\S]*thumb/,
   );
-  assert.equal(
+  assert.match(
     __test.buildMedia(
       req({
         configuration: { imagePromptTemplate: "IMG {{IMAGE_PROMPT}}" },
@@ -250,9 +251,9 @@ test("monta visão, imagem e música", () => {
       }),
       "image",
     ),
-    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nIMG azul",
+    /CONTEXTO DAS ENTRADAS:[\s\S]*azul/,
   );
-  assert.equal(
+  assert.match(
     __test.buildMedia(
       req({
         configuration: { musicPromptTemplate: "MUS {{MUSIC_PROMPT}}" },
@@ -260,7 +261,7 @@ test("monta visão, imagem e música", () => {
       }),
       "music",
     ),
-    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nMUS calma",
+    /CONTEXTO DAS ENTRADAS:[\s\S]*calma/,
   );
 });
 test("encontra StoredFiles aninhados", () => {

@@ -3,11 +3,13 @@
   "apiVersion": "1",
   "id": "local.contentflow.grok-browser-studio",
   "name": "Grok Browser Studio",
-  "version": "0.2.3",
+  "version": "1.0.0",
   "description": "Gera texto, pesquisa, imagens e vídeos no Grok web usando um perfil Chrome dedicado, sem API oficial.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
-  "branding": { "iconPath": "assets/icon.png" },
+  "branding": {
+    "iconPath": "assets/icon.png"
+  },
   "runtime": {
     "kind": "node",
     "version": ">=26 <27",
@@ -21,8 +23,7 @@
   "profileSetup": {
     "configurationKey": "accountProfile",
     "label": "Salvar perfil",
-    "description": "Abre o Grok Imagine para login e fecha o Chrome depois de validar a área de criação.",
-    "fallbackConfigurationKey": "fallbackAccountProfiles"
+    "description": "Abre o Grok Imagine para login e fecha o Chrome depois de validar a área de criação."
   },
   "settingsSchema": {
     "type": "object",
@@ -93,7 +94,7 @@
     {
       "id": "generate-text-in-browser",
       "operator": "IA",
-      "instructionUsage": "optional",
+      "instructionUsage": "required",
       "blockTypes": ["CRIAR"],
       "processTypes": [
         "theme",
@@ -187,66 +188,12 @@
       },
       "blockConfigSchema": {
         "type": "object",
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
           "accountProfile": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default"
-          },
-          "fallbackAccountProfiles": {
-            "type": "string",
-            "title": "Perfis de fallback",
-            "format": "textarea",
-            "default": "",
-            "maxLength": 512,
-            "description": "Aliases adicionais, um por linha, em ordem. O núcleo troca somente após UPSTREAM_UNAVAILABLE, TIMEOUT ou JOB_FAILED; CAPTCHA, autenticação, bloqueio e cota sempre pausam."
-          },
-          "promptTemplate": {
-            "type": "string",
-            "format": "textarea",
-            "default": "{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO:\n{{CONTENT}}\n\nEntregue somente o conteúdo final solicitado."
-          },
-          "generationMode": {
-            "type": "string",
-            "default": "single",
-            "enum": ["single", "legacy_script_3_parts", "outline_sequence", "custom_parts"]
-          },
-          "customParts": {
-            "type": "string",
-            "format": "textarea",
-            "default": ""
-          },
-          "reasoningMode": {
-            "type": "string",
-            "default": "standard",
-            "enum": ["standard", "think"]
-          },
-          "plainTextOnly": {
-            "type": "boolean",
-            "default": true
-          },
-          "cleanOutput": {
-            "type": "boolean",
-            "default": true
-          },
-          "minCharacters": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 1000000,
-            "default": 1
-          },
-          "delayBetweenPartsMs": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 30000,
-            "default": 2000
-          },
-          "retryAttempts": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 3,
-            "default": 1
           }
         }
       },
@@ -332,43 +279,19 @@
       },
       "blockConfigSchema": {
         "type": "object",
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
           "accountProfile": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default"
-          },
-          "fallbackAccountProfiles": {
-            "type": "string",
-            "title": "Perfis de fallback",
-            "format": "textarea",
-            "default": "",
-            "maxLength": 512,
-            "description": "Aliases adicionais, um por linha, em ordem. O núcleo troca somente após UPSTREAM_UNAVAILABLE, TIMEOUT ou JOB_FAILED; CAPTCHA, autenticação, bloqueio e cota sempre pausam."
-          },
-          "searchPromptTemplate": {
-            "type": "string",
-            "format": "textarea",
-            "default": "Pesquise a web e responda com informações atuais e fontes.\n\nCONSULTA:\n{{QUERY}}\n\nCONTEXTO:\n{{SEARCH_CONTEXT}}"
-          },
-          "maxSources": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 30,
-            "default": 10
-          },
-          "retryAttempts": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 3,
-            "default": 1
           }
         }
       },
       "outputSchema": {
         "type": "object"
-      }
+      },
+      "instructionUsage": "required"
     },
     {
       "id": "generate-image-in-browser",
@@ -434,31 +357,12 @@
       },
       "blockConfigSchema": {
         "type": "object",
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
           "accountProfile": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default"
-          },
-          "fallbackAccountProfiles": {
-            "type": "string",
-            "title": "Perfis de fallback",
-            "format": "textarea",
-            "default": "",
-            "maxLength": 512,
-            "description": "Aliases adicionais, um por linha, em ordem. O núcleo troca somente após UPSTREAM_UNAVAILABLE, TIMEOUT ou JOB_FAILED; CAPTCHA, autenticação, bloqueio e cota sempre pausam."
-          },
-          "imagePromptTemplate": {
-            "type": "string",
-            "format": "textarea",
-            "default": "Crie uma imagem de alta qualidade conforme o briefing.\n\n{{IMAGE_PROMPT}}\n\n{{BLOCK_INSTRUCTIONS}}"
-          },
-          "retryAttempts": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 3,
-            "default": 1
           }
         }
       },
@@ -474,7 +378,8 @@
           }
         },
         "required": ["image"]
-      }
+      },
+      "instructionUsage": "required"
     },
     {
       "id": "generate-video-in-browser",
@@ -530,31 +435,12 @@
       },
       "blockConfigSchema": {
         "type": "object",
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
           "accountProfile": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default"
-          },
-          "fallbackAccountProfiles": {
-            "type": "string",
-            "title": "Perfis de fallback",
-            "format": "textarea",
-            "default": "",
-            "maxLength": 512,
-            "description": "Aliases adicionais, um por linha, em ordem. O núcleo troca somente após UPSTREAM_UNAVAILABLE, TIMEOUT ou JOB_FAILED; CAPTCHA, autenticação, bloqueio e cota sempre pausam."
-          },
-          "videoPromptTemplate": {
-            "type": "string",
-            "format": "textarea",
-            "default": "Crie um vídeo curto cinematográfico conforme o briefing, com movimento coerente e áudio quando disponível.\n\n{{VIDEO_PROMPT}}\n\n{{BLOCK_INSTRUCTIONS}}"
-          },
-          "retryAttempts": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 2,
-            "default": 1
           }
         }
       },
@@ -570,7 +456,8 @@
           }
         },
         "required": ["video"]
-      }
+      },
+      "instructionUsage": "required"
     }
   ]
 }

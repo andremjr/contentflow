@@ -150,6 +150,18 @@ function expandPrimaryTemplate(template, request) {
   );
 }
 
+function buildInstructionPrompt(request, additions = []) {
+  const instruction = String(request?.resolvedInstruction ?? "").trim();
+  if (!instruction)
+    throw codedError("INVALID_INPUT", "A instrução resolvida do bloco é obrigatória.");
+  const prompt = [expandPrimaryTemplate("", request), ...additions.map(String).filter(Boolean)]
+    .join("\n\n")
+    .trim();
+  if (prompt.length > MAX_PROMPT_CHARACTERS)
+    throw codedError("INVALID_INPUT", `O prompt ultrapassou ${MAX_PROMPT_CHARACTERS} caracteres.`);
+  return prompt;
+}
+
 function expandCapabilityTemplate(template, replacements, request) {
   let output = String(template ?? "");
   for (const [token, value] of Object.entries(replacements))
@@ -207,63 +219,15 @@ function expandOutlinePrompt(template, request, block, index, total, base) {
 }
 
 function buildParts(request) {
-  const configuration = request?.configuration ?? {};
-  const base = expandPrimaryTemplate(configuration.promptTemplate, request);
-  const format =
-    configuration.plainTextOnly === false
-      ? ""
-      : "FORMATO OBRIGATÓRIO: entregue o conteúdo diretamente como texto, sem criar arquivos ou canvas.";
-  const suffix = format ? `\n\n${format}` : "";
-  const mode = String(configuration.generationMode ?? "single");
-  let parts;
-  if (mode === "legacy_script_3_parts") {
-    parts = [
-      `${base}\n\nDesenvolva os TÓPICOS 1, 2 e 3. Faça abertura e introdução, sem concluir.`,
-      "Continue exatamente de onde parou e desenvolva os TÓPICOS 4, 5 e 6. Não repita a parte anterior.",
-      "Continue exatamente de onde parou, desenvolva os TÓPICOS 7 e 8 e finalize o roteiro.",
-    ];
-  } else if (mode === "outline_sequence") {
-    const items = outlineItems(request);
-    if (!items.length)
-      throw codedError("INVALID_INPUT", "O modo outline_sequence exige uma outline não vazia.");
-    parts = items.map((block, index) =>
-      expandOutlinePrompt(
-        index === 0
-          ? configuration.outlineFirstPromptTemplate
-          : index === items.length - 1
-            ? configuration.outlineLastPromptTemplate
-            : configuration.outlineNextPromptTemplate,
-        request,
-        block,
-        index,
-        items.length,
-        base,
-      ),
-    );
-  } else if (mode === "custom_parts") {
-    parts = String(configuration.customParts ?? "")
-      .split(/^\s*---PARTE---\s*$/gim)
-      .map((part) => expandTemplate(part, request))
-      .filter(Boolean);
-    if (!parts.length) throw codedError("INVALID_INPUT", "Partes personalizadas vazias.");
-  } else parts = [base];
-  const normalized = parts.map((part) => `${part.trim()}${suffix}`.trim()).filter(Boolean);
-  if (normalized.some((part) => part.length > MAX_PROMPT_CHARACTERS))
-    throw codedError("INVALID_INPUT", `Uma parte ultrapassou ${MAX_PROMPT_CHARACTERS} caracteres.`);
-  return normalized;
+  return [
+    buildInstructionPrompt(request, [
+      "FORMATO OBRIGATÓRIO: entregue o conteúdo diretamente como texto, sem criar arquivos ou canvas.",
+    ]),
+  ];
 }
 
-function buildSearchPrompt(request, deep = false) {
-  const configuration = request?.configuration ?? {};
-  const template = deep ? configuration.researchPromptTemplate : configuration.searchPromptTemplate;
-  const prompt = expandCapabilityTemplate(
-    template,
-    {
-      "{{QUERY}}": serialize(request?.inputs?.query),
-      "{{SEARCH_CONTEXT}}": serialize(request?.inputs?.context ?? ""),
-    },
-    request,
-  );
+function buildSearchPrompt(request, _deep = false) {
+  const prompt = buildInstructionPrompt(request);
   if (!prompt) throw codedError("INVALID_INPUT", "A consulta ficou vazia.");
   return prompt;
 }
@@ -272,14 +236,10 @@ function buildChoosePrompt(request) {
   const collection = request?.context?.selectedCollection;
   if (!collection || !Array.isArray(collection.items) || !collection.items.length)
     throw codedError("INVALID_INPUT", "O bloco Escolher precisa de uma coleção com itens.");
-  return expandCapabilityTemplate(
-    request?.configuration?.selectionPromptTemplate,
-    {
-      "{{COLLECTION_ITEMS}}": collection.items,
-      "{{CONTENT}}": serializeInputs(promptContextInputs(request)),
-    },
-    request,
-  );
+  return buildInstructionPrompt(request, [
+    `ITENS DISPONÍVEIS:\n${serialize(collection.items)}`,
+    'Responda somente JSON válido: {"selectedItemId":"ID_EXATO_DO_ITEM"}.',
+  ]);
 }
 
 function validationMode(request) {
@@ -298,32 +258,15 @@ function validationOutputInstruction(mode) {
 
 function buildValidationPrompt(request) {
   const mode = validationMode(request);
-  return expandCapabilityTemplate(
-    request?.configuration?.validationPromptTemplate,
-    {
-      "{{VALIDATION_MODE}}": mode,
-      "{{CRITERIA}}": serialize(request?.inputs?.criteria ?? ""),
-      "{{CONTENT}}": serialize(promptContextInputs(request)?.content),
-      "{{VALIDATION_OUTPUT_INSTRUCTION}}": validationOutputInstruction(mode),
-    },
-    request,
-  );
+  return buildInstructionPrompt(request, [validationOutputInstruction(mode)]);
 }
 
-function buildAnalysisPrompt(request, image) {
-  return expandCapabilityTemplate(
-    request?.configuration?.analysisPromptTemplate,
-    { "{{ANALYSIS_CONTEXT}}": serialize(request?.inputs?.context ?? "") },
-    request,
-  );
+function buildAnalysisPrompt(request, _image) {
+  return buildInstructionPrompt(request);
 }
 
 function buildImagePrompt(request) {
-  const prompt = expandCapabilityTemplate(
-    request?.configuration?.imagePromptTemplate,
-    { "{{IMAGE_PROMPT}}": serialize(request?.inputs?.prompt) },
-    request,
-  );
+  const prompt = buildInstructionPrompt(request);
   if (!prompt) throw codedError("INVALID_INPUT", "O prompt da imagem ficou vazio.");
   return prompt;
 }
@@ -1341,7 +1284,7 @@ export async function execute(request, services) {
   try {
     if (capabilityId === "generate-text-in-browser") {
       parts = buildParts(request);
-      mode = request?.configuration?.reasoningMode ?? "standard";
+      mode = "standard";
     } else if (capabilityId === "search-web-in-browser") {
       parts = [buildSearchPrompt(request, false)];
     } else if (capabilityId === "deep-research-in-browser") {
@@ -1353,7 +1296,7 @@ export async function execute(request, services) {
       parts = [buildValidationPrompt(request)];
     else if (["analyze-images-in-browser", "analyze-documents-in-browser"].includes(capabilityId)) {
       parts = [buildAnalysisPrompt(request, capabilityId.includes("images"))];
-      mode = request?.configuration?.reasoningMode ?? "standard";
+      mode = "standard";
     } else if (capabilityId === "generate-image-in-browser") {
       parts = [buildImagePrompt(request)];
       mode = "image";
@@ -1401,7 +1344,7 @@ export async function execute(request, services) {
       services.signal,
     );
     const { sessionId } = await attachChatGptPage(client, services.signal);
-    await openConversation(client, sessionId, request.conversation, services.signal);
+    await openConversation(client, sessionId, { mode: "new" }, services.signal);
     await waitForPrompt(
       client,
       sessionId,
@@ -1423,8 +1366,8 @@ export async function execute(request, services) {
     }
     await clickMode(bridge, mode);
     const responses = [],
-      retryAttempts = clampInteger(configuration.retryAttempts, 1, 0, 3),
-      delayBetweenPartsMs = clampInteger(configuration.delayBetweenPartsMs, 2000, 0, 30000);
+      retryAttempts = 0,
+      delayBetweenPartsMs = 0;
     for (let index = 0; index < parts.length; index += 1) {
       let lastError;
       for (let attempt = 0; attempt <= retryAttempts; attempt += 1) {
@@ -1472,10 +1415,7 @@ export async function execute(request, services) {
     const combined = responses.map((response) => response.text).join("\n\n"),
       sources = [
         ...new Set(responses.flatMap((response) => response.links).map((link) => link.href)),
-      ].slice(0, clampInteger(configuration.maxSources, 10, 1, 50));
-    const conversationId = validateConversationUrl(
-      await evaluate(client, sessionId, "location.href"),
-    );
+      ].slice(0, 10);
     let values;
     if (capabilityId === "generate-image-in-browser") {
       const captured = await captureGeneratedImage(
@@ -1494,7 +1434,6 @@ export async function execute(request, services) {
           outputUnits: captured.file.size,
           unit: "bytes",
         },
-        conversation: { id: conversationId },
       };
     }
     if (["search-web-in-browser", "deep-research-in-browser"].includes(capabilityId))
@@ -1504,9 +1443,8 @@ export async function execute(request, services) {
     else if (capabilityId === "validate-content-in-browser")
       values = parseValidationValues(combined, request);
     else {
-      const result =
-        configuration.cleanOutput === false ? combined.trim() : cleanGeneratedText(combined);
-      const minimum = clampInteger(configuration.minCharacters, 1, 1, 1000000);
+      const result = cleanGeneratedText(combined);
+      const minimum = 1;
       if (result.length < minimum)
         throw codedError(
           "OUTPUT_VALIDATION_FAILED",
@@ -1519,7 +1457,6 @@ export async function execute(request, services) {
       status: "success",
       values,
       usage: { provider: "OpenAI / ChatGPT web", outputUnits: combined.length, unit: "characters" },
-      conversation: { id: conversationId },
     };
   } catch (error) {
     if (services.signal?.aborted || error?.code === "CANCELLED")

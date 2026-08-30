@@ -151,6 +151,18 @@ function expandPrimaryTemplate(template, request) {
   );
 }
 
+function buildInstructionPrompt(request, additions = []) {
+  const instruction = String(request?.resolvedInstruction ?? "").trim();
+  if (!instruction)
+    throw codedError("INVALID_INPUT", "A instrução resolvida do bloco é obrigatória.");
+  const prompt = [expandPrimaryTemplate("", request), ...additions.map(String).filter(Boolean)]
+    .join("\n\n")
+    .trim();
+  if (prompt.length > MAX_PROMPT_CHARACTERS)
+    throw codedError("INVALID_INPUT", `O prompt ultrapassou ${MAX_PROMPT_CHARACTERS} caracteres.`);
+  return prompt;
+}
+
 function flattenRecords(value, output = []) {
   if (Array.isArray(value)) {
     for (const item of value) flattenRecords(item, output);
@@ -209,64 +221,7 @@ function plainTextInstruction(enabled) {
 }
 
 function buildParts(request) {
-  const configuration = request?.configuration ?? {};
-  const base = expandPrimaryTemplate(configuration.promptTemplate, request);
-  const style = String(configuration.languageInstruction ?? "").trim();
-  const format = plainTextInstruction(configuration.plainTextOnly !== false);
-  const suffix = [format, style].filter(Boolean).join("\n\n");
-  const mode = String(configuration.generationMode ?? "single");
-  let parts;
-
-  if (mode === "legacy_script_3_parts") {
-    parts = [
-      `${base}\n\n${suffix}\n\nESCREVA AGORA APENAS: a ABERTURA IMPACTANTE (600 palavras), a INTRODUÇÃO com CTA, e os TÓPICOS 1, 2 e 3 (cada um com 7000 caracteres). PARE após o Tópico 3. NÃO escreva os demais tópicos ainda.`,
-      `Continue o roteiro EXATAMENTE de onde parou. Escreva agora os TÓPICOS 4, 5 e 6 (cada um com 7000 caracteres). Mantenha o mesmo tom, estilo narrativo e fluidez. Texto corrido, sem títulos, sem formatação. PARE após o Tópico 6.\n\n${suffix}`,
-      `Continue o roteiro EXATAMENTE de onde parou. Escreva agora os TÓPICOS 7 e 8 (cada um com 7000 caracteres) e a CONCLUSÃO E CHAMADO À AÇÃO FINAL. Mantenha o mesmo tom narrativo e finalize de forma completa e envolvente. Texto corrido, sem títulos, sem formatação.\n\n${suffix}`,
-    ];
-  } else if (mode === "outline_sequence" || mode === "legacy_script_blocks") {
-    const blocks = outlineItems(request);
-    const usable = blocks.length
-      ? blocks
-      : Array.from({ length: 8 }, (_, index) => ({ titulo_bloco: `Tópico ${index + 1}` }));
-    const firstTemplate = String(
-      configuration.outlineFirstPromptTemplate ??
-        "{{PROMPT_BASE}}\n\nDesenvolva somente o bloco {{BLOCK_NUMBER}}/{{BLOCK_TOTAL}}:\n{{BLOCK}}",
-    );
-    const nextTemplate = String(
-      configuration.outlineNextPromptTemplate ??
-        "Continue de onde parou e desenvolva somente o bloco {{BLOCK_NUMBER}}/{{BLOCK_TOTAL}}:\n{{BLOCK}}",
-    );
-    const lastTemplate = String(
-      configuration.outlineLastPromptTemplate ??
-        "Continue de onde parou, desenvolva o último bloco {{BLOCK_NUMBER}}/{{BLOCK_TOTAL}} e finalize:\n{{BLOCK}}",
-    );
-    parts = usable.slice(0, MAX_PARTS).map((block, index) => {
-      const isLast = index === usable.length - 1;
-      const selectedTemplate = index === 0 ? firstTemplate : isLast ? lastTemplate : nextTemplate;
-      return `${expandOutlinePrompt(selectedTemplate, request, block, index, usable.length, base)}\n\n${suffix}`;
-    });
-  } else if (mode === "custom_parts") {
-    const custom = String(configuration.customParts ?? "")
-      .split(/^\s*---PARTE---\s*$/gim)
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .slice(0, MAX_PARTS);
-    parts = custom.length
-      ? custom.map((part, index) =>
-          index === 0 ? `${base}\n\n${part}\n\n${suffix}` : `${part}\n\n${suffix}`,
-        )
-      : [`${base}\n\n${suffix}`];
-  } else {
-    parts = [`${base}\n\n${suffix}`];
-  }
-
-  const normalized = parts.map((item) => item.trim()).filter(Boolean);
-  if (!normalized.length)
-    throw codedError("INVALID_CONFIGURATION", "O template do prompt resultou vazio.");
-  if (normalized.some((item) => item.length > MAX_PROMPT_CHARACTERS)) {
-    throw codedError("INVALID_INPUT", `Uma parte ultrapassou ${MAX_PROMPT_CHARACTERS} caracteres.`);
-  }
-  return normalized;
+  return [buildInstructionPrompt(request, [plainTextInstruction(true)])];
 }
 
 function expandCapabilityTemplate(template, replacements, request) {
@@ -278,18 +233,7 @@ function expandCapabilityTemplate(template, replacements, request) {
 }
 
 function buildSearchPrompt(request) {
-  const template = String(
-    request?.configuration?.searchPromptTemplate ??
-      "Use obrigatoriamente a pesquisa web. Responda com fatos atuais e cite as fontes.\n\n{{QUERY}}\n\n{{SEARCH_CONTEXT}}",
-  );
-  const prompt = expandCapabilityTemplate(
-    template,
-    {
-      "{{QUERY}}": serialize(request?.inputs?.query),
-      "{{SEARCH_CONTEXT}}": serialize(request?.inputs?.context ?? ""),
-    },
-    request,
-  );
+  const prompt = buildInstructionPrompt(request);
   if (!prompt) throw codedError("INVALID_INPUT", "A consulta de pesquisa ficou vazia.");
   return prompt;
 }
@@ -302,18 +246,10 @@ function buildChoosePrompt(request) {
       "O bloco Escolher precisa receber uma coleção estratégica com itens.",
     );
   }
-  const template = String(
-    request?.configuration?.selectionPromptTemplate ??
-      'Escolha somente um item permitido e responda {"selectedItemId":"ID_EXATO"}.\n\n{{COLLECTION_ITEMS}}',
-  );
-  return expandCapabilityTemplate(
-    template,
-    {
-      "{{COLLECTION_ITEMS}}": collection.items,
-      "{{CONTENT}}": serializeInputs(promptContextInputs(request)),
-    },
-    request,
-  );
+  return buildInstructionPrompt(request, [
+    `ITENS DISPONÍVEIS:\n${serialize(collection.items)}`,
+    'Responda somente JSON válido: {"selectedItemId":"ID_EXATO_DO_ITEM"}.',
+  ]);
 }
 
 function validationMode(request) {
@@ -334,44 +270,15 @@ function validationOutputInstruction(mode) {
 
 function buildValidationPrompt(request) {
   const mode = validationMode(request);
-  const template = String(
-    request?.configuration?.validationPromptTemplate ??
-      "Valide o conteúdo conforme os critérios.\n{{CONTENT}}\n{{CRITERIA}}\n{{VALIDATION_OUTPUT_INSTRUCTION}}",
-  );
-  return expandCapabilityTemplate(
-    template,
-    {
-      "{{VALIDATION_MODE}}": mode,
-      "{{CRITERIA}}": serialize(request?.inputs?.criteria ?? ""),
-      "{{CONTENT}}": serialize(promptContextInputs(request)?.content),
-      "{{VALIDATION_OUTPUT_INSTRUCTION}}": validationOutputInstruction(mode),
-    },
-    request,
-  );
+  return buildInstructionPrompt(request, [validationOutputInstruction(mode)]);
 }
 
 function buildImageAnalysisPrompt(request) {
-  const template = String(
-    request?.configuration?.analysisPromptTemplate ??
-      "Analise cuidadosamente as imagens anexadas. Descreva somente o que é visualmente sustentado e sinalize incertezas.\n\nTAREFA:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO:\n{{ANALYSIS_CONTEXT}}",
-  );
-  return expandCapabilityTemplate(
-    template,
-    { "{{ANALYSIS_CONTEXT}}": serialize(request?.inputs?.context ?? "") },
-    request,
-  );
+  return buildInstructionPrompt(request);
 }
 
 function buildDocumentAnalysisPrompt(request) {
-  const template = String(
-    request?.configuration?.analysisPromptTemplate ??
-      "Analise os documentos anexados conforme a tarefa. Não invente conteúdo ausente; quando útil, identifique arquivo e página/seção.\n\nTAREFA:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO:\n{{ANALYSIS_CONTEXT}}",
-  );
-  return expandCapabilityTemplate(
-    template,
-    { "{{ANALYSIS_CONTEXT}}": serialize(request?.inputs?.context ?? "") },
-    request,
-  );
+  return buildInstructionPrompt(request);
 }
 
 function isStoredFile(value) {
@@ -1439,9 +1346,9 @@ export async function execute(request, services) {
     if (traceEnabled) process.stderr.write(`[Claude Browser] ${message}\n`);
   };
   const step = (message) => process.stderr.write(`[Claude Browser] ${message}\n`);
-  const retryAttempts = clampInteger(configuration.retryAttempts, 1, 0, 3);
-  const delayBetweenPartsMs = clampInteger(configuration.delayBetweenPartsMs, 3000, 0, 30000);
-  const minCharacters = clampInteger(configuration.minCharacters, 1, 1, 1_000_000);
+  const retryAttempts = 0;
+  const delayBetweenPartsMs = 0;
+  const minCharacters = 1;
   let client;
   let child;
   let bridge;
@@ -1525,7 +1432,7 @@ export async function execute(request, services) {
     const combined = responses.map((response) => response.text).join("\n\n");
     let values;
     if (capabilityId === "search-web-in-browser") {
-      const maxSources = clampInteger(configuration.maxSources, 10, 1, 30);
+      const maxSources = 10;
       const sources = [
         ...new Set(responses.flatMap((response) => response.links ?? []).map((link) => link.href)),
       ].slice(0, maxSources);
@@ -1535,8 +1442,7 @@ export async function execute(request, services) {
     } else if (capabilityId === "validate-content-in-browser") {
       values = parseValidationValues(combined, request);
     } else {
-      const result =
-        configuration.cleanOutput === false ? combined.trim() : cleanGeneratedText(combined);
+      const result = cleanGeneratedText(combined);
       if (!result)
         throw codedError(
           "OUTPUT_VALIDATION_FAILED",

@@ -1,12 +1,16 @@
 # Gemini Browser Studio
 
-Versão **0.2.4** para ContentFlow Plugin API v1.
+Versão **1.0.0** para ContentFlow Plugin API v1.
+
+## Contrato simplificado
+
+O plugin usa a instrução resolvida do bloco como único prompt editável. As entradas conectadas são acrescentadas automaticamente como contexto. O bloco expõe apenas o perfil da conta, sempre abre uma conversa nova e realiza um único envio por execução. Configurações antigas permanecem aceitas apenas para não quebrar Métodos existentes e são ignoradas.
 
 Super plugin independente que usa a interface web do Gemini em um Google Chrome real com perfil persistente dedicado. Não usa a API oficial do Gemini, não pede chave e não exporta cookies, tokens ou storage.
 
 ## Capabilities
 
-- `generate-text-in-browser`: textos, títulos, thumb copy, prompts e roteiros iterativos.
+- `generate-text-in-browser`: textos, títulos, thumb copy e prompts em uma única chamada.
 - `search-web-in-browser`: pesquisa atual solicitada diretamente pelo prompt, sem depender de opção visual, com captura de links citados.
 - `choose-library-item-in-browser`: somente IDs reais da Biblioteca Estratégica.
 - `validate-content-in-browser`: aprovação, escolha única ou múltipla, inclusive para arquivos.
@@ -19,7 +23,7 @@ O plugin reconhece os modos atualmente expostos pelo Gemini: 3.5 Flash Lite, 3.6
 
 ## Roteiros iterativos
 
-Cada execução começa em uma nova conversa; todas as partes daquela execução permanecem na mesma conversa. `outline_sequence` usa cada item recebido como um envio independente, aceitando 8, 12 ou até 32 blocos. `result` une o roteiro e a saída opcional `parts` preserva cada resposta.
+Cada execução começa em uma nova conversa e faz um único envio. A saída opcional `parts`, quando conectada por um Método antigo, contém somente essa resposta.
 
 Também existem `single`, `legacy_script_3_parts` e `custom_parts`, separados por `---PARTE---`.
 
@@ -61,7 +65,7 @@ Imagem e música geradas são recuperadas pela própria sessão autenticada, gra
 ## Dados, efeitos e custo
 
 - Provedor: Google / Gemini web.
-- Dados enviados: prompts, contexto, continuações e anexos conectados.
+- Dados enviados: instrução do bloco, contexto e anexos conectados.
 - Efeitos: criação de conversas, pesquisas e geração de mídia quando configurada.
 - Custo/cota: dependem da conta e do plano Gemini.
 - Logs: etapas, contagens, tamanhos e hashes curtos; nunca conteúdo, cookies ou tokens.
@@ -77,12 +81,8 @@ node --test ./ecosystem/plugins/reference/gemini-browser-studio/test.mjs
 
 `diagnosticMockResponse` testa caminhos textuais sem navegador. Imagem e música exigem teste real para produzir artifacts.
 
-Em 20/08/2026, a interface real foi validada com dois prompts consecutivos na mesma conversa, pesquisa com fonte clicável, imagem de 1024×559 e música instrumental de 1:01. Os seletores e formatos do handler foram ajustados aos elementos reais observados.
+Em 20/08/2026, a interface real foi validada com pesquisa com fonte clicável, imagem de 1024×559 e música instrumental de 1:01. Os seletores e formatos do handler foram ajustados aos elementos reais observados.
 
 ## Revogação
 
 Saia da conta na janela Chrome dedicada. Para remover uma sessão, exclua manualmente apenas a pasta do alias correspondente dentro da pasta de trabalho conectada ao plugin. Outputs já promovidos permanecem no ContentFlow.
-
-## Perfis de fallback
-
-`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. Cada alias deve ser salvo separadamente. O núcleo troca de perfil somente em falhas técnicas transitórias; CAPTCHA, autenticação, limite, cota e bloqueio pausam a execução.

@@ -1,12 +1,16 @@
 # ChatGPT Browser Studio
 
-Versão **0.3.5** para ContentFlow Plugin API v1.
+Versão **1.0.0** para ContentFlow Plugin API v1.
+
+## Contrato simplificado
+
+O plugin usa a instrução resolvida do bloco como único prompt editável. As entradas conectadas são acrescentadas automaticamente como contexto. O bloco expõe apenas o perfil da conta, sempre abre uma conversa nova e realiza um único envio por execução. Configurações antigas de template, modo, partes, retry e fallback podem permanecer em Métodos salvos para compatibilidade, mas são ignoradas.
 
 Super plugin independente que usa a interface web do ChatGPT em um Google Chrome real com perfil persistente dedicado. Não usa a API oficial da OpenAI, não solicita chave de API e nunca exporta cookies, tokens ou storage da sessão.
 
 ## Capabilities
 
-- `generate-text-in-browser` (`CRIAR`): títulos, textos de thumbnail, roteiros, prompts de assets e qualquer texto. Suporta uma resposta, roteiro legado em três partes, outline dinâmica de até 32 itens e partes personalizadas.
+- `generate-text-in-browser` (`CRIAR`): títulos, textos de thumbnail, prompts de assets e qualquer texto em uma única chamada.
 - `search-web-in-browser` (`BUSCAR`): solicita a pesquisa diretamente no prompt e captura o texto e as URLs citadas, sem depender de um atalho visual **Search the web**.
 - `deep-research-in-browser` (`BUSCAR`): ativa **Deep research** quando o recurso existe na conta; se o plano não oferecer, retorna `PERMISSION_DENIED` sem improvisar uma pesquisa comum.
 - `choose-library-item-in-browser` (`ESCOLHER`): devolve somente o ID exato de um item real da coleção estratégica.
@@ -63,7 +67,7 @@ O Chrome abre em `https://chatgpt.com/`. A permissão `process` inicia esse Chro
 ## Dados, efeitos e custos
 
 - Provedor: OpenAI / ChatGPT web.
-- Dados transmitidos: prompts, contexto do bloco, continuações e anexos explicitamente conectados.
+- Dados transmitidos: instrução do bloco, contexto e anexos explicitamente conectados.
 - Efeitos: criação de conversas e mensagens; pesquisa externa quando escolhida; geração de imagem quando escolhida.
 - Custos e cotas: dependem do plano da conta ChatGPT.
 - Logs: somente etapas, contagens, tamanhos e hashes curtos; nunca prompts, respostas, cookies ou tokens.
@@ -81,12 +85,8 @@ node --test ./ecosystem/plugins/reference/chatgpt-browser-studio/test.mjs
 
 `diagnosticMockResponse` valida as capabilities textuais sem abrir o navegador. A geração de imagem exige teste real porque precisa produzir um artifact.
 
-Em 20/08/2026, a interface real foi validada com: dois prompts consecutivos na mesma conversa, recuperação correta do contexto, pesquisa web com fonte clicável e criação de imagem. A imagem de teste foi identificada pelo elemento visual real em `chatgpt.com`, com 1254×1254 pixels; o handler usa esse mesmo caminho autenticado para importar os bytes como artifact.
+Em 20/08/2026, a interface real foi validada com pesquisa web com fonte clicável e criação de imagem. A imagem de teste foi identificada pelo elemento visual real em `chatgpt.com`, com 1254×1254 pixels; o handler usa esse mesmo caminho autenticado para importar os bytes como artifact.
 
 ## Revogação
 
 Saia da conta na janela Chrome dedicada e, se desejar remover a sessão, exclua manualmente somente a pasta do alias dentro da pasta de trabalho conectada ao plugin. Remover o plugin não apaga outputs já promovidos pelo ContentFlow.
-
-## Perfis de fallback
-
-`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. Cada alias deve ser salvo separadamente. O núcleo troca de perfil somente em falhas técnicas transitórias; CAPTCHA, autenticação, limite, cota e bloqueio pausam a execução.
