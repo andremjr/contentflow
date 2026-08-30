@@ -5,9 +5,9 @@ export function collectionItemValuesForPlugin(
   item: ChannelLibraryItem,
 ) {
   return Object.fromEntries(
-    collection.fields.flatMap((field) => {
-      const value = item.values[field.id];
-      return value === undefined ? [] : [[field.label, value as RuntimeValue]];
-    }),
+    collection.fields.map((field) => [
+      field.label,
+      (item.values[field.id] ?? null) as RuntimeValue,
+    ]),
   );
 }

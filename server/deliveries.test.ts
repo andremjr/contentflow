@@ -7,6 +7,7 @@ import {
 } from "../src/lib/deliveries";
 import type { ActionBlock, ProcessExecution, Project } from "../src/lib/domain";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
+import { composePluginPortValue } from "./plugin-input-values";
 
 function executionFor(
   processType: ProcessExecution["processType"],
@@ -173,7 +174,7 @@ test("invalida a revisão anterior e cria novos IDs em outra tentativa", () => {
   assert.notEqual(execution.deliveries?.find((item) => item.status === "completed")?.id, firstId);
 });
 
-test("resolve campos diferentes do mesmo item escolhido sem repetir o primeiro", () => {
+test("permite resolver campos específicos do mesmo item escolhido", () => {
   const chooseBlock: ActionBlock = {
     id: "choose-angle",
     type: "ESCOLHER",
@@ -195,6 +196,7 @@ test("resolve campos diferentes do mesmo item escolhido sem repetir o primeiro",
         type: "text",
         source: "previous_block",
         blockId: chooseBlock.id,
+        sourceKey: "name",
       },
       {
         id: "angle-description",
@@ -202,6 +204,7 @@ test("resolve campos diferentes do mesmo item escolhido sem repetir o primeiro",
         type: "textarea",
         source: "previous_block",
         blockId: chooseBlock.id,
+        sourceKey: "description",
       },
     ],
     outputs: [],
@@ -249,4 +252,157 @@ test("resolve campos diferentes do mesmo item escolhido sem repetir o primeiro",
     resolved.map((item) => item.resolvedSourceKey),
     ["name", "description"],
   );
+});
+
+test("envia completos todos os itens escolhidos ligados a um bloco Criar", () => {
+  const chooseCategory: ActionBlock = {
+    id: "choose-category",
+    type: "ESCOLHER",
+    operator: "IA",
+    collectionId: "editorial-lines",
+    inputs: [],
+    outputs: [],
+    parameters: [],
+    order: 0,
+  };
+  const chooseAngle: ActionBlock = {
+    id: "choose-angle",
+    type: "ESCOLHER",
+    operator: "IA",
+    collectionId: "angles",
+    inputs: [],
+    outputs: [],
+    parameters: [],
+    order: 1,
+  };
+  const createTheme: ActionBlock = {
+    id: "create-theme",
+    type: "CRIAR",
+    operator: "IA",
+    inputs: [
+      {
+        id: "category-input",
+        label: "Nova entrada",
+        type: "text",
+        source: "previous_block",
+        blockId: chooseCategory.id,
+      },
+      {
+        id: "angle-input",
+        label: "Nova entrada",
+        type: "text",
+        source: "previous_block",
+        blockId: chooseAngle.id,
+      },
+    ],
+    outputs: [],
+    parameters: [],
+    order: 2,
+  };
+  const execution = executionFor("theme", chooseCategory);
+  execution.methodSnapshot.blocks.push(chooseAngle, createTheme);
+  execution.blocks[0].values = { selectedItemId: "line-1" };
+  execution.blocks.push(
+    {
+      blockId: chooseAngle.id,
+      status: "completed",
+      values: { selectedItemId: "angle-1" },
+      attempt: 1,
+    },
+    { blockId: createTheme.id, status: "blocked_executor", values: {} },
+  );
+
+  const resolved = resolveBlockInputs({
+    block: createTheme,
+    execution,
+    project,
+    projectExecutions: [execution],
+    collections: [
+      {
+        id: "editorial-lines",
+        channelId: "channel-1",
+        name: "Linha Editorial",
+        fields: [
+          { id: "category", label: "Categoria", type: "text", required: true },
+          { id: "description", label: "Descrição", type: "textarea", required: true },
+          { id: "period", label: "Período", type: "text", required: false },
+        ],
+        createdAt: "2026-08-30T00:00:00.000Z",
+      },
+      {
+        id: "angles",
+        channelId: "channel-1",
+        name: "Perspectiva do canal",
+        fields: [
+          { id: "angle", label: "Ângulo", type: "text", required: true },
+          { id: "approach", label: "Abordagem", type: "textarea", required: true },
+        ],
+        createdAt: "2026-08-30T00:00:00.000Z",
+      },
+    ],
+    libraryItems: [
+      {
+        id: "line-1",
+        channelId: "channel-1",
+        collectionId: "editorial-lines",
+        values: {
+          category: "Grandes conflitos",
+          description: "Guerras e disputas decisivas.",
+          period: "Antiguidade ao século XX",
+        },
+        createdAt: "2026-08-30T00:00:00.000Z",
+      },
+      {
+        id: "angle-1",
+        channelId: "channel-1",
+        collectionId: "angles",
+        values: {
+          angle: "Consequências humanas",
+          approach: "Mostrar como pessoas comuns foram afetadas.",
+        },
+        createdAt: "2026-08-30T00:00:00.000Z",
+      },
+      {
+        id: "line-not-selected",
+        channelId: "channel-1",
+        collectionId: "editorial-lines",
+        values: {
+          category: "ITEM NÃO ESCOLHIDO",
+          description: "Este registro não pode chegar ao prompt.",
+          period: "Fora do contexto",
+        },
+        createdAt: "2026-08-30T00:00:00.000Z",
+      },
+      {
+        id: "angle-not-selected",
+        channelId: "channel-1",
+        collectionId: "angles",
+        values: {
+          angle: "ÂNGULO NÃO ESCOLHIDO",
+          approach: "Este registro também não pode chegar ao prompt.",
+        },
+        createdAt: "2026-08-30T00:00:00.000Z",
+      },
+    ],
+  });
+
+  assert.equal(resolved.length, 2);
+  assert.match(String(resolved[0].value), /ITEM ESCOLHIDO — Linha Editorial/);
+  assert.match(String(resolved[0].value), /"Categoria": "Grandes conflitos"/);
+  assert.match(String(resolved[0].value), /"Descrição": "Guerras e disputas decisivas\."/);
+  assert.match(String(resolved[0].value), /"Período": "Antiguidade ao século XX"/);
+  assert.match(String(resolved[1].value), /ITEM ESCOLHIDO — Perspectiva do canal/);
+  assert.match(String(resolved[1].value), /"Ângulo": "Consequências humanas"/);
+  assert.match(
+    String(resolved[1].value),
+    /"Abordagem": "Mostrar como pessoas comuns foram afetadas\."/,
+  );
+
+  const pluginContext = composePluginPortValue(
+    resolved.map((item) => ({ label: item.input.label, value: item.value ?? null })),
+  );
+  assert.match(String(pluginContext), /ITEM ESCOLHIDO — Linha Editorial/);
+  assert.match(String(pluginContext), /ITEM ESCOLHIDO — Perspectiva do canal/);
+  assert.doesNotMatch(String(pluginContext), /ITEM NÃO ESCOLHIDO/);
+  assert.doesNotMatch(String(pluginContext), /ÂNGULO NÃO ESCOLHIDO/);
 });

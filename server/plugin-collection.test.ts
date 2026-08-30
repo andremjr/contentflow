@@ -27,3 +27,28 @@ test("envia todos os campos do item estratégico ao plugin com nomes compreensí
     Descrição: "Coloca o espectador dentro do evento.",
   });
 });
+
+test("preserva todos os campos declarados mesmo quando um valor está vazio", () => {
+  const collection: StrategicCollection = {
+    id: "angles",
+    channelId: "channel-1",
+    name: "Ângulos",
+    fields: [
+      { id: "name", label: "Ângulo", type: "text", required: true },
+      { id: "notes", label: "Observações", type: "textarea", required: false },
+    ],
+    createdAt: "2026-08-30T00:00:00.000Z",
+  };
+  const item: ChannelLibraryItem = {
+    id: "angle-1",
+    channelId: "channel-1",
+    collectionId: "angles",
+    values: { name: "Imersivo" },
+    createdAt: "2026-08-30T00:00:00.000Z",
+  };
+
+  assert.deepEqual(collectionItemValuesForPlugin(collection, item), {
+    Ângulo: "Imersivo",
+    Observações: null,
+  });
+});

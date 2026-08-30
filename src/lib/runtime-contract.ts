@@ -14,6 +14,7 @@ import {
 import { createProcessOutputFields, isEmptyRuntimeValue } from "@/lib/human-workflow";
 import { normalizeExecutionDeliveries } from "@/lib/deliveries";
 import { resolveChannelHistory } from "@/lib/channel-history";
+import { collectionItemValuesForPlugin } from "@/lib/plugin-collection";
 
 type RuntimeCandidate = {
   id: string;
@@ -94,7 +95,8 @@ export function resolveBlockInputs({
         !usedCandidateIds.has(candidate.id) &&
         areRuntimeTypesCompatible(candidate.type, input.type),
     );
-    const selected = [...available].sort(
+    const completeSelectedItems = available.filter((candidate) => candidate.key === "selectedItem");
+    const selected = [...(completeSelectedItems.length ? completeSelectedItems : available)].sort(
       (left, right) => labelScore(input.label, right.label) - labelScore(input.label, left.label),
     )[0];
     if (!selected) return { input, resolved: false };
@@ -146,6 +148,18 @@ function collectCandidates({
           ? libraryItems.find((candidate) => candidate.id === selectedItemId)
           : undefined;
       const collection = collections.find((candidate) => candidate.id === item?.collectionId);
+      if (item && collection) {
+        const completeItem = collectionItemValuesForPlugin(collection, item);
+        candidates.push({
+          id: `${completed.blockId}:selected-item`,
+          label: `Item escolhido — ${collection.name}`,
+          key: "selectedItem",
+          type: "textarea",
+          value: `ITEM ESCOLHIDO — ${collection.name}:\n${JSON.stringify(completeItem, null, 2)}`,
+          sourceLabel: definition.name ?? "Escolher",
+          sourceBlockId: completed.blockId,
+        });
+      }
       for (const field of collection?.fields ?? []) {
         const value = item?.values[field.id];
         if (value === undefined || isEmptyRuntimeValue(value)) continue;
@@ -290,14 +304,15 @@ function resolveExplicitInput(
   if (input.source === "previous_block" && input.blockId) {
     const candidate = candidates.find(
       (item) =>
-        !usedCandidateIds.has(item.id) &&
+        (!usedCandidateIds.has(item.id) || (!input.sourceKey && item.key === "selectedItem")) &&
         item.sourceBlockId === input.blockId &&
         (!input.sourceKey || item.key === input.sourceKey) &&
         areRuntimeTypesCompatible(item.type, input.type),
     );
     return candidate
       ? {
-          candidateId: candidate.id,
+          candidateId:
+            !input.sourceKey && candidate.key === "selectedItem" ? undefined : candidate.id,
           result: {
             resolved: true,
             value: candidate.value,
