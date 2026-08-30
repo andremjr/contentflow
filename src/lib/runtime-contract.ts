@@ -78,7 +78,7 @@ export function resolveBlockInputs({
     if (input.source === "channel_history" && block.type !== "ESCOLHER" && block.type !== "CRIAR") {
       return { input, resolved: false };
     }
-    const explicit = resolveExplicitInput(input, project, candidates, {
+    const explicit = resolveExplicitInput(input, project, candidates, usedCandidateIds, {
       execution,
       channelExecutions,
       channelProjects,
@@ -247,6 +247,7 @@ function resolveExplicitInput(
   input: BlockInputBinding,
   project: Project,
   candidates: RuntimeCandidate[],
+  usedCandidateIds: ReadonlySet<string>,
   historyContext: {
     execution: ProcessExecution;
     channelExecutions: ProcessExecution[];
@@ -287,6 +288,7 @@ function resolveExplicitInput(
   if (input.source === "previous_block" && input.blockId) {
     const candidate = candidates.find(
       (item) =>
+        !usedCandidateIds.has(item.id) &&
         item.sourceBlockId === input.blockId &&
         (!input.sourceKey || item.key === input.sourceKey) &&
         areRuntimeTypesCompatible(item.type, input.type),

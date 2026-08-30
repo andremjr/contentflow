@@ -149,6 +149,37 @@ test("gera uma resposta simples", () => {
   assert.match(parts[0], /FORMATO OBRIGATÓRIO/);
 });
 
+test("sempre inclui a instrução resolvida mesmo quando o template personalizado omite o token", () => {
+  const [prompt] = __test.buildParts(
+    request({
+      resolvedInstruction: "Use somente acontecimentos documentados.",
+      configuration: { promptTemplate: "Crie dez temas com base no contexto: {{CONTENT}}" },
+    }),
+  );
+  assert.match(prompt, /^INSTRUÇÕES DO BLOCO:\nUse somente acontecimentos documentados\./);
+});
+
+test("abre o menu de ferramentas antes de ativar a busca quando o atalho não está visível", async () => {
+  const calls = [];
+  const bridge = {
+    dispatch: async (_action, payload, operationKey) => {
+      calls.push({ payload, operationKey });
+      if (operationKey.endsWith(":direct")) {
+        const error = new Error("not found");
+        error.code = "OUTPUT_VALIDATION_FAILED";
+        throw error;
+      }
+      return { ok: true };
+    },
+  };
+
+  assert.equal(await __test.clickMode(bridge, "search"), true);
+  assert.deepEqual(
+    calls.map((call) => call.operationKey),
+    ["mode:search:direct", "mode:search:open-tools", "mode:search:from-tools"],
+  );
+});
+
 test("preserva o roteiro legado em três envios", () => {
   const parts = __test.buildParts(
     request({ configuration: { generationMode: "legacy_script_3_parts" } }),
@@ -217,7 +248,7 @@ test("monta pesquisa web e deep research", () => {
         inputs: { query: "tendências", context: "YouTube" },
       }),
     ),
-    "WEB tendências | YouTube",
+    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nWEB tendências | YouTube",
   );
   assert.equal(
     __test.buildSearchPrompt(
@@ -227,7 +258,7 @@ test("monta pesquisa web e deep research", () => {
       }),
       true,
     ),
-    "DEEP mercado",
+    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nDEEP mercado",
   );
 });
 

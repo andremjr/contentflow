@@ -40,6 +40,17 @@ import {
   type ExecutionOrchestratorMode,
 } from "@/lib/execution-orchestrator";
 
+export type YouTubeChannelProfile = Pick<
+  Channel,
+  | "youtubeChannelId"
+  | "name"
+  | "handle"
+  | "subscribers"
+  | "avatarUrl"
+  | "bannerUrl"
+  | "lastSyncedAt"
+>;
+
 const db = {
   channels: [] as Channel[],
   projects: [] as Project[],
@@ -431,6 +442,26 @@ export function updateChannel(channel: Channel) {
   db.channels[index] = updated;
   emit();
   void request(`/api/channels/${updated.id}`, "PUT", updated);
+  return updated;
+}
+
+export async function resolveYouTubeChannel(handle: string): Promise<YouTubeChannelProfile> {
+  const response = await fetch(`/api/youtube/channel?handle=${encodeURIComponent(handle)}`);
+  if (!response.ok) throw new Error(await readApiError(response));
+  return response.json() as Promise<YouTubeChannelProfile>;
+}
+
+export async function syncChannelFromYouTube(channelId: string) {
+  const response = await fetch(`/api/channels/${encodeURIComponent(channelId)}/sync-youtube`, {
+    method: "POST",
+  });
+  if (!response.ok) throw new Error(await readApiError(response));
+  const updated = normalizeChannel((await response.json()) as Channel);
+  const index = db.channels.findIndex((channel) => channel.id === channelId);
+  if (index >= 0) {
+    db.channels[index] = updated;
+    emit();
+  }
   return updated;
 }
 

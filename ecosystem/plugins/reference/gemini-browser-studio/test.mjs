@@ -103,6 +103,15 @@ test("gera texto simples", () => {
   assert.match(p[0], /Tema principal/);
   assert.match(p[0], /FORMATO OBRIGATÓRIO/);
 });
+test("inclui a instrução resolvida quando o template personalizado não possui o token", () => {
+  const [prompt] = __test.buildParts(
+    req({
+      resolvedInstruction: "Evite repetir temas.",
+      configuration: { promptTemplate: "Gere opções." },
+    }),
+  );
+  assert.match(prompt, /^INSTRUÇÕES DO BLOCO:\nEvite repetir temas\./);
+});
 test("mantém roteiro legado em três partes", () => {
   const p = __test.buildParts(req({ configuration: { generationMode: "legacy_script_3_parts" } }));
   assert.equal(p.length, 3);
@@ -148,7 +157,7 @@ test("monta busca", () =>
         inputs: { query: "tema", context: "hoje" },
       }),
     ),
-    "BUSCA tema hoje",
+    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nBUSCA tema hoje",
   ));
 test("respeita contrato de busca", () =>
   assert.deepEqual(
@@ -196,7 +205,7 @@ test("monta visão, imagem e música", () => {
         inputs: { context: "thumb" },
       }),
     ),
-    "ANALISE thumb",
+    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nANALISE thumb",
   );
   assert.equal(
     __test.buildMedia(
@@ -206,7 +215,7 @@ test("monta visão, imagem e música", () => {
       }),
       "image",
     ),
-    "IMG azul",
+    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nIMG azul",
   );
   assert.equal(
     __test.buildMedia(
@@ -216,7 +225,7 @@ test("monta visão, imagem e música", () => {
       }),
       "music",
     ),
-    "MUS calma",
+    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nMUS calma",
   );
 });
 test("encontra StoredFiles aninhados", () => {

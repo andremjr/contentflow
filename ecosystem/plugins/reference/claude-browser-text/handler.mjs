@@ -13,6 +13,7 @@ const MAX_PROMPT_CHARACTERS = 500_000;
 const MAX_PARTS = 32;
 const MAX_ATTACHMENTS = 20;
 const MAX_ATTACHMENT_BYTES = 500 * 1024 * 1024;
+const PROFILE_SETUP_WAIT_MS = Number.POSITIVE_INFINITY;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
 const DOCUMENT_EXTENSIONS = new Set([
   ".pdf",
@@ -109,6 +110,23 @@ function expandTemplate(template, request) {
   return output.trim();
 }
 
+function ensureBlockInstruction(prompt, template, request) {
+  const instruction = String(
+    request?.resolvedInstruction ||
+      request?.context?.block?.instructions ||
+      request?.context?.block?.name ||
+      "",
+  ).trim();
+  const expanded = String(prompt ?? "").trim();
+  if (!instruction || String(template ?? "").includes("{{BLOCK_INSTRUCTIONS}}")) return expanded;
+  if (expanded.includes(instruction)) return expanded;
+  return `INSTRUÇÕES DO BLOCO:\n${instruction}\n\n${expanded}`.trim();
+}
+
+function expandPrimaryTemplate(template, request) {
+  return ensureBlockInstruction(expandTemplate(template, request), template, request);
+}
+
 function flattenRecords(value, output = []) {
   if (Array.isArray(value)) {
     for (const item of value) flattenRecords(item, output);
@@ -168,7 +186,7 @@ function plainTextInstruction(enabled) {
 
 function buildParts(request) {
   const configuration = request?.configuration ?? {};
-  const base = expandTemplate(configuration.promptTemplate, request);
+  const base = expandPrimaryTemplate(configuration.promptTemplate, request);
   const style = String(configuration.languageInstruction ?? "").trim();
   const format = plainTextInstruction(configuration.plainTextOnly !== false);
   const suffix = [format, style].filter(Boolean).join("\n\n");
@@ -232,7 +250,7 @@ function expandCapabilityTemplate(template, replacements, request) {
   for (const [token, value] of Object.entries(replacements)) {
     output = replaceAllLiteral(output, token, typeof value === "string" ? value : serialize(value));
   }
-  return expandTemplate(output, request).trim();
+  return ensureBlockInstruction(expandTemplate(output, request), template, request);
 }
 
 function buildSearchPrompt(request) {
@@ -1322,12 +1340,7 @@ async function configureProfile(request, services) {
     client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
     const { sessionId } = await attachClaudePage(client, services.signal, true);
     await openNewConversation(client, sessionId, services.signal);
-    await waitForPrompt(
-      client,
-      sessionId,
-      clampInteger(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
-      services.signal,
-    );
+    await waitForPrompt(client, sessionId, PROFILE_SETUP_WAIT_MS, services.signal);
     bridge = await attachContentFlowBridge({
       client,
       pageSessionId: sessionId,
@@ -1336,6 +1349,7 @@ async function configureProfile(request, services) {
       request,
       signal: services.signal,
       allowedOrigins: ["https://claude.ai"],
+      waitMs: PROFILE_SETUP_WAIT_MS,
     });
     await markProfilePrepared(profilePath, profileName);
     return {

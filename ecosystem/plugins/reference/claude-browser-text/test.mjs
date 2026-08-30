@@ -126,6 +126,16 @@ test("prioriza a instrução resolvida pelo núcleo", () => {
   );
 });
 
+test("inclui a instrução resolvida quando o template personalizado não possui o token", () => {
+  const [prompt] = __test.buildParts(
+    request({
+      resolvedInstruction: "Não repita o tema anterior.",
+      configuration: { promptTemplate: "Gere um tema." },
+    }),
+  );
+  assert.match(prompt, /^INSTRUÇÕES DO BLOCO:\nNão repita o tema anterior\./);
+});
+
 test("isola contas por alias sem aceitar traversal", () => {
   assert.equal(__test.normalizeAccountProfile("canal-a"), "canal-a");
   assert.throws(() => __test.normalizeAccountProfile("../perfil"), /Perfil da conta/);
@@ -246,7 +256,10 @@ test("monta pesquisa web com consulta e contexto", () => {
       inputs: { query: "tendências atuais", context: "YouTube" },
     }),
   );
-  assert.equal(prompt, "PESQUISE tendências atuais | YouTube");
+  assert.equal(
+    prompt,
+    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nPESQUISE tendências atuais | YouTube",
+  );
 });
 
 test("Buscar respeita as chaves e tipos do outputContract do bloco", () => {

@@ -172,3 +172,77 @@ test("invalida a revisão anterior e cria novos IDs em outra tentativa", () => {
   assert.equal(execution.deliveries?.find((item) => item.id === firstId)?.status, "invalidated");
   assert.notEqual(execution.deliveries?.find((item) => item.status === "completed")?.id, firstId);
 });
+
+test("resolve campos diferentes do mesmo item escolhido sem repetir o primeiro", () => {
+  const chooseBlock: ActionBlock = {
+    id: "choose-angle",
+    type: "ESCOLHER",
+    operator: "IA",
+    collectionId: "angles",
+    inputs: [],
+    outputs: [],
+    parameters: [],
+    order: 0,
+  };
+  const createBlock: ActionBlock = {
+    id: "create-theme",
+    type: "CRIAR",
+    operator: "IA",
+    inputs: [
+      {
+        id: "angle-name",
+        label: "Ângulo",
+        type: "text",
+        source: "previous_block",
+        blockId: chooseBlock.id,
+      },
+      {
+        id: "angle-description",
+        label: "Descrição",
+        type: "textarea",
+        source: "previous_block",
+        blockId: chooseBlock.id,
+      },
+    ],
+    outputs: [],
+    parameters: [],
+    order: 1,
+  };
+  const execution = executionFor("theme", chooseBlock);
+  execution.methodSnapshot.blocks.push(createBlock);
+  execution.blocks[0].values = { selectedItemId: "angle-1" };
+  execution.blocks.push({ blockId: createBlock.id, status: "blocked_executor", values: {} });
+
+  const resolved = resolveBlockInputs({
+    block: createBlock,
+    execution,
+    project,
+    projectExecutions: [execution],
+    collections: [
+      {
+        id: "angles",
+        channelId: "channel-1",
+        name: "Ângulos",
+        fields: [
+          { id: "name", label: "Ângulo", type: "text", required: true },
+          { id: "description", label: "Descrição", type: "textarea", required: true },
+        ],
+        createdAt: "2026-08-30T00:00:00.000Z",
+      },
+    ],
+    libraryItems: [
+      {
+        id: "angle-1",
+        channelId: "channel-1",
+        collectionId: "angles",
+        values: { name: "Imersivo", description: "Coloca o espectador dentro do evento." },
+        createdAt: "2026-08-30T00:00:00.000Z",
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    resolved.map((item) => item.value),
+    ["Imersivo", "Coloca o espectador dentro do evento."],
+  );
+});

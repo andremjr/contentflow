@@ -12,7 +12,8 @@ const URL_NEW = "https://gemini.google.com/app",
   MAX_PARTS = 32,
   MAX_PROMPT = 500000,
   MAX_FILES = 20,
-  MAX_BYTES = 512 * 1024 * 1024;
+  MAX_BYTES = 512 * 1024 * 1024,
+  PROFILE_SETUP_WAIT_MS = Number.POSITIVE_INFINITY;
 const IMAGES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]),
   DOCS = new Set([
     ".pdf",
@@ -99,11 +100,26 @@ function expand(template, request) {
     out = replace(out, `{{INPUT:${k}}}`, serialize(v));
   return out.trim();
 }
+function ensureBlockInstruction(prompt, template, request) {
+  const instruction = String(
+    request?.resolvedInstruction ||
+      request?.context?.block?.instructions ||
+      request?.context?.block?.name ||
+      "",
+  ).trim();
+  const expanded = String(prompt ?? "").trim();
+  if (!instruction || String(template ?? "").includes("{{BLOCK_INSTRUCTIONS}}")) return expanded;
+  if (expanded.includes(instruction)) return expanded;
+  return `INSTRUÇÕES DO BLOCO:\n${instruction}\n\n${expanded}`.trim();
+}
+function expandPrimary(template, request) {
+  return ensureBlockInstruction(expand(template, request), template, request);
+}
 function expandCap(template, repls, request) {
   let out = String(template ?? "");
   for (const [k, v] of Object.entries(repls))
     out = replace(out, k, typeof v === "string" ? v : serialize(v));
-  return expand(out, request);
+  return ensureBlockInstruction(expand(out, request), template, request);
 }
 function flatten(v, o = []) {
   if (Array.isArray(v)) for (const x of v) flatten(x, o);
@@ -144,7 +160,7 @@ function outlinePrompt(t, r, b, i, n, base) {
 }
 function buildParts(r) {
   const c = r?.configuration ?? {},
-    base = expand(c.promptTemplate, r),
+    base = expandPrimary(c.promptTemplate, r),
     mode = c.generationMode ?? "single",
     suffix =
       c.plainTextOnly === false
@@ -970,12 +986,7 @@ async function configureProfile(request, services) {
     client = await new CDP(launched.version.webSocketDebuggerUrl).connect(services.signal);
     const { sessionId } = await attach(client, services.signal, true);
     await newChat(client, sessionId, services.signal);
-    await waitPrompt(
-      client,
-      sessionId,
-      clamp(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
-      services.signal,
-    );
+    await waitPrompt(client, sessionId, PROFILE_SETUP_WAIT_MS, services.signal);
     bridge = await attachContentFlowBridge({
       client,
       pageSessionId: sessionId,
@@ -984,6 +995,7 @@ async function configureProfile(request, services) {
       request,
       signal: services.signal,
       allowedOrigins: ["https://gemini.google.com"],
+      waitMs: PROFILE_SETUP_WAIT_MS,
     });
     await markProfilePrepared(path, name);
     return {

@@ -149,7 +149,7 @@ export function getRegisteredPlugin(pluginId: string) {
 export async function executeRegisteredPlugin(
   plugin: RegisteredPlugin,
   request: PluginExecutionRequest,
-  timeoutMs: number,
+  timeoutMs: number | undefined,
   secrets: Record<string, string> = {},
   options: { workspaceDirectory?: string; existingArtifacts?: StoredFile[] } = {},
 ): Promise<PluginExecutionResponse> {
@@ -219,19 +219,22 @@ export async function executeRegisteredPlugin(
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const finish = (callback: () => void) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       callback();
     };
-    const timer = setTimeout(
-      () => {
-        child.kill();
-        finish(() => reject(new Error("O plugin excedeu o tempo máximo de execução.")));
-      },
-      Math.max(1_000, Math.min(timeoutMs, maxPluginExecutionMs)),
-    );
+    if (timeoutMs !== undefined) {
+      timer = setTimeout(
+        () => {
+          child.kill();
+          finish(() => reject(new Error("O plugin excedeu o tempo máximo de execução.")));
+        },
+        Math.max(1_000, Math.min(timeoutMs, maxPluginExecutionMs)),
+      );
+    }
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf8");

@@ -190,7 +190,7 @@ export function NewChannelDialog({
                 autoCorrect="off"
               />
               <p className="text-[11px] text-muted-foreground">
-                Serve apenas como referência local. Nenhuma consulta externa será feita.
+                Serve como referência local do canal.
               </p>
             </div>
 

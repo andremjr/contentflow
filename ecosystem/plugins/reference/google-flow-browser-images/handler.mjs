@@ -11,6 +11,7 @@ const GENERATION_SUFFIX = "/flowMedia:batchGenerateImages";
 const MEDIA_HOST = "flow-content.google";
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const DEFAULT_PORT = 9333;
+const PROFILE_SETUP_WAIT_MS = Number.POSITIVE_INFINITY;
 const EXTENSION_BRIDGE_ID = "com.contentflow.browser-bridge";
 const EXTENSION_PROTOCOL_VERSION = 2;
 const IMAGE_MODELS = Object.freeze({
@@ -1213,11 +1214,17 @@ async function ensureFlowProjectReady(
   );
 }
 
-async function waitForFlowProfile(client, sessionId, settings, signal) {
+async function waitForFlowProfile(client, sessionId, settings, signal, timeoutMs) {
   const seconds = Number.isInteger(settings?.interactiveWaitSeconds)
     ? settings.interactiveWaitSeconds
     : 600;
-  const deadline = Date.now() + Math.min(900, Math.max(30, seconds)) * 1000;
+  const deadline =
+    timeoutMs === Number.POSITIVE_INFINITY
+      ? Number.POSITIVE_INFINITY
+      : Date.now() +
+        (Number.isFinite(timeoutMs)
+          ? Math.max(30_000, Number(timeoutMs))
+          : Math.min(900, Math.max(30, seconds)) * 1000);
   let state;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
@@ -2149,15 +2156,7 @@ async function configureProfile(request, services) {
     child = launched.child;
     client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
     const page = await attachFlowPage(client, FLOW_LANDING_URL, true, services.signal, true);
-    const extensionWaitMs = Math.max(
-      30000,
-      Math.min(
-        895000,
-        (Number.isInteger(settings.interactiveWaitSeconds)
-          ? settings.interactiveWaitSeconds
-          : 600) * 1000,
-      ),
-    );
+    const extensionWaitMs = PROFILE_SETUP_WAIT_MS;
     [extensionBridge] = await Promise.all([
       attachExtensionBridge(client, page.sessionId, {
         signal: services.signal,
@@ -2165,7 +2164,7 @@ async function configureProfile(request, services) {
         profileId: runtime.accountProfile,
         waitMs: extensionWaitMs,
       }),
-      waitForFlowProfile(client, page.sessionId, settings, services.signal),
+      waitForFlowProfile(client, page.sessionId, settings, services.signal, PROFILE_SETUP_WAIT_MS),
     ]);
     await markProfilePrepared(
       runtime.profilePath,

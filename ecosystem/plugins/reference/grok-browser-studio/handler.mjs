@@ -16,6 +16,7 @@ const MAX_ATTACHMENTS = 20;
 const MAX_ATTACHMENT_BYTES = 512 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".m4v"]);
+const PROFILE_SETUP_WAIT_MS = Number.POSITIVE_INFINITY;
 const DOCUMENT_EXTENSIONS = new Set([
   ".pdf",
   ".docx",
@@ -110,11 +111,28 @@ function expandTemplate(template, request) {
   return output.trim();
 }
 
+function ensureBlockInstruction(prompt, template, request) {
+  const instruction = String(
+    request?.resolvedInstruction ||
+      request?.context?.block?.instructions ||
+      request?.context?.block?.name ||
+      "",
+  ).trim();
+  const expanded = String(prompt ?? "").trim();
+  if (!instruction || String(template ?? "").includes("{{BLOCK_INSTRUCTIONS}}")) return expanded;
+  if (expanded.includes(instruction)) return expanded;
+  return `INSTRUÇÕES DO BLOCO:\n${instruction}\n\n${expanded}`.trim();
+}
+
+function expandPrimaryTemplate(template, request) {
+  return ensureBlockInstruction(expandTemplate(template, request), template, request);
+}
+
 function expandCapabilityTemplate(template, replacements, request) {
   let output = String(template ?? "");
   for (const [token, value] of Object.entries(replacements))
     output = replaceAllLiteral(output, token, typeof value === "string" ? value : serialize(value));
-  return expandTemplate(output, request).trim();
+  return ensureBlockInstruction(expandTemplate(output, request), template, request);
 }
 
 function flattenRecords(value, output = []) {
@@ -168,7 +186,7 @@ function expandOutlinePrompt(template, request, block, index, total, base) {
 
 function buildParts(request) {
   const configuration = request?.configuration ?? {};
-  const base = expandTemplate(configuration.promptTemplate, request);
+  const base = expandPrimaryTemplate(configuration.promptTemplate, request);
   const format =
     configuration.plainTextOnly === false
       ? ""
@@ -1345,12 +1363,7 @@ async function configureProfile(request, services) {
     client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
     const { sessionId } = await attachChatGptPage(client, services.signal, true);
     await openNewConversation(client, sessionId, services.signal);
-    await waitForPrompt(
-      client,
-      sessionId,
-      clampInteger(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
-      services.signal,
-    );
+    await waitForPrompt(client, sessionId, PROFILE_SETUP_WAIT_MS, services.signal);
     bridge = await attachContentFlowBridge({
       client,
       pageSessionId: sessionId,
@@ -1359,6 +1372,7 @@ async function configureProfile(request, services) {
       request,
       signal: services.signal,
       allowedOrigins: ["https://grok.com"],
+      waitMs: PROFILE_SETUP_WAIT_MS,
     });
     await markProfilePrepared(profilePath, profileName);
     return {

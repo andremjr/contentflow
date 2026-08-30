@@ -113,6 +113,16 @@ test("gera uma resposta simples", () => {
   assert.match(parts[0], /FORMATO OBRIGATÓRIO/);
 });
 
+test("inclui a instrução resolvida quando o template personalizado não possui o token", () => {
+  const [prompt] = __test.buildParts(
+    request({
+      resolvedInstruction: "Use tom documental.",
+      configuration: { promptTemplate: "Gere opções." },
+    }),
+  );
+  assert.match(prompt, /^INSTRUÇÕES DO BLOCO:\nUse tom documental\./);
+});
+
 test("preserva o roteiro legado em três envios", () => {
   const parts = __test.buildParts(
     request({ configuration: { generationMode: "legacy_script_3_parts" } }),
@@ -170,7 +180,7 @@ test("monta pesquisa web e deep research", () => {
         inputs: { query: "tendências", context: "YouTube" },
       }),
     ),
-    "WEB tendências | YouTube",
+    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nWEB tendências | YouTube",
   );
   assert.equal(
     __test.buildSearchPrompt(
@@ -180,7 +190,7 @@ test("monta pesquisa web e deep research", () => {
       }),
       true,
     ),
-    "DEEP mercado",
+    "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nDEEP mercado",
   );
 });
 

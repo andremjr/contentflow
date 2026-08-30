@@ -63,6 +63,8 @@ import {
 } from "./plugin-runner";
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
 import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
+import { instructionWithRetryFeedback } from "../src/lib/retry-feedback";
+import { collectionItemValuesForPlugin } from "../src/lib/plugin-collection";
 import {
   createPersistentPluginJob,
   isPluginJobTimedOut,
@@ -94,6 +96,7 @@ import { resolvePluginConnectionSecrets } from "./plugin-connection-runtime";
 import { normalizePluginConversationId, resolvePluginConversation } from "./plugin-conversation";
 import { discoverPluginDirectories } from "./plugin-package";
 import { migrateSiblingDataDirectory } from "./data-directory-migration";
+import { fetchYouTubeChannel } from "./youtube";
 
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
 const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
@@ -2037,8 +2040,7 @@ app.post("/api/plugins/:pluginId/profile", async (request, response) => {
         previousBlockOutputs: [],
       },
     };
-    const timeoutMs =
-      action === "prepare" ? (plugin.manifest.profileSetup.prepareTimeoutMs ?? 600_000) : 30_000;
+    const timeoutMs = action === "prepare" ? undefined : 30_000;
     const result = await executeRegisteredPlugin(plugin, pluginRequest, timeoutMs, pluginSecrets, {
       workspaceDirectory: executionWorkspaceForPlugin(plugin),
     });
@@ -3122,7 +3124,10 @@ app.post("/api/execute-block", async (request, response) => {
     outputContract,
     validation: block.validation,
     retryFeedback: blockExecution.retryFeedback,
-    resolvedInstruction: resolvedInstruction.instruction,
+    resolvedInstruction: instructionWithRetryFeedback(
+      resolvedInstruction.instruction,
+      blockExecution.retryFeedback,
+    ),
     unresolvedInstructionVariables: resolvedInstruction.unresolved,
     conversation,
     context: {
@@ -3146,7 +3151,7 @@ app.post("/api/execute-block", async (request, response) => {
             collectionId: selectedCollection.id,
             items: selectedCollectionItems.map((item) => ({
               id: item.id,
-              values: item.values,
+              values: collectionItemValuesForPlugin(selectedCollection, item),
             })),
           }
         : undefined,
@@ -3220,6 +3225,17 @@ app.post("/api/execute-block", async (request, response) => {
     project: currentProject,
     values: job.partialValues,
   });
+});
+
+app.get("/api/youtube/channel", async (request, response) => {
+  try {
+    const handle = typeof request.query.handle === "string" ? request.query.handle : "";
+    response.json(await fetchYouTubeChannel(handle));
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível consultar o YouTube.",
+    });
+  }
 });
 
 app.get("/api/channels", (_request, response) => {
@@ -3343,6 +3359,31 @@ app.put("/api/channels/:id", (request, response) => {
     return;
   }
   response.json(channel);
+});
+
+app.post("/api/channels/:id/sync-youtube", async (request, response) => {
+  const row = database
+    .prepare("SELECT payload FROM channels WHERE id = ?")
+    .get(request.params.id) as { payload: string } | undefined;
+
+  if (!row) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+
+  try {
+    const channel = JSON.parse(row.payload) as StoredPayload;
+    const profile = await fetchYouTubeChannel(channel.handle ?? "");
+    const updated = { ...channel, ...profile };
+    database
+      .prepare("UPDATE channels SET payload = ? WHERE id = ?")
+      .run(JSON.stringify(updated), request.params.id);
+    response.json(updated);
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível atualizar esse canal.",
+    });
+  }
 });
 
 app.delete("/api/channels/:id", (request, response) => {

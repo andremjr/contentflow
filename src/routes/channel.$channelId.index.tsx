@@ -12,6 +12,7 @@ import {
   FolderKanban,
   Trash2,
   UsersRound,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
@@ -20,6 +21,7 @@ import { ChannelAvatar } from "@/components/channel-avatar";
 import { ProcessStatus } from "@/components/process-status";
 import { ExecutionOrchestratorPanel } from "@/components/execution-orchestrator-panel";
 import { NewProjectDialog } from "@/components/new-project-dialog";
+import { NewChannelDialog } from "@/components/new-channel-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -40,7 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PROCESS_META, type Channel, type Project } from "@/lib/domain";
-import { removeProject, useChannel, useProjects } from "@/lib/store";
+import { removeProject, syncChannelFromYouTube, useChannel, useProjects } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/channel/$channelId/")({ component: ChannelWorkspace });
@@ -63,6 +65,8 @@ function ChannelWorkspace() {
   const projects = useProjects(channelId);
   const [view, setView] = useState<"cards" | "list">("cards");
   const [search, setSearch] = useState("");
+  const [editingChannel, setEditingChannel] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const hasLocalViewChange = useRef(false);
   const viewPersistenceQueue = useRef(Promise.resolve());
 
@@ -118,6 +122,20 @@ function ChannelWorkspace() {
 
   if (!channel) return null;
 
+  async function syncYouTube() {
+    setIsSyncing(true);
+    try {
+      await syncChannelFromYouTube(channelId);
+      toast.success("Informações do canal atualizadas pelo YouTube.");
+    } catch (error) {
+      toast.error("Não foi possível atualizar o canal", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
   return (
     <AppShell>
       <TopBar
@@ -132,6 +150,17 @@ function ChannelWorkspace() {
         actions={
           <>
             <NewProjectDialog channelId={channel.id} />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-9 gap-1.5"
+              onClick={() => void syncYouTube()}
+              disabled={isSyncing}
+            >
+              <RefreshCw className={cn("size-3.5", isSyncing && "animate-spin")} />
+              <span className="hidden sm:inline">Atualizar informações</span>
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="size-9 text-muted-foreground">
@@ -141,7 +170,9 @@ function ChannelWorkspace() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Ações do canal</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Editar canal</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setEditingChannel(true)}>
+                  Editar canal
+                </DropdownMenuItem>
                 <DropdownMenuItem>Duplicar configurações</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="text-destructive">Arquivar canal</DropdownMenuItem>
@@ -149,6 +180,13 @@ function ChannelWorkspace() {
             </DropdownMenu>
           </>
         }
+      />
+
+      <NewChannelDialog
+        trigger={null}
+        channel={channel}
+        open={editingChannel}
+        onOpenChange={setEditingChannel}
       />
 
       <main className="flex-1 space-y-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

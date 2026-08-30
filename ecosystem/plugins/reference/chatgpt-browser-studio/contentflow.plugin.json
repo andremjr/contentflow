@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.chatgpt-browser-studio",
   "name": "ChatGPT Browser Studio",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Automação modular do ChatGPT web para criar, pesquisar, escolher, validar, analisar arquivos e gerar imagens.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -23,7 +23,6 @@
     "configurationKey": "accountProfile",
     "label": "Salvar perfil",
     "description": "Abre o ChatGPT para login e fecha o Chrome após validar a área do chat.",
-    "prepareTimeoutMs": 900000,
     "fallbackConfigurationKey": "fallbackAccountProfiles"
   },
   "settingsSchema": {
