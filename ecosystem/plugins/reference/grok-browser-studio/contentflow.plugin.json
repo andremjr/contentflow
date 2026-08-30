@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.grok-browser-studio",
   "name": "Grok Browser Studio",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Gera texto, pesquisa, imagens e vídeos no Grok web usando um perfil Chrome dedicado, sem API oficial.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",

@@ -116,8 +116,27 @@ function ensureBlockInstruction(prompt, template, request) {
   if (expanded.includes(instruction)) return expanded;
   return `INSTRUÇÕES DO BLOCO:\n${instruction}\n\n${expanded}`.trim();
 }
+function ensureInputContext(prompt, template, request) {
+  const sourceTemplate = String(template ?? "");
+  if (sourceTemplate.includes("{{CONTENT}}") || sourceTemplate.includes("{{TEMA}}")) {
+    return String(prompt ?? "").trim();
+  }
+  const remainingInputs = Object.fromEntries(
+    Object.entries(promptContextInputs(request) ?? {}).filter(
+      ([key]) => !sourceTemplate.includes(`{{INPUT:${key}}}`),
+    ),
+  );
+  const context = serializeInputs(remainingInputs).trim();
+  const expanded = String(prompt ?? "").trim();
+  if (!context || expanded.includes(context)) return expanded;
+  return `${expanded}\n\nCONTEXTO DAS ENTRADAS:\n${context}`.trim();
+}
 function expandPrimary(template, request) {
-  return ensureBlockInstruction(expand(template, request), template, request);
+  return ensureInputContext(
+    ensureBlockInstruction(expand(template, request), template, request),
+    template,
+    request,
+  );
 }
 function expandCap(template, repls, request) {
   let out = String(template ?? "");

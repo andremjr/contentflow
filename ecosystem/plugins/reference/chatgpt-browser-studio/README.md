@@ -1,6 +1,6 @@
 # ChatGPT Browser Studio
 
-Versão **0.3.4** para ContentFlow Plugin API v1.
+Versão **0.3.5** para ContentFlow Plugin API v1.
 
 Super plugin independente que usa a interface web do ChatGPT em um Google Chrome real com perfil persistente dedicado. Não usa a API oficial da OpenAI, não solicita chave de API e nunca exporta cookies, tokens ou storage da sessão.
 

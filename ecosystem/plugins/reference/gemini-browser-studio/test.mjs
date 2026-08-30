@@ -44,7 +44,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 });
 test("manifesto possui oito capabilities e permissões mínimas", () => {
   assert.equal(manifest.id, "local.contentflow.gemini-browser-studio");
-  assert.equal(manifest.version, "0.2.3");
+  assert.equal(manifest.version, "0.2.4");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.capabilities[0].instructionUsage, "optional");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -123,6 +123,23 @@ test("inclui a instrução resolvida quando o template personalizado não possui
     }),
   );
   assert.match(prompt, /^INSTRUÇÕES DO BLOCO:\nEvite repetir temas\./);
+});
+test("sempre inclui as entradas resolvidas quando o prompt do plugin está vazio", () => {
+  const [prompt] = __test.buildParts(
+    req({
+      resolvedInstruction: "Crie um tema histórico.",
+      configuration: { promptTemplate: "" },
+      instructionContextInputs: {
+        content:
+          'ITEM ESCOLHIDO — Linha Editorial:\n{"Nome":"Mistérios da História","Descrição":"Civilizações desaparecidas"}\n\nITEM ESCOLHIDO — Perspectiva do canal:\n{"Ângulo":"O momento em que tudo deu errado","Descrição":"Investigue o ponto de ruptura"}',
+      },
+    }),
+  );
+  assert.match(prompt, /CONTEXTO DAS ENTRADAS:/);
+  assert.match(prompt, /Mistérios da História/);
+  assert.match(prompt, /Civilizações desaparecidas/);
+  assert.match(prompt, /O momento em que tudo deu errado/);
+  assert.match(prompt, /Investigue o ponto de ruptura/);
 });
 test("mantém roteiro legado em três partes", () => {
   const p = __test.buildParts(req({ configuration: { generationMode: "legacy_script_3_parts" } }));

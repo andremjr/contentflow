@@ -9,7 +9,7 @@ const manifest = JSON.parse(
 const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "0.4.3");
+  assert.equal(manifest.version, "0.4.4");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
 });
@@ -146,6 +146,24 @@ test("inclui a instrução resolvida quando o template personalizado não possui
     }),
   );
   assert.match(prompt, /^INSTRUÇÕES DO BLOCO:\nNão repita o tema anterior\./);
+});
+
+test("sempre inclui as entradas resolvidas quando o prompt do plugin está vazio", () => {
+  const [prompt] = __test.buildParts(
+    request({
+      resolvedInstruction: "Crie um tema histórico.",
+      configuration: { promptTemplate: "" },
+      instructionContextInputs: {
+        content:
+          'ITEM ESCOLHIDO — Linha Editorial:\n{"Nome":"Mistérios da História","Descrição":"Civilizações desaparecidas"}\n\nITEM ESCOLHIDO — Perspectiva do canal:\n{"Ângulo":"O momento em que tudo deu errado","Descrição":"Investigue o ponto de ruptura"}',
+      },
+    }),
+  );
+  assert.match(prompt, /CONTEXTO DAS ENTRADAS:/);
+  assert.match(prompt, /Mistérios da História/);
+  assert.match(prompt, /Civilizações desaparecidas/);
+  assert.match(prompt, /O momento em que tudo deu errado/);
+  assert.match(prompt, /Investigue o ponto de ruptura/);
 });
 
 test("isola contas por alias sem aceitar traversal", () => {

@@ -1,6 +1,6 @@
 # Claude Browser Studio
 
-Versão **0.4.3** para ContentFlow Plugin API v1.
+Versão **0.4.4** para ContentFlow Plugin API v1.
 
 Plugin independente para ContentFlow que converte a lógica operacional de `gerar_roteiros.py` e `extrair_cookies_chrome.py` em seis capabilities pela interface web do Claude: texto/roteiros, pesquisa, escolha, validação, visão e análise de documentos.
 

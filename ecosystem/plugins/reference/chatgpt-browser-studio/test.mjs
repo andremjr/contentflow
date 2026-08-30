@@ -58,7 +58,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "0.3.4");
+  assert.equal(manifest.version, "0.3.5");
   assert.equal(manifest.supportsConversationContinuation, true);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -189,6 +189,24 @@ test("sempre inclui a instrução resolvida mesmo quando o template personalizad
     }),
   );
   assert.match(prompt, /^INSTRUÇÕES DO BLOCO:\nUse somente acontecimentos documentados\./);
+});
+
+test("sempre inclui as entradas resolvidas quando o prompt do plugin está vazio", () => {
+  const [prompt] = __test.buildParts(
+    request({
+      resolvedInstruction: "Crie um tema histórico.",
+      configuration: { promptTemplate: "" },
+      instructionContextInputs: {
+        content:
+          'ITEM ESCOLHIDO — Linha Editorial:\n{"Nome":"Mistérios da História","Descrição":"Civilizações desaparecidas"}\n\nITEM ESCOLHIDO — Perspectiva do canal:\n{"Ângulo":"O momento em que tudo deu errado","Descrição":"Investigue o ponto de ruptura"}',
+      },
+    }),
+  );
+  assert.match(prompt, /CONTEXTO DAS ENTRADAS:/);
+  assert.match(prompt, /Mistérios da História/);
+  assert.match(prompt, /Civilizações desaparecidas/);
+  assert.match(prompt, /O momento em que tudo deu errado/);
+  assert.match(prompt, /Investigue o ponto de ruptura/);
 });
 
 test("pesquisa web depende somente do prompt e não tenta ativar atalho visual", async () => {

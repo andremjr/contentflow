@@ -1,6 +1,6 @@
 # Gemini Browser Studio
 
-Versão **0.2.3** para ContentFlow Plugin API v1.
+Versão **0.2.4** para ContentFlow Plugin API v1.
 
 Super plugin independente que usa a interface web do Gemini em um Google Chrome real com perfil persistente dedicado. Não usa a API oficial do Gemini, não pede chave e não exporta cookies, tokens ou storage.
 
