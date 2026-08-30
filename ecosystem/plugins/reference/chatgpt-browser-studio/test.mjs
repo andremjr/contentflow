@@ -57,7 +57,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "0.3.2");
+  assert.equal(manifest.version, "0.3.3");
   assert.equal(manifest.supportsConversationContinuation, true);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -134,6 +134,26 @@ test("só considera pronto o perfil marcado após login", async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("aguarda a Bridge antes de validar novamente a aba do ChatGPT", async () => {
+  const calls = [];
+  const bridge = { dispose() {} };
+  assert.equal(
+    await __test.prepareProfileSession({
+      attachBridge: async () => {
+        calls.push("bridge");
+        return bridge;
+      },
+      attachPage: async () => {
+        calls.push("page");
+        return { sessionId: "chatgpt-session" };
+      },
+      waitPrompt: async (sessionId) => calls.push(`prompt:${sessionId}`),
+    }),
+    bridge,
+  );
+  assert.deepEqual(calls, ["bridge", "page", "prompt:chatgpt-session"]);
 });
 
 test("expande placeholders ContentFlow e legados", () => {

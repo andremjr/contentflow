@@ -1229,18 +1229,22 @@ async function configureProfile(request, services) {
     });
     child = launched.child;
     client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
-    const { sessionId } = await attachChatGptPage(client, services.signal, true);
-    await openNewConversation(client, sessionId, services.signal);
-    await waitForPrompt(client, sessionId, PROFILE_SETUP_WAIT_MS, services.signal);
-    bridge = await attachContentFlowBridge({
-      client,
-      pageSessionId: sessionId,
-      pluginId: PLUGIN_ID,
-      profileId: profileName,
-      request,
-      signal: services.signal,
-      allowedOrigins: ["https://chatgpt.com"],
-      waitMs: PROFILE_SETUP_WAIT_MS,
+    const initialPage = await attachChatGptPage(client, services.signal, true);
+    bridge = await prepareProfileSession({
+      attachBridge: () =>
+        attachContentFlowBridge({
+          client,
+          pageSessionId: initialPage.sessionId,
+          pluginId: PLUGIN_ID,
+          profileId: profileName,
+          request,
+          signal: services.signal,
+          allowedOrigins: ["https://chatgpt.com"],
+          waitMs: PROFILE_SETUP_WAIT_MS,
+        }),
+      attachPage: () => attachChatGptPage(client, services.signal, true),
+      waitPrompt: (sessionId) =>
+        waitForPrompt(client, sessionId, PROFILE_SETUP_WAIT_MS, services.signal),
     });
     await markProfilePrepared(profilePath, profileName);
     return {
@@ -1262,6 +1266,21 @@ async function configureProfile(request, services) {
     try {
       child?.kill();
     } catch {}
+  }
+}
+
+async function prepareProfileSession({ attachBridge, attachPage, waitPrompt }) {
+  // The user may navigate the initial ChatGPT tab to chrome://extensions while
+  // installing Browser Bridge. Wait for the extension first, then reattach (or
+  // create) a ChatGPT tab and wait without a setup deadline for login.
+  const bridge = await attachBridge();
+  try {
+    const { sessionId } = await attachPage();
+    await waitPrompt(sessionId);
+    return bridge;
+  } catch (error) {
+    bridge?.dispose();
+    throw error;
   }
 }
 
@@ -1525,6 +1544,7 @@ export const __test = {
   profilePathFor,
   runtimeProfilePath,
   profilePort,
+  prepareProfileSession,
   searchResponseValues,
   generationResponseValues,
   summarizeBlock,
