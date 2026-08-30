@@ -8,6 +8,7 @@ import { __test, execute, validateConversationUrl } from "./handler.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
+const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 
 test("aceita somente referências de conversa do ChatGPT", () => {
   assert.equal(
@@ -57,7 +58,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "0.3.3");
+  assert.equal(manifest.version, "0.3.4");
   assert.equal(manifest.supportsConversationContinuation, true);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -190,25 +191,18 @@ test("sempre inclui a instrução resolvida mesmo quando o template personalizad
   assert.match(prompt, /^INSTRUÇÕES DO BLOCO:\nUse somente acontecimentos documentados\./);
 });
 
-test("abre o menu de ferramentas antes de ativar a busca quando o atalho não está visível", async () => {
+test("pesquisa web depende somente do prompt e não tenta ativar atalho visual", async () => {
   const calls = [];
   const bridge = {
-    dispatch: async (_action, payload, operationKey) => {
-      calls.push({ payload, operationKey });
-      if (operationKey.endsWith(":direct")) {
-        const error = new Error("not found");
-        error.code = "OUTPUT_VALIDATION_FAILED";
-        throw error;
-      }
-      return { ok: true };
+    dispatch: async (_action, _payload, operationKey) => {
+      calls.push({ operationKey });
+      throw new Error("não deveria clicar");
     },
   };
 
-  assert.equal(await __test.clickMode(bridge, "search"), true);
-  assert.deepEqual(
-    calls.map((call) => call.operationKey),
-    ["mode:search:direct", "mode:search:open-tools", "mode:search:from-tools"],
-  );
+  assert.equal(await __test.clickMode(bridge, "search"), undefined);
+  assert.deepEqual(calls, []);
+  assert.doesNotMatch(handlerSource, /mode\s*=\s*["']search["']/);
 });
 
 test("preserva o roteiro legado em três envios", () => {

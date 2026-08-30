@@ -974,15 +974,16 @@ async function attachFiles(client, sessionId, attachments, signal) {
 }
 
 async function clickMode(bridge, mode) {
-  if (!mode || mode === "standard") return;
+  // Search web is prompt-driven. Requiring a UI toggle makes the capability
+  // fail when ChatGPT moves or omits the shortcut even though the same request
+  // works when it is stated explicitly in the prompt.
+  if (!mode || mode === "standard" || mode === "search") return;
   const terms =
-    mode === "search"
-      ? ["search the web", "pesquisar na web"]
-      : mode === "deep"
-        ? ["deep research", "pesquisa aprofundada"]
-        : mode === "image"
-          ? ["create an image", "criar uma imagem"]
-          : ["think", "pensar"];
+    mode === "deep"
+      ? ["deep research", "pesquisa aprofundada"]
+      : mode === "image"
+        ? ["create an image", "criar uma imagem"]
+        : ["think", "pensar"];
   // A geração de imagens também funciona no chat padrão quando a conta não
   // exibe o atalho "Criar uma imagem". Nesse caso o próprio prompt explícito
   // aciona a ferramenta, portanto não devemos abortar antes de enviá-lo.
@@ -1323,7 +1324,6 @@ export async function execute(request, services) {
       mode = request?.configuration?.reasoningMode ?? "standard";
     } else if (capabilityId === "search-web-in-browser") {
       parts = [buildSearchPrompt(request, false)];
-      mode = "search";
     } else if (capabilityId === "deep-research-in-browser") {
       parts = [buildSearchPrompt(request, true)];
       mode = "deep";

@@ -1,13 +1,13 @@
 # Gemini Browser Studio
 
-Versão **0.2.0** para ContentFlow Plugin API v1.
+Versão **0.2.3** para ContentFlow Plugin API v1.
 
 Super plugin independente que usa a interface web do Gemini em um Google Chrome real com perfil persistente dedicado. Não usa a API oficial do Gemini, não pede chave e não exporta cookies, tokens ou storage.
 
 ## Capabilities
 
 - `generate-text-in-browser`: textos, títulos, thumb copy, prompts e roteiros iterativos.
-- `search-web-in-browser`: pesquisa atual com captura de links citados.
+- `search-web-in-browser`: pesquisa atual solicitada diretamente pelo prompt, sem depender de opção visual, com captura de links citados.
 - `choose-library-item-in-browser`: somente IDs reais da Biblioteca Estratégica.
 - `validate-content-in-browser`: aprovação, escolha única ou múltipla, inclusive para arquivos.
 - `analyze-images-in-browser`: visão computacional com múltiplas imagens.

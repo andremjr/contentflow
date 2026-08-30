@@ -5,6 +5,7 @@ import { __test, execute } from "./handler.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
+const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 function req(o = {}) {
   return {
     capabilityId: o.capabilityId ?? "generate-text-in-browser",
@@ -43,7 +44,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 });
 test("manifesto possui oito capabilities e permissões mínimas", () => {
   assert.equal(manifest.id, "local.contentflow.gemini-browser-studio");
-  assert.equal(manifest.version, "0.2.2");
+  assert.equal(manifest.version, "0.2.3");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.capabilities[0].instructionUsage, "optional");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -170,6 +171,12 @@ test("monta busca", () =>
     ),
     "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nBUSCA tema hoje",
   ));
+test("busca do Gemini é guiada pelo prompt, sem ativar opção visual", () => {
+  assert.doesNotMatch(
+    handlerSource,
+    /enable-web-search|ensureWebSearch|mode:search|pesquisar na web.*click/i,
+  );
+});
 test("respeita contrato de busca", () =>
   assert.deepEqual(
     __test.searchValues("- A\n- B", ["https://example.com"], {

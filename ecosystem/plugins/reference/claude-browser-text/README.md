@@ -1,6 +1,6 @@
 # Claude Browser Studio
 
-Versão **0.4.0** para ContentFlow Plugin API v1.
+Versão **0.4.3** para ContentFlow Plugin API v1.
 
 Plugin independente para ContentFlow que converte a lógica operacional de `gerar_roteiros.py` e `extrair_cookies_chrome.py` em seis capabilities pela interface web do Claude: texto/roteiros, pesquisa, escolha, validação, visão e análise de documentos.
 
@@ -47,10 +47,10 @@ A espera de respostas combina `MutationObserver` com polling de segurança e tim
 
 ### Buscar — `search-web-in-browser`
 
-- Confirma visualmente a opção **Web search** no menu **Add files, connectors, and more**.
+- Solicita a pesquisa diretamente no prompt, sem depender da opção visual **Web search** ou do menu de ferramentas.
 - Recebe `query` e `context`.
 - Devolve `result` em texto longo e `sources` como lista de URLs capturadas da resposta.
-- Se a conta não mostrar Web search, retorna erro explícito; não improvisa uma pesquisa sem a ferramenta.
+- A instrução explícita do prompt determina a pesquisa; mudanças no atalho visual não bloqueiam o envio.
 
 ### Escolher — `choose-library-item-in-browser`
 

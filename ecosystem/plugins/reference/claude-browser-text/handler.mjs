@@ -1205,41 +1205,6 @@ async function clickSend(bridge, operationKey) {
   );
 }
 
-async function ensureWebSearchEnabled(client, sessionId, bridge, signal) {
-  await bridge.dispatch(
-    "click",
-    {
-      selectors: ["button"],
-      textIncludes: ["add files, connectors, and more", "adicionar arquivos, conectores"],
-    },
-    "open-tools",
-  );
-  await sleep(300, signal);
-  const searchState = await evaluate(
-    client,
-    sessionId,
-    `(() => { ${PAGE_HELPERS}; const item=[...document.querySelectorAll('[role="menuitemcheckbox"]')].find(el => cfVisible(el) && /web search|pesquisa web/i.test(cfText(el))); if(!item)return null; const r=item.getBoundingClientRect(); return {checked:item.getAttribute('aria-checked')==='true' || item.hasAttribute('data-checked'),x:r.left+r.width/2,y:r.top+r.height/2}; })()`,
-  );
-  if (!searchState) {
-    throw codedError(
-      "PERMISSION_DENIED",
-      "A conta ou a interface atual do Claude não apresentou a opção Web search.",
-      false,
-    );
-  }
-  if (!searchState.checked) {
-    await bridge.dispatch(
-      "click",
-      {
-        selectors: ['[role="menuitemcheckbox"]'],
-        textIncludes: ["web search", "pesquisa web"],
-      },
-      "enable-web-search",
-    );
-    await sleep(250, signal);
-  }
-}
-
 async function responseState(client, sessionId) {
   return await evaluate(
     client,
@@ -1502,11 +1467,6 @@ export async function execute(request, services) {
       await attachFiles(client, sessionId, attachments, services.signal);
       step("Anexos prontos para análise.");
     }
-    if (capabilityId === "search-web-in-browser") {
-      await ensureWebSearchEnabled(client, sessionId, bridge, services.signal);
-      step("Web search confirmado para o bloco Buscar.");
-    }
-
     const responses = [];
     for (let index = 0; index < parts.length; index += 1) {
       let lastError;

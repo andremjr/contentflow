@@ -1,13 +1,13 @@
 # ChatGPT Browser Studio
 
-Versão **0.2.0** para ContentFlow Plugin API v1.
+Versão **0.3.4** para ContentFlow Plugin API v1.
 
 Super plugin independente que usa a interface web do ChatGPT em um Google Chrome real com perfil persistente dedicado. Não usa a API oficial da OpenAI, não solicita chave de API e nunca exporta cookies, tokens ou storage da sessão.
 
 ## Capabilities
 
 - `generate-text-in-browser` (`CRIAR`): títulos, textos de thumbnail, roteiros, prompts de assets e qualquer texto. Suporta uma resposta, roteiro legado em três partes, outline dinâmica de até 32 itens e partes personalizadas.
-- `search-web-in-browser` (`BUSCAR`): ativa **Search the web**, captura o texto e as URLs citadas.
+- `search-web-in-browser` (`BUSCAR`): solicita a pesquisa diretamente no prompt e captura o texto e as URLs citadas, sem depender de um atalho visual **Search the web**.
 - `deep-research-in-browser` (`BUSCAR`): ativa **Deep research** quando o recurso existe na conta; se o plano não oferecer, retorna `PERMISSION_DENIED` sem improvisar uma pesquisa comum.
 - `choose-library-item-in-browser` (`ESCOLHER`): devolve somente o ID exato de um item real da coleção estratégica.
 - `validate-content-in-browser` (`VALIDAR`): aprovação/reprovação, escolha única ou múltipla; aceita também imagens e documentos.

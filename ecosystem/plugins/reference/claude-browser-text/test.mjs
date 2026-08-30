@@ -6,9 +6,10 @@ import { __test, execute } from "./handler.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
+const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "0.4.2");
+  assert.equal(manifest.version, "0.4.3");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
 });
@@ -271,6 +272,7 @@ test("monta pesquisa web com consulta e contexto", () => {
     prompt,
     "INSTRUÇÕES DO BLOCO:\nEscreva com clareza.\n\nPESQUISE tendências atuais | YouTube",
   );
+  assert.doesNotMatch(handlerSource, /ensureWebSearchEnabled|enable-web-search|open-tools/);
 });
 
 test("Buscar respeita as chaves e tipos do outputContract do bloco", () => {

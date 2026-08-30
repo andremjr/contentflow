@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.chatgpt-browser-studio",
   "name": "ChatGPT Browser Studio",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Automação modular do ChatGPT web para criar, pesquisar, escolher, validar, analisar arquivos e gerar imagens.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
