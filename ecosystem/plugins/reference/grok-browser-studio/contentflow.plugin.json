@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.grok-browser-studio",
   "name": "Grok Browser Studio",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Gera texto, pesquisa, imagens e vídeos no Grok web usando um perfil Chrome dedicado, sem API oficial.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -22,6 +22,7 @@
   "deliveryTypes": ["text", "image", "video", "processing"],
   "profileSetup": {
     "configurationKey": "accountProfile",
+    "fallbackConfigurationKey": "fallbackAccountProfiles",
     "label": "Salvar perfil",
     "description": "Abre o Grok Imagine para login e fecha o Chrome depois de validar a área de criação."
   },
@@ -190,6 +191,14 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
           "accountProfile": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
@@ -281,6 +290,14 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
           "accountProfile": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
@@ -359,6 +376,14 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
           "accountProfile": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
@@ -437,6 +462,14 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
           "accountProfile": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",

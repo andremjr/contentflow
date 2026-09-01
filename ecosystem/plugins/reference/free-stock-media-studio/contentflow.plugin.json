@@ -3,8 +3,8 @@
   "apiVersion": "1",
   "id": "local.contentflow.free-stock-media-studio",
   "name": "Free Stock Media Studio",
-  "version": "0.2.1",
-  "description": "Pesquisa e baixa imagens e vídeos de bancos gratuitos e acervos abertos com proveniência, licença e atribuição preservadas.",
+  "version": "0.3.0",
+  "description": "Pesquisa imagens e vídeos em escala por consulta ou briefing temporal, usando o maior lote permitido por provedor e preservando proveniência, licença e atribuição.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
   "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
@@ -114,7 +114,13 @@
             "default": "all",
             "enum": ["all", "pexels", "pixabay", "unsplash", "openverse", "wikimedia", "nasa"]
           },
-          "resultsPerProvider": { "type": "integer", "minimum": 1, "maximum": 20, "default": 6 },
+          "resultLimitMode": {
+            "type": "string",
+            "default": "provider_max",
+            "enum": ["provider_max", "custom"],
+            "description": "provider_max usa o maior page size aceito por cada API; custom aplica o limite abaixo sem ultrapassar o teto do provedor."
+          },
+          "resultsPerProvider": { "type": "integer", "minimum": 1, "maximum": 500, "default": 20 },
           "page": { "type": "integer", "minimum": 1, "maximum": 100, "default": 1 },
           "orientation": {
             "type": "string",
@@ -183,7 +189,13 @@
             "default": "all",
             "enum": ["all", "pexels", "pixabay", "coverr", "wikimedia", "nasa"]
           },
-          "resultsPerProvider": { "type": "integer", "minimum": 1, "maximum": 20, "default": 6 },
+          "resultLimitMode": {
+            "type": "string",
+            "default": "provider_max",
+            "enum": ["provider_max", "custom"],
+            "description": "provider_max usa o maior page size aceito por cada API; custom aplica o limite abaixo sem ultrapassar o teto do provedor."
+          },
+          "resultsPerProvider": { "type": "integer", "minimum": 1, "maximum": 500, "default": 20 },
           "page": { "type": "integer", "minimum": 1, "maximum": 100, "default": 1 },
           "orientation": {
             "type": "string",
@@ -197,6 +209,167 @@
         "type": "object",
         "properties": { "results": { "type": "array" }, "warnings": { "type": "array" } },
         "required": ["results"]
+      }
+    },
+    {
+      "id": "search-stock-by-briefs",
+      "operator": "Código",
+      "instructionUsage": "not_applicable",
+      "blockTypes": ["BUSCAR"],
+      "processTypes": ["assets", "editing"],
+      "inputPorts": [
+        {
+          "key": "asset_briefs",
+          "label": "Briefings visuais por trecho",
+          "description": "Records gerados a partir da transcrição. Cada item deve conter brief_id, tempos, primary_query e, opcionalmente, fallbacks, preferência de mídia, orientação e termos negativos.",
+          "acceptedTypes": ["records"],
+          "required": true,
+          "multiple": true,
+          "presentation": { "renderer": "table", "itemType": "record" }
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "selected_assets",
+          "label": "Asset selecionado por trecho",
+          "description": "Um único asset escolhido automaticamente por briefing, com brief_id, timestamps, qualidade, consulta usada, licença e proveniência.",
+          "producedTypes": ["records"],
+          "required": true,
+          "presentation": { "renderer": "cards", "itemType": "record" }
+        }
+      ],
+      "acceptedInputTypes": ["records"],
+      "producedOutputTypes": ["records"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 600000,
+        "supportsCancellation": true,
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "inputPort": "asset_briefs",
+          "outputPort": "selected_assets",
+          "mode": "sequential"
+        }
+      },
+      "sideEffects": ["external_read"],
+      "cost": { "model": "free", "estimateSupported": false },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["Pexels", "Pixabay", "Unsplash", "Coverr", "Openverse", "Wikimedia Commons", "NASA"]
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "providerStrategy": {
+            "type": "string",
+            "default": "balanced_fallback",
+            "enum": ["balanced_fallback", "priority_fallback", "all"],
+            "description": "balanced_fallback distribui os trechos entre provedores para preservar cotas; priority_fallback mantém uma ordem fixa; all consulta todos os compatíveis."
+          },
+          "provider": {
+            "type": "string",
+            "default": "all",
+            "enum": ["all", "pexels", "pixabay", "unsplash", "coverr", "openverse", "wikimedia", "nasa"]
+          },
+          "minimumCandidatesPerBrief": { "type": "integer", "minimum": 1, "maximum": 30, "default": 4 },
+          "maximumCandidatesPerBrief": { "type": "integer", "minimum": 1, "maximum": 50, "default": 12 },
+          "maximumFallbackQueries": { "type": "integer", "minimum": 0, "maximum": 2, "default": 2 },
+          "mediaPolicy": {
+            "type": "string",
+            "default": "follow_brief",
+            "enum": ["follow_brief", "images_only", "videos_only", "mixed"]
+          },
+          "minimumImageWidth": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 1280 },
+          "minimumVideoWidth": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 1280 },
+          "minimumVideoDuration": { "type": "integer", "minimum": 0, "maximum": 3600, "default": 3 },
+          "maximumVideoDuration": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7200,
+            "default": 0,
+            "description": "Zero desativa o limite máximo de duração."
+          },
+          "minimumQualityScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "default": 65,
+            "description": "Piso para relevância da consulta, orientação, resolução, usabilidade e proveniência."
+          },
+          "strictOrientation": {
+            "type": "boolean",
+            "default": true,
+            "description": "Rejeita candidatos com dimensões conhecidas incompatíveis com a orientação do briefing."
+          },
+          "licenseProfile": {
+            "type": "string",
+            "default": "commercial_safe",
+            "enum": ["commercial_safe", "all_declared"],
+            "description": "commercial_safe remove licenças explicitamente não comerciais ou sem derivados; a validação jurídica final continua humana."
+          },
+          "safeSearch": { "type": "boolean", "default": true }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "selected_assets": { "type": "array", "minItems": 1, "maxItems": 1 } },
+        "required": ["selected_assets"]
+      }
+    },
+    {
+      "id": "download-selected-stock-assets",
+      "operator": "Código",
+      "instructionUsage": "not_applicable",
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["assets", "editing"],
+      "inputPorts": [
+        {
+          "key": "selected_assets",
+          "label": "Assets selecionados por trecho",
+          "description": "Records produzidos pela busca automática por briefings. Somente estes vencedores serão baixados.",
+          "acceptedTypes": ["records"],
+          "required": true,
+          "multiple": true,
+          "presentation": { "renderer": "cards", "itemType": "record" }
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "assets",
+          "label": "Arquivos por trecho",
+          "description": "Um arquivo local por briefing, preservando brief_id, timestamps, provedor, atribuição e licença.",
+          "producedTypes": ["files"],
+          "required": true,
+          "presentation": { "renderer": "file-list", "itemType": "file", "acceptedMimeTypes": ["image/*", "video/*"] }
+        }
+      ],
+      "acceptedInputTypes": ["records"],
+      "producedOutputTypes": ["files"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 1800000,
+        "supportsCancellation": true,
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "inputPort": "selected_assets",
+          "outputPort": "assets",
+          "mode": "sequential"
+        }
+      },
+      "sideEffects": ["external_read", "external_write", "local_artifact"],
+      "cost": { "model": "free", "estimateSupported": false },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["Pexels", "Pixabay", "Unsplash", "Coverr", "Openverse", "Wikimedia Commons", "NASA"]
+      },
+      "blockConfigSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "assets": { "type": "array", "minItems": 1, "maxItems": 1 } },
+        "required": ["assets"]
       }
     },
     {

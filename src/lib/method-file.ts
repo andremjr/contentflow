@@ -219,6 +219,7 @@ export function serializeMethodFile(name: string, method: ProcessMethod) {
     ...structuredClone(method),
     blocks: method.blocks.map((block) => ({
       ...structuredClone(block),
+      collectionId: undefined,
       plugin: block.plugin
         ? {
             pluginId: block.plugin.pluginId,

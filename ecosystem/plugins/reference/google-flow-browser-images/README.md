@@ -112,4 +112,4 @@ npm run plugin:kit -- test-sandbox <pasta-do-plugin>
 
 ## Perfis e lote resiliente
 
-`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. O núcleo executa a lista de prompts um item por vez, persiste cada imagem com identidade e ordem antes de avançar e troca de perfil somente após falha técnica transitória. CAPTCHA, autenticação, limite, cota e bloqueio pausam a execução e nunca acionam rotação automática.
+`fallbackAccountProfiles` aceita aliases adicionais, um por linha e em ordem. O núcleo executa a lista de prompts um item por vez, persiste cada imagem com identidade e ordem antes de avançar e avança para o próximo perfil sempre que houver qualquer erro ou falha na execução.

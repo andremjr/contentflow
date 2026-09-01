@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, extname, join } from "node:path";
@@ -474,6 +475,19 @@ function regValue(o) {
 }
 async function chromeCandidates() {
   if (platform() === "win32") {
+    const standardCandidates = [
+      process.env.PROGRAMFILES &&
+        join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe"),
+      process.env["PROGRAMFILES(X86)"] &&
+        join(process.env["PROGRAMFILES(X86)"], "Google", "Chrome", "Application", "chrome.exe"),
+      process.env.LOCALAPPDATA &&
+        join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    ].filter(Boolean);
+    const existing = standardCandidates.filter((p) => existsSync(p));
+    if (existing.length) return [...new Set(existing)];
+
     const f = [];
     for (const k of [
       "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
@@ -484,12 +498,6 @@ async function chromeCandidates() {
     }
     const w = await capture("where.exe", ["chrome.exe"]);
     if (w.ok) f.push(...w.stdout.split(/\r?\n/));
-    f.push(
-      process.env.PROGRAMFILES &&
-        join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe"),
-      process.env.LOCALAPPDATA &&
-        join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
-    );
     return [...new Set(f.filter(Boolean).map((x) => x.trim()))];
   }
   if (platform() === "darwin")

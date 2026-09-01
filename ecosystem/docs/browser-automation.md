@@ -52,7 +52,7 @@ Plugins de referência e catálogos mantidos pelo projeto não aceitam capacidad
 
 - contornar créditos, paywalls, rate limits, filas, regiões, feature flags ou níveis de assinatura;
 - fazer uma conta gratuita obter recursos pagos;
-- alternar contas, identidades, IPs ou fingerprints para ampliar cota;
+- descobrir ou conectar silenciosamente contas, identidades, IPs ou fingerprints que o usuário não preparou para o plugin;
 - burlar CAPTCHA, anti-bot, espera obrigatória ou verificação de identidade;
 - varrer ou extrair silenciosamente cookies e tokens de perfis, contas ou serviços que o usuário não conectou àquele plugin;
 - reutilizar credenciais de outra aplicação, pessoa, organização ou perfil;
@@ -61,9 +61,9 @@ Plugins de referência e catálogos mantidos pelo projeto não aceitam capacidad
 - ocultar automação, tráfego, custos, terceiros ou finalidade dos dados;
 - realizar scraping de dados que o usuário não poderia acessar manualmente.
 
-Quando surgir um CAPTCHA, bloqueio antiabuso ou pedido de nova autenticação, o job deve pausar. Esses eventos são limites operacionais, não falhas a serem contornadas.
+Quando surgir um CAPTCHA, bloqueio antiabuso ou pedido de nova autenticação, o plugin pode manter o job pendente para intervenção. Se encerrar a tentativa como erro, o núcleo aplica o fallback configurado normalmente.
 
-Múltiplas contas conectadas explicitamente são permitidas para continuidade operacional. A troca automática fica restrita a falhas técnicas transitórias (`UPSTREAM_UNAVAILABLE`, `TIMEOUT` e `JOB_FAILED`) e não pode ser usada em resposta a CAPTCHA, autenticação, rate limit, cota, upgrade ou bloqueio. Todas as contas precisam ser preparadas individualmente pelo usuário e permanecem em perfis dedicados separados.
+Múltiplas contas conectadas explicitamente são permitidas para continuidade operacional. Quando `fallbackConfigurationKey` estiver declarado, qualquer tentativa encerrada como erro pode avançar automaticamente para o próximo alias configurado, inclusive em autenticação, rate limit, cota, permissão, upgrade, bloqueio ou validação de output. Cancelamento solicitado pelo usuário e esgotamento da lista encerram o fallback. Todas as contas precisam ser preparadas individualmente pelo usuário e permanecem em perfis dedicados separados.
 
 Um autor pode escrever, compartilhar e instalar diretamente código que ignore essas regras. A documentação não afirma aprovar previamente nem controlar esse comportamento. Ela define o que recebe selo oficial, listagem nos catálogos do projeto e suporte. Independentemente da origem ou finalidade, todo plugin executado dentro do ContentFlow recebe somente os recursos consentidos; se tentar ampliar essa autoridade, a sandbox deve impedir ou encerrar a operação automaticamente.
 
@@ -135,7 +135,7 @@ Uma única extensão não significa autoridade irrestrita. Ela aceita somente pl
 
 O canal entre handler, service worker e content script usa mensagens versionadas, origem e aba allowlisted, identificador de execução, token efêmero e validação estrutural. Content scripts são tratados como contexto menos confiável: não recebem secrets duráveis e não podem ampliar hosts, permissões, efeitos ou escopo da capability.
 
-Plugins com vários perfis podem declarar `profileSetup.fallbackConfigurationKey`. O campo contém aliases ordenados, nunca cookies ou credenciais. O núcleo valida e prepara cada alias separadamente, registra qual perfil foi usado e preserva o cursor e as entregas parciais ao fazer um fallback técnico permitido.
+Plugins com vários perfis podem declarar `profileSetup.fallbackConfigurationKey`. O campo contém aliases ordenados, nunca cookies ou credenciais. O núcleo valida e prepara cada alias separadamente, registra qual perfil foi usado e preserva o cursor e as entregas parciais ao fazer o fallback configurado após uma resposta de erro.
 
 Requisitos:
 
@@ -164,8 +164,8 @@ O núcleo aplica o menor limite entre manifesto, configuração local e resposta
 - iniciar um job por vez quando a interface oficial for serial;
 - usar backoff e `retryAfterMs` reais;
 - persistir `jobId` e chave de idempotência antes de repetir;
-- interromper ao receber cota esgotada, upgrade necessário ou bloqueio da conta;
-- nunca interpretar erro de limite como motivo para trocar endpoint, conta ou identidade;
+- respeitar a resposta do plugin: estados pendentes permanecem no perfil atual e respostas de erro podem avançar para o próximo perfil de fallback preparado;
+- nunca trocar endpoint, IP, fingerprint nem usar conta que não tenha sido preparada explicitamente pelo usuário;
 - em lote declarado por `execution.itemOrchestration`, concluir e persistir um item antes de iniciar o próximo;
 - mostrar ao usuário contagem de jobs, estado, custo conhecido e ação externa esperada.
 

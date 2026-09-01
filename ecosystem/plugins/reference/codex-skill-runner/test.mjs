@@ -61,11 +61,15 @@ test("monta uma execução não interativa e devolve a entrega tipada", async ()
   const response = await executeWithRunner(request, services, async (call) => {
     observed = call;
     await writeFile(call.resultPath, JSON.stringify({ result: "Roteiro pronto" }));
+    return {
+      stdout: JSON.stringify({ type: "thread.started", thread_id: "thread_12345678" }),
+      stderr: "",
+    };
   });
   assert.equal(response.status, "success");
   assert.deepEqual(response.values, { result: "Roteiro pronto" });
   assert.deepEqual(observed.args.slice(0, 3), ["--ask-for-approval", "never", "exec"]);
-  assert.ok(observed.args.includes("--ephemeral"));
+  assert.equal(observed.args.includes("--ephemeral"), false);
   assert.ok(observed.args.includes("--ignore-user-config"));
   assert.equal(
     observed.args.some((arg) => arg.includes("model_provider")),
@@ -74,6 +78,26 @@ test("monta uma execução não interativa e devolve a entrega tipada", async ()
   assert.equal(Object.hasOwn(observed.env, "OPENAI_API_KEY"), false);
   assert.equal(Object.hasOwn(observed.env, "CODEX_HOME"), false);
   assert.match(observed.prompt, /\$roteiro-youtube/);
+  assert.equal(response.conversation.id, "thread_12345678");
+});
+
+test("retoma uma conversa Codex específica entre blocos", async () => {
+  const { request, services } = await harness({
+    conversation: { mode: "reuse", id: "thread_abcdefgh" },
+  });
+  let args;
+  const response = await executeWithRunner(request, services, async (call) => {
+    args = call.args;
+    await writeFile(call.resultPath, JSON.stringify({ result: "Continuação" }));
+    return {
+      stdout: JSON.stringify({ type: "thread.started", thread_id: "thread_abcdefgh" }),
+      stderr: "",
+    };
+  });
+  assert.equal(response.status, "success");
+  assert.equal(args[args.indexOf("exec") + 1], "resume");
+  assert.ok(args.includes("thread_abcdefgh"));
+  assert.equal(args.includes("--ephemeral"), false);
 });
 
 test("rejeita nome de skill inseguro antes de criar subprocesso", async () => {

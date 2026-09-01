@@ -13,6 +13,28 @@ const PROVIDERS = Object.freeze({
 });
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_JSON_BYTES = 5 * 1024 * 1024;
+const MAX_OUTPUT_JSON_BYTES = 1_750_000;
+const PROVIDER_PAGE_LIMITS = Object.freeze({
+  image: Object.freeze({
+    pexels: 80,
+    pixabay: 200,
+    unsplash: 30,
+    openverse: 20,
+    wikimedia: 500,
+    nasa: 100,
+  }),
+  video: Object.freeze({
+    pexels: 80,
+    pixabay: 200,
+    coverr: 100,
+    wikimedia: 500,
+    nasa: 100,
+  }),
+});
+const PROVIDER_PRIORITY = Object.freeze({
+  image: Object.freeze(["pexels", "pixabay", "unsplash", "openverse", "wikimedia", "nasa"]),
+  video: Object.freeze(["pexels", "pixabay", "coverr", "wikimedia", "nasa"]),
+});
 
 class PluginFailure extends Error {
   constructor(code, message, retryable = false, retryAfterMs) {
@@ -62,11 +84,24 @@ function normalizeConfiguration(request, mediaType) {
   return {
     provider,
     providers: provider === "all" ? allowed.slice(1) : [provider],
-    resultsPerProvider: clamp(configuration.resultsPerProvider, 1, 20, 6),
+    resultLimitMode: configuration.resultLimitMode === "custom" ? "custom" : "provider_max",
+    resultsPerProvider: clamp(configuration.resultsPerProvider, 1, 500, 20),
     page: clamp(configuration.page, 1, 100, 1),
     orientation: cleanText(configuration.orientation || "any", 20),
     safeSearch: configuration.safeSearch !== false,
   };
+}
+
+function providerPageLimit(provider, mediaType, config) {
+  const maximum = PROVIDER_PAGE_LIMITS[mediaType]?.[provider];
+  if (!maximum)
+    throw new PluginFailure(
+      "INVALID_INPUT",
+      `${PROVIDERS[provider]?.label || provider} não oferece mídia do tipo ${mediaType}.`,
+    );
+  return config.resultLimitMode === "custom"
+    ? Math.min(maximum, config.resultsPerProvider)
+    : maximum;
 }
 
 function requestTimeout(request) {
@@ -435,10 +470,11 @@ function orientationForPixabay(orientation) {
 
 async function searchPexels(mediaType, query, config, request, services) {
   const key = await secret(services, "pexels");
+  const limit = providerPageLimit("pexels", mediaType, config);
   const path = mediaType === "image" ? "/v1/search" : "/v1/videos/search";
   const url = new URL(path, "https://api.pexels.com");
   url.searchParams.set("query", query);
-  url.searchParams.set("per_page", String(config.resultsPerProvider));
+  url.searchParams.set("per_page", String(limit));
   url.searchParams.set("page", String(config.page));
   if (config.orientation !== "any") url.searchParams.set("orientation", config.orientation);
   const data = await fetchJson(
@@ -477,10 +513,11 @@ async function saveCache(path, data) {
 
 async function searchPixabay(mediaType, query, config, request, services) {
   const key = await secret(services, "pixabay");
+  const limit = providerPageLimit("pixabay", mediaType, config);
   const params = new URLSearchParams({
     q: query,
     page: String(config.page),
-    per_page: String(Math.max(3, config.resultsPerProvider)),
+    per_page: String(Math.max(3, limit)),
     safesearch: String(config.safeSearch),
     orientation: orientationForPixabay(config.orientation),
   });
@@ -495,17 +532,19 @@ async function searchPixabay(mediaType, query, config, request, services) {
     await saveCache(path, data);
   }
   return (Array.isArray(data.hits) ? data.hits : [])
-    .slice(0, config.resultsPerProvider)
+    .slice(0, limit)
     .map(mediaType === "image" ? pixabayImage : pixabayVideo)
     .filter((item) => item.download_url);
 }
 
 async function searchUnsplash(query, config, request, services) {
   const key = await secret(services, "unsplash");
+  const limit = providerPageLimit("unsplash", "image", config);
   const url = new URL("/search/photos", "https://api.unsplash.com");
   url.searchParams.set("query", query);
   url.searchParams.set("page", String(config.page));
-  url.searchParams.set("per_page", String(config.resultsPerProvider));
+  url.searchParams.set("per_page", String(limit));
+  url.searchParams.set("content_filter", config.safeSearch ? "high" : "low");
   if (config.orientation !== "any") url.searchParams.set("orientation", config.orientation);
   const data = await fetchJson(
     url,
@@ -520,10 +559,11 @@ async function searchUnsplash(query, config, request, services) {
 }
 
 async function searchOpenverse(query, config, request, services) {
+  const limit = providerPageLimit("openverse", "image", config);
   const url = new URL("/v1/images/", "https://api.openverse.org");
   url.searchParams.set("q", query);
   url.searchParams.set("page", String(config.page));
-  url.searchParams.set("page_size", String(config.resultsPerProvider));
+  url.searchParams.set("page_size", String(limit));
   url.searchParams.set("mature", String(!config.safeSearch));
   const ratios = { landscape: "wide", portrait: "tall", square: "square" };
   if (ratios[config.orientation]) url.searchParams.set("aspect_ratio", ratios[config.orientation]);
@@ -544,14 +584,15 @@ async function searchOpenverse(query, config, request, services) {
 }
 
 async function searchWikimedia(mediaType, query, config, request, services) {
+  const limit = providerPageLimit("wikimedia", mediaType, config);
   const url = new URL("/w/api.php", "https://commons.wikimedia.org");
   const fileType = mediaType === "image" ? "bitmap" : "video";
   url.searchParams.set("action", "query");
   url.searchParams.set("generator", "search");
   url.searchParams.set("gsrsearch", `${query} filetype:${fileType}`);
   url.searchParams.set("gsrnamespace", "6");
-  url.searchParams.set("gsrlimit", String(config.resultsPerProvider));
-  url.searchParams.set("gsroffset", String((config.page - 1) * config.resultsPerProvider));
+  url.searchParams.set("gsrlimit", String(limit));
+  url.searchParams.set("gsroffset", String((config.page - 1) * limit));
   url.searchParams.set("prop", "imageinfo|info");
   url.searchParams.set("iiprop", "url|mime|size|mediatype|extmetadata");
   url.searchParams.set("inprop", "url");
@@ -574,24 +615,26 @@ async function searchWikimedia(mediaType, query, config, request, services) {
 }
 
 async function searchNasa(mediaType, query, config, request, services) {
+  const limit = providerPageLimit("nasa", mediaType, config);
   const url = new URL("/search", "https://images-api.nasa.gov");
   url.searchParams.set("q", query);
   url.searchParams.set("media_type", mediaType);
   url.searchParams.set("page", String(config.page));
-  url.searchParams.set("page_size", String(config.resultsPerProvider));
+  url.searchParams.set("page_size", String(limit));
   const data = await fetchJson(url, {}, request, services, "nasa");
   return (Array.isArray(data.collection?.items) ? data.collection.items : [])
-    .slice(0, config.resultsPerProvider)
+    .slice(0, limit)
     .map((item) => nasaRecord(mediaType, item))
     .filter((item) => item.download_location);
 }
 
 async function searchCoverr(query, config, request, services) {
   const key = await secret(services, "coverr");
+  const limit = providerPageLimit("coverr", "video", config);
   const url = new URL("/videos", "https://api.coverr.co");
   url.searchParams.set("query", query);
   url.searchParams.set("page", String(config.page - 1));
-  url.searchParams.set("page_size", String(config.resultsPerProvider));
+  url.searchParams.set("page_size", String(limit));
   const data = await fetchJson(
     url,
     { headers: { Authorization: `Bearer ${key}` } },
@@ -617,6 +660,43 @@ function diagnosticRecords(mediaType, providers) {
   }));
 }
 
+async function searchProvider(provider, mediaType, query, config, request, services) {
+  if (request.settings?.diagnosticFixture === true) return diagnosticRecords(mediaType, [provider]);
+  if (provider === "pexels") return searchPexels(mediaType, query, config, request, services);
+  if (provider === "pixabay") return searchPixabay(mediaType, query, config, request, services);
+  if (provider === "unsplash") return searchUnsplash(query, config, request, services);
+  if (provider === "openverse") return searchOpenverse(query, config, request, services);
+  if (provider === "wikimedia") return searchWikimedia(mediaType, query, config, request, services);
+  if (provider === "nasa") return searchNasa(mediaType, query, config, request, services);
+  return searchCoverr(query, config, request, services);
+}
+
+function fitResultsToBudget(results, maximumBytes = MAX_OUTPUT_JSON_BYTES) {
+  const queues = new Map();
+  for (const result of results) {
+    const queue = queues.get(result.provider) ?? [];
+    queue.push(result);
+    queues.set(result.provider, queue);
+  }
+  const selected = [];
+  let bytes = 2;
+  let added = true;
+  while (added) {
+    added = false;
+    for (const queue of queues.values()) {
+      const item = queue.shift();
+      if (!item) continue;
+      const itemBytes = Buffer.byteLength(JSON.stringify(item)) + 1;
+      if (bytes + itemBytes > maximumBytes)
+        return { results: selected, truncated: selected.length < results.length };
+      selected.push(item);
+      bytes += itemBytes;
+      added = true;
+    }
+  }
+  return { results: selected, truncated: false };
+}
+
 async function search(mediaType, request, services) {
   const query = normalizeQuery(request.inputs?.query);
   const config = normalizeConfiguration(request, mediaType);
@@ -628,16 +708,9 @@ async function search(mediaType, request, services) {
       usage: { provider: "diagnostic", outputUnits: results.length, unit: "items" },
     };
   }
-  const tasks = config.providers.map(async (provider) => {
-    if (provider === "pexels") return searchPexels(mediaType, query, config, request, services);
-    if (provider === "pixabay") return searchPixabay(mediaType, query, config, request, services);
-    if (provider === "unsplash") return searchUnsplash(query, config, request, services);
-    if (provider === "openverse") return searchOpenverse(query, config, request, services);
-    if (provider === "wikimedia")
-      return searchWikimedia(mediaType, query, config, request, services);
-    if (provider === "nasa") return searchNasa(mediaType, query, config, request, services);
-    return searchCoverr(query, config, request, services);
-  });
+  const tasks = config.providers.map((provider) =>
+    searchProvider(provider, mediaType, query, config, request, services),
+  );
   const settled = await Promise.allSettled(tasks);
   const results = [];
   const warnings = [];
@@ -652,10 +725,325 @@ async function search(mediaType, request, services) {
     }
   });
   if (settled.every((entry) => entry.status === "rejected")) throw firstFailure;
+  const fitted = fitResultsToBudget(results);
+  if (fitted.truncated)
+    warnings.push(
+      "A resposta atingiu o limite seguro do plugin; os resultados foram reduzidos de forma equilibrada entre provedores.",
+    );
   return {
     status: "success",
-    values: { results, warnings },
-    usage: { provider: config.providers.join(","), outputUnits: results.length, unit: "items" },
+    values: { results: fitted.results, warnings },
+    usage: {
+      provider: config.providers.join(","),
+      outputUnits: fitted.results.length,
+      unit: "items",
+    },
+  };
+}
+
+function normalizeTerms(value) {
+  const values = Array.isArray(value) ? value : String(value ?? "").split(/[;,\n]/);
+  return values
+    .map((item) => cleanText(item, 80).toLowerCase())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+function normalizeAssetBrief(value) {
+  const brief = Array.isArray(value) ? value[0] : value;
+  if (!brief || typeof brief !== "object")
+    throw new PluginFailure("INVALID_INPUT", "Informe um briefing visual em formato de record.");
+  const primaryQuery = normalizeQuery(brief.primary_query ?? brief.query ?? brief.keywords);
+  const startSeconds = Number(brief.start_seconds ?? brief.start ?? 0);
+  const endSeconds = Number(brief.end_seconds ?? brief.end ?? startSeconds);
+  const preference = cleanText(brief.media_preference || "mixed", 20).toLowerCase();
+  return {
+    briefId: cleanText(brief.brief_id || brief.id || `brief-${startSeconds}`, 120),
+    startSeconds: Number.isFinite(startSeconds) ? Math.max(0, startSeconds) : 0,
+    endSeconds: Number.isFinite(endSeconds) ? Math.max(0, endSeconds) : 0,
+    transcriptExcerpt: cleanText(brief.transcript_excerpt || brief.transcript || "", 500),
+    visualIntent: cleanText(brief.visual_intent || "", 300),
+    primaryQuery,
+    fallbackQueries: [brief.fallback_query_1, brief.fallback_query_2]
+      .map((item) => cleanText(item, 100))
+      .filter(Boolean),
+    mediaPreference: ["image", "video", "mixed"].includes(preference) ? preference : "mixed",
+    orientation: ["landscape", "portrait", "square", "any"].includes(brief.orientation)
+      ? brief.orientation
+      : "any",
+    negativeTerms: normalizeTerms(brief.negative_terms),
+  };
+}
+
+function normalizeBriefConfiguration(request) {
+  const configuration = request.configuration ?? {};
+  const minimumCandidates = clamp(configuration.minimumCandidatesPerBrief, 1, 30, 4);
+  const maximumCandidates = clamp(configuration.maximumCandidatesPerBrief, 1, 50, 12);
+  return {
+    strategy: ["balanced_fallback", "priority_fallback", "all"].includes(
+      configuration.providerStrategy,
+    )
+      ? configuration.providerStrategy
+      : "balanced_fallback",
+    batchIndex: Math.max(0, Number(request.batch?.index) || 0),
+    provider: cleanText(configuration.provider || "all", 20).toLowerCase(),
+    minimumCandidates: Math.min(minimumCandidates, maximumCandidates),
+    maximumCandidates,
+    maximumFallbackQueries: clamp(configuration.maximumFallbackQueries, 0, 2, 2),
+    mediaPolicy: ["follow_brief", "images_only", "videos_only", "mixed"].includes(
+      configuration.mediaPolicy,
+    )
+      ? configuration.mediaPolicy
+      : "follow_brief",
+    minimumImageWidth: clamp(configuration.minimumImageWidth, 0, 10000, 1280),
+    minimumVideoWidth: clamp(configuration.minimumVideoWidth, 0, 10000, 1280),
+    minimumVideoDuration: clamp(configuration.minimumVideoDuration, 0, 3600, 3),
+    maximumVideoDuration: clamp(configuration.maximumVideoDuration, 0, 7200, 0),
+    minimumQualityScore: clamp(configuration.minimumQualityScore, 0, 100, 65),
+    strictOrientation: configuration.strictOrientation !== false,
+    commercialSafe: configuration.licenseProfile !== "all_declared",
+  };
+}
+
+function briefMediaTypes(brief, config) {
+  if (config.mediaPolicy === "images_only") return ["image"];
+  if (config.mediaPolicy === "videos_only") return ["video"];
+  if (config.mediaPolicy === "mixed") return ["video", "image"];
+  if (brief.mediaPreference === "image") return ["image"];
+  if (brief.mediaPreference === "video") return ["video"];
+  return ["video", "image"];
+}
+
+function orientationMatches(item, orientation) {
+  if (orientation === "any" || !item.width || !item.height) return true;
+  const ratio = item.width / item.height;
+  if (orientation === "landscape") return ratio > 1.05;
+  if (orientation === "portrait") return ratio < 0.95;
+  return ratio >= 0.9 && ratio <= 1.1;
+}
+
+function candidateAllowed(item, brief, config) {
+  if (item.media_type === "image" && item.width && item.width < config.minimumImageWidth)
+    return false;
+  if (item.media_type === "video" && item.width && item.width < config.minimumVideoWidth)
+    return false;
+  if (
+    item.media_type === "video" &&
+    item.duration &&
+    (item.duration < config.minimumVideoDuration ||
+      (config.maximumVideoDuration > 0 && item.duration > config.maximumVideoDuration))
+  )
+    return false;
+  if (
+    config.commercialSafe &&
+    /(?:noncommercial|no derivatives|\bby-nc\b|\bby-nd\b)/i.test(item.license_name)
+  )
+    return false;
+  if (config.strictOrientation && !orientationMatches(item, brief.orientation)) return false;
+  const searchable = [item.title, item.author, item.source_name, item.attribution]
+    .map((value) => cleanText(value, 500).toLowerCase())
+    .join(" ");
+  return !brief.negativeTerms.some((term) => searchable.includes(term));
+}
+
+function enrichCandidate(item, brief, config, query, queryIndex, providerIndex) {
+  const dimensionsKnown = Number(item.width) > 0 && Number(item.height) > 0;
+  const orientationScore = brief.orientation === "any" ? 10 : dimensionsKnown ? 15 : 5;
+  const minimumWidth =
+    item.media_type === "image" ? config.minimumImageWidth : config.minimumVideoWidth;
+  const resolutionScore = Number(item.width) >= minimumWidth ? 15 : dimensionsKnown ? 0 : 5;
+  const provenanceScore = item.source_url && item.license_name && item.attribution ? 15 : 5;
+  const usableScore = item.preview_url && (item.download_url || item.download_location) ? 15 : 5;
+  const queryScore = queryIndex === 0 ? 25 : Math.max(10, 20 - queryIndex * 5);
+  const qualityScore = Math.max(
+    0,
+    Math.min(
+      100,
+      10 +
+        queryScore +
+        orientationScore +
+        resolutionScore +
+        provenanceScore +
+        usableScore -
+        providerIndex * 2,
+    ),
+  );
+  return {
+    ...item,
+    brief_id: brief.briefId,
+    start_seconds: brief.startSeconds,
+    end_seconds: Math.max(brief.startSeconds, brief.endSeconds),
+    transcript_excerpt: brief.transcriptExcerpt,
+    visual_intent: brief.visualIntent,
+    query_used: query,
+    query_kind: queryIndex === 0 ? "primary" : `fallback_${queryIndex}`,
+    candidate_score: qualityScore,
+    minimum_quality_score: config.minimumQualityScore,
+    orientation_match: orientationMatches(item, brief.orientation),
+  };
+}
+
+function selectDiverseCandidates(candidates, maximum) {
+  const unique = new Map();
+  for (const candidate of candidates) {
+    const key = `${candidate.provider}:${candidate.external_id}:${candidate.media_type}`;
+    const current = unique.get(key);
+    if (!current || candidate.candidate_score > current.candidate_score) unique.set(key, candidate);
+  }
+  const queues = new Map();
+  for (const candidate of [...unique.values()].sort(
+    (left, right) => right.candidate_score - left.candidate_score,
+  )) {
+    const key = `${candidate.media_type}:${candidate.provider}`;
+    const queue = queues.get(key) ?? [];
+    queue.push(candidate);
+    queues.set(key, queue);
+  }
+  const selected = [];
+  while (selected.length < maximum) {
+    let added = false;
+    for (const queue of queues.values()) {
+      const candidate = queue.shift();
+      if (!candidate) continue;
+      selected.push(candidate);
+      added = true;
+      if (selected.length === maximum) break;
+    }
+    if (!added) break;
+  }
+  return selected;
+}
+
+function providersForBrief(mediaType, config) {
+  const available = PROVIDER_PRIORITY[mediaType];
+  if (config.provider === "all") {
+    if (config.strategy !== "balanced_fallback" || available.length < 2) return available;
+    const offset = config.batchIndex % available.length;
+    return [...available.slice(offset), ...available.slice(0, offset)];
+  }
+  return available.includes(config.provider) ? [config.provider] : [];
+}
+
+async function searchByBrief(request, services) {
+  const brief = normalizeAssetBrief(request.inputs?.asset_briefs);
+  const briefConfig = normalizeBriefConfiguration(request);
+  const queries = [
+    brief.primaryQuery,
+    ...brief.fallbackQueries.slice(0, briefConfig.maximumFallbackQueries),
+  ];
+  const candidates = [];
+  const warnings = [];
+  const failures = [];
+  for (let queryIndex = 0; queryIndex < queries.length; queryIndex += 1) {
+    const query = queries[queryIndex];
+    for (const mediaType of briefMediaTypes(brief, briefConfig)) {
+      if (
+        briefConfig.strategy !== "all" &&
+        selectDiverseCandidates(candidates, briefConfig.maximumCandidates).length >=
+          briefConfig.minimumCandidates
+      )
+        break;
+      const config = normalizeConfiguration(
+        {
+          ...request,
+          configuration: {
+            ...request.configuration,
+            provider: "all",
+            orientation: brief.orientation,
+            resultLimitMode: "provider_max",
+          },
+        },
+        mediaType,
+      );
+      const providers = providersForBrief(mediaType, briefConfig);
+      if (briefConfig.strategy === "all") {
+        const settled = await Promise.allSettled(
+          providers.map((provider) =>
+            searchProvider(provider, mediaType, query, config, request, services),
+          ),
+        );
+        settled.forEach((entry, providerIndex) => {
+          const provider = providers[providerIndex];
+          if (entry.status === "rejected") {
+            failures.push(entry.reason);
+            const code =
+              entry.reason instanceof PluginFailure ? entry.reason.code : "UPSTREAM_ERROR";
+            warnings.push(`${PROVIDERS[provider].label}: ${code}`);
+            return;
+          }
+          candidates.push(
+            ...entry.value
+              .filter((item) => candidateAllowed(item, brief, briefConfig))
+              .map((item) =>
+                enrichCandidate(item, brief, briefConfig, query, queryIndex, providerIndex),
+              )
+              .filter((item) => item.candidate_score >= briefConfig.minimumQualityScore),
+          );
+        });
+      } else {
+        for (let providerIndex = 0; providerIndex < providers.length; providerIndex += 1) {
+          const provider = providers[providerIndex];
+          try {
+            const results = await searchProvider(
+              provider,
+              mediaType,
+              query,
+              config,
+              request,
+              services,
+            );
+            candidates.push(
+              ...results
+                .filter((item) => candidateAllowed(item, brief, briefConfig))
+                .map((item) =>
+                  enrichCandidate(item, brief, briefConfig, query, queryIndex, providerIndex),
+                )
+                .filter((item) => item.candidate_score >= briefConfig.minimumQualityScore),
+            );
+          } catch (error) {
+            failures.push(error);
+            const code = error instanceof PluginFailure ? error.code : "UPSTREAM_ERROR";
+            warnings.push(`${PROVIDERS[provider].label}: ${code}`);
+          }
+          if (
+            selectDiverseCandidates(candidates, briefConfig.maximumCandidates).length >=
+            briefConfig.minimumCandidates
+          )
+            break;
+        }
+      }
+    }
+    if (
+      selectDiverseCandidates(candidates, briefConfig.maximumCandidates).length >=
+      briefConfig.minimumCandidates
+    )
+      break;
+  }
+  const pool = selectDiverseCandidates(candidates, briefConfig.maximumCandidates);
+  if (!pool.length && failures.length === 1) throw failures[0];
+  if (!pool.length)
+    throw new PluginFailure(
+      "NOT_FOUND",
+      `Nenhum asset atingiu o piso de qualidade para o briefing ${brief.briefId}.`,
+    );
+  const selected = [
+    {
+      ...pool[0],
+      candidate_rank: 1,
+      candidate_pool_size: pool.length,
+      selection_mode: "automatic_best",
+      search_warnings: warnings.join("; ").slice(0, 1000),
+    },
+  ];
+  return {
+    status: "success",
+    values: { selected_assets: selected },
+    usage: {
+      provider: [...new Set(selected.map((item) => item.provider))].join(",") || "none",
+      inputUnits: queries.length,
+      outputUnits: selected.length,
+      unit: "items",
+    },
   };
 }
 
@@ -709,6 +1097,7 @@ function eventFingerprint(request, asset) {
         request.blockId,
         request.capabilityId,
         request.invocation?.attempt || 1,
+        request.batch?.itemId || asset.brief_id || "single",
         asset.asset_id,
       ].join(":"),
     )
@@ -954,6 +1343,39 @@ async function download(mediaType, request, services) {
   };
 }
 
+async function downloadSelected(request, services) {
+  const asset = assetFromInput(request.inputs?.selected_assets);
+  if (!["image", "video"].includes(asset.media_type))
+    throw new PluginFailure(
+      "INVALID_INPUT",
+      "O asset selecionado deve ser uma imagem ou um vídeo.",
+    );
+  const result = await download(
+    asset.media_type,
+    { ...request, inputs: { ...request.inputs, asset } },
+    services,
+  );
+  const artifact = result.values[asset.media_type];
+  return {
+    ...result,
+    values: {
+      assets: [
+        {
+          ...artifact,
+          brief_id: cleanText(asset.brief_id, 120),
+          start_seconds: Number(asset.start_seconds) || 0,
+          end_seconds: Number(asset.end_seconds) || 0,
+          provider: cleanText(asset.provider, 50),
+          source_url: cleanText(asset.source_url, 2000),
+          attribution: cleanText(asset.attribution, 500),
+          license_name: cleanText(asset.license_name, 200),
+          license_url: cleanText(asset.license_url, 2000),
+        },
+      ],
+    },
+  };
+}
+
 function errorResponse(error) {
   if (error instanceof PluginFailure) {
     return {
@@ -979,10 +1401,14 @@ export async function execute(request, services) {
       return await search("image", request, services);
     if (request.capabilityId === "search-stock-videos")
       return await search("video", request, services);
+    if (request.capabilityId === "search-stock-by-briefs")
+      return await searchByBrief(request, services);
     if (request.capabilityId === "download-stock-image")
       return await download("image", request, services);
     if (request.capabilityId === "download-stock-video")
       return await download("video", request, services);
+    if (request.capabilityId === "download-selected-stock-assets")
+      return await downloadSelected(request, services);
     throw new PluginFailure("NOT_SUPPORTED", "Capacidade não suportada por este plugin.");
   } catch (error) {
     return errorResponse(error);
@@ -991,6 +1417,13 @@ export async function execute(request, services) {
 
 export const __test = Object.freeze({
   normalizeQuery,
+  normalizeAssetBrief,
+  normalizeBriefConfiguration,
+  providerPageLimit,
+  candidateAllowed,
+  providersForBrief,
+  selectDiverseCandidates,
+  fitResultsToBudget,
   choosePexelsVideo,
   choosePixabayVideo,
   pexelsImage,

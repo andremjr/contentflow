@@ -186,6 +186,7 @@ function promptFor(request, configuration, schema, choosing) {
     configuration.skillName
       ? `Use explicitamente a skill $${configuration.skillName}.`
       : "Use uma skill disponível no workspace quando a descrição dela corresponder claramente à tarefa.",
+    "Você pode usar pesquisa, leitura, edição, scripts e demais ferramentas do Codex somente dentro das permissões configuradas para esta etapa.",
     `Canal: ${context.channel?.name ?? "não informado"}`,
     `Idioma do canal: ${context.channel?.language ?? context.locale ?? "não informado"}`,
     `Nicho: ${context.channel?.niche ?? "não informado"}`,
@@ -253,6 +254,21 @@ function matchesSchema(value, schema) {
 
 function validateResult(value, schema) {
   return matchesSchema(value, schema);
+}
+
+function conversationIdFromEvents(stdout) {
+  for (const line of String(stdout ?? "").split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const event = JSON.parse(line);
+      if (event?.type === "thread.started" && typeof event.thread_id === "string") {
+        return event.thread_id.trim();
+      }
+    } catch {
+      // O arquivo de resultado continua sendo a autoridade para a entrega.
+    }
+  }
+  return undefined;
 }
 
 function diagnosticResult(request, choosing) {
@@ -393,31 +409,60 @@ export async function executeWithRunner(request, services, runner = runCodexProc
     const prompt = promptFor(request, configuration, schema, choosing);
     const args = ["--ask-for-approval", "never"];
     if (configuration.enableWebSearch) args.push("--search");
-    args.push(
-      "exec",
-      "--cd",
-      workspaceRoot,
-      "--sandbox",
-      configuration.sandboxMode,
-      "--skip-git-repo-check",
-      "--ephemeral",
-      "--ignore-user-config",
-      "--model",
-      configuration.model,
-      "--config",
-      "features.plugins=false",
-      "--config",
-      "features.remote_plugin=false",
-      "--output-schema",
-      schemaPath,
-      "--output-last-message",
-      resultPath,
-      "--config",
-      `model_reasoning_effort=\"${configuration.reasoningEffort}\"`,
-    );
-    args.push("-");
+    args.push("exec");
+    const reusedConversation = request.conversation?.mode === "reuse";
+    if (reusedConversation) {
+      const conversationId = String(request.conversation.id ?? "").trim();
+      if (!/^[A-Za-z0-9_-]{8,200}$/.test(conversationId)) {
+        throw new PluginFailure(
+          "INVALID_INPUT",
+          "O identificador da conversa do Codex é inválido.",
+        );
+      }
+      args.push("resume", "--ignore-user-config", "--skip-git-repo-check");
+      args.push(
+        "--model",
+        configuration.model,
+        "--output-schema",
+        schemaPath,
+        "--output-last-message",
+        resultPath,
+        "--json",
+        "--config",
+        "features.plugins=false",
+        "--config",
+        "features.remote_plugin=false",
+        "--config",
+        `model_reasoning_effort=\"${configuration.reasoningEffort}\"`,
+        conversationId,
+        "-",
+      );
+    } else {
+      args.push(
+        "--cd",
+        workspaceRoot,
+        "--sandbox",
+        configuration.sandboxMode,
+        "--skip-git-repo-check",
+        "--ignore-user-config",
+        "--model",
+        configuration.model,
+        "--config",
+        "features.plugins=false",
+        "--config",
+        "features.remote_plugin=false",
+        "--output-schema",
+        schemaPath,
+        "--output-last-message",
+        resultPath,
+        "--json",
+        "--config",
+        `model_reasoning_effort=\"${configuration.reasoningEffort}\"`,
+        "-",
+      );
+    }
 
-    await runner({
+    const execution = await runner({
       args,
       cwd: workspaceRoot,
       env: {
@@ -425,6 +470,10 @@ export async function executeWithRunner(request, services, runner = runCodexProc
         SYSTEMROOT: process.env.SYSTEMROOT,
         TEMP: process.env.TEMP,
         TMP: process.env.TMP,
+        HOME: process.env.HOME,
+        USERPROFILE: process.env.USERPROFILE,
+        APPDATA: process.env.APPDATA,
+        LOCALAPPDATA: process.env.LOCALAPPDATA,
       },
       prompt,
       signal: services.signal,
@@ -452,11 +501,14 @@ export async function executeWithRunner(request, services, runner = runCodexProc
         "A entrega do Codex não corresponde ao tipo solicitado pelo bloco.",
       );
     }
-    return {
+    const response = {
       status: "success",
       values: parsed,
       usage: { provider: "OpenAI", model: configuration.model },
     };
+    const conversationId = conversationIdFromEvents(execution?.stdout);
+    if (conversationId) response.conversation = { id: conversationId };
+    return response;
   } catch (error) {
     return errorResponse(error);
   }

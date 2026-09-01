@@ -6,7 +6,9 @@ Leia este arquivo sempre que o plugin envolver manifesto, portas, tipos, execuç
 
 O arquivo `contentflow.plugin.json` fica na raiz do pacote. Os campos essenciais são `apiVersion: "1"`, `id` reverso e imutável, `name`, `version` SemVer, `description`, `author`, `license`, `runtime`, `entrypoint` e `capabilities`. Declare `minCoreVersion` quando aplicável. O runtime v1 é Node/ESM, normalmente `>=26 <27`.
 
-Cada capability deve declarar `id`, `operator` (`IA` ou `Código`), `blockTypes`, `processTypes` quando necessário, `inputPorts`, `outputPorts`, `execution`, `sideEffects`, `cost`, `dataPolicy`, `blockConfigSchema` e, quando útil, `outputSchema`. `deliveryTypes` classifica o pacote para descoberta, mas não substitui as portas.
+Cada capability deve declarar `id`, `operator` (`IA` ou `Código`), `blockTypes`, `processTypes` quando necessário, `inputPorts`, `outputPorts`, `execution`, `sideEffects`, `cost`, `dataPolicy`, `blockConfigSchema` e, quando útil, `outputSchema`. `deliveryTypes` classifica o pacote para descoberta, mas não substitui as portas. `instructionUsage` informa se a capability exige, aceita ou ignora a instrução resolvida do bloco; ausência equivale a `optional`.
+
+No manifesto, `branding.iconPath` pode apontar para PNG/WebP local de até 512 KiB, relativo ao pacote, sem URL, caminho absoluto, `..` ou symlink externo. Recomenda-se 256 × 256; o autor precisa possuir direito de uso. `profileSetup`, `execution.itemOrchestration` e `supportsConversationContinuation` são contratos funcionais: só os declare quando handler e testes cobrirem seus ciclos completos.
 
 Use schemas JSON Schema Draft 2020-12 dentro do subconjunto aceito pelo núcleo. Configurações devem ter raiz `object`; prefira `additionalProperties: false`; defaults precisam satisfazer o próprio schema; propriedades desconhecidas devem ser rejeitadas antes de invocar o handler.
 
@@ -18,18 +20,24 @@ O handler deve usar `request.inputs[portKey]`, nunca labels. Outputs usam as cha
 
 ## Request e services
 
-A requisição inclui, entre outros campos, `executionId`, `traceId`, `blockId`, `capabilityId`, `attempt`, `invocation`, `configuration`, `settings`, `inputs`, `inputContract`, `inputDeliveries`, `outputContract`, `validation`, `retryFeedback`, `conversation` e `context`.
+A requisição inclui, entre outros campos, `executionId`, `traceId`, `blockId`, `capabilityId`, `attempt`, `invocation`, `configuration`, `settings`, `inputs`, `inputContract`, `inputDeliveries`, `outputContract`, `validation`, `retryFeedback`, `resolvedInstruction`, `unresolvedInstructionVariables`, `batch`, `conversation` e `context`.
+
+Capabilities com `instructionUsage: required` devem falhar de forma clara quando `resolvedInstruction` estiver vazia; `optional` pode combiná-la com configuração própria; `not_applicable` deve ignorá-la. Nunca volte ao template cru quando variáveis ficaram não resolvidas sem tratar `unresolvedInstructionVariables`.
 
 Plugins que preservam uma conversa no provedor podem declarar `supportsConversationContinuation: true`. O request recebe `conversation: { mode: "new" }` ou `conversation: { mode: "reuse", id: "..." }`; o sucesso devolve opcionalmente `conversation: { id: "..." }`. Trate o ID como opaco, valide que pertence ao provedor esperado e nunca inclua tokens. O núcleo só permite reutilização entre blocos anteriores com o mesmo plugin e a mesma conexão local.
 
+`execution.itemOrchestration` declara `inputPort`, `outputPort` e `mode: "sequential"`. O núcleo chama uma vez por item, fornece `request.batch` com ID/índice/total, acumula o output e persiste cada entrega antes da seguinte. O plugin não cria o loop editorial nem reprocessa itens já concluídos.
+
+`profileSetup` habilita `invocation.mode = "configure"` com `action = "status"` ou `"prepare"`. Essas chamadas não pertencem a Projeto e retornam `values.ready`. Perfis alternativos só usam `fallbackConfigurationKey` com aliases preparados explicitamente. Qualquer resposta de erro pode avançar para o próximo alias, inclusive autenticação, rate limit, cota, permissão, upgrade, bloqueio ou validação de output; cancelamento e lista esgotada encerram o fallback.
+
 A assinatura é `execute(request, services)`. Serviços:
 
-| Serviço | Regra |
-| --- | --- |
-| `signal` | Encaminhar para operações abortáveis. |
-| `getSecret(key)` | Só aceita chaves declaradas no manifesto. |
-| `resolveInputFile(file)` | Resolve `StoredFile` autorizado em staging. |
-| `getOutputPath(relativePath)` | Retorna caminho temporário exclusivo de saída. |
+| Serviço                          | Regra                                                       |
+| -------------------------------- | ----------------------------------------------------------- |
+| `signal`                         | Encaminhar para operações abortáveis.                       |
+| `getSecret(key)`                 | Só aceita chaves declaradas no manifesto.                   |
+| `resolveInputFile(file)`         | Resolve `StoredFile` autorizado em staging.                 |
+| `getOutputPath(relativePath)`    | Retorna caminho temporário exclusivo de saída.              |
 | `getWorkspacePath(relativePath)` | Retorna caminho persistente dentro do workspace autorizado. |
 
 Secrets nunca aparecem no envelope serializável, Método, snapshot, log ou artifact.

@@ -9,7 +9,7 @@ const manifest = JSON.parse(
 const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "1.0.0");
+  assert.equal(manifest.version, "1.0.1");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
 });
@@ -75,7 +75,10 @@ test("manifesto declara as seis capabilities do Claude Browser Studio", () => {
   const capability = manifest.capabilities.find((item) => item.id === "generate-text-in-browser");
   assert.ok(capability);
   assert.equal(capability.instructionUsage, "required");
-  assert.deepEqual(Object.keys(capability.blockConfigSchema.properties), ["accountProfile"]);
+  assert.deepEqual(Object.keys(capability.blockConfigSchema.properties), [
+    "fallbackAccountProfiles",
+    "accountProfile",
+  ]);
   assert.deepEqual(capability.blockTypes, ["CRIAR"]);
   assert.deepEqual(
     capability.outputPorts.map((item) => item.key),

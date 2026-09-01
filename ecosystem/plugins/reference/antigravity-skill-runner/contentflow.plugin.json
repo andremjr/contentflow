@@ -1,0 +1,380 @@
+{
+  "$schema": "../../../docs/schemas/contentflow-plugin-v1.schema.json",
+  "apiVersion": "1",
+  "id": "com.contentflow.antigravity-skill-runner",
+  "name": "Antigravity Skill Runner",
+  "version": "0.1.0",
+  "description": "Executa o agente Antigravity e suas skills locais em etapas de produção, com entregas tipadas para o Método.",
+  "author": "ContentFlow",
+  "license": "LicenseRef-ContentFlow-Antigravity-Plugin-Proprietary-1.0",
+  "branding": { "iconPath": "assets/icon.png" },
+  "homepage": "https://github.com/andremjr/contentflow",
+  "repository": "https://github.com/andremjr/contentflow",
+  "runtime": {
+    "kind": "node",
+    "version": ">=26 <27",
+    "module": "esm"
+  },
+  "minCoreVersion": "0.3.5",
+  "entrypoint": "handler.mjs",
+  "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
+  "secretKeys": [],
+  "deliveryTypes": ["text", "processing"],
+  "supportsConversationContinuation": true,
+  "settingsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "capabilities": [
+    {
+      "id": "run-production-skill",
+      "operator": "IA",
+      "instructionUsage": "optional",
+      "blockTypes": ["BUSCAR", "CRIAR", "VALIDAR"],
+      "processTypes": [
+        "theme",
+        "title",
+        "thumbnail",
+        "script",
+        "narration",
+        "assets",
+        "editing",
+        "publishing"
+      ],
+      "inputPorts": [
+        {
+          "key": "context",
+          "label": "Contexto",
+          "description": "Entradas resolvidas que o agente usará para produzir a entrega.",
+          "acceptedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "approval",
+            "thumbnail_layout"
+          ],
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Resultado do agente",
+          "description": "Entrega tipada produzida pelo Antigravity.",
+          "producedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "approval"
+          ],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "approval",
+        "thumbnail_layout"
+      ],
+      "producedOutputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "approval"
+      ],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 900000,
+        "supportsCancellation": false,
+        "maxConcurrency": 1
+      },
+      "sideEffects": ["external_read", "external_write", "subprocess"],
+      "cost": {
+        "model": "unknown",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": [
+          "Google Antigravity",
+          "provedores chamados por ferramentas e skills autorizadas"
+        ],
+        "retentionPolicyUrl": "https://policies.google.com/privacy",
+        "trainingPolicyUrl": "https://policies.google.com/privacy"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "skill_name": {
+            "type": "string",
+            "title": "Nome da skill",
+            "description": "Nome técnico da skill em .agents/skills. Vazio permite seleção implícita pelo Antigravity.",
+            "pattern": "^$|^[a-z0-9][a-z0-9_-]{0,63}$",
+            "default": ""
+          },
+          "task_prompt": {
+            "type": "string",
+            "title": "Orientação adicional",
+            "description": "Complementa as instruções do bloco sem substituir o contrato do Método.",
+            "format": "textarea",
+            "default": "Execute a etapa de produção e devolva somente a entrega solicitada."
+          },
+          "model": {
+            "type": "string",
+            "title": "Modelo do Antigravity",
+            "description": "Opcional. Vazio usa o modelo padrão da conta conectada.",
+            "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._:/ -]{0,99}$",
+            "default": ""
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agente do Antigravity",
+            "description": "Opcional. Vazio usa o agente padrão; consulte os nomes disponíveis com agy agents.",
+            "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._:/ -]{0,99}$",
+            "default": ""
+          },
+          "effort": {
+            "type": "string",
+            "title": "Esforço de raciocínio",
+            "oneOf": [
+              { "const": "low", "title": "Baixo" },
+              { "const": "medium", "title": "Médio" },
+              { "const": "high", "title": "Alto" }
+            ],
+            "default": "medium"
+          },
+          "workspace_mode": {
+            "type": "string",
+            "title": "Acesso ao workspace",
+            "description": "Leitura usa o modo de planejamento. Escrita permite que o agente edite arquivos do workspace; comandos e web continuam sujeitos às permissões finas do Antigravity.",
+            "oneOf": [
+              { "const": "read-only", "title": "Somente leitura" },
+              { "const": "workspace-write", "title": "Ler e escrever no workspace" }
+            ],
+            "default": "read-only"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "title": "Tempo máximo (segundos)",
+            "minimum": 30,
+            "maximum": 3600,
+            "default": 900
+          },
+          "diagnostic_mode": {
+            "type": "boolean",
+            "title": "Modo de diagnóstico",
+            "description": "Testa o contrato sem chamar o Antigravity. Não use em Métodos de produção.",
+            "default": false
+          }
+        },
+        "required": [
+          "skill_name",
+          "task_prompt",
+          "model",
+          "agent",
+          "effort",
+          "workspace_mode",
+          "timeout_seconds",
+          "diagnostic_mode"
+        ]
+      },
+      "outputSchema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "choose-with-production-skill",
+      "operator": "IA",
+      "instructionUsage": "optional",
+      "blockTypes": ["ESCOLHER"],
+      "processTypes": [
+        "theme",
+        "title",
+        "thumbnail",
+        "script",
+        "narration",
+        "assets",
+        "editing",
+        "publishing"
+      ],
+      "inputPorts": [
+        {
+          "key": "context",
+          "label": "Contexto da escolha",
+          "acceptedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "approval",
+            "thumbnail_layout"
+          ],
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Item escolhido",
+          "producedTypes": ["select"],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "approval",
+        "thumbnail_layout"
+      ],
+      "producedOutputTypes": ["select"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 900000,
+        "supportsCancellation": false,
+        "maxConcurrency": 1
+      },
+      "sideEffects": ["external_read", "external_write", "subprocess"],
+      "cost": {
+        "model": "unknown",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": [
+          "Google Antigravity",
+          "provedores chamados por ferramentas e skills autorizadas"
+        ],
+        "retentionPolicyUrl": "https://policies.google.com/privacy",
+        "trainingPolicyUrl": "https://policies.google.com/privacy"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "skill_name": {
+            "type": "string",
+            "title": "Nome da skill",
+            "pattern": "^$|^[a-z0-9][a-z0-9_-]{0,63}$",
+            "default": ""
+          },
+          "task_prompt": {
+            "type": "string",
+            "title": "Orientação adicional",
+            "format": "textarea",
+            "default": "Escolha o item que melhor atende às instruções do bloco."
+          },
+          "model": {
+            "type": "string",
+            "title": "Modelo do Antigravity",
+            "description": "Opcional. Vazio usa o modelo padrão da conta conectada.",
+            "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._:/ -]{0,99}$",
+            "default": ""
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agente do Antigravity",
+            "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._:/ -]{0,99}$",
+            "default": ""
+          },
+          "effort": {
+            "type": "string",
+            "title": "Esforço de raciocínio",
+            "oneOf": [
+              { "const": "low", "title": "Baixo" },
+              { "const": "medium", "title": "Médio" },
+              { "const": "high", "title": "Alto" }
+            ],
+            "default": "medium"
+          },
+          "workspace_mode": {
+            "type": "string",
+            "title": "Acesso ao workspace",
+            "oneOf": [
+              { "const": "read-only", "title": "Somente leitura" },
+              { "const": "workspace-write", "title": "Ler e escrever no workspace" }
+            ],
+            "default": "read-only"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "title": "Tempo máximo (segundos)",
+            "minimum": 30,
+            "maximum": 3600,
+            "default": 900
+          },
+          "diagnostic_mode": {
+            "type": "boolean",
+            "title": "Modo de diagnóstico",
+            "description": "Testa o contrato sem chamar o Antigravity. Não use em Métodos de produção.",
+            "default": false
+          }
+        },
+        "required": [
+          "skill_name",
+          "task_prompt",
+          "model",
+          "agent",
+          "effort",
+          "workspace_mode",
+          "timeout_seconds",
+          "diagnostic_mode"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "selectedItemId": { "type": "string" }
+        },
+        "required": ["selectedItemId"]
+      }
+    }
+  ]
+}

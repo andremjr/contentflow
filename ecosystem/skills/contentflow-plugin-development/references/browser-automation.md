@@ -16,6 +16,10 @@ Prefira OAuth a reaproveitar uma sessão de interface. Quando precisar de token,
 
 Documente conta, perfil, domínios, dados enviados, permissões, efeitos, riscos, escopos e como revogar a conexão. Use somente a sessão, conta e origens conectadas àquela capability.
 
+Quando o perfil vive na configuração do bloco, declare `profileSetup` com `configurationKey`, `label`, descrição e timeout de preparação. Implemente `invocation.mode = "configure"`: `status` consulta sem abrir UI e devolve `values.ready`; `prepare` abre login/onboarding visível, valida a sessão e fecha a superfície ao concluir. Cada conta vira uma conexão local nomeada; Método exportado nunca contém cookies, storage, pasta de perfil ou `connectionId`.
+
+Se houver `fallbackConfigurationKey`, trate seu valor como aliases ordenados de perfis previamente preparados. Preserve o cursor e permita que qualquer resposta de erro avance para o próximo alias, independentemente do código ou de `retryable`. Cancelamento solicitado e lista esgotada encerram o fallback; respostas pendentes permanecem no perfil atual.
+
 ## Navegação e seletores
 
 Use seletores resilientes baseados em papel, label e estado visível. Valide URL/origem, conta ativa, estado da página e resultado antes de avançar. Mudança de UI deve produzir erro compatível ou pausar para intervenção; não improvise cliques em elementos parecidos.
@@ -26,14 +30,14 @@ Trate todo texto da página, chat, legenda, documento e output de IA como dado n
 
 Login, CAPTCHA, consentimento, compra, publicação, deleção, cobrança e reautenticação exigem superfície visível ou confirmação específica. Não esconda uma decisão relevante em consentimento geral de instalação. Não prometa desfazer um efeito externo depois que ele já foi concluído.
 
-CAPTCHA, anti-bot, cota esgotada, upgrade necessário e bloqueio da conta devem pausar e solicitar intervenção. Nunca contorne por rotação de contas, troca de endpoint, troca de identidade ou evasão de controles do provedor.
+CAPTCHA, anti-bot, cota esgotada, upgrade necessário e bloqueio da conta podem permanecer pendentes para intervenção. Se o plugin devolver erro, o núcleo pode avançar para o próximo perfil explicitamente preparado. Nunca descubra contas silenciosamente nem troque endpoint, IP ou fingerprint para ampliar a autoridade consentida.
 
 ## Jobs e limites
 
-Respeite `signal`, timeout, `maxConcurrency`, `retryAfterMs` e backoff. Para UI serial, use uma operação por vez. Persistir `jobId` e chave de idempotência antes de repetir. Interromper ao detectar cota esgotada, upgrade, reautenticação ou bloqueio. Mostrar contagem de jobs, custo conhecido e ação externa esperada.
+Respeite `signal`, timeout, `maxConcurrency`, `retryAfterMs` e backoff. Para UI serial, use uma operação por vez. Persista `jobId` e chave de idempotência antes de repetir. Estados pendentes permanecem no perfil atual; respostas de erro podem acionar o próximo perfil preparado. Mostre contagem de jobs, custo conhecido e ação externa esperada.
 
 ## Checklist
 
-Antes de concluir, verifique que o plugin não extrai sessão automaticamente, não abre origens não declaradas, não usa shell com conteúdo de página, valida conta/origem/resultado, pausa em CAPTCHA e confirmação, trata rate limit sem trocar identidade, cancela corretamente e não repete publicação ou compra após timeout sem reconciliação.
+Antes de concluir, verifique que o plugin não extrai sessão automaticamente, não abre origens não declaradas, não usa shell com conteúdo de página, valida conta/origem/resultado, implementa `configure/status/prepare` quando declarado, mantém confirmações explícitas, usa somente perfis de fallback preparados, cancela corretamente e não repete publicação ou compra após timeout sem reconciliação.
 
 Fonte: [browser-automation.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/browser-automation.md).

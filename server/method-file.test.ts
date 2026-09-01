@@ -79,3 +79,24 @@ test("exporta e remapeia continuidade de conversa sem expor a conta local", () =
     assert.equal(copied[1].plugin.conversation.sourceBlockId, copied[0].id);
   assert.equal(copied[1].plugin?.connectionId, undefined);
 });
+
+test("exporta requisito de ESCOLHER sem expor collectionId local", () => {
+  const choosing: ProcessMethod = {
+    processType: "title",
+    blocks: [
+      {
+        id: "choose-structure",
+        type: "ESCOLHER",
+        operator: "Humano",
+        collectionId: "local-title-structures",
+        parameters: [],
+        order: 0,
+      },
+    ],
+  };
+
+  const contents = serializeMethodFile("Estrutura de título", choosing);
+  assert.doesNotMatch(contents, /local-title-structures/);
+  const parsed = parseMethodFile(contents);
+  assert.equal(parsed.method.blocks[0].collectionId, undefined);
+});

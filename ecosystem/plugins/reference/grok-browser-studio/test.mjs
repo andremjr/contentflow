@@ -48,10 +48,11 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara capabilities reais de texto, pesquisa, imagem e vídeo", () => {
   assert.equal(manifest.id, "local.contentflow.grok-browser-studio");
-  assert.equal(manifest.version, "1.0.0");
+  assert.equal(manifest.version, "1.0.1");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.capabilities[0].instructionUsage, "required");
   assert.deepEqual(Object.keys(manifest.capabilities[0].blockConfigSchema.properties), [
+    "fallbackAccountProfiles",
     "accountProfile",
   ]);
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);

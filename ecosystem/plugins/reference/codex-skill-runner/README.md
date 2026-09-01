@@ -1,6 +1,6 @@
 # Codex Skill Runner
 
-Plugin independente compatível com ContentFlow Plugin API v1. Ele permite executar skills do Codex como operadores de blocos do Método, mantendo a sequência, os bindings, as tentativas e as entregas sob controle do ContentFlow.
+Plugin independente compatível com ContentFlow Plugin API v1. Ele automatiza o agente Codex dentro dos blocos do Método como uma pessoa o usaria no chat ou terminal: conversa, pesquisa, análise, criação de scripts e edição no workspace, conforme as permissões concedidas. Skills são a especialização principal, mas não limitam as ferramentas do agente.
 
 Este pacote não é afiliado, patrocinado nem mantido pela OpenAI. “Codex” e “OpenAI” são usados apenas para identificar o provedor interoperado.
 
@@ -8,7 +8,8 @@ Este pacote não é afiliado, patrocinado nem mantido pela OpenAI. “Codex” e
 
 - `run-production-skill`: usa uma skill para executar blocos `BUSCAR`, `CRIAR` e `VALIDAR`, com saída de texto ou dados estruturados.
 - `choose-with-production-skill`: escolhe exatamente um item existente da Biblioteca Estratégica em blocos `ESCOLHER`.
-- Invocação não interativa por `codex exec`, schema de saída obrigatório e sessão efêmera.
+- Invocação não interativa por `codex exec` e schema de saída obrigatório.
+- Continuidade opcional entre blocos com o ID da thread e `codex exec resume`.
 - Reutilização da autenticação oficial já configurada no Codex CLI, inclusive o acesso por assinatura do ChatGPT.
 
 Arquivos, imagens, áudio e vídeo ainda não são outputs desta versão. Eles exigem uma capability própria que promova artifacts pelo protocolo do ContentFlow.
@@ -39,7 +40,7 @@ workspace/
 
 Copie apenas as skills necessárias para esse workspace. Cada `SKILL.md` precisa declarar `name` e `description`. O campo **Nome da skill** do bloco pode invocá-la explicitamente; quando vazio, o Codex pode selecionar implicitamente uma skill compatível.
 
-O plugin não lê, copia nem interpreta credenciais. Ele inicia o executável oficial, e o próprio Codex CLI acessa sua sessão já configurada.
+O plugin não lê, copia nem interpreta credenciais. Ele inicia o executável oficial, e o próprio Codex CLI acessa sua sessão já configurada. Além das skills, o agente pode pesquisar, analisar arquivos, criar scripts e editar o workspace quando essas capacidades forem autorizadas na configuração do bloco.
 
 ## Segurança e permissões
 
@@ -49,7 +50,7 @@ O pacote solicita:
 - `filesystem:read` e `filesystem:write`: leitura da skill e estado temporário/dedicado dentro da pasta conectada;
 - `process`: início do Codex CLI. Esta é uma permissão avançada; subprocessos possuem a autoridade normal do usuário.
 
-O Codex é iniciado sem shell, com argumentos estruturados, aprovação `never`, sandbox `read-only` por padrão, configuração pessoal ignorada e sessão efêmera. O flag `--ignore-user-config` evita carregar preferências pessoais, mas preserva a autenticação oficial do CLI. Plugins remotos do Codex ficam desativados nessa execução. O modo `workspace-write` deve ser usado somente quando scripts da skill realmente precisarem gravar na pasta autorizada.
+O Codex é iniciado sem shell, com argumentos estruturados, aprovação `never`, sandbox `read-only` por padrão e configuração pessoal ignorada. O flag `--ignore-user-config` evita carregar preferências pessoais, mas preserva a autenticação oficial do CLI. Plugins remotos do Codex ficam desativados nessa execução. O modo `workspace-write` deve ser usado somente quando o agente realmente precisar gravar na pasta autorizada. As sessões persistem apenas para permitir a continuidade explicitamente selecionada pelo Método.
 
 Prompts, entradas e conteúdo recuperado são tratados como dados não confiáveis. Nenhuma credencial é inserida no prompt, na resposta ou nos logs pelo plugin.
 

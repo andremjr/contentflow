@@ -8,6 +8,7 @@
   "inputs": { "query": "fitness workout" },
   "configuration": {
     "provider": "all",
+    "resultLimitMode": "custom",
     "resultsPerProvider": 3,
     "page": 1,
     "orientation": "landscape",

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
@@ -350,6 +351,19 @@ function parseRegistryDefaultValue(output) {
 }
 
 async function windowsChromeCandidates() {
+  const standardCandidates = [
+    process.env.PROGRAMFILES &&
+      join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe"),
+    process.env["PROGRAMFILES(X86)"] &&
+      join(process.env["PROGRAMFILES(X86)"], "Google", "Chrome", "Application", "chrome.exe"),
+    process.env.LOCALAPPDATA &&
+      join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+  ].filter(Boolean);
+  const existing = standardCandidates.filter((p) => existsSync(p));
+  if (existing.length) return dedupeStrings(existing);
+
   const found = [];
   const registryKeys = [
     "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
@@ -374,17 +388,6 @@ async function windowsChromeCandidates() {
         .filter(Boolean),
     );
   }
-
-  found.push(
-    process.env.PROGRAMFILES &&
-      join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe"),
-    process.env["PROGRAMFILES(X86)"] &&
-      join(process.env["PROGRAMFILES(X86)"], "Google", "Chrome", "Application", "chrome.exe"),
-    process.env.LOCALAPPDATA &&
-      join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-  );
 
   return dedupeStrings(found);
 }
@@ -2584,12 +2587,19 @@ export async function execute(request, services) {
       await saveCaptchaRetryNavigation(request, services, activeProjectUrl).catch(() => undefined);
     }
 
-    return resultError(
+    const errorResponse = resultError(
       cause?.code ?? "UPSTREAM_UNAVAILABLE",
       `${cause?.message ?? "Falha na automação do Chrome."}${suffix}`,
       Boolean(cause?.retryable),
       cause?.retryAfterMs,
     );
+    if (files.length > 0) {
+      errorResponse.partialValues = { images: files };
+    }
+    if (artifacts.length > 0) {
+      errorResponse.artifacts = artifacts;
+    }
+    return errorResponse;
   }
 }
 export const __test = {

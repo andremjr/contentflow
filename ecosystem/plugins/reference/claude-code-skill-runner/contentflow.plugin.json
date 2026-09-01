@@ -1,0 +1,349 @@
+{
+  "$schema": "../../../docs/schemas/contentflow-plugin-v1.schema.json",
+  "apiVersion": "1",
+  "id": "com.contentflow.claude-code-skill-runner",
+  "name": "Claude Code Skill Runner",
+  "version": "0.1.0",
+  "description": "Executa o agente Claude Code e suas skills locais em etapas de produção, com entregas tipadas para o Método.",
+  "author": "ContentFlow",
+  "license": "LicenseRef-ContentFlow-Claude-Code-Plugin-Proprietary-1.0",
+  "branding": { "iconPath": "assets/icon.png" },
+  "homepage": "https://github.com/andremjr/contentflow",
+  "repository": "https://github.com/andremjr/contentflow",
+  "runtime": {
+    "kind": "node",
+    "version": ">=26 <27",
+    "module": "esm"
+  },
+  "minCoreVersion": "0.3.5",
+  "entrypoint": "handler.mjs",
+  "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
+  "secretKeys": [],
+  "deliveryTypes": ["text", "processing"],
+  "supportsConversationContinuation": true,
+  "settingsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "capabilities": [
+    {
+      "id": "run-production-skill",
+      "operator": "IA",
+      "instructionUsage": "optional",
+      "blockTypes": ["BUSCAR", "CRIAR", "VALIDAR"],
+      "processTypes": [
+        "theme",
+        "title",
+        "thumbnail",
+        "script",
+        "narration",
+        "assets",
+        "editing",
+        "publishing"
+      ],
+      "inputPorts": [
+        {
+          "key": "context",
+          "label": "Contexto",
+          "description": "Entradas resolvidas que o agente usará para produzir a entrega.",
+          "acceptedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "approval",
+            "thumbnail_layout"
+          ],
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Resultado do agente",
+          "description": "Entrega tipada produzida pelo Claude Code.",
+          "producedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "approval"
+          ],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "approval",
+        "thumbnail_layout"
+      ],
+      "producedOutputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "approval"
+      ],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 900000,
+        "supportsCancellation": false,
+        "maxConcurrency": 1
+      },
+      "sideEffects": ["external_read", "external_write", "subprocess"],
+      "cost": {
+        "model": "unknown",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["Anthropic", "provedores chamados por ferramentas e skills autorizadas"],
+        "retentionPolicyUrl": "https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-data",
+        "trainingPolicyUrl": "https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "skill_name": {
+            "type": "string",
+            "title": "Nome da skill",
+            "description": "Nome técnico da skill disponível ao Claude Code. Vazio permite seleção implícita pelo agente.",
+            "pattern": "^$|^[a-z0-9][a-z0-9_-]{0,63}$",
+            "default": ""
+          },
+          "task_prompt": {
+            "type": "string",
+            "title": "Orientação adicional",
+            "description": "Complementa as instruções do bloco sem substituir o contrato do Método.",
+            "format": "textarea",
+            "default": "Execute a etapa de produção e devolva somente a entrega solicitada."
+          },
+          "model": {
+            "type": "string",
+            "title": "Modelo do Claude",
+            "description": "Modelo disponível na conta Anthropic conectada.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$",
+            "default": "sonnet"
+          },
+          "sandbox_mode": {
+            "type": "string",
+            "title": "Acesso da skill à pasta de trabalho",
+            "description": "Leitura é o padrão. Escrita autoriza o Claude Code a editar e executar scripts no workspace temporário da etapa.",
+            "oneOf": [
+              { "const": "read-only", "title": "Somente leitura" },
+              { "const": "workspace-write", "title": "Ler e escrever no workspace" }
+            ],
+            "default": "read-only"
+          },
+          "enable_web_search": {
+            "type": "boolean",
+            "title": "Pesquisa web ao vivo",
+            "description": "Permite as ferramentas WebSearch e WebFetch quando a etapa exigir fontes atuais.",
+            "default": false
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "title": "Tempo máximo (segundos)",
+            "minimum": 30,
+            "maximum": 3600,
+            "default": 900
+          },
+          "diagnostic_mode": {
+            "type": "boolean",
+            "title": "Modo de diagnóstico",
+            "description": "Testa o contrato sem chamar o Claude Code. Não use em Métodos de produção.",
+            "default": false
+          }
+        },
+        "required": [
+          "skill_name",
+          "task_prompt",
+          "model",
+          "sandbox_mode",
+          "enable_web_search",
+          "timeout_seconds",
+          "diagnostic_mode"
+        ]
+      },
+      "outputSchema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "choose-with-production-skill",
+      "operator": "IA",
+      "instructionUsage": "optional",
+      "blockTypes": ["ESCOLHER"],
+      "processTypes": [
+        "theme",
+        "title",
+        "thumbnail",
+        "script",
+        "narration",
+        "assets",
+        "editing",
+        "publishing"
+      ],
+      "inputPorts": [
+        {
+          "key": "context",
+          "label": "Contexto da escolha",
+          "acceptedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "approval",
+            "thumbnail_layout"
+          ],
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Item escolhido",
+          "producedTypes": ["select"],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "approval",
+        "thumbnail_layout"
+      ],
+      "producedOutputTypes": ["select"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 900000,
+        "supportsCancellation": false,
+        "maxConcurrency": 1
+      },
+      "sideEffects": ["external_read", "external_write", "subprocess"],
+      "cost": {
+        "model": "unknown",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["Anthropic", "provedores chamados por ferramentas e skills autorizadas"],
+        "retentionPolicyUrl": "https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-data",
+        "trainingPolicyUrl": "https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training"
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "skill_name": {
+            "type": "string",
+            "title": "Nome da skill",
+            "pattern": "^$|^[a-z0-9][a-z0-9_-]{0,63}$",
+            "default": ""
+          },
+          "task_prompt": {
+            "type": "string",
+            "title": "Orientação adicional",
+            "format": "textarea",
+            "default": "Escolha o item que melhor atende às instruções do bloco."
+          },
+          "model": {
+            "type": "string",
+            "title": "Modelo do Claude",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$",
+            "default": "sonnet"
+          },
+          "sandbox_mode": {
+            "type": "string",
+            "title": "Acesso da skill à pasta de trabalho",
+            "oneOf": [
+              { "const": "read-only", "title": "Somente leitura" },
+              { "const": "workspace-write", "title": "Ler e escrever no workspace" }
+            ],
+            "default": "read-only"
+          },
+          "enable_web_search": {
+            "type": "boolean",
+            "title": "Pesquisa web ao vivo",
+            "default": false
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "title": "Tempo máximo (segundos)",
+            "minimum": 30,
+            "maximum": 3600,
+            "default": 900
+          },
+          "diagnostic_mode": {
+            "type": "boolean",
+            "title": "Modo de diagnóstico",
+            "description": "Testa o contrato sem chamar o Claude Code. Não use em Métodos de produção.",
+            "default": false
+          }
+        },
+        "required": [
+          "skill_name",
+          "task_prompt",
+          "model",
+          "sandbox_mode",
+          "enable_web_search",
+          "timeout_seconds",
+          "diagnostic_mode"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "selectedItemId": { "type": "string" }
+        },
+        "required": ["selectedItemId"]
+      }
+    }
+  ]
+}

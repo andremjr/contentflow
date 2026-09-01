@@ -16,6 +16,7 @@ Use esta skill para modelar processos executáveis de produção de vídeo no Co
 5. **Separe contrato de dados de apresentação.** `type` define o valor universal; `presentation` só define renderer. Não inclua HTML, scripts, React, secrets, `deliveryId` ou `itemId` no Método.
 6. **Preserve decisões e proveniência.** Inputs devem apontar estruturalmente para Projeto, processo anterior, bloco anterior, Biblioteca ou contexto estático; o runtime resolve os IDs concretos.
 7. **Não permita conflitos de contrato.** Antes de conectar qualquer output a input, valide `type`, schema (`recordFields`/`options`), cardinalidade, obrigatoriedade, MIME/apresentação e proveniência. Leia [data-compatibility.md](references/data-compatibility.md). Se a conexão não for compatível, altere o contrato, insira transformação explícita ou peça esclarecimento; nunca faça coerção silenciosa.
+8. **Separe referências portáteis de vínculos locais.** O arquivo pode declarar requisitos de plugin, conversa e Biblioteca, mas nunca exporta `connectionId`, `collectionId`, secrets ou IDs opacos do provedor. Depois da importação, o usuário reassocia conta e coleção no Canal.
 
 ## Fluxo principal
 
@@ -28,7 +29,7 @@ Siga esta sequência em qualquer criação ou revisão:
 5. **Mapeie blocos e operadores.** Use a árvore de decisão de [blocks-and-operators.md](references/blocks-and-operators.md). Em dúvida entre `ESCOLHER` e `VALIDAR`, use `VALIDAR`, salvo coleção estratégica explicitamente pré-existente.
 6. **Defina o contrato de cada bloco.** Declare `inputs`, `outputs`, `parameters`, `instructions`, `order` e, quando aplicável, `validation`, `recordFields`, `presentation` e configuração de plugin.
 7. **Projete prompts e configurações.** Separe instruções imperativas, parâmetros editáveis, configuração do executor, settings locais e secrets. Leia [prompt-design.md](references/prompt-design.md) quando houver IA, placeholders ou formato estruturado.
-8. **Conecte as referências.** Use `previous_block` apenas no mesmo Método; use `previous_process` para processos anteriores; use `project` apenas para `title`/`deadline`; use `static` para contexto fixo.
+8. **Conecte as referências.** Use `previous_block` apenas no mesmo Método; use `previous_process` para processos anteriores; use `project` apenas para `title`/`deadline`; use `static` para contexto fixo; use `channel_history` somente em `ESCOLHER` ou `CRIAR`, conforme [runtime-execution.md](references/runtime-execution.md).
 9. **Modele validação.** Para aprovação, seleção ou reprovação de resultado gerado/pesquisado, use `VALIDAR` com `targetBlockId`, `targetOutputKey`, `mode`, `onReject` e `maxAttempts`.
 10. **Mostre uma prévia antes do JSON**, salvo pedido explícito de JSON pronto. Inclua processo, resumo, blocos, exclusões estratégicas, coleções propostas, suposições e perguntas mínimas.
 11. **Gere e valide o JSON.** Use [method-format.md](references/method-format.md), o template em `templates/method-skeleton.json` e a lista de validação em [validation.md](references/validation.md), incluindo obrigatoriamente a matriz de [data-compatibility.md](references/data-compatibility.md).
@@ -40,13 +41,15 @@ Siga esta sequência em qualquer criação ou revisão:
 | --- | --- |
 | Pesquisar notícias, canais, API, fontes ou mídia externa | `BUSCAR` |
 | Gerar lista, texto, áudio, imagem, vídeo, arquivo ou síntese | `CRIAR` |
-| Aplicar template/layout/estrutura já salvo na Biblioteca do Canal | `ESCOLHER` com `collectionId` no Canal; não gerar em JSON portátil |
+| Aplicar template/layout/estrutura já salvo na Biblioteca do Canal | `ESCOLHER`; o JSON portátil preserva o requisito, mas não o `collectionId` local |
 | Aprovar, reprovar, escolher ou curar resultado desta execução | `VALIDAR` |
 | Tema recém-gerado e escolha humana | `CRIAR` → `VALIDAR/select_one` |
 | Banco permanente reutilizado em vários vídeos | Propor coleção; não misturar automaticamente no JSON portátil |
 | Contexto de canal anterior aos vídeos | Excluir do Método e documentar na prévia |
 | Output de processo anterior | `previous_process` + `sourceProcessType` + `sourceKey` |
 | Output de bloco anterior do mesmo processo | `previous_block` + `blockId` + `sourceKey` |
+| Memória de Projetos anteriores do Canal | `channel_history` como `records`, somente em `ESCOLHER`/`CRIAR` |
+| Continuar conversa de plugin | `plugin.conversation.mode = reuse` + processo/bloco anterior compatível |
 
 ## Contrato mínimo de bloco
 
@@ -70,6 +73,8 @@ Trate cinco camadas separadamente:
 
 Use placeholders somente quando a fonte estiver declarada, por exemplo `{{project.title}}`, `{{video.topic}}` ou `{{block_01.output}}`. Para IA, peça saída compatível com o `type` do output e não misture seleção humana dentro da geração. Para Código, declare entrada, formato, artefato e erro esperado. Para Humano, declare o que revisar ou entregar e como o resultado será representado.
 
+Quando o plugin declarar continuidade, escolha explicitamente conversa nova ou uma referência estrutural anterior. A reutilização só é válida no mesmo Projeto, com o mesmo `pluginId` e a mesma conexão local; o arquivo portátil nunca contém o ID real da conversa.
+
 ## Validação final
 
 Antes de entregar um arquivo, confirme:
@@ -79,11 +84,13 @@ Antes de entregar um arquivo, confirme:
 - `id` único, `order` sem saltos, enums válidos e `parameters` em todos os blocos;
 - cada `output.key` não vazia e única no bloco;
 - cada referência aponta para bloco/processo anterior e output existente;
+- `channel_history` usa `records`, pertence a `ESCOLHER`/`CRIAR` e possui origem/limite válidos;
+- referências de conversa apontam para bloco anterior do mesmo plugin e não carregam ID opaco ou conta local;
 - cada conexão output→input passa na matriz de compatibilidade de tipo, schema, cardinalidade, obrigatoriedade, options/MIME e proveniência;
 - nenhum `list`, `records`, `files`, `multiselect` ou mídia especializada é ligado a formato incompatível sem transformação explícita;
 - `records` possui schema completo e keys únicas;
 - `VALIDAR` não aponta para outro `VALIDAR` e usa mode coerente;
-- `ESCOLHER` só aparece quando há coleção estratégica pré-existente e configurada no Canal;
+- `ESCOLHER` representa coleção estratégica pré-existente; em arquivo portátil, documenta o requisito e exige reassociação a uma coleção local após importar;
 - não há secrets, conteúdo protegido desnecessário, `deliveryId`, `itemId` ou valores transitórios;
 - o output oficial do Processo é alcançável e será promovido ao fim.
 

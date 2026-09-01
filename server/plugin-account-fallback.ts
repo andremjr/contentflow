@@ -7,16 +7,17 @@ export const AUTOMATIC_PROFILE_FALLBACK_CODES = new Set([
   "JOB_FAILED",
 ]);
 
-const PROFILE_ALIAS = /^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$/;
+const PROFILE_ALIAS = /^[A-Za-z0-9][A-Za-z0-9_.\s-]{0,63}$/;
 
 export function orderedProfileCandidates(
   manifest: Pick<PluginManifest, "profileSetup">,
   configuration: Record<string, unknown>,
 ) {
   const setup = manifest.profileSetup;
-  if (!setup?.fallbackConfigurationKey) return undefined;
+  if (!setup) return undefined;
+  const fallbackKey = setup.fallbackConfigurationKey || "fallbackAccountProfiles";
   const primary = String(configuration[setup.configurationKey] ?? "").trim();
-  const rawFallbacks = String(configuration[setup.fallbackConfigurationKey] ?? "");
+  const rawFallbacks = String(configuration[fallbackKey] ?? "");
   const candidates = [primary, ...rawFallbacks.split(/[\n,;]+/)]
     .map((value) => value.trim())
     .filter((value, index, values) => PROFILE_ALIAS.test(value) && values.indexOf(value) === index);
@@ -31,14 +32,12 @@ export function orderedProfileCandidates(
 
 export function canAdvanceProfileFallback(
   job: PersistentPluginJob,
-  response: Extract<PluginExecutionResponse, { status: "error" }>,
+  response:
+    | Extract<PluginExecutionResponse, { status: "error" }>
+    | { code?: string; message?: string; status?: string; retryable?: boolean },
 ) {
   const fallback = job.profileFallback;
-  return Boolean(
-    response.retryable &&
-    !job.jobId &&
-    fallback &&
-    AUTOMATIC_PROFILE_FALLBACK_CODES.has(response.code) &&
-    fallback.activeIndex + 1 < fallback.candidates.length,
-  );
+  if (!fallback) return false;
+  if (response.code === "CANCELLED" || job.cancelRequested) return false;
+  return fallback.activeIndex + 1 < fallback.candidates.length;
 }

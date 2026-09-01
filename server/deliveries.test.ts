@@ -406,3 +406,40 @@ test("envia completos todos os itens escolhidos ligados a um bloco Criar", () =>
   assert.doesNotMatch(String(pluginContext), /ITEM NÃO ESCOLHIDO/);
   assert.doesNotMatch(String(pluginContext), /ÂNGULO NÃO ESCOLHIDO/);
 });
+
+test("materializa itens individuais em saídas do tipo list", () => {
+  const block: ActionBlock = {
+    id: "theme-options-block",
+    type: "CRIAR",
+    operator: "IA",
+    outputs: [
+      {
+        id: "theme-options-output",
+        label: "Opções de tema",
+        key: "theme_options",
+        type: "list",
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 0,
+  };
+  const execution = executionFor("theme", block);
+  const themes = [
+    "Como aeroportos decidem prioridade de voos",
+    "O gargalo logístico dos supermercados",
+    "O risco escondido das assistências técnicas",
+  ];
+  const deliveries = recordBlockDeliveries(
+    execution,
+    block,
+    { theme_options: themes },
+    "completed",
+  );
+
+  assert.equal(deliveries.length, 1);
+  assert.equal(deliveries[0].items.length, 3);
+  assert.equal(deliveries[0].items[0].value, themes[0]);
+  assert.equal(deliveries[0].items[1].value, themes[1]);
+  assert.equal(deliveries[0].items[2].value, themes[2]);
+});

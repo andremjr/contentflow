@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.claude-browser-text",
   "name": "Claude Browser Studio",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Super plugin do Claude web para criar, pesquisar, escolher, validar e analisar imagens ou documentos em conversas persistentes.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -22,6 +22,7 @@
   "deliveryTypes": ["text", "processing"],
   "profileSetup": {
     "configurationKey": "accountProfile",
+    "fallbackConfigurationKey": "fallbackAccountProfiles",
     "label": "Salvar perfil",
     "description": "Abre o Claude para login e fecha o Chrome após validar a área do chat."
   },
@@ -210,6 +211,14 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
           "accountProfile": {
             "type": "string",
             "title": "Perfil da conta Claude",
@@ -309,6 +318,14 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
           "accountProfile": {
             "type": "string",
             "title": "Perfil da conta Claude",
@@ -392,6 +409,14 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
           "accountProfile": {
             "type": "string",
             "title": "Perfil da conta Claude",
@@ -548,6 +573,14 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
           "accountProfile": {
             "type": "string",
             "title": "Perfil da conta Claude",
@@ -623,6 +656,14 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
           "accountProfile": {
             "type": "string",
             "title": "Perfil da conta Claude",
@@ -706,6 +747,14 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
           "accountProfile": {
             "type": "string",
             "title": "Perfil da conta Claude",

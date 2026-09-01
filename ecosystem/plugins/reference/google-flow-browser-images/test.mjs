@@ -8,7 +8,7 @@ import { testExtensionBridge } from "../../../browser-bridge/test.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.2.1");
+assert.equal(manifest.version, "1.2.2");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
@@ -222,5 +222,5 @@ await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), 
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v1.2.1 usa a ponte comum no Chrome, isola input e valida 300 comandos idempotentes.",
+  "OK: v1.2.2 usa a ponte comum no Chrome, isola input e valida 300 comandos idempotentes.",
 );

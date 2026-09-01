@@ -10,7 +10,9 @@ O pacote não deve mudar sob o mesmo número de versão. Qualquer alteração de
 
 ## Instalação
 
-O usuário escolhe uma pasta e pode usar **Instalar uma cópia** ou **Usar pasta ao vivo**. O gerenciador valida estrutura, manifesto, runtime, entrypoint, integridade, permissões, settings e secrets antes de executar. O consentimento mostra autor, versão, permissões, efeitos, providers, custos e dados.
+O usuário escolhe uma pasta e pode usar **Instalar uma cópia** ou **Usar pasta ao vivo**. A primeira aceita uma pasta de plugin ou uma raiz com várias subpastas de plugins: o lote inteiro é validado antes da cópia, falha atomicamente e nunca sobrescreve versão existente. O gerenciador valida estrutura, manifesto, runtime, entrypoint, integridade, branding, permissões, settings e secrets antes de executar. O consentimento mostra autor, versão, permissões, efeitos, providers, custos e dados.
+
+Quando houver `branding.iconPath`, inclua o PNG/WebP local no pacote e documente sua licença/proveniência. O ícone não pode usar favicon remoto, imitar a marca do ContentFlow ou sugerir endosso inexistente.
 
 ## Atualização
 

@@ -390,6 +390,28 @@ function executionFor(projectId: string, processType: string) {
   return row ? (JSON.parse(row.payload) as ProcessExecution) : undefined;
 }
 
+function normalizePluginListValue(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : String(item).trim()))
+      .filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n/)
+      .map((line) => {
+        const cleaned = line
+          .trim()
+          .replace(/^[-*•\s]+/, "")
+          .replace(/^\d+[.)]\s*/, "")
+          .trim();
+        return cleaned || line.trim();
+      })
+      .filter(Boolean);
+  }
+  return [];
+}
+
 function valuesForPluginResponse(
   block: ActionBlock,
   responseValues: Record<string, RuntimeValue>,
@@ -398,11 +420,16 @@ function valuesForPluginResponse(
   const values: Record<string, RuntimeValue> = {};
   for (const field of block.outputs ?? []) {
     const contract = outputContract.find((item) => item.key === field.key);
-    const value =
+    let value =
       responseValues[field.key] ??
       (contract ? responseValues[contract.portKey] : undefined) ??
       responseValues.result;
-    if (value !== undefined) values[field.key] = value;
+    if (value !== undefined) {
+      if (field.type === "list" && (typeof value === "string" || Array.isArray(value))) {
+        value = normalizePluginListValue(value);
+      }
+      values[field.key] = value;
+    }
   }
   return values;
 }
@@ -1282,7 +1309,7 @@ async function processPluginJob(
           partialValues,
           partialArtifacts,
           error: pluginResponse.message,
-          message: `Falha técnica em ${currentProfile}; continuando com ${nextProfile}.`,
+          message: `Falha em ${currentProfile}; continuando com ${nextProfile}.`,
           nextPollAt: new Date().toISOString(),
         });
         if (saved.status === "cancel_requested") return saved;
@@ -1427,6 +1454,39 @@ async function processPluginJob(
     return saved;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível executar o plugin.";
+    const errorCode = (error as { code?: string })?.code || "JOB_FAILED";
+    const fallback = job.profileFallback;
+    if (fallback && canAdvanceProfileFallback(job, { code: errorCode, message, status: "error" })) {
+      const currentProfile = fallback.candidates[fallback.activeIndex];
+      const nextIndex = fallback.activeIndex + 1;
+      const nextProfile = fallback.candidates[nextIndex];
+      const saved = pluginJobs.save(claim, {
+        ...job,
+        status: "starting",
+        retryCount: job.retryCount + 1,
+        profileFallback: {
+          ...fallback,
+          activeIndex: nextIndex,
+          history: [
+            ...fallback.history,
+            {
+              profile: currentProfile,
+              code: errorCode,
+              message,
+            },
+          ],
+        },
+        error: message,
+        message: `Falha em ${currentProfile}; continuando com ${nextProfile}.`,
+        nextPollAt: new Date().toISOString(),
+      });
+      if (saved.status === "cancel_requested") return saved;
+      blockExecution.status = "in_progress";
+      blockExecution.progressMessage = saved.message;
+      execution.status = "running";
+      persistPluginExecution(execution, project);
+      return saved;
+    }
     if (job.retryCount < 2 && Date.now() + 1_000 < new Date(job.deadlineAt).getTime()) {
       const retryCount = job.retryCount + 1;
       const saved = pluginJobs.save(claim, {

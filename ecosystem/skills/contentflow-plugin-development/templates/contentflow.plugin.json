@@ -12,14 +12,15 @@
     "version": ">=26 <27",
     "module": "esm"
   },
-  "minCoreVersion": "0.2.0",
+  "minCoreVersion": "0.4.9",
   "entrypoint": "handler.mjs",
   "permissions": [],
-  "deliveryTypes": ["processing"],
+  "deliveryTypes": ["text"],
   "capabilities": [
     {
       "id": "transform",
       "operator": "Código",
+      "instructionUsage": "not_applicable",
       "blockTypes": ["CRIAR"],
       "inputPorts": [
         {

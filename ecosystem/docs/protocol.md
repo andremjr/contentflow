@@ -344,7 +344,7 @@ Regras:
 - O mesmo plugin pode possuir várias conexões, e blocos diferentes podem selecionar conexões diferentes.
 - O Método persistido localmente pode referenciar `connectionId`; uma exportação substitui essa referência por um requisito de conexão. A importação exige associação explícita a uma conexão local antes da execução.
 - O núcleo nunca escolhe entre várias conexões elegíveis por nome, ordem de criação ou conteúdo secreto. Ambiguidade gera bloqueio, não fallback silencioso.
-- Fallback entre perfis ou conexões só ocorre quando declarado e somente nas falhas técnicas permitidas; autenticação, CAPTCHA, rate limit, cota, upgrade e bloqueio nunca autorizam troca automática de identidade.
+- Fallback entre perfis ou conexões só ocorre quando declarado. Qualquer resposta de erro pode avançar para o próximo perfil preparado, inclusive autenticação, rate limit, cota, permissão, upgrade, bloqueio e validação de output; cancelamento solicitado e lista esgotada encerram a tentativa.
 - Configurações exportadas não podem conter secrets.
 - Secrets são disponibilizados apenas à execução que declarou a chave, por `services.getSecret()`.
 - O plugin não pode enumerar secrets de outros plugins.
@@ -400,7 +400,7 @@ O núcleo chama `execute()` com `invocation.mode = "start"`. A capacidade devolv
 
 Plugins que declaram `profileSetup` também podem receber `invocation.mode = "configure"` com `action = "status"` ou `"prepare"`. Essas chamadas não pertencem a uma execução de Projeto, não recebem inputs e devem devolver `success` com `values.ready` booleano ou um erro seguro. `prepare` abre a superfície interativa necessária, aguarda login/onboarding e fecha o navegador após validar; `status` apenas consulta o estado mantido pelo próprio plugin.
 
-Quando `fallbackConfigurationKey` estiver declarado, o usuário prepara explicitamente cada alias. O núcleo preserva a ordem configurada e só avança para o próximo perfil diante de `UPSTREAM_UNAVAILABLE`, `TIMEOUT` ou `JOB_FAILED` retryable, antes da criação de um job externo opaco. `AUTHENTICATION_FAILED`, `RATE_LIMIT`, CAPTCHA, cota, bloqueio e upgrade nunca acionam troca automática de identidade.
+Quando `fallbackConfigurationKey` estiver declarado, o usuário prepara explicitamente cada alias. O núcleo preserva a ordem configurada e avança para o próximo perfil quando a tentativa terminar com qualquer resposta de erro, independentemente de `code` ou `retryable`, inclusive `AUTHENTICATION_FAILED`, `RATE_LIMIT`, cota, permissão, bloqueio, upgrade e validação de output. `CANCELLED`, cancelamento já solicitado e esgotamento da lista nunca avançam o cursor. Respostas pendentes continuam no perfil atual.
 
 `execution.itemOrchestration` aceita `inputPort`, `outputPort` e `mode: "sequential"`. Se a entrada indicada for uma lista com mais de um item, o núcleo chama o plugin uma vez por item, inclui `request.batch` com ID, índice e total, acumula a saída indicada e persiste cada resultado antes de iniciar o seguinte. Assim, um erro ou fallback não repete itens já entregues.
 

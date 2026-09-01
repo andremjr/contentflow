@@ -54,7 +54,12 @@ export function NewProjectDialog({
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
-        if (!v) reset();
+        if (!v) {
+          reset();
+          if (typeof document !== "undefined") {
+            document.body.style.pointerEvents = "";
+          }
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -70,10 +75,15 @@ export function NewProjectDialog({
         )}
       </DialogTrigger>
       <DialogContent
-        className="sm:max-w-md"
+        className="sm:max-w-md pointer-events-auto"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
-          titleInputRef.current?.focus();
+          requestAnimationFrame(() => {
+            if (typeof document !== "undefined") {
+              document.body.style.pointerEvents = "";
+            }
+            titleInputRef.current?.focus();
+          });
         }}
       >
         <DialogHeader>
@@ -88,13 +98,14 @@ export function NewProjectDialog({
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 pointer-events-auto">
           <div className="space-y-1.5">
             <Label htmlFor={titleId}>Título *</Label>
             <Input
               ref={titleInputRef}
               id={titleId}
               name="project-title"
+              autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex.: A física impossível de Interstellar"

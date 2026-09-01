@@ -111,7 +111,10 @@ export function ProcessRunner({
   const awaitingOutput = execution?.status === "awaiting_output";
   const methodIssue = getMethodConfigurationIssue(method);
   const runningExecutionId =
-    execution && ["running", "blocked_executor"].includes(execution.status)
+    execution &&
+    (["running", "blocked_executor", "in_progress"].includes(execution.status) ||
+      activeExecution?.status === "in_progress" ||
+      activeExecution?.status === "blocked_executor")
       ? execution.id
       : undefined;
 

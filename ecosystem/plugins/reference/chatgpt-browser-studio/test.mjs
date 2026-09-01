@@ -58,13 +58,16 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "1.0.0");
+  assert.equal(manifest.version, "1.0.1");
   assert.equal(manifest.supportsConversationContinuation, undefined);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
   const generation = manifest.capabilities.find((item) => item.id === "generate-text-in-browser");
   assert.equal(generation.instructionUsage, "required");
-  assert.deepEqual(Object.keys(generation.blockConfigSchema.properties), ["accountProfile"]);
+  assert.deepEqual(Object.keys(generation.blockConfigSchema.properties), [
+    "fallbackAccountProfiles",
+    "accountProfile",
+  ]);
   assert.deepEqual(generation.outputPorts.find((port) => port.key === "result").producedTypes, [
     "text",
     "textarea",

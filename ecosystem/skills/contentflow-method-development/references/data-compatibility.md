@@ -11,13 +11,13 @@ origem: processo/bloco/output key
 origem.type: tipo universal
 origem.schema: recordFields/options/itemType/MIME
 origem.cardinality: singular ou coleção
-origem.required: obrigatório/opcional
+origem.required: obrigatoriedade declarada no output
 ↓ conversão explícita, se existir
 entrada: bloco/input
 entrada.type: tipo universal
 entrada.schema: recordFields/options/itemType/MIME
 entrada.cardinality: singular ou coleção
-entrada.required: obrigatório/opcional
+entrada.disponibilidade: a referência precisa ser resolvível para o bloco executar
 ```
 
 A conexão só é válida se o tipo técnico e a forma do valor forem compatíveis. `label` e `helpText` não alteram o schema.

@@ -48,23 +48,23 @@ Um selo `reference` ou `verified` melhora a informação de origem, mas não rem
 
 ## 3. Ameaças prioritárias
 
-| Ameaça                        | Exemplo                                                | Controle principal                                                  |
-| ----------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------- |
-| Supply chain                  | dependência publica atualização maliciosa              | lockfile, hash, assinatura, revisão e pacote imutável               |
-| Path traversal / symlink      | artifact usa `../../` ou link para arquivo privado     | resolução canônica, raiz exclusiva e rejeição de symlinks externos  |
-| Zip slip / decompression bomb | pacote ou mídia expande além do limite                 | extração segura, limites por arquivo e total                        |
-| SSRF                          | URL acessa `localhost`, metadata cloud ou rede privada | proxy de saída, bloqueio de faixas e revalidação após redirect      |
-| Exfiltração                   | plugin envia roteiro ou key a domínio oculto           | egress controlado, consentimento e redaction                        |
-| Prompt injection              | página pede ao modelo para revelar secrets             | separar dados de instruções e nunca ampliar permissões por conteúdo |
-| Command injection             | nome de arquivo interpolado no FFmpeg/shell            | argumentos estruturados, sem shell, allowlist de executáveis        |
-| DoS local                     | loop, fork bomb ou artifact gigante                    | processo isolado, quotas e kill da árvore                           |
-| Cost attack                   | retries criam jobs pagos duplicados                    | idempotência, limites e confirmação/estimativa                      |
-| Efeito externo indevido       | upload publica vídeo sem confirmação                   | declaração de efeito e consentimento just-in-time                   |
-| Vazamento em logs             | token ou prompt aparece em erro                        | redaction, limites e logs estruturados                              |
-| Confusão entre execuções      | cache global mistura canais                            | staging e contexto exclusivos por invocação                         |
-| Sequestro de sessão           | plugin copia cookie ou token de perfil não autorizado  | conexão explícita, cofre, pasta escolhida e proibição de varredura  |
-| Evasão de limites             | rotação de contas ou endpoints amplia créditos         | identidade fixa, quotas, auditoria e falha fechada                  |
-| Automação de UI incorreta     | mudança visual faz o plugin clicar em publicar         | estado validado, seletores acessíveis e confirmação just-in-time    |
+| Ameaça                        | Exemplo                                                 | Controle principal                                                  |
+| ----------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- |
+| Supply chain                  | dependência publica atualização maliciosa               | lockfile, hash, assinatura, revisão e pacote imutável               |
+| Path traversal / symlink      | artifact usa `../../` ou link para arquivo privado      | resolução canônica, raiz exclusiva e rejeição de symlinks externos  |
+| Zip slip / decompression bomb | pacote ou mídia expande além do limite                  | extração segura, limites por arquivo e total                        |
+| SSRF                          | URL acessa `localhost`, metadata cloud ou rede privada  | proxy de saída, bloqueio de faixas e revalidação após redirect      |
+| Exfiltração                   | plugin envia roteiro ou key a domínio oculto            | egress controlado, consentimento e redaction                        |
+| Prompt injection              | página pede ao modelo para revelar secrets              | separar dados de instruções e nunca ampliar permissões por conteúdo |
+| Command injection             | nome de arquivo interpolado no FFmpeg/shell             | argumentos estruturados, sem shell, allowlist de executáveis        |
+| DoS local                     | loop, fork bomb ou artifact gigante                     | processo isolado, quotas e kill da árvore                           |
+| Cost attack                   | retries criam jobs pagos duplicados                     | idempotência, limites e confirmação/estimativa                      |
+| Efeito externo indevido       | upload publica vídeo sem confirmação                    | declaração de efeito e consentimento just-in-time                   |
+| Vazamento em logs             | token ou prompt aparece em erro                         | redaction, limites e logs estruturados                              |
+| Confusão entre execuções      | cache global mistura canais                             | staging e contexto exclusivos por invocação                         |
+| Sequestro de sessão           | plugin copia cookie ou token de perfil não autorizado   | conexão explícita, cofre, pasta escolhida e proibição de varredura  |
+| Evasão de limites             | endpoint, IP ou perfil não consentido amplia autoridade | somente perfis preparados, quotas, auditoria e fallback rastreável  |
+| Automação de UI incorreta     | mudança visual faz o plugin clicar em publicar          | estado validado, seletores acessíveis e confirmação just-in-time    |
 
 ## 4. Instalação segura
 
@@ -174,7 +174,7 @@ Outputs de IA são validados estruturalmente e, quando houver risco de ação ex
 - Estado incerto após timeout não é repetido automaticamente; primeiro ocorre reconciliação pelo identificador externo.
 - Cancelamento informa efeitos que não puderam ser revertidos.
 
-Automação de navegador obedece também a [`browser-automation.md`](browser-automation.md). O executor não extrai nem entrega automaticamente cookies, tokens, histórico, armazenamento de sessão ou perfis. O usuário pode conectar explicitamente um secret ou escolher uma pasta para uma capacidade que declare as permissões avançadas necessárias; nesse caso, o plugin responde pelo runtime e opera dentro do consentimento concedido. CAPTCHA, anti-bot, reautenticação, cota esgotada e upgrade necessário pausam a execução; não autorizam evasão, rotação de conta ou troca de endpoint.
+Automação de navegador obedece também a [`browser-automation.md`](browser-automation.md). O executor não extrai nem entrega automaticamente cookies, tokens, histórico, armazenamento de sessão ou perfis. O usuário pode conectar explicitamente um secret ou escolher uma pasta para uma capacidade que declare as permissões avançadas necessárias; nesse caso, o plugin responde pelo runtime e opera dentro do consentimento concedido. CAPTCHA, anti-bot, reautenticação, cota esgotada e upgrade podem permanecer pendentes no perfil atual; se o plugin devolver erro, o núcleo pode avançar para o próximo perfil explicitamente preparado. Isso não autoriza descobrir contas, trocar endpoint, IP ou fingerprint nem ampliar permissões fora do consentimento.
 
 ## 11. Logs, auditoria e privacidade
 

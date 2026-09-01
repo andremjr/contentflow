@@ -1,6 +1,6 @@
 # Grok Browser Studio
 
-Versão **1.0.0** para ContentFlow Plugin API v1.
+Versão **1.0.1** para ContentFlow Plugin API v1.
 
 O plugin usa a instrução resolvida do bloco como único prompt editável. As entradas conectadas são acrescentadas automaticamente como contexto. O bloco expõe apenas o perfil da conta, abre uma conversa nova e realiza um único envio por execução. Configurações antigas permanecem aceitas apenas para compatibilidade e são ignoradas.
 

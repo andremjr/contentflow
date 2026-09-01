@@ -6,10 +6,48 @@ Plugin unificado do ContentFlow para pesquisar e baixar mídia stock gratuita e 
 
 - `search-stock-images` (`BUSCAR`): Pexels, Pixabay, Unsplash, Openverse, Wikimedia Commons e NASA.
 - `search-stock-videos` (`BUSCAR`): Pexels, Pixabay, Coverr, Wikimedia Commons e NASA.
+- `search-stock-by-briefs` (`BUSCAR`): recebe briefings temporais, avalia lotes máximos dos provedores e escolhe automaticamente um asset por trecho.
+- `download-selected-stock-assets` (`CRIAR`): materializa sequencialmente a lista mista de vencedores, sem baixar os demais candidatos avaliados.
 - `download-stock-image` (`CRIAR`): materializa a imagem escolhida como artefato local.
 - `download-stock-video` (`CRIAR`): materializa o vídeo escolhido como artefato local.
 
-O desenho recomendado de Método é `BUSCAR mídia -> ESCOLHER um record -> CRIAR arquivo`. A busca não baixa silenciosamente todos os resultados.
+O desenho recomendado para escala é `CRIAR briefings com IA -> BUSCAR e selecionar automaticamente -> CRIAR arquivos`. A busca usa os candidatos como universo de avaliação, mas devolve somente um vencedor por briefing; o download materializa somente esses vencedores.
+
+## Contrato dos briefings
+
+Cada item de `asset_briefs` deve ser um record plano. O núcleo executa os itens sequencialmente e acumula um item em `selected_assets` por briefing:
+
+```json
+{
+  "brief_id": "scene-007",
+  "start_seconds": 12.5,
+  "end_seconds": 18,
+  "transcript_excerpt": "A equipe atravessa a cidade ao amanhecer.",
+  "primary_query": "team walking city sunrise",
+  "fallback_query_1": "urban commuters dawn",
+  "fallback_query_2": "people city morning",
+  "media_preference": "video",
+  "orientation": "landscape",
+  "visual_intent": "plano aberto com movimento e energia",
+  "negative_terms": "logo, watermark, illustration"
+}
+```
+
+`primary_query` é obrigatório. Os demais campos têm defaults seguros. Para SRT, o bloco anterior deve converter cada legenda ou grupo semântico em um record e usar os tempos em segundos.
+
+## Orquestração e qualidade
+
+- `balanced_fallback` é o padrão: alterna o primeiro provedor conforme o índice do trecho, usa o maior lote aceito pela API e para assim que reúne candidatos suficientes. Isso distribui centenas de trechos entre as cotas disponíveis.
+- `priority_fallback` mantém uma ordem fixa de provedores quando houver uma fonte preferencial.
+- `all` consulta todos os provedores compatíveis e custa mais requisições; use quando diversidade de fonte for mais importante que cota.
+- Termos de fallback só são consultados quando a busca anterior não produz o pool mínimo.
+- O padrão exige largura mínima de 1280 px, vídeo com pelo menos 3 segundos, orientação compatível quando as dimensões são conhecidas e score mínimo 65/100.
+- O score considera posição da consulta, orientação, resolução, preview/download e completude de proveniência. O ranking de relevância do próprio provedor continua sendo o principal sinal semântico.
+- Licenças explicitamente não comerciais ou sem derivados são rejeitadas no perfil `commercial_safe`. Isso não substitui a validação humana de direitos, marcas e pessoas identificáveis.
+- Se nenhum candidato superar o piso depois dos fallbacks e provedores habilitados, o item falha com `NOT_FOUND`; o plugin nunca preenche o trecho com mídia fraca ou fictícia.
+- `maximumCandidatesPerBrief` controla apenas o pool interno (12 por padrão). A saída continua sendo exatamente um asset por briefing.
+
+As buscas manuais também usam `provider_max` por padrão. `custom` permite reduzir a página sem jamais ultrapassar o teto oficial de cada provedor.
 
 ## Credenciais
 

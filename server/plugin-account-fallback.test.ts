@@ -56,30 +56,65 @@ test("normaliza aliases ordenados e remove duplicatas ou valores inválidos", ()
   ]);
 });
 
-for (const code of ["UPSTREAM_UNAVAILABLE", "TIMEOUT", "JOB_FAILED"]) {
-  test(`avança em erro técnico ${code}`, () => {
+for (const code of [
+  "UPSTREAM_UNAVAILABLE",
+  "TIMEOUT",
+  "JOB_FAILED",
+  "AUTHENTICATION_FAILED",
+  "RATE_LIMIT",
+  "PERMISSION_DENIED",
+  "QUOTA_EXCEEDED",
+  "OUTPUT_VALIDATION_FAILED",
+  "UNEXPECTED_ERROR",
+]) {
+  test(`avança perfil em qualquer erro ${code}`, () => {
     assert.equal(
       canAdvanceProfileFallback(jobWithFallback(), {
         status: "error",
         code,
-        message: "Falha técnica",
-        retryable: true,
+        message: `Falha com ${code}`,
+        retryable: false,
       }),
       true,
     );
   });
 }
 
-for (const code of ["AUTHENTICATION_FAILED", "RATE_LIMIT", "PERMISSION_DENIED"]) {
-  test(`não troca identidade em ${code}`, () => {
-    assert.equal(
-      canAdvanceProfileFallback(jobWithFallback(), {
-        status: "error",
-        code,
-        message: "Intervenção necessária",
-        retryable: true,
-      }),
-      false,
-    );
-  });
-}
+test("não avança perfil em cancelamento explícito CANCELLED", () => {
+  assert.equal(
+    canAdvanceProfileFallback(jobWithFallback(), {
+      status: "error",
+      code: "CANCELLED",
+      message: "Execução cancelada pelo usuário.",
+    }),
+    false,
+  );
+});
+
+test("não avança perfil se a execução já teve cancelamento solicitado", () => {
+  const job = jobWithFallback();
+  job.cancelRequested = true;
+  assert.equal(
+    canAdvanceProfileFallback(job, {
+      status: "error",
+      code: "RATE_LIMIT",
+      message: "Limite atingido.",
+    }),
+    false,
+  );
+});
+
+test("não avança perfil quando a lista de candidatos for esgotada", () => {
+  const job = jobWithFallback();
+  if (job.profileFallback) {
+    job.profileFallback.activeIndex = job.profileFallback.candidates.length - 1;
+  }
+  assert.equal(
+    canAdvanceProfileFallback(job, {
+      status: "error",
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "Falha final.",
+    }),
+    false,
+  );
+});

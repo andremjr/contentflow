@@ -178,7 +178,7 @@
             "title": "Perfil de conta",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default",
-            "description": "Use a mesma chave para reutilizar a conta e uma chave diferente por canal para separar conta, projetos, personagens e referências. O plugin nunca troca de conta automaticamente por cota."
+            "description": "Use a mesma chave para reutilizar a conta e uma chave diferente por canal para separar conta, projetos, personagens e referências."
           },
           "fallbackAccountProfiles": {
             "type": "string",
@@ -186,7 +186,7 @@
             "format": "textarea",
             "default": "",
             "maxLength": 512,
-            "description": "Aliases adicionais, um por linha, em ordem. O núcleo troca somente após UPSTREAM_UNAVAILABLE, TIMEOUT ou JOB_FAILED; CAPTCHA, autenticação, bloqueio e cota sempre pausam."
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
           },
           "imageModel": {
             "type": "string",

@@ -35,4 +35,4 @@ Use `IA` para geração ou análise por modelo; `Humano` para julgamento, escrit
 
 Proponha coleção somente quando ela já existir antes da execução, for usada em vários vídeos, for realmente consumida por um bloco e possuir formato definível. Exemplos: banco permanente de temas aprovados, estruturas de título, layouts de thumbnail, regras editoriais e modelos narrativos.
 
-Para cada proposta, documente nome, finalidade, campos, tipos, obrigatoriedade e processos consumidores. Não inclua `collectionId` em JSON portátil; ele pertence ao canal de destino. Uma lista criada para decidir o vídeo atual não é coleção.
+Para cada proposta, documente nome, finalidade, campos, tipos, obrigatoriedade e processos consumidores. Um bloco `ESCOLHER` pode permanecer no JSON portátil como requisito estrutural, mas `collectionId` nunca é exportado porque pertence ao canal de destino; reassocie a coleção depois de importar. Uma lista criada para decidir o vídeo atual não é coleção.
