@@ -315,7 +315,10 @@ function ProjectGrid({ projects, channel }: { projects: Project[]; channel: Chan
             key={p.id}
             className="group relative overflow-hidden rounded-lg bg-card transition-colors hover:bg-surface-2"
           >
-            <DropdownMenu>
+            {/* The native confirmation dialog blocks Radix's modal cleanup. If the project
+                card is removed while that cleanup is pending, body pointer events can remain
+                locked and prevent the next project dialog from receiving focus. */}
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"

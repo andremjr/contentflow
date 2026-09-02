@@ -842,6 +842,34 @@ async function attachChatGptPage(client, signal, activate = false, forceNew = fa
   return { sessionId, targetId: target.targetId, created };
 }
 
+function taskPageMarker(request) {
+  return `contentflow-${createHash("sha256")
+    .update(
+      [
+        request?.executionId || "execution",
+        request?.blockId || "block",
+        Number(request?.attempt) || 1,
+        request?.traceId || "trace",
+      ].join(":"),
+    )
+    .digest("hex")
+    .slice(0, 24)}`;
+}
+
+async function markTaskPage(client, sessionId, request, signal) {
+  const marker = taskPageMarker(request);
+  await evaluate(
+    client,
+    sessionId,
+    `(() => { const marker=${JSON.stringify(marker)}; const url=new URL(location.href); url.hash=marker; history.replaceState(history.state, '', url); return location.href; })()`,
+  );
+  // chrome.tabs.query observes history.replaceState asynchronously. A short
+  // wait lets the Browser Bridge match the exact task tab instead of another
+  // provider tab with the same pathname.
+  await sleep(200, signal);
+  return marker;
+}
+
 const PAGE_HELPERS = String.raw`
 function cfVisible(el){if(!el||!(el instanceof Element))return false;const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>8&&r.height>8&&r.bottom>0&&r.right>0}
 function cfText(el){return [el?.innerText,el?.textContent,el?.getAttribute?.('aria-label'),el?.getAttribute?.('data-testid')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()}
@@ -1357,7 +1385,11 @@ export async function execute(request, services) {
   }
 
   const configuration = request?.configuration ?? {};
-  let client, child, bridge;
+  let client,
+    child,
+    bridge,
+    taskTargetId,
+    closeTaskTarget = false;
   try {
     const profileName = normalizeAccountProfile(configuration.accountProfile),
       profilePath = runtimeProfilePath(settings, profileName, services),
@@ -1403,6 +1435,7 @@ export async function execute(request, services) {
       clampInteger(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
       services.signal,
     );
+    if (taskPage.created) await markTaskPage(client, sessionId, request, services.signal);
     parts = partsForConversation(parts, request.conversation, reusedConversation);
     if (reusedConversation && request.conversation?.continuationMessage) attachments = [];
     bridge = await attachContentFlowBridge({
@@ -1563,6 +1596,7 @@ export const __test = {
   profilePathFor,
   runtimeProfilePath,
   profilePort,
+  taskPageMarker,
   prepareProfileSession,
   searchResponseValues,
   generationResponseValues,

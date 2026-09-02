@@ -54,12 +54,7 @@ export function NewProjectDialog({
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
-        if (!v) {
-          reset();
-          if (typeof document !== "undefined") {
-            document.body.style.pointerEvents = "";
-          }
-        }
+        if (!v) reset();
       }}
     >
       <DialogTrigger asChild>
@@ -75,13 +70,10 @@ export function NewProjectDialog({
         )}
       </DialogTrigger>
       <DialogContent
-        className="sm:max-w-md pointer-events-auto"
+        className="sm:max-w-md"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           requestAnimationFrame(() => {
-            if (typeof document !== "undefined") {
-              document.body.style.pointerEvents = "";
-            }
             titleInputRef.current?.focus();
           });
         }}
@@ -98,7 +90,7 @@ export function NewProjectDialog({
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pointer-events-auto">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor={titleId}>Título *</Label>
             <Input

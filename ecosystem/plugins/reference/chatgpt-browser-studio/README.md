@@ -1,6 +1,6 @@
 # ChatGPT Browser Studio
 
-Versão **1.0.2** para ContentFlow Plugin API v1.
+Versão **1.0.4** para ContentFlow Plugin API v1.
 
 ## Contrato simplificado
 

@@ -58,7 +58,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "1.0.2");
+  assert.equal(manifest.version, "1.0.4");
   assert.equal(manifest.supportsConversationContinuation, undefined);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -111,6 +111,23 @@ test("modela as fases observáveis da resposta", () => {
     __test.responsePhase({ hasNewResponse: true, generating: false, stablePolls: 2 }),
     "completed",
   );
+});
+
+test("identifica cada aba de tarefa sem colisão entre tentativas", () => {
+  const first = __test.taskPageMarker({
+    executionId: "execution",
+    blockId: "block",
+    attempt: 1,
+    traceId: "trace",
+  });
+  const retry = __test.taskPageMarker({
+    executionId: "execution",
+    blockId: "block",
+    attempt: 2,
+    traceId: "trace",
+  });
+  assert.match(first, /^contentflow-[a-f0-9]{24}$/);
+  assert.notEqual(first, retry);
 });
 
 test("isola contas por alias e porta", () => {
@@ -402,4 +419,18 @@ test("rotas simuladas não abrem navegador", async () => {
     services,
   );
   assert.deepEqual(analysis.values, { result: "Imagem analisada" });
+});
+
+test("preserva o erro de perfil ausente ao encerrar uma execução real", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "contentflow-chatgpt-unprepared-"));
+  try {
+    const result = await execute(request({ settings: { diagnosticMockResponse: undefined } }), {
+      signal: AbortSignal.timeout(5000),
+      getWorkspacePath: (relativePath) => path.join(directory, relativePath),
+    });
+    assert.equal(result.status, "error");
+    assert.equal(result.code, "AUTHENTICATION_FAILED");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

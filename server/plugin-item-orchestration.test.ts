@@ -71,6 +71,17 @@ test("acumula outputs parciais sem repetir itens anteriores", () => {
   assert.deepEqual(second.images, ["image-a", "image-b"]);
 });
 
+test("incrementa a tentativa lógica ao repetir um job", () => {
+  const job = createPersistentPluginJob({
+    pluginId: "test.browser",
+    pluginVersion: "1.0.0",
+    request,
+    timeoutMs: 60_000,
+  });
+  job.retryCount = 2;
+  assert.equal(invocationRequestForJob(job, { mode: "start" }).attempt, 3);
+});
+
 test("troca continuação por contexto quando o fallback muda de perfil", () => {
   const job = createPersistentPluginJob({
     pluginId: "test.browser",

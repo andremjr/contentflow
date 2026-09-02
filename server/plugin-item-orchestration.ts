@@ -45,6 +45,10 @@ export function invocationRequestForJob(job: PersistentPluginJob, invocation: Pl
   if (item) inputs[item.inputPort] = structuredClone(item.items[item.currentIndex]);
   return {
     ...job.request,
+    // A retry explícita é uma nova tentativa lógica. Avançar o número impede
+    // que bridges idempotentes reproduzam do cache os comandos da tentativa
+    // anterior (por exemplo, "preencher" e "enviar" em uma nova aba vazia).
+    attempt: job.request.attempt + job.retryCount,
     invocation,
     configuration,
     conversation,
