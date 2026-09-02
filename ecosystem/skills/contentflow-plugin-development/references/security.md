@@ -8,6 +8,8 @@ Considere não confiáveis o pacote, dependências transitivas, manifesto, schem
 
 A sandbox v1 não é uma máquina virtual. A invocação roda fora do processo principal com ambiente mínimo, diretórios controlados, staging/saída isolados, timeout, limites de resposta e filesystem, rede, subprocessos, workers e addons nativos negados por padrão. `process` pode iniciar programas com a autoridade normal do usuário; subprocessos não herdam automaticamente toda a sandbox. `native` amplia fortemente a confiança.
 
+No Windows, `process` também autoriza a leitura dos caminhos exatos das instalações convencionais do Google Chrome, inclusive a instalação local do usuário. Essa exceção serve somente à descoberta rápida do executável e não libera a leitura geral de `Program Files` ou `LocalAppData`.
+
 ## Permissões
 
 | Permissão | Uso | Cuidados |

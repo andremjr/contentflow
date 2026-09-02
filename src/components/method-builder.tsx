@@ -504,6 +504,7 @@ export function MethodBuilder({
               mode: "approval",
               onReject: "retry_target",
               maxAttempts: 3,
+              retryMode: "full",
             }
           : undefined,
       parameters: [],
@@ -1450,8 +1451,9 @@ function BlockEditor({
                     </SelectContent>
                   </Select>
                   <p className="text-[11px] text-muted-foreground">
-                    Use a mesma conversa para preservar o contexto do provedor. Só aparecem blocos
-                    anteriores com o mesmo plugin e a mesma conta.
+                    Use a mesma conversa para preservar o contexto do provedor. Se o perfil mudar ou
+                    a conversa não abrir, o plugin inicia outra e recebe o contexto do bloco de
+                    origem.
                   </p>
                 </div>
               )}
@@ -2209,6 +2211,7 @@ function ValidationEditor({
     mode: "approval" as ValidationMode,
     onReject: "retry_target" as const,
     maxAttempts: 3,
+    retryMode: "full" as const,
   };
   const target = previousBlocks.find((item) => item.id === validation.targetBlockId);
   const targetOutputs = target?.outputs ?? [];
@@ -2339,20 +2342,47 @@ function ValidationEditor({
             </Select>
           </div>
           {validation.onReject === "retry_target" && (
-            <div className="space-y-1.5">
-              <Label>Máximo de tentativas</Label>
-              <NumberInput
-                min={1}
-                max={20}
-                integer
-                value={validation.maxAttempts}
-                onValueChange={(maxAttempts) =>
-                  applyValidation({ maxAttempts: maxAttempts ?? validation.maxAttempts })
-                }
-              />
-              <p className="text-[10px] text-muted-foreground">
-                Ao atingir o limite, a validação permanece pausada para decisão humana.
-              </p>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Mensagem da nova tentativa</Label>
+                <Select
+                  value={validation.retryMode ?? "full"}
+                  onValueChange={(retryMode) =>
+                    applyValidation({
+                      retryMode: retryMode as "full" | "conversation_feedback",
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Reenviar instrução e contexto completos</SelectItem>
+                    <SelectItem value="conversation_feedback">
+                      Continuar o chat enviando somente as observações
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">
+                  Se a conversa não estiver acessível no perfil usado, uma nova conversa recebe o
+                  resultado anterior e as observações.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Máximo de tentativas</Label>
+                <NumberInput
+                  min={1}
+                  max={20}
+                  integer
+                  value={validation.maxAttempts}
+                  onValueChange={(maxAttempts) =>
+                    applyValidation({ maxAttempts: maxAttempts ?? validation.maxAttempts })
+                  }
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Ao atingir o limite, a validação permanece pausada para decisão humana.
+                </p>
+              </div>
             </div>
           )}
         </>

@@ -282,6 +282,7 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
             mode: block.validation?.mode ?? "approval",
             onReject: block.validation?.onReject ?? "retry_target",
             maxAttempts: Math.max(1, block.validation?.maxAttempts ?? 3),
+            retryMode: block.validation?.retryMode ?? "full",
             targetBlockId: block.validation?.targetBlockId,
             targetOutputKey: block.validation?.targetOutputKey,
           }
@@ -309,6 +310,7 @@ export function normalizeMethodBlocks(blocks: ActionBlock[], processType: Proces
         targetOutputKey: mode === "approval" ? undefined : targetOutput?.key,
         onReject: block.validation?.onReject ?? "retry_target",
         maxAttempts: Math.max(1, block.validation?.maxAttempts ?? 3),
+        retryMode: block.validation?.retryMode ?? "full",
       };
       const hasExpectedOutput = (block.outputs ?? []).some((output) =>
         mode === "approval"

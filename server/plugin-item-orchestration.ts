@@ -28,6 +28,18 @@ export function invocationRequestForJob(job: PersistentPluginJob, invocation: Pl
   const fallback = job.profileFallback;
   if (fallback)
     configuration[fallback.configurationKey] = fallback.candidates[fallback.activeIndex];
+  const activeProfile = fallback?.candidates[fallback.activeIndex];
+  const conversation =
+    job.request.conversation?.mode === "reuse" &&
+    job.request.conversation.sourceProfile &&
+    activeProfile &&
+    job.request.conversation.sourceProfile !== activeProfile
+      ? {
+          mode: "new" as const,
+          fallbackContext: job.request.conversation.fallbackContext,
+          continuationMessage: job.request.conversation.continuationMessage,
+        }
+      : job.request.conversation;
   const inputs = { ...job.request.inputs };
   const item = job.itemOrchestration;
   if (item) inputs[item.inputPort] = structuredClone(item.items[item.currentIndex]);
@@ -35,6 +47,7 @@ export function invocationRequestForJob(job: PersistentPluginJob, invocation: Pl
     ...job.request,
     invocation,
     configuration,
+    conversation,
     inputs,
     batch: item
       ? {

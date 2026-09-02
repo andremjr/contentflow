@@ -1,6 +1,6 @@
 import type { RuntimeValue } from "@/lib/domain";
 
-function feedbackText(feedback: Record<string, RuntimeValue> | undefined) {
+export function retryFeedbackText(feedback: Record<string, RuntimeValue> | undefined) {
   if (!feedback) return "";
   for (const key of ["feedback", "observations", "observacoes", "notes"]) {
     const value = feedback[key];
@@ -16,7 +16,7 @@ export function instructionWithRetryFeedback(
   instruction: string,
   feedback: Record<string, RuntimeValue> | undefined,
 ) {
-  const observations = feedbackText(feedback);
+  const observations = retryFeedbackText(feedback);
   if (!observations) return instruction;
   return [instruction.trim(), `OBSERVAÇÕES DA REPROVAÇÃO ANTERIOR:\n${observations}`]
     .filter(Boolean)

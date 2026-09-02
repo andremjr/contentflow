@@ -65,6 +65,7 @@ import {
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
 import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
 import { instructionWithRetryFeedback } from "../src/lib/retry-feedback";
+import { pluginConversationFallbackContext } from "../src/lib/conversation-context";
 import { collectionItemValuesForPlugin } from "../src/lib/plugin-collection";
 import {
   createPersistentPluginJob,
@@ -494,8 +495,15 @@ function finishPluginBlock(
         blockExecution.status = "awaiting_human";
         blockExecution.error = `O limite de ${maxAttempts} tentativas foi atingido.`;
       } else {
+        const retryMode = block.validation.retryMode ?? "full";
+        const retryConversationContext = pluginConversationFallbackContext(
+          targetBlock,
+          targetExecution.values,
+        );
         for (let index = targetIndex; index < execution.blocks.length; index += 1) {
           const item = execution.blocks[index];
+          const preserveConversation =
+            index === targetIndex && retryMode === "conversation_feedback";
           item.attempt = attemptAfterRetryInvalidation(item);
           item.values = {};
           item.error = undefined;
@@ -505,10 +513,14 @@ function finishPluginBlock(
           item.progress = undefined;
           item.progressMessage = undefined;
           item.retryFeedback = undefined;
-          item.pluginConversation = undefined;
+          item.retryMode = undefined;
+          item.retryConversationContext = undefined;
+          if (!preserveConversation) item.pluginConversation = undefined;
           item.status = "pending";
         }
         targetExecution.retryFeedback = structuredClone(values);
+        targetExecution.retryMode = retryMode;
+        targetExecution.retryConversationContext = retryConversationContext;
         targetExecution.startedAt = now;
         targetExecution.status =
           targetBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
@@ -1438,12 +1450,22 @@ async function processPluginJob(
         if (saved.status === "cancel_requested") return;
         finishPluginBlock(execution, block, blockExecution, values);
         if (completedConversationId) {
+          const profileConfigurationKey = plugin.manifest.profileSetup?.configurationKey;
+          const activeProfile = job.profileFallback
+            ? job.profileFallback.candidates[job.profileFallback.activeIndex]
+            : profileConfigurationKey
+              ? String(job.request.configuration[profileConfigurationKey] ?? "").trim() || undefined
+              : undefined;
           blockExecution.pluginConversation = {
             pluginId: plugin.id,
             connectionId: block.plugin?.connectionId,
+            profile: activeProfile,
             id: completedConversationId,
+            fallbackContext: pluginConversationFallbackContext(block, values),
           };
         }
+        blockExecution.retryMode = undefined;
+        blockExecution.retryConversationContext = undefined;
         blockExecution.logs = pluginResponse.logs;
         blockExecution.progress = 1;
         blockExecution.progressMessage = undefined;
@@ -2956,10 +2978,12 @@ app.post("/api/execute-block", async (request, response) => {
   try {
     conversation = resolvePluginConversation({
       block,
+      blockExecution,
       execution,
       projectExecutions,
       pluginId: plugin.id,
       supportsContinuation: plugin.manifest.supportsConversationContinuation === true,
+      profileSetup: plugin.manifest.profileSetup,
     });
   } catch (error) {
     response.status(422).json({

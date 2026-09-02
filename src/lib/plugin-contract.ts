@@ -260,7 +260,22 @@ export type PluginExecutionRequest = {
   resolvedInstruction?: string;
   /** Variables left intact because no declared runtime source could resolve them. */
   unresolvedInstructionVariables?: string[];
-  conversation?: { mode: "new" } | { mode: "reuse"; id: string };
+  conversation?:
+    | {
+        mode: "new";
+        /** Contexto textual seguro usado quando a conversa anterior não pode ser aberta. */
+        fallbackContext?: string;
+        /** Turno curto que substitui o prompt completo, por exemplo após reprovação editorial. */
+        continuationMessage?: string;
+      }
+    | {
+        mode: "reuse";
+        id: string;
+        /** Alias não secreto do perfil que criou a conversa. */
+        sourceProfile?: string;
+        fallbackContext?: string;
+        continuationMessage?: string;
+      };
   /** Core-owned position when a declared list input is executed item by item. */
   batch?: { itemId: string; index: number; total: number };
   context: PluginExecutionContext;

@@ -525,40 +525,39 @@ async function version(port, ms = 1500) {
 }
 async function launch(settings, p, port, signal) {
   const old = await version(port);
-  if (old) return { version: old, child: null };
+  if (old) return { version: old, child: null, reused: true };
   const exes = settings?.chromeExecutable?.trim?.()
     ? [settings.chromeExecutable.trim()]
     : await chromeCandidates();
   if (!exes.length) throw err("INVALID_CONFIGURATION", "Chrome não localizado.");
+  const keepBrowserOpen = settings.keepBrowserOpen !== false;
+  const args = [
+    `--remote-debugging-port=${port}`,
+    "--remote-debugging-address=127.0.0.1",
+    `--user-data-dir=${p}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    URL_NEW,
+  ];
+  if (settings.startMinimized !== false) args.unshift("--start-minimized");
   for (const exe of exes) {
     let child;
     try {
-      child = spawn(
-        exe,
-        [
-          `--remote-debugging-port=${port}`,
-          "--remote-debugging-address=127.0.0.1",
-          `--user-data-dir=${p}`,
-          "--no-first-run",
-          "--no-default-browser-check",
-          URL_NEW,
-        ],
-        {
-          detached: settings.keepBrowserOpen === true,
-          stdio: "ignore",
-          windowsHide: false,
-          shell: false,
-        },
-      );
+      child = spawn(exe, args, {
+        detached: keepBrowserOpen,
+        stdio: "ignore",
+        windowsHide: false,
+        shell: false,
+      });
     } catch {
       continue;
     }
-    if (settings.keepBrowserOpen === true) child.unref();
+    if (keepBrowserOpen) child.unref();
     const d = Date.now() + 15000;
     while (Date.now() < d) {
       if (signal?.aborted) throw err("CANCELLED", "Cancelado.");
       const v = await version(port);
-      if (v) return { version: v, child };
+      if (v) return { version: v, child, reused: false };
       await sleep(350, signal);
     }
     try {
@@ -659,12 +658,16 @@ function normalizeEditorText(value) {
     .replace(/\s+/gu, " ")
     .trim();
 }
-async function attach(c, signal, activate = false) {
+async function attach(c, signal, activate = false, forceNew = false) {
   const { targetInfos = [] } = await c.send("Target.getTargets");
-  let t = targetInfos.find((x) => x.type === "page" && String(x.url).includes(HOST));
+  let t = forceNew
+    ? undefined
+    : targetInfos.find((x) => x.type === "page" && String(x.url).includes(HOST));
+  let created = false;
   if (!t) {
-    const n = await c.send("Target.createTarget", { url: URL_NEW });
+    const n = await c.send("Target.createTarget", { url: URL_NEW, background: !activate });
     t = { targetId: n.targetId };
+    created = true;
   }
   const { sessionId } = await c.send("Target.attachToTarget", {
     targetId: t.targetId,
@@ -673,7 +676,7 @@ async function attach(c, signal, activate = false) {
   if (activate) await c.send("Target.activateTarget", { targetId: t.targetId });
   await c.send("Page.enable", {}, sessionId);
   await c.send("Runtime.enable", {}, sessionId);
-  return { sessionId };
+  return { sessionId, targetId: t.targetId, created };
 }
 const HELP = String.raw`function vis(e){if(!e||!(e instanceof Element))return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>8&&r.height>8}function txt(e){return[e?.innerText,e?.textContent,e?.getAttribute?.('aria-label'),e?.getAttribute?.('data-test-id')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()}function prompt(){return [...document.querySelectorAll('[contenteditable="true"][role="textbox"],[role="textbox"][aria-label*="Gemini" i],[role="textbox"][aria-label*="comando" i]')].find(vis)||null}function responses(){const sels=['.model-response-text','structured-content-container','.response-container-content','[data-test-id="model-response"]','message-content'];for(const s of sels){const n=[...document.querySelectorAll(s)].filter(vis);if(n.length)return n}return[]}function state(){const n=responses(),entries=n.map(e=>({text:(e.innerText||e.textContent||'').trim(),links:[...e.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text),stop=[...document.querySelectorAll('button')].some(e=>vis(e)&&/parar|stop/i.test(txt(e)));return{texts:entries.map(x=>x.text),entries,stop,body:(document.body?.innerText||'').slice(0,6000)}}`;
 async function newChat(c, s, signal) {
@@ -683,6 +686,45 @@ async function newChat(c, s, signal) {
     if (await evaluate(c, s, `(()=>{${HELP};return !!prompt()})()`)) return;
     await sleep(350, signal);
   }
+}
+export function validateConversationUrl(id) {
+  let url;
+  try {
+    url = new URL(id);
+  } catch {
+    throw err("INVALID_INPUT", "A referência da conversa do Gemini é inválida.");
+  }
+  if (url.protocol !== "https:" || url.hostname !== HOST || !url.pathname.startsWith("/app/"))
+    throw err("INVALID_INPUT", "A referência não pertence a uma conversa do Gemini.");
+  return url.href;
+}
+async function prepareConversation(c, s, conversation, waitMs, signal) {
+  let reused = conversation?.mode === "reuse";
+  if (reused) await c.send("Page.navigate", { url: validateConversationUrl(conversation.id) }, s);
+  else await newChat(c, s, signal);
+  try {
+    await waitPrompt(c, s, waitMs, signal);
+    if (reused) validateConversationUrl(await evaluate(c, s, "location.href"));
+  } catch (error) {
+    if (!reused || !conversation?.fallbackContext) throw error;
+    await newChat(c, s, signal);
+    await waitPrompt(c, s, waitMs, signal);
+    reused = false;
+  }
+  return reused;
+}
+export function partsForConversation(parts, conversation, reused) {
+  const continuation = String(conversation?.continuationMessage ?? "").trim();
+  const fallbackContext = String(conversation?.fallbackContext ?? "").trim();
+  if (reused && continuation) return [continuation];
+  if (!reused && fallbackContext) {
+    const requestText = continuation || parts.join("\n\n");
+    return [`${fallbackContext}\n\nNOVA SOLICITAÇÃO:\n${requestText}`];
+  }
+  return parts;
+}
+async function currentConversationUrl(c, s) {
+  return validateConversationUrl(await evaluate(c, s, "location.href"));
 }
 async function waitPrompt(c, s, ms, signal) {
   const d = Date.now() + ms;
@@ -954,7 +996,7 @@ async function configureProfile(request, services) {
   let client, child, bridge;
   try {
     const launched = await launch(
-      { ...settings, keepBrowserOpen: false },
+      { ...settings, keepBrowserOpen: false, startMinimized: false },
       path,
       port,
       services.signal,
@@ -1036,7 +1078,11 @@ export async function execute(request, services) {
   } catch (e) {
     return failure(e.code || "INVALID_CONFIGURATION", e.message);
   }
-  let client, child, bridge;
+  let client,
+    child,
+    bridge,
+    taskTargetId,
+    closeTaskTarget = false;
   try {
     const cfg = request.configuration ?? {},
       profile = normalizeProfile(cfg.accountProfile),
@@ -1050,20 +1096,33 @@ export async function execute(request, services) {
         `O perfil ${profile} ainda não foi salvo. Abra a configuração do Método e use Salvar perfil antes de executar.`,
       );
     }
-    const launched = await launch(settings, path, port, services.signal);
+    const launched = await launch(
+      {
+        ...settings,
+        keepBrowserOpen: settings.keepBrowserOpen !== false,
+        startMinimized: settings.startMinimized !== false,
+      },
+      path,
+      port,
+      services.signal,
+    );
     child = launched.child;
     client = await new CDP(
       launched.version.webSocketDebuggerUrl,
       settings.diagnosticTrace ? (m) => process.stderr.write(`[Gemini Browser] ${m}\n`) : null,
     ).connect(services.signal);
-    const { sessionId } = await attach(client, services.signal);
-    await newChat(client, sessionId, services.signal);
-    await waitPrompt(
+    const taskPage = await attach(client, services.signal, false, launched.reused);
+    const { sessionId } = taskPage;
+    taskTargetId = taskPage.targetId;
+    closeTaskTarget = launched.reused && taskPage.created;
+    const reusedConversation = await prepareConversation(
       client,
       sessionId,
+      request.conversation,
       clamp(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
       services.signal,
     );
+    parts = partsForConversation(parts, request.conversation, reusedConversation);
     bridge = await attachContentFlowBridge({
       client,
       pageSessionId: sessionId,
@@ -1073,7 +1132,8 @@ export async function execute(request, services) {
       signal: services.signal,
       allowedOrigins: ["https://gemini.google.com"],
     });
-    if (files.length) await attachFiles(client, sessionId, bridge, files, services.signal);
+    if (files.length && !(reusedConversation && request.conversation?.continuationMessage))
+      await attachFiles(client, sessionId, bridge, files, services.signal);
     if (media) await selectTool(bridge, media === "image" ? "image" : "music");
     const responses = [],
       retries = 0;
@@ -1115,12 +1175,14 @@ export async function execute(request, services) {
       if (i < parts.length - 1) await sleep(0, services.signal);
     }
     const combined = responses.map((x) => x.text).join("\n\n");
+    const conversationId = await currentConversationUrl(client, sessionId);
     if (media) {
       const captured = await captureMedia(client, sessionId, services, request, media);
       return {
         status: "success",
         values: { [media === "image" ? "image" : "audio"]: captured.file, description: combined },
         artifacts: [captured.artifact],
+        conversation: { id: conversationId },
         usage: {
           provider: media === "image" ? "Google / Gemini Images" : "Google / Gemini Music",
           outputUnits: captured.file.size,
@@ -1147,6 +1209,7 @@ export async function execute(request, services) {
     return {
       status: "success",
       values,
+      conversation: { id: conversationId },
       usage: { provider: "Google / Gemini web", outputUnits: combined.length, unit: "characters" },
     };
   } catch (e) {
@@ -1155,12 +1218,17 @@ export async function execute(request, services) {
     return failure(e.code || "UPSTREAM_UNAVAILABLE", e.message || "Falha Gemini.", !!e.retryable);
   } finally {
     bridge?.dispose();
-    if (settings.keepBrowserOpen !== true)
+    if (closeTaskTarget && taskTargetId)
+      try {
+        await client?.send("Target.closeTarget", { targetId: taskTargetId });
+      } catch {}
+    const keepBrowserOpen = settings.keepBrowserOpen !== false;
+    if (!keepBrowserOpen && child)
       try {
         await client?.send("Browser.close");
       } catch {}
     client?.close();
-    if (settings.keepBrowserOpen !== true && child)
+    if (!keepBrowserOpen && child)
       try {
         child.kill();
       } catch {}

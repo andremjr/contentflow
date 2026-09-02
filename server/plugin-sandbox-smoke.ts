@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import path from "node:path";
@@ -7,6 +15,8 @@ import type { RegisteredPlugin } from "./plugin-runner";
 
 const temporaryDataDirectory = mkdtempSync(path.join(tmpdir(), "contentflow-sandbox-data-"));
 process.env.CONTENTFLOW_DATA_DIR = temporaryDataDirectory;
+const executableDiscoveryRoot = path.join(temporaryDataDirectory, "LocalAppData");
+process.env.LOCALAPPDATA = executableDiscoveryRoot;
 const { executeRegisteredPlugin } = await import("./plugin-runner");
 
 const pluginDirectory = realpathSync(
@@ -16,14 +26,14 @@ const manifest = JSON.parse(
   readFileSync(path.join(pluginDirectory, "contentflow.plugin.json"), "utf8"),
 ) as PluginManifest;
 
-function registered(entrypoint: string): RegisteredPlugin {
+function registered(entrypoint: string, permissions = manifest.permissions): RegisteredPlugin {
   return {
     id: manifest.id,
     source: "installed",
     directory: "ecosystem/plugins/examples/community-reference",
     absoluteDirectory: pluginDirectory,
     entrypoint: path.join(pluginDirectory, entrypoint),
-    manifest,
+    manifest: { ...manifest, permissions },
     executable: true,
   };
 }
@@ -89,6 +99,29 @@ if (probe.status !== "success" || !String(probe.values.result).includes("ERR_ACC
   throw new Error(`A sandbox não bloqueou a leitura externa: ${JSON.stringify(probe)}.`);
 }
 
+const chromeExecutable = path.join(
+  executableDiscoveryRoot,
+  "Google",
+  "Chrome",
+  "Application",
+  "chrome.exe",
+);
+mkdirSync(path.dirname(chromeExecutable), { recursive: true });
+writeFileSync(chromeExecutable, "probe", "utf8");
+const executableProbe = await executeRegisteredPlugin(
+  registered("executable-read-probe.mjs", ["process"]),
+  request({ executablePath: chromeExecutable }),
+  30_000,
+);
+if (
+  executableProbe.status !== "success" ||
+  executableProbe.values.result !== "EXECUTABLE_READ_ALLOWED"
+) {
+  throw new Error(
+    `A sandbox bloqueou a descoberta autorizada do executável: ${JSON.stringify(executableProbe)}.`,
+  );
+}
+
 const localServer = createServer((_incoming, outgoing) => outgoing.end("reachable"));
 await new Promise<void>((resolve) => localServer.listen(0, "127.0.0.1", resolve));
 const address = localServer.address();
@@ -134,5 +167,5 @@ try {
 
 rmSync(temporaryDataDirectory, { recursive: true, force: true });
 console.log(
-  "Sandbox comunitária: execução, artifacts, workspace e bloqueios de filesystem/rede aprovados.",
+  "Sandbox comunitária: execução, artifacts, descoberta de executável, workspace e bloqueios de filesystem/rede aprovados.",
 );

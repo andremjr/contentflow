@@ -70,3 +70,32 @@ test("acumula outputs parciais sem repetir itens anteriores", () => {
   const second = appendOrchestratedOutput(first, { images: ["image-b"] }, "images");
   assert.deepEqual(second.images, ["image-a", "image-b"]);
 });
+
+test("troca continuação por contexto quando o fallback muda de perfil", () => {
+  const job = createPersistentPluginJob({
+    pluginId: "test.browser",
+    pluginVersion: "1.0.0",
+    request: {
+      ...request,
+      conversation: {
+        mode: "reuse",
+        id: "https://provider.test/chat/1",
+        sourceProfile: "primary",
+        fallbackContext: "Resultado anterior",
+        continuationMessage: "Ajuste somente o contraste.",
+      },
+    },
+    timeoutMs: 60_000,
+    profileFallback: {
+      configurationKey: "accountProfile",
+      candidates: ["primary", "backup"],
+      activeIndex: 1,
+      history: [],
+    },
+  });
+  assert.deepEqual(invocationRequestForJob(job, { mode: "start" }).conversation, {
+    mode: "new",
+    fallbackContext: "Resultado anterior",
+    continuationMessage: "Ajuste somente o contraste.",
+  });
+});

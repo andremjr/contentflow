@@ -28,6 +28,7 @@ import {
 import { getPresentationRestrictionIssue } from "@/lib/presentation";
 import { resolveBlockInputs } from "@/lib/runtime-contract";
 import { attemptAfterRetryInvalidation } from "@/lib/retry-attempt";
+import { pluginConversationFallbackContext } from "@/lib/conversation-context";
 import {
   invalidateBlockDeliveries,
   normalizeExecutionDeliveries,
@@ -992,8 +993,14 @@ function retryValidatedBlock(
   }
 
   const now = new Date().toISOString();
+  const retryMode = validationBlock.validation?.retryMode ?? "full";
+  const retryConversationContext = pluginConversationFallbackContext(
+    targetBlock,
+    targetExecution.values,
+  );
   for (let index = targetIndex; index < execution.blocks.length; index += 1) {
     const blockExecution = execution.blocks[index];
+    const preserveConversation = index === targetIndex && retryMode === "conversation_feedback";
     blockExecution.attempt = attemptAfterRetryInvalidation(blockExecution);
     blockExecution.values = {};
     blockExecution.error = undefined;
@@ -1003,10 +1010,14 @@ function retryValidatedBlock(
     blockExecution.progress = undefined;
     blockExecution.progressMessage = undefined;
     blockExecution.retryFeedback = undefined;
-    blockExecution.pluginConversation = undefined;
+    blockExecution.retryMode = undefined;
+    blockExecution.retryConversationContext = undefined;
+    if (!preserveConversation) blockExecution.pluginConversation = undefined;
     if (index === targetIndex) {
       blockExecution.startedAt = now;
       blockExecution.retryFeedback = structuredClone(validationValues);
+      blockExecution.retryMode = retryMode;
+      blockExecution.retryConversationContext = retryConversationContext;
       blockExecution.status =
         targetBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
     } else {

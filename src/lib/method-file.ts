@@ -166,6 +166,7 @@ const validationSchema = z.object({
   mode: z.enum(["approval", "select_one", "select_many"]),
   onReject: z.enum(["retry_target", "pause"]),
   maxAttempts: z.number().int().min(1).max(20),
+  retryMode: z.enum(["full", "conversation_feedback"]).optional(),
 });
 
 const sharedPluginBindingSchema = z.object({

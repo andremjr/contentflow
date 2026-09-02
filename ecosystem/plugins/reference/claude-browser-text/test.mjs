@@ -9,7 +9,7 @@ const manifest = JSON.parse(
 const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "1.0.1");
+  assert.equal(manifest.version, "1.0.2");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
 });

@@ -8,6 +8,8 @@ Autores começando um plugin não precisam ler este documento inteiro antes do p
 
 > Limite importante: esta é a sandbox de capacidades v1, não uma máquina virtual. Conceder `process` permite que o plugin inicie programas com a autoridade normal do usuário e esses programas não herdam automaticamente a sandbox do Node. Conceder `native` também amplia fortemente a confiança. Essas permissões devem aparecer como acesso avançado na interface. Quotas fortes de CPU/memória, proxy obrigatório para todo egress, assinatura/hash de pacotes, confirmação de cancelamento externo e allowlist de executáveis continuam como hardening planejado.
 
+No Windows, `process` também autoriza a leitura dos caminhos exatos das instalações convencionais do Google Chrome, inclusive a instalação local do usuário. Essa exceção serve somente à descoberta rápida do executável e não libera a leitura geral de `Program Files` ou `LocalAppData`.
+
 ## 1. Objetivos
 
 O sistema deve presumir que um pacote, uma dependência, um provedor remoto ou um arquivo de entrada pode estar comprometido. O isolamento deve limitar:

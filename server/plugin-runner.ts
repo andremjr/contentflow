@@ -64,6 +64,26 @@ const developmentLinksRoot = path.resolve(
   process.env.CONTENTFLOW_DEVELOPMENT_LINKS_DIR ?? path.join(dataRoot, "plugins", "development"),
 );
 
+export function windowsExecutableDiscoveryReadPaths(
+  environment: NodeJS.ProcessEnv = process.env,
+  platform = process.platform,
+) {
+  if (platform !== "win32") return [];
+  return [
+    environment.PROGRAMFILES &&
+      path.join(environment.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe"),
+    environment["PROGRAMFILES(X86)"] &&
+      path.join(environment["PROGRAMFILES(X86)"], "Google", "Chrome", "Application", "chrome.exe"),
+    environment.LOCALAPPDATA &&
+      path.join(environment.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+  ].filter(
+    (candidate, index, candidates): candidate is string =>
+      Boolean(candidate) && candidates.indexOf(candidate) === index,
+  );
+}
+
 const registry = new Map<string, RegisteredPlugin>();
 let discoveryIssues: PluginIssue[] = [];
 
@@ -196,7 +216,12 @@ export async function executeRegisteredPlugin(
   if (permissions.has("filesystem:write")) {
     args.push(`--allow-fs-write=${realWorkspaceDirectory}`);
   }
-  if (permissions.has("process")) args.push("--allow-child-process");
+  if (permissions.has("process")) {
+    args.push("--allow-child-process");
+    for (const executablePath of windowsExecutableDiscoveryReadPaths()) {
+      args.push(`--allow-fs-read=${executablePath}`);
+    }
+  }
   if (permissions.has("worker")) args.push("--allow-worker");
   if (permissions.has("native")) args.push("--allow-addons");
   if (nodeMajor >= 26 && permissions.has("network")) args.push("--allow-net");
@@ -208,6 +233,9 @@ export async function executeRegisteredPlugin(
       NODE_ENV: process.env.NODE_ENV ?? "development",
       PATH: process.env.PATH,
       SYSTEMROOT: process.env.SYSTEMROOT,
+      PROGRAMFILES: process.env.PROGRAMFILES,
+      "PROGRAMFILES(X86)": process.env["PROGRAMFILES(X86)"],
+      LOCALAPPDATA: process.env.LOCALAPPDATA,
       TEMP: process.env.TEMP,
       TMP: process.env.TMP,
     },

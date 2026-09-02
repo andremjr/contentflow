@@ -160,6 +160,7 @@ export type BlockValidationConfig = {
   mode: ValidationMode;
   onReject: "retry_target" | "pause";
   maxAttempts: number;
+  retryMode?: "full" | "conversation_feedback";
 };
 
 export type BlockPluginBinding = {
@@ -337,8 +338,13 @@ export type BlockExecution = {
   pluginConversation?: {
     pluginId: string;
     connectionId?: string;
+    profile?: string;
     id: string;
+    fallbackContext?: string;
   };
+  /** Controla a mensagem da próxima tentativa após uma reprovação editorial. */
+  retryMode?: "full" | "conversation_feedback";
+  retryConversationContext?: string;
 };
 
 export type ProcessExecutionStatus =

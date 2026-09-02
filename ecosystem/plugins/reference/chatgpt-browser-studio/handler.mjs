@@ -643,7 +643,7 @@ async function launchOrReuseChrome({
   signal,
 }) {
   const existing = await fetchBrowserVersion(port);
-  if (existing) return { version: existing, child: null };
+  if (existing) return { version: existing, child: null, reused: true };
   const args = [
     `--remote-debugging-port=${port}`,
     "--remote-debugging-address=127.0.0.1",
@@ -672,7 +672,7 @@ async function launchOrReuseChrome({
     while (Date.now() < deadline) {
       if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
       const version = await fetchBrowserVersion(port);
-      if (version) return { version, child };
+      if (version) return { version, child, reused: false };
       await sleep(350, signal);
     }
     failures.push(`${executable}: CDP não respondeu.`);
@@ -807,14 +807,19 @@ function normalizeEditorText(value) {
     .trim();
 }
 
-async function attachChatGptPage(client, signal, activate = false) {
+async function attachChatGptPage(client, signal, activate = false, forceNew = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
-  let target = targetInfos.find(
-    (item) => item.type === "page" && String(item.url).includes(CHATGPT_HOST),
-  );
+  let target = forceNew
+    ? undefined
+    : targetInfos.find((item) => item.type === "page" && String(item.url).includes(CHATGPT_HOST));
+  let created = false;
   if (!target) {
-    const created = await client.send("Target.createTarget", { url: CHATGPT_NEW_URL });
-    target = { targetId: created.targetId };
+    const result = await client.send("Target.createTarget", {
+      url: CHATGPT_NEW_URL,
+      background: !activate,
+    });
+    target = { targetId: result.targetId };
+    created = true;
   }
   const { sessionId } = await client.send("Target.attachToTarget", {
     targetId: target.targetId,
@@ -834,7 +839,7 @@ async function attachChatGptPage(client, signal, activate = false) {
     } catch {}
     await sleep(300, signal);
   }
-  return { sessionId };
+  return { sessionId, targetId: target.targetId, created };
 }
 
 const PAGE_HELPERS = String.raw`
@@ -870,9 +875,13 @@ async function openNewConversation(client, sessionId, signal) {
 }
 
 async function openConversation(client, sessionId, conversation, signal) {
-  if (conversation?.mode !== "reuse") return await openNewConversation(client, sessionId, signal);
+  if (conversation?.mode !== "reuse") {
+    await openNewConversation(client, sessionId, signal);
+    return false;
+  }
   const conversationUrl = validateConversationUrl(conversation.id);
   await client.send("Page.navigate", { url: conversationUrl }, sessionId);
+  return true;
 }
 
 export function validateConversationUrl(id) {
@@ -885,6 +894,35 @@ export function validateConversationUrl(id) {
   if (url.protocol !== "https:" || url.hostname !== CHATGPT_HOST || !url.pathname.startsWith("/c/"))
     throw codedError("INVALID_INPUT", "A referência não pertence a uma conversa do ChatGPT.");
   return url.href;
+}
+
+async function prepareConversation(client, sessionId, conversation, waitMs, signal) {
+  let reused = await openConversation(client, sessionId, conversation, signal);
+  try {
+    await waitForPrompt(client, sessionId, waitMs, signal);
+    if (reused) validateConversationUrl(await evaluate(client, sessionId, "location.href"));
+  } catch (error) {
+    if (!reused || !conversation?.fallbackContext) throw error;
+    await openNewConversation(client, sessionId, signal);
+    await waitForPrompt(client, sessionId, waitMs, signal);
+    reused = false;
+  }
+  return reused;
+}
+
+export function partsForConversation(parts, conversation, reused) {
+  const continuation = String(conversation?.continuationMessage ?? "").trim();
+  const fallbackContext = String(conversation?.fallbackContext ?? "").trim();
+  if (reused && continuation) return [continuation];
+  if (!reused && fallbackContext) {
+    const requestText = continuation || parts.join("\n\n");
+    return [`${fallbackContext}\n\nNOVA SOLICITAÇÃO:\n${requestText}`];
+  }
+  return parts;
+}
+
+async function currentConversationUrl(client, sessionId) {
+  return validateConversationUrl(await evaluate(client, sessionId, "location.href"));
 }
 
 async function waitForPrompt(client, sessionId, waitMs, signal) {
@@ -1187,7 +1225,11 @@ async function configureProfile(request, services) {
     return resultError("INVALID_CONFIGURATION", "Ação de configuração de perfil inválida.");
   }
 
-  let client, child, bridge;
+  let client,
+    child,
+    bridge,
+    taskTargetId,
+    closeTaskTarget = false;
   try {
     const launched = await launchOrReuseChrome({
       executables: await resolveChromeExecutables(settings),
@@ -1323,7 +1365,7 @@ export async function execute(request, services) {
         clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
         profileName,
       );
-    const attachments = await resolveAttachments(request, services);
+    let attachments = await resolveAttachments(request, services);
     assertDedicatedProfilePath(profilePath, settings.allowExistingChromeProfile === true);
     if (!(await profileIsPrepared(profilePath, profileName))) {
       throw codedError(
@@ -1337,26 +1379,32 @@ export async function execute(request, services) {
         : () => {};
     const step = (message) => process.stderr.write(`[ChatGPT Browser] ${message}\n`);
     step(`Preparando perfil ${profileName} para ${parts.length} etapa(s).`);
+    const keepBrowserOpen = settings.keepBrowserOpen !== false;
     const launched = await launchOrReuseChrome({
       executables: await resolveChromeExecutables(settings),
       profilePath,
       port,
-      startMinimized: settings.startMinimized === true,
-      keepBrowserOpen: settings.keepBrowserOpen === true,
+      startMinimized: settings.startMinimized !== false,
+      keepBrowserOpen,
       signal: services.signal,
     });
     child = launched.child;
     client = await new CdpClient(launched.version.webSocketDebuggerUrl, trace).connect(
       services.signal,
     );
-    const { sessionId } = await attachChatGptPage(client, services.signal);
-    await openConversation(client, sessionId, { mode: "new" }, services.signal);
-    await waitForPrompt(
+    const taskPage = await attachChatGptPage(client, services.signal, false, launched.reused);
+    const { sessionId } = taskPage;
+    taskTargetId = taskPage.targetId;
+    closeTaskTarget = launched.reused && taskPage.created;
+    const reusedConversation = await prepareConversation(
       client,
       sessionId,
+      request.conversation,
       clampInteger(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
       services.signal,
     );
+    parts = partsForConversation(parts, request.conversation, reusedConversation);
+    if (reusedConversation && request.conversation?.continuationMessage) attachments = [];
     bridge = await attachContentFlowBridge({
       client,
       pageSessionId: sessionId,
@@ -1422,6 +1470,7 @@ export async function execute(request, services) {
       sources = [
         ...new Set(responses.flatMap((response) => response.links).map((link) => link.href)),
       ].slice(0, 10);
+    const conversationId = await currentConversationUrl(client, sessionId);
     let values;
     if (capabilityId === "generate-image-in-browser") {
       const captured = await captureGeneratedImage(
@@ -1435,6 +1484,7 @@ export async function execute(request, services) {
         status: "success",
         values: { image: captured.file, description: combined.trim() },
         artifacts: [captured.artifact],
+        conversation: { id: conversationId },
         usage: {
           provider: "OpenAI / ChatGPT Images",
           outputUnits: captured.file.size,
@@ -1462,6 +1512,7 @@ export async function execute(request, services) {
     return {
       status: "success",
       values,
+      conversation: { id: conversationId },
       usage: { provider: "OpenAI / ChatGPT web", outputUnits: combined.length, unit: "characters" },
     };
   } catch (error) {
@@ -1474,12 +1525,17 @@ export async function execute(request, services) {
     );
   } finally {
     bridge?.dispose();
-    if (settings.keepBrowserOpen !== true)
+    if (closeTaskTarget && taskTargetId)
+      try {
+        await client?.send("Target.closeTarget", { targetId: taskTargetId });
+      } catch {}
+    const keepBrowserOpen = settings.keepBrowserOpen !== false;
+    if (!keepBrowserOpen && child)
       try {
         await client?.send("Browser.close");
       } catch {}
     client?.close();
-    if (settings.keepBrowserOpen !== true && child) {
+    if (!keepBrowserOpen && child) {
       try {
         child.kill();
       } catch {}

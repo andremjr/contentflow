@@ -51,12 +51,19 @@ test("reutiliza somente conversa opaca de bloco anterior compatível", () => {
   assert.deepEqual(
     resolvePluginConversation({
       block: target,
+      blockExecution: execution.blocks[1],
       execution,
       projectExecutions: [execution],
       pluginId: "browser",
       supportsContinuation: true,
     }),
-    { mode: "reuse", id: "https://provider.test/c/123" },
+    {
+      mode: "reuse",
+      id: "https://provider.test/c/123",
+      sourceProfile: undefined,
+      fallbackContext: "CONTEXTO DA CONVERSA ANTERIOR — Criar",
+      continuationMessage: undefined,
+    },
   );
 });
 
@@ -67,6 +74,7 @@ test("bloqueia troca de conta e referência futura", () => {
     () =>
       resolvePluginConversation({
         block: wrongAccount,
+        blockExecution: execution.blocks[1],
         execution,
         projectExecutions: [execution],
         pluginId: "browser",
@@ -84,12 +92,64 @@ test("bloqueia troca de conta e referência futura", () => {
     () =>
       resolvePluginConversation({
         block: future,
+        blockExecution: execution.blocks[0],
         execution,
         projectExecutions: [execution],
         pluginId: "browser",
         supportsContinuation: true,
       }),
     /bloco posterior/,
+  );
+});
+
+test("abre conversa nova com contexto quando o perfil mudou", () => {
+  const profiledSource = structuredClone(source);
+  profiledSource.plugin!.configuration.accountProfile = "principal";
+  const profiledTarget = structuredClone(target);
+  profiledTarget.plugin!.configuration.accountProfile = "reserva";
+  const profiledExecution = structuredClone(execution);
+  profiledExecution.methodSnapshot.blocks = [profiledSource, profiledTarget];
+  profiledExecution.blocks[0].pluginConversation = {
+    ...profiledExecution.blocks[0].pluginConversation!,
+    profile: "principal",
+    fallbackContext: "Título: Como começar",
+  };
+  assert.deepEqual(
+    resolvePluginConversation({
+      block: profiledTarget,
+      blockExecution: profiledExecution.blocks[1],
+      execution: profiledExecution,
+      projectExecutions: [profiledExecution],
+      pluginId: "browser",
+      supportsContinuation: true,
+      profileSetup: { configurationKey: "accountProfile", label: "Perfil" },
+    }),
+    { mode: "new", fallbackContext: "Título: Como começar", continuationMessage: undefined },
+  );
+});
+
+test("repete no mesmo chat enviando somente as observações", () => {
+  const retryExecution = structuredClone(execution);
+  const retryBlock = retryExecution.blocks[0];
+  retryBlock.retryMode = "conversation_feedback";
+  retryBlock.retryFeedback = { decision: "rejected", feedback: "Deixe a promessa específica." };
+  retryBlock.retryConversationContext = "Resultado anterior: título genérico";
+  assert.deepEqual(
+    resolvePluginConversation({
+      block: source,
+      blockExecution: retryBlock,
+      execution: retryExecution,
+      projectExecutions: [retryExecution],
+      pluginId: "browser",
+      supportsContinuation: true,
+    }),
+    {
+      mode: "reuse",
+      id: "https://provider.test/c/123",
+      sourceProfile: undefined,
+      fallbackContext: "Resultado anterior: título genérico",
+      continuationMessage: "Deixe a promessa específica.",
+    },
   );
 });
 

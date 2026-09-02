@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.claude-browser-text",
   "name": "Claude Browser Studio",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Super plugin do Claude web para criar, pesquisar, escolher, validar e analisar imagens ou documentos em conversas persistentes.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -58,12 +58,12 @@
       },
       "keepBrowserOpen": {
         "type": "boolean",
-        "default": false
+        "default": true
       },
       "startMinimized": {
         "type": "boolean",
-        "default": false,
-        "description": "Deixe false no primeiro uso de cada perfil para fazer login manualmente."
+        "default": true,
+        "description": "A execução automática permanece minimizada; a preparação do perfil continua visível para login manual."
       },
       "interactiveWaitSeconds": {
         "type": "integer",
