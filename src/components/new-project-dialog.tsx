@@ -63,6 +63,7 @@ export function NewProjectDialog({
             size="sm"
             className="h-9 gap-1.5 px-2.5 text-white sm:px-3"
             aria-label="Novo projeto"
+            data-new-project-trigger
           >
             <Plus className="size-4" />
             <span className="hidden sm:inline">Novo projeto</span>
@@ -73,9 +74,7 @@ export function NewProjectDialog({
         className="sm:max-w-md"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
-          requestAnimationFrame(() => {
-            titleInputRef.current?.focus();
-          });
+          titleInputRef.current?.focus();
         }}
       >
         <DialogHeader>

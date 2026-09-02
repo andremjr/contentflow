@@ -300,13 +300,14 @@ function parseSelectedItemId(text, request) {
   const candidate = String(parsed?.selectedItemId ?? stripCodeFence(text))
     .replace(/^["']|["']$/g, "")
     .trim();
-  if (!items.some((item) => item.id === candidate))
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "O ChatGPT não devolveu o ID exato de um item permitido.",
-      true,
-    );
-  return candidate;
+  if (items.some((item) => item.id === candidate)) return candidate;
+  const mentionedIds = items.map((item) => item.id).filter((id) => String(text).includes(id));
+  if (mentionedIds.length === 1) return mentionedIds[0];
+  throw codedError(
+    "OUTPUT_VALIDATION_FAILED",
+    "O ChatGPT não devolveu um único ID exato permitido.",
+    true,
+  );
 }
 
 function parseValidationValues(text, request) {
@@ -1066,13 +1067,25 @@ async function setPrompt(bridge, prompt, operationKey) {
 }
 
 async function clickSend(client, sessionId, bridge, signal, operationKey) {
-  await bridge.dispatch(
-    "click",
-    {
-      selectors: ['button[data-testid="send-button"]'],
-    },
-    operationKey,
-  );
+  let clickError;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await bridge.dispatch(
+        "click",
+        {
+          selectors: ['button[data-testid="send-button"]'],
+        },
+        `${operationKey}:${attempt}`,
+      );
+      clickError = undefined;
+      break;
+    } catch (error) {
+      clickError = error;
+      if (error?.code !== "OUTPUT_VALIDATION_FAILED" || attempt === 19) throw error;
+      await sleep(250, signal);
+    }
+  }
+  if (clickError) throw clickError;
   const sent = async (deadline) => {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
@@ -1109,8 +1122,21 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
       generating: Boolean(state?.stop),
       stablePolls: stable,
     });
-    if (phase === "completed")
-      return { text: newest.trim(), links: state.entries?.at(-1)?.links ?? [] };
+    if (phase === "completed") {
+      await sleep(5_000, signal);
+      const confirmedState = await responseState(client, sessionId);
+      const confirmedTexts = confirmedState?.texts ?? [];
+      const confirmedNewest = confirmedTexts.length > baselineCount ? confirmedTexts.at(-1) : "";
+      if (confirmedNewest === newest && !confirmedState?.stop) {
+        return {
+          text: confirmedNewest.trim(),
+          links: confirmedState.entries?.at(-1)?.links ?? [],
+        };
+      }
+      previous = confirmedNewest;
+      stable = 0;
+      continue;
+    }
     const hint = String(state?.bodyHint ?? "");
     if (/usage limit|rate limit|reached.*limit|limite de uso/i.test(hint))
       throw codedError("RATE_LIMIT", "O ChatGPT informou limite temporário de uso.", true);
@@ -1427,7 +1453,7 @@ export async function execute(request, services) {
     const taskPage = await attachChatGptPage(client, services.signal, false, launched.reused);
     const { sessionId } = taskPage;
     taskTargetId = taskPage.targetId;
-    closeTaskTarget = launched.reused && taskPage.created;
+    closeTaskTarget = taskPage.created || !launched.reused;
     const reusedConversation = await prepareConversation(
       client,
       sessionId,

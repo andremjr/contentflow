@@ -26,6 +26,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -47,18 +55,6 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/channel/$channelId/")({ component: ChannelWorkspace });
 
-async function confirmProjectRemoval(project: Project) {
-  if (!confirm(`Excluir "${project.title}"?`)) return;
-  try {
-    await removeProject(project.id);
-    toast.success("Projeto excluído.");
-  } catch (error) {
-    toast.error("Não foi possível excluir o projeto", {
-      description: error instanceof Error ? error.message : undefined,
-    });
-  }
-}
-
 function ChannelWorkspace() {
   const { channelId } = Route.useParams();
   const channel = useChannel(channelId);
@@ -67,6 +63,8 @@ function ChannelWorkspace() {
   const [search, setSearch] = useState("");
   const [editingChannel, setEditingChannel] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [projectPendingRemoval, setProjectPendingRemoval] = useState<Project | null>(null);
+  const [isRemovingProject, setIsRemovingProject] = useState(false);
   const hasLocalViewChange = useRef(false);
   const viewPersistenceQueue = useRef(Promise.resolve());
 
@@ -133,6 +131,22 @@ function ChannelWorkspace() {
       });
     } finally {
       setIsSyncing(false);
+    }
+  }
+
+  async function confirmProjectRemoval() {
+    if (!projectPendingRemoval || isRemovingProject) return;
+    setIsRemovingProject(true);
+    try {
+      await removeProject(projectPendingRemoval.id);
+      setProjectPendingRemoval(null);
+      toast.success("Projeto excluído.");
+    } catch (error) {
+      toast.error("Não foi possível excluir o projeto", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsRemovingProject(false);
     }
   }
 
@@ -288,7 +302,11 @@ function ChannelWorkspace() {
           filtered.length === 0 ? (
             <EmptyProjects channelId={channel.id} channelName={channel.name} />
           ) : (
-            <ProjectGrid projects={filtered} channel={channel} />
+            <ProjectGrid
+              projects={filtered}
+              channel={channel}
+              onRequestRemoval={setProjectPendingRemoval}
+            />
           )
         ) : (
           <div className="space-y-4">
@@ -296,16 +314,71 @@ function ChannelWorkspace() {
             {filtered.length === 0 ? (
               <EmptyProjects channelId={channel.id} channelName={channel.name} />
             ) : (
-              <ProjectTable projects={filtered} channel={channel} />
+              <ProjectTable
+                projects={filtered}
+                channel={channel}
+                onRequestRemoval={setProjectPendingRemoval}
+              />
             )}
           </div>
         )}
       </main>
+      <Dialog
+        open={projectPendingRemoval !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isRemovingProject) setProjectPendingRemoval(null);
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-md"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            requestAnimationFrame(() => {
+              document.querySelector<HTMLElement>("[data-new-project-trigger]")?.focus();
+            });
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Excluir projeto?</DialogTitle>
+            <DialogDescription>
+              {projectPendingRemoval
+                ? `O projeto “${projectPendingRemoval.title}” será excluído permanentemente.`
+                : "Este projeto será excluído permanentemente."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={isRemovingProject}
+              onClick={() => setProjectPendingRemoval(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isRemovingProject}
+              onClick={() => void confirmProjectRemoval()}
+            >
+              {isRemovingProject ? "Excluindo…" : "Excluir projeto"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
 
-function ProjectGrid({ projects, channel }: { projects: Project[]; channel: Channel }) {
+function ProjectGrid({
+  projects,
+  channel,
+  onRequestRemoval,
+}: {
+  projects: Project[];
+  channel: Channel;
+  onRequestRemoval: (project: Project) => void;
+}) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {projects.map((p) => {
@@ -315,9 +388,6 @@ function ProjectGrid({ projects, channel }: { projects: Project[]; channel: Chan
             key={p.id}
             className="group relative overflow-hidden rounded-lg bg-card transition-colors hover:bg-surface-2"
           >
-            {/* The native confirmation dialog blocks Radix's modal cleanup. If the project
-                card is removed while that cleanup is pending, body pointer events can remain
-                locked and prevent the next project dialog from receiving focus. */}
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -333,7 +403,7 @@ function ProjectGrid({ projects, channel }: { projects: Project[]; channel: Chan
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onSelect={() => {
-                    void confirmProjectRemoval(p);
+                    onRequestRemoval(p);
                   }}
                 >
                   <Trash2 className="mr-2 size-3.5" />
@@ -407,7 +477,15 @@ function ProjectGrid({ projects, channel }: { projects: Project[]; channel: Chan
   );
 }
 
-function ProjectTable({ projects, channel }: { projects: Project[]; channel: Channel }) {
+function ProjectTable({
+  projects,
+  channel,
+  onRequestRemoval,
+}: {
+  projects: Project[];
+  channel: Channel;
+  onRequestRemoval: (project: Project) => void;
+}) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
       <Table>
@@ -475,7 +553,7 @@ function ProjectTable({ projects, channel }: { projects: Project[]; channel: Cha
                       size="icon"
                       className="size-8 text-muted-foreground hover:text-destructive"
                       onClick={() => {
-                        void confirmProjectRemoval(p);
+                        onRequestRemoval(p);
                       }}
                     >
                       <Trash2 className="size-3.5" />

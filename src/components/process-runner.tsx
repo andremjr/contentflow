@@ -110,13 +110,8 @@ export function ProcessRunner({
     activeExecution?.status === "blocked_executor" && activeBlock?.operator !== "Humano";
   const awaitingOutput = execution?.status === "awaiting_output";
   const methodIssue = getMethodConfigurationIssue(method);
-  const runningExecutionId =
-    execution &&
-    (["running", "blocked_executor", "in_progress"].includes(execution.status) ||
-      activeExecution?.status === "in_progress" ||
-      activeExecution?.status === "blocked_executor")
-      ? execution.id
-      : undefined;
+  const synchronizedExecutionId =
+    execution && !["completed", "cancelled"].includes(execution.status) ? execution.id : undefined;
 
   const scheduleNextProcess = useCallback(() => {
     if (!project || !channel || !nextProcess || nextNavigationTimer.current) return;
@@ -145,18 +140,22 @@ export function ProcessRunner({
   );
 
   useEffect(() => {
-    if (!runningExecutionId) return;
+    if (!synchronizedExecutionId || !project?.id) return;
     let active = true;
     const refresh = () => {
-      if (active) void refreshProcessExecution(runningExecutionId);
+      if (active) void refreshProcessExecution(synchronizedExecutionId, project.id, processId);
     };
     refresh();
-    const timer = window.setInterval(refresh, 1_000);
+    const activelyRunning =
+      ["running", "blocked_executor", "in_progress"].includes(execution?.status ?? "") ||
+      activeExecution?.status === "in_progress" ||
+      activeExecution?.status === "blocked_executor";
+    const timer = window.setInterval(refresh, activelyRunning ? 1_000 : 3_000);
     return () => {
       active = false;
       window.clearInterval(timer);
     };
-  }, [runningExecutionId]);
+  }, [activeExecution?.status, execution?.status, processId, project?.id, synchronizedExecutionId]);
 
   if (!project || !channel) return null;
   const projectId = project.id;

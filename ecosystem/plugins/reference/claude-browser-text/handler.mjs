@@ -1049,11 +1049,11 @@ function cfPrompt() {
 }
 function cfAssistantNodes() {
   const selectors = [
-    '[data-message-author-role="assistant"]',
-    '[data-testid*="assistant" i]',
-    '.font-claude-response',
+    '.standard-markdown',
     '[data-is-streaming] .standard-markdown',
-    '.standard-markdown'
+    '.font-claude-response',
+    '[data-message-author-role="assistant"]',
+    '[data-testid*="assistant" i]'
   ];
   for (const selector of selectors) {
     const nodes = [...document.querySelectorAll(selector)].filter(cfVisible);
@@ -1189,12 +1189,24 @@ async function setPrompt(bridge, prompt, operationKey) {
   );
 }
 
-async function clickSend(bridge, operationKey) {
-  await bridge.dispatch(
-    "click",
-    { selectors: ["button"], textIncludes: ["send message", "enviar mensagem", "send"] },
-    operationKey,
-  );
+async function clickSend(bridge, operationKey, signal) {
+  let clickError;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await bridge.dispatch(
+        "click",
+        { selectors: ["button"], textIncludes: ["send message", "enviar mensagem", "send"] },
+        `${operationKey}:${attempt}`,
+      );
+      clickError = undefined;
+      break;
+    } catch (error) {
+      clickError = error;
+      if (error?.code !== "OUTPUT_VALIDATION_FAILED" || attempt === 19) throw error;
+      await sleep(250, signal);
+    }
+  }
+  if (clickError) throw clickError;
 }
 
 async function responseState(client, sessionId) {
@@ -1224,8 +1236,25 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
       stablePolls,
     });
     if (phase === "completed") {
-      const entry = Array.isArray(state?.entries) ? state.entries.at(-1) : undefined;
-      return { text: newest.trim(), links: Array.isArray(entry?.links) ? entry.links : [] };
+      await sleep(5_000, signal);
+      const confirmedState = await responseState(client, sessionId);
+      const confirmedTexts = Array.isArray(confirmedState?.texts) ? confirmedState.texts : [];
+      const confirmedNewest =
+        confirmedTexts.length > baselineCount
+          ? confirmedTexts.at(-1)
+          : (confirmedTexts.at(-1) ?? "");
+      if (confirmedNewest === newest && !confirmedState?.stop) {
+        const entry = Array.isArray(confirmedState?.entries)
+          ? confirmedState.entries.at(-1)
+          : undefined;
+        return {
+          text: confirmedNewest.trim(),
+          links: Array.isArray(entry?.links) ? entry.links : [],
+        };
+      }
+      previous = confirmedNewest;
+      stablePolls = 0;
+      continue;
     }
     const hint = String(state?.bodyHint ?? "");
     if (/usage limit|rate limit|limite de uso|try again later/i.test(hint)) {
@@ -1255,7 +1284,7 @@ async function generatePart(client, sessionId, bridge, prompt, settings, signal,
   const before = await responseState(client, sessionId);
   const baselineCount = Array.isArray(before?.texts) ? before.texts.length : 0;
   await setPrompt(bridge, prompt, `prompt:${operationKey}`);
-  await clickSend(bridge, `send:${operationKey}`);
+  await clickSend(bridge, `send:${operationKey}`, signal);
   const timeoutSeconds = clampInteger(settings?.responseTimeoutSeconds, 600, 30, 900);
   return await waitForResponse(client, sessionId, baselineCount, timeoutSeconds * 1000, signal);
 }
@@ -1452,7 +1481,7 @@ export async function execute(request, services) {
     );
     const { sessionId } = taskPage;
     taskTargetId = taskPage.targetId;
-    closeTaskTarget = launched.startedByPlugin === false && taskPage.created;
+    closeTaskTarget = taskPage.created || launched.startedByPlugin;
     const interactiveWaitSeconds = clampInteger(settings.interactiveWaitSeconds, 600, 30, 900);
     const reusedConversation = await prepareConversation(
       client,

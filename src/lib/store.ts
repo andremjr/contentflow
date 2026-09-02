@@ -1183,8 +1183,16 @@ export async function cancelProcessExecution(executionId: string) {
   return true;
 }
 
-export async function refreshProcessExecution(executionId: string) {
-  const response = await fetch(`/api/executions/${executionId}/state`);
+export async function refreshProcessExecution(
+  executionId: string,
+  projectId?: string,
+  processType?: ProcessId,
+) {
+  const query =
+    projectId && processType
+      ? `?projectId=${encodeURIComponent(projectId)}&processType=${encodeURIComponent(processType)}`
+      : "";
+  const response = await fetch(`/api/executions/${executionId}/state${query}`);
   if (!response.ok) return false;
   const body = (await response.json()) as {
     execution: ProcessExecution;
@@ -1195,8 +1203,15 @@ export async function refreshProcessExecution(executionId: string) {
 }
 
 function applyServerExecutionState(execution: ProcessExecution, project: Project) {
-  const executionIndex = db.executions.findIndex((item) => item.id === execution.id);
+  let executionIndex = db.executions.findIndex((item) => item.id === execution.id);
+  if (executionIndex < 0) {
+    executionIndex = db.executions.findIndex(
+      (item) =>
+        item.projectId === execution.projectId && item.processType === execution.processType,
+    );
+  }
   if (executionIndex >= 0) db.executions[executionIndex] = normalizeExecution(execution);
+  else db.executions.unshift(normalizeExecution(execution));
   const projectIndex = db.projects.findIndex((item) => item.id === project.id);
   if (projectIndex >= 0) db.projects[projectIndex] = project;
   emit();

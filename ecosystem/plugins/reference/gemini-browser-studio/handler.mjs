@@ -861,11 +861,26 @@ async function setPrompt(bridge, text, operationKey) {
   );
 }
 async function send(c, s, bridge, signal, operationKey) {
-  await bridge.dispatch(
-    "click",
-    { selectors: ["button"], textIncludes: ["enviar mensagem", "send message", "enviar", "send"] },
-    operationKey,
-  );
+  let clickError;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await bridge.dispatch(
+        "click",
+        {
+          selectors: ["button"],
+          textIncludes: ["enviar mensagem", "send message", "enviar", "send"],
+        },
+        `${operationKey}:${attempt}`,
+      );
+      clickError = undefined;
+      break;
+    } catch (error) {
+      clickError = error;
+      if (error?.code !== "OUTPUT_VALIDATION_FAILED" || attempt === 19) throw error;
+      await sleep(250, signal);
+    }
+  }
+  if (clickError) throw clickError;
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw err("CANCELLED", "Execução cancelada.");
@@ -1114,7 +1129,7 @@ export async function execute(request, services) {
     const taskPage = await attach(client, services.signal, false, launched.reused);
     const { sessionId } = taskPage;
     taskTargetId = taskPage.targetId;
-    closeTaskTarget = launched.reused && taskPage.created;
+    closeTaskTarget = taskPage.created || !launched.reused;
     const reusedConversation = await prepareConversation(
       client,
       sessionId,

@@ -149,6 +149,7 @@ export async function attachContentFlowBridge({
       );
     }
     const issuedAt = Date.now();
+    const commandTimeoutMs = Math.max(1000, Math.min(30000, timeoutMs));
     const command = {
       pluginId,
       protocolVersion: PROTOCOL_VERSION,
@@ -157,7 +158,7 @@ export async function attachContentFlowBridge({
       executionKey: key,
       commandId: commandId(key, action, operationKey),
       issuedAt,
-      expiresAt: issuedAt + Math.max(1000, Math.min(30000, timeoutMs)),
+      expiresAt: issuedAt + commandTimeoutMs,
       expectedUrl: page.url,
       action,
       payload,
@@ -165,7 +166,7 @@ export async function attachContentFlowBridge({
     const response = await evaluateWorker(
       client,
       workerSessionId,
-      `globalThis.contentFlowBridge.dispatch(${JSON.stringify(command)})`,
+      `Promise.race([globalThis.contentFlowBridge.dispatch(${JSON.stringify(command)}),new Promise(resolve=>setTimeout(()=>resolve({ok:false,code:"COMMAND_TIMEOUT",message:"A extensão não respondeu no prazo."}),${commandTimeoutMs + 1000}))])`,
     );
     if (!response?.ok) {
       const code = String(response?.code || "");

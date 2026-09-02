@@ -3931,7 +3931,12 @@ app.get("/api/executions", (request, response) => {
 });
 
 app.get("/api/executions/:id/state", (request, response) => {
-  const execution = executionById(request.params.id);
+  const projectId = typeof request.query.projectId === "string" ? request.query.projectId : "";
+  const processType =
+    typeof request.query.processType === "string" ? request.query.processType : "";
+  const execution =
+    executionById(request.params.id) ||
+    (projectId && processType ? executionFor(projectId, processType) : undefined);
   const project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
   if (!execution || !project) {
     response.status(404).json({ error: "Execução não encontrada." });

@@ -58,7 +58,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "1.0.4");
+  assert.equal(manifest.version, "1.0.5");
   assert.equal(manifest.supportsConversationContinuation, undefined);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -339,6 +339,21 @@ test("Escolher aceita somente ID permitido", () => {
   const value = request({ context: { selectedCollection: { items: [{ id: "a" }, { id: "b" }] } } });
   assert.equal(__test.parseSelectedItemId('{"selectedItemId":"b"}', value), "b");
   assert.throws(() => __test.parseSelectedItemId('{"selectedItemId":"x"}', value), /ID exato/);
+});
+
+test("Escolher recupera um único ID permitido mesmo com texto adicional", () => {
+  const request = {
+    context: {
+      selectedCollection: {
+        items: [{ id: "item-a" }, { id: "item-b" }],
+      },
+    },
+  };
+  assert.equal(
+    __test.parseSelectedItemId('Escolha concluída: {"selectedItemId":"item-b"}.', request),
+    "item-b",
+  );
+  assert.throws(() => __test.parseSelectedItemId("item-a ou item-b", request));
 });
 
 test("Validar interpreta aprovação e seleções", () => {
