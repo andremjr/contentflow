@@ -110,7 +110,11 @@ import {
 } from "@/lib/method-file";
 import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
 import { createChannelHistoryRecordFields } from "@/lib/channel-history";
-import { instructionInputKey, instructionInputLabel } from "@/lib/instruction-template";
+import {
+  instructionInputKey,
+  instructionInputLabel,
+  nextManualInputLabel,
+} from "@/lib/instruction-template";
 import type {
   JsonSchema,
   PluginCapability,
@@ -2499,7 +2503,7 @@ function ContextInputsEditor({
   const addInput = () => {
     const input: BlockInputBinding = {
       id: uid(`${block.id}-input`),
-      label: "Nova entrada",
+      label: nextManualInputLabel(inputs),
       type: "text",
       source: "previous_block",
       presentation: { renderer: "auto" },
@@ -2578,7 +2582,7 @@ function DataContractEditor({
   const addInput = () => {
     const input: BlockInputBinding = {
       id: uid(`${block.id}-input`),
-      label: "Nova entrada",
+      label: nextManualInputLabel(inputs),
       type: "text",
       source: "previous_block",
       presentation: { renderer: "auto" },

@@ -25,7 +25,7 @@ export function RuntimeValueViewer({
   }
 
   if (type === "thumbnail_layout" && isThumbnailLayout(value)) {
-    return <CompositionPreview boxes={value.boxes} />;
+    return <CompositionPreview boxes={value.boxes} className={compact ? "max-w-72" : undefined} />;
   }
 
   const renderer =

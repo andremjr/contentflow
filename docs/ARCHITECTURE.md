@@ -176,6 +176,8 @@ Os métodos permanecem lineares: não existem ramificações, junções, paralel
 
 Todo bloco `VALIDAR` referencia um bloco anterior específico e opera em um de três modos: aprovar ou reprovar, escolher uma opção, ou escolher várias opções. Uma reprovação pode pausar a execução ou solicitar uma nova tentativa do bloco validado. Nesse último caso, o motor invalida e executa novamente o trecho linear entre o bloco-alvo e a validação, preservando o feedback da reprovação como contexto da nova tentativa e respeitando o limite configurado. Uma escolha concluída torna-se uma saída tipada do próprio bloco `VALIDAR`, disponível para os blocos seguintes.
 
+Se a tentativa reprovada produziu imagens e o executor precisar abrir outra conversa para refazer o bloco, o núcleo preserva as referências autorizadas e o plugin anexa essas imagens à nova conversa. Quando a conversa anterior puder ser reutilizada, a mídia não é reenviada.
+
 Cada nova tentativa incrementa a identidade de execução dos blocos já iniciados no trecho invalidado. Jobs, artifacts e entregas da tentativa anterior permanecem rastreáveis, mas não podem ser reutilizados como se pertencessem à nova tentativa.
 
 Cada execução mantém um snapshot do Método utilizado, o estado individual dos blocos, rascunhos, entregas concluídas e referências a arquivos armazenados localmente. As saídas concluídas tornam-se contexto para os blocos seguintes.

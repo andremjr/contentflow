@@ -345,6 +345,8 @@ export type BlockExecution = {
   /** Controla a mensagem da próxima tentativa após uma reprovação editorial. */
   retryMode?: "full" | "conversation_feedback";
   retryConversationContext?: string;
+  /** Imagens da tentativa reprovada, anexadas somente se o plugin abrir outra conversa. */
+  retryConversationAttachments?: StoredFile[];
 };
 
 export type ProcessExecutionStatus =

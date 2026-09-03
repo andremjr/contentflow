@@ -4,6 +4,7 @@ import {
   instructionInputKey,
   instructionInputLabel,
   instructionVariables,
+  nextManualInputLabel,
   resolveInstructionTemplate,
 } from "../src/lib/instruction-template";
 
@@ -79,6 +80,25 @@ test("gera chaves humanas estáveis para o seletor de variáveis", () => {
     "project.title",
     "inputs.title",
   ]);
+});
+
+test("gera nomes únicos para novas entradas manuais", () => {
+  assert.equal(nextManualInputLabel([]), "Nova entrada 1");
+  assert.equal(
+    nextManualInputLabel([
+      { label: "Nova entrada 1" },
+      { label: "Referência" },
+      { label: "Nova entrada 2" },
+    ]),
+    "Nova entrada 3",
+  );
+  assert.equal(
+    instructionInputKey({
+      id: "manual-3",
+      label: nextManualInputLabel([{ label: "Nova entrada 1" }]),
+    }),
+    "nova_entrada_2",
+  );
 });
 
 test("padroniza os oito resultados universais na linguagem da interface", () => {

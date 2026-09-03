@@ -478,7 +478,21 @@ type PluginExecutionRequest = {
   retryFeedback?: Record<string, RuntimeValue>;
   resolvedInstruction?: string;
   unresolvedInstructionVariables?: string[];
-  conversation?: { mode: "new" } | { mode: "reuse"; id: string };
+  conversation?:
+    | {
+        mode: "new";
+        fallbackContext?: string;
+        continuationMessage?: string;
+        fallbackAttachments?: StoredFile[];
+      }
+    | {
+        mode: "reuse";
+        id: string;
+        sourceProfile?: string;
+        fallbackContext?: string;
+        continuationMessage?: string;
+        fallbackAttachments?: StoredFile[];
+      };
   context: PluginExecutionContext;
 };
 ```
@@ -486,6 +500,8 @@ type PluginExecutionRequest = {
 O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContract` serve para conhecer tipo e schema dos registros recebidos. `inputDeliveries` é metadado paralelo e opcional de proveniência; plugins v1 que leem somente `inputs` continuam compatíveis. `resolvedInstruction` contém a instrução do Método após o núcleo resolver variáveis declaradas; capabilities que consomem instrução devem preferi-la ao template cru em `context.block.instructions`. Ao compor contexto textual adicional, o plugin deve preferir `instructionContextInputs` a `inputs`: o núcleo remove desse mapa as entradas que já foram interpoladas em `resolvedInstruction`, evitando enviar o mesmo conteúdo duas vezes. A ausência do campo preserva o comportamento de plugins v1 existentes. `unresolvedInstructionVariables` informa placeholders preservados por compatibilidade. `settings` contém somente preferências não secretas validadas por `settingsSchema`; secrets declarados são acessados por `services.getSecret()` e não aparecem no envelope serializável.
 
 Um manifesto pode declarar `supportsConversationContinuation: true`. Nesse caso, o request informa se o plugin deve iniciar ou reutilizar uma conversa, e uma resposta bem-sucedida pode devolver `conversation: { id }`. O ID é opaco para o núcleo: o plugin valida origem e formato antes de usá-lo. O núcleo só resolve referências produzidas por bloco anterior do mesmo Projeto, plugin e conexão local; cookies, tokens e o histórico integral nunca entram nesse campo.
+
+Quando uma reprovação refaz um bloco que produziu imagens, o núcleo pode incluir essas referências autorizadas em `conversation.fallbackAttachments`. O plugin só deve anexá-las se efetivamente abrir uma conversa nova; se conseguir reutilizar a conversa anterior, não deve reenviar a mídia. Os arquivos continuam sujeitos a `resolveInputFile`, permissões, MIME, tamanho e limites da capability.
 
 ## 11. Contexto permitido
 
@@ -736,6 +752,7 @@ Códigos recomendados:
 - o núcleo incrementa `attempt`;
 - invalida o trecho linear necessário;
 - envia `retryFeedback` do bloco `VALIDAR`;
+- preserva imagens da tentativa reprovada em `conversation.fallbackAttachments` quando outra conversa precisar ser aberta;
 - cria nova chave de idempotência;
 - preserva histórico das tentativas anteriores.
 

@@ -1,8 +1,17 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
+export function normalizeUserProvidedPath(value: string) {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  if (trimmed.length >= 2 && (quote === '"' || quote === "'") && trimmed.at(-1) === quote) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 export function discoverPluginDirectories(requestedPath: string) {
-  const sourceRoot = path.resolve(requestedPath);
+  const sourceRoot = path.resolve(normalizeUserProvidedPath(requestedPath));
   if (!existsSync(sourceRoot) || !statSync(sourceRoot).isDirectory())
     throw new Error("A pasta informada não existe.");
 

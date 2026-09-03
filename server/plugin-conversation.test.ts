@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ActionBlock, ProcessExecution } from "../src/lib/domain";
+import { pluginConversationFallbackAttachments } from "../src/lib/conversation-context";
 import { normalizePluginConversationId, resolvePluginConversation } from "./plugin-conversation";
 
 const source: ActionBlock = {
@@ -151,6 +152,57 @@ test("repete no mesmo chat enviando somente as observações", () => {
       continuationMessage: "Deixe a promessa específica.",
     },
   );
+});
+
+test("preserva imagens da tentativa reprovada quando o plugin precisa abrir outra conversa", () => {
+  const image = {
+    id: "previous-image",
+    name: "previous.png",
+    mimeType: "image/png",
+    size: 123,
+    url: "/api/files/previous.png",
+  };
+  const retryExecution = structuredClone(execution);
+  const retryBlock = retryExecution.blocks[0];
+  retryBlock.retryMode = "full";
+  retryBlock.retryFeedback = { decision: "rejected", feedback: "Aumente o contraste." };
+  retryBlock.retryConversationAttachments = [image];
+  assert.deepEqual(
+    resolvePluginConversation({
+      block: source,
+      blockExecution: retryBlock,
+      execution: retryExecution,
+      projectExecutions: [retryExecution],
+      pluginId: "browser",
+      supportsContinuation: false,
+    }),
+    {
+      mode: "new",
+      fallbackContext: undefined,
+      continuationMessage: undefined,
+      fallbackAttachments: [image],
+    },
+  );
+});
+
+test("coleta somente imagens persistidas para o fallback da conversa", () => {
+  const image = {
+    id: "image",
+    name: "image.webp",
+    mimeType: "image/webp",
+    size: 10,
+    url: "/api/files/image.webp",
+  };
+  const document = {
+    id: "document",
+    name: "document.pdf",
+    mimeType: "application/pdf",
+    size: 10,
+    url: "/api/files/document.pdf",
+  };
+  assert.deepEqual(pluginConversationFallbackAttachments({ result: [image, image, document] }), [
+    image,
+  ]);
 });
 
 test("rejeita referências vazias, enormes ou com controles", () => {

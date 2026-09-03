@@ -2,6 +2,7 @@ import type {
   ActionBlock,
   BlockExecution,
   ProcessExecution,
+  StoredFile,
   UniversalProcess,
 } from "../src/lib/domain";
 import { PROCESS_ORDER } from "../src/lib/domain";
@@ -22,18 +23,38 @@ export function resolvePluginConversation(input: {
     input.blockExecution.retryMode === "conversation_feedback"
       ? retryFeedbackText(input.blockExecution.retryFeedback)
       : undefined;
+  const fallbackAttachments = input.blockExecution.retryConversationAttachments;
   if (input.blockExecution.retryMode === "conversation_feedback" && input.supportsContinuation) {
     const ownConversation = input.blockExecution.pluginConversation;
     const fallbackContext =
       input.blockExecution.retryConversationContext ?? ownConversation?.fallbackContext;
-    if (!ownConversation?.id) return { mode: "new", fallbackContext, continuationMessage };
+    if (!ownConversation?.id)
+      return {
+        mode: "new",
+        fallbackContext,
+        continuationMessage,
+        ...(fallbackAttachments?.length ? { fallbackAttachments } : {}),
+      };
     return conversationForProfile({
       block: input.block,
       profileSetup: input.profileSetup,
       conversation: ownConversation,
       fallbackContext,
       continuationMessage,
+      ...(fallbackAttachments?.length ? { fallbackAttachments } : {}),
     });
+  }
+
+  if (input.blockExecution.retryMode) {
+    return {
+      mode: "new",
+      fallbackContext:
+        input.blockExecution.retryMode === "conversation_feedback"
+          ? input.blockExecution.retryConversationContext
+          : undefined,
+      continuationMessage,
+      ...(fallbackAttachments?.length ? { fallbackAttachments } : {}),
+    };
   }
 
   const reuse = input.block.plugin?.conversation;
@@ -114,6 +135,7 @@ function conversationForProfile(input: {
   conversation: NonNullable<BlockExecution["pluginConversation"]>;
   fallbackContext?: string;
   continuationMessage?: string;
+  fallbackAttachments?: StoredFile[];
 }): PluginExecutionRequest["conversation"] {
   const configurationKey = input.profileSetup?.configurationKey;
   const requestedProfile = configurationKey
@@ -128,6 +150,9 @@ function conversationForProfile(input: {
       mode: "new",
       fallbackContext: input.fallbackContext,
       continuationMessage: input.continuationMessage,
+      ...(input.fallbackAttachments?.length
+        ? { fallbackAttachments: input.fallbackAttachments }
+        : {}),
     };
   }
   return {
@@ -136,5 +161,8 @@ function conversationForProfile(input: {
     sourceProfile: input.conversation.profile,
     fallbackContext: input.fallbackContext,
     continuationMessage: input.continuationMessage,
+    ...(input.fallbackAttachments?.length
+      ? { fallbackAttachments: input.fallbackAttachments }
+      : {}),
   };
 }

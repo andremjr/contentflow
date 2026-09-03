@@ -527,8 +527,8 @@ function InstallPluginDialog({ onInstalled }: { onInstalled: () => Promise<void>
           />
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             {mode === "install"
-              ? "O ContentFlow valida todo o conjunto antes de instalar e guarda uma cópia de cada plugin."
-              : "Ideal para criar com IA: alterações na pasta aparecem ao atualizar, e desconectar não apaga seus arquivos."}
+              ? "O ContentFlow aceita o caminho com ou sem aspas, valida todo o conjunto e guarda uma cópia de cada plugin."
+              : "O caminho pode ter aspas. Alterações na pasta aparecem ao atualizar, e desconectar não apaga seus arquivos."}
           </p>
         </div>
         <Button disabled={installing || !folderPath.trim()} onClick={() => void install()}>

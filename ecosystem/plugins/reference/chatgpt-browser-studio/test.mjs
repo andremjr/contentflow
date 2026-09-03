@@ -3,7 +3,15 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { __test, execute, validateConversationUrl } from "./handler.mjs";
+import {
+  __test,
+  attachmentsAreReady,
+  composerUploadState,
+  collectGeneratedImages,
+  waitAndClickSend,
+  execute,
+  validateConversationUrl,
+} from "./handler.mjs";
 
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
@@ -58,7 +66,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "1.0.5");
+  assert.equal(manifest.version, "1.0.6");
   assert.equal(manifest.supportsConversationContinuation, undefined);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -72,6 +80,13 @@ test("manifesto declara oito capabilities modulares", () => {
     "text",
     "textarea",
   ]);
+  const imageGeneration = manifest.capabilities.find(
+    (item) => item.id === "generate-image-in-browser",
+  );
+  assert.deepEqual(
+    imageGeneration.outputPorts.find((port) => port.key === "images").producedTypes,
+    ["files"],
+  );
   assert.deepEqual(
     manifest.capabilities.map((item) => item.id),
     [
@@ -409,6 +424,347 @@ test("monta prompt para criação de imagem", () => {
 test("identifica StoredFiles aninhados", () => {
   const file = { id: "f", name: "a.pdf", url: "staging://f" };
   assert.deepEqual(__test.collectStoredFiles({ a: [file] }), [file]);
+});
+
+test("anexa a imagem reprovada somente quando precisa abrir outra conversa", () => {
+  const reference = { path: "C:/uploads/reference.png", name: "reference.png" };
+  const rejected = { path: "C:/uploads/rejected.png", name: "rejected.png" };
+  assert.deepEqual(
+    __test.attachmentsForConversation([reference], [rejected], false, "Corrija a imagem."),
+    [reference, rejected],
+  );
+  assert.deepEqual(
+    __test.attachmentsForConversation([reference], [rejected], true, "Corrija a imagem."),
+    [],
+  );
+});
+
+test("reconhece miniaturas sem nome e aguarda todos os anexos prontos", () => {
+  const files = [{ name: "reprovada.png" }, { name: "referencia.webp" }];
+  const ready = {
+    text: "",
+    previews: ["blob:one", "blob:two"],
+    busy: false,
+    sendEnabled: true,
+    error: false,
+  };
+  assert.equal(attachmentsAreReady(ready, files), true);
+  assert.equal(attachmentsAreReady({ ...ready, previews: ["blob:one"] }, files), false);
+  assert.equal(attachmentsAreReady(ready, files, ["blob:one"]), false);
+  assert.equal(attachmentsAreReady({ ...ready, previews: ["blob:one", "blob:one"] }, files), false);
+  assert.equal(attachmentsAreReady({ ...ready, busy: true }, files), false);
+  assert.equal(attachmentsAreReady({ ...ready, sendEnabled: false }, files), false);
+  assert.equal(attachmentsAreReady({ ...ready, error: true }, files), false);
+  assert.equal(attachmentsAreReady(null, files), false);
+});
+
+test("mantém suporte a documentos e não ignora upload pendente mesmo com nome visível", () => {
+  const ready = {
+    text: "brief.pdf",
+    previews: ["blob:image"],
+    busy: false,
+    sendEnabled: true,
+    error: false,
+  };
+  assert.equal(attachmentsAreReady(ready, [{ name: "brief.pdf" }]), true);
+  assert.equal(attachmentsAreReady(ready, [{ name: "brief.pdf" }, { name: "ref.png" }]), true);
+  assert.equal(attachmentsAreReady(ready, [{ name: "outro.pdf" }]), false);
+  assert.equal(attachmentsAreReady({ ...ready, busy: true }, [{ name: "brief.pdf" }]), false);
+  assert.equal(attachmentsAreReady({ ...ready, error: true }, [{ name: "brief.pdf" }]), false);
+});
+
+test("observa apenas miniaturas carregadas e controles do compositor", () => {
+  const element = (extra = {}) => ({
+    getClientRects: () => [1],
+    getAttribute: () => null,
+    ...extra,
+  });
+  const images = [
+    element({ complete: true, naturalWidth: 120, naturalHeight: 80, src: "blob:ready" }),
+    element({ complete: false, naturalWidth: 120, naturalHeight: 80, src: "blob:loading" }),
+    element({ complete: true, naturalWidth: 16, naturalHeight: 16, src: "icon" }),
+  ];
+  const send = element({
+    disabled: false,
+    getAttribute: (key) => (key === "data-testid" ? "send-button" : null),
+  });
+  const composer = {
+    innerText: "",
+    querySelector: () => send,
+    querySelectorAll: (selector) => (selector === "img" ? images : []),
+  };
+  const doc = {
+    body: { innerText: "ref.png no histórico" },
+    defaultView: { getComputedStyle: () => ({ display: "block", visibility: "visible" }) },
+    querySelector: () => ({ closest: () => composer, contains: () => false }),
+  };
+  const state = composerUploadState(doc);
+  assert.deepEqual(state.previews, ["blob:ready"]);
+  assert.equal(state.text.includes("ref.png"), false);
+  assert.equal(state.sendEnabled, true);
+  send.disabled = true;
+  assert.equal(composerUploadState(doc).sendEnabled, false);
+});
+
+test("não confunde preview decodificado com upload concluído ou botão de voz com enviar", () => {
+  const element = (extra = {}) => ({
+    getClientRects: () => [1],
+    getAttribute: () => null,
+    ...extra,
+  });
+  const img = element({
+    complete: true,
+    naturalWidth: 120,
+    naturalHeight: 80,
+    src: "blob:preview",
+    style: { filter: "blur(4px)" },
+  });
+  const spinner = element({
+    style: { animationName: "loading-ring", animationPlayState: "running" },
+  });
+  const send = element({
+    getAttribute: (key) => (key === "aria-label" ? "Enviar mensagem" : null),
+  });
+  let showSpinner = false;
+  const composer = {
+    innerText: "",
+    querySelector: () => send,
+    querySelectorAll: (selector) =>
+      selector === "img" ? [img] : selector.startsWith("svg,") && showSpinner ? [spinner] : [],
+  };
+  const doc = {
+    body: {},
+    defaultView: {
+      getComputedStyle: (el) => ({ display: "block", visibility: "visible", ...el.style }),
+    },
+    querySelector: () => ({
+      innerText: "observações de correção",
+      contains: () => false,
+      closest: () => composer,
+    }),
+  };
+  assert.equal(composerUploadState(doc).busy, true);
+  img.style.filter = "none";
+  showSpinner = true;
+  assert.equal(composerUploadState(doc).busy, true);
+  showSpinner = false;
+  assert.equal(composerUploadState(doc).busy, false);
+  assert.equal(composerUploadState(doc).hasPrompt, true);
+  assert.equal(composerUploadState(doc).sendEnabled, true);
+  send.getAttribute = () => "Iniciar modo de voz";
+  assert.equal(composerUploadState(doc).sendEnabled, false);
+});
+
+test("aguarda upload lento após preencher prompt e só clica uma vez quando pronto", async () => {
+  let time = 0,
+    clicks = 0,
+    reads = 0;
+  const timing = {
+    now: () => time,
+    pause: async (ms) => {
+      time += ms;
+    },
+  };
+  await waitAndClickSend(
+    async () => {
+      reads++;
+      // Includes a transient enabled state before the upload indicator appears.
+      return {
+        hasPrompt: true,
+        sendEnabled: time === 0 || time >= 60000,
+        busy: time > 0 && time < 60000,
+      };
+    },
+    async () => {
+      clicks++;
+      assert.ok(time >= 60500);
+    },
+    undefined,
+    timing,
+  );
+  assert.equal(clicks, 1);
+  assert.ok(reads > 100);
+});
+
+test("reavalia botão desabilitado entre observação e clique", async () => {
+  let time = 0,
+    clicks = 0;
+  await waitAndClickSend(
+    async () => ({ hasPrompt: true, sendEnabled: true, busy: false }),
+    async () => {
+      if (++clicks === 1)
+        throw Object.assign(new Error("Botão indisponível"), { code: "OUTPUT_VALIDATION_FAILED" });
+    },
+    undefined,
+    {
+      now: () => time,
+      pause: async (ms) => {
+        time += ms;
+      },
+    },
+  );
+  assert.equal(clicks, 2);
+  assert.ok(time >= 1500);
+});
+
+test("espera de envio respeita falha real, cancelamento e timeout sem clicar", async () => {
+  for (const scenario of ["error", "cancel", "timeout", "empty"]) {
+    let time = 0,
+      clicks = 0;
+    const controller = new AbortController();
+    if (scenario === "cancel") controller.abort();
+    await assert.rejects(
+      waitAndClickSend(
+        async () => ({
+          error: scenario === "error",
+          busy: scenario === "timeout",
+          sendEnabled: true,
+          hasPrompt: scenario !== "empty",
+        }),
+        async () => {
+          clicks++;
+        },
+        controller.signal,
+        {
+          now: () => time,
+          pause: async (ms) => {
+            time += ms;
+          },
+          timeoutMs: 2000,
+        },
+      ),
+      (error) =>
+        error.code ===
+        { error: "INVALID_INPUT", cancel: "CANCELLED", timeout: "TIMEOUT", empty: "TIMEOUT" }[
+          scenario
+        ],
+    );
+    assert.equal(clicks, 0);
+  }
+});
+
+test("entrega qualquer quantidade de imagens capturadas pela porta de vários arquivos", () => {
+  const files = Array.from({ length: 5 }, (_, index) => ({
+    id: `image-${index + 1}`,
+    name: `image-${index + 1}.png`,
+    mimeType: "image/png",
+    url: `artifact://image-${index + 1}`,
+  }));
+  assert.deepEqual(__test.imageResponseValues({ files }, "Cinco opções"), {
+    image: files[0],
+    images: files,
+    description: "Cinco opções",
+  });
+});
+
+test("detecta imagens novas pela URL mesmo quando a quantidade de elementos não muda", () => {
+  const oldImages = [
+    { src: "https://chatgpt.com/backend-api/estuary/content?id=old-a" },
+    { src: "https://chatgpt.com/backend-api/estuary/content?id=old-b" },
+    { src: "https://chatgpt.com/backend-api/estuary/content?id=old-c" },
+  ];
+  const currentImages = [
+    { src: "https://chatgpt.com/backend-api/estuary/content?id=new-a", alt: "Imagem gerada" },
+    { src: "https://chatgpt.com/backend-api/estuary/content?id=new-b", alt: "Imagem gerada" },
+    { src: "https://chatgpt.com/backend-api/estuary/content?id=new-c", alt: "Imagem gerada" },
+    { src: "https://chatgpt.com/backend-api/estuary/content?id=new-c", alt: "" },
+  ];
+
+  assert.deepEqual(
+    __test.generatedImagesAfterBaseline(
+      currentImages,
+      oldImages.map((image) => image.src),
+    ),
+    currentImages.slice(0, 3),
+  );
+});
+
+function pageImage(role, id, overrides = {}) {
+  return {
+    src: `https://chatgpt.com/backend-api/estuary/content?id=${id}`,
+    alt: "Imagem gerada",
+    complete: true,
+    naturalWidth: 1536,
+    naturalHeight: 1024,
+    closest(selector) {
+      if (selector.startsWith("form,")) return role === "user" || role === "composer" ? {} : null;
+      if (selector === "[data-message-author-role], [data-turn]")
+        return role === "assistant" ? { getAttribute: () => "assistant" } : null;
+      return null;
+    },
+    ...overrides,
+  };
+}
+
+test("não captura o anexo reprovado que ganha uma nova URL após ser enviado", () => {
+  const reference = pageImage("user", "uploaded-reference");
+  const revised = pageImage("assistant", "new-generation");
+  const images = collectGeneratedImages({
+    querySelectorAll: () => [pageImage("composer", "local-preview"), reference, revised],
+  });
+  assert.deepEqual(
+    images.map((image) => image.src),
+    [revised.src],
+  );
+  assert.equal(__test.imageResponseValues({ files: images }, "Revisada").image.src, revised.src);
+  assert.deepEqual(collectGeneratedImages({ querySelectorAll: () => [reference] }), []);
+});
+
+test("preserva todas as imagens do assistente e exclui referências e histórico", () => {
+  const old = pageImage("assistant", "old-generation");
+  const generated = Array.from({ length: 5 }, (_, i) => pageImage("assistant", `new-${i}`));
+  const images = collectGeneratedImages({
+    querySelectorAll: () => [
+      old,
+      pageImage("user", "reference"),
+      ...generated,
+      generated[0],
+      pageImage("unknown", "unowned"),
+      pageImage("assistant", "loading", { complete: false }),
+    ],
+  });
+  assert.deepEqual(
+    __test.generatedImagesAfterBaseline(images, [old.src]).map((image) => image.src),
+    generated.map((image) => image.src),
+  );
+});
+
+test("aceita imagem fora do texto mas dentro de um turno comprovadamente do assistente", () => {
+  const img = pageImage("unknown", "tool-output", {
+    closest(selector) {
+      if (selector.startsWith("article"))
+        return { querySelector: (query) => (query.includes('"assistant"') ? {} : null) };
+      return null;
+    },
+  });
+  assert.equal(collectGeneratedImages({ querySelectorAll: () => [img] }).length, 1);
+  const turnImage = pageImage("unknown", "turn-output", {
+    closest(selector) {
+      if (selector === "[data-message-author-role], [data-turn]")
+        return {
+          getAttribute: (name) => (name === "data-turn" ? "assistant" : null),
+        };
+      return null;
+    },
+  });
+  assert.equal(collectGeneratedImages({ querySelectorAll: () => [turnImage] }).length, 1);
+});
+
+test("identifica queda de CDP sem confundir erro HTTP", () => {
+  assert.equal(__test.isCdpConnectionLoss(new Error("CDP não conectado.")), true);
+  assert.equal(__test.isCdpConnectionLoss(new Error("WebSocket is closed")), true);
+  assert.equal(__test.isCdpConnectionLoss(new Error("HTTP 403")), false);
+});
+
+test("reconhece o controle de geração nos idiomas usados pelo ChatGPT", () => {
+  assert.equal(__test.generationControlIsStop("Stop generating", "composer-submit-button"), true);
+  assert.equal(
+    __test.generationControlIsStop("Parar de responder", "composer-submit-button"),
+    true,
+  );
+  assert.equal(__test.generationControlIsStop("Detener respuesta", "composer-submit-button"), true);
+  assert.equal(__test.generationControlIsStop("Enviar mensagem", "composer-submit-button"), false);
+  assert.equal(__test.generationControlIsStop("", "stop-button"), true);
 });
 
 test("limpa markdown de saída", () => {

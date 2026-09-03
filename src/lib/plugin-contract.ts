@@ -267,6 +267,8 @@ export type PluginExecutionRequest = {
         fallbackContext?: string;
         /** Turno curto que substitui o prompt completo, por exemplo após reprovação editorial. */
         continuationMessage?: string;
+        /** Imagens anteriores que o plugin anexa somente ao realmente abrir outra conversa. */
+        fallbackAttachments?: StoredFile[];
       }
     | {
         mode: "reuse";
@@ -275,6 +277,7 @@ export type PluginExecutionRequest = {
         sourceProfile?: string;
         fallbackContext?: string;
         continuationMessage?: string;
+        fallbackAttachments?: StoredFile[];
       };
   /** Core-owned position when a declared list input is executed item by item. */
   batch?: { itemId: string; index: number; total: number };

@@ -87,6 +87,15 @@ export function windowsExecutableDiscoveryReadPaths(
 const registry = new Map<string, RegisteredPlugin>();
 let discoveryIssues: PluginIssue[] = [];
 
+export function pluginRegistrationConflictIsReportable(
+  registeredSource: PluginSource,
+  incomingSource: PluginSource,
+) {
+  // Pastas locais e vínculos de desenvolvimento têm precedência deliberada
+  // sobre a cópia instalada para permitir testar uma correção no aplicativo.
+  return !(registeredSource === "local" && incomingSource === "installed");
+}
+
 function scanPluginDirectory(
   pluginDirectory: string,
   source: PluginSource,
@@ -101,6 +110,7 @@ function scanPluginDirectory(
     const { manifest, absoluteDirectory: realDirectory, entrypoint: realEntrypoint } = validated;
     const registered = registry.get(manifest.id);
     if (registered) {
+      if (!pluginRegistrationConflictIsReportable(registered.source, source)) return;
       throw new Error(`O id ${manifest.id} já foi registrado por outro plugin.`);
     }
     registry.set(manifest.id, {

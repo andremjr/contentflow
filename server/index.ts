@@ -65,7 +65,10 @@ import {
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
 import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
 import { instructionWithRetryFeedback } from "../src/lib/retry-feedback";
-import { pluginConversationFallbackContext } from "../src/lib/conversation-context";
+import {
+  pluginConversationFallbackAttachments,
+  pluginConversationFallbackContext,
+} from "../src/lib/conversation-context";
 import { collectionItemValuesForPlugin } from "../src/lib/plugin-collection";
 import {
   createPersistentPluginJob,
@@ -96,7 +99,7 @@ import { validatePluginDirectory } from "./plugin-validation";
 import { PluginConnectionStore, type PluginConnection } from "./plugin-connections";
 import { resolvePluginConnectionSecrets } from "./plugin-connection-runtime";
 import { normalizePluginConversationId, resolvePluginConversation } from "./plugin-conversation";
-import { discoverPluginDirectories } from "./plugin-package";
+import { discoverPluginDirectories, normalizeUserProvidedPath } from "./plugin-package";
 import {
   downloadCatalogPlugin,
   extractPluginArchive,
@@ -500,6 +503,9 @@ function finishPluginBlock(
           targetBlock,
           targetExecution.values,
         );
+        const retryConversationAttachments = pluginConversationFallbackAttachments(
+          targetExecution.values,
+        );
         for (let index = targetIndex; index < execution.blocks.length; index += 1) {
           const item = execution.blocks[index];
           const preserveConversation =
@@ -515,12 +521,14 @@ function finishPluginBlock(
           item.retryFeedback = undefined;
           item.retryMode = undefined;
           item.retryConversationContext = undefined;
+          item.retryConversationAttachments = undefined;
           if (!preserveConversation) item.pluginConversation = undefined;
           item.status = "pending";
         }
         targetExecution.retryFeedback = structuredClone(values);
         targetExecution.retryMode = retryMode;
         targetExecution.retryConversationContext = retryConversationContext;
+        targetExecution.retryConversationAttachments = retryConversationAttachments;
         targetExecution.startedAt = now;
         targetExecution.status =
           targetBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
@@ -1466,6 +1474,7 @@ async function processPluginJob(
         }
         blockExecution.retryMode = undefined;
         blockExecution.retryConversationContext = undefined;
+        blockExecution.retryConversationAttachments = undefined;
         blockExecution.logs = pluginResponse.logs;
         blockExecution.progress = 1;
         blockExecution.progressMessage = undefined;
@@ -2159,7 +2168,8 @@ app.post("/api/plugins/:pluginId/profile", async (request, response) => {
 });
 
 app.post("/api/plugins/install-from-folder", (request, response) => {
-  const requestedPath = typeof request.body?.path === "string" ? request.body.path.trim() : "";
+  const requestedPath =
+    typeof request.body?.path === "string" ? normalizeUserProvidedPath(request.body.path) : "";
   if (!requestedPath) {
     response.status(400).json({ error: "Informe a pasta de um plugin ou do pacote extraído." });
     return;
@@ -2231,7 +2241,8 @@ app.post("/api/plugins/install-from-folder", (request, response) => {
 });
 
 app.post("/api/plugins/link-development-folder", (request, response) => {
-  const requestedPath = typeof request.body?.path === "string" ? request.body.path.trim() : "";
+  const requestedPath =
+    typeof request.body?.path === "string" ? normalizeUserProvidedPath(request.body.path) : "";
   if (!requestedPath) {
     response.status(400).json({ error: "Informe a pasta de desenvolvimento do plugin." });
     return;
@@ -2410,7 +2421,8 @@ app.put("/api/plugins/:pluginId/update-from-folder", (request, response) => {
     });
     return;
   }
-  const requestedPath = typeof request.body?.path === "string" ? request.body.path.trim() : "";
+  const requestedPath =
+    typeof request.body?.path === "string" ? normalizeUserProvidedPath(request.body.path) : "";
   if (!requestedPath) {
     response.status(400).json({ error: "Informe a pasta da nova versão do plugin." });
     return;
@@ -2579,7 +2591,8 @@ app.get("/api/plugins/:pluginId/workspace", (request, response) => {
 app.put("/api/plugins/:pluginId/workspace", (request, response) => {
   initializePluginRunner();
   const plugin = getRegisteredPlugin(request.params.pluginId);
-  const requestedPath = typeof request.body?.path === "string" ? request.body.path.trim() : "";
+  const requestedPath =
+    typeof request.body?.path === "string" ? normalizeUserProvidedPath(request.body.path) : "";
   if (!plugin) {
     response.status(404).json({ error: "Plugin não encontrado." });
     return;

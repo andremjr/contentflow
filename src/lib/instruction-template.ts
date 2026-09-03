@@ -129,6 +129,13 @@ export function instructionInputLabel(input: InstructionInputIdentity) {
   return (semanticLabelKey && SEMANTIC_INPUT_LABELS[semanticLabelKey]) || input.label;
 }
 
+export function nextManualInputLabel(inputs: Array<Pick<InstructionInputIdentity, "label">>) {
+  const used = new Set(inputs.map((input) => normalizeVariableKey(input.label)));
+  let index = 1;
+  while (used.has(`nova_entrada_${index}`)) index += 1;
+  return `Nova entrada ${index}`;
+}
+
 export function instructionVariables(template: string) {
   return [...String(template ?? "").matchAll(VARIABLE)].map((match) => match[1]);
 }

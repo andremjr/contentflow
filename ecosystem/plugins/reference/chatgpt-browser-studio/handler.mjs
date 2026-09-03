@@ -421,30 +421,42 @@ function attachmentInput(request) {
 }
 
 async function resolveAttachments(request, services) {
-  const unique = [
-    ...new Map(
-      collectStoredFiles(attachmentInput(request)).map((file) => [file.id, file]),
-    ).values(),
-  ];
-  if (unique.length > MAX_ATTACHMENTS)
-    throw codedError("INVALID_INPUT", `Máximo de ${MAX_ATTACHMENTS} anexos por conversa.`);
+  const kind =
+    request?.capabilityId === "analyze-images-in-browser"
+      ? "image"
+      : request?.capabilityId === "analyze-documents-in-browser"
+        ? "document"
+        : "supported";
+  const resolved = await resolveStoredFileAttachments(attachmentInput(request), services, kind);
   if (
     ["analyze-images-in-browser", "analyze-documents-in-browser"].includes(request?.capabilityId) &&
-    !unique.length
+    !resolved.length
   )
     throw codedError("INVALID_INPUT", "Nenhum arquivo autorizado foi recebido.");
+  return resolved;
+}
+
+async function resolveFallbackAttachments(request, services) {
+  return resolveStoredFileAttachments(
+    request?.conversation?.fallbackAttachments,
+    services,
+    "image",
+  );
+}
+
+async function resolveStoredFileAttachments(value, services, kind) {
+  const unique = [...new Map(collectStoredFiles(value).map((file) => [file.id, file])).values()];
+  if (unique.length > MAX_ATTACHMENTS)
+    throw codedError("INVALID_INPUT", `Máximo de ${MAX_ATTACHMENTS} anexos por conversa.`);
   const resolved = [];
   for (const file of unique) {
     const path = await services.resolveInputFile(file);
     const extension = extname(file.name || path).toLowerCase();
     if (!SUPPORTED_EXTENSIONS.has(extension))
       throw codedError("INVALID_INPUT", `Formato não suportado: ${extension || "sem extensão"}.`);
-    if (request?.capabilityId === "analyze-images-in-browser" && !IMAGE_EXTENSIONS.has(extension))
+    if (kind === "image" && !IMAGE_EXTENSIONS.has(extension))
       throw codedError("INVALID_INPUT", `A visão não aceita ${file.name}.`);
-    if (
-      request?.capabilityId === "analyze-documents-in-browser" &&
-      !DOCUMENT_EXTENSIONS.has(extension)
-    )
+    if (kind === "document" && !DOCUMENT_EXTENSIONS.has(extension))
       throw codedError("INVALID_INPUT", `Documento não suportado: ${file.name}.`);
     const info = await stat(path);
     if (!info.isFile() || info.size > MAX_ATTACHMENT_BYTES)
@@ -452,6 +464,15 @@ async function resolveAttachments(request, services) {
     resolved.push({ path, name: file.name || basename(path), size: info.size });
   }
   return resolved;
+}
+
+export function attachmentsForConversation(primary, fallback, reused, continuationMessage) {
+  if (reused && String(continuationMessage ?? "").trim()) return [];
+  const candidates = reused ? primary : [...primary, ...fallback];
+  const unique = [...new Map(candidates.map((item) => [item.path, item])).values()];
+  if (unique.length > MAX_ATTACHMENTS)
+    throw codedError("INVALID_INPUT", `Máximo de ${MAX_ATTACHMENTS} anexos por conversa.`);
+  return unique;
 }
 
 function defaultProfilesBasePath() {
@@ -871,13 +892,59 @@ async function markTaskPage(client, sessionId, request, signal) {
   return marker;
 }
 
+const GENERATION_STOP_PATTERN = /\b(stop|parar|detener|interromper)\b/i;
+
+export function generationControlIsStop(text, testId) {
+  return String(testId ?? "") === "stop-button" || GENERATION_STOP_PATTERN.test(String(text ?? ""));
+}
+
+// Runs in the provider page. Uploaded references can use the same content URL
+// and alt text as generated images after submission, so URL/alt alone cannot
+// establish provenance. Require an assistant message or assistant turn.
+export function collectGeneratedImages(doc) {
+  const unique = new Map();
+  for (const img of doc.querySelectorAll("img")) {
+    if (img.closest('form, [data-message-author-role="user"], [data-turn="user"]')) continue;
+    const owner = img.closest("[data-message-author-role], [data-turn]");
+    const role =
+      owner?.getAttribute("data-message-author-role") || owner?.getAttribute("data-turn");
+    const turn = img.closest('article[data-testid^="conversation-turn-"]');
+    const assistantOwned =
+      role === "assistant" ||
+      (!role &&
+        turn &&
+        !turn.querySelector('[data-message-author-role="user"]') &&
+        turn.querySelector('[data-message-author-role="assistant"]'));
+    if (!assistantOwned) continue;
+    const src = img.currentSrc || img.src || "",
+      alt = img.alt || "";
+    if (
+      !img.complete ||
+      img.naturalWidth < 256 ||
+      img.naturalHeight < 256 ||
+      (!/generated image|imagem gerada/i.test(alt) && !src.includes("backend-api/estuary/content"))
+    )
+      continue;
+    if (!unique.has(src))
+      unique.set(src, {
+        src,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+        alt: alt || "Imagem gerada",
+      });
+  }
+  return [...unique.values()];
+}
+
 const PAGE_HELPERS = String.raw`
 function cfVisible(el){if(!el||!(el instanceof Element))return false;const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>8&&r.height>8&&r.bottom>0&&r.right>0}
 function cfText(el){return [el?.innerText,el?.textContent,el?.getAttribute?.('aria-label'),el?.getAttribute?.('data-testid')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()}
+function cfGenerating(){const stopPattern=new RegExp(${JSON.stringify(GENERATION_STOP_PATTERN.source)},'i');return [...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(stopPattern.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'))}
 function cfPrompt(){const selectors=['#prompt-textarea','[contenteditable="true"][role="textbox"]','[role="textbox"][aria-label*="Chat" i]'];for(const s of selectors){const el=[...document.querySelectorAll(s)].find(cfVisible);if(el)return el}return null}
 function cfAssistantNodes(){const selectors=['[data-message-author-role="assistant"] .markdown','[data-message-author-role="assistant"]','article[data-testid^="conversation-turn-"] .markdown'];for(const s of selectors){const n=[...document.querySelectorAll(s)].filter(cfVisible);if(n.length)return n}return []}
+function cfGeneratedImages(){return (${collectGeneratedImages.toString()})(document)}
 function cfResolveComparison(){const body=document.body?.innerText||'';if(!/giving feedback on a new version|qual resposta voc[êe] prefere|dando feedback sobre uma nova vers[ãa]o/i.test(body))return false;const button=[...document.querySelectorAll('button')].find(el=>cfVisible(el)&&/prefer this response|prefiro esta resposta|choose this response|escolher esta resposta/i.test(cfText(el)));if(!button)return false;button.click();return true}
-function cfResponseState(){const comparisonResolved=cfResolveComparison(),nodes=cfAssistantNodes(),entries=nodes.map(el=>({text:(el.innerText||el.textContent||'').trim(),links:[...el.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text);const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(/stop/i.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'));return{texts:entries.map(x=>x.text),entries,stop,comparisonResolved,bodyHint:(document.body?.innerText||'').slice(0,6000)}}
+function cfResponseState(){const comparisonResolved=cfResolveComparison(),nodes=cfAssistantNodes(),entries=nodes.map(el=>({text:(el.innerText||el.textContent||'').trim(),links:[...el.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text);return{texts:entries.map(x=>x.text),entries,stop:cfGenerating(),comparisonResolved,bodyHint:(document.body?.innerText||'').slice(0,6000)}}
 `;
 
 async function openNewConversation(client, sessionId, signal) {
@@ -976,8 +1043,115 @@ async function waitForPrompt(client, sessionId, waitMs, signal) {
   );
 }
 
+// Runs in the provider page. Restrict observations to the composer so images
+// and filenames in previous messages cannot satisfy the current upload.
+export function composerUploadState(doc) {
+  const prompt = doc.querySelector('#prompt-textarea, [contenteditable="true"][role="textbox"]');
+  const sendSelector = 'button[data-testid="send-button"], button#composer-submit-button';
+  let composer = prompt?.closest("form");
+  if (!composer) {
+    composer = prompt?.parentElement;
+    while (composer && composer !== doc.body && !composer.querySelector(sendSelector))
+      composer = composer.parentElement;
+  }
+  if (!composer || composer === doc.body) return null;
+  const visible = (el) => {
+    const style = doc.defaultView.getComputedStyle(el);
+    return (
+      style.display !== "none" && style.visibility !== "hidden" && el.getClientRects().length > 0
+    );
+  };
+  const text = [
+    composer.innerText,
+    ...[...composer.querySelectorAll("[aria-label], [title]")]
+      .filter(visible)
+      .map((el) => `${el.getAttribute("aria-label") || ""} ${el.getAttribute("title") || ""}`),
+  ]
+    .join(" ")
+    .toLowerCase();
+  const send = composer.querySelector(sendSelector);
+  const sendLabel = `${send?.getAttribute("aria-label") || ""} ${send?.getAttribute("data-testid") || ""}`;
+  // A blob preview can be decoded before the server has received the file.
+  // ChatGPT also uses CSS-animated SVGs and blurred previews during upload.
+  const outsidePrompt = (el) => !prompt?.contains(el);
+  const images = [...composer.querySelectorAll("img")].filter(visible);
+  const uploadingPreview = images.some((img) => {
+    if (!img.complete || !img.naturalWidth) return true;
+    for (let el = img; el && el !== composer; el = el.parentElement) {
+      if (/blur\((?!0(?:px)?\))/.test(doc.defaultView.getComputedStyle(el).filter || ""))
+        return true;
+    }
+    return false;
+  });
+  const animatedUpload = [...composer.querySelectorAll('svg, svg *, [class*="animate-"]')]
+    .filter((el) => visible(el) && outsidePrompt(el))
+    .some((el) => {
+      const style = doc.defaultView.getComputedStyle(el);
+      return (
+        style.animationName &&
+        style.animationName !== "none" &&
+        style.animationPlayState !== "paused"
+      );
+    });
+  const alerts = [...composer.querySelectorAll('[role="alert"], [data-state="error"]')]
+    .filter((el) => visible(el) && outsidePrompt(el))
+    .map((el) => el.innerText || el.textContent || "")
+    .join(" ");
+  return {
+    text,
+    hasPrompt: Boolean((prompt?.innerText || prompt?.textContent || "").trim()),
+    previews: [
+      ...new Set(
+        [...composer.querySelectorAll("img")]
+          .filter(
+            (img) =>
+              visible(img) && img.complete && img.naturalWidth >= 32 && img.naturalHeight >= 32,
+          )
+          .map((img) => img.currentSrc || img.src)
+          .filter(Boolean),
+      ),
+    ],
+    busy:
+      uploadingPreview ||
+      animatedUpload ||
+      [
+        ...composer.querySelectorAll('[role="progressbar"], [aria-busy="true"], .animate-spin'),
+      ].some(visible),
+    sendEnabled: Boolean(
+      send &&
+      visible(send) &&
+      !send.disabled &&
+      !send.matches?.(":disabled") &&
+      send.getAttribute("aria-disabled") !== "true" &&
+      doc.defaultView.getComputedStyle(send).pointerEvents !== "none" &&
+      /send-button|\b(?:send|enviar|envoyer|senden)\b/i.test(sendLabel) &&
+      !/stop|parar|detener|interromper/i.test(sendLabel),
+    ),
+    error:
+      /upload failed|couldn't upload|falha.*(?:upload|carregar|enviar)|erro.*(?:upload|carregar)|arquivo.*grande/i.test(
+        alerts,
+      ),
+  };
+}
+
+export function attachmentsAreReady(state, attachments, baselinePreviews = []) {
+  if (!state || state.error || state.busy || !state.sendEnabled) return false;
+  const named = (file) => state.text.includes(file.name.toLowerCase());
+  if (attachments.every(named)) return true;
+  const images = attachments.filter((file) =>
+    IMAGE_EXTENSIONS.has(extname(file.name).toLowerCase()),
+  );
+  const documents = attachments.filter((file) => !images.includes(file));
+  const baseline = new Set(baselinePreviews);
+  const newPreviews = new Set(state.previews.filter((src) => !baseline.has(src)));
+  return images.length > 0 && documents.every(named) && newPreviews.size >= images.length;
+}
+
 async function attachFiles(client, sessionId, attachments, signal) {
   if (!attachments.length) return;
+  const readState = () =>
+    evaluate(client, sessionId, `(${composerUploadState.toString()})(document)`);
+  const baseline = await readState();
   await client.send("DOM.enable", {}, sessionId);
   const { root } = await client.send("DOM.getDocument", { depth: 1, pierce: true }, sessionId);
   const { nodeIds = [] } = await client.send(
@@ -996,14 +1170,12 @@ async function attachFiles(client, sessionId, attachments, signal) {
     { files: attachments.map((item) => item.path), nodeId: nodeIds[0] },
     sessionId,
   );
-  const expected = attachments.map((item) => item.name.toLowerCase()),
-    deadline = Date.now() + 120000;
+  const deadline = Date.now() + 120000;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    const body = await evaluate(client, sessionId, "(document.body?.innerText||'').toLowerCase()");
-    if (expected.every((name) => body.includes(name))) return;
-    if (/upload failed|couldn't upload|arquivo.*grande/i.test(body))
-      throw codedError("INVALID_INPUT", "O ChatGPT recusou um anexo.");
+    const state = await readState();
+    if (state?.error) throw codedError("INVALID_INPUT", "O ChatGPT recusou um anexo.");
+    if (attachmentsAreReady(state, attachments, baseline?.previews)) return;
     await sleep(500, signal);
   }
   throw codedError("TIMEOUT", "Anexos não ficaram prontos em 120 segundos.", true);
@@ -1066,40 +1238,68 @@ async function setPrompt(bridge, prompt, operationKey) {
   );
 }
 
-async function clickSend(client, sessionId, bridge, signal, operationKey) {
-  let clickError;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+export async function waitAndClickSend(readState, click, signal, timing = {}) {
+  const now = timing.now || Date.now;
+  const pause = timing.pause || sleep;
+  const deadline = now() + (timing.timeoutMs ?? 120000);
+  let readyPolls = 0;
+  let attempt = 0;
+  while (now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    const state = await readState();
+    if (state?.error) throw codedError("INVALID_INPUT", "O ChatGPT recusou um anexo.");
+    readyPolls = state?.hasPrompt && state.sendEnabled && !state.busy ? readyPolls + 1 : 0;
+    if (readyPolls < 2) {
+      await pause(500, signal);
+      continue;
+    }
     try {
-      await bridge.dispatch(
-        "click",
-        {
-          selectors: ['button[data-testid="send-button"]'],
-        },
-        `${operationKey}:${attempt}`,
-      );
-      clickError = undefined;
-      break;
+      await click(attempt++);
+      return;
     } catch (error) {
-      clickError = error;
-      if (error?.code !== "OUTPUT_VALIDATION_FAILED" || attempt === 19) throw error;
-      await sleep(250, signal);
+      // A button can become disabled between observation and dispatch. Wait
+      // for readiness again, without treating a slow upload as a failed job.
+      if (error?.code !== "OUTPUT_VALIDATION_FAILED") throw error;
+      readyPolls = 0;
+      await pause(500, signal);
     }
   }
-  if (clickError) throw clickError;
+  throw codedError(
+    "TIMEOUT",
+    "O ChatGPT não liberou o envio após aguardar os anexos por 120 segundos.",
+    true,
+  );
+}
+
+async function clickSend(client, sessionId, bridge, signal, operationKey) {
+  await waitAndClickSend(
+    () => evaluate(client, sessionId, `(${composerUploadState.toString()})(document)`),
+    (attempt) =>
+      bridge.dispatch(
+        "click",
+        {
+          selectors: [
+            'button[data-testid="send-button"]:not(:disabled):not([aria-disabled="true"])',
+          ],
+        },
+        `${operationKey}:${attempt}`,
+      ),
+    signal,
+  );
   const sent = async (deadline) => {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
       const submitted = await evaluate(
         client,
         sessionId,
-        `(() => {${PAGE_HELPERS};const prompt=cfPrompt();const text=(prompt?.innerText||prompt?.textContent||'').trim();const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(/stop/i.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'));return !text||stop})()`,
+        `(() => {${PAGE_HELPERS};const prompt=cfPrompt();const text=(prompt?.innerText||prompt?.textContent||'').trim();return !text||cfGenerating()})()`,
       );
       if (submitted) return true;
       await sleep(150, signal);
     }
     return false;
   };
-  if (await sent(Date.now() + 2_500)) return;
+  if (await sent(Date.now() + 15_000)) return;
   throw codedError("OUTPUT_VALIDATION_FAILED", "O ChatGPT não confirmou o envio do prompt.", true);
 }
 
@@ -1170,11 +1370,12 @@ async function generateImagePart(
   signal,
   operationKey,
 ) {
-  const baseline = await evaluate(
+  const baselineImages = await evaluate(
     client,
     sessionId,
-    `(() => [...document.querySelectorAll('img')].filter(img=>img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||(img.currentSrc||img.src||'').includes('backend-api/estuary/content'))).length)()`,
+    `(() => {${PAGE_HELPERS};return cfGeneratedImages()})()`,
   );
+  const baselineSources = (baselineImages ?? []).map((image) => image.src).filter(Boolean);
   await setPrompt(bridge, prompt, `image-prompt:${operationKey}`);
   await clickSend(client, sessionId, bridge, signal, `image-send:${operationKey}`);
   const deadline =
@@ -1184,9 +1385,16 @@ async function generateImagePart(
     const state = await evaluate(
       client,
       sessionId,
-      `(() => {${PAGE_HELPERS};const images=[...document.querySelectorAll('img')].filter(img=>img.complete&&img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||(img.currentSrc||img.src||'').includes('backend-api/estuary/content')));const img=images.at(-1);const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(/stop/i.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'));return{count:images.length,stop,alt:img?.alt||'Imagem gerada',src:img?.currentSrc||img?.src||''}})()`,
+      `(() => {${PAGE_HELPERS};const images=cfGeneratedImages();return{images,stop:cfGenerating(),href:location.href}})()`,
     );
-    if (state.count > baseline && state.src && !state.stop) return { text: state.alt, links: [] };
+    const newImages = generatedImagesAfterBaseline(state.images, baselineSources);
+    if (newImages.length && !state.stop)
+      return {
+        text: newImages.at(-1)?.alt || "Imagem gerada",
+        links: [],
+        imageBaselineSources: baselineSources,
+        conversationId: validateConversationUrl(state.href),
+      };
     const body = await evaluate(client, sessionId, "(document.body?.innerText||'').slice(-4000)");
     if (/usage limit|rate limit|reached.*limit|limite de uso/i.test(body))
       throw codedError("RATE_LIMIT", "O ChatGPT informou limite de geração de imagens.", true);
@@ -1195,61 +1403,121 @@ async function generateImagePart(
   throw codedError("TIMEOUT", "O ChatGPT não concluiu a imagem no prazo.", true);
 }
 
-async function captureGeneratedImage(client, sessionId, services, request, timeoutMs) {
+async function captureGeneratedImages(
+  client,
+  sessionId,
+  services,
+  request,
+  timeoutMs,
+  baselineSources,
+) {
   const deadline = Date.now() + timeoutMs;
-  let imageData;
+  const capturedBySource = new Map();
+  let quietSince;
   while (Date.now() < deadline) {
     if (services.signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    imageData = await evaluate(
-      client,
-      sessionId,
-      `(() => {const images=[...document.querySelectorAll('img')].filter(img=>img.complete&&img.naturalWidth>=256&&img.naturalHeight>=256&&(/generated image/i.test(img.alt||'')||(img.currentSrc||img.src||'').includes('backend-api/estuary/content')));const img=images.at(-1);return img?{src:img.currentSrc||img.src,width:img.naturalWidth,height:img.naturalHeight,alt:img.alt||'Imagem gerada'}:null})()`,
-    );
-    if (imageData?.src) break;
-    await sleep(1000, services.signal);
+    let candidates;
+    try {
+      candidates = generatedImagesAfterBaseline(
+        await evaluate(client, sessionId, `(() => {${PAGE_HELPERS};return cfGeneratedImages()})()`),
+        baselineSources,
+      ).filter((image) => !capturedBySource.has(image.src));
+    } catch (error) {
+      if (capturedBySource.size && isCdpConnectionLoss(error)) break;
+      throw error;
+    }
+    if (candidates.length) {
+      let payloads;
+      try {
+        payloads = await evaluate(
+          client,
+          sessionId,
+          `(async()=>Promise.all(${JSON.stringify(candidates)}.map(async image=>{try{const r=await fetch(image.src,{credentials:'include'});if(!r.ok)throw new Error('HTTP '+r.status);const b=new Uint8Array(await r.arrayBuffer());let s='';const n=32768;for(let i=0;i<b.length;i+=n)s+=String.fromCharCode(...b.subarray(i,i+n));return{...image,base64:btoa(s),mimeType:(r.headers.get('content-type')||'image/png').split(';')[0]}}catch(error){return{...image,error:String(error?.message||error)}}})))()`,
+        );
+      } catch (error) {
+        if (capturedBySource.size && isCdpConnectionLoss(error)) break;
+        throw error;
+      }
+      let added = false;
+      for (const image of payloads ?? []) {
+        if (image.error || capturedBySource.has(image.src)) continue;
+        const bytes = Buffer.from(image.base64, "base64");
+        if (!bytes.length || bytes.length > 50 * 1024 * 1024) continue;
+        const extension =
+          image.mimeType === "image/webp"
+            ? "webp"
+            : image.mimeType === "image/jpeg"
+              ? "jpg"
+              : "png";
+        const artifactId = `chatgpt-image-${createHash("sha256")
+          .update(
+            `${request?.executionId || "execution"}:${request?.blockId || "block"}:${request?.attempt || 1}:${createHash("sha256").update(bytes).digest("hex")}`,
+          )
+          .digest("hex")
+          .slice(0, 16)}`;
+        const name = `${artifactId}.${extension}`;
+        await writeFile(services.getOutputPath(name), bytes);
+        capturedBySource.set(image.src, {
+          image,
+          file: {
+            id: artifactId,
+            name,
+            mimeType: image.mimeType,
+            size: bytes.length,
+            url: `artifact://${artifactId}`,
+          },
+          artifact: {
+            id: artifactId,
+            name,
+            mimeType: image.mimeType,
+            size: bytes.length,
+            source: { kind: "path", path: name },
+          },
+        });
+        added = true;
+      }
+      if (added) quietSince = Date.now();
+    }
+    if (capturedBySource.size && quietSince && Date.now() - quietSince >= 3_000) break;
+    await sleep(capturedBySource.size ? 500 : 1000, services.signal);
   }
-  if (!imageData?.src)
+  if (!capturedBySource.size)
     throw codedError(
       "OUTPUT_VALIDATION_FAILED",
       "A resposta terminou sem uma imagem gerada capturável.",
       true,
     );
-  const payload = await evaluate(
-    client,
-    sessionId,
-    `(async()=>{const r=await fetch(${JSON.stringify(imageData.src)},{credentials:'include'});if(!r.ok)throw new Error('HTTP '+r.status);const b=new Uint8Array(await r.arrayBuffer());let s='';const n=32768;for(let i=0;i<b.length;i+=n)s+=String.fromCharCode(...b.subarray(i,i+n));return{base64:btoa(s),mimeType:(r.headers.get('content-type')||'image/png').split(';')[0]}})()`,
-  );
-  const bytes = Buffer.from(payload.base64, "base64");
-  if (!bytes.length || bytes.length > 50 * 1024 * 1024)
-    throw codedError("OUTPUT_VALIDATION_FAILED", "Imagem gerada vazia ou acima de 50 MB.", true);
-  const extension =
-    payload.mimeType === "image/webp" ? "webp" : payload.mimeType === "image/jpeg" ? "jpg" : "png";
-  const artifactId = `chatgpt-image-${createHash("sha256")
-    .update(
-      `${request?.executionId || "execution"}:${request?.blockId || "block"}:${request?.attempt || 1}`,
-    )
-    .digest("hex")
-    .slice(0, 16)}`;
-  const name = `${artifactId}.${extension}`;
-  await writeFile(services.getOutputPath(name), bytes);
-  const file = {
-    id: artifactId,
-    name,
-    mimeType: payload.mimeType,
-    size: bytes.length,
-    url: `artifact://${artifactId}`,
-  };
+  const captured = [...capturedBySource.values()];
   return {
-    file,
-    artifact: {
-      id: artifactId,
-      name,
-      mimeType: payload.mimeType,
-      size: bytes.length,
-      source: { kind: "path", path: name },
-    },
-    dimensions: imageData,
+    files: captured.map((entry) => entry.file),
+    artifacts: captured.map((entry) => entry.artifact),
+    dimensions: captured.map((entry) => entry.image),
   };
+}
+
+export function isCdpConnectionLoss(error) {
+  return /CDP n[aã]o conectado|WebSocket.*(?:closed|close)|socket.*(?:closed|hang up)/i.test(
+    String(error?.message ?? error ?? ""),
+  );
+}
+
+export function imageResponseValues(captured, description) {
+  return {
+    image: captured.files[0],
+    images: captured.files,
+    description: description.trim(),
+  };
+}
+
+export function generatedImagesAfterBaseline(images = [], baselineSources = []) {
+  const baseline = new Set(baselineSources);
+  const unique = new Map();
+  for (const image of images ?? []) {
+    const src = String(image?.src ?? "").trim();
+    if (!src || baseline.has(src) || unique.has(src)) continue;
+    unique.set(src, { ...image, src });
+  }
+  return [...unique.values()];
 }
 
 async function configureProfile(request, services) {
@@ -1423,7 +1691,7 @@ export async function execute(request, services) {
         clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
         profileName,
       );
-    let attachments = await resolveAttachments(request, services);
+    const primaryAttachments = await resolveAttachments(request, services);
     assertDedicatedProfilePath(profilePath, settings.allowExistingChromeProfile === true);
     if (!(await profileIsPrepared(profilePath, profileName))) {
       throw codedError(
@@ -1463,7 +1731,15 @@ export async function execute(request, services) {
     );
     if (taskPage.created) await markTaskPage(client, sessionId, request, services.signal);
     parts = partsForConversation(parts, request.conversation, reusedConversation);
-    if (reusedConversation && request.conversation?.continuationMessage) attachments = [];
+    const fallbackAttachments = reusedConversation
+      ? []
+      : await resolveFallbackAttachments(request, services);
+    const attachments = attachmentsForConversation(
+      primaryAttachments,
+      fallbackAttachments,
+      reusedConversation,
+      request.conversation?.continuationMessage,
+    );
     bridge = await attachContentFlowBridge({
       client,
       pageSessionId: sessionId,
@@ -1529,28 +1805,36 @@ export async function execute(request, services) {
       sources = [
         ...new Set(responses.flatMap((response) => response.links).map((link) => link.href)),
       ].slice(0, 10);
-    const conversationId = await currentConversationUrl(client, sessionId);
     let values;
     if (capabilityId === "generate-image-in-browser") {
-      const captured = await captureGeneratedImage(
+      const captured = await captureGeneratedImages(
         client,
         sessionId,
         services,
         request,
         clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000,
+        responses[0]?.imageBaselineSources,
       );
+      let conversationId = responses.at(-1)?.conversationId;
+      if (!conversationId)
+        try {
+          conversationId = await currentConversationUrl(client, sessionId);
+        } catch (error) {
+          if (!isCdpConnectionLoss(error)) throw error;
+        }
       return {
         status: "success",
-        values: { image: captured.file, description: combined.trim() },
-        artifacts: [captured.artifact],
-        conversation: { id: conversationId },
+        values: imageResponseValues(captured, combined),
+        artifacts: captured.artifacts,
+        ...(conversationId ? { conversation: { id: conversationId } } : {}),
         usage: {
           provider: "OpenAI / ChatGPT Images",
-          outputUnits: captured.file.size,
+          outputUnits: captured.files.reduce((total, file) => total + file.size, 0),
           unit: "bytes",
         },
       };
     }
+    const conversationId = await currentConversationUrl(client, sessionId);
     if (["search-web-in-browser", "deep-research-in-browser"].includes(capabilityId))
       values = searchResponseValues(combined.trim(), sources, request);
     else if (capabilityId === "choose-library-item-in-browser")
@@ -1603,6 +1887,7 @@ export async function execute(request, services) {
 }
 
 export const __test = {
+  attachmentsForConversation,
   buildParts,
   buildSearchPrompt,
   buildChoosePrompt,
@@ -1626,6 +1911,10 @@ export const __test = {
   prepareProfileSession,
   searchResponseValues,
   generationResponseValues,
+  imageResponseValues,
+  generatedImagesAfterBaseline,
+  isCdpConnectionLoss,
+  generationControlIsStop,
   summarizeBlock,
   responsePhase,
 };

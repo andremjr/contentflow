@@ -1,6 +1,6 @@
 # ChatGPT Browser Studio
 
-Versão **1.0.5** para ContentFlow Plugin API v1.
+Versão **1.0.6** para ContentFlow Plugin API v1.
 
 ## Contrato simplificado
 
@@ -17,7 +17,7 @@ Super plugin independente que usa a interface web do ChatGPT em um Google Chrome
 - `validate-content-in-browser` (`VALIDAR`): aprovação/reprovação, escolha única ou múltipla; aceita também imagens e documentos.
 - `analyze-images-in-browser` (`CRIAR`): visão computacional com uma ou várias imagens.
 - `analyze-documents-in-browser` (`CRIAR`): resumo, extração, comparação e transformação de documentos.
-- `generate-image-in-browser` (`CRIAR`): ativa **Create an image**, captura a imagem resultante e a importa como artifact local tipado `image`.
+- `generate-image-in-browser` (`CRIAR`): ativa **Create an image** e importa todas as imagens novas da resposta. A porta `image` preserva a primeira para contratos unitários; a porta `images`, do tipo `files`, entrega a coleção completa.
 
 Todas as capabilities textuais podem operar nos oito Processos Universais. A geração de imagens é exposta somente em Thumbnail e Assets Visuais.
 
@@ -51,7 +51,7 @@ O plugin aceita somente `StoredFile` liberado pelo núcleo e resolve cada entrad
 
 São aceitos até 20 anexos por conversa e até 512 MB por arquivo, sujeitos aos limites menores da conta e do contexto. Imagens: JPEG, PNG, GIF e WebP. Documentos: PDF, DOCX, CSV, TXT, HTML, ODT, RTF, EPUB, JSON, XLSX e PPTX.
 
-Na geração de imagem, os bytes são recuperados pela própria sessão autenticada, gravados somente na pasta temporária retornada por `getOutputPath()` e promovidos pelo núcleo como artifact. Base64, caminhos locais e cookies não aparecem no output.
+Na geração de imagem, os bytes de cada imagem nova são recuperados pela própria sessão autenticada, gravados somente na pasta temporária retornada por `getOutputPath()` e promovidos pelo núcleo como artifacts. Em uma nova tentativa após reprovação, a imagem anterior é anexada somente se uma nova conversa precisar ser aberta. Base64, caminhos locais e cookies não aparecem no output.
 
 ## Instalação
 

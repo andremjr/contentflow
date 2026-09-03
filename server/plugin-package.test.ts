@@ -3,7 +3,23 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { discoverPluginDirectories } from "./plugin-package";
+import { discoverPluginDirectories, normalizeUserProvidedPath } from "./plugin-package";
+import { pluginRegistrationConflictIsReportable } from "./plugin-runner";
+
+test("aceita caminhos colados com aspas simples ou duplas", () => {
+  assert.equal(
+    normalizeUserProvidedPath('  "C:\\Plugins\\Meu plugin"  '),
+    "C:\\Plugins\\Meu plugin",
+  );
+  assert.equal(normalizeUserProvidedPath("'C:\\Plugins\\Meu plugin'"), "C:\\Plugins\\Meu plugin");
+  assert.equal(normalizeUserProvidedPath("C:\\Plugins\\Meu plugin"), "C:\\Plugins\\Meu plugin");
+});
+
+test("pasta local substitui a instalação sem gerar conflito de manifesto", () => {
+  assert.equal(pluginRegistrationConflictIsReportable("local", "installed"), false);
+  assert.equal(pluginRegistrationConflictIsReportable("local", "local"), true);
+  assert.equal(pluginRegistrationConflictIsReportable("installed", "installed"), true);
+});
 
 test("descobre um plugin individual ou vários plugins na raiz de um pacote", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "contentflow-plugin-package-"));
@@ -13,6 +29,7 @@ test("descobre um plugin individual ou vários plugins na raiz de um pacote", as
   await mkdir(individual);
   await writeFile(path.join(individual, "contentflow.plugin.json"), "{}");
   assert.deepEqual(discoverPluginDirectories(individual), [individual]);
+  assert.deepEqual(discoverPluginDirectories(`"${individual}"`), [individual]);
 
   const bundle = path.join(root, "bundle");
   await mkdir(path.join(bundle, "plugin-b"), { recursive: true });
