@@ -187,7 +187,7 @@ const extensionContent = await readFile(
   "utf8",
 );
 assert.equal(extensionManifest.manifest_version, 3);
-assert.equal(extensionManifest.version, "0.2.0");
+assert.equal(extensionManifest.version, "0.3.0");
 assert.deepEqual(extensionManifest.host_permissions, [
   "https://chatgpt.com/*",
   "https://claude.ai/*",
@@ -197,13 +197,17 @@ assert.deepEqual(extensionManifest.host_permissions, [
   "https://meta.ai/*",
   "https://www.meta.ai/*",
 ]);
-assert.deepEqual(extensionManifest.permissions, ["tabs", "storage"]);
+assert.deepEqual(extensionManifest.permissions, ["tabs", "storage", "debugger"]);
 assert.ok(extensionWorker.includes("globalThis.contentFlowBridge"));
 assert.ok(extensionWorker.includes('BRIDGE_ID = "com.contentflow.browser-bridge"'));
 assert.ok(extensionWorker.includes("command.executionKey"));
 assert.ok(extensionWorker.includes("sessionToken"));
-assert.ok(extensionContent.includes('action === "setPrompt"'));
-assert.ok(extensionContent.includes('action === "clickGenerate"'));
+assert.ok(extensionWorker.includes('"Input.dispatchMouseEvent"'));
+assert.ok(extensionWorker.includes('"Input.dispatchKeyEvent"'));
+assert.ok(extensionWorker.includes('"Input.insertText"'));
+assert.ok(!extensionWorker.includes("chrome.tabs.sendMessage"));
+assert.ok(extensionContent.includes('action: "wake"'));
+assert.ok(!extensionContent.includes("dispatchAction"));
 assert.ok(!source.includes("--load-extension="));
 assert.ok(source.includes("Carregar sem compactação"));
 assert.ok(source.includes("ContentFlow Browser Bridge conectada"));

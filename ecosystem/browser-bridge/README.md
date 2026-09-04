@@ -10,7 +10,7 @@ Extensão companheira Manifest V3 única para todos os plugins de automação de
 - novos provedores entram por atualização desta mesma extensão, nunca por uma segunda extensão;
 - o núcleo do ContentFlow não recebe seletores, cookies, sessões ou regras de fornecedor.
 
-A versão `0.2.0` atende Google Flow, ChatGPT, Claude, Gemini, Grok e Meta AI. A ponte mantém apenas transporte, autenticação efêmera, isolamento por origem/aba/perfil, idempotência e operações DOM limitadas. Seletores e regras de cada provedor continuam no adapter do respectivo plugin.
+A versão `0.3.0` atende Google Flow, ChatGPT, Claude, Gemini, Grok e Meta AI. A ponte mantém apenas transporte, autenticação efêmera, isolamento por origem/aba/perfil, idempotência e operações de UI limitadas. O Service Worker localiza alvos com scripts efêmeros via CDP e entrega cliques e texto com `Input.*`; o Content Script apenas desperta o worker após a navegação. Seletores e regras de cada provedor continuam no adapter do respectivo plugin.
 
 ## Instalação
 

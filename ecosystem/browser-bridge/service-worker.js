@@ -2,7 +2,9 @@ const BRIDGE_ID = "com.contentflow.browser-bridge";
 const FLOW_PLUGIN_ID = "local.contentflow.google-flow-batch-images";
 const PROTOCOL_VERSION = 2;
 const COMMAND_CACHE_KEY = "contentflowCommandCacheV2";
+const CANCELLED_EXECUTIONS_KEY = "contentflowCancelledExecutionsV2";
 const MAX_COMMAND_CACHE = 500;
+const CDP_VERSION = "1.3";
 const COMMON_ACTIONS = new Set(["ping", "inspect", "setText", "click"]);
 const policy = (origins, tabPatterns, options = {}) =>
   Object.freeze({
@@ -32,6 +34,7 @@ const PLUGIN_POLICIES = Object.freeze({
   ),
 });
 const inFlight = new Map();
+const tabQueues = new Map();
 let activeSession = null;
 
 function bridgeError(code, message) {
@@ -97,6 +100,23 @@ async function cacheResponse(command, response) {
   await chrome.storage.session.set({ [COMMAND_CACHE_KEY]: Object.fromEntries(entries) });
 }
 
+async function markExecutionCancelled(executionKey) {
+  const stored = await chrome.storage.session.get(CANCELLED_EXECUTIONS_KEY);
+  const now = Date.now();
+  const cancellations = Object.fromEntries(
+    Object.entries(stored?.[CANCELLED_EXECUTIONS_KEY] || {}).filter(
+      ([, expiresAt]) => Number(expiresAt) > now,
+    ),
+  );
+  cancellations[executionKey] = now + 12 * 60 * 60 * 1000;
+  await chrome.storage.session.set({ [CANCELLED_EXECUTIONS_KEY]: cancellations });
+}
+
+async function isExecutionCancelled(executionKey) {
+  const stored = await chrome.storage.session.get(CANCELLED_EXECUTIONS_KEY);
+  return Number(stored?.[CANCELLED_EXECUTIONS_KEY]?.[executionKey]) > Date.now();
+}
+
 function validateSession(command) {
   if (!activeSession || command?.sessionToken !== activeSession.sessionToken) {
     return bridgeError(
@@ -156,6 +176,332 @@ function withTimeout(promise, timeoutMs) {
   });
 }
 
+function enqueueTabCommand(tabId, operation) {
+  const previous = tabQueues.get(tabId) || Promise.resolve();
+  const queued = previous.catch(() => undefined).then(operation);
+  tabQueues.set(tabId, queued);
+  return queued.finally(() => {
+    if (tabQueues.get(tabId) === queued) tabQueues.delete(tabId);
+  });
+}
+
+function resolvePageTarget(payload, mode, shouldScroll) {
+  const visible = (element) => {
+    if (!(element instanceof Element)) return false;
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return (
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      Number(style.opacity) !== 0 &&
+      rect.width > 8 &&
+      rect.height > 8
+    );
+  };
+  const allDeep = (selector, root = document) => {
+    const output = [];
+    const visit = (node) => {
+      if (!node?.querySelectorAll) return;
+      for (const element of node.querySelectorAll(selector)) output.push(element);
+      for (const element of node.querySelectorAll("*")) {
+        if (element.shadowRoot) visit(element.shadowRoot);
+      }
+    };
+    visit(root);
+    return [...new Set(output)];
+  };
+  const normalize = (value, fallback) => {
+    const candidates = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+    const normalized = candidates
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    return normalized.length ? normalized : fallback;
+  };
+  const elementsFor = (selectors) => {
+    const output = [];
+    for (const selector of selectors) {
+      try {
+        output.push(...allDeep(selector));
+      } catch {
+        // Um seletor inválido nunca amplia a origem ou escolhe um alvo alternativo.
+      }
+    }
+    return [...new Set(output)];
+  };
+  const textOf = (element) =>
+    [
+      element?.innerText,
+      element?.textContent,
+      element?.getAttribute?.("aria-label"),
+      element?.getAttribute?.("title"),
+      element?.getAttribute?.("placeholder"),
+      element?.getAttribute?.("data-testid"),
+      element?.getAttribute?.("data-test-id"),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  const isEditable = (element) => {
+    if (!visible(element) || element.disabled || element.readOnly) return false;
+    const contenteditable = (element.getAttribute("contenteditable") || "").toLowerCase();
+    return (
+      element.getAttribute("data-slate-editor") === "true" ||
+      contenteditable === "true" ||
+      contenteditable === "plaintext-only" ||
+      element.matches('textarea, input[type="text"], input:not([type]), [role="textbox"]')
+    );
+  };
+
+  let target = null;
+  if (mode === "editable") {
+    const selectors = normalize(payload?.selectors || payload?.selector, [
+      '[data-slate-editor="true"]',
+      '[contenteditable="true"][role="textbox"]',
+      '[contenteditable="true"]',
+      '[contenteditable="plaintext-only"]',
+      "textarea",
+      'input[type="text"]',
+      '[role="textbox"]',
+    ]);
+    target = elementsFor(selectors).find(isEditable) || null;
+  } else {
+    const selectors = normalize(payload?.selectors || payload?.selector, [
+      "button",
+      '[role="button"]',
+      '[role="menuitem"]',
+      '[role="option"]',
+    ]);
+    const terms = (Array.isArray(payload?.textIncludes) ? payload.textIncludes : [])
+      .map((item) =>
+        String(item || "")
+          .trim()
+          .toLowerCase(),
+      )
+      .filter(Boolean)
+      .slice(0, 30);
+    target =
+      elementsFor(selectors)
+        .filter(
+          (element) =>
+            visible(element) &&
+            !element.disabled &&
+            element.getAttribute("aria-disabled") !== "true" &&
+            (!terms.length || terms.some((term) => textOf(element).includes(term))),
+        )
+        .sort((left, right) => textOf(left).length - textOf(right).length)[0] || null;
+  }
+
+  if (!target) return { found: false };
+  if (shouldScroll) target.scrollIntoView({ block: "center", inline: "center" });
+  const rect = target.getBoundingClientRect();
+  const left = Math.max(0, rect.left);
+  const right = Math.min(innerWidth, rect.right);
+  const top = Math.max(0, rect.top);
+  const bottom = Math.min(innerHeight, rect.bottom);
+  if (shouldScroll && (right <= left || bottom <= top)) return { found: false };
+  const x = left + (right - left) / 2;
+  const y = top + (bottom - top) / 2;
+  return {
+    found: true,
+    x,
+    y,
+    absoluteX: x + scrollX,
+    absoluteY: y + scrollY,
+    text: textOf(target),
+  };
+}
+
+function readFocusedText() {
+  let element = document.activeElement;
+  while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    return element.value;
+  }
+  return element?.innerText || element?.textContent || "";
+}
+
+async function sendCdp(tabId, method, params = {}) {
+  return await chrome.debugger.sendCommand({ tabId }, method, params);
+}
+
+async function evaluateValue(tabId, expression) {
+  const evaluated = await sendCdp(tabId, "Runtime.evaluate", {
+    expression,
+    returnByValue: true,
+    awaitPromise: true,
+    userGesture: true,
+  });
+  if (evaluated?.exceptionDetails) {
+    throw new Error(evaluated.exceptionDetails.text || "Runtime.evaluate falhou.");
+  }
+  return evaluated?.result?.value;
+}
+
+async function targetFor(tabId, payload, mode, shouldScroll) {
+  const locatorPayload = {};
+  if (typeof payload?.selector === "string") locatorPayload.selector = payload.selector;
+  if (Array.isArray(payload?.selectors)) locatorPayload.selectors = payload.selectors;
+  if (Array.isArray(payload?.textIncludes)) locatorPayload.textIncludes = payload.textIncludes;
+  return await evaluateValue(
+    tabId,
+    `(${resolvePageTarget.toString()})(${JSON.stringify(locatorPayload)},${JSON.stringify(mode)},${Boolean(shouldScroll)})`,
+  );
+}
+
+async function dispatchMouseClick(tabId, target) {
+  const base = { x: target.x, y: target.y, button: "left" };
+  await sendCdp(tabId, "Input.dispatchMouseEvent", {
+    type: "mouseMoved",
+    x: target.x,
+    y: target.y,
+  });
+  await sendCdp(tabId, "Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    ...base,
+    clickCount: 1,
+  });
+  await sendCdp(tabId, "Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    ...base,
+    clickCount: 1,
+  });
+}
+
+async function replaceFocusedText(tabId, value) {
+  await sendCdp(tabId, "Input.dispatchKeyEvent", {
+    type: "rawKeyDown",
+    key: "a",
+    code: "KeyA",
+    windowsVirtualKeyCode: 65,
+    nativeVirtualKeyCode: 65,
+    modifiers: 2,
+    commands: ["selectAll"],
+  });
+  await sendCdp(tabId, "Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "a",
+    code: "KeyA",
+    windowsVirtualKeyCode: 65,
+    nativeVirtualKeyCode: 65,
+    modifiers: 2,
+  });
+  if (value) {
+    await sendCdp(tabId, "Input.insertText", { text: value });
+  } else {
+    await sendCdp(tabId, "Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: "Backspace",
+      code: "Backspace",
+      windowsVirtualKeyCode: 8,
+      nativeVirtualKeyCode: 8,
+    });
+    await sendCdp(tabId, "Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: "Backspace",
+      code: "Backspace",
+      windowsVirtualKeyCode: 8,
+      nativeVirtualKeyCode: 8,
+    });
+  }
+}
+
+async function dispatchCdpAction(tabId, command, policy) {
+  if (await isExecutionCancelled(command.executionKey)) {
+    return bridgeError("CANCELLED", "Execução cancelada.");
+  }
+  const page = await evaluateValue(
+    tabId,
+    "({ url: location.href, origin: location.origin, title: document.title })",
+  );
+  let pageUrl;
+  try {
+    pageUrl = new URL(page?.url);
+  } catch {
+    return bridgeError("ORIGIN_NOT_ALLOWED", "A aba deixou a origem autorizada.");
+  }
+  if (!policy.origins.has(pageUrl.origin) || !pageUrl.pathname.includes(policy.requiredPath)) {
+    return bridgeError("ORIGIN_NOT_ALLOWED", "A aba deixou a origem autorizada.");
+  }
+
+  const payload = command.payload || {};
+  if (command.action === "ping") {
+    return { ok: true, protocolVersion: PROTOCOL_VERSION, url: page.url };
+  }
+  if (command.action === "inspect") {
+    const editable = await targetFor(tabId, payload, "editable", false);
+    return {
+      ok: true,
+      protocolVersion: PROTOCOL_VERSION,
+      url: page.url,
+      title: page.title,
+      editableReady: Boolean(editable?.found),
+    };
+  }
+  if (command.action === "setText" || command.action === "setPrompt") {
+    const target = await targetFor(tabId, payload, "editable", true);
+    if (!target?.found) {
+      return bridgeError("EDITOR_NOT_FOUND", "Editor não encontrado.");
+    }
+    if (await isExecutionCancelled(command.executionKey)) {
+      return bridgeError("CANCELLED", "Execução cancelada.");
+    }
+    await dispatchMouseClick(tabId, target);
+    const text = String(payload.text || "");
+    await replaceFocusedText(tabId, text);
+    const actual = String((await evaluateValue(tabId, `(${readFocusedText.toString()})()`)) || "")
+      .replace(/\uFEFF/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const expected = text.replace(/\s+/g, " ").trim();
+    if (expected && actual !== expected && !actual.includes(expected.slice(0, 80))) {
+      return bridgeError("EDITOR_WRITE_FAILED", "O texto não permaneceu no editor.");
+    }
+    return { ok: true, readbackLength: actual.length };
+  }
+  if (command.action === "click" || command.action === "clickGenerate") {
+    const clickPayload =
+      command.action === "clickGenerate" && !payload.textIncludes
+        ? { ...payload, textIncludes: ["criar", "create", "gerar", "generate"] }
+        : payload;
+    const target = await targetFor(tabId, clickPayload, "clickable", true);
+    if (!target?.found) {
+      return bridgeError("CONTROL_NOT_FOUND", "Controle não encontrado ou desabilitado.");
+    }
+    if (await isExecutionCancelled(command.executionKey)) {
+      return bridgeError("CANCELLED", "Execução cancelada.");
+    }
+    await dispatchMouseClick(tabId, target);
+    return { ok: true, text: target.text };
+  }
+  return bridgeError("UNKNOWN_ACTION", `Ação não suportada: ${String(command.action)}`);
+}
+
+async function withAttachedDebugger(tabId, operation) {
+  let attached = false;
+  let result;
+  let failure;
+  try {
+    await chrome.debugger.attach({ tabId }, CDP_VERSION);
+    attached = true;
+    result = await operation();
+  } catch (error) {
+    failure = error;
+  } finally {
+    if (attached) {
+      try {
+        await chrome.debugger.detach({ tabId });
+      } catch (error) {
+        failure ||= error;
+      }
+    }
+  }
+  if (failure) throw failure;
+  return result;
+}
+
 async function dispatchToPage(command) {
   const policy = policyForPlugin(command.pluginId);
   let expectedUrl;
@@ -190,16 +536,9 @@ async function dispatchToPage(command) {
   const timeoutMs = Math.max(1000, Math.min(30000, command.expiresAt - Date.now()));
   try {
     const response = await withTimeout(
-      chrome.tabs.sendMessage(tab.id, {
-        source: "contentflow",
-        pluginId: command.pluginId,
-        protocolVersion: PROTOCOL_VERSION,
-        profileId: command.profileId,
-        executionKey: command.executionKey,
-        commandId: command.commandId,
-        action: command.action,
-        payload: command.payload || {},
-      }),
+      enqueueTabCommand(tab.id, () =>
+        withAttachedDebugger(tab.id, () => dispatchCdpAction(tab.id, command, policy)),
+      ),
       timeoutMs,
     );
     const normalized =
@@ -211,7 +550,7 @@ async function dispatchToPage(command) {
   } catch (error) {
     return bridgeError(
       "CONTENT_SCRIPT_UNAVAILABLE",
-      `A ponte da página não respondeu: ${error?.message || String(error)}`,
+      `O motor CDP não conseguiu executar o comando: ${error?.message || String(error)}`,
     );
   }
 }
@@ -252,24 +591,7 @@ globalThis.contentFlowBridge = Object.freeze({
     ) {
       return bridgeError("SESSION_MISMATCH", "Cancelamento recusado pela extensão.");
     }
-    const policy = policyForPlugin(activeSession.pluginId);
-    const tabs = await chrome.tabs.query({ url: policy.tabPatterns });
-    await Promise.allSettled(
-      tabs
-        .filter((tab) => Number.isInteger(tab.id))
-        .map((tab) =>
-          chrome.tabs.sendMessage(tab.id, {
-            source: "contentflow",
-            pluginId: activeSession.pluginId,
-            protocolVersion: PROTOCOL_VERSION,
-            profileId: request.profileId,
-            executionKey: request.executionKey,
-            commandId: request.commandId,
-            action: "cancel",
-            payload: {},
-          }),
-        ),
-    );
+    await markExecutionCancelled(request.executionKey);
     return { ok: true };
   },
 });

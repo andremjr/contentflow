@@ -4,7 +4,8 @@ import { runInNewContext } from "node:vm";
 
 export async function testExtensionBridge(source) {
   const storage = {};
-  const sentMessages = [];
+  const debuggerCalls = [];
+  let focusedText = "";
   let runtimeListener;
   const chrome = {
     runtime: {
@@ -34,9 +35,56 @@ export async function testExtensionBridge(source) {
           },
         ];
       },
-      async sendMessage(tabId, message) {
-        sentMessages.push({ tabId, message: structuredClone(message) });
-        return { ok: true, action: message.action, ordinal: sentMessages.length };
+      async sendMessage() {
+        assert.fail("ações de UI não podem mais usar chrome.tabs.sendMessage");
+      },
+    },
+    debugger: {
+      async attach(target, version) {
+        debuggerCalls.push({ operation: "attach", target: structuredClone(target), version });
+      },
+      async detach(target) {
+        debuggerCalls.push({ operation: "detach", target: structuredClone(target) });
+      },
+      async sendCommand(target, method, params = {}) {
+        debuggerCalls.push({
+          operation: "sendCommand",
+          target: structuredClone(target),
+          method,
+          params: structuredClone(params),
+        });
+        if (method === "Runtime.evaluate") {
+          if (params.expression.includes("function resolvePageTarget")) {
+            const clickable = params.expression.includes(',"clickable",');
+            return {
+              result: {
+                value: {
+                  found: true,
+                  x: 320,
+                  y: 240,
+                  absoluteX: 320,
+                  absoluteY: 640,
+                  text: clickable ? "generate" : "",
+                },
+              },
+            };
+          }
+          if (params.expression.includes("function readFocusedText")) {
+            return { result: { value: focusedText } };
+          }
+          return {
+            result: {
+              value: {
+                url: "https://labs.google/fx/pt/tools/flow/project/project-1",
+                origin: "https://labs.google",
+                title: "Flow",
+              },
+            },
+          };
+        }
+        if (method === "Input.insertText") focusedText = params.text;
+        if (method === "Input.dispatchKeyEvent" && params.key === "Backspace") focusedText = "";
+        return {};
       },
     },
   };
@@ -94,7 +142,18 @@ export async function testExtensionBridge(source) {
   const replay = await bridge.dispatch(first);
   assert.equal(replay.ok, true);
   assert.equal(replay.replayed, true);
-  assert.equal(sentMessages.length, 1, "comando repetido não pode repetir o efeito na página");
+  assert.equal(
+    debuggerCalls.filter((entry) => entry.operation === "attach").length,
+    1,
+    "comando repetido não pode repetir o efeito na página",
+  );
+  assert.ok(
+    !debuggerCalls.some(
+      (entry) =>
+        entry.method === "Runtime.evaluate" && entry.params.expression.includes("prompt 1"),
+    ),
+    "o texto do usuário só deve trafegar em Input.insertText",
+  );
 
   const wrongOrigin = await bridge.dispatch(
     command(2, { expectedUrl: "https://example.com/tools/flow" }),
@@ -113,8 +172,36 @@ export async function testExtensionBridge(source) {
     const response = await bridge.dispatch(command(ordinal));
     assert.equal(response.ok, true);
   }
-  assert.equal(sentMessages.filter((entry) => entry.message.action === "setPrompt").length, 300);
-  assert.equal(Object.keys(storage.contentflowCommandCacheV2).length, 300);
+  const clickResult = await bridge.dispatch(
+    command(301, {
+      executionKey: "execution-key-click-test",
+      action: "clickGenerate",
+      payload: { selectors: ["button"], textIncludes: ["generate"] },
+    }),
+  );
+  assert.equal(clickResult.ok, true);
+  assert.equal(clickResult.text, "generate");
+  assert.equal(Object.keys(storage.contentflowCommandCacheV2).length, 301);
+  assert.equal(debuggerCalls.filter((entry) => entry.operation === "attach").length, 301);
+  assert.equal(
+    debuggerCalls.filter((entry) => entry.operation === "detach").length,
+    301,
+    "cada attach precisa do detach correspondente",
+  );
+  assert.ok(
+    debuggerCalls.some(
+      (entry) =>
+        entry.method === "Input.dispatchMouseEvent" && entry.params.type === "mousePressed",
+    ),
+  );
+  assert.ok(
+    debuggerCalls.some(
+      (entry) =>
+        entry.method === "Input.dispatchMouseEvent" && entry.params.type === "mouseReleased",
+    ),
+  );
+  assert.ok(debuggerCalls.some((entry) => entry.method === "Input.dispatchKeyEvent"));
+  assert.ok(debuggerCalls.some((entry) => entry.method === "Input.insertText"));
 
   const cancelResult = await bridge.cancel({
     sessionToken: handshake.sessionToken,
@@ -123,7 +210,7 @@ export async function testExtensionBridge(source) {
     commandId: createHash("sha256").update("cancel").digest("hex"),
   });
   assert.equal(cancelResult.ok, true);
-  assert.equal(sentMessages.at(-1).message.action, "cancel");
+  assert.ok(storage.contentflowCancelledExecutionsV2["execution-key-volume-test"] > Date.now());
 
   for (const provider of [
     ["local.contentflow.chatgpt-browser-studio", "https://chatgpt.com/"],

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "ContentFlow Browser Bridge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Ponte comum dos plugins de automação de navegador compatíveis com o ContentFlow.",
-  "permissions": ["tabs", "storage"],
+  "permissions": ["tabs", "storage", "debugger"],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://claude.ai/*",
