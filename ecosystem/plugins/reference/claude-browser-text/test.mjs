@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { __test, execute } from "./handler.mjs";
 
 const manifest = JSON.parse(
@@ -9,7 +11,7 @@ const manifest = JSON.parse(
 const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "1.0.3");
+  assert.equal(manifest.version, "1.1.0");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
 });
@@ -56,6 +58,7 @@ function request(overrides = {}) {
       ...overrides.context,
     },
     validation: overrides.validation,
+    outputContract: overrides.outputContract,
   };
 }
 
@@ -78,11 +81,14 @@ test("manifesto declara as seis capabilities do Claude Browser Studio", () => {
   assert.deepEqual(Object.keys(capability.blockConfigSchema.properties), [
     "fallbackAccountProfiles",
     "accountProfile",
+    "generationMode",
+    "characterTolerancePercent",
+    "maxLengthRepairPrompts",
   ]);
   assert.deepEqual(capability.blockTypes, ["CRIAR"]);
   assert.deepEqual(
     capability.outputPorts.map((item) => item.key),
-    ["result", "parts"],
+    ["result", "parts", "document"],
   );
   assert.deepEqual(
     manifest.capabilities.map((item) => item.id),
@@ -201,33 +207,26 @@ test("monta uma resposta genérica", () => {
   assert.match(parts[0], /texto puro/i);
 });
 
-test("ignora o roteiro legado e faz somente um envio", () => {
+test("modo single força somente um envio", () => {
   const parts = __test.buildParts(
-    request({ configuration: { generationMode: "legacy_script_3_parts" } }),
+    request({ configuration: { generationMode: "single" }, inputs: { sections: 8 } }),
   );
   assert.equal(parts.length, 1);
-  assert.doesNotMatch(parts[0], /TÓPICOS 1, 2 e 3/);
 });
 
-test("mantém records no contexto de um único envio", () => {
+test("modo auto usa a quantidade de blocos como sequência", () => {
   const parts = __test.buildParts(
     request({
-      configuration: { generationMode: "legacy_script_blocks" },
-      inputs: {
-        content: [
-          { titulo_bloco: "Abertura", objetivo: "Criar curiosidade" },
-          { titulo_bloco: "Virada" },
-        ],
-      },
+      configuration: { generationMode: "auto" },
+      inputs: { sections: "3" },
     }),
   );
-  assert.equal(parts.length, 1);
-  assert.match(parts[0], /Abertura/);
-  assert.match(parts[0], /Criar curiosidade/);
-  assert.match(parts[0], /Virada/);
+  assert.equal(parts.length, 3);
+  assert.match(parts[0], /bloco 1\/3/i);
+  assert.match(parts[2], /bloco 3\/3/i);
 });
 
-test("não divide outlines em múltiplos envios", () => {
+test("divide outline em múltiplos envios na mesma conversa", () => {
   const outline = Array.from({ length: 12 }, (_, index) => ({
     titulo_bloco: `Ponto ${index + 1}`,
     objetivo: `Objetivo ${index + 1}`,
@@ -235,32 +234,51 @@ test("não divide outlines em múltiplos envios", () => {
   const parts = __test.buildParts(
     request({
       configuration: {
-        generationMode: "outline_sequence",
-        outlineFirstPromptTemplate:
-          "INÍCIO {{BLOCK_NUMBER}}/{{BLOCK_TOTAL}} {{BLOCK_JSON}} {{PROMPT_BASE}}",
-        outlineNextPromptTemplate: "MEIO {{BLOCK_NUMBER}}/{{BLOCK_TOTAL}} {{BLOCK}}",
-        outlineLastPromptTemplate: "FIM {{BLOCK_NUMBER}}/{{BLOCK_TOTAL}} {{BLOCK}}",
+        generationMode: "auto",
       },
       inputs: { content: "Contexto geral", outline },
     }),
   );
-  assert.equal(parts.length, 1);
-  assert.doesNotMatch(parts[0], /INÍCIO 1\/12/);
+  assert.equal(parts.length, 12);
   assert.match(parts[0], /Ponto 1/);
-  assert.match(parts[0], /Ponto 12/);
+  assert.match(parts[11], /Ponto 12/);
 });
 
-test("ignora partes personalizadas", () => {
-  const parts = __test.buildParts(
+test("distribui a meta conforme o saldo e valida a tolerância", () => {
+  const plan = __test.targetCharacterPlan(
     request({
-      configuration: {
-        generationMode: "custom_parts",
-        customParts: "Comece agora\n---PARTE---\nContinue e finalize",
-      },
+      configuration: { characterTolerancePercent: 5 },
+      inputs: { target: 1000 },
     }),
   );
-  assert.equal(parts.length, 1);
-  assert.doesNotMatch(parts[0], /Comece agora/);
+  assert.deepEqual(plan, { target: 1000, tolerancePercent: 5, minimum: 950, maximum: 1050 });
+  assert.match(__test.promptWithCharacterBudget("Etapa", plan, [], 0, 2), /500 caracteres/);
+  assert.doesNotThrow(() => __test.validateGeneratedLength("x".repeat(980), plan));
+  assert.throws(() => __test.validateGeneratedLength("x".repeat(900), plan), /faixa aceita/);
+});
+
+test("gera artifact Markdown somente quando o contrato pede arquivo", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "claude-browser-test-"));
+  try {
+    const artifactRequest = request({
+      outputContract: [
+        { key: "script", type: "textarea", portKey: "result" },
+        { key: "script_file", type: "file", portKey: "document" },
+      ],
+      context: { project: { title: "História de Johnstown" } },
+    });
+    assert.equal(__test.markdownArtifactRequested(artifactRequest), true);
+    const generated = await __test.createMarkdownArtifact(
+      artifactRequest,
+      { getOutputPath: (name) => join(directory, name) },
+      "Roteiro pronto",
+    );
+    assert.equal(generated.file.name, "historia-de-johnstown.md");
+    assert.equal(generated.file.mimeType, "text/markdown");
+    assert.equal(await readFile(join(directory, generated.file.name), "utf8"), "Roteiro pronto");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("preserva cada resposta quando a saída parts é conectada", () => {

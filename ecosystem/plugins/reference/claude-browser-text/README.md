@@ -1,10 +1,10 @@
 # Claude Browser Studio
 
-Versão **1.0.3** para ContentFlow Plugin API v1.
+Versão **1.1.0** para ContentFlow Plugin API v1.
 
 Plugin independente para ContentFlow que converte a lógica operacional de `gerar_roteiros.py` e `extrair_cookies_chrome.py` em seis capabilities pela interface web do Claude: texto/roteiros, pesquisa, escolha, validação, visão e análise de documentos.
 
-Ele não usa a API oficial da Anthropic. O plugin abre um Google Chrome real com perfil persistente dedicado, inicia uma conversa nova, faz um único envio e lê a resposta visível do Claude. Cookies e tokens permanecem sob controle do Chrome e nunca são exportados para TXT, manifesto, logs, outputs ou artifacts.
+Ele não usa a API oficial da Anthropic. O plugin abre um Google Chrome real com perfil persistente dedicado, inicia uma conversa nova e lê as respostas visíveis do Claude. Uma execução simples faz um envio; uma execução com outline ou quantidade de blocos faz vários envios na mesma conversa e concatena os trechos na ordem. Cookies e tokens permanecem sob controle do Chrome e nunca são exportados para TXT, manifesto, logs, outputs ou artifacts.
 
 ## Contrato simplificado
 
@@ -51,9 +51,12 @@ A espera de respostas combina `MutationObserver` com polling de segurança e tim
 
 - Entrada opcional `content`: briefing, tema, regras, referências e outros valores universais serializáveis.
 - Entrada opcional `outline`: `records` ou `list`; cada item dispara uma mensagem e produz uma resposta na mesma conversa.
+- Entrada opcional `sections`: quando não há outline, gera essa quantidade de blocos consecutivos.
+- Entrada opcional `target`: meta total de tamanho; o plugin distribui o saldo entre as etapas, pode pedir complementos e valida a faixa configurada antes de concluir.
 - Entrada opcional `attachments`: imagens ou documentos usados como referência na primeira mensagem.
 - Saída `result`: `textarea` com o texto final unido e, por padrão, limpo.
 - Saída opcional `parts`: lista que preserva cada resposta capturada separadamente na mesma conversa.
+- Saída opcional `document`: arquivo Markdown criado localmente a partir do mesmo texto final já validado.
 
 ### Validar — `validate-content-in-browser`
 
@@ -100,7 +103,9 @@ O ContentFlow v0.3 ainda envia `settings: {}` para plugins comunitários, portan
 
 ## Execução
 
-Cada bloco realiza um único envio. A instrução define a tarefa e o contexto das entradas é anexado automaticamente. A saída opcional `parts`, quando ainda conectada por um Método antigo, contém somente a resposta dessa chamada.
+Por padrão, `generationMode: auto` realiza um único envio quando não há sequência. Se `outline` tiver itens ou `sections` for maior que 1, cada etapa vira uma mensagem na mesma conversa. `single` força um envio e `sequence` força a sequência. O resultado final é a concatenação ordenada das respostas; `parts` preserva os trechos individualmente.
+
+Quando `target` é informado, cada etapa recebe uma meta proporcional ao saldo restante. Se o acumulado ficar abaixo da tolerância, o plugin pode enviar até duas mensagens de complemento por padrão. Resultado fora da faixa aceita retorna `OUTPUT_VALIDATION_FAILED` e não é entregue como roteiro concluído.
 
 ## Segurança e dados
 
@@ -138,9 +143,9 @@ Em 20/08/2026, o fluxo real foi validado na interface web do Claude. A versão 1
 - A automação depende da interface web do Claude e pode exigir atualização se labels ou estrutura mudarem.
 - O Chrome precisa estar instalado.
 - Login, reautenticação, CAPTCHA e escolha de plano são sempre manuais.
-- Uma execução cria uma conversa nova e faz um único envio.
+- Uma execução cria uma conversa nova; pode fazer um envio ou uma sequência de até 32 etapas.
 - O plugin tenta iniciar cada execução pelo link visível **New** do Claude e usa `https://claude.ai/new` como fallback determinístico.
 - Cada conversa aceita no máximo 20 anexos e 500 MB por arquivo; limites adicionais do plano/contexto continuam valendo.
 - O plugin mapeia, mas não automatiza billing, mudança de plano, conectores, plugins de terceiros, compartilhamento, microfone ou captura da tela. Esses recursos ampliariam dados e permissões sem necessidade para os blocos do ContentFlow.
-- A criação de arquivos pelo ambiente de código do Claude não é importada como artifact nesta versão; o foco do plugin é produzir texto e analisar entradas autorizadas.
+- O plugin não depende do artifact interno do Claude, que pode variar com a interface. Quando o Método pede a saída `document`, ele grava o texto final validado como `.md` e o entrega pelo contrato seguro de artifacts do ContentFlow.
 - Os scripts Python originais não são alterados nem apagados.

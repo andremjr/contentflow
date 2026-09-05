@@ -17,6 +17,7 @@ const MAX_ATTACHMENT_BYTES = 512 * 1024 * 1024;
 const PROFILE_SETUP_WAIT_MS = Number.POSITIVE_INFINITY;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
 const DOCUMENT_EXTENSIONS = new Set([
+  ".md",
   ".pdf",
   ".docx",
   ".csv",
@@ -450,18 +451,29 @@ async function resolveStoredFileAttachments(value, services, kind) {
     throw codedError("INVALID_INPUT", `Máximo de ${MAX_ATTACHMENTS} anexos por conversa.`);
   const resolved = [];
   for (const file of unique) {
-    const path = await services.resolveInputFile(file);
-    const extension = extname(file.name || path).toLowerCase();
+    let path = await services.resolveInputFile(file);
+    let name = file.name || basename(path);
+    let extension = extname(name || path).toLowerCase();
     if (!SUPPORTED_EXTENSIONS.has(extension))
       throw codedError("INVALID_INPUT", `Formato não suportado: ${extension || "sem extensão"}.`);
     if (kind === "image" && !IMAGE_EXTENSIONS.has(extension))
       throw codedError("INVALID_INPUT", `A visão não aceita ${file.name}.`);
     if (kind === "document" && !DOCUMENT_EXTENSIONS.has(extension))
       throw codedError("INVALID_INPUT", `Documento não suportado: ${file.name}.`);
+    if (extension === ".md") {
+      const base = basename(name, extension)
+        .replace(/[^a-zA-Z0-9._-]+/g, "-")
+        .slice(0, 100);
+      name = `${base || "contexto"}.txt`;
+      const normalizedPath = services.getOutputPath(name);
+      await writeFile(normalizedPath, await readFile(path));
+      path = normalizedPath;
+      extension = ".txt";
+    }
     const info = await stat(path);
     if (!info.isFile() || info.size > MAX_ATTACHMENT_BYTES)
       throw codedError("INVALID_INPUT", `Arquivo inválido ou acima de 512 MB: ${file.name}.`);
-    resolved.push({ path, name: file.name || basename(path), size: info.size });
+    resolved.push({ path, name, size: info.size });
   }
   return resolved;
 }

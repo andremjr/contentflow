@@ -1,0 +1,60 @@
+{
+  "executionId": "text-file-builder-fixture",
+  "traceId": "text-file-builder-fixture-trace",
+  "blockId": "text-file-builder-fixture-block",
+  "capabilityId": "build-text-file",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": {
+    "fileName": "contexto.md",
+    "format": "markdown"
+  },
+  "settings": {},
+  "inputs": {
+    "content": "Tema: Johnstown\nDados pesquisados: 2.209 mortes documentadas."
+  },
+  "inputContract": [
+    {
+      "id": "fixture-content",
+      "portKey": "content",
+      "label": "Contexto",
+      "type": "textarea"
+    }
+  ],
+  "outputContract": [
+    {
+      "portKey": "document",
+      "label": "Arquivo de contexto",
+      "key": "document",
+      "type": "file",
+      "required": true,
+      "presentation": {
+        "renderer": "file-list",
+        "itemType": "file",
+        "acceptedMimeTypes": ["text/markdown", "text/plain"]
+      }
+    }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "fixture-channel",
+      "name": "Canal histórico",
+      "language": "es",
+      "niche": "História"
+    },
+    "project": {
+      "id": "fixture-project",
+      "title": "Projeto histórico"
+    },
+    "processType": "script",
+    "block": {
+      "type": "CRIAR",
+      "name": "Preparar contexto do roteiro",
+      "instructions": "Consolide as entradas em um arquivo Markdown."
+    },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

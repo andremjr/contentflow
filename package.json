@@ -1,6 +1,6 @@
 {
   "name": "contentflow",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "productName": "ContentFlow",
   "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",

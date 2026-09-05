@@ -17,6 +17,7 @@ const MAX_ATTACHMENT_BYTES = 500 * 1024 * 1024;
 const PROFILE_SETUP_WAIT_MS = Number.POSITIVE_INFINITY;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
 const DOCUMENT_EXTENSIONS = new Set([
+  ".md",
   ".pdf",
   ".docx",
   ".csv",
@@ -174,6 +175,7 @@ function flattenRecords(value, output = []) {
 }
 
 function summarizeBlock(index, block) {
+  if (typeof block === "string") return block.trim() || `Bloco ${index}`;
   const title = block?.titulo_bloco || block?.titulo || block?.nome || `Bloco ${index}`;
   const objective = block?.objetivo || block?.objetivo_emocional || block?.descricao || "";
   const points = block?.pontos_chave || block?.pontos || block?.conteudos_obrigatorios || [];
@@ -221,8 +223,154 @@ function plainTextInstruction(enabled) {
     : "";
 }
 
+function parseOptionalPositiveInteger(value, label) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw codedError("INVALID_INPUT", `${label} precisa ser um número inteiro positivo.`);
+  }
+  return parsed;
+}
+
+function targetCharacterPlan(request) {
+  const target = parseOptionalPositiveInteger(
+    request?.inputs?.target ?? request?.configuration?.targetCharacters,
+    "A meta de caracteres",
+  );
+  if (!target) return undefined;
+  if (target > 1_000_000) {
+    throw codedError("INVALID_INPUT", "A meta de caracteres não pode ultrapassar 1.000.000.");
+  }
+  const tolerancePercent = clampInteger(
+    request?.configuration?.characterTolerancePercent,
+    5,
+    0,
+    25,
+  );
+  return {
+    target,
+    tolerancePercent,
+    minimum: Math.floor(target * (1 - tolerancePercent / 100)),
+    maximum: Math.ceil(target * (1 + tolerancePercent / 100)),
+  };
+}
+
+function requestedSectionCount(request) {
+  return Math.min(
+    MAX_PARTS,
+    parseOptionalPositiveInteger(request?.inputs?.sections, "A quantidade de blocos") ?? 1,
+  );
+}
+
+function sequenceItems(request) {
+  const explicit = outlineItems(request);
+  if (explicit.length) return explicit;
+  return Array.from({ length: requestedSectionCount(request) }, (_, index) => `Bloco ${index + 1}`);
+}
+
 function buildParts(request) {
-  return [buildInstructionPrompt(request, [plainTextInstruction(true)])];
+  const base = buildInstructionPrompt(request, [plainTextInstruction(true)]);
+  const configuredMode = String(request?.configuration?.generationMode ?? "auto");
+  const items = sequenceItems(request);
+  const useSequence =
+    configuredMode === "sequence" || (configuredMode === "auto" && items.length > 1);
+  if (!useSequence) return [base];
+
+  return items.map((item, index) => {
+    const position = index + 1;
+    const description = summarizeBlock(position, item);
+    if (index === 0) {
+      return [
+        base,
+        `O roteiro será produzido em ${items.length} blocos consecutivos nesta mesma conversa.`,
+        `Escreva agora somente o bloco ${position}/${items.length}: ${description}`,
+        "Não antecipe os blocos seguintes e entregue apenas o trecho do roteiro, sem comentários sobre o processo.",
+      ].join("\n\n");
+    }
+    const ending = index === items.length - 1 ? " Conclua o roteiro neste bloco." : "";
+    return [
+      `Continue exatamente de onde o roteiro parou e escreva somente o bloco ${position}/${items.length}: ${description}.${ending}`,
+      "Preserve idioma, voz, fatos, ritmo e continuidade. Não repita trechos anteriores e entregue apenas o novo trecho do roteiro.",
+      plainTextInstruction(true),
+    ].join("\n\n");
+  });
+}
+
+function cleanCombinedResponses(responses) {
+  return responses
+    .map((response) => cleanGeneratedText(response?.text))
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
+function promptWithCharacterBudget(prompt, plan, responses, index, total) {
+  if (!plan) return prompt;
+  const accumulated = cleanCombinedResponses(responses).length;
+  const remainingCharacters = Math.max(1, plan.target - accumulated);
+  const remainingParts = Math.max(1, total - index);
+  const partTarget = Math.max(200, Math.round(remainingCharacters / remainingParts));
+  return `${prompt}\n\nMETA DE TAMANHO: o roteiro completo deve ficar próximo de ${plan.target} caracteres. Produza aproximadamente ${partTarget} caracteres nesta etapa; restam ${remainingParts} etapa(s), incluindo esta.`;
+}
+
+function lengthRepairPrompt(plan, currentLength) {
+  const missing = Math.max(1, plan.target - currentLength);
+  return [
+    `O texto acumulado tem aproximadamente ${currentLength} caracteres e a meta é ${plan.target}.`,
+    `Continue de onde parou e acrescente aproximadamente ${missing} caracteres que se integrem naturalmente ao roteiro, sem repetir conteúdo.`,
+    "Preserve idioma, voz, fatos e continuidade. Entregue somente o novo trecho do roteiro, sem comentários sobre o processo.",
+    plainTextInstruction(true),
+  ].join("\n\n");
+}
+
+function validateGeneratedLength(result, plan) {
+  if (!plan) return;
+  if (result.length < plan.minimum || result.length > plan.maximum) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      `O roteiro terminou com ${result.length} caracteres; a faixa aceita é de ${plan.minimum} a ${plan.maximum} para a meta de ${plan.target}.`,
+      true,
+    );
+  }
+}
+
+function markdownArtifactRequested(request) {
+  return (request?.outputContract ?? []).some(
+    (field) => field?.portKey === "document" || field?.type === "file",
+  );
+}
+
+function safeMarkdownName(request) {
+  const base = String(request?.context?.project?.title ?? "roteiro")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return `${base || "roteiro"}.md`;
+}
+
+async function createMarkdownArtifact(request, services, result) {
+  const bytes = Buffer.from(result, "utf8");
+  const id = `claude-markdown-${createHash("sha256")
+    .update(
+      `${request?.executionId || "execution"}:${request?.blockId || "block"}:${request?.attempt || 1}`,
+    )
+    .digest("hex")
+    .slice(0, 16)}`;
+  const name = safeMarkdownName(request);
+  await writeFile(services.getOutputPath(name), bytes);
+  return {
+    file: { id, name, mimeType: "text/markdown", size: bytes.length, url: `artifact://${id}` },
+    artifact: {
+      id,
+      name,
+      mimeType: "text/markdown",
+      size: bytes.length,
+      source: { kind: "path", path: name },
+    },
+  };
 }
 
 function expandCapabilityTemplate(template, replacements, request) {
@@ -326,8 +474,9 @@ async function resolveAttachments(request, services) {
   }
   const resolved = [];
   for (const file of unique) {
-    const path = await services.resolveInputFile(file);
-    const extension = extname(file.name || path).toLowerCase();
+    let path = await services.resolveInputFile(file);
+    let name = file.name || basename(path);
+    let extension = extname(name || path).toLowerCase();
     if (!SUPPORTED_UPLOAD_EXTENSIONS.has(extension)) {
       throw codedError(
         "INVALID_INPUT",
@@ -346,12 +495,22 @@ async function resolveAttachments(request, services) {
         `O recurso de documentos não aceita o formato de ${file.name}.`,
       );
     }
+    if (extension === ".md") {
+      const base = basename(name, extension)
+        .replace(/[^a-zA-Z0-9._-]+/g, "-")
+        .slice(0, 100);
+      name = `${base || "contexto"}.txt`;
+      const normalizedPath = services.getOutputPath(name);
+      await writeFile(normalizedPath, await readFile(path));
+      path = normalizedPath;
+      extension = ".txt";
+    }
     const info = await stat(path);
     if (!info.isFile())
       throw codedError("INVALID_INPUT", `O anexo autorizado não é um arquivo: ${file.name}.`);
     if (info.size > MAX_ATTACHMENT_BYTES)
       throw codedError("INVALID_INPUT", `O anexo ${file.name} ultrapassa 500 MB.`);
-    resolved.push({ path, name: file.name || basename(path), size: info.size });
+    resolved.push({ path, name, size: info.size });
   }
   return resolved;
 }
@@ -1380,14 +1539,23 @@ export async function execute(request, services) {
       if (capabilityId === "validate-content-in-browser") {
         return { status: "success", values: parseValidationValues(mockResponse, request) };
       }
+      if (capabilityId === "generate-text-in-browser") {
+        const result = cleanGeneratedText(mockResponse);
+        validateGeneratedLength(result, targetCharacterPlan(request));
+        const values = generationResponseValues(result, [{ text: result }], request);
+        if (markdownArtifactRequested(request)) {
+          const generated = await createMarkdownArtifact(request, services, result);
+          values.document = generated.file;
+          return { status: "success", values, artifacts: [generated.artifact] };
+        }
+        return { status: "success", values };
+      }
       return {
         status: "success",
         values:
           capabilityId === "search-web-in-browser"
             ? searchResponseValues(mockResponse, [], request)
-            : capabilityId === "generate-text-in-browser"
-              ? generationResponseValues(mockResponse, [{ text: mockResponse }], request)
-              : { result: mockResponse },
+            : { result: mockResponse },
       };
     } catch (error) {
       return resultError(
@@ -1399,9 +1567,12 @@ export async function execute(request, services) {
   }
 
   let parts;
+  let characterPlan;
   try {
-    if (capabilityId === "generate-text-in-browser") parts = buildParts(request);
-    else if (capabilityId === "search-web-in-browser") parts = [buildSearchPrompt(request)];
+    if (capabilityId === "generate-text-in-browser") {
+      parts = buildParts(request);
+      characterPlan = targetCharacterPlan(request);
+    } else if (capabilityId === "search-web-in-browser") parts = [buildSearchPrompt(request)];
     else if (capabilityId === "choose-library-item-in-browser")
       parts = [buildChoosePrompt(request)];
     else if (capabilityId === "validate-content-in-browser")
@@ -1519,7 +1690,7 @@ export async function execute(request, services) {
             client,
             sessionId,
             bridge,
-            parts[index],
+            promptWithCharacterBudget(parts[index], characterPlan, responses, index, parts.length),
             settings,
             services.signal,
             `${index}:${attempt}`,
@@ -1542,7 +1713,30 @@ export async function execute(request, services) {
       if (index < parts.length - 1) await sleep(delayBetweenPartsMs, services.signal);
     }
 
+    if (capabilityId === "generate-text-in-browser" && characterPlan) {
+      const maxRepairPrompts = clampInteger(configuration.maxLengthRepairPrompts, 2, 0, 5);
+      for (let repair = 0; repair < maxRepairPrompts; repair += 1) {
+        const current = cleanCombinedResponses(responses);
+        if (current.length >= characterPlan.minimum) break;
+        step(
+          `Ajustando tamanho: ${current.length}/${characterPlan.target} caracteres (complemento ${repair + 1}/${maxRepairPrompts}).`,
+        );
+        responses.push(
+          await generatePart(
+            client,
+            sessionId,
+            bridge,
+            lengthRepairPrompt(characterPlan, current.length),
+            settings,
+            services.signal,
+            `repair:${repair}`,
+          ),
+        );
+      }
+    }
+
     const combined = responses.map((response) => response.text).join("\n\n");
+    let artifacts;
     let values;
     if (capabilityId === "search-web-in-browser") {
       const maxSources = 10;
@@ -1555,7 +1749,7 @@ export async function execute(request, services) {
     } else if (capabilityId === "validate-content-in-browser") {
       values = parseValidationValues(combined, request);
     } else {
-      const result = cleanGeneratedText(combined);
+      const result = cleanCombinedResponses(responses);
       if (!result)
         throw codedError(
           "OUTPUT_VALIDATION_FAILED",
@@ -1569,14 +1763,24 @@ export async function execute(request, services) {
           true,
         );
       }
+      validateGeneratedLength(result, characterPlan);
       values = generationResponseValues(result, responses, request);
+      if (markdownArtifactRequested(request)) {
+        const generated = await createMarkdownArtifact(request, services, result);
+        values.document = generated.file;
+        artifacts = [generated.artifact];
+      }
     }
-    const outputCharacters = combined.length;
+    const outputCharacters =
+      capabilityId === "generate-text-in-browser"
+        ? String(values.result ?? "").length
+        : combined.length;
     const conversationId = await currentConversationUrl(client, sessionId);
     step(`Concluído: ${outputCharacters} caracteres em ${responses.length} resposta(s).`);
     return {
       status: "success",
       values,
+      ...(artifacts ? { artifacts } : {}),
       conversation: { id: conversationId },
       usage: {
         provider: "Anthropic / Claude web",
@@ -1626,6 +1830,10 @@ export const __test = {
   expandTemplate,
   expandOutlinePrompt,
   generationResponseValues,
+  cleanCombinedResponses,
+  createMarkdownArtifact,
+  lengthRepairPrompt,
+  markdownArtifactRequested,
   normalizeAccountProfile,
   outlineItems,
   parseSelectedItemId,
@@ -1636,6 +1844,9 @@ export const __test = {
   runtimeProfilePath,
   profilePort,
   searchResponseValues,
+  targetCharacterPlan,
+  promptWithCharacterBudget,
+  validateGeneratedLength,
   serializeInputs,
   summarizeBlock,
   responsePhase,

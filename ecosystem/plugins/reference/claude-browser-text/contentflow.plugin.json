@@ -3,8 +3,8 @@
   "apiVersion": "1",
   "id": "local.contentflow.claude-browser-text",
   "name": "Claude Browser Studio",
-  "version": "1.0.3",
-  "description": "Super plugin do Claude web para criar, pesquisar, escolher, validar e analisar imagens ou documentos em conversas persistentes.",
+  "version": "1.1.0",
+  "description": "Super plugin do Claude web para criar em uma ou várias etapas, pesquisar, escolher, validar e analisar imagens ou documentos em conversas persistentes.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
   "branding": {
@@ -146,6 +146,22 @@
           "multiple": false
         },
         {
+          "key": "sections",
+          "label": "Quantidade de blocos",
+          "description": "Quando não há outline, cria esta quantidade de etapas consecutivas.",
+          "acceptedTypes": ["number", "text", "textarea"],
+          "required": false,
+          "multiple": false
+        },
+        {
+          "key": "target",
+          "label": "Meta de caracteres",
+          "description": "Meta total validada depois da concatenação de todas as respostas.",
+          "acceptedTypes": ["number"],
+          "required": false,
+          "multiple": false
+        },
+        {
           "key": "attachments",
           "label": "Referências anexas",
           "description": "Imagens ou documentos enviados somente na primeira mensagem da conversa.",
@@ -173,6 +189,18 @@
           "presentation": {
             "renderer": "list"
           }
+        },
+        {
+          "key": "document",
+          "label": "Documento Markdown",
+          "description": "Arquivo .md opcional criado a partir do texto final validado.",
+          "producedTypes": ["file"],
+          "required": false,
+          "presentation": {
+            "renderer": "file-list",
+            "itemType": "file",
+            "acceptedMimeTypes": ["text/markdown"]
+          }
         }
       ],
       "acceptedInputTypes": [
@@ -191,7 +219,7 @@
         "file",
         "files"
       ],
-      "producedOutputTypes": ["text", "textarea", "list"],
+      "producedOutputTypes": ["text", "textarea", "list", "file"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 900000,
@@ -225,6 +253,28 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default",
             "description": "Alias como canal-a. Cada alias mantém login e histórico separados."
+          },
+          "generationMode": {
+            "type": "string",
+            "title": "Modo de geração",
+            "enum": ["auto", "single", "sequence"],
+            "default": "auto",
+            "description": "Auto usa sequência quando recebe outline ou quantidade maior que 1; single força um envio; sequence força várias etapas."
+          },
+          "characterTolerancePercent": {
+            "type": "integer",
+            "title": "Tolerância da meta (%)",
+            "minimum": 0,
+            "maximum": 25,
+            "default": 5
+          },
+          "maxLengthRepairPrompts": {
+            "type": "integer",
+            "title": "Complementos para atingir a meta",
+            "minimum": 0,
+            "maximum": 5,
+            "default": 2,
+            "description": "Quantidade máxima de mensagens adicionais quando o roteiro termina abaixo da faixa aceita."
           }
         }
       },
@@ -242,6 +292,18 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "document": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "name": { "type": "string", "pattern": "\\.md$" },
+              "mimeType": { "const": "text/markdown" },
+              "size": { "type": "integer", "minimum": 1 },
+              "url": { "type": "string", "pattern": "^artifact://" }
+            },
+            "required": ["id", "name", "mimeType", "size", "url"]
           }
         },
         "required": ["result"]
