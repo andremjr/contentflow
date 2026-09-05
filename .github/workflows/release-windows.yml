@@ -38,6 +38,25 @@ jobs:
       - name: Verificar projeto
         run: npm run check
 
+      - name: Instalar navegador de testes
+        run: npx playwright install chromium
+
+      - name: Validar interação ponta a ponta antes de publicar
+        run: npm run test:e2e
+
+      - name: Validar a aplicação Electron real
+        run: npm run test:electron
+
+      - name: Guardar evidências E2E
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            playwright-report/
+            playwright-report-electron/
+            test-results/
+
       - name: Montar e publicar instalador, portátil e latest.yml
         run: npm run desktop:release
         env:

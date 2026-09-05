@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   FileAudio,
   FileImage,
@@ -94,16 +94,23 @@ export function RuntimeFieldsForm({
   fields,
   values,
   dynamicOptions = {},
+  uploadFile = uploadLocalFile,
   onChange,
 }: {
   fields: BlockFieldDefinition[];
   values: Record<string, RuntimeValue>;
   dynamicOptions?: Record<string, string[]>;
+  uploadFile?: (file: File) => Promise<StoredFile>;
   onChange: (values: Record<string, RuntimeValue>) => void;
 }) {
   const [uploadingKey, setUploadingKey] = useState<string>();
+  const latestValues = useRef(values);
+  latestValues.current = values;
 
-  const update = (key: string, value: RuntimeValue) => onChange({ ...values, [key]: value });
+  const update = (key: string, value: RuntimeValue) => {
+    latestValues.current = { ...latestValues.current, [key]: value };
+    onChange(latestValues.current);
+  };
 
   async function upload(field: BlockFieldDefinition, files: FileList | null) {
     if (!files?.length) return;
@@ -116,7 +123,7 @@ export function RuntimeFieldsForm({
     }
     setUploadingKey(field.key);
     try {
-      const uploaded = await Promise.all(Array.from(files).map(uploadLocalFile));
+      const uploaded = await Promise.all(Array.from(files).map(uploadFile));
       update(field.key, field.type === "files" ? uploaded : uploaded[0]);
     } catch (error) {
       toast.error("Não foi possível salvar o arquivo", {

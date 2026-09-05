@@ -33,6 +33,8 @@ import {
   ListChecks,
   LoaderCircle,
   History,
+  FlaskConical,
+  Play,
   Plus,
   Search,
   Share2,
@@ -43,6 +45,7 @@ import {
 import { toast } from "sonner";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
+import { RuntimeFieldsForm } from "@/components/runtime-fields-form";
 import { LineListTextarea } from "@/components/line-list-textarea";
 import {
   PRESENTATION_RENDERERS,
@@ -92,6 +95,8 @@ import {
   type ProcessMethod,
   type RecordFieldDefinition,
   type RecordFieldType,
+  type RuntimeValue,
+  type StoredFile,
   type StrategicCollection,
   type UniversalProcess,
   type ValidationMode,
@@ -111,9 +116,13 @@ import {
 import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
 import { createChannelHistoryRecordFields } from "@/lib/channel-history";
 import {
+  addInstructionInputVariable,
   instructionInputKey,
   instructionInputLabel,
+  instructionReferencesInput,
   nextManualInputLabel,
+  removeInstructionInputVariables,
+  replaceInstructionInputVariable,
 } from "@/lib/instruction-template";
 import type {
   JsonSchema,
@@ -121,7 +130,14 @@ import type {
   PluginManifest,
   PluginProfileSetup,
 } from "@/lib/plugin-contract";
-import { setChannelMethod, useChannel, useChannels, useLibraryCollections } from "@/lib/store";
+import {
+  readMethodDraft,
+  rememberMethodDraft,
+  setChannelMethod,
+  useChannel,
+  useChannels,
+  useLibraryCollections,
+} from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 type DiscoveredPlugin = {
@@ -312,15 +328,16 @@ export function MethodBuilder({
     const changedProcess = loadedProcessRef.current !== processType;
     if (!changedProcess && isDirty) return;
 
+    const recovered = changedProcess ? readMethodDraft(channelId, processType) : undefined;
     setDraftBlocks(
-      structuredClone(method?.blocks ?? []).map((block) =>
+      structuredClone(recovered?.blocks ?? method?.blocks ?? []).map((block) =>
         normalizeActionBlock(block, processType),
       ),
     );
     loadedProcessRef.current = processType;
-    setIsDirty(false);
+    setIsDirty(!!recovered);
     setSaveStatus(method?.blocks.length ? "saved" : "idle");
-  }, [isDirty, processType, method]);
+  }, [channelId, isDirty, processType, method]);
 
   const persistMethod = useCallback(
     async (showConfirmation = false) => {
@@ -389,6 +406,9 @@ export function MethodBuilder({
       uid,
     ).map((block) => normalizeActionBlock(block, processType));
     setDraftBlocks(importedBlocks);
+    rememberMethodDraft(channelId, processType, { processType, blocks: importedBlocks }, (error) =>
+      toast.error("Método não salvo", { description: error.message }),
+    );
     setSelectedBlockId(importedBlocks[0]?.id ?? null);
     setIsDirty(true);
     setPendingFileImport(null);
@@ -397,12 +417,15 @@ export function MethodBuilder({
         ? "Associe localmente as contas exigidas pelos blocos antes de executar. Nenhuma credencial foi importada."
         : "Revise a cópia. As alterações serão salvas automaticamente.",
     });
-  }, [pendingFileImport, processType]);
+  }, [channelId, pendingFileImport, processType]);
 
   if (!channel || !method) return null;
 
   const saveBlocks = (nextBlocks: ActionBlock[]) => {
     editVersionRef.current += 1;
+    rememberMethodDraft(channelId, processType, { processType, blocks: nextBlocks }, (error) =>
+      toast.error("Método não salvo; rascunho preservado", { description: error.message }),
+    );
     setDraftBlocks(nextBlocks.map((block, order) => ({ ...block, order })));
     setIsDirty(true);
     setSaveStatus("pending");
@@ -1518,6 +1541,283 @@ function BlockEditor({
           )}
         </div>
       )}
+
+      <MethodBlockTest
+        block={block}
+        methodBlocks={methodBlocks}
+        channelId={channelId}
+        processType={processType}
+        capability={selectedCapability}
+      />
+    </div>
+  );
+}
+
+type MethodBlockTestResult = {
+  runId: string;
+  values: Record<string, RuntimeValue>;
+  temporary: true;
+};
+
+function MethodBlockTest({
+  block,
+  methodBlocks,
+  channelId,
+  processType,
+  capability,
+}: {
+  block: ActionBlock;
+  methodBlocks: ActionBlock[];
+  channelId: string;
+  processType: UniversalProcess;
+  capability?: PluginCapability;
+}) {
+  const [runId] = useState(() => crypto.randomUUID());
+  const [projectTitle, setProjectTitle] = useState("Projeto de teste");
+  const [projectDeadline, setProjectDeadline] = useState("");
+  const [values, setValues] = useState<Record<string, RuntimeValue>>(() =>
+    Object.fromEntries(
+      (block.inputs ?? []).flatMap((input) =>
+        input.source === "static" && typeof input.staticValue === "string"
+          ? [[input.id, input.staticValue]]
+          : [],
+      ),
+    ),
+  );
+  const [result, setResult] = useState<MethodBlockTestResult>();
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string>();
+  const controllerRef = useRef<AbortController | undefined>(undefined);
+
+  useEffect(
+    () => () => {
+      controllerRef.current?.abort();
+      void fetch(`/api/method-block-tests/${encodeURIComponent(runId)}`, {
+        method: "DELETE",
+        keepalive: true,
+      }).catch(() => undefined);
+    },
+    [runId],
+  );
+
+  const validationTarget =
+    block.type === "VALIDAR" && block.validation?.targetBlockId
+      ? methodBlocks.find((candidate) => candidate.id === block.validation?.targetBlockId)
+      : undefined;
+  const validationOutput =
+    validationTarget?.outputs?.find((output) => output.key === block.validation?.targetOutputKey) ??
+    validationTarget?.outputs?.[0];
+  const inputFields: BlockFieldDefinition[] = [
+    ...(validationOutput
+      ? [
+          {
+            ...validationOutput,
+            id: "__validation_target__",
+            key: "__validation_target__",
+            label: `${validationOutput.label} para teste`,
+            required: true,
+          },
+        ]
+      : []),
+    ...(block.inputs ?? []).map((input) => ({
+      id: input.id,
+      key: input.id,
+      label: `${input.label} para teste`,
+      type: input.type,
+      required: true,
+      recordFields: input.recordFields,
+      presentation: input.presentation,
+      placeholder:
+        input.source === "channel_history"
+          ? "Histórico simulado — nenhum dado real do Canal será consultado"
+          : "Valor temporário usado somente neste teste",
+    })),
+  ];
+  const displayOutputs: BlockFieldDefinition[] =
+    block.type === "ESCOLHER"
+      ? [
+          {
+            id: "method-test-selected-item",
+            key: "selectedItemId",
+            label: "Item escolhido",
+            type: "text",
+            required: true,
+          },
+        ]
+      : (block.outputs ?? []);
+  const hasExternalEffect = Boolean(
+    capability?.sideEffects.some((effect) =>
+      ["external_read", "external_write", "public_publish"].includes(effect),
+    ),
+  );
+
+  async function uploadTemporaryFile(file: File) {
+    const response = await fetch(`/api/method-block-tests/${encodeURIComponent(runId)}/uploads`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "X-File-Name": encodeURIComponent(file.name),
+        "X-File-Type": file.type || "application/octet-stream",
+      },
+      body: file,
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(payload.error ?? "Não foi possível preparar o arquivo temporário.");
+    }
+    return response.json() as Promise<StoredFile>;
+  }
+
+  async function executeTest() {
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setTesting(true);
+    setError(undefined);
+    setResult(undefined);
+    try {
+      const response = await fetch("/api/method-block-tests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          runId,
+          channelId,
+          processType,
+          blockId: block.id,
+          blocks: methodBlocks,
+          inputValues: values,
+          projectTitle,
+          projectDeadline,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as MethodBlockTestResult & {
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error ?? "Não foi possível testar o bloco.");
+      setResult(payload);
+      toast.success("Teste concluído", {
+        description: "O resultado é temporário e não entrou no histórico do Canal.",
+      });
+    } catch (caught) {
+      if (controller.signal.aborted) {
+        setError("Teste cancelado.");
+      } else {
+        setError(caught instanceof Error ? caught.message : "Não foi possível testar o bloco.");
+      }
+    } finally {
+      if (controllerRef.current === controller) controllerRef.current = undefined;
+      setTesting(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-dashed border-brand/40 bg-brand/5 p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <FlaskConical className="size-4 text-brand-soft" />
+            Testar somente este bloco
+          </div>
+          <p className="max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
+            Usa a configuração atual, abre o navegador visivelmente quando necessário e descarta o
+            resultado ao fechar o editor. Não cria Projeto, Execução, Entrega nem Histórico do
+            Canal.
+          </p>
+        </div>
+        {testing ? (
+          <Button type="button" variant="outline" onClick={() => controllerRef.current?.abort()}>
+            Cancelar teste
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            disabled={block.operator === "Humano" || !block.plugin || !capability}
+            onClick={() => void executeTest()}
+          >
+            <Play className="size-3.5" />
+            Executar teste
+          </Button>
+        )}
+      </div>
+
+      {block.operator === "Humano" ? (
+        <p className="mt-3 rounded-lg border border-border/70 bg-background/40 p-3 text-xs text-muted-foreground">
+          Este bloco é humano: o formulário acima já representa sua prévia e não há executor
+          automático para chamar.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor={`${block.id}-test-project-title`}>Título fictício do Projeto</Label>
+            <Input
+              id={`${block.id}-test-project-title`}
+              value={projectTitle}
+              onChange={(event) => setProjectTitle(event.target.value)}
+              placeholder="Usado para {{project.title}}"
+            />
+          </div>
+          {block.instructions?.includes("{{project.deadline}}") && (
+            <div className="space-y-1.5">
+              <Label htmlFor={`${block.id}-test-project-deadline`}>Prazo fictício do Projeto</Label>
+              <Input
+                id={`${block.id}-test-project-deadline`}
+                type="date"
+                value={projectDeadline}
+                onChange={(event) => setProjectDeadline(event.target.value)}
+              />
+            </div>
+          )}
+          {inputFields.length > 0 && (
+            <RuntimeFieldsForm
+              fields={inputFields}
+              values={values}
+              uploadFile={uploadTemporaryFile}
+              onChange={setValues}
+            />
+          )}
+          {hasExternalEffect && (
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-100">
+              O resultado é temporário no ContentFlow, mas a chamada ao provedor é real e pode usar
+              cota, criar conversa ou produzir mídia na conta configurada.
+            </p>
+          )}
+        </div>
+      )}
+
+      {testing && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-brand/30 bg-background/50 p-3 text-xs">
+          <LoaderCircle className="size-4 animate-spin text-brand-soft" />
+          Executando o bloco em modo de teste…
+        </div>
+      )}
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs"
+        >
+          {error}
+        </p>
+      )}
+      {result && (
+        <div className="mt-4 space-y-3 rounded-lg border border-brand/30 bg-background/60 p-4">
+          <div>
+            <p className="text-xs font-semibold">Resultado temporário</p>
+            <p className="text-[10px] text-muted-foreground">
+              Será descartado ao fechar este editor e nunca alimentará outros blocos.
+            </p>
+          </div>
+          {displayOutputs.map((output) => (
+            <div key={output.id} className="space-y-1.5 rounded-md border border-border/70 p-3">
+              <p className="text-[11px] font-medium text-muted-foreground">{output.label}</p>
+              <RuntimeValueViewer
+                type={output.type}
+                value={result.values[output.key]}
+                presentation={output.presentation}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1715,6 +2015,9 @@ function InstructionEditor({
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const promptSessionRef = useRef<
+    { instructions: string; inputs: BlockInputBinding[] } | undefined
+  >(undefined);
   const usage = capability?.instructionUsage ?? "optional";
   const label =
     block.operator === "IA" && usage !== "not_applicable"
@@ -1862,6 +2165,31 @@ function InstructionEditor({
         ref={textareaRef}
         value={block.instructions ?? ""}
         onChange={(event) => onChange({ instructions: event.target.value })}
+        onFocus={() => {
+          promptSessionRef.current = {
+            instructions: block.instructions ?? "",
+            inputs: block.inputs ?? [],
+          };
+        }}
+        onBlur={(event) => {
+          const session = promptSessionRef.current;
+          promptSessionRef.current = undefined;
+          if (!session) return;
+          const removedInputs = session.inputs.filter(
+            (input) =>
+              instructionReferencesInput(session.instructions, input) &&
+              !instructionReferencesInput(event.target.value, input),
+          );
+          if (!removedInputs.length) return;
+          const removedIds = new Set(removedInputs.map((input) => input.id));
+          onChange({
+            instructions: event.target.value,
+            inputs: (block.inputs ?? []).filter((input) => !removedIds.has(input.id)),
+          });
+          toast.info(
+            `${removedInputs.length === 1 ? "A entrada vinculada foi removida" : "As entradas vinculadas foram removidas"} junto com a variável do prompt.`,
+          );
+        }}
         placeholder="Explique o que deve ser feito e qual resultado é esperado."
         rows={5}
       />
@@ -1939,8 +2267,8 @@ function InstructionEditor({
             </DropdownMenuContent>
           </DropdownMenu>
           <p className="text-[10px] text-muted-foreground">
-            Toda entrada conectada já é enviada como contexto. Use a variável somente para escolher
-            onde ela aparece no prompt; o sistema não repetirá o mesmo conteúdo.
+            Cada entrada possui uma variável vinculada no prompt. Apagar a variável remove a
+            entrada; remover ou renomear a entrada também atualiza a variável.
           </p>
         </div>
       )}
@@ -2508,7 +2836,10 @@ function ContextInputsEditor({
       source: "previous_block",
       presentation: { renderer: "auto" },
     };
-    onChange({ inputs: [...inputs, input] });
+    onChange({
+      inputs: [...inputs, input],
+      instructions: addInstructionInputVariable(block.instructions ?? "", input),
+    });
   };
 
   return (
@@ -2519,8 +2850,8 @@ function ContextInputsEditor({
             <History className="size-3.5 text-muted-foreground" /> Entradas de contexto
           </h3>
           <p className="text-[11px] text-muted-foreground">
-            Opcional. Entradas conectadas são enviadas automaticamente; não é necessário repeti-las
-            no prompt.
+            Opcional. Cada entrada é vinculada à sua variável no prompt para manter a configuração
+            explícita e sem duplicidade.
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-1">
@@ -2542,12 +2873,28 @@ function ContextInputsEditor({
             availableBlocks={methodBlocks.slice(0, blockIndex)}
             processType={processType}
             channelMethods={channelMethods}
-            onChange={(patch) =>
+            onChange={(patch) => {
+              const nextInput = { ...input, ...patch };
               onChange({
-                inputs: inputs.map((item) => (item.id === input.id ? { ...item, ...patch } : item)),
-              })
-            }
-            onRemove={() => onChange({ inputs: inputs.filter((item) => item.id !== input.id) })}
+                inputs: inputs.map((item) => (item.id === input.id ? nextInput : item)),
+                instructions: replaceInstructionInputVariable(
+                  block.instructions ?? "",
+                  input,
+                  nextInput,
+                ),
+              });
+            }}
+            onRemove={() => {
+              const remainingInputs = inputs.filter((item) => item.id !== input.id);
+              onChange({
+                inputs: remainingInputs,
+                instructions: removeInstructionInputVariables(
+                  block.instructions ?? "",
+                  input,
+                  remainingInputs,
+                ),
+              });
+            }}
           />
         ))}
         {!regularInputs.length && (
@@ -2587,7 +2934,10 @@ function DataContractEditor({
       source: "previous_block",
       presentation: { renderer: "auto" },
     };
-    onChange({ inputs: [...inputs, input] });
+    onChange({
+      inputs: [...inputs, input],
+      instructions: addInstructionInputVariable(block.instructions ?? "", input),
+    });
   };
   const addOutput = () => {
     const output: BlockFieldDefinition = {
@@ -2605,7 +2955,7 @@ function DataContractEditor({
       <MethodEditorSection
         eyebrow="O que precisa"
         title={block.type === "BUSCAR" ? "Informações para a busca" : "Informações de entrada"}
-        description="Defina o que precisa estar disponível antes desta ação começar. Entregas compatíveis podem ser conectadas automaticamente."
+        description="Defina o que precisa estar disponível antes desta ação começar. Cada entrada cria e mantém sua variável correspondente no prompt."
       >
         {block.type === "CRIAR" && (
           <div className="mb-3">
@@ -2625,14 +2975,28 @@ function DataContractEditor({
               availableBlocks={methodBlocks.slice(0, blockIndex)}
               processType={processType}
               channelMethods={channelMethods}
-              onChange={(patch) =>
+              onChange={(patch) => {
+                const nextInput = { ...input, ...patch };
                 onChange({
-                  inputs: inputs.map((item) =>
-                    item.id === input.id ? { ...item, ...patch } : item,
+                  inputs: inputs.map((item) => (item.id === input.id ? nextInput : item)),
+                  instructions: replaceInstructionInputVariable(
+                    block.instructions ?? "",
+                    input,
+                    nextInput,
                   ),
-                })
-              }
-              onRemove={() => onChange({ inputs: inputs.filter((item) => item.id !== input.id) })}
+                });
+              }}
+              onRemove={() => {
+                const remainingInputs = inputs.filter((item) => item.id !== input.id);
+                onChange({
+                  inputs: remainingInputs,
+                  instructions: removeInstructionInputVariables(
+                    block.instructions ?? "",
+                    input,
+                    remainingInputs,
+                  ),
+                });
+              }}
             />
           ))}
           {regularInputs.length === 0 && (
@@ -2760,6 +3124,7 @@ function InputBindingEditor({
           variant="ghost"
           className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
           onClick={onRemove}
+          aria-label={`Remover entrada ${instructionInputLabel(input)}`}
         >
           <Trash2 className="size-3" />
         </Button>

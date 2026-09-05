@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   BookOpen,
@@ -155,16 +155,27 @@ function CollectionSection({
 }) {
   const [open, setOpen] = useState(false);
 
-  function removeCollection() {
-    if (
-      !window.confirm(
-        `Excluir a coleção “${collection.name}” e seus ${items.length} ${items.length === 1 ? "item" : "itens"}?`,
-      )
-    ) {
-      return;
+  const removeCollectionLock = useRef(false);
+  async function removeCollection() {
+    if (removeCollectionLock.current) return;
+    removeCollectionLock.current = true;
+    try {
+      if (
+        !window.confirm(
+          `Excluir a coleção “${collection.name}” e seus ${items.length} ${items.length === 1 ? "item" : "itens"}?`,
+        )
+      ) {
+        return;
+      }
+      await removeLibraryCollection(collection.id);
+      toast.success("Coleção removida.");
+    } catch (error) {
+      toast.error("Não foi possível salvar a alteração", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      removeCollectionLock.current = false;
     }
-    removeLibraryCollection(collection.id);
-    toast.success("Coleção removida.");
   }
 
   return (
@@ -246,7 +257,11 @@ function CollectionSection({
                           size="icon"
                           variant="ghost"
                           className="size-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeLibraryItem(item.id)}
+                          onClick={() =>
+                            void removeLibraryItem(item.id).catch((error) =>
+                              toast.error(error.message),
+                            )
+                          }
                           aria-label="Excluir item"
                         >
                           <Trash2 className="size-3.5" />
@@ -318,6 +333,7 @@ function EditCollection({ collection }: { collection: StrategicCollection }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(collection.name);
   const [fields, setFields] = useState<StrategicCollectionField[]>(collection.fields);
+  const nameInputId = useId();
   const valid =
     Boolean(name.trim()) && fields.length > 0 && fields.every((field) => field.label.trim());
 
@@ -332,15 +348,26 @@ function EditCollection({ collection }: { collection: StrategicCollection }) {
     );
   }
 
-  function save() {
-    if (!valid) return;
-    updateLibraryCollection({
-      ...collection,
-      name: name.trim(),
-      fields: fields.map((field) => ({ ...field, label: field.label.trim() })),
-    });
-    toast.success(`Coleção “${name.trim()}” atualizada.`);
-    setOpen(false);
+  const saveLock = useRef(false);
+  async function save() {
+    if (saveLock.current) return;
+    saveLock.current = true;
+    try {
+      if (!valid) return;
+      await updateLibraryCollection({
+        ...collection,
+        name: name.trim(),
+        fields: fields.map((field) => ({ ...field, label: field.label.trim() })),
+      });
+      toast.success(`Coleção “${name.trim()}” atualizada.`);
+      setOpen(false);
+    } catch (error) {
+      toast.error("Não foi possível salvar a alteração", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      saveLock.current = false;
+    }
   }
 
   return (
@@ -370,8 +397,12 @@ function EditCollection({ collection }: { collection: StrategicCollection }) {
         </DialogHeader>
         <div className="space-y-5">
           <div className="space-y-1.5">
-            <Label>Nome da coleção</Label>
-            <Input value={name} onChange={(event) => setName(event.target.value)} />
+            <Label htmlFor={nameInputId}>Nome da coleção</Label>
+            <Input
+              id={nameInputId}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
           </div>
 
           <CollectionFieldEditor fields={fields} onChange={setFields} onUpdate={updateField} />
@@ -389,6 +420,7 @@ function NewCollection({ channelId }: { channelId: string }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [fields, setFields] = useState<StrategicCollectionField[]>([newField(0)]);
+  const nameInputId = useId();
   const valid =
     Boolean(name.trim()) && fields.length > 0 && fields.every((field) => field.label.trim());
 
@@ -403,16 +435,27 @@ function NewCollection({ channelId }: { channelId: string }) {
     setFields([newField(0)]);
   }
 
-  function save() {
-    if (!valid) return;
-    createLibraryCollection({
-      channelId,
-      name: name.trim(),
-      fields: fields.map((field) => ({ ...field, label: field.label.trim() })),
-    });
-    toast.success(`Coleção “${name.trim()}” criada.`);
-    setOpen(false);
-    reset();
+  const saveLock = useRef(false);
+  async function save() {
+    if (saveLock.current) return;
+    saveLock.current = true;
+    try {
+      if (!valid) return;
+      await createLibraryCollection({
+        channelId,
+        name: name.trim(),
+        fields: fields.map((field) => ({ ...field, label: field.label.trim() })),
+      });
+      toast.success(`Coleção “${name.trim()}” criada.`);
+      setOpen(false);
+      reset();
+    } catch (error) {
+      toast.error("Não foi possível salvar a alteração", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      saveLock.current = false;
+    }
   }
 
   return (
@@ -437,8 +480,10 @@ function NewCollection({ channelId }: { channelId: string }) {
         </DialogHeader>
         <div className="space-y-5">
           <div className="space-y-1.5">
-            <Label>Nome da coleção</Label>
+            <Label htmlFor={nameInputId}>Nome da coleção</Label>
             <Input
+              id={nameInputId}
+              autoFocus
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Ex: CTAs"
@@ -641,24 +686,35 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
     }
   }
 
-  function save() {
-    if (!valid) return;
-    createLibraryItem({
-      channelId: collection.channelId,
-      collectionId: collection.id,
-      values: Object.fromEntries(
-        collection.fields.map((field) => {
-          const value = values[field.id];
-          if (typeof value === "string") {
-            return [field.id, field.type === "number" && value ? Number(value) : value.trim()];
-          }
-          return [field.id, value ?? ""];
-        }),
-      ),
-    });
-    toast.success(`Item adicionado a “${collection.name}”.`);
-    setValues({});
-    setOpen(false);
+  const saveLock = useRef(false);
+  async function save() {
+    if (saveLock.current) return;
+    saveLock.current = true;
+    try {
+      if (!valid) return;
+      await createLibraryItem({
+        channelId: collection.channelId,
+        collectionId: collection.id,
+        values: Object.fromEntries(
+          collection.fields.map((field) => {
+            const value = values[field.id];
+            if (typeof value === "string") {
+              return [field.id, field.type === "number" && value ? Number(value) : value.trim()];
+            }
+            return [field.id, value ?? ""];
+          }),
+        ),
+      });
+      toast.success(`Item adicionado a “${collection.name}”.`);
+      setValues({});
+      setOpen(false);
+    } catch (error) {
+      toast.error("Não foi possível salvar a alteração", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      saveLock.current = false;
+    }
   }
 
   return (

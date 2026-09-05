@@ -166,7 +166,7 @@ export async function attachContentFlowBridge({
     const response = await evaluateWorker(
       client,
       workerSessionId,
-      `Promise.race([globalThis.contentFlowBridge.dispatch(${JSON.stringify(command)}),new Promise(resolve=>setTimeout(()=>resolve({ok:false,code:"COMMAND_TIMEOUT",message:"A extensão não respondeu no prazo."}),${commandTimeoutMs + 1000}))])`,
+      `(() => { const bridge = globalThis.contentFlowBridge; const connected = bridge.connect(${JSON.stringify({ pluginId, protocolVersion: PROTOCOL_VERSION, profileId, sessionToken })}); if (!connected?.ok) return connected; return Promise.race([bridge.dispatch(${JSON.stringify(command)}),new Promise(resolve=>setTimeout(()=>resolve({ok:false,code:"COMMAND_TIMEOUT",message:"A extensão não respondeu no prazo."}),${commandTimeoutMs + 1000}))]); })()`,
     );
     if (!response?.ok) {
       const code = String(response?.code || "");
@@ -202,6 +202,8 @@ export async function attachContentFlowBridge({
 
   const cancel = () => {
     const payload = {
+      pluginId,
+      protocolVersion: PROTOCOL_VERSION,
       sessionToken,
       profileId,
       executionKey: key,
@@ -220,6 +222,7 @@ export async function attachContentFlowBridge({
       .catch(() => undefined);
   };
   signal?.addEventListener("abort", cancel, { once: true });
+  let disposed = false;
 
   let ping;
   try {
@@ -238,7 +241,26 @@ export async function attachContentFlowBridge({
     dispatch,
     identity,
     dispose() {
+      if (disposed) return;
+      disposed = true;
       signal?.removeEventListener("abort", cancel);
+      const payload = { pluginId, protocolVersion: PROTOCOL_VERSION, profileId, sessionToken };
+      void client
+        .send(
+          "Runtime.evaluate",
+          {
+            expression: `globalThis.contentFlowBridge?.disconnect(${JSON.stringify(payload)})`,
+            returnByValue: true,
+            awaitPromise: true,
+          },
+          workerSessionId,
+        )
+        .catch(() => undefined)
+        .finally(() =>
+          client
+            .send("Target.detachFromTarget", { sessionId: workerSessionId })
+            .catch(() => undefined),
+        );
     },
   };
 }

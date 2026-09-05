@@ -135,6 +135,24 @@ try {
     "abandoned",
     "job órfão deve encerrar mesmo após solicitação de cancelamento",
   );
+  const deferred = restartedStore.create(
+    createPersistentPluginJob({
+      pluginId: "plugin.example",
+      pluginVersion: "1.0.0",
+      request: request(3),
+      timeoutMs: 60_000,
+      now,
+    }),
+  );
+  const deferredClaim = restartedStore.claim(deferred.id, now);
+  assert.ok(deferredClaim);
+  const retryAt = new Date(now.getTime() + 250);
+  restartedStore.defer(deferredClaim, retryAt);
+  assert.equal(restartedStore.claimNext(now), undefined);
+  assert.ok(
+    restartedStore.claimNext(retryAt),
+    "job sem vaga de concorrência precisa liberar o lease e voltar à fila",
+  );
   assert.equal(
     restartedStore.deleteTerminalBefore(new Date("9999-12-31T23:59:59.999Z")),
     2,

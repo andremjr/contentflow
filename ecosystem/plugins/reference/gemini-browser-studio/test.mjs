@@ -44,7 +44,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 });
 test("manifesto possui oito capabilities e permissões mínimas", () => {
   assert.equal(manifest.id, "local.contentflow.gemini-browser-studio");
-  assert.equal(manifest.version, "1.0.3");
+  assert.equal(manifest.version, "1.0.4");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.capabilities[0].instructionUsage, "required");
   assert.deepEqual(Object.keys(manifest.capabilities[0].blockConfigSchema.properties), [
@@ -74,8 +74,16 @@ test("manifesto possui oito capabilities e permissões mínimas", () => {
   ]);
   assert.deepEqual(manifest.secretKeys ?? [], []);
 });
+test("preenche o input oculto do Gemini pelo objectId da sessão CDP", () => {
+  assert.match(handlerSource, /DOM\.setFileInputFiles/);
+  assert.match(handlerSource, /files: files\.map\(\(x\) => x\.path\), objectId/);
+  assert.doesNotMatch(handlerSource, /c\.send\("DOM\.requestNode"/);
+  assert.match(handlerSource, /img\[alt="attachment" i\]/);
+  assert.match(handlerSource, /aria-label\*="close attachment" i/);
+});
 
 test("modela as fases observáveis da resposta", () => {
+  assert.match(handlerSource, /gemini said\|gemini disse/);
   assert.equal(
     __test.responsePhase({ hasNewResponse: false, generating: false, stablePolls: 0 }),
     "awaiting_response",

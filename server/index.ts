@@ -1,4 +1,7 @@
 import express, { type ErrorRequestHandler } from "express";
+import { z } from "zod";
+import { executionCommands } from "./execution-commands";
+import { deriveProcessOutput } from "../src/lib/process-output";
 import Database from "better-sqlite3";
 import {
   cpSync,
@@ -16,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type {
   ActionBlock,
+  BlockInputBinding,
   BlockExecution,
   Channel,
   ChannelLibraryItem,
@@ -45,7 +49,11 @@ import {
   getCompatiblePresentationRenderers,
   getPresentationRestrictionIssue,
 } from "../src/lib/presentation";
-import type { PluginExecutionRequest, PluginFieldContract } from "../src/lib/plugin-contract";
+import type {
+  PluginExecutionRequest,
+  PluginExecutionResponse,
+  PluginFieldContract,
+} from "../src/lib/plugin-contract";
 import { resolveInstructionTemplate } from "../src/lib/instruction-template";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { attemptAfterRetryInvalidation } from "../src/lib/retry-attempt";
@@ -108,6 +116,7 @@ import {
 } from "./plugin-catalog";
 import { migrateSiblingDataDirectory } from "./data-directory-migration";
 import { fetchYouTubeChannel } from "./youtube";
+import { pluginConcurrencySlot, pluginConcurrencySlotForRequest } from "./plugin-concurrency";
 
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
 const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
@@ -117,6 +126,7 @@ const defaultDataDirectory =
     : path.join(applicationRoot, "data");
 const dataDirectory = path.resolve(process.env.CONTENTFLOW_DATA_DIR ?? defaultDataDirectory);
 const uploadsDirectory = path.join(dataDirectory, "uploads");
+const methodTestsDirectory = path.join(dataDirectory, "method-tests");
 const installedPluginsDirectory = path.resolve(
   process.env.CONTENTFLOW_INSTALLED_PLUGINS_DIR ?? path.join(dataDirectory, "plugins", "installed"),
 );
@@ -189,6 +199,7 @@ if (
 }
 
 mkdirSync(uploadsDirectory, { recursive: true });
+mkdirSync(methodTestsDirectory, { recursive: true });
 mkdirSync(installedPluginsDirectory, { recursive: true });
 mkdirSync(developmentLinksDirectory, { recursive: true });
 
@@ -292,6 +303,27 @@ if (!pluginConsentColumns.some((column) => column.name === "network_hosts")) {
 const pluginJobs = new PluginJobStore(database);
 const pluginConnections = new PluginConnectionStore(database);
 pluginJobs.recoverInterrupted();
+// A database-wide sequence orders snapshots from commands and background workers.
+database.exec(
+  "CREATE TABLE IF NOT EXISTS state_clock (id INTEGER PRIMARY KEY CHECK(id = 1), revision INTEGER NOT NULL); INSERT OR IGNORE INTO state_clock VALUES (1, 0)",
+);
+for (const table of [
+  "channels",
+  "projects",
+  "process_executions",
+  "execution_orchestrators",
+  "library_items",
+  "library_collections",
+  "channel_order",
+]) {
+  for (const operation of ["INSERT", "UPDATE", "DELETE"]) {
+    database.exec(`CREATE TRIGGER IF NOT EXISTS clock_${table}_${operation} AFTER ${operation} ON ${table}
+      BEGIN UPDATE state_clock SET revision = revision + 1 WHERE id = 1; END`);
+  }
+}
+database.exec(
+  "CREATE TABLE IF NOT EXISTS execution_commands (id TEXT PRIMARY KEY, payload TEXT NOT NULL)",
+);
 
 type AppPreferences = {
   theme: "light" | "dark";
@@ -552,31 +584,9 @@ function finishPluginBlock(
     execution.status =
       nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
   } else {
-    const [finalField] = createProcessOutputFields(execution.processType);
-    let finalValue: RuntimeValue | undefined;
-    let sourceBlockId: string | undefined;
-    for (let index = execution.methodSnapshot.blocks.length - 1; index >= 0; index -= 1) {
-      const candidate = execution.methodSnapshot.blocks[index];
-      if (candidate.type === "VALIDAR" || candidate.type === "ESCOLHER") continue;
-      const candidateOutput = candidate.outputs?.find(
-        (output) => output.key === finalField.key && output.type === finalField.type,
-      );
-      if (!candidateOutput) continue;
-      const candidateExecution = execution.blocks.find((item) => item.blockId === candidate.id);
-      const value = candidateExecution?.values[finalField.key];
-      if (!isEmptyRuntimeValue(value)) {
-        finalValue = value;
-        sourceBlockId = candidate.id;
-        break;
-      }
-    }
-    if (finalValue !== undefined) {
-      execution.output = {
-        processType: execution.processType,
-        values: { [finalField.key]: finalValue },
-        sourceBlockId,
-        createdAt: now,
-      };
+    const output = deriveProcessOutput(execution);
+    if (output) {
+      execution.output = output;
       recordProcessOutputDelivery(execution, execution.output.values, now);
       execution.outputStatus = "completed";
       execution.status = "completed";
@@ -596,6 +606,9 @@ function executionById(executionId: string) {
 }
 
 function persistPluginExecution(execution: ProcessExecution, project: Project) {
+  const latestProject = readPayload<Project>("projects", project.id);
+  if (latestProject) Object.assign(project, latestProject);
+  execution.revision = (executionById(execution.id)?.revision ?? 0) + 1;
   execution.updatedAt = new Date().toISOString();
   updateProjectAfterPluginBlock(project, execution);
   const persist = () => {
@@ -944,6 +957,9 @@ function queueOrchestratorReconciliationForProject(projectId: string) {
 }
 
 function cancelStoredProcessExecution(execution: ProcessExecution, project: Project) {
+  delete project.runThrough;
+  delete project.runFrom;
+  execution.revision = (execution.revision ?? 0) + 1;
   pluginJobs.requestCancellation(execution.id);
   execution.status = "cancelled";
   execution.blocks = execution.blocks.map((item) =>
@@ -1072,8 +1088,8 @@ async function processPluginJob(
   const claim = existingClaim ?? pluginJobs.claim(jobId);
   if (!claim) return pluginJobs.get(jobId);
   const { job } = claim;
-  const execution = executionById(job.executionId);
-  const project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
+  let execution = executionById(job.executionId);
+  let project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
   if (!execution || !project) {
     return markPluginJobFailed(
       claim,
@@ -1083,8 +1099,8 @@ async function processPluginJob(
       "abandoned",
     );
   }
-  const block = execution.methodSnapshot.blocks.find((item) => item.id === job.blockId);
-  const blockExecution = execution.blocks.find((item) => item.blockId === job.blockId);
+  let block = execution.methodSnapshot.blocks.find((item) => item.id === job.blockId);
+  let blockExecution = execution.blocks.find((item) => item.blockId === job.blockId);
   if (!block || !blockExecution || (blockExecution.attempt ?? 1) !== job.attempt) {
     return markPluginJobFailed(
       claim,
@@ -1227,6 +1243,27 @@ async function processPluginJob(
       secrets,
       { workspaceDirectory, existingArtifacts: job.partialArtifacts },
     );
+
+    // No object captured before an external await is allowed to overwrite newer state.
+    execution = executionById(job.executionId);
+    project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
+    block = execution?.methodSnapshot.blocks.find((item) => item.id === job.blockId);
+    blockExecution = execution?.blocks.find((item) => item.blockId === job.blockId);
+    if (
+      !execution ||
+      !project ||
+      !block ||
+      !blockExecution ||
+      execution.status === "cancelled" ||
+      (blockExecution.attempt ?? 1) !== job.attempt
+    ) {
+      return markPluginJobCancelled(
+        claim,
+        undefined,
+        undefined,
+        "Resultado de execução encerrada descartado.",
+      );
+    }
 
     if (pluginResponse.status === "pending") {
       if (capability.execution.mode !== "async") {
@@ -1456,6 +1493,7 @@ async function processPluginJob(
       },
       (saved) => {
         if (saved.status === "cancel_requested") return;
+        if (!execution || !project || !block || !blockExecution) return;
         finishPluginBlock(execution, block, blockExecution, values);
         if (completedConversationId) {
           const profileConfigurationKey = plugin.manifest.profileSetup?.configurationKey;
@@ -1485,6 +1523,23 @@ async function processPluginJob(
     return saved;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível executar o plugin.";
+    execution = executionById(job.executionId);
+    project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
+    blockExecution = execution?.blocks.find((item) => item.blockId === job.blockId);
+    if (
+      !execution ||
+      !project ||
+      !blockExecution ||
+      execution.status === "cancelled" ||
+      (blockExecution.attempt ?? 1) !== job.attempt
+    ) {
+      return markPluginJobCancelled(
+        claim,
+        undefined,
+        undefined,
+        "Execução encerrada; falha tardia descartada.",
+      );
+    }
     const errorCode = (error as { code?: string })?.code || "JOB_FAILED";
     const fallback = job.profileFallback;
     if (fallback && canAdvanceProfileFallback(job, { code: errorCode, message, status: "error" })) {
@@ -1539,20 +1594,28 @@ async function processPluginJob(
   }
 }
 
-let pluginJobSchedulerRunning = false;
+let activePluginWorkers = 0;
+const activePluginConcurrencySlots = new Map<string, number>();
 async function processDuePluginJobs() {
-  if (pluginJobSchedulerRunning) return;
-  pluginJobSchedulerRunning = true;
-  try {
-    const dueJobs: ClaimedPluginJob[] = [];
-    for (let index = 0; index < 4; index += 1) {
-      const claim = pluginJobs.claimNext();
-      if (!claim) break;
-      dueJobs.push(claim);
+  while (activePluginWorkers < 4) {
+    const claim = pluginJobs.claimNext();
+    if (!claim) break;
+    const slot = pluginConcurrencySlot(getRegisteredPlugin(claim.job.pluginId), claim.job);
+    const activeInSlot = activePluginConcurrencySlots.get(slot.key) ?? 0;
+    if (activeInSlot >= slot.limit) {
+      pluginJobs.defer(claim, new Date(Date.now() + 250));
+      continue;
     }
-    await Promise.allSettled(dueJobs.map((claim) => processPluginJob(claim.job.id, {}, claim)));
-  } finally {
-    pluginJobSchedulerRunning = false;
+    activePluginWorkers += 1;
+    activePluginConcurrencySlots.set(slot.key, activeInSlot + 1);
+    void processPluginJob(claim.job.id, {}, claim)
+      .catch((error) => console.error("Falha no worker de plugin:", error))
+      .finally(() => {
+        activePluginWorkers -= 1;
+        const remaining = (activePluginConcurrencySlots.get(slot.key) ?? 1) - 1;
+        if (remaining > 0) activePluginConcurrencySlots.set(slot.key, remaining);
+        else activePluginConcurrencySlots.delete(slot.key);
+      });
   }
 }
 
@@ -1943,6 +2006,34 @@ function migrateLegacyLibraryItems() {
 
 migrateLegacyLibraryItems();
 
+const methodTestRunIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const methodTestRetentionMs = 60 * 60 * 1_000;
+
+function methodTestRunDirectory(runId: string) {
+  if (!methodTestRunIdPattern.test(runId)) {
+    throw new Error("Identificador de teste inválido.");
+  }
+  return path.join(methodTestsDirectory, runId);
+}
+
+function cleanupExpiredMethodTests() {
+  const cutoff = Date.now() - methodTestRetentionMs;
+  for (const entry of readdirSync(methodTestsDirectory, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !methodTestRunIdPattern.test(entry.name)) continue;
+    const directory = path.join(methodTestsDirectory, entry.name);
+    try {
+      if (statSync(directory).mtimeMs < cutoff) rmSync(directory, { recursive: true, force: true });
+    } catch {
+      // Another request may have removed the temporary run concurrently.
+    }
+  }
+}
+
+cleanupExpiredMethodTests();
+const methodTestCleanupTimer = setInterval(cleanupExpiredMethodTests, 15 * 60 * 1_000);
+methodTestCleanupTimer.unref();
+
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(
@@ -1958,6 +2049,87 @@ app.use(
     },
   }),
 );
+app.use(
+  "/api/method-block-tests/files",
+  express.static(methodTestsDirectory, {
+    dotfiles: "deny",
+    fallthrough: false,
+    setHeaders(response, filePath) {
+      response.setHeader("Cache-Control", "no-store");
+      response.setHeader("X-Content-Type-Options", "nosniff");
+      response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+      if (activeUploadExtensions.has(path.extname(filePath).toLowerCase())) {
+        response.setHeader("Content-Disposition", "attachment");
+      }
+    },
+  }),
+);
+
+app.post(
+  "/api/method-block-tests/:runId/uploads",
+  express.raw({ type: "application/octet-stream", limit: maxUploadBytes }),
+  (request, response) => {
+    let runDirectory: string;
+    try {
+      runDirectory = methodTestRunDirectory(request.params.runId);
+    } catch (error) {
+      response
+        .status(400)
+        .json({ error: error instanceof Error ? error.message : "Teste inválido." });
+      return;
+    }
+    const originalName = decodeUploadName(request.headers["x-file-name"]);
+    const mimeType = String(request.headers["x-file-type"] ?? "application/octet-stream")
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase();
+    if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
+      response.status(400).json({ error: "Arquivo vazio ou inválido." });
+      return;
+    }
+    const extension = path
+      .extname(originalName)
+      .replace(/[^a-zA-Z0-9.]/g, "")
+      .slice(0, 12)
+      .toLowerCase();
+    if (activeUploadExtensions.has(extension) || activeUploadMimeTypes.has(mimeType)) {
+      response.status(415).json({
+        error:
+          "Esse formato ativo não pode ser usado no teste. Envie uma mídia ou arquivo de dados.",
+      });
+      return;
+    }
+    if (directorySize(methodTestsDirectory, true) + request.body.length > maxUploadStorageBytes) {
+      response.status(507).json({
+        error: `Os arquivos temporários de teste atingiram o limite de ${maxUploadStorageGb} GB.`,
+      });
+      return;
+    }
+    const filesDirectory = path.join(runDirectory, "files");
+    mkdirSync(filesDirectory, { recursive: true });
+    const id = randomUUID();
+    const storedName = `${id}${extension}`;
+    writeFileSync(path.join(filesDirectory, storedName), request.body);
+    response.status(201).json({
+      id,
+      name: path.basename(originalName),
+      mimeType,
+      size: request.body.length,
+      url: `/api/method-block-tests/files/${request.params.runId}/files/${storedName}`,
+    });
+  },
+);
+
+app.delete("/api/method-block-tests/:runId", (request, response) => {
+  try {
+    rmSync(methodTestRunDirectory(request.params.runId), { recursive: true, force: true });
+    response.status(204).end();
+  } catch (error) {
+    response
+      .status(400)
+      .json({ error: error instanceof Error ? error.message : "Teste inválido." });
+  }
+});
 
 app.post(
   "/api/uploads",
@@ -2892,6 +3064,433 @@ app.delete("/api/plugins/:pluginId/connections/:connectionId", async (request, r
   response.json(await publicPluginConnection(plugin, revoked));
 });
 
+let activeMethodBlockTests = 0;
+
+app.post("/api/method-block-tests", async (request, response) => {
+  const body = request.body as {
+    runId?: string;
+    channelId?: string;
+    processType?: UniversalProcess;
+    blockId?: string;
+    blocks?: ActionBlock[];
+    inputValues?: Record<string, RuntimeValue>;
+    projectTitle?: string;
+    projectDeadline?: string;
+  };
+  let runDirectory: string;
+  try {
+    if (!body.runId) throw new Error("Identificador de teste ausente.");
+    runDirectory = methodTestRunDirectory(body.runId);
+  } catch (error) {
+    response
+      .status(400)
+      .json({ error: error instanceof Error ? error.message : "Teste inválido." });
+    return;
+  }
+  if (
+    !body.channelId ||
+    !body.processType ||
+    !PROCESS_ORDER.includes(body.processType) ||
+    !body.blockId ||
+    !Array.isArray(body.blocks) ||
+    body.blocks.length < 1 ||
+    body.blocks.length > 200 ||
+    !body.inputValues ||
+    typeof body.inputValues !== "object" ||
+    Array.isArray(body.inputValues)
+  ) {
+    response.status(400).json({ error: "Configuração do teste de bloco inválida." });
+    return;
+  }
+
+  let blocks: ActionBlock[];
+  try {
+    blocks = normalizeMethodBlocks(body.blocks, body.processType);
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "O bloco não possui uma configuração válida.",
+    });
+    return;
+  }
+  const block = blocks.find((candidate) => candidate.id === body.blockId);
+  const channel = readPayload<Channel>("channels", body.channelId);
+  if (!block || !channel) {
+    response.status(404).json({ error: "Bloco ou canal não encontrado." });
+    return;
+  }
+  if (block.operator === "Humano") {
+    response.status(422).json({
+      error: "Blocos humanos não executam plugin. Use a prévia dos campos para revisar o contrato.",
+    });
+    return;
+  }
+  if (!block.plugin) {
+    response.status(422).json({ error: "Selecione um plugin e uma capacidade antes de testar." });
+    return;
+  }
+
+  const plugin = getRegisteredPlugin(block.plugin.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Plugin não encontrado no registro local." });
+    return;
+  }
+  if (!plugin.executable || !pluginConsentIsCurrent(plugin)) {
+    response.status(403).json({
+      error: "Ative este plugin e confirme suas permissões na Central de Plugins.",
+    });
+    return;
+  }
+  const capability = plugin.manifest.capabilities.find(
+    (candidate) => candidate.id === block.plugin?.capabilityId,
+  );
+  if (
+    !capability ||
+    capability.operator !== block.operator ||
+    !capability.blockTypes.includes(block.type) ||
+    (capability.processTypes && !capability.processTypes.includes(body.processType))
+  ) {
+    response.status(422).json({ error: "A capacidade não é compatível com este bloco." });
+    return;
+  }
+
+  const testInputs: BlockInputBinding[] = [...(block.inputs ?? [])];
+  if (block.type === "VALIDAR" && block.validation?.targetBlockId) {
+    const targetBlock = blocks.find(
+      (candidate) => candidate.id === block.validation?.targetBlockId,
+    );
+    const targetOutput =
+      targetBlock?.outputs?.find((field) => field.key === block.validation?.targetOutputKey) ??
+      targetBlock?.outputs?.[0];
+    if (targetOutput) {
+      testInputs.unshift({
+        id: "__validation_target__",
+        label: targetOutput.label,
+        type: targetOutput.type,
+        source: "static",
+        recordFields: targetOutput.recordFields,
+        presentation: targetOutput.presentation,
+      });
+    }
+  }
+  const resolvedTestInputs = testInputs.map((input) => ({
+    input,
+    value:
+      body.inputValues?.[input.id] ??
+      (input.source === "static" && typeof input.staticValue === "string"
+        ? input.staticValue
+        : undefined),
+  }));
+  const missingInputs = resolvedTestInputs.filter(({ value }) => isEmptyRuntimeValue(value));
+  if (missingInputs.length) {
+    response.status(422).json({
+      error: `Preencha os dados de teste: ${missingInputs.map(({ input }) => input.label).join(", ")}.`,
+    });
+    return;
+  }
+  const usedInputPorts = new Set<string>();
+  const assignedInputs = resolvedTestInputs.map(({ input, value }) => {
+    const port = selectPluginInputPort(input, capability.inputPorts, usedInputPorts);
+    if (port && !port.multiple) usedInputPorts.add(port.key);
+    return { input, value: value!, port };
+  });
+  const unsupportedInputs = assignedInputs.filter((item) => !item.port);
+  if (unsupportedInputs.length) {
+    response.status(422).json({
+      error: `O plugin não aceita: ${unsupportedInputs.map(({ input }) => input.label).join(", ")}.`,
+    });
+    return;
+  }
+
+  const inputs = Object.fromEntries(
+    capability.inputPorts.flatMap((port) => {
+      const assigned = assignedInputs.filter((item) => item.port?.key === port.key);
+      return assigned.length
+        ? [
+            [
+              port.key,
+              composePluginPortValue(
+                assigned.map(({ input, value }) => ({ label: input.label, value })),
+              ),
+            ],
+          ]
+        : [];
+    }),
+  ) as Record<string, RuntimeValue>;
+  const inputContract = assignedInputs.map(({ input, port }) => ({
+    id: input.id,
+    portKey: port?.key ?? input.id,
+    label: input.label,
+    type: input.type,
+    recordFields: input.recordFields,
+    presentation: input.presentation,
+  }));
+  const outputContract: PluginFieldContract[] =
+    block.type === "ESCOLHER"
+      ? [
+          {
+            label: "Item escolhido",
+            key: "selectedItemId",
+            type: "text",
+            required: true,
+            portKey: capability.outputPorts[0]?.key ?? "result",
+          },
+        ]
+      : (block.outputs ?? []).map((field) => ({
+          label: field.label,
+          key: field.key,
+          type: field.type,
+          required: field.required,
+          options: field.options,
+          recordFields: field.recordFields,
+          presentation: field.presentation,
+          portKey:
+            capability.outputPorts.find((port) => port.producedTypes.includes(field.type))?.key ??
+            capability.outputPorts[0]?.key ??
+            field.key,
+        }));
+  if (!outputContract.length) {
+    response.status(422).json({ error: "Defina ao menos uma entrega antes de testar o bloco." });
+    return;
+  }
+
+  const executionParameters = Object.fromEntries(
+    (block.parameters ?? []).map((parameter) => [parameter.key, parameter.value]),
+  );
+  const resolvedInstruction = resolveInstructionTemplate(block.instructions ?? "", {
+    channel: { name: channel.name, language: channel.language, niche: channel.niche },
+    project: {
+      title: body.projectTitle?.trim() || "Projeto de teste",
+      deadline: body.projectDeadline?.trim() || "",
+    },
+    block: { name: block.name ?? block.type, type: block.type },
+    inputs: assignedInputs.map(({ input, port, value }) => ({
+      id: input.id,
+      label: input.label,
+      sourceKey: input.sourceKey,
+      portKey: port?.key,
+      value,
+    })),
+    parameters: executionParameters,
+  });
+  if (resolvedInstruction.unresolved.length) {
+    response.status(422).json({
+      error: `Variáveis sem valor no teste: ${resolvedInstruction.unresolved
+        .map((variable) => `{{${variable}}}`)
+        .join(", ")}.`,
+    });
+    return;
+  }
+  if (capability.instructionUsage === "required" && !resolvedInstruction.instruction) {
+    response.status(422).json({ error: "Defina a instrução do bloco antes de testar." });
+    return;
+  }
+
+  let resolvedConnection: Awaited<ReturnType<typeof resolvePluginConnection>>;
+  try {
+    resolvedConnection = await resolvePluginConnection(plugin, block.plugin.connectionId);
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível carregar a conexão.",
+    });
+    return;
+  }
+  const missingSecret = (plugin.manifest.secretKeys ?? []).find(
+    (secretKey) => !resolvedConnection.secrets[secretKey],
+  );
+  if (missingSecret) {
+    response.status(422).json({
+      error: `Crie ou associe uma conta local válida a este bloco (${missingSecret}).`,
+    });
+    return;
+  }
+
+  const selectedCollection =
+    block.type === "ESCOLHER" && block.collectionId
+      ? readPayload<StrategicCollection>("library_collections", block.collectionId)
+      : undefined;
+  const selectedCollectionItems = selectedCollection
+    ? (
+        database
+          .prepare("SELECT payload FROM library_items WHERE collection_id = ?")
+          .all(selectedCollection.id) as { payload: string }[]
+      ).map((row) => JSON.parse(row.payload) as ChannelLibraryItem)
+    : [];
+  if (block.type === "ESCOLHER" && (!selectedCollection || !selectedCollectionItems.length)) {
+    response.status(422).json({ error: "A coleção vinculada precisa possuir itens para o teste." });
+    return;
+  }
+
+  const referencedInputIds = new Set(resolvedInstruction.referencedInputIds);
+  const instructionContextInputs = Object.fromEntries(
+    capability.inputPorts.flatMap((port) => {
+      const unreferenced = assignedInputs.filter(
+        (item) => item.port?.key === port.key && !referencedInputIds.has(item.input.id),
+      );
+      return unreferenced.length
+        ? [
+            [
+              port.key,
+              composePluginPortValue(
+                unreferenced.map(({ input, value }) => ({ label: input.label, value })),
+              ),
+            ],
+          ]
+        : [];
+    }),
+  ) as Record<string, RuntimeValue>;
+  const pluginRequest: PluginExecutionRequest = {
+    executionId: `method-test-${body.runId}`,
+    traceId: randomUUID(),
+    blockId: block.id,
+    capabilityId: capability.id,
+    attempt: 1,
+    invocation: { mode: "start" },
+    configuration: { ...block.plugin.configuration, ...executionParameters },
+    settings: resolvedConnection.connectionId
+      ? { connectionId: resolvedConnection.connectionId }
+      : {},
+    inputs,
+    instructionContextInputs,
+    inputContract,
+    inputDeliveries: inputContract.map((item) => ({
+      inputId: item.id,
+      portKey: item.portKey,
+      itemIds: [],
+    })),
+    outputContract,
+    validation: block.validation,
+    resolvedInstruction: resolvedInstruction.instruction,
+    unresolvedInstructionVariables: [],
+    conversation: plugin.manifest.supportsConversationContinuation ? { mode: "new" } : undefined,
+    context: {
+      runMode: "method_test",
+      locale: channel.language || "pt-BR",
+      timeZone: "America/Sao_Paulo",
+      channel: {
+        id: channel.id,
+        name: channel.name,
+        language: channel.language,
+        niche: channel.niche,
+      },
+      project: {
+        id: `method-test-${body.runId}`,
+        title: body.projectTitle?.trim() || "Projeto de teste",
+      },
+      processType: body.processType,
+      block: {
+        type: block.type,
+        name: block.name ?? block.type,
+        instructions: block.instructions ?? "",
+      },
+      selectedCollection: selectedCollection
+        ? {
+            collectionId: selectedCollection.id,
+            items: selectedCollectionItems.map((item) => ({
+              id: item.id,
+              values: collectionItemValuesForPlugin(selectedCollection, item),
+            })),
+          }
+        : undefined,
+      previousProcessOutputs: [],
+      previousBlockOutputs: [],
+      previousDeliveries: [],
+    },
+  };
+  const slot = pluginConcurrencySlotForRequest(
+    plugin,
+    plugin.id,
+    capability.id,
+    pluginRequest.configuration,
+  );
+  const activeInSlot = activePluginConcurrencySlots.get(slot.key) ?? 0;
+  if (activeMethodBlockTests >= 2 || activeInSlot >= slot.limit) {
+    response.status(409).json({
+      error: "Esse plugin ou perfil já está em uso. Aguarde a execução atual terminar.",
+    });
+    return;
+  }
+
+  mkdirSync(path.join(runDirectory, "files"), { recursive: true });
+  const controller = new AbortController();
+  const abortIfDisconnected = () => {
+    if (!response.writableEnded) controller.abort();
+  };
+  request.once("aborted", abortIfDisconnected);
+  response.once("close", abortIfDisconnected);
+  activeMethodBlockTests += 1;
+  activePluginConcurrencySlots.set(slot.key, activeInSlot + 1);
+  try {
+    const workspaceDirectory = plugin.manifest.profileSetup
+      ? executionWorkspaceForPlugin(plugin)
+      : path.join(runDirectory, "workspace", plugin.id.replace(/[^A-Za-z0-9._-]/g, "_"));
+    const executionOptions = {
+      workspaceDirectory,
+      artifactDirectory: path.join(runDirectory, "files"),
+      artifactUrlPrefix: `/api/method-block-tests/files/${body.runId}/files`,
+      signal: controller.signal,
+    };
+    const deadline = Date.now() + (capability.execution.defaultTimeoutMs ?? 60_000);
+    let pluginResponse: PluginExecutionResponse = await executeRegisteredPlugin(
+      plugin,
+      pluginRequest,
+      Math.max(1_000, deadline - Date.now()),
+      resolvedConnection.secrets,
+      executionOptions,
+    );
+    let storedArtifacts = pluginResponse.storedArtifacts ?? [];
+    while (pluginResponse.status === "pending") {
+      if (capability.execution.mode !== "async") {
+        throw new Error("Uma capacidade imediata não pode devolver pending.");
+      }
+      if (!pluginResponse.jobId || Date.now() >= deadline) {
+        throw new Error("O teste excedeu o tempo máximo declarado pelo plugin.");
+      }
+      const pollAfterMs = pluginResponse.pollAfterMs;
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.max(250, Math.min(30_000, pollAfterMs))),
+      );
+      pluginResponse = await executeRegisteredPlugin(
+        plugin,
+        { ...pluginRequest, invocation: { mode: "resume", jobId: pluginResponse.jobId } },
+        Math.max(1_000, deadline - Date.now()),
+        resolvedConnection.secrets,
+        { ...executionOptions, existingArtifacts: storedArtifacts },
+      );
+      storedArtifacts = pluginResponse.storedArtifacts ?? storedArtifacts;
+    }
+    if (pluginResponse.status === "error") {
+      response.status(422).json({
+        error: pluginResponse.message,
+        code: pluginResponse.code,
+        values: pluginResponse.partialValues ?? {},
+      });
+      return;
+    }
+    response.json({
+      ok: true,
+      runId: body.runId,
+      values: mappedPluginValues(block, pluginResponse.values, outputContract),
+      outputs: block.type === "ESCOLHER" ? outputContract : (block.outputs ?? []),
+      usage: pluginResponse.usage,
+      temporary: true,
+    });
+  } catch (error) {
+    if (!response.headersSent) {
+      response.status(controller.signal.aborted ? 499 : 422).json({
+        error: error instanceof Error ? error.message : "Não foi possível testar o bloco.",
+      });
+    }
+  } finally {
+    request.off("aborted", abortIfDisconnected);
+    response.off("close", abortIfDisconnected);
+    activeMethodBlockTests -= 1;
+    const remaining = (activePluginConcurrencySlots.get(slot.key) ?? 1) - 1;
+    if (remaining > 0) activePluginConcurrencySlots.set(slot.key, remaining);
+    else activePluginConcurrencySlots.delete(slot.key);
+    void processDuePluginJobs();
+  }
+});
+
 app.post("/api/execute-block", async (request, response) => {
   const body = request.body as {
     projectId?: string;
@@ -3389,6 +3988,22 @@ app.post("/api/execute-block", async (request, response) => {
     },
   };
 
+  const latestExecution = executionById(execution.id);
+  if (!latestExecution) {
+    response.status(404).json({ error: "Execução removida." });
+    return;
+  }
+  if (
+    latestExecution.status === "cancelled" ||
+    (latestExecution.revision ?? 0) !== (execution.revision ?? 0)
+  ) {
+    response.status(202).json({
+      ok: true,
+      execution: latestExecution,
+      project: readPayload<Project>("projects", project.id),
+    });
+    return;
+  }
   const executionTimeoutMs = capability.execution.defaultTimeoutMs ?? 60_000;
   const createdJob = pluginJobs.create(
     createPersistentPluginJob({
@@ -3453,6 +4068,266 @@ app.get("/api/youtube/channel", async (request, response) => {
     });
   }
 });
+
+function stateSnapshot() {
+  return database.transaction(() => {
+    const read = <T>(table: string) =>
+      (
+        database.prepare(`SELECT payload FROM ${table} ORDER BY rowid DESC`).all() as {
+          payload: string;
+        }[]
+      ).map((row) => JSON.parse(row.payload) as T);
+    return {
+      revision: (
+        database.prepare("SELECT revision FROM state_clock WHERE id = 1").get() as {
+          revision: number;
+        }
+      ).revision,
+      channels: (
+        database
+          .prepare(
+            `SELECT channels.payload FROM channels LEFT JOIN channel_order ON channel_order.channel_id = channels.id
+        ORDER BY CASE WHEN channel_order.position IS NULL THEN 1 ELSE 0 END, channel_order.position ASC, channels.created_at DESC`,
+          )
+          .all() as { payload: string }[]
+      ).map((row) => {
+        const channel = JSON.parse(row.payload) as Channel;
+        channel.activeProjects = (
+          database
+            .prepare("SELECT COUNT(*) AS count FROM projects WHERE channel_id = ?")
+            .get(channel.id) as { count: number }
+        ).count;
+        return channel;
+      }),
+      projects: read<Project>("projects"),
+      executions: read<ProcessExecution>("process_executions"),
+      orchestrators: read<ExecutionOrchestrator>("execution_orchestrators"),
+      libraryItems: read<ChannelLibraryItem>("library_items"),
+      libraryCollections: read<StrategicCollection>("library_collections"),
+    };
+  })();
+}
+
+app.get("/api/state", (request, response) => {
+  const revision = (
+    database.prepare("SELECT revision FROM state_clock WHERE id = 1").get() as { revision: number }
+  ).revision;
+  response.setHeader("Cache-Control", "no-store");
+  if (request.query.since === String(revision)) {
+    response.status(204).end();
+    return;
+  }
+  response.json(stateSnapshot());
+});
+
+const commandSchema = z.object({
+  id: z.string().uuid(),
+  action: z.enum([
+    "start",
+    "choose",
+    "draft",
+    "outputDraft",
+    "completeHuman",
+    "completeOutput",
+    "retry",
+    "reset",
+  ]),
+  projectId: z.string().optional(),
+  processType: z.enum(PROCESS_ORDER).optional(),
+  executionId: z.string().optional(),
+  blockId: z.string().optional(),
+  itemId: z.string().optional(),
+  attempt: z.number().int().positive().optional(),
+  values: z.record(z.string(), z.unknown()).optional(),
+});
+
+app.post("/api/commands", (request, response) => {
+  const parsed = commandSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "Comando inválido." });
+    return;
+  }
+  const command = parsed.data;
+  try {
+    const result = database.transaction(() => {
+      const receipt = database
+        .prepare("SELECT payload FROM execution_commands WHERE id = ?")
+        .get(command.id) as { payload: string } | undefined;
+      if (receipt) return JSON.parse(receipt.payload);
+      const state = stateSnapshot();
+      const execution = state.executions.find((item) => item.id === command.executionId);
+      const project = state.projects.find(
+        (item) => item.id === (execution?.projectId ?? command.projectId),
+      );
+      if (!project) throw new Error("Projeto não encontrado.");
+      if (command.action !== "start" && command.action !== "reset" && !execution)
+        throw new Error("Execução não encontrada.");
+      if (command.blockId) {
+        const block = execution?.blocks.find((item) => item.blockId === command.blockId);
+        if (!block || command.attempt !== (block.attempt ?? 1))
+          throw new Error("Esta etapa mudou. Atualize a tela antes de continuar.");
+      }
+      const engine = executionCommands(state);
+      let result: unknown;
+      let updated = execution;
+      const values = (command.values ?? {}) as Record<string, RuntimeValue>;
+      switch (command.action) {
+        case "start":
+          if (!command.processType) throw new Error("Processo não informado.");
+          updated = engine.startProcessExecution(project.id, command.processType);
+          if (!updated) throw new Error("Configure o Método antes de executar.");
+          project.runThrough = "publishing";
+          project.runFrom = command.processType;
+          result = updated;
+          break;
+        case "choose":
+          result = engine.chooseCollectionItem(
+            execution!.id,
+            command.blockId ?? "",
+            command.itemId ?? "",
+          );
+          break;
+        case "draft":
+          result = engine.saveHumanBlockDraft(execution!.id, command.blockId ?? "", values);
+          break;
+        case "completeHuman":
+          result = engine.completeHumanBlock(execution!.id, command.blockId ?? "", values);
+          break;
+        case "completeOutput":
+          result = engine.completeProcessOutput(execution!.id, values);
+          break;
+        case "outputDraft":
+          if (execution!.status !== "awaiting_output") {
+            result = false;
+            break;
+          }
+          execution!.output = {
+            processType: execution!.processType,
+            values,
+            createdAt: new Date().toISOString(),
+          };
+          result = true;
+          break;
+        case "retry":
+          result = engine.retryBlockExecution(execution!.id, command.blockId ?? "");
+          break;
+        case "reset": {
+          if (!command.processType) throw new Error("Processo não informado.");
+          const prior = state.executions.find(
+            (item) => item.projectId === project.id && item.processType === command.processType,
+          );
+          if (prior && !["completed", "cancelled", "failed"].includes(prior.status))
+            throw new Error("Cancele a execução antes de reiniciar.");
+          if (prior) database.prepare("DELETE FROM process_executions WHERE id = ?").run(prior.id);
+          delete project.runThrough;
+          project.stages[command.processType] = "not_started";
+          project.currentStage = command.processType;
+          project.state = "not_started";
+          project.progress = Math.round(
+            (PROCESS_ORDER.filter((id) => ["done", "approved"].includes(project.stages[id]))
+              .length /
+              PROCESS_ORDER.length) *
+              100,
+          );
+          result = true;
+          break;
+        }
+      }
+      if (
+        result === false ||
+        (result && typeof result === "object" && "ok" in result && !result.ok)
+      )
+        return result;
+      if (updated) {
+        updated.revision = (updated.revision ?? 0) + 1;
+        updated.updatedAt = new Date().toISOString();
+        database
+          .prepare(
+            `INSERT INTO process_executions (id, project_id, process_type, payload, updated_at) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`,
+          )
+          .run(
+            updated.id,
+            project.id,
+            updated.processType,
+            JSON.stringify(updated),
+            updated.updatedAt,
+          );
+      }
+      database
+        .prepare("UPDATE projects SET payload = ? WHERE id = ?")
+        .run(JSON.stringify(project), project.id);
+      if (!["draft", "outputDraft"].includes(command.action)) {
+        database
+          .prepare("INSERT INTO execution_commands (id, payload) VALUES (?, ?)")
+          .run(command.id, JSON.stringify(result));
+      }
+      return result;
+    })();
+    response.json({ result, state: stateSnapshot() });
+    const projectId =
+      command.projectId ??
+      (command.executionId ? executionById(command.executionId)?.projectId : undefined);
+    if (projectId) {
+      for (const row of database
+        .prepare("SELECT payload FROM process_executions WHERE project_id = ?")
+        .all(projectId) as { payload: string }[])
+        scheduleAutomaticPluginBlock(JSON.parse(row.payload));
+      queueOrchestratorReconciliationForProject(projectId);
+    }
+    reconcileStandaloneProcesses();
+  } catch (error) {
+    response.status(409).json({
+      error: error instanceof Error ? error.message : "Não foi possível aplicar o comando.",
+    });
+  }
+});
+
+function reconcileStandaloneProcesses() {
+  const projects = (
+    database
+      .prepare(
+        "SELECT payload FROM projects WHERE json_extract(payload, '$.runThrough') IS NOT NULL",
+      )
+      .all() as { payload: string }[]
+  ).map((row) => JSON.parse(row.payload) as Project);
+  if (!projects.length) return;
+  const orchestrators = executionOrchestrators();
+  for (const project of projects) {
+    if (
+      !project.runThrough ||
+      orchestrators.some(
+        (item) =>
+          ACTIVE_ORCHESTRATOR_STATUSES.has(item.status) && item.projectIds.includes(project.id),
+      )
+    )
+      continue;
+    const channel = readPayload<Channel>("channels", project.channelId);
+    if (!channel) continue;
+    const current = executionFor(project.id, project.currentStage);
+    if (current && current.status !== "completed") {
+      if (current.status === "blocked_executor") scheduleAutomaticPluginBlock(current);
+      continue;
+    }
+    const next = PROCESS_ORDER.find(
+      (id) =>
+        PROCESS_ORDER.indexOf(id) >= PROCESS_ORDER.indexOf(project.runFrom ?? "theme") &&
+        !["done", "approved"].includes(project.stages[id]),
+    );
+    if (
+      !next ||
+      PROCESS_ORDER.indexOf(next) > PROCESS_ORDER.indexOf(project.runThrough) ||
+      !channel.methods[next]?.blocks.length
+    ) {
+      delete project.runThrough;
+      database
+        .prepare("UPDATE projects SET payload = ? WHERE id = ?")
+        .run(JSON.stringify(project), project.id);
+      continue;
+    }
+    startOrchestratedProcess(project, channel, next);
+  }
+}
 
 app.get("/api/channels", (_request, response) => {
   const rows = database
@@ -3561,12 +4436,35 @@ app.put("/api/channels/order", (request, response) => {
   response.json({ channelIds: requestedIds });
 });
 
+app.put("/api/channels/:id/methods/:processType", (request, response) => {
+  const channel = readPayload<Channel>("channels", request.params.id);
+  const processType = request.params.processType as UniversalProcess;
+  if (!channel) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+  if (!PROCESS_ORDER.includes(processType) || !Array.isArray(request.body?.blocks)) {
+    response.status(400).json({ error: "Método inválido." });
+    return;
+  }
+  channel.methods[processType] = {
+    processType,
+    blocks: normalizeMethodBlocks(request.body.blocks, processType),
+  };
+  database
+    .prepare("UPDATE channels SET payload = ? WHERE id = ?")
+    .run(JSON.stringify(channel), channel.id);
+  response.json(channel.methods[processType]);
+});
+
 app.put("/api/channels/:id", (request, response) => {
-  const channel = request.body as StoredPayload;
+  const channel = request.body as Channel;
   if (!channel?.id || channel.id !== request.params.id) {
     response.status(400).json({ error: "Canal inválido." });
     return;
   }
+  const current = readPayload<Channel>("channels", channel.id);
+  if (current) channel.methods = current.methods;
   const result = database
     .prepare("UPDATE channels SET payload = ? WHERE id = ?")
     .run(JSON.stringify(channel), channel.id);
@@ -3590,7 +4488,12 @@ app.post("/api/channels/:id/sync-youtube", async (request, response) => {
   try {
     const channel = JSON.parse(row.payload) as StoredPayload;
     const profile = await fetchYouTubeChannel(channel.handle ?? "");
-    const updated = { ...channel, ...profile };
+    const latest = readPayload<Channel>("channels", request.params.id);
+    if (!latest) {
+      response.status(404).json({ error: "Canal removido durante a atualização." });
+      return;
+    }
+    const updated = { ...latest, ...profile };
     database
       .prepare("UPDATE channels SET payload = ? WHERE id = ?")
       .run(JSON.stringify(updated), request.params.id);
@@ -3608,6 +4511,10 @@ app.delete("/api/channels/:id", (request, response) => {
       .prepare("SELECT id FROM projects WHERE channel_id = ?")
       .all(channelId) as { id: string }[];
     for (const project of projects) {
+      for (const row of database
+        .prepare("SELECT id FROM process_executions WHERE project_id = ?")
+        .all(project.id) as { id: string }[])
+        pluginJobs.requestCancellation(row.id);
       database.prepare("DELETE FROM process_executions WHERE project_id = ?").run(project.id);
     }
     database.prepare("DELETE FROM projects WHERE channel_id = ?").run(channelId);
@@ -3872,6 +4779,10 @@ app.delete("/api/projects/:id", (request, response) => {
     return;
   }
   const remove = database.transaction((projectId: string) => {
+    for (const row of database
+      .prepare("SELECT id FROM process_executions WHERE project_id = ?")
+      .all(projectId) as { id: string }[])
+      pluginJobs.requestCancellation(row.id);
     database.prepare("DELETE FROM process_executions WHERE project_id = ?").run(projectId);
     return database.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
   });
@@ -3980,12 +4891,17 @@ app.post("/api/executions", (request, response) => {
     response.status(400).json({ error: "Execução inválida." });
     return;
   }
+  const existing = executionFor(execution.projectId, execution.processType as UniversalProcess);
+  if (existing) {
+    response
+      .status(409)
+      .json({ error: "Este processo já possui uma execução.", execution: existing });
+    return;
+  }
   database
     .prepare(
       `INSERT INTO process_executions (id, project_id, process_type, payload, updated_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(project_id, process_type) DO UPDATE SET
-         id = excluded.id, payload = excluded.payload, updated_at = excluded.updated_at`,
+       VALUES (?, ?, ?, ?, ?)`,
     )
     .run(
       execution.id,
@@ -4000,11 +4916,29 @@ app.post("/api/executions", (request, response) => {
 });
 
 app.put("/api/executions/:id", (request, response) => {
-  const execution = request.body as StoredPayload;
+  const execution = request.body as ProcessExecution;
   if (!execution?.id || execution.id !== request.params.id || !execution.updatedAt) {
     response.status(400).json({ error: "Execução inválida." });
     return;
   }
+  const current = executionById(execution.id);
+  if (!current) {
+    response.status(404).json({ error: "Execução não encontrada." });
+    return;
+  }
+  if (
+    (execution.revision ?? 0) !== (current.revision ?? 0) ||
+    execution.projectId !== current.projectId ||
+    execution.processType !== current.processType ||
+    JSON.stringify(execution.methodSnapshot) !== JSON.stringify(current.methodSnapshot) ||
+    (current.status === "cancelled" && execution.status !== "cancelled")
+  ) {
+    response
+      .status(409)
+      .json({ error: "A execução mudou. Recarregue o estado antes de continuar." });
+    return;
+  }
+  execution.revision = (current.revision ?? 0) + 1;
   const result = database
     .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
     .run(JSON.stringify(execution), execution.updatedAt, execution.id);
@@ -4018,6 +4952,7 @@ app.put("/api/executions/:id", (request, response) => {
 });
 
 app.delete("/api/executions/:id", (request, response) => {
+  pluginJobs.requestCancellation(request.params.id);
   const result = database
     .prepare("DELETE FROM process_executions WHERE id = ?")
     .run(request.params.id);
@@ -4165,6 +5100,7 @@ app.listen(port, "127.0.0.1", () => {
 });
 
 setInterval(resumeExecutionOrchestrators, 2_000).unref();
+setInterval(reconcileStandaloneProcesses, 1_000).unref();
 
 function boundedEnvironmentNumber(
   name: string,
@@ -4185,12 +5121,22 @@ function decodeUploadName(value: string | string[] | undefined) {
 }
 
 function uploadDirectorySize() {
-  return readdirSync(uploadsDirectory, { withFileTypes: true }).reduce((total, entry) => {
-    if (!entry.isFile()) return total;
-    try {
-      return total + statSync(path.join(uploadsDirectory, entry.name)).size;
-    } catch {
-      return total;
-    }
-  }, 0);
+  return directorySize(uploadsDirectory);
+}
+
+function directorySize(directory: string, recursive = false): number {
+  try {
+    return readdirSync(directory, { withFileTypes: true }).reduce((total, entry) => {
+      const entryPath = path.join(directory, entry.name);
+      if (recursive && entry.isDirectory()) return total + directorySize(entryPath, true);
+      if (!entry.isFile()) return total;
+      try {
+        return total + statSync(entryPath).size;
+      } catch {
+        return total;
+      }
+    }, 0);
+  } catch {
+    return 0;
+  }
 }

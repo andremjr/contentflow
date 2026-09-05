@@ -212,6 +212,20 @@ export class PluginJobStore {
       .run(now.toISOString(), now.toISOString()).changes;
   }
 
+  defer(claim: ClaimedPluginJob, nextPollAt: Date) {
+    const timestamp = new Date().toISOString();
+    const next = { ...claim.job, nextPollAt: nextPollAt.toISOString(), updatedAt: timestamp };
+    const result = this.database
+      .prepare(
+        `UPDATE plugin_jobs
+         SET next_poll_at = ?, lease_token = NULL, lease_until = NULL, payload = ?, updated_at = ?
+         WHERE id = ? AND lease_token = ?`,
+      )
+      .run(next.nextPollAt, JSON.stringify(next), timestamp, next.id, claim.leaseToken);
+    if (!result.changes) throw new Error("O lease do job expirou antes do reagendamento.");
+    return next;
+  }
+
   deleteTerminalBefore(cutoff: Date) {
     return this.database
       .prepare(

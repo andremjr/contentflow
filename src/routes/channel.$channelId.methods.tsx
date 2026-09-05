@@ -32,7 +32,7 @@ function ChannelMethodsPage() {
         ]}
       />
       <MethodAgentCta className="px-4 pt-4 sm:px-6" />
-      <MethodBuilder channelId={channel.id} initialProcess={process} />
+      <MethodBuilder key={channel.id} channelId={channel.id} initialProcess={process} />
     </AppShell>
   );
 }

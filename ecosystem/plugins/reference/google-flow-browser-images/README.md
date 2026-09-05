@@ -56,6 +56,8 @@ Fallback de modelo não é usado para CAPTCHA, bloqueio, cota geral, créditos o
 
 A porta opcional `reference_images` aceita `image`, `file` ou `files`. As referências são enviadas ao painel de criação antes dos prompts e podem orientar personagem, avatar, produto, cenário e estilo consistentes.
 
+No processo `thumbnail`, o mesmo output `images` pode atender um campo singular `image` quando o bloco recebe exatamente um prompt. Para lotes e para o processo `assets`, use `files`; o plugin preserva a ordem e a identidade de cada imagem.
+
 - máximo configurável: 0 a 10;
 - cada arquivo precisa ser uma imagem de até 25 MB;
 - arquivos são resolvidos pelo staging autorizado do ContentFlow;
@@ -99,7 +101,7 @@ O padrão é conservador: uma geração por vez e intervalo mínimo de 5 segundo
 
 ## Segurança e intervenção humana
 
-Use somente perfis dedicados. Login, reautenticação e CAPTCHA são concluídos pelo usuário na janela visível. O plugin não extrai sessão nem salva token reCAPTCHA. A ContentFlow Browser Bridge é instalada manualmente, habilita atualmente `https://labs.google/*` para este piloto e tem finalidade exclusiva de produtividade, estabilidade e isolamento da automação. Ela é comum a todos os plugins de navegador compatíveis e não pertence a este plugin.
+Use somente perfis dedicados. Login, reautenticação e CAPTCHA são concluídos pelo usuário na janela visível. O plugin não extrai sessão nem salva token reCAPTCHA. A ContentFlow Browser Bridge é instalada manualmente, habilita `https://flow.google.com/*` e o domínio legado `https://labs.google/*` para este piloto e tem finalidade exclusiva de produtividade, estabilidade e isolamento da automação. Ela é comum a todos os plugins de navegador compatíveis e não pertence a este plugin.
 
 ## Validação
 

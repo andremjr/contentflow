@@ -1477,7 +1477,8 @@ export async function execute(request, services) {
       executables: await resolveChromeExecutables(settings),
       profilePath,
       port,
-      startMinimized: settings.startMinimized === true,
+      startMinimized:
+        request?.context?.runMode !== "method_test" && settings.startMinimized !== false,
       keepBrowserOpen: settings.keepBrowserOpen === true,
       signal: services.signal,
     });

@@ -94,8 +94,7 @@ test(
     const port = await availablePort();
     const dataDirectory = mkdtempSync(path.join(os.tmpdir(), "contentflow-orchestrator-"));
     const baseUrl = `http://127.0.0.1:${port}`;
-    const tsxCli = path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
-    const child = spawn(process.execPath, [tsxCli, "server/index.ts"], {
+    const child = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
       cwd: process.cwd(),
       env: {
         ...process.env,
@@ -103,6 +102,7 @@ test(
         CONTENTFLOW_DATA_DIR: dataDirectory,
       },
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
     let logs = "";
     child.stdout?.on("data", (chunk) => (logs += chunk.toString()));
@@ -162,7 +162,7 @@ test(
       assert.match(prematureResume.body.error, /Corrija ou tente novamente/);
 
       const repairedExecution = {
-        ...failedExecution,
+        ...failedResponse.body,
         status: "completed",
         outputStatus: "completed",
         error: undefined,
@@ -254,7 +254,7 @@ test(
           once(child, "exit"),
           new Promise((resolve) => setTimeout(resolve, 3_000)),
         ]);
-      rmSync(dataDirectory, { recursive: true, force: true });
+      rmSync(dataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   },
 );

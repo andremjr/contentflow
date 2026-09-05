@@ -1465,7 +1465,8 @@ export async function execute(request, services) {
       executables,
       profilePath,
       port,
-      startMinimized: settings.startMinimized !== false,
+      startMinimized:
+        request?.context?.runMode !== "method_test" && settings.startMinimized !== false,
       keepBrowserOpen,
       signal: services.signal,
     });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Layers3, Plus } from "lucide-react";
 import {
   Dialog,
@@ -59,7 +59,9 @@ export function NewChannelDialog({
     onOpenChange?.(value);
   };
 
-  const canSubmit = name.trim().length >= 2;
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const canSubmit = name.trim().length >= 2 && !saving;
 
   function reset() {
     setName(channel?.name ?? "");
@@ -84,55 +86,66 @@ export function NewChannelDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      if (channel) {
+        const updated = await updateChannel({
+          ...channel,
+          name: name.trim(),
+          handle: handle.trim(),
+          niche: niche.trim(),
+          language,
+          frequency,
+          color,
+          description: description.trim(),
+        });
+        if (updated) toast.success("Canal atualizado");
+        setOpen(false);
+        return;
+      }
 
-    if (channel) {
-      const updated = updateChannel({
-        ...channel,
+      const newChannel: Omit<Channel, "createdAt"> = {
+        id: `ch-${crypto.randomUUID()}`,
         name: name.trim(),
         handle: handle.trim(),
+        color,
+        subscribers: "—",
+        description: description.trim(),
         niche: niche.trim(),
         language,
+        activeProjects: 0,
         frequency,
-        color,
-        description: description.trim(),
+        nextPublish: "",
+        currentProjectProgress: 0,
+        status: "healthy",
+        trend: [],
+        methods: createEmptyMethods(),
+      };
+
+      const persistedChannel = await createChannel(newChannel);
+      onCreate?.(persistedChannel);
+      toast.success("Canal criado", {
+        description: "Agora você pode organizar Métodos, Projetos e a Biblioteca Estratégica.",
       });
-      if (updated) toast.success("Canal atualizado");
+      reset();
       setOpen(false);
-      return;
+    } catch (error) {
+      toast.error("Canal não salvo", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
-
-    const newChannel: Omit<Channel, "createdAt"> = {
-      id: `ch-${crypto.randomUUID()}`,
-      name: name.trim(),
-      handle: handle.trim(),
-      color,
-      subscribers: "—",
-      description: description.trim(),
-      niche: niche.trim(),
-      language,
-      activeProjects: 0,
-      frequency,
-      nextPublish: "",
-      currentProjectProgress: 0,
-      status: "healthy",
-      trend: [],
-      methods: createEmptyMethods(),
-    };
-
-    const persistedChannel = createChannel(newChannel);
-    onCreate?.(persistedChannel);
-    toast.success("Canal criado", {
-      description: "Agora você pode organizar Métodos, Projetos e a Biblioteca Estratégica.",
-    });
-    reset();
-    setOpen(false);
   }
 
   return (
     <Dialog
       open={open}
       onOpenChange={(v) => {
+        if (savingRef.current) return;
         setOpen(v);
         if (!v) reset();
       }}

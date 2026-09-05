@@ -14,6 +14,8 @@ export default tseslint.config(
       "desktop-dist",
       "desktop-runtime",
       "release",
+      "playwright-report",
+      "test-results",
       "compiled/**/*.exe",
     ],
   },

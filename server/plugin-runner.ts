@@ -181,7 +181,13 @@ export async function executeRegisteredPlugin(
   request: PluginExecutionRequest,
   timeoutMs: number | undefined,
   secrets: Record<string, string> = {},
-  options: { workspaceDirectory?: string; existingArtifacts?: StoredFile[] } = {},
+  options: {
+    workspaceDirectory?: string;
+    existingArtifacts?: StoredFile[];
+    artifactDirectory?: string;
+    artifactUrlPrefix?: string;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<PluginExecutionResponse> {
   if (!plugin.executable) {
     throw new Error("Este plugin não está disponível para execução.");
@@ -193,6 +199,7 @@ export async function executeRegisteredPlugin(
   );
   const workerPath = path.join(workerRoot, "plugin-worker.mjs");
   const uploadsDirectory = path.resolve(dataRoot, "uploads");
+  const artifactDirectory = path.resolve(options.artifactDirectory ?? uploadsDirectory);
   const workspaceDirectory = path.resolve(
     options.workspaceDirectory ??
       path.join(
@@ -209,6 +216,7 @@ export async function executeRegisteredPlugin(
     safeSegment(request.traceId),
   );
   mkdirSync(uploadsDirectory, { recursive: true });
+  mkdirSync(artifactDirectory, { recursive: true });
   mkdirSync(workspaceDirectory, { recursive: true });
   mkdirSync(outputDirectory, { recursive: true });
   const realWorkspaceDirectory = realpathSync(workspaceDirectory);
@@ -258,12 +266,22 @@ export async function executeRegisteredPlugin(
     let stderr = "";
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const abort = () => {
+      child.kill();
+      finish(() => reject(new Error("Execução de teste cancelada.")));
+    };
     const finish = (callback: () => void) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abort);
       callback();
     };
+    if (options.signal?.aborted) {
+      abort();
+      return;
+    }
+    options.signal?.addEventListener("abort", abort, { once: true });
     if (timeoutMs !== undefined) {
       timer = setTimeout(
         () => {
@@ -290,9 +308,12 @@ export async function executeRegisteredPlugin(
           void importPluginArtifacts(
             pluginResponse,
             outputDirectory,
-            uploadsDirectory,
+            artifactDirectory,
             plugin.manifest,
-            { existingArtifacts: options.existingArtifacts },
+            {
+              existingArtifacts: options.existingArtifacts,
+              urlPrefix: options.artifactUrlPrefix,
+            },
           )
             .then(resolve, reject)
             .finally(() => rmSync(outputDirectory, { recursive: true, force: true }));
@@ -335,6 +356,7 @@ export async function importPluginArtifacts(
   dependencies: {
     downloadRemote?: typeof downloadRemoteArtifact;
     existingArtifacts?: StoredFile[];
+    urlPrefix?: string;
   } = {},
 ): Promise<PluginExecutionResponse> {
   const artifacts = response.status === "success" ? response.artifacts : response.partialArtifacts;
@@ -393,6 +415,9 @@ export async function importPluginArtifacts(
           allowedHosts: manifest.networkHosts,
           maxBytes: remainingBytes,
         });
+        if (dependencies.urlPrefix) {
+          remote.file.url = `${dependencies.urlPrefix}/${path.basename(remote.storedPath)}`;
+        }
         imported.set(artifact.id, remote.file);
         createdPaths.push(remote.storedPath);
         importedBytes += remote.file.size;
@@ -420,6 +445,7 @@ export async function importPluginArtifacts(
         realCandidate,
         uploadsDirectory,
         metadata.size,
+        dependencies.urlPrefix,
       );
       imported.set(artifact.id, importedLocal.file);
       createdPaths.push(importedLocal.storedPath);
@@ -447,6 +473,7 @@ async function importLocalArtifact(
   sourcePath: string,
   uploadsDirectory: string,
   size: number,
+  urlPrefix?: string,
 ) {
   validateLocalArtifactMetadata(artifact.id, artifact.name, artifact.mimeType);
   const extension = safeArtifactExtension(artifact.name);
@@ -491,7 +518,7 @@ async function importLocalArtifact(
         name: artifact.name,
         mimeType: artifact.mimeType.toLowerCase(),
         size,
-        url: `/api/files/${storedName}`,
+        url: `${urlPrefix ?? "/api/files"}/${storedName}`,
         sha256: hash.digest("hex"),
       } satisfies StoredFile,
     };

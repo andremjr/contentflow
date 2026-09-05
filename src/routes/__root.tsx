@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { AppPreferencesProvider } from "@/lib/app-preferences";
+import { useDatabaseConnectionError } from "@/lib/store";
 
 import appCss from "../styles.css?url";
 
@@ -123,10 +124,19 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const connectionError = useDatabaseConnectionError();
 
   return (
     <QueryClientProvider client={queryClient}>
       <AppPreferencesProvider>
+        {connectionError && (
+          <div
+            role="alert"
+            className="sticky top-0 z-50 border-b border-destructive/40 bg-background px-4 py-3 text-center text-sm text-destructive"
+          >
+            {connectionError}
+          </div>
+        )}
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
       </AppPreferencesProvider>

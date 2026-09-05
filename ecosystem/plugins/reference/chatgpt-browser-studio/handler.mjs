@@ -1309,20 +1309,29 @@ async function responseState(client, sessionId) {
 async function waitForResponse(client, sessionId, baselineCount, timeoutMs, signal) {
   const deadline = Date.now() + timeoutMs;
   let previous = "",
-    stable = 0;
+    stable = 0,
+    stableSince = 0;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     const state = await responseState(client, sessionId),
       texts = state?.texts ?? [],
       newest = texts.length > baselineCount ? texts.at(-1) : "";
-    stable = newest && newest === previous ? stable + 1 : 0;
+    if (newest && newest === previous) {
+      stable += 1;
+    } else {
+      stable = 0;
+      stableSince = newest ? Date.now() : 0;
+    }
     previous = newest;
     const phase = responsePhase({
       hasNewResponse: Boolean(newest),
       generating: Boolean(state?.stop),
       stablePolls: stable,
     });
-    if (phase === "completed") {
+    // A interface pode ocultar momentaneamente o botão "Parar" durante uma
+    // pausa longa do streaming. Exigir uma janela contínua sem alterações evita
+    // capturar apenas o primeiro fragmento de uma resposta ainda em produção.
+    if (phase === "completed" && Date.now() - stableSince >= 12_000) {
       await sleep(5_000, signal);
       const confirmedState = await responseState(client, sessionId);
       const confirmedTexts = confirmedState?.texts ?? [];
@@ -1335,6 +1344,7 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
       }
       previous = confirmedNewest;
       stable = 0;
+      stableSince = confirmedNewest ? Date.now() : 0;
       continue;
     }
     const hint = String(state?.bodyHint ?? "");
@@ -1710,7 +1720,8 @@ export async function execute(request, services) {
       executables: await resolveChromeExecutables(settings),
       profilePath,
       port,
-      startMinimized: settings.startMinimized !== false,
+      startMinimized:
+        request?.context?.runMode !== "method_test" && settings.startMinimized !== false,
       keepBrowserOpen,
       signal: services.signal,
     });

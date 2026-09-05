@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { toast } from "sonner";
 import {
   closestCenter,
   DndContext,
@@ -80,7 +81,9 @@ export function SortableChannelGrid({
       const oldIndex = channelIds.indexOf(String(active.id));
       const newIndex = channelIds.indexOf(String(over.id));
       if (oldIndex >= 0 && newIndex >= 0) {
-        reorderChannels(arrayMove(channelIds, oldIndex, newIndex));
+        void reorderChannels(arrayMove(channelIds, oldIndex, newIndex)).catch((error) =>
+          toast.error(error.message),
+        );
       }
     }
     clearDrag();
@@ -175,10 +178,14 @@ export function SortableChannelGrid({
             <Button
               variant="destructive"
               disabled={removalConfirmation !== removingChannel?.name}
-              onClick={() => {
-                if (removingChannel) removeChannel(removingChannel.id);
-                setRemovingChannel(undefined);
-                setRemovalConfirmation("");
+              onClick={async () => {
+                try {
+                  if (removingChannel) await removeChannel(removingChannel.id);
+                  setRemovingChannel(undefined);
+                  setRemovalConfirmation("");
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Não foi possível remover.");
+                }
               }}
             >
               Remover canal

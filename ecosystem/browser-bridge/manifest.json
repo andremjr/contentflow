@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ContentFlow Browser Bridge",
-  "version": "0.3.0",
+  "version": "0.3.5",
   "description": "Ponte comum dos plugins de automação de navegador compatíveis com o ContentFlow.",
   "permissions": ["tabs", "storage", "debugger"],
   "host_permissions": [
@@ -9,6 +9,7 @@
     "https://claude.ai/*",
     "https://gemini.google.com/*",
     "https://grok.com/*",
+    "https://flow.google.com/*",
     "https://labs.google/*",
     "https://meta.ai/*",
     "https://www.meta.ai/*"
@@ -23,6 +24,7 @@
         "https://claude.ai/*",
         "https://gemini.google.com/*",
         "https://grok.com/*",
+        "https://flow.google.com/*",
         "https://labs.google/*",
         "https://meta.ai/*",
         "https://www.meta.ai/*"

@@ -23,10 +23,14 @@ const PLUGIN_POLICIES = Object.freeze({
     ["https://gemini.google.com"],
     ["https://gemini.google.com/*"],
   ),
-  [FLOW_PLUGIN_ID]: policy(["https://labs.google"], ["https://labs.google/*"], {
-    requiredPath: "/tools/flow",
-    actions: ["setPrompt", "clickGenerate"],
-  }),
+  [FLOW_PLUGIN_ID]: policy(
+    ["https://flow.google.com", "https://labs.google"],
+    ["https://flow.google.com/*", "https://labs.google/*"],
+    {
+      requiredPath: "/",
+      actions: ["setPrompt", "clickGenerate"],
+    },
+  ),
   "local.contentflow.grok-browser-studio": policy(["https://grok.com"], ["https://grok.com/*"]),
   "local.contentflow.meta-ai-browser-studio": policy(
     ["https://meta.ai", "https://www.meta.ai"],
@@ -35,7 +39,9 @@ const PLUGIN_POLICIES = Object.freeze({
 });
 const inFlight = new Map();
 const tabQueues = new Map();
-let activeSession = null;
+const activeSessions = new Map();
+const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+const MAX_ACTIVE_SESSIONS = 128;
 
 function bridgeError(code, message) {
   return { ok: false, code, message };
@@ -118,20 +124,24 @@ async function isExecutionCancelled(executionKey) {
 }
 
 function validateSession(command) {
-  if (!activeSession || command?.sessionToken !== activeSession.sessionToken) {
+  const session = activeSessions.get(command?.sessionToken);
+  const now = Date.now();
+  if (!session || now - session.lastSeenAt > SESSION_TTL_MS) {
+    if (session) activeSessions.delete(command.sessionToken);
     return bridgeError(
       "SESSION_MISMATCH",
       "A sessão efêmera da extensão não corresponde à execução.",
     );
   }
   if (
-    command.pluginId !== activeSession.pluginId ||
+    command.pluginId !== session.pluginId ||
     !policyForPlugin(command.pluginId) ||
     command.protocolVersion !== PROTOCOL_VERSION
   ) {
     return bridgeError("PROTOCOL_MISMATCH", "Plugin ou versão de protocolo incompatível.");
   }
-  if (command.profileId !== activeSession.profileId) {
+  session.lastSeenAt = now;
+  if (command.profileId !== session.profileId) {
     return bridgeError("PROFILE_MISMATCH", "O comando pertence a outro perfil dedicado.");
   }
   if (typeof command.executionKey !== "string" || command.executionKey.length < 16) {
@@ -143,7 +153,6 @@ function validateSession(command) {
   if (!policyForPlugin(command.pluginId).actions.has(command.action)) {
     return bridgeError("UNKNOWN_ACTION", `Ação não suportada: ${String(command.action)}`);
   }
-  const now = Date.now();
   if (!Number.isFinite(command.issuedAt) || !Number.isFinite(command.expiresAt)) {
     return bridgeError("INVALID_COMMAND", "Janela temporal do comando ausente.");
   }
@@ -351,6 +360,100 @@ async function targetFor(tabId, payload, mode, shouldScroll) {
   );
 }
 
+// Runs inside the already-authorized provider tab. This is intentionally
+// limited to the same selector/text policy as the bridge command; it is not a
+// general page-evaluation surface. DOM activation works while Chrome is
+// minimized and avoids making the dedicated profile visible for every action.
+function clickPageTarget(payload) {
+  const visible = (element) => {
+    if (!(element instanceof Element)) return false;
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return (
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      Number(style.opacity) !== 0 &&
+      rect.width > 8 &&
+      rect.height > 8
+    );
+  };
+  const allDeep = (selector, root = document) => {
+    const output = [];
+    const visit = (node) => {
+      if (!node?.querySelectorAll) return;
+      for (const element of node.querySelectorAll(selector)) output.push(element);
+      for (const element of node.querySelectorAll("*")) {
+        if (element.shadowRoot) visit(element.shadowRoot);
+      }
+    };
+    visit(root);
+    return [...new Set(output)];
+  };
+  const textOf = (element) =>
+    [
+      element?.innerText,
+      element?.textContent,
+      element?.getAttribute?.("aria-label"),
+      element?.getAttribute?.("title"),
+      element?.getAttribute?.("placeholder"),
+      element?.getAttribute?.("data-testid"),
+      element?.getAttribute?.("data-test-id"),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  const selectors = (Array.isArray(payload?.selectors) ? payload.selectors : [payload?.selector])
+    .map((selector) => String(selector || "").trim())
+    .filter(Boolean)
+    .slice(0, 20);
+  const terms = (Array.isArray(payload?.textIncludes) ? payload.textIncludes : [])
+    .map((term) =>
+      String(term || "")
+        .trim()
+        .toLowerCase(),
+    )
+    .filter(Boolean)
+    .slice(0, 30);
+  const candidates = [
+    ...new Set(
+      selectors.flatMap((selector) => {
+        try {
+          return allDeep(selector);
+        } catch {
+          return [];
+        }
+      }),
+    ),
+  ];
+  const target = candidates
+    .filter(
+      (element) =>
+        visible(element) &&
+        !element.disabled &&
+        element.getAttribute("aria-disabled") !== "true" &&
+        (!terms.length || terms.some((term) => textOf(element).includes(term))),
+    )
+    .sort((left, right) => textOf(left).length - textOf(right).length)[0];
+  if (!target) return { clicked: false };
+  target.scrollIntoView({ block: "center", inline: "center" });
+  target.focus?.({ preventScroll: true });
+  target.click();
+  return { clicked: true, text: textOf(target) };
+}
+
+async function clickWithDom(tabId, payload) {
+  return await evaluateValue(
+    tabId,
+    `(${clickPageTarget.toString()})(${JSON.stringify({
+      selectors: payload?.selectors,
+      selector: payload?.selector,
+      textIncludes: payload?.textIncludes,
+    })})`,
+  );
+}
+
 async function dispatchMouseClick(tabId, target) {
   const base = { x: target.x, y: target.y, button: "left" };
   await sendCdp(tabId, "Input.dispatchMouseEvent", {
@@ -368,6 +471,51 @@ async function dispatchMouseClick(tabId, target) {
     ...base,
     clickCount: 1,
   });
+}
+
+async function focusTargetAtPoint(tabId, target) {
+  await sendCdp(tabId, "DOM.enable");
+  const documentResult = await sendCdp(tabId, "DOM.getDocument", { depth: -1, pierce: true });
+  const rootNodeId = documentResult?.root?.nodeId;
+  if (rootNodeId) {
+    const matches = await sendCdp(tabId, "DOM.querySelectorAll", {
+      nodeId: rootNodeId,
+      selector:
+        '[contenteditable="true"], [contenteditable="plaintext-only"], textarea, input[type="text"], input:not([type]), [role="textbox"]',
+    });
+    let best = null;
+    for (const nodeId of matches?.nodeIds || []) {
+      try {
+        const box = await sendCdp(tabId, "DOM.getBoxModel", { nodeId });
+        const quad = box?.model?.border;
+        if (!Array.isArray(quad) || quad.length < 8) continue;
+        const xs = [quad[0], quad[2], quad[4], quad[6]];
+        const ys = [quad[1], quad[3], quad[5], quad[7]];
+        const left = Math.min(...xs);
+        const right = Math.max(...xs);
+        const top = Math.min(...ys);
+        const bottom = Math.max(...ys);
+        if (target.x < left || target.x > right || target.y < top || target.y > bottom) continue;
+        const area = Math.max(1, right - left) * Math.max(1, bottom - top);
+        if (!best || area < best.area) best = { nodeId, area };
+      } catch {
+        // Nós ocultos ou removidos podem desaparecer entre a localização e o foco.
+      }
+    }
+    if (best) {
+      await sendCdp(tabId, "DOM.focus", { nodeId: best.nodeId });
+      return;
+    }
+  }
+  const node = await sendCdp(tabId, "DOM.getNodeForLocation", {
+    x: Math.round(target.x),
+    y: Math.round(target.y),
+    includeUserAgentShadowDOM: true,
+    ignorePointerEventsNone: true,
+  });
+  if (node?.backendNodeId) {
+    await sendCdp(tabId, "DOM.focus", { backendNodeId: node.backendNodeId });
+  }
 }
 
 async function replaceFocusedText(tabId, value) {
@@ -441,22 +589,28 @@ async function dispatchCdpAction(tabId, command, policy) {
     };
   }
   if (command.action === "setText" || command.action === "setPrompt") {
-    const target = await targetFor(tabId, payload, "editable", true);
-    if (!target?.found) {
-      return bridgeError("EDITOR_NOT_FOUND", "Editor não encontrado.");
-    }
-    if (await isExecutionCancelled(command.executionKey)) {
-      return bridgeError("CANCELLED", "Execução cancelada.");
-    }
-    await dispatchMouseClick(tabId, target);
     const text = String(payload.text || "");
-    await replaceFocusedText(tabId, text);
-    const actual = String((await evaluateValue(tabId, `(${readFocusedText.toString()})()`)) || "")
-      .replace(/\uFEFF/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
     const expected = text.replace(/\s+/g, " ").trim();
-    if (expected && actual !== expected && !actual.includes(expected.slice(0, 80))) {
+    let actual = "";
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const target = await targetFor(tabId, payload, "editable", true);
+      if (!target?.found) {
+        return bridgeError("EDITOR_NOT_FOUND", "Editor não encontrado.");
+      }
+      if (await isExecutionCancelled(command.executionKey)) {
+        return bridgeError("CANCELLED", "Execução cancelada.");
+      }
+      await focusTargetAtPoint(tabId, target);
+      await dispatchMouseClick(tabId, target);
+      await focusTargetAtPoint(tabId, target);
+      await replaceFocusedText(tabId, text);
+      actual = String((await evaluateValue(tabId, `(${readFocusedText.toString()})()`)) || "")
+        .replace(/\uFEFF/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!expected || actual === expected || actual.includes(expected)) break;
+    }
+    if (expected && actual !== expected && !actual.includes(expected)) {
       return bridgeError("EDITOR_WRITE_FAILED", "O texto não permaneceu no editor.");
     }
     return { ok: true, readbackLength: actual.length };
@@ -473,8 +627,15 @@ async function dispatchCdpAction(tabId, command, policy) {
     if (await isExecutionCancelled(command.executionKey)) {
       return bridgeError("CANCELLED", "Execução cancelada.");
     }
-    await dispatchMouseClick(tabId, target);
-    return { ok: true, text: target.text };
+    try {
+      await dispatchMouseClick(tabId, target);
+      return { ok: true, text: target.text, mechanism: "cdp-input" };
+    } catch (error) {
+      const domResult = await clickWithDom(tabId, clickPayload);
+      if (domResult?.clicked)
+        return { ok: true, text: domResult.text || target.text, mechanism: "dom-fallback" };
+      throw error;
+    }
   }
   return bridgeError("UNKNOWN_ACTION", `Ação não suportada: ${String(command.action)}`);
 }
@@ -537,7 +698,9 @@ async function dispatchToPage(command) {
   try {
     const response = await withTimeout(
       enqueueTabCommand(tab.id, () =>
-        withAttachedDebugger(tab.id, () => dispatchCdpAction(tab.id, command, policy)),
+        Date.now() >= command.expiresAt
+          ? bridgeError("COMMAND_EXPIRED", "O comando expirou antes de executar na aba.")
+          : withAttachedDebugger(tab.id, () => dispatchCdpAction(tab.id, command, policy)),
       ),
       timeoutMs,
     );
@@ -562,16 +725,30 @@ globalThis.contentFlowBridge = Object.freeze({
       !policyForPlugin(handshake?.pluginId) ||
       handshake?.protocolVersion !== PROTOCOL_VERSION ||
       typeof handshake?.profileId !== "string" ||
+      handshake.profileId.length < 1 ||
+      handshake.profileId.length > 128 ||
       !/^[a-f0-9-]{32,64}$/i.test(String(handshake?.sessionToken || ""))
     ) {
       return bridgeError("HANDSHAKE_REJECTED", "Handshake da extensão inválido.");
     }
-    activeSession = {
+    const now = Date.now();
+    for (const [token, session] of activeSessions) {
+      if (now - session.lastSeenAt > SESSION_TTL_MS) activeSessions.delete(token);
+    }
+    while (activeSessions.size >= MAX_ACTIVE_SESSIONS) {
+      const oldest = [...activeSessions.entries()].sort(
+        (left, right) => left[1].lastSeenAt - right[1].lastSeenAt,
+      )[0];
+      if (!oldest) break;
+      activeSessions.delete(oldest[0]);
+    }
+    activeSessions.set(handshake.sessionToken, {
       pluginId: handshake.pluginId,
       profileId: handshake.profileId,
       sessionToken: handshake.sessionToken,
-      connectedAt: Date.now(),
-    };
+      connectedAt: now,
+      lastSeenAt: now,
+    });
     return { ok: true, pluginId: handshake.pluginId, ...identity() };
   },
   async dispatch(command) {
@@ -583,15 +760,33 @@ globalThis.contentFlowBridge = Object.freeze({
     return await operation;
   },
   async cancel(request) {
+    const session = activeSessions.get(request?.sessionToken);
     if (
-      !activeSession ||
-      request?.sessionToken !== activeSession.sessionToken ||
-      request?.profileId !== activeSession.profileId ||
-      typeof request?.executionKey !== "string"
+      !session ||
+      Date.now() - session.lastSeenAt > SESSION_TTL_MS ||
+      request?.pluginId !== session.pluginId ||
+      request?.protocolVersion !== PROTOCOL_VERSION ||
+      request?.profileId !== session.profileId ||
+      typeof request?.executionKey !== "string" ||
+      request.executionKey.length < 16
     ) {
       return bridgeError("SESSION_MISMATCH", "Cancelamento recusado pela extensão.");
     }
+    session.lastSeenAt = Date.now();
     await markExecutionCancelled(request.executionKey);
+    return { ok: true };
+  },
+  disconnect(request) {
+    const session = activeSessions.get(request?.sessionToken);
+    if (
+      !session ||
+      request?.pluginId !== session.pluginId ||
+      request?.protocolVersion !== PROTOCOL_VERSION ||
+      request?.profileId !== session.profileId
+    ) {
+      return bridgeError("SESSION_MISMATCH", "Desconexão recusada pela extensão.");
+    }
+    activeSessions.delete(request.sessionToken);
     return { ok: true };
   },
 });

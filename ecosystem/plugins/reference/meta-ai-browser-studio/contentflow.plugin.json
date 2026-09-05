@@ -55,7 +55,7 @@
       },
       "startMinimized": {
         "type": "boolean",
-        "default": false
+        "default": true
       },
       "interactiveWaitSeconds": {
         "type": "integer",

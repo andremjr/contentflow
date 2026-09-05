@@ -223,6 +223,8 @@ export type Channel = {
 };
 
 export type Project = {
+  runThrough?: ProcessId;
+  runFrom?: ProcessId;
   id: string;
   title: string;
   channelId: string;
@@ -367,6 +369,7 @@ export type ProcessOutput = {
 };
 
 export type ProcessExecution = {
+  revision?: number;
   id: string;
   projectId: string;
   channelId: string;

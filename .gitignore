@@ -8,6 +8,9 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+playwright-report/
+playwright-report-electron/
+test-results/
 data/
 dist
 dist-ssr

@@ -1,7 +1,8 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { createServer, request: httpRequest } = require("node:http");
 const { spawn } = require("node:child_process");
-const { existsSync, readFileSync, statSync } = require("node:fs");
+const { existsSync, statSync } = require("node:fs");
+const { readFile } = require("node:fs/promises");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { configureDesktopUpdater } = require("./updater.cjs");
@@ -13,9 +14,13 @@ let mainWindow;
 let webServer;
 let apiProcess;
 let quitting = false;
+const staticAssetCache = new Map();
 
 app.setName("ContentFlow");
 app.setAppUserModelId("com.contentflow.app");
+if (process.env.CONTENTFLOW_ELECTRON_USER_DATA_DIR) {
+  app.setPath("userData", path.resolve(process.env.CONTENTFLOW_ELECTRON_USER_DATA_DIR));
+}
 
 app.on("second-instance", () => {
   if (!mainWindow) return;
@@ -41,6 +46,7 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   quitting = true;
   webServer?.close();
+  webServer?.closeAllConnections?.();
   apiProcess?.kill();
 });
 
@@ -70,19 +76,33 @@ async function startDesktop() {
   apiProcess = spawn(process.env.CONTENTFLOW_PLUGIN_NODE_EXECUTABLE, [apiEntry], {
     env: process.env,
     windowsHide: true,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "ignore", "pipe"],
   });
   let apiError = "";
+  let apiLaunchError;
+  let apiReady = false;
   apiProcess.stderr.on("data", (chunk) => {
     apiError = `${apiError}${chunk.toString("utf8")}`.slice(-12_000);
   });
+  apiProcess.once("error", (error) => {
+    apiLaunchError = error;
+  });
   apiProcess.once("exit", (code) => {
-    if (code && !quitting) {
-      dialog.showErrorBox("A API local foi encerrada", apiError || `Código de saída: ${code}`);
+    if (!quitting && apiReady) {
+      dialog.showErrorBox(
+        "A API local foi encerrada",
+        apiError || `Código de saída: ${code ?? "desconhecido"}`,
+      );
       app.quit();
     }
   });
-  await waitForApi(apiPort);
+  await waitForApi(
+    apiPort,
+    () => apiLaunchError,
+    () => apiProcess?.exitCode,
+    () => apiError,
+  );
+  apiReady = true;
 
   const webPort = await startWebServer(appRoot, apiPort);
   const windowIcon = path.join(appRoot, "build", "icon.png");
@@ -94,6 +114,7 @@ async function startDesktop() {
     title: "ContentFlow",
     icon: windowIcon,
     backgroundColor: "#08111f",
+    show: false,
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -113,7 +134,9 @@ async function startDesktop() {
     if (url.startsWith("https://") || url.startsWith("http://")) void shell.openExternal(url);
   });
   configureDesktopUpdater({ app, ipcMain, shell, getWindow: () => mainWindow });
+  mainWindow.once("ready-to-show", () => mainWindow?.show());
   await mainWindow.loadURL(`${appOrigin}/dashboard`);
+  if (!mainWindow.isVisible()) mainWindow.show();
 }
 
 async function startWebServer(appRoot, apiPort) {
@@ -132,7 +155,12 @@ async function startWebServer(appRoot, apiPort) {
       if (staticPath) {
         outgoing.statusCode = 200;
         outgoing.setHeader("content-type", mimeType(staticPath));
-        outgoing.end(readFileSync(staticPath));
+        let body = staticAssetCache.get(staticPath);
+        if (!body) {
+          body = await readFile(staticPath);
+          staticAssetCache.set(staticPath, body);
+        }
+        outgoing.end(body);
         return;
       }
       const body = await readRequestBody(incoming);
@@ -234,9 +262,15 @@ function reservePort() {
   });
 }
 
-async function waitForApi(port) {
+async function waitForApi(port, getLaunchError, getExitCode, getStderr) {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
+    const launchError = getLaunchError?.();
+    if (launchError) throw launchError;
+    const exitCode = getExitCode?.();
+    if (exitCode !== null && exitCode !== undefined) {
+      throw new Error(getStderr?.() || `A API local encerrou com código ${exitCode}.`);
+    }
     try {
       const response = await fetch(`http://127.0.0.1:${port}/api/preferences`);
       if (response.ok) return;

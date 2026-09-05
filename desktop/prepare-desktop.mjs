@@ -41,7 +41,7 @@ await build({
   bundle: true,
   platform: "node",
   format: "esm",
-  target: "node24",
+  target: "node26",
   sourcemap: false,
   external: ["better-sqlite3", "@napi-rs/keyring"],
   banner: {

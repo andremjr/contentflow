@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  addInstructionInputVariable,
   instructionInputKey,
   instructionInputLabel,
+  instructionReferencesInput,
   instructionVariables,
   nextManualInputLabel,
+  removeInstructionInputVariables,
+  replaceInstructionInputVariable,
   resolveInstructionTemplate,
 } from "../src/lib/instruction-template";
 
@@ -99,6 +103,29 @@ test("gera nomes únicos para novas entradas manuais", () => {
     }),
     "nova_entrada_2",
   );
+});
+
+test("mantém o vínculo bidirecional entre uma entrada e a variável do prompt", () => {
+  const original = { id: "input-reference", label: "Referência", sourceKey: "reference" };
+  const renamed = { ...original, label: "Briefing criativo", sourceKey: undefined };
+
+  const withInput = addInstructionInputVariable("Crie uma imagem.", original);
+  assert.equal(withInput, "Crie uma imagem. {{inputs.reference}}");
+  assert.equal(instructionReferencesInput(withInput, original), true);
+
+  const withRenamedInput = replaceInstructionInputVariable(withInput, original, renamed);
+  assert.equal(withRenamedInput, "Crie uma imagem. {{inputs.briefing_criativo}}");
+  assert.equal(instructionReferencesInput(withRenamedInput, renamed), true);
+
+  assert.equal(removeInstructionInputVariables(withRenamedInput, renamed, []), "Crie uma imagem.");
+});
+
+test("preserva uma variável compartilhada quando outra entrada ainda a usa", () => {
+  const first = { id: "one", label: "Tema", sourceKey: "theme" };
+  const second = { id: "two", label: "Tema secundário", sourceKey: "theme" };
+  const template = "{{inputs.tema_do_video}}";
+
+  assert.equal(removeInstructionInputVariables(template, first, [second]), template);
 });
 
 test("padroniza os oito resultados universais na linguagem da interface", () => {

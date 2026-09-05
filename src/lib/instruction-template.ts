@@ -103,6 +103,27 @@ type InstructionInputIdentity = Pick<InstructionTemplateInput, "id" | "label" | 
   key?: string;
 };
 
+function normalizedInputVariables(input: InstructionInputIdentity) {
+  return new Set(
+    [
+      instructionInputKey(input),
+      normalizeVariableKey(input.sourceKey),
+      normalizeVariableKey(input.label),
+      normalizeVariableKey(input.key),
+      normalizeVariableKey(input.id),
+    ]
+      .filter(Boolean)
+      .map((key) => `inputs.${key}`),
+  );
+}
+
+function normalizedTemplateVariable(variable: string) {
+  return variable
+    .split(".")
+    .map((part) => normalizeVariableKey(part))
+    .join(".");
+}
+
 function semanticInputKey(input: Pick<InstructionInputIdentity, "label" | "sourceKey" | "key">) {
   const candidates = [
     normalizeVariableKey(input.sourceKey ?? input.key),
@@ -140,6 +161,55 @@ export function instructionVariables(template: string) {
   return [...String(template ?? "").matchAll(VARIABLE)].map((match) => match[1]);
 }
 
+/** Whether the prompt currently contains any supported alias for this input. */
+export function instructionReferencesInput(template: string, input: InstructionInputIdentity) {
+  const variables = normalizedInputVariables(input);
+  return instructionVariables(template).some((variable) =>
+    variables.has(normalizedTemplateVariable(variable)),
+  );
+}
+
+/** Adds the canonical input variable only when that input is not already represented in the prompt. */
+export function addInstructionInputVariable(template: string, input: InstructionInputIdentity) {
+  if (instructionReferencesInput(template, input)) return template;
+  const token = `{{inputs.${instructionInputKey(input)}}}`;
+  const current = String(template ?? "");
+  return current.trim() ? `${current}${/\s$/.test(current) ? "" : " "}${token}` : token;
+}
+
+/** Keeps a prompt token attached when the input name or source changes. */
+export function replaceInstructionInputVariable(
+  template: string,
+  previous: InstructionInputIdentity,
+  next: InstructionInputIdentity,
+) {
+  const previousVariables = normalizedInputVariables(previous);
+  const nextToken = `{{inputs.${instructionInputKey(next)}}}`;
+  return String(template ?? "").replace(VARIABLE, (token, variable: string) =>
+    previousVariables.has(normalizedTemplateVariable(variable)) ? nextToken : token,
+  );
+}
+
+/** Removes only tokens owned exclusively by an input that was deleted. */
+export function removeInstructionInputVariables(
+  template: string,
+  removed: InstructionInputIdentity,
+  remainingInputs: InstructionInputIdentity[],
+) {
+  const removedVariables = normalizedInputVariables(removed);
+  const remainingVariables = new Set(
+    remainingInputs.flatMap((input) => [...normalizedInputVariables(input)]),
+  );
+  return String(template ?? "")
+    .replace(VARIABLE, (token, variable: string) => {
+      const normalized = normalizedTemplateVariable(variable);
+      return removedVariables.has(normalized) && !remainingVariables.has(normalized) ? "" : token;
+    })
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n[ \t]+\n/g, "\n\n")
+    .trim();
+}
+
 export function resolveInstructionTemplate(template: string, context: InstructionTemplateContext) {
   const values = new Map<string, unknown>([
     ["project.title", context.project.title],
@@ -157,15 +227,11 @@ export function resolveInstructionTemplate(template: string, context: Instructio
   const inputOwners = new Map<string, string>();
   for (const input of context.inputs) {
     const aliases = new Set([
-      instructionInputKey(input),
-      normalizeVariableKey(input.sourceKey),
-      normalizeVariableKey(input.label),
-      normalizeVariableKey(input.portKey),
-      normalizeVariableKey(input.id),
+      ...normalizedInputVariables(input),
+      `inputs.${normalizeVariableKey(input.portKey)}`,
     ]);
-    for (const alias of aliases) {
-      if (alias) {
-        const variable = `inputs.${alias}`;
+    for (const variable of aliases) {
+      if (variable !== "inputs.") {
         values.set(variable, input.value);
         inputOwners.set(variable, input.id);
       }
@@ -175,10 +241,7 @@ export function resolveInstructionTemplate(template: string, context: Instructio
   const unresolved = new Set<string>();
   const referencedInputIds = new Set<string>();
   const instruction = String(template ?? "").replace(VARIABLE, (token, variable: string) => {
-    const normalized = variable
-      .split(".")
-      .map((part) => normalizeVariableKey(part))
-      .join(".");
+    const normalized = normalizedTemplateVariable(variable);
     if (!values.has(normalized)) {
       unresolved.add(variable);
       return token;

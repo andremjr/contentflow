@@ -3,11 +3,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const PLUGIN_ID = "local.contentflow.google-flow-batch-images";
-const FLOW_HOST = "labs.google";
-const FLOW_LANDING_URL = "https://labs.google/fx/pt/tools/flow";
+const FLOW_HOST = "flow.google.com";
+const LEGACY_FLOW_HOST = "labs.google";
+const FLOW_HOSTS = new Set([FLOW_HOST, LEGACY_FLOW_HOST]);
+const FLOW_LANDING_URL = "https://flow.google.com/";
 const GENERATION_SUFFIX = "/flowMedia:batchGenerateImages";
 const MEDIA_HOST = "flow-content.google";
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
@@ -88,16 +90,36 @@ function safeFilename(text, fallback) {
   return stem || fallback;
 }
 
+function isFlowHost(hostname) {
+  return FLOW_HOSTS.has(String(hostname || "").toLowerCase());
+}
+
+function isFlowProjectPath(pathname) {
+  return (
+    /^\/project\//i.test(String(pathname || "")) ||
+    /\/tools\/flow\/project\//i.test(String(pathname || ""))
+  );
+}
+
+function isFlowUrl(raw, requireProject = false) {
+  try {
+    const url = new URL(raw);
+    return (
+      url.protocol === "https:" &&
+      isFlowHost(url.hostname) &&
+      (!requireProject || isFlowProjectPath(url.pathname))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function validateFlowUrl(raw) {
   const url = new URL(raw);
-  if (
-    url.protocol !== "https:" ||
-    url.hostname !== FLOW_HOST ||
-    !url.pathname.includes("/tools/flow/project/")
-  ) {
+  if (!isFlowUrl(url.toString(), true)) {
     throw codedError(
       "INVALID_CONFIGURATION",
-      "flowUrl precisa apontar para um projeto em https://labs.google/.../tools/flow/project/...",
+      "flowUrl precisa apontar para um projeto em https://flow.google.com/project/...",
     );
   }
   return url.toString();
@@ -130,13 +152,25 @@ async function readCaptchaRetryNavigation(request, services) {
     ) {
       return undefined;
     }
-    return { url: validateFlowUrl(state.projectUrl), pinned: true, captchaRetry: true };
+    return {
+      url: validateFlowUrl(state.projectUrl),
+      pinned: true,
+      captchaRetry: !state.referencesAttached && !state.preparationRetry,
+      referencesAttached: state.referencesAttached === true,
+      captureLabel:
+        typeof state.captureLabel === "string" ? state.captureLabel.slice(0, 300) : undefined,
+    };
   } catch {
     return undefined;
   }
 }
 
-async function saveCaptchaRetryNavigation(request, services, projectUrl) {
+async function saveCaptchaRetryNavigation(
+  request,
+  services,
+  projectUrl,
+  referencesAttached = false,
+) {
   const statePath = captchaRetryStatePath(request, services);
   if (!statePath || !projectUrl) return;
   await writeFile(
@@ -146,6 +180,7 @@ async function saveCaptchaRetryNavigation(request, services, projectUrl) {
       blockId: request.blockId,
       failedAttempt: Number(request.attempt),
       projectUrl: validateFlowUrl(projectUrl),
+      referencesAttached,
     }),
     { encoding: "utf8", flag: "w" },
   );
@@ -270,6 +305,12 @@ function normalizeReferenceImages(value) {
   };
   visit(value);
   return out;
+}
+
+function requestsSingleImage(request) {
+  return (request?.outputContract ?? []).some(
+    (field) => field?.portKey === "images" && field?.type === "image",
+  );
 }
 
 function assertDedicatedProfilePath(path) {
@@ -623,7 +664,7 @@ async function attachExtensionBridge(
       flowSessionId,
       "({ url: location.href, origin: location.origin })",
     );
-    if (page?.origin !== `https://${FLOW_HOST}`) {
+    if (!isFlowUrl(page?.url)) {
       throw codedError("OUTPUT_VALIDATION_FAILED", "A aba anexada deixou de ser o Google Flow.");
     }
     const issuedAt = Date.now();
@@ -671,6 +712,8 @@ async function attachExtensionBridge(
 
   const cancel = () => {
     const requestPayload = {
+      pluginId: PLUGIN_ID,
+      protocolVersion: EXTENSION_PROTOCOL_VERSION,
       sessionToken,
       profileId,
       executionKey,
@@ -689,6 +732,7 @@ async function attachExtensionBridge(
       .catch(() => undefined);
   };
   signal?.addEventListener("abort", cancel, { once: true });
+  let disposed = false;
 
   let ping;
   try {
@@ -708,7 +752,31 @@ async function attachExtensionBridge(
     sessionId: workerSessionId,
     targetId: workerTarget.targetId,
     dispose() {
+      if (disposed) return;
+      disposed = true;
       signal?.removeEventListener("abort", cancel);
+      const payload = {
+        pluginId: PLUGIN_ID,
+        protocolVersion: EXTENSION_PROTOCOL_VERSION,
+        profileId,
+        sessionToken,
+      };
+      void client
+        .send(
+          "Runtime.evaluate",
+          {
+            expression: `globalThis.contentFlowBridge?.disconnect(${JSON.stringify(payload)})`,
+            returnByValue: true,
+            awaitPromise: true,
+          },
+          workerSessionId,
+        )
+        .catch(() => undefined)
+        .finally(() =>
+          client
+            .send("Target.detachFromTarget", { sessionId: workerSessionId })
+            .catch(() => undefined),
+        );
     },
   };
 }
@@ -849,12 +917,10 @@ class CdpClient {
 async function attachFlowPage(client, startUrl, pinned, signal, interactive = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
   const projectTarget = targetInfos.find(
-    (item) =>
-      item.type === "page" && /labs\.google\/fx\/.*tools\/flow\/project\//i.test(String(item.url)),
+    (item) => item.type === "page" && isFlowUrl(item.url, true),
   );
   let target =
-    projectTarget ||
-    targetInfos.find((item) => item.type === "page" && String(item.url).includes("labs.google"));
+    projectTarget || targetInfos.find((item) => item.type === "page" && isFlowUrl(item.url));
   if (!target) target = targetInfos.find((item) => item.type === "page");
 
   let targetId = target?.targetId;
@@ -1053,10 +1119,10 @@ function pageStateExpression(promptSelector) {
     const challenge = iframes.some(f => /recaptcha|challenge/i.test((f.src || '') + ' ' + (f.title || '')));
     const host = location.hostname;
     const href = location.href;
-    const projectLike = /\/tools\/flow\/project\//i.test(location.pathname);
+    const projectLike = /^\/project\//i.test(location.pathname) || /\/tools\/flow\/project\//i.test(location.pathname);
     const loginLike = host === 'accounts.google.com' || /signin|login|challenge/i.test(href);
     const links = cfAll('a[href]').filter(cfVisible).map(a => ({ href: a.href, text: cfText(a) }));
-    const projectLinks = links.filter(x => /\/tools\/flow\/project\//i.test(x.href)).slice(0, 10);
+    const projectLinks = links.filter(x => /https:\/\/(?:flow\.google\.com\/project\/|labs\.google\/.*\/tools\/flow\/project\/)/i.test(x.href)).slice(0, 10);
     const clickables = cfAll('button, [role="button"], a[href]').filter(cfVisible).map(el => ({
       text: cfText(el),
       tag: el.tagName,
@@ -1167,7 +1233,7 @@ async function ensureFlowProjectReady(
           }
         } else if (Array.isArray(last?.projectLinks) && last.projectLinks.length > 0) {
           const candidate = last.projectLinks[0]?.href;
-          if (typeof candidate === "string" && candidate.startsWith("https://labs.google/")) {
+          if (typeof candidate === "string" && isFlowUrl(candidate, true)) {
             await client.send("Page.navigate", { url: candidate }, sessionId);
             lastActionAt = Date.now();
             actionCount += 1;
@@ -1238,12 +1304,7 @@ async function waitForFlowProfile(client, sessionId, settings, signal, timeoutMs
         state?.projectLike ||
         state?.hasNewProject ||
         (Array.isArray(state?.projectLinks) && state.projectLinks.length > 0);
-      if (
-        state?.host === FLOW_HOST &&
-        !state?.loginLike &&
-        !state?.challenge &&
-        authenticatedSurface
-      )
+      if (isFlowHost(state?.host) && !state?.loginLike && !state?.challenge && authenticatedSurface)
         return;
     } catch {
       // O contexto pode ser recriado durante o login interativo.
@@ -1312,32 +1373,6 @@ async function ensureImageMode(client, sessionId, settings, signal) {
   await sleep(250, signal);
 }
 
-function referenceUploadActionExpression(promptSelector) {
-  return String.raw`(() => { ${DEEP_HELPERS}
-    const prompt = cfPromptCandidate(${JSON.stringify(promptSelector || "")});
-    if (!prompt) return { ok: false, reason: 'prompt-not-found' };
-    const pr = prompt.getBoundingClientRect();
-    const candidates = cfAll('button, [role="button"], label').filter(cfVisible);
-    let best = null;
-    let bestScore = -Infinity;
-    for (const el of candidates) {
-      const t = cfText(el);
-      if (!/(adicionar|add|upload|carregar|refer.ncia|reference|ingrediente|ingredient)/i.test(t)) continue;
-      if (/(excluir|delete|remove|remover|projeto|project)/i.test(t)) continue;
-      const r = el.getBoundingClientRect();
-      const dx = Math.abs((r.left + r.width / 2) - (pr.left + pr.width / 2));
-      const dy = Math.abs((r.top + r.height / 2) - (pr.top + pr.height / 2));
-      let score = 180 - (dx + dy) / 14;
-      if (r.top >= pr.top - 260 && r.top <= pr.bottom + 260) score += 80;
-      if (score > bestScore) { best = el; bestScore = score; }
-    }
-    if (!best || bestScore < 40) return { ok: false, reason: 'upload-action-not-found' };
-    best.scrollIntoView({ block: 'center', inline: 'center' });
-    best.click();
-    return { ok: true, text: cfText(best).slice(0, 120) };
-  })()`;
-}
-
 function cdpNodeAttributes(node) {
   const attributes = {};
   const raw = Array.isArray(node?.attributes) ? node.attributes : [];
@@ -1375,6 +1410,20 @@ async function locateImageFileInput(client, sessionId) {
   return findImageFileInputNode(documentResult?.root);
 }
 
+async function uploadMediaActionIsVisible(client, sessionId) {
+  return Boolean(
+    await evaluate(
+      client,
+      sessionId,
+      `(() => { ${DEEP_HELPERS}
+        return cfAll('button, [role="button"], [role="menuitem"], [role="option"]')
+          .filter(cfVisible)
+          .some((element) => /(?:enviar|upload|carregar|fazer upload)(?:\\s+de)?\\s+(?:mídia|media|arquivo|file)/i.test(cfText(element)));
+      })()`,
+    ),
+  );
+}
+
 async function prepareReferenceImagePaths(referenceImages, services, maximum) {
   if (referenceImages.length > maximum) {
     throw codedError(
@@ -1404,23 +1453,70 @@ async function prepareReferenceImagePaths(referenceImages, services, maximum) {
   return paths;
 }
 
-async function uploadReferenceImages(client, sessionId, filePaths, settings, signal, step) {
+async function uploadReferenceImages(client, sessionId, bridge, filePaths, settings, signal, step) {
   if (filePaths.length === 0) return;
+  // The browser's native file picker otherwise remains modal even after
+  // DOM.setFileInputFiles, preventing subsequent bridge input from reaching Flow.
+  await client.send("Page.setInterceptFileChooserDialog", { enabled: true }, sessionId);
+  try {
+    await uploadReferenceImagesInPage(client, sessionId, bridge, filePaths, settings, signal, step);
+  } finally {
+    await client.send("Page.setInterceptFileChooserDialog", { enabled: false }, sessionId);
+  }
+}
+
+async function uploadReferenceImagesInPage(
+  client,
+  sessionId,
+  bridge,
+  filePaths,
+  settings,
+  signal,
+  step,
+) {
   await ensureImageMode(client, sessionId, settings, signal);
   let input = await locateImageFileInput(client, sessionId);
   if (!input) {
-    const action = await evaluate(
-      client,
-      sessionId,
-      referenceUploadActionExpression(settings?.promptSelector || ""),
-    );
-    if (!action?.ok) {
+    let uploadMenuVisible = await uploadMediaActionIsVisible(client, sessionId);
+    for (let clickAttempt = 1; !uploadMenuVisible && clickAttempt <= 3; clickAttempt += 1) {
+      await bridge.dispatch(
+        "click",
+        {
+          selectors: ["button", '[role="button"]'],
+          textIncludes: [
+            "adicionar elementos à caixa de comando",
+            "add elements to prompt box",
+            "adicionar referência",
+            "add reference",
+          ],
+        },
+        `open-reference-menu:${clickAttempt}`,
+      );
+      const menuDeadline = Date.now() + 3_000;
+      while (!uploadMenuVisible && Date.now() < menuDeadline) {
+        await sleep(250, signal);
+        uploadMenuVisible = await uploadMediaActionIsVisible(client, sessionId);
+      }
+    }
+    if (!uploadMenuVisible) {
       throw codedError(
         "OUTPUT_VALIDATION_FAILED",
-        "Não encontrei o controle para adicionar imagens de referência no Google Flow.",
+        "O controle de referência do Google Flow não abriu o menu de envio de mídia.",
       );
     }
-    step?.(`Controle de referência aberto (${action.text || "Adicionar"}).`);
+    step?.("Controle de referência aberto.");
+    input = await locateImageFileInput(client, sessionId);
+    if (!input) {
+      await bridge.dispatch(
+        "click",
+        {
+          selectors: ["button", '[role="button"]', '[role="menuitem"]', '[role="option"]'],
+          textIncludes: ["enviar mídia", "upload media", "carregar mídia", "upload file"],
+        },
+        "choose-reference-upload",
+      );
+      step?.("Opção de envio de mídia selecionada.");
+    }
     const deadline = Date.now() + 10_000;
     while (!input && Date.now() < deadline) {
       await sleep(250, signal);
@@ -1434,19 +1530,164 @@ async function uploadReferenceImages(client, sessionId, filePaths, settings, sig
     );
   }
   await client.send("DOM.setFileInputFiles", { files: filePaths, nodeId: input.nodeId }, sessionId);
-  step?.(`${filePaths.length} imagem(ns) de referência enviada(s) ao projeto.`);
-  await sleep(Math.min(15_000, 2_000 + filePaths.length * 1_000), signal);
+  step?.(
+    `${filePaths.length} imagem(ns) de referência selecionada(s); aguardando o Flow concluir o envio.`,
+  );
+  await waitReferenceUploadReady(
+    client,
+    sessionId,
+    settings,
+    signal,
+    step,
+    90_000,
+    bridge,
+    filePaths.map((filePath) => basename(filePath)),
+  );
+  step?.("Envio da referência concluído e editor disponível.");
 }
 
-async function setPromptWithExtension(bridge, prompt, customSelector, operationKey) {
-  return await bridge.dispatch(
-    "setPrompt",
-    {
-      text: prompt,
-      promptSelector: customSelector || "",
-    },
-    operationKey,
+function referenceUploadStateExpression(promptSelector, referenceNames = []) {
+  return `(() => { ${DEEP_HELPERS}
+    const dialogs = cfAll('[role="dialog"]').filter(cfVisible);
+    const consent = dialogs.some(el => /direitos de uso|rights to use|usage rights/i.test(cfText(el)));
+    const prompt = cfPromptCandidate(${JSON.stringify(promptSelector || "")});
+    const editable = !!prompt && prompt.getAttribute('contenteditable') !== 'false';
+    const pickerOpen = cfAll('button, [role="button"]').filter(cfVisible)
+      .some(el => /enviar mídia|upload media/i.test(cfText(el)));
+    const includeReady = cfAll('button, [role="button"]').filter(cfVisible)
+      .some(el => !el.disabled && el.getAttribute('aria-disabled') !== 'true' && /incluir no comando|add to prompt|include in prompt/i.test(cfText(el)));
+    const names = ${JSON.stringify(referenceNames.map((name) => name.toLowerCase()))};
+    const referenceMatches = names.length > 0 && names.every(name =>
+      cfAll('[role="option"], img').filter(cfVisible).some(el =>
+        (cfText(el) + ' ' + (el.getAttribute('alt') || '').toLowerCase()).includes(name)));
+    return { consent, dialogs: dialogs.length, pickerOpen, editable, includeReady, referenceMatches };
+  })()`;
+}
+
+async function attachedReferenceCount(client, sessionId) {
+  return (
+    Number(
+      await evaluate(
+        client,
+        sessionId,
+        `(() => { ${DEEP_HELPERS}
+    return cfAll('button, [role="button"]').filter(cfVisible).filter(el =>
+      /^(elemento|element|ingredient)$/i.test((el.getAttribute('aria-label') || '').trim()) &&
+      !!el.querySelector('img')).length;
+  })()`,
+      ),
+    ) || 0
   );
+}
+
+async function waitReferenceUploadReady(
+  client,
+  sessionId,
+  settings,
+  signal,
+  step,
+  timeoutMs = 90_000,
+  bridge,
+  referenceNames = [],
+) {
+  const deadline = Date.now() + timeoutMs;
+  let state;
+  let consentReported = false;
+  let included = false;
+  let includeAttempts = 0;
+  while (Date.now() < deadline) {
+    state = await evaluate(
+      client,
+      sessionId,
+      referenceUploadStateExpression(settings?.promptSelector, referenceNames),
+    );
+    if (state?.consent && !consentReported) {
+      step?.(
+        "O Flow solicita confirmação dos direitos da imagem. Confirme na janela do Flow para continuar.",
+      );
+      consentReported = true;
+    }
+    if (state?.editable && !state.dialogs && !state.pickerOpen) return;
+    if (!state?.consent && state?.includeReady && state?.referenceMatches && !included && bridge) {
+      includeAttempts += 1;
+      try {
+        await bridge.dispatch(
+          "click",
+          {
+            selectors: ["button", '[role="button"]'],
+            textIncludes: ["incluir", "add to prompt", "include in prompt"],
+          },
+          `include-uploaded-reference:${includeAttempts}`,
+        );
+        included = true;
+        step?.("Referência enviada incluída no comando do Flow.");
+      } catch (error) {
+        // Opening the debugger can change Flow's responsive picker layout.
+        // Retry only a confirmed missing control, never an uncertain click.
+        if (includeAttempts >= 3 || !/Controle não encontrado/.test(error?.message || ""))
+          throw error;
+      }
+    }
+    await sleep(500, signal);
+  }
+  throw codedError(
+    state?.consent ? "HUMAN_INTERVENTION_REQUIRED" : "OUTPUT_VALIDATION_FAILED",
+    state?.consent
+      ? "O Flow aguarda sua confirmação dos direitos de uso da referência. Confirme na janela do Flow e retome a etapa."
+      : `O envio da referência não liberou o editor do Flow. Estado: ${JSON.stringify(state)}.`,
+  );
+}
+
+async function setPromptWithExtension(
+  bridge,
+  prompt,
+  customSelector,
+  operationKey,
+  signal,
+  client,
+  sessionId,
+) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await bridge.dispatch(
+        "setPrompt",
+        {
+          text: prompt,
+          promptSelector: customSelector || "",
+          selectors: customSelector
+            ? [customSelector]
+            : [
+                '[data-slate-editor="true"]',
+                '[contenteditable="true"]',
+                '[contenteditable="plaintext-only"]',
+                '[role="textbox"]',
+              ],
+        },
+        `${operationKey}:${attempt}`,
+      );
+    } catch (error) {
+      lastError = error;
+      if (error?.code !== "OUTPUT_VALIDATION_FAILED" || attempt === 3) {
+        const state = await evaluate(
+          client,
+          sessionId,
+          `(() => { ${DEEP_HELPERS}
+          const editor = cfPromptCandidate(${JSON.stringify(customSelector || "")});
+          const focused = document.activeElement;
+          return { editorFound: !!editor, editorCharacters: (editor?.innerText || '').length,
+            focusedTag: focused?.tagName, focusedRole: focused?.getAttribute('role'),
+            editorFocused: editor === focused || !!editor?.contains(focused),
+            visibleDialogs: cfAll('[role="dialog"]').filter(cfVisible).length };
+        })()`,
+        ).catch(() => undefined);
+        error.message += ` Diagnóstico do editor: ${JSON.stringify(state)}.`;
+        throw error;
+      }
+      await sleep(750 * attempt, signal);
+    }
+  }
+  throw lastError;
 }
 
 async function waitGenerateEnabled(client, sessionId, settings, signal, timeoutMs = 15000) {
@@ -1487,6 +1728,15 @@ async function clickGenerateWithExtension(bridge, settings, operationKey) {
     {
       promptSelector: settings?.promptSelector || "",
       generateSelector: settings?.generateSelector || "",
+      textIncludes: [
+        "iniciar geração",
+        "iniciar geracao",
+        "start generation",
+        "criar",
+        "create",
+        "gerar",
+        "generate",
+      ],
     },
     operationKey,
   );
@@ -2034,6 +2284,104 @@ function parseGenerationResponse(captured) {
   return body;
 }
 
+function mediaItemsFromImageUrls(urls) {
+  const seen = new Set();
+  const media = [];
+  for (const raw of Array.isArray(urls) ? urls : []) {
+    try {
+      const parsed = new URL(String(raw || ""));
+      if (parsed.protocol !== "https:" || parsed.hostname !== MEDIA_HOST || seen.has(parsed.href)) {
+        continue;
+      }
+      seen.add(parsed.href);
+      const mediaId =
+        parsed.pathname.split("/").filter(Boolean).at(-1) || `image-${media.length + 1}`;
+      media.push({ image: { generatedImage: { fifeUrl: parsed.href, mediaId } } });
+    } catch {
+      // URLs incompletas ou de outros componentes da página não são mídia gerada.
+    }
+  }
+  return media;
+}
+
+async function generatedMediaOnPage(client, sessionId) {
+  const urls = await evaluate(
+    client,
+    sessionId,
+    `(() => { ${DEEP_HELPERS}
+      return cfAll('img')
+        .filter(cfVisible)
+        .map(img => img.currentSrc || img.src || '')
+        .filter(src => String(src).toLowerCase().startsWith('https://flow-content.google/image/'));
+    })()`,
+  );
+  return mediaItemsFromImageUrls(urls);
+}
+
+// Explicit recovery selection: never guess the newest image or submit again
+// when the operator identifies an already-generated result after a UI failure.
+async function recoverMediaByLabel(client, sessionId, label) {
+  const urls = await evaluate(
+    client,
+    sessionId,
+    `(() => { ${DEEP_HELPERS}
+    const label = ${JSON.stringify(label.toLowerCase())};
+    const candidates = cfAll('img, [alt], [aria-label], [title], [role="group"], span, div')
+      .filter(el => [el.getAttribute('alt'), el.getAttribute('aria-label'), el.getAttribute('title'), el.textContent,
+        (el.getAttribute('aria-labelledby') || '').split(/\s+/).map(id => document.getElementById(id)?.textContent || '').join(' ')]
+        .some(value => String(value || '').trim().toLowerCase() === label));
+    const urls = new Set();
+    for (const candidate of candidates) {
+      // The media card's accessible label can be exposed directly on the <img>.
+      // querySelectorAll() below intentionally excludes the node itself, so capture
+      // that case before walking its container.
+      if (candidate instanceof HTMLImageElement && cfVisible(candidate)) {
+        urls.add(candidate.currentSrc || candidate.src);
+        continue;
+      }
+      let node = candidate;
+      for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
+        const images = [...node.querySelectorAll('img')].filter(cfVisible);
+        if (images.length === 1) { urls.add(images[0].currentSrc || images[0].src); break; }
+        if (images.length > 1) break;
+      }
+    }
+    return [...urls];
+  })()`,
+  );
+  const media = mediaItemsFromImageUrls(urls);
+  if (media.length !== 1)
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      "Não foi possível identificar uma única imagem para a recuperação solicitada. Nenhuma geração foi disparada.",
+    );
+  return media[0];
+}
+
+async function waitForGeneratedMediaOnPage(
+  client,
+  sessionId,
+  baselineUrls,
+  signal,
+  timeoutMs,
+  isCancelled = () => false,
+) {
+  const baseline = new Set(baselineUrls);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && !isCancelled()) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    const fresh = (await generatedMediaOnPage(client, sessionId)).filter(
+      (item) => !baseline.has(item.image.generatedImage.fifeUrl),
+    );
+    if (fresh.length > 0) return { media: fresh };
+    await sleep(750, signal);
+  }
+  throw codedError(
+    "TIMEOUT",
+    "Nenhuma imagem nova apareceu no projeto do Google Flow dentro do tempo limite.",
+  );
+}
+
 function extensionForMime(mimeType) {
   const mime = String(mimeType).toLowerCase();
   if (mime.includes("png")) return ".png";
@@ -2210,6 +2558,13 @@ export async function execute(request, services) {
 
   const prompts = normalizePrompts(request?.inputs?.prompts);
   if (prompts.length === 0) return resultError("INVALID_INPUT", "Informe pelo menos um prompt.");
+  const singleImageOutput = requestsSingleImage(request);
+  if (singleImageOutput && prompts.length !== 1) {
+    return resultError(
+      "INVALID_INPUT",
+      "Um output image exige exatamente um prompt. Use files para gerar um lote.",
+    );
+  }
   const referenceImages = normalizeReferenceImages(request?.inputs?.reference_images);
   const coreBatchIndex = Number.isInteger(request?.batch?.index) ? request.batch.index : undefined;
   const coreBatchTotal = Number.isInteger(request?.batch?.total) ? request.batch.total : undefined;
@@ -2227,7 +2582,8 @@ export async function execute(request, services) {
 
   const settings = request?.settings ?? {};
   const keepBrowserOpen = settings.keepBrowserOpen !== false;
-  const startMinimized = settings.startMinimized !== false;
+  const startMinimized =
+    request?.context?.runMode !== "method_test" && settings.startMinimized !== false;
   const requestTimeoutSeconds = Number.isInteger(settings.requestTimeoutSeconds)
     ? settings.requestTimeoutSeconds
     : 240;
@@ -2245,7 +2601,7 @@ export async function execute(request, services) {
   const maxReferenceImages = Number.isInteger(request?.configuration?.maxReferenceImages)
     ? request.configuration.maxReferenceImages
     : 10;
-  const maxImagesPerPrompt = Number.isInteger(request?.configuration?.maxImagesPerPrompt)
+  const requestedMaxImagesPerPrompt = Number.isInteger(request?.configuration?.maxImagesPerPrompt)
     ? request.configuration.maxImagesPerPrompt
     : 1;
   if (requestedConcurrentGenerations < 1 || requestedConcurrentGenerations > 3) {
@@ -2257,9 +2613,10 @@ export async function execute(request, services) {
   if (maxReferenceImages < 0 || maxReferenceImages > 10) {
     return resultError("INVALID_CONFIGURATION", "maxReferenceImages deve ficar entre 0 e 10.");
   }
-  if (maxImagesPerPrompt < 1 || maxImagesPerPrompt > 4) {
+  if (requestedMaxImagesPerPrompt < 1 || requestedMaxImagesPerPrompt > 4) {
     return resultError("INVALID_CONFIGURATION", "maxImagesPerPrompt deve ficar entre 1 e 4.");
   }
+  const maxImagesPerPrompt = singleImageOutput ? 1 : requestedMaxImagesPerPrompt;
   const stepLogs = [];
   const diagnosticLogs = [];
   const step = (message) => {
@@ -2319,6 +2676,8 @@ export async function execute(request, services) {
   let responseTracker;
   let extensionBridge;
   let activeProjectUrl;
+  let referencesAttached = navigation.referencesAttached === true;
+  let generationSubmitted = false;
   const files = [];
   const artifacts = [];
   try {
@@ -2385,8 +2744,46 @@ export async function execute(request, services) {
     );
     activeProjectUrl = initialProjectState?.url;
     step(`Projeto do Google Flow pronto: ${initialProjectState?.url || "URL não detectada"}.`);
+    if (navigation.captureLabel) {
+      // Project shell/editor readiness precedes the asynchronously loaded media grid.
+      await sleep(3_000, services.signal);
+      const media = await recoverMediaByLabel(client, sessionId, navigation.captureLabel);
+      const recovered = await downloadGeneratedImage(media, prompts[0], 1, 1, services);
+      responseTracker.close();
+      responseTracker = null;
+      await generationDefaults.disable();
+      extensionBridge.dispose();
+      extensionBridge = null;
+      await maybeCloseBrowser(client, browserInfo, keepBrowserOpen);
+      client = null;
+      await clearCaptchaRetryNavigation(request, services);
+      return {
+        status: "success",
+        values: { images: singleImageOutput ? recovered.file : [recovered.file] },
+        artifacts: [recovered.artifact],
+        logs: [
+          ...stepLogs,
+          "Resultado existente recuperado por seleção explícita do operador; nenhuma nova geração foi enviada.",
+        ],
+      };
+    }
     step("Editor Slate detectado.");
-    await uploadReferenceImages(client, sessionId, referencePaths, settings, services.signal, step);
+    if (
+      !referencesAttached ||
+      (await attachedReferenceCount(client, sessionId)) < referencePaths.length
+    )
+      await uploadReferenceImages(
+        client,
+        sessionId,
+        extensionBridge,
+        referencePaths,
+        settings,
+        services.signal,
+        step,
+      );
+    referencesAttached = referencePaths.length > 0;
+    if (navigation.referencesAttached)
+      step("Retomando o projeto com a referência já anexada, sem repetir o upload.");
 
     const maxConcurrentGenerations = activePreferences.fallbackOnModelLimit
       ? 1
@@ -2407,6 +2804,9 @@ export async function execute(request, services) {
               task.prompt,
               settings.promptSelector || "",
               `${task.index}:${task.attempt}:prompt`,
+              services.signal,
+              client,
+              sessionId,
             );
             step(`${label}: Slate preenchido (${promptResult?.readbackLength || 0} caracteres).`);
             const generateState = await waitGenerateEnabled(
@@ -2416,10 +2816,32 @@ export async function execute(request, services) {
               services.signal,
               15000,
             );
+            if (
+              referencePaths.length > 0 &&
+              (await attachedReferenceCount(client, sessionId)) < referencePaths.length
+            ) {
+              throw codedError(
+                "OUTPUT_VALIDATION_FAILED",
+                "A referência não está anexada ao comando do Flow. O prompt não foi enviado.",
+              );
+            }
             step(`${label}: botão habilitado (${generateState?.text || "Criar"}).`);
 
-            const reservation = responseTracker.reserve(requestTimeoutSeconds * 1000);
+            const baselineMedia = await generatedMediaOnPage(client, sessionId);
+            const baselineUrls = baselineMedia.map((item) => item.image.generatedImage.fifeUrl);
+            const responseTimeoutMs = requestTimeoutSeconds * 1000;
+            const reservation = responseTracker.reserve(responseTimeoutMs);
+            let stopPageFallback = false;
+            const pageFallback = waitForGeneratedMediaOnPage(
+              client,
+              sessionId,
+              baselineUrls,
+              services.signal,
+              responseTimeoutMs,
+              () => stopPageFallback,
+            );
             try {
+              generationSubmitted = true;
               const clickResult = await clickGenerateWithExtension(
                 extensionBridge,
                 settings,
@@ -2427,13 +2849,29 @@ export async function execute(request, services) {
               );
               step(`${label}: envio confirmado (${clickResult?.text || "Criar"}).`);
             } catch (cause) {
+              stopPageFallback = true;
+              await pageFallback.catch(() => undefined);
               reservation.cancel(cause);
               await reservation.promise.catch(() => undefined);
               throw cause;
             }
 
-            const captured = await reservation.promise;
-            step(`${label}: resposta HTTP ${captured?.status ?? "?"} capturada.`);
+            const completed = await Promise.race([
+              reservation.promise.then((captured) => ({ source: "network", captured })),
+              pageFallback.then((body) => ({
+                source: "page",
+                captured: { status: 200, bodyText: JSON.stringify(body) },
+              })),
+            ]);
+            stopPageFallback = true;
+            if (completed.source === "page") {
+              reservation.cancel(codedError("CANCELLED", "Fallback visual concluiu primeiro."));
+              await reservation.promise.catch(() => undefined);
+              step(`${label}: imagem nova detectada no projeto do Flow.`);
+            } else {
+              step(`${label}: resposta HTTP ${completed.captured?.status ?? "?"} capturada.`);
+            }
+            const captured = completed.captured;
             let generation;
             try {
               generation = parseGenerationResponse(captured);
@@ -2540,7 +2978,7 @@ export async function execute(request, services) {
 
     return {
       status: "success",
-      values: { images: files },
+      values: { images: singleImageOutput ? files[0] : files },
       artifacts,
       usage: { provider: "Google Labs / Flow", outputUnits: files.length, unit: "image" },
       logs: [
@@ -2586,6 +3024,16 @@ export async function execute(request, services) {
     ) {
       await saveCaptchaRetryNavigation(request, services, activeProjectUrl).catch(() => undefined);
     }
+    if (
+      !generationSubmitted &&
+      referencesAttached &&
+      activeProjectUrl &&
+      cause?.code !== "CANCELLED"
+    ) {
+      await saveCaptchaRetryNavigation(request, services, activeProjectUrl, true).catch(
+        () => undefined,
+      );
+    }
 
     const errorResponse = resultError(
       cause?.code ?? "UPSTREAM_UNAVAILABLE",
@@ -2594,7 +3042,7 @@ export async function execute(request, services) {
       cause?.retryAfterMs,
     );
     if (files.length > 0) {
-      errorResponse.partialValues = { images: files };
+      errorResponse.partialValues = { images: singleImageOutput ? files[0] : files };
     }
     if (artifacts.length > 0) {
       errorResponse.artifacts = artifacts;
@@ -2603,6 +3051,10 @@ export async function execute(request, services) {
   }
 }
 export const __test = {
+  uploadReferenceImages,
+  waitReferenceUploadReady,
+  referenceUploadStateExpression,
+  isFlowHost,
   normalizePrompts,
   safeFilename,
   validateFlowUrl,
@@ -2619,6 +3071,8 @@ export const __test = {
   markProfilePrepared,
   resolveGenerationPreferences,
   normalizeReferenceImages,
+  requestsSingleImage,
+  mediaItemsFromImageUrls,
   assertDedicatedProfilePath,
   extensionForMime,
   IMAGE_MODELS,

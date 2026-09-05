@@ -8,7 +8,7 @@ import { testExtensionBridge } from "../../../browser-bridge/test.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.2.2");
+assert.equal(manifest.version, "1.2.5");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
@@ -16,6 +16,7 @@ assert.ok(manifest.permissions.includes("filesystem:write"));
 assert.ok(manifest.permissions.includes("network"));
 assert.ok(manifest.permissions.includes("process"));
 assert.deepEqual(manifest.deliveryTypes, ["image"]);
+assert.ok(manifest.networkHosts.includes("flow.google.com"));
 
 const cap = manifest.capabilities.find((item) => item.id === "generate-images-in-browser");
 assert.ok(cap);
@@ -27,6 +28,8 @@ assert.deepEqual(
   cap.outputPorts.map((port) => port.key),
   ["images"],
 );
+assert.deepEqual(cap.outputPorts[0].producedTypes, ["image", "files"]);
+assert.deepEqual(cap.producedOutputTypes, ["image", "files"]);
 assert.equal(cap.blockConfigSchema.properties.accountProfile.default, "default");
 assert.equal(cap.blockConfigSchema.properties.imageModel.default, "flow_auto");
 assert.equal(cap.blockConfigSchema.properties.fallbackOnModelLimit.default, true);
@@ -41,8 +44,192 @@ assert.deepEqual(__test.normalizeReferenceImages([{ id: "a" }, [{ id: "b" }]]), 
   { id: "a" },
   { id: "b" },
 ]);
+
+// Isolated regression: file selection must suppress the native modal and wait
+// for the provider's upload/consent UI, not merely for setFileInputFiles.
+const uploadCalls = [];
+let uploadReadyReads = 0;
+const uploadClient = {
+  async send(method, params) {
+    uploadCalls.push({ method, params });
+    if (method === "DOM.getDocument")
+      return {
+        root: { nodeId: 7, nodeName: "INPUT", attributes: ["type", "file", "accept", "image/*"] },
+      };
+    if (method === "Runtime.evaluate") {
+      if (params.expression.includes("const dialogs =")) {
+        uploadReadyReads += 1;
+        return {
+          result: {
+            value: {
+              editable: true,
+              dialogs: uploadReadyReads === 1 ? 1 : 0,
+              pickerOpen: false,
+              consent: false,
+            },
+          },
+        };
+      }
+      return { result: { value: { ok: true, changed: false } } };
+    }
+    return {};
+  },
+};
+await __test.uploadReferenceImages(
+  uploadClient,
+  "page",
+  {},
+  ["fixture-reference.png"],
+  {},
+  undefined,
+);
+assert.equal(uploadCalls[0].method, "Page.setInterceptFileChooserDialog");
+assert.equal(uploadCalls[0].params.enabled, true);
+assert.ok(uploadCalls.some((call) => call.method === "DOM.setFileInputFiles"));
+assert.equal(uploadReadyReads, 2, "waits until the modal closes before writing the prompt");
+assert.deepEqual(uploadCalls.at(-1), {
+  method: "Page.setInterceptFileChooserDialog",
+  params: { enabled: false },
+});
+const consentClient = {
+  async send() {
+    return { result: { value: { editable: false, dialogs: 1, pickerOpen: true, consent: true } } };
+  },
+};
+let includedReference = false;
+let includeClicks = 0;
+const includeClient = {
+  async send() {
+    return {
+      result: {
+        value: {
+          editable: true,
+          dialogs: 0,
+          pickerOpen: !includedReference,
+          consent: false,
+          includeReady: !includedReference,
+          referenceMatches: true,
+        },
+      },
+    };
+  },
+};
+const includeBridge = {
+  async dispatch(action, payload) {
+    assert.equal(action, "click");
+    assert.ok(payload.textIncludes.includes("incluir"));
+    includeClicks += 1;
+    includedReference = true;
+  },
+};
+await __test.waitReferenceUploadReady(
+  includeClient,
+  "page",
+  {},
+  undefined,
+  undefined,
+  2_000,
+  includeBridge,
+  ["fixture-reference.png"],
+);
+assert.equal(
+  includeClicks,
+  1,
+  "includes the matching uploaded reference once before leaving the picker",
+);
+const wrongReferenceClient = {
+  async send() {
+    return {
+      result: {
+        value: {
+          editable: true,
+          dialogs: 0,
+          pickerOpen: true,
+          consent: false,
+          includeReady: true,
+          referenceMatches: false,
+        },
+      },
+    };
+  },
+};
+await assert.rejects(
+  __test.waitReferenceUploadReady(
+    wrongReferenceClient,
+    "page",
+    {},
+    undefined,
+    undefined,
+    1,
+    includeBridge,
+    ["fixture-reference.png"],
+  ),
+  /não liberou/,
+);
+assert.equal(includeClicks, 1, "never includes unrelated media");
+await assert.rejects(
+  __test.waitReferenceUploadReady(consentClient, "page", {}, undefined, undefined, 1),
+  (error) => error.code === "HUMAN_INTERVENTION_REQUIRED",
+);
+const failedUploadCalls = [];
+const failedUploadClient = {
+  async send(method, params) {
+    failedUploadCalls.push({ method, params });
+    if (method === "Runtime.evaluate") throw new Error("fixture upload failure");
+    return {};
+  },
+};
+await assert.rejects(
+  __test.uploadReferenceImages(
+    failedUploadClient,
+    "page",
+    {},
+    ["fixture-reference.png"],
+    {},
+    undefined,
+  ),
+  /fixture upload failure/,
+);
+assert.deepEqual(failedUploadCalls.at(-1), {
+  method: "Page.setInterceptFileChooserDialog",
+  params: { enabled: false },
+});
+assert.equal(
+  __test.requestsSingleImage({ outputContract: [{ portKey: "images", type: "image" }] }),
+  true,
+);
+assert.equal(
+  __test.requestsSingleImage({ outputContract: [{ portKey: "images", type: "files" }] }),
+  false,
+);
 assert.equal(__test.normalizeAccountProfile("canal_01"), "canal_01");
 assert.throws(() => __test.normalizeAccountProfile("../perfil"), /accountProfile/);
+assert.equal(
+  __test.validateFlowUrl("https://flow.google.com/project/project-1"),
+  "https://flow.google.com/project/project-1",
+);
+assert.equal(
+  __test.validateFlowUrl("https://labs.google/fx/pt/tools/flow/project/project-1"),
+  "https://labs.google/fx/pt/tools/flow/project/project-1",
+);
+assert.throws(() => __test.validateFlowUrl("https://example.com/project/project-1"), /flowUrl/);
+assert.deepEqual(
+  __test.mediaItemsFromImageUrls([
+    "https://flow-content.google/image/generated-1?Signature=abc",
+    "https://flow-content.google/image/generated-1?Signature=abc",
+    "https://example.com/image/generated-2",
+  ]),
+  [
+    {
+      image: {
+        generatedImage: {
+          fifeUrl: "https://flow-content.google/image/generated-1?Signature=abc",
+          mediaId: "generated-1",
+        },
+      },
+    },
+  ],
+);
 
 const retryDirectory = await mkdtemp(join(tmpdir(), "contentflow-flow-retry-"));
 const retryServices = { getWorkspacePath: (relativePath) => join(retryDirectory, relativePath) };
@@ -60,6 +247,27 @@ assert.equal(retryNavigation?.captchaRetry, true);
 assert.match(retryNavigation?.url ?? "", /\/tools\/flow\/project\/project-1/);
 assert.equal(
   await __test.readCaptchaRetryNavigation({ ...failedRequest, attempt: 3 }, retryServices),
+  undefined,
+);
+await __test.clearCaptchaRetryNavigation(failedRequest, retryServices);
+await __test.saveCaptchaRetryNavigation(
+  failedRequest,
+  retryServices,
+  "https://flow.google.com/project/project-reference",
+  true,
+);
+const referenceRetry = await __test.readCaptchaRetryNavigation(
+  { ...failedRequest, attempt: 2 },
+  retryServices,
+);
+assert.equal(referenceRetry.referencesAttached, true);
+assert.equal(referenceRetry.captchaRetry, false);
+assert.equal(referenceRetry.url, "https://flow.google.com/project/project-reference");
+assert.equal(
+  await __test.readCaptchaRetryNavigation(
+    { ...failedRequest, blockId: "other-block", attempt: 2 },
+    retryServices,
+  ),
   undefined,
 );
 await __test.clearCaptchaRetryNavigation(failedRequest, retryServices);
@@ -187,12 +395,13 @@ const extensionContent = await readFile(
   "utf8",
 );
 assert.equal(extensionManifest.manifest_version, 3);
-assert.equal(extensionManifest.version, "0.3.0");
+assert.equal(extensionManifest.version, "0.3.5");
 assert.deepEqual(extensionManifest.host_permissions, [
   "https://chatgpt.com/*",
   "https://claude.ai/*",
   "https://gemini.google.com/*",
   "https://grok.com/*",
+  "https://flow.google.com/*",
   "https://labs.google/*",
   "https://meta.ai/*",
   "https://www.meta.ai/*",
@@ -217,6 +426,8 @@ assert.equal((source.match(/Target\.activateTarget/g) || []).length, 1);
 assert.ok(source.includes("Modo Automático do Flow"));
 assert.ok(source.includes("fresh-project"));
 assert.ok(source.includes("!navigation.pinned"));
+assert.ok(source.includes("flow\\.google\\.com\\/project\\/"));
+assert.ok(source.includes('"iniciar geração"'));
 assert.ok(source.includes("Retomando o projeto recém-verificado após CAPTCHA"));
 assert.ok(source.includes("DOM.setFileInputFiles"));
 assert.ok(source.includes("limite do Nano Banana Pro atingido"));
@@ -226,5 +437,5 @@ await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), 
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v1.2.2 usa a ponte comum no Chrome, isola input e valida 300 comandos idempotentes.",
+  "OK: v1.2.5 usa a ponte comum no Chrome, aceita o domínio atual do Flow, entrega image ou files e valida 300 comandos idempotentes.",
 );

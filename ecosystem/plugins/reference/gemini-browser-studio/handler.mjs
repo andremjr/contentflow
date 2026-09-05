@@ -658,6 +658,23 @@ function normalizeEditorText(value) {
     .replace(/\s+/gu, " ")
     .trim();
 }
+function taskPageMarker(request) {
+  return `contentflow-${createHash("sha256")
+    .update(
+      [request?.executionId, request?.blockId, request?.attempt ?? 1, request?.traceId].join(":"),
+    )
+    .digest("hex")
+    .slice(0, 24)}`;
+}
+async function markTaskPage(client, sessionId, request, signal) {
+  const marker = taskPageMarker(request);
+  await evaluate(
+    client,
+    sessionId,
+    `(() => { const url = new URL(location.href); url.hash = ${JSON.stringify(marker)}; history.replaceState(history.state, '', url); return location.href; })()`,
+  );
+  await sleep(200, signal);
+}
 async function attach(c, signal, activate = false, forceNew = false) {
   const { targetInfos = [] } = await c.send("Target.getTargets");
   let t = forceNew
@@ -678,7 +695,7 @@ async function attach(c, signal, activate = false, forceNew = false) {
   await c.send("Runtime.enable", {}, sessionId);
   return { sessionId, targetId: t.targetId, created };
 }
-const HELP = String.raw`function vis(e){if(!e||!(e instanceof Element))return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>8&&r.height>8}function txt(e){return[e?.innerText,e?.textContent,e?.getAttribute?.('aria-label'),e?.getAttribute?.('data-test-id')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()}function prompt(){return [...document.querySelectorAll('[contenteditable="true"][role="textbox"],[role="textbox"][aria-label*="Gemini" i],[role="textbox"][aria-label*="comando" i]')].find(vis)||null}function responses(){const sels=['.model-response-text','structured-content-container','.response-container-content','[data-test-id="model-response"]','message-content'];for(const s of sels){const n=[...document.querySelectorAll(s)].filter(vis);if(n.length)return n}return[]}function state(){const n=responses(),entries=n.map(e=>({text:(e.innerText||e.textContent||'').trim(),links:[...e.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text),stop=[...document.querySelectorAll('button')].some(e=>vis(e)&&/parar|stop/i.test(txt(e)));return{texts:entries.map(x=>x.text),entries,stop,body:(document.body?.innerText||'').slice(0,6000)}}`;
+const HELP = String.raw`function vis(e){if(!e||!(e instanceof Element))return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>8&&r.height>8}function txt(e){return[e?.innerText,e?.textContent,e?.getAttribute?.('aria-label'),e?.getAttribute?.('data-test-id')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()}function prompt(){return [...document.querySelectorAll('[contenteditable="true"][role="textbox"],[role="textbox"][aria-label*="Gemini" i],[role="textbox"][aria-label*="comando" i]')].find(vis)||null}function responses(){const sels=['.model-response-text','structured-content-container','.response-container-content','[data-test-id="model-response"]','message-content'];for(const s of sels){const n=[...document.querySelectorAll(s)].filter(vis);if(n.length)return n}return[]}function state(){const n=responses(),entries=n.map(e=>({text:(e.innerText||e.textContent||'').trim(),links:[...e.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text&&!/^(?:gemini said|gemini disse)$/i.test(x.text.trim())),stop=[...document.querySelectorAll('button')].some(e=>vis(e)&&/parar|stop/i.test(txt(e)));return{texts:entries.map(x=>x.text),entries,stop,body:(document.body?.innerText||'').slice(0,6000)}}`;
 async function newChat(c, s, signal) {
   await c.send("Page.navigate", { url: URL_NEW }, s);
   const d = Date.now() + 20000;
@@ -799,6 +816,14 @@ async function selectTool(bridge, type) {
 }
 async function attachFiles(c, s, bridge, files, signal) {
   if (!files.length) return;
+  const baselineAttachmentCount = await evaluate(
+    c,
+    s,
+    `(()=>Math.max(
+      [...document.querySelectorAll('img[alt="attachment" i]')].filter((el)=>{const r=el.getBoundingClientRect();return r.width>20&&r.height>20}).length,
+      document.querySelectorAll('button[aria-label*="close attachment" i]').length
+    ))()`,
+  );
   if (
     !(await clickText(
       bridge,
@@ -833,15 +858,30 @@ async function attachFiles(c, s, bridge, files, signal) {
   );
   const objectId = target?.result?.objectId;
   if (!objectId) throw err("OUTPUT_VALIDATION_FAILED", "Input de upload não encontrado.", true);
-  const { nodeId } = await c.send("DOM.requestNode", { objectId }, s);
-  if (!nodeId)
-    throw err("OUTPUT_VALIDATION_FAILED", "Input de upload não pôde ser resolvido.", true);
-  await c.send("DOM.setFileInputFiles", { files: files.map((x) => x.path), nodeId }, s);
+  // O objectId pertence à mesma sessão CDP usada pelo Runtime.evaluate e pode
+  // ser entregue diretamente ao DOM.setFileInputFiles. Nas versões atuais do
+  // Gemini, DOM.requestNode pode devolver nodeId=0 para inputs ocultos criados
+  // pelo Angular, embora o elemento continue válido e preenchível.
+  await c.send("DOM.setFileInputFiles", { files: files.map((x) => x.path), objectId }, s);
   const names = files.map((x) => x.name.toLowerCase()),
     d = Date.now() + 120000;
   while (Date.now() < d) {
-    const body = await evaluate(c, s, "(document.body?.innerText||'').toLowerCase()");
-    if (names.every((n) => body.includes(n))) return;
+    const state = await evaluate(
+      c,
+      s,
+      `(()=>({
+        body:(document.body?.innerText||'').toLowerCase(),
+        attachmentCount:Math.max(
+          [...document.querySelectorAll('img[alt="attachment" i]')].filter((el)=>{const r=el.getBoundingClientRect();return r.width>20&&r.height>20}).length,
+          document.querySelectorAll('button[aria-label*="close attachment" i]').length
+        )
+      }))()`,
+    );
+    if (
+      names.every((name) => state?.body?.includes(name)) ||
+      Number(state?.attachmentCount) >= Number(baselineAttachmentCount) + files.length
+    )
+      return;
     await sleep(500, signal);
   }
   throw err("TIMEOUT", "Upload não concluiu.", true);
@@ -1115,7 +1155,8 @@ export async function execute(request, services) {
       {
         ...settings,
         keepBrowserOpen: settings.keepBrowserOpen !== false,
-        startMinimized: settings.startMinimized !== false,
+        startMinimized:
+          request?.context?.runMode !== "method_test" && settings.startMinimized !== false,
       },
       path,
       port,
@@ -1138,6 +1179,7 @@ export async function execute(request, services) {
       services.signal,
     );
     parts = partsForConversation(parts, request.conversation, reusedConversation);
+    if (taskPage.created) await markTaskPage(client, sessionId, request, services.signal);
     bridge = await attachContentFlowBridge({
       client,
       pageSessionId: sessionId,
@@ -1251,6 +1293,7 @@ export async function execute(request, services) {
 }
 
 export const __test = {
+  taskPageMarker,
   buildParts,
   buildSearch,
   buildChoose,

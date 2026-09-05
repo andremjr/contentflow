@@ -25,14 +25,14 @@ export default defineConfig({
       ignored: ["**/data/test-exports/**"],
     },
     proxy: {
-      "/api": "http://127.0.0.1:8787",
+      "/api": `http://127.0.0.1:${process.env.CONTENTFLOW_API_PORT ?? 8787}`,
     },
   },
   preview: {
     host: "127.0.0.1",
     port: 8080,
     proxy: {
-      "/api": "http://127.0.0.1:8787",
+      "/api": `http://127.0.0.1:${process.env.CONTENTFLOW_API_PORT ?? 8787}`,
     },
   },
   resolve: {

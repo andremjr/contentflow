@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { PROCESS_META, PROCESS_ORDER, type ProcessId } from "@/lib/domain";
-import { useChannel, useHumanTasks, useProject } from "@/lib/store";
+import { useChannel, useDatabaseReady, useHumanTasks, useProject } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/project/$projectId")({ component: ProjectLayout });
@@ -25,7 +25,20 @@ function ProjectLayout() {
   const project = useProject(projectId);
   const channel = useChannel(project?.channelId ?? "");
   const humanTasks = useHumanTasks();
+  const databaseReady = useDatabaseReady();
   const pathname = useLocation({ select: (state) => state.pathname });
+  if (!databaseReady) {
+    return (
+      <AppShell>
+        <div
+          role="status"
+          className="flex flex-1 items-center justify-center p-10 text-muted-foreground"
+        >
+          Carregando projeto…
+        </div>
+      </AppShell>
+    );
+  }
   if (!project || !channel) {
     return (
       <AppShell>

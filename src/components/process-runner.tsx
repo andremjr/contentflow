@@ -51,6 +51,8 @@ import {
   resetStage,
   retryBlockExecution,
   saveHumanBlockDraft,
+  readRuntimeDraft,
+  saveProcessOutputDraft,
   startProcessExecution,
   useChannel,
   useChannelExecutions,
@@ -74,15 +76,12 @@ const STATUS_LABEL: Record<BlockExecution["status"], string> = {
 
 const NEXT_PROCESS_DELAY = 1100;
 
-export function ProcessRunner({
-  project,
-  processId,
-  description,
-}: {
-  project?: Project;
-  processId: ProcessId;
-  description: string;
-}) {
+type ProcessRunnerProps = { project?: Project; processId: ProcessId; description: string };
+export function ProcessRunner(props: ProcessRunnerProps) {
+  return <ProcessRunnerSession key={`${props.project?.id}:${props.processId}`} {...props} />;
+}
+
+function ProcessRunnerSession({ project, processId, description }: ProcessRunnerProps) {
   const navigate = useNavigate();
   const channel = useChannel(project?.channelId ?? "");
   const collections = useLibraryCollections(project?.channelId);
@@ -109,17 +108,15 @@ export function ProcessRunner({
   const blockedByPluginExecutor =
     activeExecution?.status === "blocked_executor" && activeBlock?.operator !== "Humano";
   const awaitingOutput = execution?.status === "awaiting_output";
-  const methodIssue = getMethodConfigurationIssue(method);
+  const methodIssue = getMethodConfigurationIssue(execution?.methodSnapshot ?? method);
   const synchronizedExecutionId =
     execution && !["completed", "cancelled"].includes(execution.status) ? execution.id : undefined;
 
   const scheduleNextProcess = useCallback(() => {
     if (!project || !channel || !nextProcess || nextNavigationTimer.current) return;
+    if (getMethodConfigurationIssue(channel.methods[nextProcess])) return;
     setIsAdvancing(true);
     nextNavigationTimer.current = window.setTimeout(() => {
-      if (channel.methods[nextProcess].blocks.length) {
-        startProcessExecution(project.id, nextProcess);
-      }
       navigate({ to: `/project/${project.id}/${PROCESS_ROUTE_SEGMENT[nextProcess]}` });
     }, NEXT_PROCESS_DELAY);
   }, [channel, navigate, nextProcess, project]);
@@ -168,29 +165,37 @@ export function ProcessRunner({
     });
   }
 
-  function start() {
-    const started = startProcessExecution(projectId, processId);
-    if (!started) {
-      toast.error(methodIssue ?? `Crie um método de ${meta.label} antes de iniciar.`);
-      return;
+  async function start() {
+    try {
+      const started = await startProcessExecution(projectId, processId);
+      if (!started) {
+        toast.error(methodIssue ?? `Crie um método de ${meta.label} antes de iniciar.`);
+        return;
+      }
+      toast.success(`Processo de ${meta.label} iniciado`, {
+        description: "Os blocos serão executados na ordem definida no método.",
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível iniciar.");
     }
-    toast.success(`Processo de ${meta.label} iniciado`, {
-      description: "Os blocos serão executados na ordem definida no método.",
-    });
   }
 
-  function chooseItem(itemId: string) {
-    if (!execution || !activeBlock) return;
-    if (!chooseCollectionItem(execution.id, activeBlock.id, itemId)) {
-      toast.error("Não foi possível registrar esta escolha.");
-      return;
+  async function chooseItem(itemId: string) {
+    try {
+      if (!execution || !activeBlock) return;
+      if (!(await chooseCollectionItem(execution.id, activeBlock.id, itemId))) {
+        toast.error("Não foi possível registrar esta escolha.");
+        return;
+      }
+      if (execution.status === "completed") {
+        toast.success("Opção escolhida. O processo foi concluído.");
+        scheduleNextProcess();
+        return;
+      }
+      toast.success("Opção escolhida. O processo continuará.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar a escolha.");
     }
-    if (execution.status === "completed") {
-      toast.success("Opção escolhida. O processo foi concluído.");
-      scheduleNextProcess();
-      return;
-    }
-    toast.success("Opção escolhida. O processo continuará.");
   }
 
   async function cancel() {
@@ -204,14 +209,18 @@ export function ProcessRunner({
     }
   }
 
-  function retry() {
-    if (
-      !execution ||
-      !activeExecution ||
-      !retryBlockExecution(execution.id, activeExecution.blockId)
-    )
-      return;
-    toast.success("Bloco preparado para uma nova tentativa.");
+  async function retry() {
+    try {
+      if (
+        !execution ||
+        !activeExecution ||
+        !(await retryBlockExecution(execution.id, activeExecution.blockId))
+      )
+        return;
+      toast.success("Bloco preparado para uma nova tentativa.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível repetir.");
+    }
   }
 
   return (
@@ -228,7 +237,13 @@ export function ProcessRunner({
             </div>
           </div>
           {completed || execution?.status === "cancelled" ? (
-            <Button variant="outline" size="sm" onClick={() => resetStage(project.id, processId)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void resetStage(project.id, processId).catch((error) => toast.error(error.message))
+              }
+            >
               <RotateCcw className="mr-1.5 size-3.5" /> Executar novamente
             </Button>
           ) : methodIssue ? (
@@ -279,7 +294,7 @@ export function ProcessRunner({
             />
           ) : waitingForHumanAction && activeBlock ? (
             <HumanBlockGate
-              key={activeBlock.id}
+              key={`${execution.id}:${activeBlock.id}:${activeExecution?.attempt ?? 1}`}
               block={activeBlock}
               execution={execution}
               project={project}
@@ -289,7 +304,11 @@ export function ProcessRunner({
               onProcessCompleted={scheduleNextProcess}
             />
           ) : awaitingOutput ? (
-            <ProcessOutputGate execution={execution} onCompleted={scheduleNextProcess} />
+            <ProcessOutputGate
+              key={execution.id}
+              execution={execution}
+              onCompleted={scheduleNextProcess}
+            />
           ) : blockedByPluginExecutor && activeBlock ? (
             activeBlock.plugin ? (
               <PluginExecutionGate
@@ -1042,8 +1061,8 @@ function HumanBlockGate({
 }) {
   const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
   const retryFeedback = blockExecution?.retryFeedback;
-  const [values, setValues] = useState<Record<string, RuntimeValue>>(
-    structuredClone(blockExecution?.values ?? {}),
+  const [values, setValues] = useState<Record<string, RuntimeValue>>(() =>
+    structuredClone(readRuntimeDraft(execution.id, block.id) ?? blockExecution?.values ?? {}),
   );
   const blockIndex = execution.methodSnapshot.blocks.findIndex((item) => item.id === block.id);
   const previousExecutions = execution.blocks
@@ -1139,38 +1158,53 @@ function HumanBlockGate({
 
   function updateValues(nextValues: Record<string, RuntimeValue>) {
     setValues(nextValues);
-    if (blockExecution) saveHumanBlockDraft(execution.id, block.id, nextValues);
+    if (blockExecution)
+      void saveHumanBlockDraft(execution.id, block.id, nextValues).catch((error) =>
+        toast.error("Rascunho não salvo", { description: error.message }),
+      );
   }
 
-  function submit() {
-    if (missingInputs.length) {
-      toast.error("Existem entradas sem conexão", {
-        description: missingInputs.map((item) => item.input.label).join(", "),
-      });
-      return;
-    }
-    const result = completeHumanBlock(execution.id, block.id, values);
-    if (!result.ok) {
-      toast.error("A ação ainda não pode ser concluída", {
-        description: result.missing.join(", "),
-      });
-      return;
-    }
-    if (result.retriedBlock) {
-      toast.info(`Nova tentativa iniciada em “${result.retriedBlock}”.`, {
-        description: "Os blocos seguintes serão executados novamente com o novo resultado.",
-      });
-    } else if (result.pausedValidation) {
-      toast.info("Resultado reprovado. A validação permanece pausada para revisão.");
-    } else if (result.completedProcess) {
-      toast.success("Processo concluído.");
-      onProcessCompleted();
-    } else if (execution.status === "awaiting_output") {
-      toast.success("Ação concluída", {
-        description: "Registre agora o resultado final do processo.",
-      });
-    } else {
-      toast.success("Ação concluída. O próximo bloco está pronto.");
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  async function submit() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      if (missingInputs.length) {
+        toast.error("Existem entradas sem conexão", {
+          description: missingInputs.map((item) => item.input.label).join(", "),
+        });
+        return;
+      }
+      const result = await completeHumanBlock(execution.id, block.id, values);
+      if (!result.ok) {
+        toast.error("A ação ainda não pode ser concluída", {
+          description: result.missing.join(", "),
+        });
+        return;
+      }
+      if (result.retriedBlock) {
+        toast.info(`Nova tentativa iniciada em “${result.retriedBlock}”.`, {
+          description: "Os blocos seguintes serão executados novamente com o novo resultado.",
+        });
+      } else if (result.pausedValidation) {
+        toast.info("Resultado reprovado. A validação permanece pausada para revisão.");
+      } else if (result.completedProcess) {
+        toast.success("Processo concluído.");
+        onProcessCompleted();
+      } else if (execution.status === "awaiting_output") {
+        toast.success("Ação concluída", {
+          description: "Registre agora o resultado final do processo.",
+        });
+      } else {
+        toast.success("Ação concluída. O próximo bloco está pronto.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível concluir a ação.");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   }
 
@@ -1272,7 +1306,7 @@ function HumanBlockGate({
         ) : (
           <p className="text-xs text-muted-foreground">Esta ação não exige campos adicionais.</p>
         )}
-        <Button className="mt-5" disabled={missingInputs.length > 0} onClick={submit}>
+        <Button className="mt-5" disabled={submitting || missingInputs.length > 0} onClick={submit}>
           <CheckCircle2 className="mr-1.5 size-4" /> Concluir ação humana
         </Button>
       </div>
@@ -1293,17 +1327,29 @@ function ProcessOutputGate({
 }) {
   const fields = createProcessOutputFields(execution.processType);
   const [values, setValues] = useState<Record<string, RuntimeValue>>(
-    execution.output?.values ?? {},
+    () => readRuntimeDraft(execution.id, "__output__") ?? execution.output?.values ?? {},
   );
 
-  function submit() {
-    const result = completeProcessOutput(execution.id, values);
-    if (!result.ok) {
-      toast.error("Informe o resultado final", { description: result.missing.join(", ") });
-      return;
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  async function submit() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      const result = await completeProcessOutput(execution.id, values);
+      if (!result.ok) {
+        toast.error("Informe o resultado final", { description: result.missing.join(", ") });
+        return;
+      }
+      toast.success("Resultado salvo. Processo concluído.");
+      onCompleted();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar o resultado.");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
-    toast.success("Resultado salvo. Processo concluído.");
-    onCompleted();
   }
 
   return (
@@ -1317,8 +1363,17 @@ function ProcessOutputGate({
         próximos processos.
       </p>
       <div className="mt-5 rounded-xl border border-border/70 bg-card p-4 sm:p-5">
-        <RuntimeFieldsForm fields={fields} values={values} onChange={setValues} />
-        <Button className="mt-5" onClick={submit}>
+        <RuntimeFieldsForm
+          fields={fields}
+          values={values}
+          onChange={(next) => {
+            setValues(next);
+            void saveProcessOutputDraft(execution.id, next).catch((error) =>
+              toast.error("Rascunho não salvo", { description: error.message }),
+            );
+          }}
+        />
+        <Button className="mt-5" disabled={submitting} onClick={submit}>
           <CheckCircle2 className="mr-1.5 size-4" /> Salvar resultado e concluir
         </Button>
       </div>
