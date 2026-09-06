@@ -1,5 +1,6 @@
-import { Check, Languages, Moon, Settings2, Sun } from "lucide-react";
+import { Bell, Check, Languages, Moon, Settings2, Sun, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,16 @@ const LANGUAGES: Array<{ value: AppLanguage; label: string; detail: string }> = 
 ];
 
 export function AppPreferencesDialog() {
-  const { theme, language, setTheme, setLanguage } = useAppPreferences();
+  const {
+    theme,
+    language,
+    notificationSound,
+    systemNotifications,
+    setTheme,
+    setLanguage,
+    setNotificationSound,
+    setSystemNotifications,
+  } = useAppPreferences();
 
   return (
     <Dialog>
@@ -31,15 +41,15 @@ export function AppPreferencesDialog() {
         <Button
           variant="ghost"
           className="h-auto w-full justify-center gap-2 px-2 py-2.5 text-muted-foreground hover:text-foreground sm:justify-start sm:px-3"
-          aria-label="Aparência e idioma"
+          aria-label="Preferências"
         >
           <Settings2 className="size-4 shrink-0" />
-          <span className="hidden text-xs font-medium sm:block">Aparência e idioma</span>
+          <span className="hidden text-xs font-medium sm:block">Preferências</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Aparência e idioma</DialogTitle>
+          <DialogTitle>Aparência, idioma e notificações</DialogTitle>
           <DialogDescription>
             Estas preferências são globais e ficam salvas neste dispositivo.
           </DialogDescription>
@@ -100,6 +110,55 @@ export function AppPreferencesDialog() {
                 </button>
               );
             })}
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <Bell className="size-3.5" />
+            Notificações
+          </div>
+          <div className="divide-y divide-border border-y border-border">
+            <div className="flex min-h-14 items-center gap-3 px-2 py-2.5">
+              <Bell className="size-4 shrink-0 text-brand-soft" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Validações na barra de tarefas</span>
+                <span className="block text-[11px] text-muted-foreground">
+                  A contagem de validações pendentes aparece sempre no ícone do aplicativo.
+                </span>
+              </span>
+              <span className="shrink-0 rounded-full bg-brand/15 px-2 py-1 text-[10px] font-semibold text-brand-soft">
+                Sempre ativo
+              </span>
+            </div>
+            <label className="flex min-h-14 cursor-pointer items-center gap-3 px-2 py-2.5 hover:bg-secondary/50">
+              <Volume2 className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Som de alerta</span>
+                <span className="block text-[11px] text-muted-foreground">
+                  Reproduzir um som quando uma nova validação precisar de atenção.
+                </span>
+              </span>
+              <Checkbox
+                aria-label="Som de alerta"
+                checked={notificationSound}
+                onCheckedChange={(checked) => setNotificationSound(checked === true)}
+              />
+            </label>
+            <label className="flex min-h-14 cursor-pointer items-center gap-3 px-2 py-2.5 hover:bg-secondary/50">
+              <Bell className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Notificações do Windows</span>
+                <span className="block text-[11px] text-muted-foreground">
+                  Exibir alertas na central de notificações do Windows.
+                </span>
+              </span>
+              <Checkbox
+                aria-label="Notificações do Windows"
+                checked={systemNotifications}
+                onCheckedChange={(checked) => setSystemNotifications(checked === true)}
+              />
+            </label>
           </div>
         </section>
       </DialogContent>

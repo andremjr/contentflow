@@ -40,6 +40,7 @@ const PLUGIN_POLICIES = Object.freeze({
 const inFlight = new Map();
 const tabQueues = new Map();
 const activeSessions = new Map();
+const debuggerSessionsByTab = new Map();
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const MAX_ACTIVE_SESSIONS = 128;
 
@@ -663,6 +664,39 @@ async function withAttachedDebugger(tabId, operation) {
   return result;
 }
 
+async function detachSessionDebugger(session) {
+  if (!Number.isInteger(session?.attachedTabId)) return;
+  const tabId = session.attachedTabId;
+  session.attachedTabId = undefined;
+  const owners = debuggerSessionsByTab.get(tabId);
+  owners?.delete(session.sessionToken);
+  if (owners?.size) return;
+  debuggerSessionsByTab.delete(tabId);
+  try {
+    await chrome.debugger.detach({ tabId });
+  } catch {
+    // A aba ou o Chrome podem ter sido fechados antes do fim do job.
+  }
+}
+
+async function withJobDebugger(tabId, command, operation) {
+  if (command.pluginId !== FLOW_PLUGIN_ID) return await withAttachedDebugger(tabId, operation);
+  const session = activeSessions.get(command.sessionToken);
+  if (!session) throw new Error("Sessão da Browser Bridge não encontrada.");
+  if (session.attachedTabId !== tabId) {
+    await detachSessionDebugger(session);
+    let owners = debuggerSessionsByTab.get(tabId);
+    if (!owners) {
+      await chrome.debugger.attach({ tabId }, CDP_VERSION);
+      owners = new Set();
+      debuggerSessionsByTab.set(tabId, owners);
+    }
+    owners.add(session.sessionToken);
+    session.attachedTabId = tabId;
+  }
+  return await operation();
+}
+
 async function dispatchToPage(command) {
   const policy = policyForPlugin(command.pluginId);
   let expectedUrl;
@@ -700,7 +734,7 @@ async function dispatchToPage(command) {
       enqueueTabCommand(tab.id, () =>
         Date.now() >= command.expiresAt
           ? bridgeError("COMMAND_EXPIRED", "O comando expirou antes de executar na aba.")
-          : withAttachedDebugger(tab.id, () => dispatchCdpAction(tab.id, command, policy)),
+          : withJobDebugger(tab.id, command, () => dispatchCdpAction(tab.id, command, policy)),
       ),
       timeoutMs,
     );
@@ -733,7 +767,10 @@ globalThis.contentFlowBridge = Object.freeze({
     }
     const now = Date.now();
     for (const [token, session] of activeSessions) {
-      if (now - session.lastSeenAt > SESSION_TTL_MS) activeSessions.delete(token);
+      if (now - session.lastSeenAt > SESSION_TTL_MS) {
+        activeSessions.delete(token);
+        void detachSessionDebugger(session);
+      }
     }
     while (activeSessions.size >= MAX_ACTIVE_SESSIONS) {
       const oldest = [...activeSessions.entries()].sort(
@@ -741,7 +778,10 @@ globalThis.contentFlowBridge = Object.freeze({
       )[0];
       if (!oldest) break;
       activeSessions.delete(oldest[0]);
+      void detachSessionDebugger(oldest[1]);
     }
+    const previous = activeSessions.get(handshake.sessionToken);
+    if (previous) void detachSessionDebugger(previous);
     activeSessions.set(handshake.sessionToken, {
       pluginId: handshake.pluginId,
       profileId: handshake.profileId,
@@ -776,7 +816,7 @@ globalThis.contentFlowBridge = Object.freeze({
     await markExecutionCancelled(request.executionKey);
     return { ok: true };
   },
-  disconnect(request) {
+  async disconnect(request) {
     const session = activeSessions.get(request?.sessionToken);
     if (
       !session ||
@@ -787,6 +827,7 @@ globalThis.contentFlowBridge = Object.freeze({
       return bridgeError("SESSION_MISMATCH", "Desconexão recusada pela extensão.");
     }
     activeSessions.delete(request.sessionToken);
+    await detachSessionDebugger(session);
     return { ok: true };
   },
 });

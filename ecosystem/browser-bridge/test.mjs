@@ -215,11 +215,15 @@ export async function testExtensionBridge(source) {
   assert.equal(clickResult.text, "generate");
   assert.equal(clickResult.mechanism, "cdp-input");
   assert.equal(Object.keys(storage.contentflowCommandCacheV2).length, 301);
-  assert.equal(debuggerCalls.filter((entry) => entry.operation === "attach").length, 301);
+  assert.equal(
+    debuggerCalls.filter((entry) => entry.operation === "attach").length,
+    1,
+    "o depurador do Flow deve permanecer anexado durante o job inteiro",
+  );
   assert.equal(
     debuggerCalls.filter((entry) => entry.operation === "detach").length,
-    301,
-    "cada attach precisa do detach correspondente",
+    0,
+    "o depurador do Flow não deve ser removido entre ações do mesmo job",
   );
   assert.ok(
     !debuggerCalls.some(
@@ -258,6 +262,18 @@ export async function testExtensionBridge(source) {
   assert.equal(fallbackClick.ok, true);
   assert.equal(fallbackClick.mechanism, "dom-fallback");
 
+  assert.equal(
+    (
+      await bridge.disconnect({
+        pluginId: handshake.pluginId,
+        protocolVersion: handshake.protocolVersion,
+        sessionToken: handshake.sessionToken,
+        profileId: handshake.profileId,
+      })
+    ).ok,
+    true,
+  );
+  assert.equal(bridge.connect(handshake).ok, true);
   let releaseAttach;
   attachGate = new Promise((resolve) => {
     releaseAttach = resolve;
@@ -297,13 +313,18 @@ export async function testExtensionBridge(source) {
     "outro plugin não pode cancelar uma execução usando a sessão alheia",
   );
 
-  const disconnected = bridge.disconnect({
+  const disconnected = await bridge.disconnect({
     pluginId: handshake.pluginId,
     protocolVersion: handshake.protocolVersion,
     sessionToken: handshake.sessionToken,
     profileId: handshake.profileId,
   });
   assert.equal(disconnected.ok, true);
+  assert.equal(
+    debuggerCalls.filter((entry) => entry.operation === "detach").length,
+    2,
+    "o depurador do Flow deve ser removido somente no encerramento do job",
+  );
   assert.equal((await bridge.dispatch(command(302))).code, "SESSION_MISMATCH");
 
   for (const provider of [

@@ -50,7 +50,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PROCESS_META, type Channel, type Project } from "@/lib/domain";
-import { removeProject, syncChannelFromYouTube, useChannel, useProjects } from "@/lib/store";
+import { projectThumbnail } from "@/lib/project-thumbnail";
+import {
+  removeProject,
+  syncChannelFromYouTube,
+  useChannel,
+  useChannelExecutions,
+  useProjects,
+} from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/channel/$channelId/")({ component: ChannelWorkspace });
@@ -59,6 +66,7 @@ function ChannelWorkspace() {
   const { channelId } = Route.useParams();
   const channel = useChannel(channelId);
   const projects = useProjects(channelId);
+  const executions = useChannelExecutions(channelId);
   const [view, setView] = useState<"cards" | "list">("cards");
   const [search, setSearch] = useState("");
   const [editingChannel, setEditingChannel] = useState(false);
@@ -305,6 +313,7 @@ function ChannelWorkspace() {
             <ProjectGrid
               projects={filtered}
               channel={channel}
+              executions={executions}
               onRequestRemoval={setProjectPendingRemoval}
             />
           )
@@ -373,16 +382,19 @@ function ChannelWorkspace() {
 function ProjectGrid({
   projects,
   channel,
+  executions,
   onRequestRemoval,
 }: {
   projects: Project[];
   channel: Channel;
+  executions: ReturnType<typeof useChannelExecutions>;
   onRequestRemoval: (project: Project) => void;
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {projects.map((p) => {
         const stage = PROCESS_META[p.currentStage];
+        const thumbnail = projectThumbnail(executions, p.id);
         return (
           <div
             key={p.id}
@@ -416,6 +428,13 @@ function ProjectGrid({
                 className="relative aspect-video overflow-hidden"
                 style={{ backgroundColor: `oklch(0.28 0.025 ${p.thumbHue})` }}
               >
+                {thumbnail ? (
+                  <img
+                    src={thumbnail.url}
+                    alt={`Thumbnail do projeto ${p.title}`}
+                    className="absolute inset-0 size-full object-cover"
+                  />
+                ) : null}
                 <div className="absolute left-2 top-2">
                   <ChannelAvatar channel={channel} size="sm" />
                 </div>

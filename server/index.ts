@@ -258,6 +258,8 @@ database.exec(`
     id TEXT PRIMARY KEY,
     theme TEXT NOT NULL,
     language TEXT NOT NULL,
+    notification_sound INTEGER NOT NULL DEFAULT 0,
+    system_notifications INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS channel_preferences (
@@ -294,6 +296,20 @@ database.exec(`
     WHERE revoked_at IS NULL;
 `);
 
+const appPreferenceColumns = database.prepare("PRAGMA table_info(app_preferences)").all() as Array<{
+  name: string;
+}>;
+if (!appPreferenceColumns.some((column) => column.name === "notification_sound")) {
+  database.exec(
+    "ALTER TABLE app_preferences ADD COLUMN notification_sound INTEGER NOT NULL DEFAULT 0",
+  );
+}
+if (!appPreferenceColumns.some((column) => column.name === "system_notifications")) {
+  database.exec(
+    "ALTER TABLE app_preferences ADD COLUMN system_notifications INTEGER NOT NULL DEFAULT 0",
+  );
+}
+
 const pluginConsentColumns = database.prepare("PRAGMA table_info(plugin_consents)").all() as Array<{
   name: string;
 }>;
@@ -328,15 +344,40 @@ database.exec(
 type AppPreferences = {
   theme: "light" | "dark";
   language: "pt-BR" | "en" | "es";
+  notificationSound: boolean;
+  systemNotifications: boolean;
 };
 
-const defaultPreferences: AppPreferences = { theme: "dark", language: "pt-BR" };
+const defaultPreferences: AppPreferences = {
+  theme: "dark",
+  language: "pt-BR",
+  notificationSound: false,
+  systemNotifications: false,
+};
 
 function readPreferences(): AppPreferences {
   const row = database
-    .prepare("SELECT theme, language FROM app_preferences WHERE id = 'global'")
-    .get() as AppPreferences | undefined;
-  return row ?? defaultPreferences;
+    .prepare(
+      `SELECT theme, language, notification_sound AS notificationSound,
+              system_notifications AS systemNotifications
+       FROM app_preferences WHERE id = 'global'`,
+    )
+    .get() as
+    | {
+        theme: AppPreferences["theme"];
+        language: AppPreferences["language"];
+        notificationSound: number;
+        systemNotifications: number;
+      }
+    | undefined;
+  return row
+    ? {
+        theme: row.theme,
+        language: row.language,
+        notificationSound: Boolean(row.notificationSound),
+        systemNotifications: Boolean(row.systemNotifications),
+      }
+    : defaultPreferences;
 }
 
 type StoredPayload = {
@@ -2185,23 +2226,37 @@ app.get("/api/preferences", (_request, response) => {
 app.put("/api/preferences", (request, response) => {
   const theme = request.body?.theme;
   const language = request.body?.language;
+  const notificationSound = request.body?.notificationSound;
+  const systemNotifications = request.body?.systemNotifications;
   if (
     !(["light", "dark"] as const).includes(theme) ||
-    !(["pt-BR", "en", "es"] as const).includes(language)
+    !(["pt-BR", "en", "es"] as const).includes(language) ||
+    typeof notificationSound !== "boolean" ||
+    typeof systemNotifications !== "boolean"
   ) {
     response.status(400).json({ error: "Preferências inválidas." });
     return;
   }
   database
     .prepare(
-      `INSERT INTO app_preferences (id, theme, language, updated_at)
-       VALUES ('global', ?, ?, ?)
+      `INSERT INTO app_preferences (
+         id, theme, language, notification_sound, system_notifications, updated_at
+       )
+       VALUES ('global', ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          theme = excluded.theme,
          language = excluded.language,
+         notification_sound = excluded.notification_sound,
+         system_notifications = excluded.system_notifications,
          updated_at = excluded.updated_at`,
     )
-    .run(theme, language, new Date().toISOString());
+    .run(
+      theme,
+      language,
+      Number(notificationSound),
+      Number(systemNotifications),
+      new Date().toISOString(),
+    );
   response.json(readPreferences());
 });
 

@@ -3,7 +3,12 @@ import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createEmptyMethods, type Channel } from "../../src/lib/domain";
+import {
+  createEmptyMethods,
+  PROCESS_ORDER,
+  type Channel,
+  type Project,
+} from "../../src/lib/domain";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 let dataDirectory: string;
@@ -52,14 +57,19 @@ test("inicia a aplicação desktop isolada e mantém API e navegação responsiv
   const desktopContract = await window.evaluate(() => {
     const desktop = (
       window as typeof window & {
-        contentflowDesktop?: { updater?: { getState?: () => Promise<unknown> } };
+        contentflowDesktop?: {
+          updater?: { getState?: () => Promise<unknown> };
+          humanTasks?: { update?: (input: unknown) => void };
+        };
       }
     ).contentflowDesktop;
     return {
       updaterAvailable: typeof desktop?.updater?.getState === "function",
+      humanTasksAvailable: typeof desktop?.humanTasks?.update === "function",
     };
   });
   expect(desktopContract.updaterAvailable).toBe(true);
+  expect(desktopContract.humanTasksAvailable).toBe(true);
 
   const health = await window.evaluate(async () => {
     const response = await fetch("/api/health");
@@ -81,6 +91,123 @@ test("inicia a aplicação desktop isolada e mantém API e navegação responsiv
     .toBeGreaterThan(0);
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
+});
+
+test("mostra a quantidade de validações pendentes no ícone da barra de tarefas", async () => {
+  const window = await electronApp.firstWindow();
+  await expect(window.getByRole("heading", { name: "Visão geral" })).toBeVisible();
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const target = BrowserWindow.getAllWindows()[0];
+    const testState = globalThis as typeof globalThis & {
+      __contentflowBadgeCalls?: Array<{ description: string; hasIcon: boolean }>;
+    };
+    testState.__contentflowBadgeCalls = [];
+    const original = target.setOverlayIcon.bind(target);
+    target.setOverlayIcon = (overlay, description) => {
+      testState.__contentflowBadgeCalls?.push({
+        description,
+        hasIcon: Boolean(overlay && !overlay.isEmpty()),
+      });
+      original(overlay, description);
+    };
+  });
+
+  const channelId = randomUUID();
+  const projectId = randomUUID();
+  const methods = createEmptyMethods();
+  methods.theme.blocks = [
+    {
+      id: "desktop-human-theme",
+      type: "CRIAR",
+      operator: "Humano",
+      name: "Validar tema no desktop",
+      instructions: "Revise o tema antes de continuar.",
+      inputs: [],
+      outputs: [
+        {
+          id: "desktop-human-theme-output",
+          key: "theme",
+          label: "Tema",
+          type: "textarea",
+          required: true,
+        },
+      ],
+      parameters: [],
+      order: 0,
+    },
+  ];
+  const channel: Channel = {
+    id: channelId,
+    name: "Canal com validação",
+    handle: "",
+    color: "#6366f1",
+    subscribers: "—",
+    niche: "Teste",
+    language: "PT-BR",
+    activeProjects: 1,
+    frequency: "",
+    nextPublish: "",
+    currentProjectProgress: 0,
+    status: "attention",
+    trend: [],
+    methods,
+    createdAt: new Date().toISOString(),
+  };
+  const project: Project = {
+    id: projectId,
+    channelId,
+    title: "Projeto aguardando validação",
+    currentStage: "theme",
+    state: "not_started",
+    progress: 0,
+    deadline: "Sem prazo",
+    duration: "—",
+    updatedAt: "Agora",
+    stages: Object.fromEntries(
+      PROCESS_ORDER.map((processType) => [processType, "not_started"]),
+    ) as Project["stages"],
+    assignee: { name: "Não atribuído", initials: "—" },
+    thumbHue: 120,
+    createdAt: new Date().toISOString(),
+  };
+  const started = await window.evaluate(
+    async ({ channel, project }) => {
+      const channelResponse = await fetch("/api/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(channel),
+      });
+      const projectResponse = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(project),
+      });
+      const commandResponse = await fetch("/api/commands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: crypto.randomUUID(),
+          action: "start",
+          projectId: project.id,
+          processType: "theme",
+        }),
+      });
+      return channelResponse.ok && projectResponse.ok && commandResponse.ok;
+    },
+    { channel, project },
+  );
+  expect(started).toBe(true);
+
+  await expect
+    .poll(() =>
+      electronApp.evaluate(() => {
+        const testState = globalThis as typeof globalThis & {
+          __contentflowBadgeCalls?: Array<{ description: string; hasIcon: boolean }>;
+        };
+        return testState.__contentflowBadgeCalls?.at(-1);
+      }),
+    )
+    .toEqual({ description: "1 validação pendente", hasIcon: true });
 });
 
 test("testa um bloco no editor do Electron sem persistir o resultado", async () => {

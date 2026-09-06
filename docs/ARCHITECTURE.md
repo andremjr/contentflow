@@ -231,6 +231,7 @@ O aplicativo possui uma central global que lista todo bloco no estado `awaiting_
 - A pendência desaparece somente quando o bloco é concluído, cancelado ou sua execução é removida.
 - Cada item informa canal, projeto, Processo Universal, bloco, entrega necessária e tempo de espera.
 - O clique direciona para a aba do Processo Universal dentro do Projeto, que é o único local onde a entrega humana é realizada.
+- No desktop, o total de pendências também aparece como badge no ícone da barra de tarefas. Som e notificação nativa do sistema são preferências globais independentes, desativadas por padrão; ao clicar na notificação, o usuário é levado diretamente ao Processo correspondente.
 
 A central é uma visão derivada do estado real das execuções; ela não mantém uma cópia independente das tarefas.
 
@@ -276,7 +277,7 @@ Cada saída concluída de um bloco torna-se uma **entrega universal do Projeto**
 
 O Método não grava IDs de execução. No construtor, o usuário escolhe estruturalmente `Processo / Bloco / Entrega`; o motor resolve essa referência para a entrega e os itens reais quando o Projeto é executado. Plugins recebem os valores tipados junto com os IDs de proveniência, podendo sincronizar SRT, cenas, áudio, assets e cortes sem depender de posição visual ou nome de arquivo.
 
-As entregas são persistidas no snapshot da execução, sem criar uma segunda base de dados paralela. Uma nova tentativa invalida as entregas afetadas e cria IDs correspondentes à nova tentativa, preservando o histórico. O painel **Produtos do projeto** mostra entregas e subentregas ativas de todos os Processos Universais. Relações especializadas, como um asset selecionado para uma cena, são referências genéricas entre IDs e permanecem configuradas pelo Método ou plugin, nunca codificadas como uma regra fixa do núcleo.
+As entregas são persistidas no snapshot da execução, sem criar uma segunda base de dados paralela. Uma nova tentativa invalida as entregas afetadas e cria IDs correspondentes à nova tentativa, preservando o histórico. A interface de execução apresenta os resultados concluídos dentro de cada etapa e não duplica essas entregas em um painel consolidado do Projeto. Relações especializadas, como um asset selecionado para uma cena, são referências genéricas entre IDs e permanecem configuradas pelo Método ou plugin, nunca codificadas como uma regra fixa do núcleo.
 
 Separadamente, cada Processo Universal possui um output oficial, independente do método e do executor utilizado:
 
@@ -292,6 +293,8 @@ Separadamente, cada Processo Universal possui um output oficial, independente do
 Quando um bloco `CRIAR` entrega o campo universal esperado, o motor promove esse valor automaticamente a output do processo após o término e a eventual validação. Se nenhum bloco entregar um valor compatível, o processo pausa para que o operador humano registre o resultado final.
 
 Os outputs concluídos dos processos anteriores e as demais entregas compatíveis ficam disponíveis como contexto nos processos seguintes. O output oficial de cada processo também é registrado como entrega universal, com a mesma identidade e rastreabilidade.
+
+Quando o Processo `Thumbnail` é concluído com uma ou mais imagens, a primeira imagem disponível no output oficial passa a representar visualmente o Projeto no card do Canal. Essa capa é derivada do snapshot da execução e não cria uma cópia paralela no registro do Projeto.
 
 ---
 

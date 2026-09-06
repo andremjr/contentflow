@@ -8,6 +8,7 @@ import {
   attachmentsAreReady,
   composerUploadState,
   collectGeneratedImages,
+  waitForAttachmentsReady,
   waitAndClickSend,
   execute,
   validateConversationUrl,
@@ -66,7 +67,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "1.0.8");
+  assert.equal(manifest.version, "1.0.9");
   assert.equal(manifest.supportsConversationContinuation, undefined);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -439,38 +440,58 @@ test("anexa a imagem reprovada somente quando precisa abrir outra conversa", () 
   );
 });
 
-test("reconhece miniaturas sem nome e aguarda todos os anexos prontos", () => {
+test("considera o estado estrutural do compositor sem depender do nome do anexo", () => {
   const files = [{ name: "reprovada.png" }, { name: "referencia.webp" }];
   const ready = {
-    text: "",
-    previews: ["blob:one", "blob:two"],
+    attachmentPresent: true,
     busy: false,
     sendEnabled: true,
     error: false,
   };
   assert.equal(attachmentsAreReady(ready, files), true);
-  assert.equal(attachmentsAreReady({ ...ready, previews: ["blob:one"] }, files), false);
-  assert.equal(attachmentsAreReady(ready, files, ["blob:one"]), false);
-  assert.equal(attachmentsAreReady({ ...ready, previews: ["blob:one", "blob:one"] }, files), false);
+  assert.equal(attachmentsAreReady({ ...ready, attachmentPresent: false }, files), false);
   assert.equal(attachmentsAreReady({ ...ready, busy: true }, files), false);
   assert.equal(attachmentsAreReady({ ...ready, sendEnabled: false }, files), false);
   assert.equal(attachmentsAreReady({ ...ready, error: true }, files), false);
   assert.equal(attachmentsAreReady(null, files), false);
 });
 
-test("mantém suporte a documentos e não ignora upload pendente mesmo com nome visível", () => {
+test("reconhece documento renomeado pelo ChatGPT sem consultar o texto ou o nome", () => {
   const ready = {
-    text: "brief.pdf",
-    previews: ["blob:image"],
+    attachmentPresent: true,
     busy: false,
     sendEnabled: true,
     error: false,
   };
   assert.equal(attachmentsAreReady(ready, [{ name: "brief.pdf" }]), true);
-  assert.equal(attachmentsAreReady(ready, [{ name: "brief.pdf" }, { name: "ref.png" }]), true);
-  assert.equal(attachmentsAreReady(ready, [{ name: "outro.pdf" }]), false);
+  assert.equal(attachmentsAreReady(ready, [{ name: "nome-totalmente-diferente.txt" }]), true);
   assert.equal(attachmentsAreReady({ ...ready, busy: true }, [{ name: "brief.pdf" }]), false);
   assert.equal(attachmentsAreReady({ ...ready, error: true }, [{ name: "brief.pdf" }]), false);
+});
+
+test("exige estabilidade antes de aceitar o anexo como pronto", async () => {
+  let time = 0;
+  let reads = 0;
+  await waitForAttachmentsReady(
+    async () => {
+      reads += 1;
+      if (reads === 1)
+        return { attachmentPresent: true, busy: false, sendEnabled: true, error: false };
+      if (reads === 2)
+        return { attachmentPresent: true, busy: true, sendEnabled: false, error: false };
+      return { attachmentPresent: true, busy: false, sendEnabled: true, error: false };
+    },
+    [{ name: "qualquer-nome.txt" }],
+    undefined,
+    {
+      now: () => time,
+      pause: async (ms) => {
+        time += ms;
+      },
+      stablePolls: 3,
+    },
+  );
+  assert.equal(reads, 5);
 });
 
 test("observa apenas miniaturas carregadas e controles do compositor", () => {
@@ -500,10 +521,13 @@ test("observa apenas miniaturas carregadas e controles do compositor", () => {
   };
   const state = composerUploadState(doc);
   assert.deepEqual(state.previews, ["blob:ready"]);
-  assert.equal(state.text.includes("ref.png"), false);
+  assert.equal(state.attachmentPresent, true);
   assert.equal(state.sendEnabled, true);
   send.disabled = true;
   assert.equal(composerUploadState(doc).sendEnabled, false);
+  images.length = 0;
+  send.disabled = false;
+  assert.equal(composerUploadState(doc).attachmentPresent, true);
 });
 
 test("não confunde preview decodificado com upload concluído ou botão de voz com enviar", () => {

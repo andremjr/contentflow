@@ -11,7 +11,7 @@ const browserPlugins = [
   "meta-ai-browser-studio",
 ];
 
-test("execução normal inicia minimizada e teste de Método mantém o navegador visível", async () => {
+test("todos os jobs de navegador iniciam minimizados por padrão", async () => {
   for (const plugin of browserPlugins) {
     const root = new URL(`../ecosystem/plugins/reference/${plugin}/`, import.meta.url);
     const manifest = JSON.parse(await readFile(new URL("contentflow.plugin.json", root), "utf8"));
@@ -21,10 +21,13 @@ test("execução normal inicia minimizada e teste de Método mantém o navegador
       true,
       `${plugin} precisa manter startMinimized como padrão`,
     );
-    assert.match(
-      source,
-      /runMode\s*!==\s*["']method_test["'][\s\S]{0,100}settings\.startMinimized\s*!==\s*false/,
-      `${plugin} precisa abrir a janela durante o teste de bloco`,
+    assert.ok(
+      source.includes("settings.startMinimized !== false"),
+      `${plugin} precisa respeitar startMinimized em qualquer modo de job`,
+    );
+    assert.ok(
+      !/runMode\s*!==\s*["']method_test["'][\s\S]{0,100}settings\.startMinimized/.test(source),
+      `${plugin} não pode abrir automaticamente só porque o job é um teste de bloco`,
     );
   }
 });

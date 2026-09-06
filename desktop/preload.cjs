@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 const STATE_CHANNEL = "contentflow:updater-state";
+const HUMAN_TASKS_UPDATE_CHANNEL = "contentflow:human-tasks-update";
+const HUMAN_TASKS_NAVIGATE_CHANNEL = "contentflow:human-tasks-navigate";
 
 contextBridge.exposeInMainWorld(
   "contentflowDesktop",
@@ -16,6 +18,15 @@ contextBridge.exposeInMainWorld(
         const listener = (_event, state) => callback(state);
         ipcRenderer.on(STATE_CHANNEL, listener);
         return () => ipcRenderer.removeListener(STATE_CHANNEL, listener);
+      },
+    }),
+    humanTasks: Object.freeze({
+      update: (input) => ipcRenderer.send(HUMAN_TASKS_UPDATE_CHANNEL, input),
+      subscribeNavigation: (callback) => {
+        if (typeof callback !== "function") return () => {};
+        const listener = (_event, route) => callback(route);
+        ipcRenderer.on(HUMAN_TASKS_NAVIGATE_CHANNEL, listener);
+        return () => ipcRenderer.removeListener(HUMAN_TASKS_NAVIGATE_CHANNEL, listener);
       },
     }),
   }),

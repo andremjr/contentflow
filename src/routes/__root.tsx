@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { AppPreferencesProvider } from "@/lib/app-preferences";
+import { DesktopHumanTaskNotifications } from "@/components/desktop-human-task-notifications";
 import { useDatabaseConnectionError } from "@/lib/store";
 
 import appCss from "../styles.css?url";
@@ -129,6 +130,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AppPreferencesProvider>
+        <DesktopHumanTaskNotifications />
         {connectionError && (
           <div
             role="alert"

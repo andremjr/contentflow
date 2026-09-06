@@ -269,6 +269,19 @@ test("editor mantém entradas e variáveis do prompt sincronizadas", async ({ pa
 
   await page.goto(`/channel/${channel.id}/methods?process=title`);
   await page.getByText("Criar com contexto", { exact: true }).first().click();
+  await page.getByRole("button", { name: "Inserir variável", exact: true }).click();
+  const variableMenu = page.getByRole("menu", { name: "Inserir variável", exact: true });
+  await expect(variableMenu).toBeVisible();
+  const layerOrder = await page.evaluate(() => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]');
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    return {
+      menu: Number.parseInt(getComputedStyle(menu!).zIndex, 10),
+      dialog: Number.parseInt(getComputedStyle(dialog!).zIndex, 10),
+    };
+  });
+  expect(layerOrder.menu).toBeGreaterThan(layerOrder.dialog);
+  await page.keyboard.press("Escape");
   const prompt = page.locator("textarea").first();
   await prompt.fill("Use apenas o contexto.");
   await prompt.blur();
@@ -280,6 +293,99 @@ test("editor mantém entradas e variáveis do prompt sincronizadas", async ({ pa
   await expect(prompt).toHaveValue("Use apenas o contexto. {{inputs.briefing}}");
   await page.getByRole("button", { name: "Remover entrada Briefing", exact: true }).click();
   await expect(prompt).toHaveValue("Use apenas o contexto.");
+});
+
+test("validação resume contextos extensos e permite expandir cada entrega", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  const longContext = `Início do contexto para revisão. ${"Detalhe relevante. ".repeat(30)}Final exclusivo.`;
+  expect(
+    (
+      await request.put(`/api/channels/${channel.id}/methods/theme`, {
+        data: {
+          blocks: [
+            {
+              id: "create-long-context",
+              type: "CRIAR",
+              operator: "Humano",
+              name: "Produzir contexto longo",
+              instructions: "Registre o material para revisão.",
+              inputs: [],
+              outputs: [
+                {
+                  id: "long-context-output",
+                  key: "long_context",
+                  label: "Contexto extenso",
+                  type: "textarea",
+                  required: true,
+                },
+              ],
+              parameters: [],
+              order: 0,
+            },
+            {
+              id: "validate-long-context",
+              type: "VALIDAR",
+              operator: "Humano",
+              name: "Validar contexto",
+              instructions: "Revise o material produzido.",
+              inputs: [],
+              outputs: [
+                {
+                  id: "validation-decision",
+                  key: "decision",
+                  label: "Decisão",
+                  type: "approval",
+                  required: true,
+                },
+                {
+                  id: "validation-feedback",
+                  key: "feedback",
+                  label: "Observações",
+                  type: "textarea",
+                  required: false,
+                },
+              ],
+              validation: {
+                mode: "approval",
+                onReject: "retry_target",
+                targetBlockId: "create-long-context",
+                maxAttempts: 3,
+                retryMode: "full",
+              },
+              parameters: [],
+              order: 1,
+            },
+          ],
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  await page.goto(`/channel/${channel.id}`);
+  await page.getByRole("button", { name: "Novo projeto", exact: true }).first().click();
+  await page.getByLabel("Título *", { exact: true }).fill("Validação compacta");
+  await page.getByRole("button", { name: "Criar projeto", exact: true }).click();
+  const projects = (await (await request.get("/api/projects")).json()) as Project[];
+  const project = projects.find(
+    (item) => item.channelId === channel.id && item.title === "Validação compacta",
+  )!;
+
+  await page.goto(`/project/${project.id}/theme`);
+  await page.getByRole("button", { name: "Executar processo", exact: true }).click();
+  await page.getByLabel("Contexto extenso").fill(longContext);
+  await page.getByRole("button", { name: "Concluir ação humana", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Contexto disponível" })).toBeVisible();
+  const contextItem = page.getByTestId("context-value").filter({ hasText: "Contexto extenso" });
+  await expect(contextItem).not.toHaveAttribute("open", "");
+  await expect(contextItem.getByText(/Final exclusivo\./)).not.toBeVisible();
+  await expect(contextItem).toContainText("Início do contexto para revisão.");
+  await contextItem.locator("summary").click();
+  await expect(contextItem).toHaveAttribute("open", "");
+  await expect(contextItem.getByText(/Final exclusivo\./)).toBeVisible();
 });
 
 test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da tela", async ({
@@ -361,6 +467,49 @@ test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da
   await page.goto(`/project/${id}/thumbnail`);
   await expect(page.getByRole("button", { name: "Executar novamente", exact: true })).toBeVisible();
   await expect(page.getByText("thumbnail-fixture.png", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Produtos do projeto", { exact: true })).toHaveCount(0);
+  await page.goto(`/channel/${channel.id}`);
+  const projectThumbnail = page.getByRole("img", {
+    name: "Thumbnail do projeto Produção ponta a ponta",
+    exact: true,
+  });
+  await expect(projectThumbnail).toBeVisible();
+  await expect(projectThumbnail).toHaveAttribute("src", thumbnail.url);
+});
+
+test("salva separadamente som e notificações do Windows", async ({ page, request }) => {
+  await page.goto("/dashboard");
+  await expect(page.getByText("Carregando seus canais...", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Preferências", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Som de alerta", exact: true }).check();
+  await page.getByRole("checkbox", { name: "Notificações do Windows", exact: true }).check();
+
+  await expect
+    .poll(async () => (await (await request.get("/api/preferences")).json()).notificationSound)
+    .toBe(true);
+  await expect
+    .poll(async () => (await (await request.get("/api/preferences")).json()).systemNotifications)
+    .toBe(true);
+
+  await page.reload();
+  await page.getByRole("button", { name: "Preferências", exact: true }).click();
+  await expect(page.getByRole("checkbox", { name: "Som de alerta", exact: true })).toBeChecked();
+  await expect(
+    page.getByRole("checkbox", { name: "Notificações do Windows", exact: true }),
+  ).toBeChecked();
+
+  expect(
+    (
+      await request.put("/api/preferences", {
+        data: {
+          theme: "dark",
+          language: "pt-BR",
+          notificationSound: false,
+          systemNotifications: false,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
 });
 
 test("carrega um projeto sem mostrar inexistência enquanto aguarda o banco", async ({

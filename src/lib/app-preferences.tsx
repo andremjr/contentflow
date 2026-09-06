@@ -17,22 +17,35 @@ export type AppLanguage = "pt-BR" | "en" | "es";
 export type AppPreferences = {
   theme: AppTheme;
   language: AppLanguage;
+  notificationSound: boolean;
+  systemNotifications: boolean;
 };
 
 type PreferencesContextValue = AppPreferences & {
   ready: boolean;
   setTheme: (theme: AppTheme) => void;
   setLanguage: (language: AppLanguage) => void;
+  setNotificationSound: (enabled: boolean) => void;
+  setSystemNotifications: (enabled: boolean) => void;
   t: (source: string) => string;
 };
 
-const DEFAULT_PREFERENCES: AppPreferences = { theme: "dark", language: "pt-BR" };
+const DEFAULT_PREFERENCES: AppPreferences = {
+  theme: "dark",
+  language: "pt-BR",
+  notificationSound: false,
+  systemNotifications: false,
+};
 
 const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 
 type Translation = [english: string, spanish: string];
 
 const PHRASES: Record<string, Translation> = {
+  "A contagem de validações pendentes aparece sempre no ícone do aplicativo.": [
+    "The number of pending validations always appears on the app icon.",
+    "El número de validaciones pendientes siempre aparece en el icono de la aplicación.",
+  ],
   "A ação ainda não pode ser concluída": [
     "This action cannot be completed yet",
     "Esta acción aún no puede completarse",
@@ -52,6 +65,10 @@ const PHRASES: Record<string, Translation> = {
   "A tarefa sai daqui somente depois que o operador conclui a ação.": [
     "The task leaves this list only after the operator completes the action.",
     "La tarea sale de esta lista solo cuando el operador completa la acción.",
+  ],
+  "Aparência, idioma e notificações": [
+    "Appearance, language, and notifications",
+    "Apariencia, idioma y notificaciones",
   ],
   "Abrir canal": ["Open channel", "Abrir canal"],
   "Abrir página em uma nova aba": ["Open page in a new tab", "Abrir página en una pestaña nueva"],
@@ -216,6 +233,10 @@ const PHRASES: Record<string, Translation> = {
   "Estas preferências são globais e ficam salvas neste dispositivo.": [
     "These preferences are global and saved on this device.",
     "Estas preferencias son globales y se guardan en este dispositivo.",
+  ],
+  "Exibir alertas na central de notificações do Windows.": [
+    "Show alerts in the Windows notification center.",
+    "Mostrar alertas en el centro de notificaciones de Windows.",
   ],
   "Esta ação não exige campos adicionais.": [
     "This action does not require additional fields.",
@@ -532,6 +553,19 @@ const PHRASES: Record<string, Translation> = {
   Humano: ["Human", "Humano"],
   IA: ["AI", "IA"],
   Idioma: ["Language", "Idioma"],
+  Notificações: ["Notifications", "Notificaciones"],
+  "Notificações do Windows": ["Windows notifications", "Notificaciones de Windows"],
+  Preferências: ["Preferences", "Preferencias"],
+  "Reproduzir um som quando uma nova validação precisar de atenção.": [
+    "Play a sound when a new validation needs attention.",
+    "Reproducir un sonido cuando una nueva validación necesite atención.",
+  ],
+  "Som de alerta": ["Alert sound", "Sonido de alerta"],
+  "Sempre ativo": ["Always on", "Siempre activo"],
+  "Validações na barra de tarefas": [
+    "Validations on the taskbar",
+    "Validaciones en la barra de tareas",
+  ],
   "Importar método": ["Import method", "Importar método"],
   Importar: ["Import", "Importar"],
   "Incluídos no aplicativo": ["Included with the app", "Incluidos en la aplicación"],
@@ -946,6 +980,8 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
       ready,
       setTheme: (theme) => updatePreferences({ theme }),
       setLanguage: (language) => updatePreferences({ language }),
+      setNotificationSound: (notificationSound) => updatePreferences({ notificationSound }),
+      setSystemNotifications: (systemNotifications) => updatePreferences({ systemNotifications }),
       t: (source) => translate(source, preferences.language),
     }),
     [preferences, ready, updatePreferences],

@@ -14,6 +14,20 @@ import archiver from "archiver";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputDirectory = path.resolve(repositoryRoot, process.argv[2] ?? "release/ecosystem");
+const googleFlowLocalFiles = [
+  "captured-flow-session.json",
+  "iniciar-captura.bat",
+  "scripts/analyze-captured-session.mjs",
+  "scripts/capture-flow-session.mjs",
+  "scripts/extract-generations.mjs",
+  "scripts/find-prompt-rpcs.mjs",
+  "scripts/generation-rpcs.json",
+  "scripts/print-ui-actions.mjs",
+  "scripts/rpc-analysis.json",
+];
+const referencePluginReleaseIgnore = googleFlowLocalFiles.map(
+  (fileName) => `google-flow-browser-images/${fileName}`,
+);
 
 mkdirSync(outputDirectory, { recursive: true });
 
@@ -41,7 +55,11 @@ async function createArchive(fileName, addContents) {
 }
 
 const pluginsArchive = await createArchive("ContentFlow-Plugins.zip", (archive) => {
-  archive.directory(path.join(repositoryRoot, "ecosystem", "plugins", "reference"), false);
+  archive.glob("**/*", {
+    cwd: path.join(repositoryRoot, "ecosystem", "plugins", "reference"),
+    dot: true,
+    ignore: referencePluginReleaseIgnore,
+  });
   archive.append(
     [
       "PLUGINS PARA CONTENTFLOW",
@@ -73,7 +91,15 @@ for (const directoryEntry of readdirSync(referencePluginsDirectory, { withFileTy
   }
   const asset = `ContentFlow-Plugin-${directoryEntry.name}.zip`;
   const archivePath = await createArchive(asset, (archive) => {
-    archive.directory(pluginDirectory, directoryEntry.name);
+    archive.glob(
+      "**/*",
+      {
+        cwd: pluginDirectory,
+        dot: true,
+        ignore: directoryEntry.name === "google-flow-browser-images" ? googleFlowLocalFiles : [],
+      },
+      { prefix: directoryEntry.name },
+    );
   });
   const bytes = readFileSync(archivePath);
   catalogPlugins.push({

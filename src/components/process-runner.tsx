@@ -5,6 +5,7 @@ import {
   Bot,
   Check,
   CheckCircle2,
+  ChevronDown,
   Code2,
   LoaderCircle,
   Play,
@@ -41,7 +42,6 @@ import {
   PROCESS_ROUTE_SEGMENT,
 } from "@/lib/human-workflow";
 import { resolveBlockInputs } from "@/lib/runtime-contract";
-import { activeProjectDeliveries, deliveryRuntimeValue } from "@/lib/deliveries";
 import {
   cancelProcessExecution,
   chooseCollectionItem,
@@ -276,7 +276,6 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
             collections={collections}
             libraryItems={libraryItems}
           />
-          <ProjectDeliveriesPanel executions={projectExecutions} />
           {waitingForHumanChoice && activeBlock ? (
             <HumanChoiceGate
               block={activeBlock}
@@ -342,91 +341,6 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
         <MethodPreview method={method?.blocks ?? []} />
       )}
     </main>
-  );
-}
-
-function ProjectDeliveriesPanel({ executions }: { executions: ProcessExecution[] }) {
-  const deliveries = activeProjectDeliveries(executions).sort((left, right) =>
-    left.createdAt.localeCompare(right.createdAt),
-  );
-  if (!deliveries.length) return null;
-
-  return (
-    <section className="rounded-xl border border-border/70 bg-card p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Produtos do projeto
-          </h3>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Todas as entregas e subentregas recebem IDs universais e podem alimentar blocos futuros.
-          </p>
-        </div>
-        <Badge variant="outline">
-          {deliveries.length} {deliveries.length === 1 ? "entrega" : "entregas"}
-        </Badge>
-      </div>
-      <div className="mt-3 space-y-2">
-        {deliveries.map((delivery) => {
-          const execution = executions.find((item) => item.id === delivery.executionId);
-          const block = execution?.methodSnapshot.blocks.find(
-            (item) => item.id === delivery.blockId,
-          );
-          return (
-            <details
-              key={delivery.id}
-              className="rounded-lg border border-border/60 bg-background/30"
-            >
-              <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-semibold">{delivery.label}</span>
-                  <span className="block truncate text-[10px] text-muted-foreground">
-                    {PROCESS_META[delivery.processType].label} /{" "}
-                    {block?.name ?? block?.type ?? "Bloco"}
-                  </span>
-                </span>
-                <Badge variant="secondary" className="text-[9px]">
-                  {delivery.items.length} {delivery.items.length === 1 ? "item" : "itens"}
-                </Badge>
-              </summary>
-              <div className="space-y-3 border-t border-border/60 p-3">
-                <div>
-                  <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    ID da entrega
-                  </p>
-                  <code className="mt-1 block break-all rounded bg-secondary px-2 py-1 text-[10px]">
-                    {delivery.id}
-                  </code>
-                </div>
-                <RuntimeValueViewer
-                  type={delivery.type}
-                  value={deliveryRuntimeValue(delivery)}
-                  compact
-                />
-                <div className="space-y-1">
-                  {delivery.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex min-w-0 items-center gap-2 rounded border border-border/50 px-2 py-1.5"
-                    >
-                      <span className="font-mono text-[9px] text-muted-foreground">
-                        {String(item.order + 1).padStart(2, "0")}
-                      </span>
-                      <code className="min-w-0 flex-1 break-all text-[9px]">{item.id}</code>
-                      {item.references?.length ? (
-                        <Badge variant="outline" className="shrink-0 text-[8px]">
-                          {item.references.length} ref.
-                        </Badge>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </details>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 
@@ -644,6 +558,88 @@ function ResultValue({
       </div>
       <RuntimeValueViewer type={type} presentation={presentation} value={value} compact />
     </div>
+  );
+}
+
+function CollapsibleResultValue({
+  label,
+  type,
+  presentation,
+  value,
+  source,
+}: {
+  label: string;
+  type: Parameters<typeof RuntimeValueViewer>[0]["type"];
+  presentation?: Parameters<typeof RuntimeValueViewer>[0]["presentation"];
+  value: RuntimeValue | undefined;
+  source?: string;
+}) {
+  return (
+    <details
+      data-testid="context-value"
+      className="group min-w-0 rounded-lg border border-border/50 bg-card/60"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {label}
+            </p>
+            {source && (
+              <Badge variant="secondary" className="text-[9px]">
+                de {source}
+              </Badge>
+            )}
+          </div>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {summarizeRuntimeValue(value)}
+          </p>
+        </div>
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-border/50 p-3">
+        <RuntimeValueViewer type={type} presentation={presentation} value={value} compact />
+      </div>
+    </details>
+  );
+}
+
+function summarizeRuntimeValue(value: RuntimeValue | undefined) {
+  if (value == null || value === "") return "Não informado";
+  if (typeof value === "string") return truncateSummary(value);
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "Sim" : "Não";
+  if (Array.isArray(value)) {
+    if (!value.length) return "Nenhum item";
+    const first = value[0];
+    if (typeof first === "string") {
+      return `${value.length} ${value.length === 1 ? "item" : "itens"} · ${truncateSummary(first)}`;
+    }
+    if (isStoredFileValue(first)) {
+      return `${value.length} ${value.length === 1 ? "arquivo" : "arquivos"} · ${first.name}`;
+    }
+    return `${value.length} ${value.length === 1 ? "registro" : "registros"}`;
+  }
+  if (isStoredFileValue(value)) return value.name;
+  if ("boxes" in value && Array.isArray(value.boxes)) {
+    return `Layout 16:9 · ${value.boxes.length} ${value.boxes.length === 1 ? "elemento" : "elementos"}`;
+  }
+  return "Conteúdo disponível";
+}
+
+function truncateSummary(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > 150 ? `${normalized.slice(0, 147)}…` : normalized;
+}
+
+function isStoredFileValue(value: unknown): value is StoredFile {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "name" in value &&
+    typeof value.name === "string" &&
+    "url" in value &&
+    typeof value.url === "string",
   );
 }
 
@@ -1244,14 +1240,25 @@ function HumanBlockGate({
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             {resolvedInputs.map((item) =>
               item.resolved ? (
-                <ResultValue
-                  key={item.input.id}
-                  label={item.input.label}
-                  type={item.input.type}
-                  presentation={item.input.presentation}
-                  value={item.value}
-                  source={item.sourceLabel}
-                />
+                block.type === "VALIDAR" ? (
+                  <CollapsibleResultValue
+                    key={item.input.id}
+                    label={item.input.label}
+                    type={item.input.type}
+                    presentation={item.input.presentation}
+                    value={item.value}
+                    source={item.sourceLabel}
+                  />
+                ) : (
+                  <ResultValue
+                    key={item.input.id}
+                    label={item.input.label}
+                    type={item.input.type}
+                    presentation={item.input.presentation}
+                    value={item.value}
+                    source={item.sourceLabel}
+                  />
+                )
               ) : (
                 <div
                   key={item.input.id}
@@ -1275,7 +1282,7 @@ function HumanBlockGate({
           </h4>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             {context.map((item, index) => (
-              <ResultValue key={`${item.label}-${index}`} {...item} />
+              <CollapsibleResultValue key={`${item.label}-${index}`} {...item} />
             ))}
           </div>
         </div>

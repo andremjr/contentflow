@@ -27,12 +27,35 @@ export type DesktopUpdaterBridge = {
   subscribe(callback: (state: DesktopUpdaterState) => void): () => void;
 };
 
+export type DesktopHumanTaskNotification = {
+  id: string;
+  title: string;
+  body: string;
+  route: string;
+};
+
+export type DesktopHumanTasksBridge = {
+  update(input: {
+    count: number;
+    notificationSound: boolean;
+    systemNotifications: boolean;
+    tasks: DesktopHumanTaskNotification[];
+  }): void;
+  subscribeNavigation(callback: (route: string) => void): () => void;
+};
+
 declare global {
   interface Window {
     contentflowDesktop?: {
       updater: DesktopUpdaterBridge;
+      humanTasks?: DesktopHumanTasksBridge;
     };
   }
+}
+
+export function desktopHumanTasksBridge() {
+  if (typeof window === "undefined") return undefined;
+  return window.contentflowDesktop?.humanTasks;
 }
 
 export function desktopUpdaterBridge() {

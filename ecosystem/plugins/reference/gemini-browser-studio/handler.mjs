@@ -1155,8 +1155,7 @@ export async function execute(request, services) {
       {
         ...settings,
         keepBrowserOpen: settings.keepBrowserOpen !== false,
-        startMinimized:
-          request?.context?.runMode !== "method_test" && settings.startMinimized !== false,
+        startMinimized: settings.startMinimized !== false,
       },
       path,
       port,

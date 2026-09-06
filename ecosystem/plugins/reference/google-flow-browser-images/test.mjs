@@ -8,36 +8,74 @@ import { testExtensionBridge } from "../../../browser-bridge/test.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.2.5");
+assert.equal(manifest.version, "1.3.1");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
 assert.ok(manifest.permissions.includes("filesystem:write"));
 assert.ok(manifest.permissions.includes("network"));
 assert.ok(manifest.permissions.includes("process"));
-assert.deepEqual(manifest.deliveryTypes, ["image"]);
+assert.deepEqual(manifest.deliveryTypes, ["image", "video"]);
 assert.ok(manifest.networkHosts.includes("flow.google.com"));
+assert.equal(manifest.settingsSchema.properties.keepBrowserOpen.default, false);
 
 const cap = manifest.capabilities.find((item) => item.id === "generate-images-in-browser");
 assert.ok(cap);
 assert.deepEqual(
   cap.inputPorts.map((port) => port.key),
-  ["prompts", "reference_images"],
+  ["prompts", "reference_images", "project_url"],
 );
 assert.deepEqual(
   cap.outputPorts.map((port) => port.key),
-  ["images"],
+  ["images", "project_url"],
 );
 assert.deepEqual(cap.outputPorts[0].producedTypes, ["image", "files"]);
-assert.deepEqual(cap.producedOutputTypes, ["image", "files"]);
+assert.deepEqual(cap.producedOutputTypes, ["image", "files", "text", "url"]);
 assert.equal(cap.blockConfigSchema.properties.accountProfile.default, "default");
 assert.equal(cap.blockConfigSchema.properties.imageModel.default, "flow_auto");
 assert.equal(cap.blockConfigSchema.properties.fallbackOnModelLimit.default, true);
 assert.equal(cap.blockConfigSchema.properties.aspectRatio.default, "flow_current");
 assert.equal(cap.blockConfigSchema.properties.maxConcurrentGenerations.default, 1);
-assert.equal(cap.blockConfigSchema.properties.delayBetweenPromptsMs.default, 5000);
+assert.equal(cap.blockConfigSchema.properties.delayBetweenPromptsMs.default, 6000);
 assert.equal(cap.blockConfigSchema.properties.maxReferenceImages.maximum, 10);
 assert.equal(cap.blockConfigSchema.properties.maxImagesPerPrompt.maximum, 4);
+
+const closeCalls = [];
+await __test.maybeCloseBrowser(
+  {
+    async send(method) {
+      closeCalls.push(method);
+    },
+    close() {
+      closeCalls.push("client.close");
+    },
+  },
+  { startedByPlugin: false },
+  false,
+);
+assert.deepEqual(closeCalls, ["Browser.close", "client.close"]);
+
+const animCap = manifest.capabilities.find((item) => item.id === "animate-image-in-browser");
+assert.ok(animCap);
+assert.deepEqual(
+  animCap.inputPorts.map((port) => port.key),
+  ["images", "prompts", "project_url"],
+);
+assert.deepEqual(
+  animCap.outputPorts.map((port) => port.key),
+  ["video", "project_url"],
+);
+
+const videoCap = manifest.capabilities.find((item) => item.id === "generate-video-in-browser");
+assert.ok(videoCap);
+assert.deepEqual(
+  videoCap.inputPorts.map((port) => port.key),
+  ["prompts", "project_url"],
+);
+assert.deepEqual(
+  videoCap.outputPorts.map((port) => port.key),
+  ["video", "project_url"],
+);
 
 assert.deepEqual(__test.normalizePrompts(["primeiro", ["segundo"]]), ["primeiro", "segundo"]);
 assert.deepEqual(__test.normalizeReferenceImages([{ id: "a" }, [{ id: "b" }]]), [
@@ -230,6 +268,188 @@ assert.deepEqual(
     },
   ],
 );
+assert.deepEqual(
+  __test.mediaItemsFromImageCandidates([
+    {
+      url: "https://flow-content.google/image/real-image",
+      cardType: "image",
+    },
+    {
+      url: "https://flow-content.google/image/video-poster",
+      cardType: "video",
+    },
+    {
+      url: "https://flow-content.google/image/unclassified",
+      cardType: "unknown",
+    },
+  ]),
+  [
+    {
+      image: {
+        generatedImage: {
+          fifeUrl: "https://flow-content.google/image/real-image",
+          mediaId: "real-image",
+        },
+      },
+    },
+  ],
+);
+assert.throws(
+  () =>
+    __test.parseGenerationResponse({
+      status: 200,
+      bodyText: JSON.stringify({
+        media: [{ video: { fifeUrl: "https://flow-content.google/video/generated-video" } }],
+      }),
+    }),
+  /poster ou frame de vídeo/,
+);
+assert.deepEqual(
+  __test.parseGenerationResponse({
+    status: 200,
+    bodyText: JSON.stringify({
+      media: [
+        {
+          image: {
+            generatedImage: {
+              fifeUrl: "https://flow-content.google/image/generated-image",
+            },
+          },
+        },
+      ],
+    }),
+  }).media,
+  [
+    {
+      image: {
+        generatedImage: {
+          fifeUrl: "https://flow-content.google/image/generated-image",
+        },
+      },
+    },
+  ],
+);
+
+assert.equal(
+  __test.requestsSingleVideo({ outputContract: [{ portKey: "video", type: "video" }] }),
+  true,
+);
+assert.equal(
+  __test.requestsSingleVideo({ outputContract: [{ portKey: "video", type: "files" }] }),
+  false,
+);
+assert.deepEqual(
+  __test.mediaItemsFromVideoUrls([
+    "https://flow-content.google/video/video-123",
+    "https://flow-content.google/video/video-123",
+    "https://flow-content.google/image/image-456",
+  ]),
+  [{ video: { fifeUrl: "https://flow-content.google/video/video-123", mediaId: "video-123" } }],
+);
+
+const videoPrefs = __test.resolveVideoPreferences({
+  videoModel: "veo_3_1_quality",
+  videoResolution: "res_1080p",
+});
+assert.equal(videoPrefs.videoModelName, "Veo 3.1 - Quality");
+assert.equal(videoPrefs.videoResolutionLabel, "1080p");
+
+// Testes de resolução de navegação e projeto
+const defaultTarget = __test.resolveNavigationTarget({});
+assert.equal(defaultTarget.pinned, false);
+assert.equal(defaultTarget.url, "https://flow.google.com/");
+
+const landingUrlTarget = __test.resolveNavigationTarget({
+  settings: { flowUrl: "https://flow.google.com/" },
+});
+assert.equal(landingUrlTarget.pinned, false);
+assert.equal(landingUrlTarget.url, "https://flow.google.com/");
+
+const newModeTarget = __test.resolveNavigationTarget({
+  configuration: { projectMode: "new" },
+  inputs: { project_url: "https://flow.google.com/project/should-be-ignored" },
+});
+assert.equal(newModeTarget.pinned, false);
+assert.equal(newModeTarget.url, "https://flow.google.com/");
+
+const blockConfigTarget = __test.resolveNavigationTarget({
+  configuration: { projectUrl: "https://flow.google.com/project/config-project-123" },
+});
+assert.equal(blockConfigTarget.pinned, true);
+assert.equal(blockConfigTarget.url, "https://flow.google.com/project/config-project-123");
+
+const existingModeTarget = __test.resolveNavigationTarget({
+  configuration: {
+    projectMode: "existing",
+    projectUrl: "https://flow.google.com/project/existing-mode-proj",
+  },
+});
+assert.equal(existingModeTarget.pinned, true);
+assert.equal(existingModeTarget.url, "https://flow.google.com/project/existing-mode-proj");
+
+assert.throws(
+  () =>
+    __test.resolveNavigationTarget({
+      configuration: { projectMode: "existing", projectUrl: "" },
+    }),
+  /Usar projeto específico/,
+);
+
+const projectTarget = __test.resolveNavigationTarget({
+  inputs: { project_url: "https://flow.google.com/project/shared-project-123" },
+});
+assert.equal(projectTarget.pinned, true);
+assert.equal(projectTarget.url, "https://flow.google.com/project/shared-project-123");
+
+// Se inputs.project_url receber texto contextual de processos anteriores (tema, título, prompt),
+// o modo automático ignora e cria um novo projeto normalmente sem lançar erro.
+const textContextTarget = __test.resolveNavigationTarget({
+  inputs: {
+    project_url:
+      "theme.theme: A venda de veículos no varejo atua frequentemente...\n\ntitle.title: Bancos por Trás das Vitrines...",
+  },
+});
+assert.equal(textContextTarget.pinned, false);
+assert.equal(textContextTarget.url, "https://flow.google.com/");
+
+// Testes de navegação do attachFlowPage: sempre abre na landing page do Flow primeiro
+const mockCdpTargets = [
+  { targetId: "target-1", type: "page", url: "https://flow.google.com/project/old-project-999" },
+];
+const navigationHistory = [];
+const mockAttachClient = {
+  async send(method, params) {
+    if (method === "Target.getTargets") return { targetInfos: mockCdpTargets };
+    if (method === "Target.attachToTarget") return { sessionId: "session-1" };
+    if (method === "Page.navigate") {
+      navigationHistory.push(params.url);
+      return {};
+    }
+    if (method === "Runtime.evaluate") {
+      return { result: { value: { readyState: "complete", url: navigationHistory.at(-1) || "" } } };
+    }
+    return {};
+  },
+};
+
+// Caso 1: pinned: false (criação de novo projeto). Deve navegar APENAS para https://flow.google.com/
+navigationHistory.length = 0;
+await __test.attachFlowPage(mockAttachClient, "https://flow.google.com/", false, undefined, false);
+assert.deepEqual(navigationHistory, ["https://flow.google.com/"]);
+
+// Caso 2: pinned: true com URL de projeto. Deve navegar PRIMEIRO para a landing page e DEPOIS para o projeto
+navigationHistory.length = 0;
+await __test.attachFlowPage(
+  mockAttachClient,
+  "https://flow.google.com/project/target-proj-123",
+  true,
+  undefined,
+  false,
+);
+assert.deepEqual(navigationHistory, [
+  "https://flow.google.com/",
+  "https://flow.google.com/project/target-proj-123",
+]);
 
 const retryDirectory = await mkdtemp(join(tmpdir(), "contentflow-flow-retry-"));
 const retryServices = { getWorkspacePath: (relativePath) => join(retryDirectory, relativePath) };
@@ -303,7 +523,9 @@ const automatic = __test.resolveGenerationPreferences({
   imageModel: "flow_auto",
   aspectRatio: "flow_current",
 });
-assert.equal(automatic.imageModelName, null);
+assert.equal(automatic.requestedModelKey, "flow_auto");
+assert.equal(automatic.modelKey, "nano_banana_pro");
+assert.equal(automatic.imageModelName, "GEM_PIX_2");
 assert.equal(automatic.imageAspectRatio, null);
 const explicit = __test.resolveGenerationPreferences({
   imageModel: "nano_banana_pro",
@@ -311,28 +533,17 @@ const explicit = __test.resolveGenerationPreferences({
 });
 assert.equal(explicit.imageModelName, "GEM_PIX_2");
 assert.equal(explicit.imageAspectRatio, "IMAGE_ASPECT_RATIO_LANDSCAPE");
-
-const raw = JSON.stringify({
-  clientContext: { projectId: "dynamic-project", recaptchaContext: { token: "dynamic-token" } },
-  requests: [
-    {
-      imageModelName: "GEM_PIX_2",
-      imageAspectRatio: "IMAGE_ASPECT_RATIO_PORTRAIT",
-      structuredPrompt: { parts: [{ text: "teste" }] },
-      clientContext: { recaptchaContext: { token: "dynamic-token" } },
-      seed: 123,
-    },
-  ],
-});
-const preserved = __test.applyGenerationPreferences(raw, null, null);
-assert.equal(preserved.changed, 0);
-assert.deepEqual(JSON.parse(preserved.postData), JSON.parse(raw));
-const patched = __test.applyGenerationPreferences(raw, "GEM_PIX", "IMAGE_ASPECT_RATIO_SQUARE");
-const body = JSON.parse(patched.postData);
-assert.equal(body.requests[0].imageModelName, "GEM_PIX");
-assert.equal(body.requests[0].imageAspectRatio, "IMAGE_ASPECT_RATIO_SQUARE");
-assert.equal(body.requests[0].clientContext.recaptchaContext.token, "dynamic-token");
-assert.equal(body.clientContext.projectId, "dynamic-project");
+assert.equal(
+  __test.resolveGenerationPreferences({ imageModel: "nano_banana_2" }).imageModelName,
+  "NARWHAL",
+);
+assert.equal(
+  __test.resolveGenerationPreferences({ imageModel: "nano_banana_2_lite" }).imageModelName,
+  "HARBOR_SEAL",
+);
+assert.equal(__test.nextImageModelFallback("nano_banana_pro"), "nano_banana_2");
+assert.equal(__test.nextImageModelFallback("nano_banana_2"), "nano_banana_2_lite");
+assert.equal(__test.nextImageModelFallback("nano_banana_2_lite"), null);
 
 const modelLimit = __test.classifyGenerationHttpError(
   403,
@@ -395,7 +606,7 @@ const extensionContent = await readFile(
   "utf8",
 );
 assert.equal(extensionManifest.manifest_version, 3);
-assert.equal(extensionManifest.version, "0.3.5");
+assert.equal(extensionManifest.version, "0.3.6");
 assert.deepEqual(extensionManifest.host_permissions, [
   "https://chatgpt.com/*",
   "https://claude.ai/*",
@@ -421,21 +632,26 @@ assert.ok(!source.includes("--load-extension="));
 assert.ok(source.includes("Carregar sem compactação"));
 assert.ok(source.includes("ContentFlow Browser Bridge conectada"));
 assert.ok(!/client\.send\(\s*["']Input\./.test(source));
-assert.equal((source.match(/Page\.bringToFront/g) || []).length, 1);
-assert.equal((source.match(/Target\.activateTarget/g) || []).length, 1);
+assert.equal((source.match(/Page\.bringToFront/g) || []).length, 2);
+assert.equal((source.match(/Target\.activateTarget/g) || []).length, 2);
 assert.ok(source.includes("Modo Automático do Flow"));
+assert.ok(!source.includes("AutomationControlled"));
+assert.ok(!source.includes("Fetch.requestPaused"));
+assert.ok(!source.includes("Fetch.continueRequest"));
 assert.ok(source.includes("fresh-project"));
 assert.ok(source.includes("!navigation.pinned"));
 assert.ok(source.includes("flow\\.google\\.com\\/project\\/"));
 assert.ok(source.includes('"iniciar geração"'));
 assert.ok(source.includes("Retomando o projeto recém-verificado após CAPTCHA"));
 assert.ok(source.includes("DOM.setFileInputFiles"));
-assert.ok(source.includes("limite do Nano Banana Pro atingido"));
+assert.ok(source.includes("limite do modelo atingido"));
+assert.ok(source.includes("Nano Banana 2 Lite"));
+assert.ok(source.includes("Quantidade por prompt confirmada"));
 assert.ok(!source.includes("createFallbackArtifact"));
 assert.ok(!source.includes("FALLBACK_IMAGE_BASE64"));
 await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), /ENOENT/);
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v1.2.5 usa a ponte comum no Chrome, aceita o domínio atual do Flow, entrega image ou files e valida 300 comandos idempotentes.",
+  "OK: v1.3.1 usa a ponte comum no Chrome, aceita o domínio atual do Flow, entrega image e video e valida 300 comandos idempotentes.",
 );

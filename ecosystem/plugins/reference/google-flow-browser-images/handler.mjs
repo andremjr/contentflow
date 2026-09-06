@@ -19,19 +19,51 @@ const EXTENSION_BRIDGE_ID = "com.contentflow.browser-bridge";
 const EXTENSION_PROTOCOL_VERSION = 2;
 const IMAGE_MODELS = Object.freeze({
   flow_auto: null,
+  nano_banana_2: "NARWHAL",
+  nano_banana_2_lite: "HARBOR_SEAL",
   nano_banana: "GEM_PIX",
   nano_banana_pro: "GEM_PIX_2",
 });
 const MODEL_LABELS = Object.freeze({
   flow_auto: "Automático do Flow",
+  nano_banana_2: "Nano Banana 2",
+  nano_banana_2_lite: "Nano Banana 2 Lite",
   nano_banana: "Nano Banana",
   nano_banana_pro: "Nano Banana Pro",
+});
+const IMAGE_MODEL_FALLBACK_ORDER = Object.freeze([
+  "nano_banana_pro",
+  "nano_banana_2",
+  "nano_banana_2_lite",
+]);
+const VIDEO_MODELS = Object.freeze({
+  veo_3_1_quality: "Veo 3.1 - Quality",
+  veo_3_1_fast: "Veo 3.1 - Fast",
+  veo_3_1_lite: "Veo 3.1 - Lite",
+  omni_1_1_flash: "Omni 1.1 Flash",
+});
+const VIDEO_MODEL_LABELS = Object.freeze({
+  veo_3_1_quality: "Veo 3.1 - Quality",
+  veo_3_1_fast: "Veo 3.1 - Fast",
+  veo_3_1_lite: "Veo 3.1 - Lite",
+  omni_1_1_flash: "Omni 1.1 Flash",
+});
+const VIDEO_RESOLUTIONS = Object.freeze({
+  flow_current: null,
+  res_720p: "720p",
+  res_1080p: "1080p",
 });
 const ASPECT_RATIOS = Object.freeze({
   flow_current: null,
   landscape: "IMAGE_ASPECT_RATIO_LANDSCAPE",
   portrait: "IMAGE_ASPECT_RATIO_PORTRAIT",
   square: "IMAGE_ASPECT_RATIO_SQUARE",
+});
+const ASPECT_RATIO_LABELS = Object.freeze({
+  flow_current: null,
+  landscape: "16:9",
+  portrait: "9:16",
+  square: "1:1",
 });
 
 function resultError(code, message, retryable = false, retryAfterMs) {
@@ -126,9 +158,54 @@ function validateFlowUrl(raw) {
 }
 
 function resolveNavigationTarget(request) {
-  const configured = request?.settings?.flowUrl?.trim?.();
-  if (!configured) return { url: FLOW_LANDING_URL, pinned: false };
-  return { url: validateFlowUrl(configured), pinned: true };
+  const projectMode = String(request?.configuration?.projectMode || "auto")
+    .trim()
+    .toLowerCase();
+  if (projectMode === "new") {
+    return { url: FLOW_LANDING_URL, pinned: false };
+  }
+
+  const projectInput =
+    typeof request?.inputs?.project_url === "string"
+      ? request.inputs.project_url.trim()
+      : typeof request?.inputs?.flow_url === "string"
+        ? request.inputs.flow_url.trim()
+        : "";
+
+  const projectConfig =
+    typeof request?.configuration?.projectUrl === "string"
+      ? request.configuration.projectUrl.trim()
+      : typeof request?.configuration?.project_url === "string"
+        ? request.configuration.project_url.trim()
+        : "";
+
+  const projectSetting =
+    typeof request?.settings?.flowUrl === "string" ? request.settings.flowUrl.trim() : "";
+
+  if (projectMode === "existing") {
+    const target = projectConfig || projectInput || projectSetting;
+    if (!target || !isFlowUrl(target, true)) {
+      throw codedError(
+        "INVALID_CONFIGURATION",
+        "O modo 'Usar projeto específico' exige uma URL de projeto em https://flow.google.com/project/...",
+      );
+    }
+    return { url: validateFlowUrl(target), pinned: true };
+  }
+
+  // No modo automático (padrão):
+  // Procura se há uma URL de projeto válida em inputs (porta conectada), na configuração do bloco ou nas configurações globais.
+  const validProjectUrl = [projectConfig, projectInput, projectSetting].find(
+    (item) => item && isFlowUrl(item, true),
+  );
+
+  if (validProjectUrl) {
+    return { url: validateFlowUrl(validProjectUrl), pinned: true };
+  }
+
+  // Se nenhum projeto específico válido foi fornecido (ou se inputs receberam contexto de texto),
+  // inicia criando um novo projeto no Google Flow.
+  return { url: FLOW_LANDING_URL, pinned: false };
 }
 
 function captchaRetryStatePath(request, services) {
@@ -152,6 +229,9 @@ async function readCaptchaRetryNavigation(request, services) {
     ) {
       return undefined;
     }
+    if (!state?.projectUrl || !isFlowUrl(state.projectUrl, true)) {
+      return undefined;
+    }
     return {
       url: validateFlowUrl(state.projectUrl),
       pinned: true,
@@ -172,7 +252,7 @@ async function saveCaptchaRetryNavigation(
   referencesAttached = false,
 ) {
   const statePath = captchaRetryStatePath(request, services);
-  if (!statePath || !projectUrl) return;
+  if (!statePath || !projectUrl || !isFlowUrl(projectUrl, true)) return;
   await writeFile(
     statePath,
     JSON.stringify({
@@ -276,21 +356,28 @@ async function markProfilePrepared(path, name, extensionIdentity) {
 }
 
 function resolveGenerationPreferences(configuration = {}) {
-  const modelKey = configuration.imageModel || "flow_auto";
+  const requestedModelKey = configuration.imageModel || "flow_auto";
   const aspectRatioKey = configuration.aspectRatio || "flow_current";
-  if (!Object.hasOwn(IMAGE_MODELS, modelKey)) {
+  if (!Object.hasOwn(IMAGE_MODELS, requestedModelKey)) {
     throw codedError("INVALID_CONFIGURATION", "imageModel não é reconhecido.");
   }
   if (!Object.hasOwn(ASPECT_RATIOS, aspectRatioKey)) {
     throw codedError("INVALID_CONFIGURATION", "aspectRatio não é reconhecido.");
   }
+  const modelKey = requestedModelKey === "flow_auto" ? "nano_banana_pro" : requestedModelKey;
   return {
+    requestedModelKey,
     modelKey,
     imageModelName: IMAGE_MODELS[modelKey],
     aspectRatioKey,
     imageAspectRatio: ASPECT_RATIOS[aspectRatioKey],
     fallbackOnModelLimit: configuration.fallbackOnModelLimit !== false,
   };
+}
+
+function nextImageModelFallback(modelKey) {
+  const index = IMAGE_MODEL_FALLBACK_ORDER.indexOf(modelKey);
+  return index >= 0 ? IMAGE_MODEL_FALLBACK_ORDER[index + 1] || null : null;
 }
 
 function normalizeReferenceImages(value) {
@@ -311,6 +398,29 @@ function requestsSingleImage(request) {
   return (request?.outputContract ?? []).some(
     (field) => field?.portKey === "images" && field?.type === "image",
   );
+}
+
+function requestsSingleVideo(request) {
+  return (request?.outputContract ?? []).some(
+    (field) => field?.portKey === "video" && field?.type === "video",
+  );
+}
+
+function resolveVideoPreferences(configuration = {}) {
+  const videoModelKey = configuration.videoModel || "veo_3_1_fast";
+  const videoResolutionKey = configuration.videoResolution || "flow_current";
+  const aspectRatioKey = configuration.aspectRatio || "flow_current";
+  if (!Object.hasOwn(VIDEO_MODELS, videoModelKey)) {
+    throw codedError("INVALID_CONFIGURATION", "videoModel não é reconhecido.");
+  }
+  return {
+    videoModelKey,
+    videoModelName: VIDEO_MODELS[videoModelKey],
+    videoResolutionKey,
+    videoResolutionLabel: VIDEO_RESOLUTIONS[videoResolutionKey] || null,
+    aspectRatioKey,
+    imageAspectRatio: ASPECT_RATIOS[aspectRatioKey] || null,
+  };
 }
 
 function assertDedicatedProfilePath(path) {
@@ -500,6 +610,7 @@ async function launchOrReuseChrome({
     `--user-data-dir=${profilePath}`,
     "--no-first-run",
     "--no-default-browser-check",
+    "--window-size=1280,800",
     startUrl,
   ];
   if (startMinimized) args.unshift("--start-minimized");
@@ -512,7 +623,9 @@ async function launchOrReuseChrome({
       child = spawn(executable, args, {
         detached: Boolean(keepBrowserOpen),
         stdio: "ignore",
-        windowsHide: true,
+        // O Chrome pode começar minimizado, mas nunca deve ser criado como uma
+        // janela oculta: o usuário precisa encontrá-lo na barra de tarefas.
+        windowsHide: false,
         shell: false,
       });
     } catch (cause) {
@@ -751,7 +864,7 @@ async function attachExtensionBridge(
     identity: extensionIdentity,
     sessionId: workerSessionId,
     targetId: workerTarget.targetId,
-    dispose() {
+    async dispose() {
       if (disposed) return;
       disposed = true;
       signal?.removeEventListener("abort", cancel);
@@ -761,8 +874,8 @@ async function attachExtensionBridge(
         profileId,
         sessionToken,
       };
-      void client
-        .send(
+      try {
+        await client.send(
           "Runtime.evaluate",
           {
             expression: `globalThis.contentFlowBridge?.disconnect(${JSON.stringify(payload)})`,
@@ -770,19 +883,19 @@ async function attachExtensionBridge(
             awaitPromise: true,
           },
           workerSessionId,
-        )
-        .catch(() => undefined)
-        .finally(() =>
-          client
-            .send("Target.detachFromTarget", { sessionId: workerSessionId })
-            .catch(() => undefined),
         );
+      } catch {
+        // O navegador pode encerrar a sessão durante cancelamentos.
+      } finally {
+        await client
+          .send("Target.detachFromTarget", { sessionId: workerSessionId })
+          .catch(() => undefined);
+      }
     },
   };
 }
 
 function describeCdpParams(method, params) {
-  if (method === "Fetch.continueRequest") return "request body redacted";
   if (method === "Page.navigate" || method === "Target.createTarget") {
     try {
       const url = new URL(String(params?.url ?? ""));
@@ -887,7 +1000,7 @@ class CdpClient {
 
   send(method, params = {}, sessionId) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN)
-      return Promise.reject(codedError("UPSTREAM_UNAVAILABLE", "CDP não conectado."));
+      return Promise.reject(codedError("UPSTREAM_UNAVAILABLE", "CDP não conectado.", true));
     const id = this.nextId++;
     const message = { id, method, params };
     if (sessionId) message.sessionId = sessionId;
@@ -914,18 +1027,33 @@ class CdpClient {
   }
 }
 
+async function waitForPageReady(client, sessionId, signal, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    try {
+      const state = await evaluate(
+        client,
+        sessionId,
+        "({readyState: document.readyState, url: location.href})",
+      );
+      if (["interactive", "complete"].includes(state?.readyState)) return state;
+    } catch {
+      // Contexto pode estar sendo recriado durante redirect/login.
+    }
+    await sleep(400, signal);
+  }
+}
+
 async function attachFlowPage(client, startUrl, pinned, signal, interactive = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
-  const projectTarget = targetInfos.find(
-    (item) => item.type === "page" && isFlowUrl(item.url, true),
-  );
   let target =
-    projectTarget || targetInfos.find((item) => item.type === "page" && isFlowUrl(item.url));
-  if (!target) target = targetInfos.find((item) => item.type === "page");
+    targetInfos.find((item) => item.type === "page" && isFlowUrl(item.url)) ||
+    targetInfos.find((item) => item.type === "page");
 
   let targetId = target?.targetId;
   if (!targetId) {
-    const created = await client.send("Target.createTarget", { url: startUrl });
+    const created = await client.send("Target.createTarget", { url: FLOW_LANDING_URL });
     targetId = created.targetId;
   }
 
@@ -952,25 +1080,16 @@ async function attachFlowPage(client, startUrl, pinned, signal, interactive = fa
     }
   }
 
-  // Uma execução sem URL fixada representa um vídeo novo. Sempre voltamos à
-  // landing page para que o bootstrap crie um projeto isolado no Flow.
-  await client.send("Page.navigate", { url: startUrl }, sessionId);
+  // O plugin deve abrir SEMPRE por padrão na página inicial do Flow (https://flow.google.com/).
+  await client.send("Page.navigate", { url: FLOW_LANDING_URL }, sessionId);
+  await waitForPageReady(client, sessionId, signal);
 
-  const deadline = Date.now() + 30000;
-  while (Date.now() < deadline) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    try {
-      const state = await evaluate(
-        client,
-        sessionId,
-        "({readyState: document.readyState, url: location.href})",
-      );
-      if (["interactive", "complete"].includes(state?.readyState)) break;
-    } catch {
-      // Contexto pode estar sendo recriado durante redirect/login.
-    }
-    await sleep(400, signal);
+  // Caso ele tenha que abrir um projeto específico fixado, navega até o projeto a partir da página inicial.
+  if (pinned && startUrl && isFlowUrl(startUrl, true) && startUrl !== FLOW_LANDING_URL) {
+    await client.send("Page.navigate", { url: startUrl }, sessionId);
+    await waitForPageReady(client, sessionId, signal);
   }
+
   return { sessionId, targetId };
 }
 
@@ -1078,8 +1197,12 @@ function cfGenerateCandidate(prompt, customSelector = '', includeDisabled = fals
   if (customSelector) {
     try { candidates = cfAll(customSelector); } catch { return null; }
   } else {
-    const exact = cfAll('button').filter(btn => [...btn.querySelectorAll('span')]
-      .some(span => /^(criar|create|gerar|generate)$/i.test((span.textContent || '').trim())));
+    const exact = cfAll('button').filter(btn => {
+      const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+      if (/iniciar gera|start genera|iniciar creaci|iniciar generaci/.test(aria)) return true;
+      return [...btn.querySelectorAll('span')]
+        .some(span => /^(criar|create|gerar|generate|arrow_forward)$/i.test((span.textContent || '').trim()));
+    });
     candidates = exact.length ? exact : cfAll('button, [role="button"], input[type="submit"]');
   }
   candidates = candidates.filter(cfVisible);
@@ -1090,14 +1213,16 @@ function cfGenerateCandidate(prompt, customSelector = '', includeDisabled = fals
     const disabled = el.disabled || el.getAttribute('aria-disabled') === 'true';
     if (disabled && !includeDisabled) continue;
     const t = cfText(el);
+    const aria = (el.getAttribute('aria-label') || '').toLowerCase();
     const r = el.getBoundingClientRect();
     const exactLabel = [...(el.querySelectorAll?.('span') || [])]
       .some(span => /^(criar|create|gerar|generate)$/i.test((span.textContent || '').trim()));
     let score = 0;
+    if (/iniciar gera|start genera|iniciar creaci|iniciar generaci/.test(aria)) score += 360;
     if (exactLabel) score += 320;
     if (/^(gerar|generate|criar|create)$/i.test(t)) score += 180;
     else if (/(gerar|generate|criar|create)/i.test(t)) score += 120;
-    if (/arrow_forward/i.test(el.innerHTML || '')) score += 60;
+    if (/arrow_forward/i.test(el.innerHTML || '')) score += 100;
     if (/(novo projeto|new project|renomear|rename|excluir|delete|cancelar execução)/i.test(t)) score -= 300;
     if (pr) {
       const dx = Math.abs((r.left + r.width / 2) - (pr.left + pr.width / 2));
@@ -1147,7 +1272,9 @@ function bootstrapActionPointExpression(action) {
       // Por isso, localizamos o botão pelo texto acessível completo.
       match = candidates.find(el => {
         const text = cfText(el);
-        return /(^|\s)(novo projeto|new project)(\s|$)/i.test(text);
+        const aria = (el.getAttribute?.('aria-label') || '').toLowerCase();
+        return /(^|\s)(novo projeto|new project|criar projeto|create project)(\s|$)/i.test(text) ||
+               /(novo projeto|new project|criar projeto|create project)/i.test(aria);
       });
     } else if (${JSON.stringify(action)} === 'flow-cta') {
       match = candidates.find(el => /(create with google flow|criar com o google flow|try in google flow|experimentar no google flow|começar|start creating)/i.test(cfText(el)));
@@ -1326,6 +1453,16 @@ async function setBrowserWindowState(client, targetId, windowState) {
     }
   } catch {
     // Estado da janela é conveniência; falha não interrompe geração.
+  }
+}
+
+async function showBrowserWindow(client, sessionId, targetId) {
+  await setBrowserWindowState(client, targetId, "normal");
+  try {
+    await client.send("Target.activateTarget", { targetId });
+    await client.send("Page.bringToFront", {}, sessionId);
+  } catch {
+    // A janela continua não-headless mesmo quando o SO recusa foco programático.
   }
 }
 
@@ -1690,6 +1827,43 @@ async function setPromptWithExtension(
   throw lastError;
 }
 
+async function waitForPromptEditorStable(client, sessionId, customSelector, signal) {
+  const deadline = Date.now() + 12_000;
+  let stableReadings = 0;
+  let previousSignature = "";
+  while (Date.now() < deadline) {
+    const state = await evaluate(
+      client,
+      sessionId,
+      `(() => { ${DEEP_HELPERS}
+        const editor = cfPromptCandidate(${JSON.stringify(customSelector || "")});
+        const rect = editor?.getBoundingClientRect?.();
+        return {
+          found: Boolean(editor),
+          connected: Boolean(editor?.isConnected),
+          dialogs: cfAll('[role="dialog"]').filter(cfVisible).length,
+          signature: editor && rect
+            ? [editor.tagName, Math.round(rect.left), Math.round(rect.top), Math.round(rect.width), Math.round(rect.height)].join(':')
+            : '',
+        };
+      })()`,
+    );
+    if (state?.found && state?.connected && state.dialogs === 0 && state.signature) {
+      stableReadings = state.signature === previousSignature ? stableReadings + 1 : 1;
+      previousSignature = state.signature;
+      if (stableReadings >= 3) return state;
+    } else {
+      stableReadings = 0;
+      previousSignature = "";
+    }
+    await sleep(500, signal);
+  }
+  throw codedError(
+    "OUTPUT_VALIDATION_FAILED",
+    "O editor do Flow não estabilizou antes do preenchimento; o prompt não foi enviado.",
+  );
+}
+
 async function waitGenerateEnabled(client, sessionId, settings, signal, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   let last = null;
@@ -1742,122 +1916,340 @@ async function clickGenerateWithExtension(bridge, settings, operationKey) {
   );
 }
 
-function applyGenerationPreferences(rawPostData, imageModelName, imageAspectRatio) {
-  const body = JSON.parse(String(rawPostData || ""));
-  if (!Array.isArray(body?.requests) || body.requests.length === 0) {
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "batchGenerateImages sem requests[] no corpo interceptado.",
+async function getActiveFlowProjectUrl(client, sessionId) {
+  try {
+    const url = await evaluate(client, sessionId, "location.href");
+    const match = String(url || "").match(
+      /https?:\/\/(?:flow\.google\.com|labs\.google)\/(?:tools\/flow\/)?project\/([a-zA-Z0-9_-]+)/i,
     );
+    return match ? match[0] : isFlowUrl(url, true) ? String(url) : null;
+  } catch {
+    return null;
   }
-
-  let changed = 0;
-  for (const item of body.requests) {
-    if (!item || typeof item !== "object") continue;
-    if (imageModelName && item.imageModelName !== imageModelName) {
-      item.imageModelName = imageModelName;
-      changed += 1;
-    }
-    if (imageAspectRatio && item.imageAspectRatio !== imageAspectRatio) {
-      item.imageAspectRatio = imageAspectRatio;
-      changed += 1;
-    }
-  }
-  return { body, postData: JSON.stringify(body), changed };
 }
 
-function installGenerationPreferencesInterceptor(client, sessionId, getPreferences, step) {
-  let stopped = false;
-
-  const offPaused = client.on("Fetch.requestPaused", (params, eventSessionId) => {
-    if (stopped || eventSessionId !== sessionId) return;
-
-    const request = params?.request ?? {};
-    const url = String(request.url || "");
-    if (String(request.method || "").toUpperCase() !== "POST" || !url.includes(GENERATION_SUFFIX)) {
-      // O pattern do Fetch.enable já restringe a URL, mas mantemos guarda defensiva.
-      void client
-        .send("Fetch.continueRequest", { requestId: params.requestId }, sessionId)
-        .catch(() => {});
-      return;
-    }
-
-    void (async () => {
-      let continued = false;
-      try {
-        const raw = typeof request.postData === "string" ? request.postData : "";
-        if (!raw) {
-          step?.(
-            "batchGenerateImages interceptado, mas sem postData; requisição mantida sem alteração.",
-          );
-          await client.send("Fetch.continueRequest", { requestId: params.requestId }, sessionId);
-          continued = true;
-          return;
-        }
-
-        const { imageModelName, imageAspectRatio } = getPreferences();
-        if (!imageModelName && !imageAspectRatio) {
-          await client.send("Fetch.continueRequest", { requestId: params.requestId }, sessionId);
-          continued = true;
-          step?.("batchGenerateImages preservado: modelo e proporção controlados pelo Flow.");
-          return;
-        }
-        const patched = applyGenerationPreferences(raw, imageModelName, imageAspectRatio);
-        const postData = Buffer.from(patched.postData, "utf8").toString("base64");
-        await client.send(
-          "Fetch.continueRequest",
-          {
-            requestId: params.requestId,
-            postData,
-          },
-          sessionId,
-        );
-        continued = true;
-        step?.(
-          patched.changed > 0
-            ? `batchGenerateImages ajustado conforme a configuração explícita (modelo=${imageModelName || "Flow"}; proporção=${imageAspectRatio || "Flow"}).`
-            : `batchGenerateImages já corresponde à configuração explícita (modelo=${imageModelName || "Flow"}; proporção=${imageAspectRatio || "Flow"}).`,
-        );
-      } catch (cause) {
-        step?.(
-          `Falha ao aplicar defaults na requisição: ${cause?.message ?? cause}. Enviando requisição original.`,
-        );
-        if (!continued) {
-          try {
-            await client.send("Fetch.continueRequest", { requestId: params.requestId }, sessionId);
-          } catch {
-            /* noop */
+async function ensureFlowModelAndRatio(
+  client,
+  sessionId,
+  bridge,
+  {
+    modelName,
+    ratioLabel,
+    resolutionLabel,
+    outputCount,
+    forceImageMode = false,
+    settings = {},
+    signal,
+  },
+  step,
+) {
+  const settingsPanelIsOpen = () =>
+    evaluate(
+      client,
+      sessionId,
+      `(() => { ${DEEP_HELPERS}
+        return cfAll('[role="radio"]')
+          .filter(cfVisible)
+          .some(el => /^(?:image|imagem|video|vídeo|frames|x[1-4]|\\d+:\\d+)$/i.test(cfText(el).replace(/^(?:image|videocam|crop_[^ ]+)\s+/i, '')));
+      })()`,
+    );
+  if (modelName) {
+    step?.(`Configurando modelo no Google Flow: ${modelName}...`);
+    try {
+      let current = await evaluate(
+        client,
+        sessionId,
+        `(() => { ${DEEP_HELPERS}
+          const btn = cfAll('button[aria-label], [role="button"][aria-label]')
+            .filter(cfVisible)
+            .find(el => /(gatilho de configura|settings trigger|generation settings)/i.test(el.getAttribute('aria-label') || ''));
+          return btn ? cfText(btn) : '';
+        })()`,
+      );
+      if (
+        forceImageMode &&
+        !/(?:imagem|image|nano\s+banana|gem[_\s-]*pix)/i.test(String(current || ""))
+      ) {
+        let modeSelectionError;
+        for (let modeAttempt = 1; modeAttempt <= 3; modeAttempt += 1) {
+          if (!(await settingsPanelIsOpen())) {
+            await bridge.dispatch(
+              "click",
+              {
+                selectors: [
+                  'button[aria-label*="gatilho de configura" i]',
+                  'button[aria-label*="settings trigger" i]',
+                  'button[aria-label*="generation settings" i]',
+                ],
+              },
+              `image-mode:open-settings:${modeAttempt}`,
+            );
+            await sleep(800, signal);
           }
+          let imageModeSelector = "";
+          for (let controlWait = 0; controlWait < 12; controlWait += 1) {
+            imageModeSelector = await evaluate(
+              client,
+              sessionId,
+              `(() => { ${DEEP_HELPERS}
+                const control = cfAll('button[role="radio"], [role="radio"]')
+                  .filter(cfVisible)
+                  .find(el => /(?:^|\\s)(?:imagem|image)(?:\\s|$)/i.test(cfText(el)));
+                if (!control) return '';
+                const id = String(control.id || '').trim();
+                return id && /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(id) ? '#' + id : '';
+              })()`,
+            );
+            if (imageModeSelector) break;
+            await sleep(250, signal);
+          }
+          try {
+            // Seleciona o rádio Imagem identificado pela captura de referência,
+            // usando a ponte nativa para que o Flow reconheça o gesto.
+            await bridge.dispatch(
+              "click",
+              {
+                selectors: [
+                  ...(imageModeSelector ? [imageModeSelector] : []),
+                  'button[role="radio"]',
+                  '[role="radio"]',
+                ],
+                textIncludes: ["Imagem", "Image"],
+              },
+              `image-mode:select-image:${modeAttempt}`,
+            );
+            await sleep(1_200, signal);
+            current = await evaluate(
+              client,
+              sessionId,
+              `(() => { ${DEEP_HELPERS}
+                const btn = cfAll('button[aria-label], [role="button"][aria-label]')
+                  .filter(cfVisible)
+                  .find(el => /(gatilho de configura|settings trigger|generation settings)/i.test(el.getAttribute('aria-label') || ''));
+                return btn ? cfText(btn) : '';
+              })()`,
+            );
+            if (/(?:imagem|image|nano\s+banana|gem[_\s-]*pix)/i.test(String(current || ""))) {
+              modeSelectionError = undefined;
+              break;
+            }
+          } catch (cause) {
+            modeSelectionError = cause;
+          }
+          await sleep(500, signal);
         }
+        if (!/(?:imagem|image|nano\s+banana|gem[_\s-]*pix)/i.test(String(current || ""))) {
+          throw codedError(
+            "OUTPUT_VALIDATION_FAILED",
+            `O Flow não confirmou a troca de Vídeo para Imagem${modeSelectionError?.message ? ` (${modeSelectionError.message})` : ""}; o prompt não será enviado.`,
+          );
+        }
+        step?.(`Modo Imagem confirmado (${current}).`);
       }
-    })();
-  });
+      if (
+        !String(current || "")
+          .toLowerCase()
+          .includes(modelName.toLowerCase())
+      ) {
+        // A captura real mostra que a família de modelos só existe depois que
+        // o painel de configurações é aberto. Preserve esta ordem.
+        await bridge.dispatch("click", {
+          selectors: [
+            'button[aria-label*="gatilho de configura" i]',
+            'button[aria-label*="settings trigger" i]',
+            'button[aria-label*="generation settings" i]',
+          ],
+        });
+        await sleep(700);
+        await bridge.dispatch("click", {
+          selectors: [
+            'button[aria-label*="família de modelos" i]',
+            'button[aria-label*="model family" i]',
+            'button[aria-label*="familia de modelos" i]',
+          ],
+        });
+        await sleep(500);
+        await bridge.dispatch("click", {
+          selectors: ['[role="menuitem"]', '[role="option"]', "button"],
+          textIncludes: [modelName],
+        });
+        await sleep(1_000);
 
-  return {
-    async enable() {
-      await client.send(
-        "Fetch.enable",
-        {
-          patterns: [
+        const confirmed = await evaluate(
+          client,
+          sessionId,
+          `(() => { ${DEEP_HELPERS}
+            const btn = cfAll('button[aria-label], [role="button"][aria-label]')
+              .filter(cfVisible)
+              .find(el => /(gatilho de configura|settings trigger|generation settings)/i.test(el.getAttribute('aria-label') || ''));
+            return btn ? cfText(btn) : '';
+          })()`,
+        );
+        if (
+          !String(confirmed || "")
+            .toLowerCase()
+            .includes(modelName.toLowerCase())
+        ) {
+          throw codedError(
+            "OUTPUT_VALIDATION_FAILED",
+            `O Flow não confirmou o modelo de imagem ${modelName}; o prompt não será enviado.`,
+          );
+        }
+        step?.(`Modelo de imagem confirmado: ${modelName}.`);
+      } else {
+        step?.(`Modelo de imagem já confirmado: ${modelName}.`);
+      }
+    } catch (err) {
+      if (err?.code === "OUTPUT_VALIDATION_FAILED") throw err;
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        `Não foi possível confirmar o modelo de imagem ${modelName}: ${err?.message || err}. O prompt não foi enviado.`,
+      );
+    }
+  }
+
+  if (ratioLabel) {
+    step?.(`Configurando proporção no Google Flow: ${ratioLabel}...`);
+    try {
+      if (!(await settingsPanelIsOpen())) {
+        await bridge.dispatch("click", {
+          selectors: [
+            'button[aria-label*="configura" i]',
+            'button[aria-label*="setting" i]',
+            'button[aria-label*="ajuste" i]',
+          ],
+        });
+        await sleep(500, signal);
+      }
+      await bridge.dispatch("click", {
+        selectors: ['button[role="radio"]', '[role="radio"]'],
+        textIncludes: [ratioLabel, `crop_${ratioLabel.replace(":", "_")}`],
+      });
+      await sleep(600, signal);
+      step?.(`Proporção selecionada: ${ratioLabel}.`);
+    } catch (err) {
+      step?.(`Aviso ao aplicar proporção (${err?.message || err}). Continuando.`);
+    }
+  }
+
+  if (Number.isInteger(outputCount) && outputCount >= 1 && outputCount <= 4) {
+    const targetCount = `x${outputCount}`;
+    const readCountState = () =>
+      evaluate(
+        client,
+        sessionId,
+        `(() => { ${DEEP_HELPERS}
+          const btn = cfAll('button[aria-label], [role="button"][aria-label]')
+            .filter(cfVisible)
+            .find(el => /(gatilho de configura|settings trigger|generation settings)/i.test(el.getAttribute('aria-label') || ''));
+          return btn ? cfText(btn) : '';
+        })()`,
+      );
+    let current = await readCountState();
+    if (!new RegExp(`(?:^|\\s)${targetCount}(?:\\s|$)`, "i").test(String(current || ""))) {
+      step?.(`Configurando quantidade por prompt no Google Flow: ${targetCount}...`);
+      let selectionError;
+      for (let countAttempt = 1; countAttempt <= 3; countAttempt += 1) {
+        if (!(await settingsPanelIsOpen())) {
+          await bridge.dispatch(
+            "click",
             {
-              urlPattern: `*${GENERATION_SUFFIX}*`,
-              requestStage: "Request",
+              selectors: [
+                'button[aria-label*="gatilho de configura" i]',
+                'button[aria-label*="settings trigger" i]',
+                'button[aria-label*="generation settings" i]',
+              ],
             },
+            `image-count:open-settings:${countAttempt}`,
+          );
+          await sleep(700, signal);
+        }
+        try {
+          await bridge.dispatch(
+            "click",
+            {
+              selectors: ['button[role="radio"]', '[role="radio"]'],
+              textIncludes: [targetCount],
+            },
+            `image-count:select:${targetCount}:${countAttempt}`,
+          );
+          await sleep(1_000, signal);
+          current = await readCountState();
+          if (new RegExp(`(?:^|\\s)${targetCount}(?:\\s|$)`, "i").test(String(current || ""))) {
+            selectionError = undefined;
+            break;
+          }
+        } catch (cause) {
+          selectionError = cause;
+        }
+        await sleep(500, signal);
+      }
+      if (!new RegExp(`(?:^|\\s)${targetCount}(?:\\s|$)`, "i").test(String(current || ""))) {
+        throw codedError(
+          "OUTPUT_VALIDATION_FAILED",
+          `O Flow não confirmou ${targetCount}${selectionError?.message ? ` (${selectionError.message})` : ""}; o prompt não será enviado.`,
+        );
+      }
+    }
+    step?.(`Quantidade por prompt confirmada: ${targetCount}.`);
+    if (await settingsPanelIsOpen()) {
+      await bridge.dispatch(
+        "click",
+        {
+          selectors: [
+            'button[aria-label*="gatilho de configura" i]',
+            'button[aria-label*="settings trigger" i]',
+            'button[aria-label*="generation settings" i]',
           ],
         },
-        sessionId,
+        "image-settings:close",
       );
-    },
-    async disable() {
-      stopped = true;
-      offPaused();
-      try {
-        await client.send("Fetch.disable", {}, sessionId);
-      } catch {
-        /* noop */
-      }
-    },
-  };
+      await sleep(500, signal);
+    }
+  } else if (ratioLabel && (await settingsPanelIsOpen())) {
+    await bridge.dispatch("click", {
+      selectors: [
+        'button[aria-label*="gatilho de configura" i]',
+        'button[aria-label*="settings trigger" i]',
+        'button[aria-label*="generation settings" i]',
+      ],
+    });
+    await sleep(500, signal);
+  }
+
+  if (resolutionLabel) {
+    try {
+      await bridge.dispatch("click", {
+        textIncludes: [resolutionLabel],
+      });
+      step?.(`Resolução selecionada: ${resolutionLabel}.`);
+    } catch {}
+  }
+}
+
+async function triggerAnimateOnImage(client, sessionId, bridge, step) {
+  step?.("Localizando card de imagem no Google Flow para animar...");
+  try {
+    await bridge.dispatch("click", {
+      selectors: [
+        'button[aria-label*="mais opç" i]',
+        'button[aria-label*="more option" i]',
+        'button[aria-label*="más opci" i]',
+      ],
+      textIncludes: ["more_vert"],
+    });
+    await sleep(400);
+    await bridge.dispatch("click", {
+      selectors: ['[role="menuitem"]', "button"],
+      textIncludes: ["Animar", "Animate", "motion_blur"],
+    });
+    step?.("Ação Animar acionada no Google Flow.");
+  } catch (err) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      `Não consegui acionar o menu Animar na imagem: ${err?.message || err}`,
+    );
+  }
 }
 
 function createBatchResponseTracker(client, sessionId, signal) {
@@ -2281,6 +2673,18 @@ function parseGenerationResponse(captured) {
   if (!Array.isArray(body?.media) || body.media.length === 0) {
     throw codedError("OUTPUT_VALIDATION_FAILED", "A resposta do Google Flow não contém media[].");
   }
+  if (
+    body.media.some(
+      (item) =>
+        typeof item?.image?.generatedImage?.fifeUrl !== "string" ||
+        !item.image.generatedImage.fifeUrl,
+    )
+  ) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      "O Google Flow retornou mídia que não é imagem; poster ou frame de vídeo não será aceito.",
+    );
+  }
   return body;
 }
 
@@ -2290,7 +2694,12 @@ function mediaItemsFromImageUrls(urls) {
   for (const raw of Array.isArray(urls) ? urls : []) {
     try {
       const parsed = new URL(String(raw || ""));
-      if (parsed.protocol !== "https:" || parsed.hostname !== MEDIA_HOST || seen.has(parsed.href)) {
+      if (
+        parsed.protocol !== "https:" ||
+        parsed.hostname !== MEDIA_HOST ||
+        !/^\/image\/[^/]+\/?$/i.test(parsed.pathname) ||
+        seen.has(parsed.href)
+      ) {
         continue;
       }
       seen.add(parsed.href);
@@ -2304,18 +2713,37 @@ function mediaItemsFromImageUrls(urls) {
   return media;
 }
 
+function mediaItemsFromImageCandidates(candidates) {
+  return mediaItemsFromImageUrls(
+    (Array.isArray(candidates) ? candidates : [])
+      .filter((candidate) => candidate?.cardType === "image")
+      .map((candidate) => candidate.url),
+  );
+}
+
 async function generatedMediaOnPage(client, sessionId) {
-  const urls = await evaluate(
+  const candidates = await evaluate(
     client,
     sessionId,
     `(() => { ${DEEP_HELPERS}
       return cfAll('img')
         .filter(cfVisible)
-        .map(img => img.currentSrc || img.src || '')
-        .filter(src => String(src).toLowerCase().startsWith('https://flow-content.google/image/'));
+        .map(img => {
+          const url = img.currentSrc || img.src || '';
+          if (!String(url).toLowerCase().startsWith('https://flow-content.google/image/')) return null;
+          let node = img;
+          for (let depth = 0; node && depth < 10; depth += 1, node = node.parentElement) {
+            const videoHotbar = node.querySelector?.('flow-video-hotbar');
+            const imageHotbar = node.querySelector?.('flow-image-hotbar');
+            if (videoHotbar) return { url, cardType: 'video' };
+            if (imageHotbar) return { url, cardType: 'image' };
+          }
+          return { url, cardType: 'unknown' };
+        })
+        .filter(Boolean);
     })()`,
   );
-  return mediaItemsFromImageUrls(urls);
+  return mediaItemsFromImageCandidates(candidates);
 }
 
 // Explicit recovery selection: never guess the newest image or submit again
@@ -2370,10 +2798,14 @@ async function waitForGeneratedMediaOnPage(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline && !isCancelled()) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    const fresh = (await generatedMediaOnPage(client, sessionId)).filter(
-      (item) => !baseline.has(item.image.generatedImage.fifeUrl),
-    );
-    if (fresh.length > 0) return { media: fresh };
+    try {
+      const fresh = (await generatedMediaOnPage(client, sessionId)).filter(
+        (item) => !baseline.has(item.image.generatedImage.fifeUrl),
+      );
+      if (fresh.length > 0) return { media: fresh };
+    } catch {
+      // Ignora falhas transitórias de evaluate enquanto a página re-renderiza ou gera
+    }
     await sleep(750, signal);
   }
   throw codedError(
@@ -2400,6 +2832,19 @@ async function downloadGeneratedImage(item, prompt, promptOrdinal, variantOrdina
   const parsed = new URL(mediaUrl);
   if (parsed.protocol !== "https:" || parsed.hostname !== MEDIA_HOST) {
     throw codedError("OUTPUT_VALIDATION_FAILED", `Host de mídia inesperado: ${parsed.hostname}`);
+  }
+  if (!/^\/image\/[^/]+\/?$/i.test(parsed.pathname)) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      `A mídia não usa o endpoint original de imagem do Flow: ${parsed.pathname}`,
+    );
+  }
+  const urlMediaId = parsed.pathname.split("/").filter(Boolean).at(-1);
+  if (generated?.mediaId && urlMediaId && String(generated.mediaId) !== urlMediaId) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      "O mediaId retornado pelo Flow não corresponde ao arquivo de imagem solicitado.",
+    );
   }
 
   let response;
@@ -2433,6 +2878,41 @@ async function downloadGeneratedImage(item, prompt, promptOrdinal, variantOrdina
     .toLowerCase();
   if (!mimeType.startsWith("image/"))
     throw codedError("OUTPUT_VALIDATION_FAILED", `MIME inesperado: ${mimeType}`);
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const isPng =
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a;
+  const isWebp =
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50;
+  if (!isJpeg && !isPng && !isWebp) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      "O download do Flow declarou imagem, mas os bytes não têm assinatura JPEG, PNG ou WebP válida.",
+    );
+  }
+  if (
+    (mimeType.includes("jpeg") && !isJpeg) ||
+    (mimeType.includes("png") && !isPng) ||
+    (mimeType.includes("webp") && !isWebp)
+  ) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      `O MIME ${mimeType} não corresponde à assinatura binária do arquivo baixado.`,
+    );
+  }
 
   const ext = extensionForMime(mimeType);
   const promptPart = String(promptOrdinal).padStart(3, "0");
@@ -2460,8 +2940,136 @@ async function downloadGeneratedImage(item, prompt, promptOrdinal, variantOrdina
   };
 }
 
+function mediaItemsFromVideoUrls(urls) {
+  const seen = new Set();
+  const media = [];
+  for (const raw of Array.isArray(urls) ? urls : []) {
+    try {
+      const parsed = new URL(String(raw || ""));
+      if (parsed.protocol !== "https:" || parsed.hostname !== MEDIA_HOST || seen.has(parsed.href)) {
+        continue;
+      }
+      if (!parsed.pathname.includes("/video/")) continue;
+      seen.add(parsed.href);
+      const mediaId =
+        parsed.pathname.split("/").filter(Boolean).at(-1) || `video-${media.length + 1}`;
+      media.push({ video: { fifeUrl: parsed.href, mediaId } });
+    } catch {
+      // ignore
+    }
+  }
+  return media;
+}
+
+async function generatedVideosOnPage(client, sessionId) {
+  const urls = await evaluate(
+    client,
+    sessionId,
+    `(() => { ${DEEP_HELPERS}
+      const list = cfAll('video, video source')
+        .map(el => el.currentSrc || el.src || '')
+        .filter(src => String(src).toLowerCase().includes('flow-content.google/video/'));
+      return Array.from(new Set(list));
+    })()`,
+  );
+  return mediaItemsFromVideoUrls(urls);
+}
+
+async function waitForGeneratedVideosOnPage(
+  client,
+  sessionId,
+  baselineUrls,
+  signal,
+  timeoutMs,
+  isCancelled = () => false,
+) {
+  const baseline = new Set(baselineUrls);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && !isCancelled()) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    try {
+      const fresh = (await generatedVideosOnPage(client, sessionId)).filter(
+        (item) => !baseline.has(item.video.fifeUrl),
+      );
+      if (fresh.length > 0) return { media: fresh };
+    } catch {
+      // Ignora falhas transitórias de evaluate enquanto o vídeo é gerado
+    }
+    await sleep(1000, signal);
+  }
+  throw codedError(
+    "TIMEOUT",
+    "Nenhum vídeo novo apareceu no projeto do Google Flow dentro do tempo limite.",
+  );
+}
+
+async function downloadGeneratedVideo(item, prompt, promptOrdinal, services) {
+  const mediaUrl = item?.video?.fifeUrl;
+  const mediaId = item?.video?.mediaId || `video-${promptOrdinal}`;
+  if (typeof mediaUrl !== "string" || !mediaUrl) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", "Vídeo gerado sem fifeUrl.");
+  }
+
+  const parsed = new URL(mediaUrl);
+  if (parsed.protocol !== "https:" || parsed.hostname !== MEDIA_HOST) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", `Host de mídia inesperado: ${parsed.hostname}`);
+  }
+
+  let response;
+  try {
+    response = await fetch(mediaUrl, { signal: services.signal, redirect: "error" });
+  } catch (cause) {
+    if (services.signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    throw codedError(
+      "UPSTREAM_UNAVAILABLE",
+      `Falha ao baixar vídeo gerado: ${cause?.message ?? cause}`,
+      true,
+    );
+  }
+  if (!response.ok) {
+    throw codedError(
+      "UPSTREAM_UNAVAILABLE",
+      `Falha ao baixar vídeo gerado (HTTP ${response.status}).`,
+      response.status >= 500,
+    );
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength < 1) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", "Vídeo gerado está vazio.");
+  }
+
+  const mimeType = (response.headers.get("content-type") || "video/mp4")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+
+  const promptPart = String(promptOrdinal).padStart(3, "0");
+  const filename = `${promptPart}_video_${safeFilename(prompt, String(mediaId))}.mp4`;
+  const artifactId = `google-flow-video-${promptPart}`;
+  const outputPath = services.getOutputPath(filename);
+  await writeFile(outputPath, bytes);
+
+  return {
+    file: {
+      id: artifactId,
+      name: filename,
+      mimeType,
+      size: bytes.byteLength,
+      url: `artifact://${artifactId}`,
+    },
+    artifact: {
+      id: artifactId,
+      name: filename,
+      mimeType,
+      size: bytes.byteLength,
+      source: { kind: "path", path: filename },
+    },
+  };
+}
+
 async function maybeCloseBrowser(client, browserInfo, keepBrowserOpen) {
-  if (!keepBrowserOpen && browserInfo?.startedByPlugin) {
+  if (!keepBrowserOpen) {
     try {
       await client.send("Browser.close");
     } catch {
@@ -2536,7 +3144,7 @@ async function configureProfile(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
-    extensionBridge?.dispose();
+    await extensionBridge?.dispose();
     try {
       await client?.send("Browser.close");
     } catch {}
@@ -2556,16 +3164,45 @@ export async function execute(request, services) {
     );
   }
 
-  const prompts = normalizePrompts(request?.inputs?.prompts);
-  if (prompts.length === 0) return resultError("INVALID_INPUT", "Informe pelo menos um prompt.");
-  const singleImageOutput = requestsSingleImage(request);
-  if (singleImageOutput && prompts.length !== 1) {
-    return resultError(
-      "INVALID_INPUT",
-      "Um output image exige exatamente um prompt. Use files para gerar um lote.",
-    );
+  const capabilityId = String(request?.capabilityId ?? "generate-images-in-browser");
+  const isVideoGeneration = capabilityId === "generate-video-in-browser";
+  const isImageAnimation = capabilityId === "animate-image-in-browser";
+  const isVideoCapability = isVideoGeneration || isImageAnimation;
+
+  if (
+    ![
+      "generate-images-in-browser",
+      "animate-image-in-browser",
+      "generate-video-in-browser",
+    ].includes(capabilityId)
+  ) {
+    return resultError("INVALID_CONFIGURATION", `Capability não suportada: ${capabilityId}`);
   }
-  const referenceImages = normalizeReferenceImages(request?.inputs?.reference_images);
+
+  let prompts = normalizePrompts(request?.inputs?.prompts);
+  const singleImageOutput = requestsSingleImage(request);
+  const singleVideoOutput = requestsSingleVideo(request);
+
+  if (capabilityId === "generate-images-in-browser") {
+    if (prompts.length === 0) return resultError("INVALID_INPUT", "Informe pelo menos um prompt.");
+    if (singleImageOutput && prompts.length !== 1) {
+      return resultError(
+        "INVALID_INPUT",
+        "Um output image exige exatamente um prompt. Use files para gerar um lote.",
+      );
+    }
+  } else if (isVideoGeneration) {
+    if (prompts.length === 0)
+      return resultError("INVALID_INPUT", "Informe pelo menos um prompt de vídeo.");
+  } else if (isImageAnimation) {
+    if (prompts.length === 0) prompts = [""];
+  }
+
+  let rawReferences = request?.inputs?.reference_images;
+  if (isImageAnimation && !rawReferences) {
+    rawReferences = request?.inputs?.images ?? request?.inputs?.image;
+  }
+  const referenceImages = normalizeReferenceImages(rawReferences);
   const coreBatchIndex = Number.isInteger(request?.batch?.index) ? request.batch.index : undefined;
   const coreBatchTotal = Number.isInteger(request?.batch?.total) ? request.batch.total : undefined;
 
@@ -2581,15 +3218,16 @@ export async function execute(request, services) {
     );
 
   const settings = request?.settings ?? {};
-  const keepBrowserOpen = settings.keepBrowserOpen !== false;
-  const startMinimized =
-    request?.context?.runMode !== "method_test" && settings.startMinimized !== false;
+  const keepBrowserOpen = settings.keepBrowserOpen === true;
+  const startMinimized = settings.startMinimized !== false;
   const requestTimeoutSeconds = Number.isInteger(settings.requestTimeoutSeconds)
     ? settings.requestTimeoutSeconds
-    : 240;
+    : isVideoCapability
+      ? 450
+      : 240;
   const delayBetweenPromptsMs = Number.isInteger(request?.configuration?.delayBetweenPromptsMs)
     ? request.configuration.delayBetweenPromptsMs
-    : 5000;
+    : 6000;
   const requestedConcurrentGenerations = Number.isInteger(
     request?.configuration?.maxConcurrentGenerations,
   )
@@ -2600,7 +3238,9 @@ export async function execute(request, services) {
     : 1;
   const maxReferenceImages = Number.isInteger(request?.configuration?.maxReferenceImages)
     ? request.configuration.maxReferenceImages
-    : 10;
+    : isImageAnimation
+      ? 1
+      : 10;
   const requestedMaxImagesPerPrompt = Number.isInteger(request?.configuration?.maxImagesPerPrompt)
     ? request.configuration.maxImagesPerPrompt
     : 1;
@@ -2619,6 +3259,12 @@ export async function execute(request, services) {
   const maxImagesPerPrompt = singleImageOutput ? 1 : requestedMaxImagesPerPrompt;
   const stepLogs = [];
   const diagnosticLogs = [];
+  const diagnosticFile =
+    settings.diagnosticTrace === false || typeof services?.getWorkspacePath !== "function"
+      ? null
+      : services.getWorkspacePath(
+          `diagnostics/${String(request?.executionId || "execution")}-${String(request?.blockId || "block")}-attempt-${Number(request?.attempt || 1)}-${randomUUID()}.json`,
+        );
   const step = (message) => {
     stepLogs.push(message);
     if (stepLogs.length > 240) stepLogs.shift();
@@ -2629,19 +3275,29 @@ export async function execute(request, services) {
     }
   };
   const trace = (message) => {
-    if (settings.diagnosticTrace !== true) return;
+    if (settings.diagnosticTrace === false) return;
     diagnosticLogs.push(message);
-    if (diagnosticLogs.length > 500) diagnosticLogs.shift();
+    if (diagnosticLogs.length > 5_000) diagnosticLogs.shift();
   };
+  step(
+    settings.diagnosticTrace === false
+      ? "Depuração contínua desativada explicitamente na configuração do plugin."
+      : "Depuração contínua ativa durante o job inteiro.",
+  );
 
   let navigation;
   let chromeExecutables;
   let profileRuntime;
   let generationPreferences;
+  let videoPreferences;
   let referencePaths;
   try {
     profileRuntime = resolveProfileRuntime(request, services);
-    generationPreferences = resolveGenerationPreferences(request?.configuration ?? {});
+    if (isVideoCapability) {
+      videoPreferences = resolveVideoPreferences(request?.configuration ?? {});
+    } else {
+      generationPreferences = resolveGenerationPreferences(request?.configuration ?? {});
+    }
     assertDedicatedProfilePath(profileRuntime.profilePath);
     if (!(await profileIsPrepared(profileRuntime.profilePath, profileRuntime.accountProfile))) {
       throw codedError(
@@ -2662,6 +3318,7 @@ export async function execute(request, services) {
     );
     step(`Chrome detectado: ${chromeExecutables[0] || "candidato automático"}.`);
     step(`Perfil de conta selecionado: ${profileRuntime.accountProfile}.`);
+    if (diagnosticFile) step(`Captura integral deste job: ${diagnosticFile}.`);
   } catch (cause) {
     return resultError(
       cause?.code ?? "INVALID_CONFIGURATION",
@@ -2672,7 +3329,6 @@ export async function execute(request, services) {
 
   let browserInfo;
   let client;
-  let generationDefaults;
   let responseTracker;
   let extensionBridge;
   let activeProjectUrl;
@@ -2687,7 +3343,7 @@ export async function execute(request, services) {
       port: profileRuntime.port,
       startMinimized,
       keepBrowserOpen,
-      startUrl: navigation.url,
+      startUrl: FLOW_LANDING_URL,
       signal: services.signal,
     });
     step(
@@ -2718,21 +3374,19 @@ export async function execute(request, services) {
     step("ContentFlow Browser Bridge conectada; teclado e mouse permanecem isolados.");
 
     let activePreferences = { ...generationPreferences };
-    generationDefaults = installGenerationPreferencesInterceptor(
-      client,
-      sessionId,
-      () => activePreferences,
-      step,
-    );
-    await generationDefaults.enable();
-    step(
-      activePreferences.imageModelName || activePreferences.imageAspectRatio
-        ? `Preferências explícitas ativas: modelo=${activePreferences.imageModelName || "Flow"}; proporção=${activePreferences.imageAspectRatio || "Flow"}.`
-        : "Modo Automático do Flow ativo: modelo e proporção não serão alterados pelo plugin.",
-    );
+    if (!isVideoCapability) {
+      step(
+        activePreferences.modelKey || activePreferences.aspectRatioKey
+          ? `Preferências explícitas serão aplicadas pelos controles visíveis do Flow (modelo=${MODEL_LABELS[activePreferences.modelKey] || "Flow"}; proporção=${ASPECT_RATIO_LABELS[activePreferences.aspectRatioKey] || "Flow"}).`
+          : "Modo Automático do Flow ativo: modelo e proporção não serão alterados pelo plugin.",
+      );
+    }
     responseTracker = createBatchResponseTracker(client, sessionId, services.signal);
 
-    if (!startMinimized) await setBrowserWindowState(client, page.targetId, "normal");
+    if (!startMinimized) {
+      await showBrowserWindow(client, sessionId, page.targetId);
+      step("Janela do Chrome confirmada em modo visível (headless desativado).");
+    }
     const initialProjectState = await ensureFlowProjectReady(
       client,
       sessionId,
@@ -2742,24 +3396,27 @@ export async function execute(request, services) {
       trace,
       !navigation.pinned,
     );
-    activeProjectUrl = initialProjectState?.url;
-    step(`Projeto do Google Flow pronto: ${initialProjectState?.url || "URL não detectada"}.`);
+    activeProjectUrl =
+      (await getActiveFlowProjectUrl(client, sessionId)) || initialProjectState?.url;
+    step(`Projeto do Google Flow pronto: ${activeProjectUrl || "URL não detectada"}.`);
     if (navigation.captureLabel) {
       // Project shell/editor readiness precedes the asynchronously loaded media grid.
       await sleep(3_000, services.signal);
       const media = await recoverMediaByLabel(client, sessionId, navigation.captureLabel);
       const recovered = await downloadGeneratedImage(media, prompts[0], 1, 1, services);
-      responseTracker.close();
+      responseTracker?.close();
       responseTracker = null;
-      await generationDefaults.disable();
-      extensionBridge.dispose();
+      await extensionBridge.dispose();
       extensionBridge = null;
       await maybeCloseBrowser(client, browserInfo, keepBrowserOpen);
       client = null;
       await clearCaptchaRetryNavigation(request, services);
       return {
         status: "success",
-        values: { images: singleImageOutput ? recovered.file : [recovered.file] },
+        values: {
+          images: singleImageOutput ? recovered.file : [recovered.file],
+          project_url: activeProjectUrl,
+        },
         artifacts: [recovered.artifact],
         logs: [
           ...stepLogs,
@@ -2767,6 +3424,233 @@ export async function execute(request, services) {
         ],
       };
     }
+
+    if (isImageAnimation) {
+      step("Iniciando fluxo de animação de imagem no Google Flow...");
+      if (
+        referencePaths.length > 0 &&
+        (!referencesAttached ||
+          (await attachedReferenceCount(client, sessionId)) < referencePaths.length)
+      ) {
+        await uploadReferenceImages(
+          client,
+          sessionId,
+          extensionBridge,
+          referencePaths,
+          settings,
+          services.signal,
+          step,
+        );
+        referencesAttached = true;
+      }
+
+      await triggerAnimateOnImage(client, sessionId, extensionBridge, step);
+      await sleep(1000, services.signal);
+
+      if (videoPreferences) {
+        await ensureFlowModelAndRatio(
+          client,
+          sessionId,
+          extensionBridge,
+          {
+            modelName: videoPreferences.videoModelName,
+            resolutionLabel: videoPreferences.videoResolutionLabel,
+          },
+          step,
+        );
+      }
+
+      const promptText = prompts[0] || "";
+      if (promptText) {
+        await waitForPromptEditorStable(
+          client,
+          sessionId,
+          settings.promptSelector || "",
+          services.signal,
+        );
+        await setPromptWithExtension(
+          extensionBridge,
+          promptText,
+          settings.promptSelector || "",
+          "animate:0:prompt",
+          services.signal,
+          client,
+          sessionId,
+        );
+        step(`Instrução de animação preenchida (${promptText.length} caracteres).`);
+      }
+
+      await waitGenerateEnabled(client, sessionId, settings, services.signal, 15000);
+      const baselineMedia = await generatedVideosOnPage(client, sessionId);
+      const baselineUrls = baselineMedia.map((item) => item.video.fifeUrl);
+
+      generationSubmitted = true;
+      await clickGenerateWithExtension(extensionBridge, settings, "animate:0:generate");
+      step("Geração de animação confirmada. Aguardando conclusão do vídeo...");
+
+      const responseTimeoutMs = requestTimeoutSeconds * 1000;
+      const videoResult = await waitForGeneratedVideosOnPage(
+        client,
+        sessionId,
+        baselineUrls,
+        services.signal,
+        responseTimeoutMs,
+      );
+      const selectedVideo = videoResult.media[0];
+      const result = await downloadGeneratedVideo(
+        selectedVideo,
+        promptText || "animacao",
+        1,
+        services,
+      );
+      files.push(result.file);
+      artifacts.push(result.artifact);
+      step(`Vídeo animado salvo (${result.file.name}).`);
+
+      activeProjectUrl = (await getActiveFlowProjectUrl(client, sessionId)) || activeProjectUrl;
+      if (settings.minimizeWhenReady === true)
+        await setBrowserWindowState(client, page.targetId, "minimized");
+      responseTracker?.close();
+      responseTracker = null;
+      await extensionBridge.dispose();
+      extensionBridge = null;
+      await maybeCloseBrowser(client, browserInfo, keepBrowserOpen);
+      client = null;
+      await clearCaptchaRetryNavigation(request, services);
+
+      return {
+        status: "success",
+        values: {
+          video: singleVideoOutput ? files[0] : files,
+          project_url: activeProjectUrl,
+        },
+        artifacts,
+        usage: { provider: "Google Labs / Flow", outputUnits: files.length, unit: "video" },
+        logs: [
+          ...stepLogs,
+          ...diagnosticLogs,
+          `${files.length} vídeo(s) animado(s) do Google Flow finalizado(s).`,
+        ],
+      };
+    }
+
+    if (isVideoGeneration) {
+      step("Iniciando fluxo de geração de vídeo no Google Flow...");
+      if (videoPreferences) {
+        await ensureFlowModelAndRatio(
+          client,
+          sessionId,
+          extensionBridge,
+          {
+            modelName: videoPreferences.videoModelName,
+            ratioLabel: ASPECT_RATIO_LABELS[videoPreferences.aspectRatioKey] || null,
+            resolutionLabel: videoPreferences.videoResolutionLabel,
+          },
+          step,
+        );
+      }
+
+      for (let index = 0; index < prompts.length; index += 1) {
+        if (services.signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+        const currentPrompt = prompts[index];
+        const label = `Vídeo ${index + 1}/${prompts.length}`;
+        step(`${label}: preparando prompt.`);
+
+        await waitForPromptEditorStable(
+          client,
+          sessionId,
+          settings.promptSelector || "",
+          services.signal,
+        );
+        await setPromptWithExtension(
+          extensionBridge,
+          currentPrompt,
+          settings.promptSelector || "",
+          `video:${index}:prompt`,
+          services.signal,
+          client,
+          sessionId,
+        );
+        step(`${label}: prompt preenchido (${currentPrompt.length} caracteres).`);
+
+        await waitGenerateEnabled(client, sessionId, settings, services.signal, 15000);
+        const baselineMedia = await generatedVideosOnPage(client, sessionId);
+        const baselineUrls = baselineMedia.map((item) => item.video.fifeUrl);
+
+        generationSubmitted = true;
+        await clickGenerateWithExtension(extensionBridge, settings, `video:${index}:generate`);
+        step(`${label}: envio confirmado. Aguardando vídeo...`);
+
+        const responseTimeoutMs = requestTimeoutSeconds * 1000;
+        const videoResult = await waitForGeneratedVideosOnPage(
+          client,
+          sessionId,
+          baselineUrls,
+          services.signal,
+          responseTimeoutMs,
+        );
+        const selectedVideo = videoResult.media[0];
+        const result = await downloadGeneratedVideo(
+          selectedVideo,
+          currentPrompt,
+          index + 1,
+          services,
+        );
+        files.push(result.file);
+        artifacts.push(result.artifact);
+        step(`${label}: salvo (${result.file.name}).`);
+
+        if (index + 1 < prompts.length && delayBetweenPromptsMs > 0) {
+          await sleep(delayBetweenPromptsMs, services.signal);
+        }
+      }
+
+      activeProjectUrl = (await getActiveFlowProjectUrl(client, sessionId)) || activeProjectUrl;
+      if (settings.minimizeWhenReady === true)
+        await setBrowserWindowState(client, page.targetId, "minimized");
+      responseTracker?.close();
+      responseTracker = null;
+      await extensionBridge.dispose();
+      extensionBridge = null;
+      await maybeCloseBrowser(client, browserInfo, keepBrowserOpen);
+      client = null;
+      await clearCaptchaRetryNavigation(request, services);
+
+      return {
+        status: "success",
+        values: {
+          video: singleVideoOutput ? files[0] : files,
+          project_url: activeProjectUrl,
+        },
+        artifacts,
+        usage: { provider: "Google Labs / Flow", outputUnits: files.length, unit: "video" },
+        logs: [
+          ...stepLogs,
+          ...diagnosticLogs,
+          `${files.length} vídeo(s) do Google Flow finalizado(s).`,
+        ],
+      };
+    }
+
+    const targetModelLabel = MODEL_LABELS[activePreferences.modelKey] || null;
+    const targetRatioLabel = ASPECT_RATIO_LABELS[activePreferences.aspectRatioKey] || null;
+    if (targetModelLabel || targetRatioLabel) {
+      await ensureFlowModelAndRatio(
+        client,
+        sessionId,
+        extensionBridge,
+        {
+          modelName: targetModelLabel,
+          ratioLabel: targetRatioLabel,
+          outputCount: maxImagesPerPrompt,
+          forceImageMode: true,
+          settings,
+          signal: services.signal,
+        },
+        step,
+      );
+    }
+
     step("Editor Slate detectado.");
     if (
       !referencesAttached ||
@@ -2795,10 +3679,65 @@ export async function execute(request, services) {
       const label = `Prompt ${absolutePromptIndex + 1}/${promptTotal} (tentativa ${task.attempt}/${retryAttempts + 1})`;
       return {
         completion: (async () => {
-          let modelFallbackUsed = false;
+          const fallbackModelsTried = new Set();
+          const switchToNextImageModel = async (reason) => {
+            const fallbackModelKey = nextImageModelFallback(activePreferences.modelKey);
+            if (
+              !activePreferences.fallbackOnModelLimit ||
+              !fallbackModelKey ||
+              fallbackModelsTried.has(fallbackModelKey)
+            ) {
+              return false;
+            }
+            activePreferences = {
+              ...activePreferences,
+              modelKey: fallbackModelKey,
+              imageModelName: IMAGE_MODELS[fallbackModelKey],
+            };
+            fallbackModelsTried.add(fallbackModelKey);
+            step(
+              `${label}: ${reason}; repetindo com ${MODEL_LABELS[fallbackModelKey]} na mesma conta.`,
+            );
+            await ensureFlowModelAndRatio(
+              client,
+              sessionId,
+              extensionBridge,
+              {
+                modelName: MODEL_LABELS[fallbackModelKey],
+                forceImageMode: true,
+                outputCount: maxImagesPerPrompt,
+                settings,
+                signal: services.signal,
+              },
+              step,
+            );
+            await sleep(2_000, services.signal);
+            return true;
+          };
           while (true) {
             step(`${label}: preparando interface.`);
             await ensureFlowProjectReady(client, sessionId, settings, services.signal, true, trace);
+            // Reconfirma o modo antes de preencher. Isso evita que um rerender ou
+            // estado persistido de vídeo receba o prompt de imagem.
+            await ensureFlowModelAndRatio(
+              client,
+              sessionId,
+              extensionBridge,
+              {
+                modelName: MODEL_LABELS[activePreferences.modelKey],
+                outputCount: maxImagesPerPrompt,
+                forceImageMode: true,
+                settings,
+                signal: services.signal,
+              },
+              step,
+            );
+            await waitForPromptEditorStable(
+              client,
+              sessionId,
+              settings.promptSelector || "",
+              services.signal,
+            );
             const promptResult = await setPromptWithExtension(
               extensionBridge,
               task.prompt,
@@ -2809,13 +3748,27 @@ export async function execute(request, services) {
               sessionId,
             );
             step(`${label}: Slate preenchido (${promptResult?.readbackLength || 0} caracteres).`);
-            const generateState = await waitGenerateEnabled(
-              client,
-              sessionId,
-              settings,
-              services.signal,
-              15000,
-            );
+            let generateState;
+            try {
+              generateState = await waitGenerateEnabled(
+                client,
+                sessionId,
+                settings,
+                services.signal,
+                20_000,
+              );
+            } catch (cause) {
+              const disabledAfterPrompt =
+                cause?.code === "OUTPUT_VALIDATION_FAILED" &&
+                /aria-disabled=true/i.test(String(cause?.message || ""));
+              if (
+                disabledAfterPrompt &&
+                (await switchToNextImageModel("o modelo não habilitou a geração"))
+              ) {
+                continue;
+              }
+              throw cause;
+            }
             if (
               referencePaths.length > 0 &&
               (await attachedReferenceCount(client, sessionId)) < referencePaths.length
@@ -2876,23 +3829,12 @@ export async function execute(request, services) {
             try {
               generation = parseGenerationResponse(captured);
             } catch (cause) {
-              const canFallbackModel =
+              if (
                 cause?.code === "MODEL_LIMIT" &&
-                activePreferences.fallbackOnModelLimit &&
-                activePreferences.imageModelName === IMAGE_MODELS.nano_banana_pro &&
-                !modelFallbackUsed;
-              if (!canFallbackModel) throw cause;
-              activePreferences = {
-                ...activePreferences,
-                modelKey: "nano_banana",
-                imageModelName: IMAGE_MODELS.nano_banana,
-              };
-              modelFallbackUsed = true;
-              step(
-                `${label}: limite do Nano Banana Pro atingido; repetindo uma vez com Nano Banana na mesma conta.`,
-              );
-              await sleep(2_000, services.signal);
-              continue;
+                (await switchToNextImageModel("limite do modelo atingido"))
+              )
+                continue;
+              throw cause;
             }
 
             const selectedMedia = generation.media.slice(0, maxImagesPerPrompt);
@@ -2965,12 +3907,12 @@ export async function execute(request, services) {
       }
     }
 
-    if (settings.minimizeWhenReady !== false)
+    activeProjectUrl = (await getActiveFlowProjectUrl(client, sessionId)) || activeProjectUrl;
+    if (settings.minimizeWhenReady === true)
       await setBrowserWindowState(client, page.targetId, "minimized");
     responseTracker.close();
     responseTracker = null;
-    await generationDefaults.disable();
-    extensionBridge.dispose();
+    await extensionBridge.dispose();
     extensionBridge = null;
     await maybeCloseBrowser(client, browserInfo, keepBrowserOpen);
     client = null;
@@ -2978,7 +3920,10 @@ export async function execute(request, services) {
 
     return {
       status: "success",
-      values: { images: singleImageOutput ? files[0] : files },
+      values: {
+        images: singleImageOutput ? files[0] : files,
+        project_url: activeProjectUrl,
+      },
       artifacts,
       usage: { provider: "Google Labs / Flow", outputUnits: files.length, unit: "image" },
       logs: [
@@ -2995,13 +3940,6 @@ export async function execute(request, services) {
         /* noop */
       }
     }
-    if (generationDefaults) {
-      try {
-        await generationDefaults.disable();
-      } catch {
-        /* noop */
-      }
-    }
     if (client) {
       try {
         await maybeCloseBrowser(client, browserInfo, keepBrowserOpen);
@@ -3009,7 +3947,7 @@ export async function execute(request, services) {
         /* noop */
       }
     }
-    extensionBridge?.dispose();
+    await extensionBridge?.dispose();
     const recent = stepLogs.slice(-8).join(" | ");
     const suffix = recent ? ` Etapas: ${recent}` : "";
 
@@ -3042,12 +3980,45 @@ export async function execute(request, services) {
       cause?.retryAfterMs,
     );
     if (files.length > 0) {
-      errorResponse.partialValues = { images: singleImageOutput ? files[0] : files };
+      if (isVideoCapability) {
+        errorResponse.partialValues = {
+          video: singleVideoOutput ? files[0] : files,
+          ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
+        };
+      } else {
+        errorResponse.partialValues = {
+          images: singleImageOutput ? files[0] : files,
+          ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
+        };
+      }
     }
     if (artifacts.length > 0) {
       errorResponse.artifacts = artifacts;
     }
+    errorResponse.logs = [...stepLogs, ...diagnosticLogs];
     return errorResponse;
+  } finally {
+    if (diagnosticFile) {
+      await writeFile(
+        diagnosticFile,
+        JSON.stringify(
+          {
+            pluginId: PLUGIN_ID,
+            capabilityId,
+            executionId: request?.executionId,
+            blockId: request?.blockId,
+            attempt: request?.attempt,
+            startedWithProfile: request?.configuration?.accountProfile,
+            endedAt: new Date().toISOString(),
+            steps: stepLogs,
+            cdpTrace: diagnosticLogs,
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      ).catch(() => undefined);
+    }
   }
 }
 export const __test = {
@@ -3070,18 +4041,34 @@ export const __test = {
   profileIsPrepared,
   markProfilePrepared,
   resolveGenerationPreferences,
+  nextImageModelFallback,
   normalizeReferenceImages,
   requestsSingleImage,
+  requestsSingleVideo,
   mediaItemsFromImageUrls,
+  mediaItemsFromImageCandidates,
+  mediaItemsFromVideoUrls,
+  parseGenerationResponse,
+  waitForPromptEditorStable,
+  downloadGeneratedVideo,
+  resolveVideoPreferences,
+  getActiveFlowProjectUrl,
   assertDedicatedProfilePath,
   extensionForMime,
   IMAGE_MODELS,
+  MODEL_LABELS,
+  VIDEO_MODELS,
+  VIDEO_MODEL_LABELS,
+  VIDEO_RESOLUTIONS,
   ASPECT_RATIOS,
-  applyGenerationPreferences,
+  ASPECT_RATIO_LABELS,
   classifyGenerationHttpError,
   createAdaptiveConcurrencyController,
   runSubmissionRound,
   runGenerationPlan,
   shouldRetryGenerationError,
   pageStateExpression,
+  attachFlowPage,
+  waitForPageReady,
+  maybeCloseBrowser,
 };

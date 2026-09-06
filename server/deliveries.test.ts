@@ -7,6 +7,7 @@ import {
 } from "../src/lib/deliveries";
 import type { ActionBlock, ProcessExecution, Project } from "../src/lib/domain";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
+import { projectThumbnail } from "../src/lib/project-thumbnail";
 import { composePluginPortValue } from "./plugin-input-values";
 
 function executionFor(
@@ -83,6 +84,42 @@ test("materializa uma entrega e um ID universal por item", () => {
     normalized.deliveries?.[0].items.map((item) => item.id),
     execution.deliveries?.[0].items.map((item) => item.id),
   );
+});
+
+test("usa a primeira imagem do output concluído como thumbnail do card", () => {
+  const block: ActionBlock = {
+    id: "create-thumbnails",
+    type: "CRIAR",
+    operator: "Humano",
+    inputs: [],
+    outputs: [],
+    parameters: [],
+    order: 0,
+  };
+  const execution = executionFor("thumbnail", block);
+  const first = {
+    id: "thumbnail-1",
+    name: "primeira.png",
+    mimeType: "image/png",
+    size: 10,
+    url: "/api/files/primeira.png",
+  };
+  const second = {
+    id: "thumbnail-2",
+    name: "segunda.png",
+    mimeType: "image/png",
+    size: 10,
+    url: "/api/files/segunda.png",
+  };
+  execution.output = {
+    processType: "thumbnail",
+    values: { thumbnail: [first, second] },
+    createdAt: execution.updatedAt,
+  };
+
+  assert.equal(projectThumbnail([execution], project.id)?.id, first.id);
+  execution.status = "running";
+  assert.equal(projectThumbnail([execution], project.id), undefined);
 });
 
 test("resolve uma entrega específica de bloco de processo anterior", () => {
