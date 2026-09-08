@@ -29,6 +29,11 @@ test("atualizações preservam plugins, mas o instalador não os fornece", () =>
   assert.equal(packageJson.build.files.includes("ecosystem/plugins/reference/**/*"), false);
 });
 
+test("dependências requeridas pela API empacotada são dependências de produção", () => {
+  assert.equal(packageJson.dependencies.archiver, "^7.0.1");
+  assert.equal(packageJson.devDependencies.archiver, undefined);
+});
+
 test("o Electron inicia fechado, isolado e sem bloquear no stdout da API", () => {
   assert.match(desktopMain, /show:\s*false/);
   assert.match(desktopMain, /contextIsolation:\s*true/);
