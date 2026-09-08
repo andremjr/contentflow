@@ -270,7 +270,7 @@ No nível do manifesto, `deliveryTypes` classifica o plugin para descoberta na g
 - `cost` informa se a capacidade é gratuita, tarifada ou de custo desconhecido e se consegue estimar o uso antes da confirmação.
 - `dataPolicy` informa se dados deixam a máquina, para quais provedores e onde consultar retenção e uso para treinamento.
 - `blockConfigSchema` descreve parâmetros salvos no bloco.
-- `profileSetup`, quando presente, identifica uma chave de configuração de perfil dedicado e permite que o construtor ofereça uma preparação interativa antes da execução. `fallbackConfigurationKey` pode apontar para uma lista textual ordenada de aliases adicionais. O plugin continua responsável pelo navegador, pela validação da sessão e pelo estado local de cada perfil.
+- `profileSetup`, quando presente, identifica uma chave de configuração de perfil dedicado e permite que o Gerenciador de Plugins cadastre e prepare perfis antes da execução. O Bloco seleciona um perfil já cadastrado; `fallbackConfigurationKey` pode preservar internamente uma lista textual ordenada de aliases adicionais escolhidos no inventário. O plugin continua responsável pelo navegador, pela validação da sessão e pelo estado local de cada perfil.
 - `outputSchema` adiciona validação específica da capacidade sem substituir `outputContract`.
 
 ## 6. Portas e binding
@@ -339,7 +339,7 @@ Regras:
 - Campo obrigatório sem valor ou default impede salvar/executar o bloco.
 - Defaults do JSON Schema são materializados de forma visível; não ficam implícitos no plugin.
 - Parâmetros como proporção de vídeo permanecem no plugin/bloco que os utiliza, não viram parâmetros globais do Projeto.
-- A configuração de uso e a seleção da conexão são apresentadas no Bloco do Método, não no card da galeria de Plugins.
+- A configuração funcional e a seleção de uma conexão ou perfil já cadastrado são apresentadas no Bloco do Método. Cadastro, preparação, estado e mapa de uso dos vínculos locais pertencem aos detalhes do plugin na galeria de Plugins.
 - Uma conexão possui ID opaco e estável, nome editável, `pluginId`, estado e referências aos secrets/perfis que o núcleo controla. Renomear não altera o ID.
 - O mesmo plugin pode possuir várias conexões, e blocos diferentes podem selecionar conexões diferentes.
 - O Método persistido localmente pode referenciar `connectionId`; uma exportação substitui essa referência por um requisito de conexão. A importação exige associação explícita a uma conexão local antes da execução.

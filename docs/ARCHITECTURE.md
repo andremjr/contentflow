@@ -58,7 +58,7 @@ A experiência do usuário no ContentFlow apoia-se em 3 camadas de interface cla
 
 3. **Interface 3: Gerenciador de Plugins (Operação & Pacotes)**
    - **Objetivo**: Gestão do ciclo de vida das ferramentas instaladas.
-   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, atualização, ativação, consentimento de permissões, inspeção de dependências e remoção de qualquer plugin pelo mesmo fluxo, sem distinção baseada no autor. A configuração de uso e a escolha de conexão acontecem no Bloco do Método; secrets, sessões, workspaces e preferências técnicas continuam protegidos pelo núcleo fora do arquivo do Método.
+   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, atualização, ativação, consentimento de permissões, inspeção de dependências e remoção de qualquer plugin pelo mesmo fluxo, sem distinção baseada no autor. Contas, perfis, secrets, sessões, workspaces e preferências técnicas são gerenciados nessa interface e continuam protegidos pelo núcleo fora do arquivo do Método. O Bloco apenas escolhe, entre os vínculos locais já cadastrados, qual será usado naquela ação.
 
 No nível global, a navegação principal possui três áreas:
 
@@ -114,12 +114,12 @@ Cada Bloco de Ação em um Método é atribuído a um Operador:
 
 A experiência de configuração funcional vive **dentro do Bloco do Método**.
 
-- Quando o usuário adiciona um Bloco no Método (ex: `CRIAR`), ele seleciona o Operador (ex: `IA`), o **Plugin**, a capacidade e a conexão desejados.
-- A interface do Bloco lê o manifesto e renderiza os campos que aquela capacidade precisa, como modelo, temperatura, formato, voz ou perfil.
+- Quando o usuário adiciona um Bloco no Método (ex: `CRIAR`), ele seleciona o Operador (ex: `IA`), o **Plugin**, a capacidade e uma conexão ou perfil local já cadastrado.
+- A interface do Bloco lê o manifesto e renderiza os campos funcionais que aquela capacidade precisa, como modelo, temperatura, formato ou voz. Perfis não são criados por texto livre no Bloco: ele apenas seleciona o principal e, quando declarado, ordena perfis alternativos existentes.
 - O Método local guarda `pluginId`, `pluginVersion`, `capabilityId`, configuração, bindings e uma referência opaca `connectionId` quando o executor exigir conta ou sessão.
-- Uma conexão é um registro local, estável e nomeado, pertencente ao plugin e reutilizável por vários blocos. O Bloco determina em qual Canal, Processo e ação ela será usada; renomear a conexão não muda seu ID nem quebra o Método.
+- Uma conexão ou perfil é um registro local, estável e nomeado, pertencente ao plugin e reutilizável sem restrição por vários blocos e Canais. O Gerenciador de Plugins mostra de forma derivada onde ele é usado; essa visualização não cria permissões, cotas nem regras de disponibilidade. Renomear o nome visual não altera o alias interno e não quebra o Método.
 - O valor real de API keys, tokens, cookies e outros secrets nunca entra em `connectionId`, configuração, Método, exportação, SQLite, request, snapshot ou log. Ele permanece no cofre seguro e só é resolvido em memória para a invocação autorizada.
-- Permissões, consentimento, origem, integridade, runtime, workspace e preferências técnicas da instalação continuam sob responsabilidade do núcleo. A interface pode conduzir sua preparação a partir do Bloco, mas esses dados não se tornam configuração portátil do Método.
+- Permissões, consentimento, origem, integridade, runtime, workspace, criação e preparação de perfis e preferências técnicas da instalação continuam sob responsabilidade do núcleo no Gerenciador de Plugins. Esses dados não se tornam configuração portátil do Método.
 
 Templates exportados não carregam o `connectionId` local. No lugar dele, preservam apenas o requisito de conexão — plugin, capacidade e secrets/perfil exigidos. Ao importar ou copiar para outro ambiente, o usuário associa cada requisito a uma conexão local existente ou cria uma nova antes de executar.
 
@@ -311,7 +311,7 @@ Uma capacidade de plugin pode ser internamente complexa e demorada. Ela pode pes
 
 Automações de navegador podem cadastrar vários perfis de conta explicitamente preparados. Os plugins que operam interfaces web podem usar uma única extensão companheira Manifest V3, distribuída fora do núcleo e compatível com o protocolo público da ponte. Transporte, autenticação de comandos, isolamento de aba e operações DOM limitadas podem ser compartilhados; seletores, estados, regras e validação de cada provedor permanecem no respectivo plugin externo. O núcleo não inclui extensão, navegador, seletores ou adapters de provedor.
 
-Na V1, a extensão companheira é instalada manualmente em cada perfil dedicado por **Carregar sem compactação**. Ferramentas pessoais que o mantenedor use para preparar vários perfis da própria máquina são paralelas ao aplicativo, não são distribuídas aos usuários e nunca são chamadas pelo núcleo ou pelos plugins.
+Na V1, a extensão companheira é instalada manualmente em cada perfil dedicado por **Carregar sem compactação**. O aplicativo disponibiliza os arquivos públicos da ponte em uma pasta estável de dados, separada do checkout e preservada entre atualizações, para que renomear ou mover o código-fonte não quebre os perfis. A preparação só informa sucesso depois que o Chrome fecha de modo gracioso e confirma no perfil a referência a uma ponte ainda existente. Ferramentas pessoais que o mantenedor use para preparar vários perfis da própria máquina são paralelas ao aplicativo, não são chamadas pelo núcleo ou pelos plugins.
 
 A execução rotineira ocorre minimizada ou em background por comandos estruturados entre o handler, o service worker e o content script. Ela não depende de foco do Windows, teclado ou mouse do sistema e não deve trazer a janela para frente. Login, reautenticação e diagnóstico podem abrir uma superfície visível somente mediante ação explícita do usuário. Headless é uma evolução do mesmo contrato quando tecnicamente compatível.
 

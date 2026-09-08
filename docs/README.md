@@ -9,6 +9,10 @@ Esta pasta descreve o produto ContentFlow. A documentação de plugins, do Brows
 3. [`DESKTOP_V0.md`](DESKTOP_V0.md) — distribuição Windows e atualização.
 4. [`LEGAL_AND_LICENSING.md`](LEGAL_AND_LICENSING.md) — mapa jurídico e licenciamento.
 
+## Planos futuros
+
+- [`CHANNEL_STRUCTURE_SHARING_PLAN.md`](CHANNEL_STRUCTURE_SHARING_PLAN.md) — proposta para compartilhar Métodos, Biblioteca Estratégica, plugins e assets como uma Estrutura de Canal completa. Não autoriza implementação.
+
 ## Materiais de Métodos
 
 Os documentos em [`gpt-method-translator`](gpt-method-translator/) preservam o formato de tradução de processos para Métodos. A versão portátil e operacional dessas instruções está na skill [`../ecosystem/skills/contentflow-method-development`](../ecosystem/skills/contentflow-method-development/).

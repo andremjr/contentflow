@@ -55,6 +55,7 @@ import type {
   PluginExecutionRequest,
   PluginExecutionResponse,
   PluginFieldContract,
+  PluginProfileSetup,
 } from "../src/lib/plugin-contract";
 import { resolveInstructionTemplate } from "../src/lib/instruction-template";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
@@ -107,6 +108,14 @@ import {
 } from "./plugin-dependencies";
 import { validatePluginDirectory } from "./plugin-validation";
 import { PluginConnectionStore, type PluginConnection } from "./plugin-connections";
+import {
+  findPluginProfileUsages,
+  normalizePluginProfileAlias,
+  normalizePluginProfileName,
+  pluginProfileAliasFromName,
+  PluginProfileStore,
+  syncPluginProfilesFromMethods,
+} from "./plugin-profiles";
 import { resolvePluginConnectionSecrets } from "./plugin-connection-runtime";
 import { normalizePluginConversationId, resolvePluginConversation } from "./plugin-conversation";
 import { discoverPluginDirectories, normalizeUserProvidedPath } from "./plugin-package";
@@ -117,6 +126,7 @@ import {
   type PluginCatalog,
 } from "./plugin-catalog";
 import { migrateSiblingDataDirectory } from "./data-directory-migration";
+import { browserBridgeProfileState, stageBrowserBridge } from "./browser-profile-readiness";
 import { fetchYouTubeChannel } from "./youtube";
 import { pluginConcurrencySlot, pluginConcurrencySlotForRequest } from "./plugin-concurrency";
 
@@ -174,6 +184,7 @@ const activeUploadMimeTypes = new Set([
   "text/xml",
 ]);
 mkdirSync(dataDirectory, { recursive: true });
+const browserBridgeDirectory = stageBrowserBridge(applicationRoot, dataDirectory);
 
 const databasePath = path.join(dataDirectory, "contentflow.sqlite");
 const legacyDataDirectory = path.join(applicationRoot, "data");
@@ -208,6 +219,24 @@ mkdirSync(developmentLinksDirectory, { recursive: true });
 const database = new Database(databasePath);
 database.pragma("busy_timeout = 5000");
 database.pragma("journal_mode = WAL");
+const existingDatabaseTables = new Set(
+  (
+    database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+      name: string;
+    }>
+  ).map((row) => row.name),
+);
+if (existingDatabaseTables.has("channels") && !existingDatabaseTables.has("plugin_profiles")) {
+  const migrationBackupsDirectory = path.join(dataDirectory, "migration-backups");
+  const profileMigrationBackup = path.join(
+    migrationBackupsDirectory,
+    "contentflow-before-profile-management.sqlite",
+  );
+  if (!existsSync(profileMigrationBackup)) {
+    mkdirSync(migrationBackupsDirectory, { recursive: true });
+    await database.backup(profileMigrationBackup);
+  }
+}
 database.exec(`
   CREATE TABLE IF NOT EXISTS channels (
     id TEXT PRIMARY KEY,
@@ -262,6 +291,7 @@ database.exec(`
     language TEXT NOT NULL,
     notification_sound INTEGER NOT NULL DEFAULT 0,
     system_notifications INTEGER NOT NULL DEFAULT 0,
+    methods_library_view TEXT NOT NULL DEFAULT 'channels',
     updated_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS channel_preferences (
@@ -296,6 +326,18 @@ database.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS plugin_connections_active_name
     ON plugin_connections(plugin_id, name COLLATE NOCASE)
     WHERE revoked_at IS NULL;
+  CREATE TABLE IF NOT EXISTS plugin_profiles (
+    id TEXT PRIMARY KEY,
+    plugin_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS plugin_profiles_plugin_id
+    ON plugin_profiles(plugin_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS plugin_profiles_alias
+    ON plugin_profiles(plugin_id, alias COLLATE NOCASE);
 `);
 
 const appPreferenceColumns = database.prepare("PRAGMA table_info(app_preferences)").all() as Array<{
@@ -311,6 +353,11 @@ if (!appPreferenceColumns.some((column) => column.name === "system_notifications
     "ALTER TABLE app_preferences ADD COLUMN system_notifications INTEGER NOT NULL DEFAULT 0",
   );
 }
+if (!appPreferenceColumns.some((column) => column.name === "methods_library_view")) {
+  database.exec(
+    "ALTER TABLE app_preferences ADD COLUMN methods_library_view TEXT NOT NULL DEFAULT 'channels'",
+  );
+}
 
 const pluginConsentColumns = database.prepare("PRAGMA table_info(plugin_consents)").all() as Array<{
   name: string;
@@ -320,6 +367,7 @@ if (!pluginConsentColumns.some((column) => column.name === "network_hosts")) {
 }
 const pluginJobs = new PluginJobStore(database);
 const pluginConnections = new PluginConnectionStore(database);
+const pluginProfiles = new PluginProfileStore(database);
 pluginJobs.recoverInterrupted();
 // A database-wide sequence orders snapshots from commands and background workers.
 database.exec(
@@ -348,6 +396,7 @@ type AppPreferences = {
   language: "pt-BR" | "en" | "es";
   notificationSound: boolean;
   systemNotifications: boolean;
+  methodsLibraryView: "methods" | "channels";
 };
 
 const defaultPreferences: AppPreferences = {
@@ -355,13 +404,15 @@ const defaultPreferences: AppPreferences = {
   language: "pt-BR",
   notificationSound: false,
   systemNotifications: false,
+  methodsLibraryView: "channels",
 };
 
 function readPreferences(): AppPreferences {
   const row = database
     .prepare(
       `SELECT theme, language, notification_sound AS notificationSound,
-              system_notifications AS systemNotifications
+              system_notifications AS systemNotifications,
+              methods_library_view AS methodsLibraryView
        FROM app_preferences WHERE id = 'global'`,
     )
     .get() as
@@ -370,6 +421,7 @@ function readPreferences(): AppPreferences {
         language: AppPreferences["language"];
         notificationSound: number;
         systemNotifications: number;
+        methodsLibraryView: AppPreferences["methodsLibraryView"];
       }
     | undefined;
   return row
@@ -378,6 +430,7 @@ function readPreferences(): AppPreferences {
         language: row.language,
         notificationSound: Boolean(row.notificationSound),
         systemNotifications: Boolean(row.systemNotifications),
+        methodsLibraryView: row.methodsLibraryView === "methods" ? "methods" : "channels",
       }
     : defaultPreferences;
 }
@@ -2282,15 +2335,18 @@ app.get("/api/preferences", (_request, response) => {
 });
 
 app.put("/api/preferences", (request, response) => {
+  const current = readPreferences();
   const theme = request.body?.theme;
   const language = request.body?.language;
   const notificationSound = request.body?.notificationSound;
   const systemNotifications = request.body?.systemNotifications;
+  const methodsLibraryView = request.body?.methodsLibraryView ?? current.methodsLibraryView;
   if (
     !(["light", "dark"] as const).includes(theme) ||
     !(["pt-BR", "en", "es"] as const).includes(language) ||
     typeof notificationSound !== "boolean" ||
-    typeof systemNotifications !== "boolean"
+    typeof systemNotifications !== "boolean" ||
+    !(["methods", "channels"] as const).includes(methodsLibraryView)
   ) {
     response.status(400).json({ error: "Preferências inválidas." });
     return;
@@ -2298,21 +2354,24 @@ app.put("/api/preferences", (request, response) => {
   database
     .prepare(
       `INSERT INTO app_preferences (
-         id, theme, language, notification_sound, system_notifications, updated_at
-       )
-       VALUES ('global', ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         theme = excluded.theme,
-         language = excluded.language,
-         notification_sound = excluded.notification_sound,
-         system_notifications = excluded.system_notifications,
-         updated_at = excluded.updated_at`,
+          id, theme, language, notification_sound, system_notifications, methods_library_view,
+          updated_at
+        )
+        VALUES ('global', ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          theme = excluded.theme,
+          language = excluded.language,
+          notification_sound = excluded.notification_sound,
+          system_notifications = excluded.system_notifications,
+          methods_library_view = excluded.methods_library_view,
+          updated_at = excluded.updated_at`,
     )
     .run(
       theme,
       language,
       Number(notificationSound),
       Number(systemNotifications),
+      methodsLibraryView,
       new Date().toISOString(),
     );
   response.json(readPreferences());
@@ -2331,6 +2390,7 @@ app.get("/api/plugins", (_request, response) => {
       executable: Boolean(plugin.executable && enabled),
       sandboxed: true,
       networkIsolation: communitySandboxAvailable,
+      profileCount: plugin.manifest.profileSetup ? profileInventory(plugin).length : undefined,
     };
   });
   response.json({
@@ -2357,6 +2417,224 @@ app.get("/api/plugins/:pluginId/icon", (request, response) => {
     path.extname(absoluteIconPath).toLowerCase() === ".webp" ? "image/webp" : "image/png",
   );
   response.sendFile(absoluteIconPath);
+});
+
+function storedChannels() {
+  const rows = database.prepare("SELECT payload FROM channels").all() as { payload: string }[];
+  return parseRows(rows);
+}
+
+function profileInventory(plugin: RegisteredPlugin) {
+  const setup = plugin.manifest.profileSetup;
+  if (!setup) return [];
+  const channels = storedChannels();
+  database.transaction(() =>
+    syncPluginProfilesFromMethods(pluginProfiles, channels, plugin.id, setup, randomUUID),
+  )();
+  const usages = findPluginProfileUsages(channels, plugin.id, setup);
+  return pluginProfiles.list(plugin.id).map((profile) => ({
+    ...profile,
+    usages: usages.get(profile.alias.toLocaleLowerCase()) ?? [],
+  }));
+}
+
+function registeredProfilePlugin(pluginId: string) {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(pluginId);
+  if (!plugin?.manifest.profileSetup) return undefined;
+  return plugin;
+}
+
+app.get("/api/plugins/:pluginId/profiles", (request, response) => {
+  const plugin = registeredProfilePlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+    return;
+  }
+  response.json({ profiles: profileInventory(plugin), browserBridgeDirectory });
+});
+
+app.post("/api/plugins/:pluginId/profiles", (request, response) => {
+  const plugin = registeredProfilePlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+    return;
+  }
+  try {
+    const name = normalizePluginProfileName(request.body?.name);
+    const profileId = randomUUID();
+    const aliasBase =
+      request.body?.alias === undefined
+        ? pluginProfileAliasFromName(name) || `perfil-${profileId.slice(0, 8)}`
+        : normalizePluginProfileAlias(request.body.alias);
+    let alias = aliasBase;
+    let suffix = 2;
+    while (pluginProfiles.findByAlias(plugin.id, alias)) {
+      const suffixText = `-${suffix++}`;
+      alias = `${aliasBase.slice(0, 48 - suffixText.length).replace(/-+$/, "")}${suffixText}`;
+    }
+    const profile = pluginProfiles.create({ id: profileId, pluginId: plugin.id, name, alias });
+    response.status(201).json({ ...profile, usages: [] });
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível criar o perfil.",
+    });
+  }
+});
+
+app.patch("/api/plugins/:pluginId/profiles/:profileId", (request, response) => {
+  const plugin = registeredProfilePlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+    return;
+  }
+  try {
+    const name = normalizePluginProfileName(request.body?.name);
+    const profile = pluginProfiles.rename(plugin.id, request.params.profileId, name);
+    if (!profile) {
+      response.status(404).json({ error: "Perfil não encontrado." });
+      return;
+    }
+    const usages = findPluginProfileUsages(
+      storedChannels(),
+      plugin.id,
+      plugin.manifest.profileSetup!,
+    );
+    response.json({
+      ...profile,
+      usages: usages.get(profile.alias.toLocaleLowerCase()) ?? [],
+    });
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível renomear o perfil.",
+    });
+  }
+});
+
+app.delete("/api/plugins/:pluginId/profiles/:profileId", (request, response) => {
+  const plugin = registeredProfilePlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+    return;
+  }
+  const profile = pluginProfiles.get(plugin.id, request.params.profileId);
+  if (!profile) {
+    response.status(404).json({ error: "Perfil não encontrado." });
+    return;
+  }
+  const usages =
+    findPluginProfileUsages(storedChannels(), plugin.id, plugin.manifest.profileSetup!).get(
+      profile.alias.toLocaleLowerCase(),
+    ) ?? [];
+  if (usages.length) {
+    response.status(409).json({
+      error: "Este perfil ainda é usado por Métodos. Troque essas referências antes de removê-lo.",
+      usages,
+    });
+    return;
+  }
+  pluginProfiles.remove(plugin.id, profile.id);
+  response.status(204).end();
+});
+
+async function executePluginProfileAction(
+  plugin: RegisteredPlugin,
+  action: "status" | "prepare",
+  profileName: string,
+) {
+  const setup = plugin.manifest.profileSetup as PluginProfileSetup;
+  const profileKey = setup.configurationKey;
+  const capability = plugin.manifest.capabilities.find(
+    (candidate) => candidate.blockConfigSchema.properties?.[profileKey],
+  );
+  if (!capability) throw new Error("O perfil não pertence à configuração deste plugin.");
+  const pluginSecrets: Record<string, string> = {};
+  for (const declaredSecret of plugin.manifest.secretKeys ?? []) {
+    const storedSecret = await getPluginSecret(plugin.id, declaredSecret);
+    if (storedSecret) pluginSecrets[declaredSecret] = storedSecret;
+  }
+  const pluginRequest: PluginExecutionRequest = {
+    executionId: `profile-${randomUUID()}`,
+    traceId: randomUUID(),
+    blockId: "profile-setup",
+    capabilityId: capability.id,
+    attempt: 1,
+    invocation: { mode: "configure", action },
+    configuration: { [profileKey]: profileName },
+    settings: {},
+    inputs: {},
+    inputContract: [],
+    outputContract: [],
+    context: {
+      locale: "pt-BR",
+      timeZone: "America/Sao_Paulo",
+      channel: { id: "profile-setup", name: "Configuração", language: "pt-BR", niche: "" },
+      project: { id: "profile-setup", title: "Preparação de perfil" },
+      processType: "theme",
+      block: { type: "CRIAR", name: "Preparar perfil", instructions: "" },
+      previousProcessOutputs: [],
+      previousBlockOutputs: [],
+    },
+  };
+  const timeoutMs = action === "prepare" ? undefined : 30_000;
+  return executeRegisteredPlugin(plugin, pluginRequest, timeoutMs, pluginSecrets, {
+    workspaceDirectory: executionWorkspaceForPlugin(plugin),
+  });
+}
+
+app.post("/api/plugins/:pluginId/profiles/:profileId/:action", async (request, response) => {
+  const plugin = registeredProfilePlugin(request.params.pluginId);
+  const action = request.params.action;
+  if (!plugin) {
+    response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+    return;
+  }
+  if (!plugin.executable || !pluginConsentIsCurrent(plugin)) {
+    response.status(403).json({
+      error: "Ative este plugin e confirme suas permissões na Central de Plugins.",
+    });
+    return;
+  }
+  if (action !== "status" && action !== "prepare") {
+    response.status(400).json({ error: "Ação de perfil inválida." });
+    return;
+  }
+  const profile = pluginProfiles.get(plugin.id, request.params.profileId);
+  if (!profile) {
+    response.status(404).json({ error: "Perfil não encontrado." });
+    return;
+  }
+  try {
+    const result = await executePluginProfileAction(plugin, action, profile.alias);
+    if (result.status === "error") {
+      response.status(action === "status" ? 200 : 422).json({
+        ready: false,
+        error: result.message,
+      });
+      return;
+    }
+    const markerReady = result.status === "success" && result.values.ready === true;
+    const bridgeState = markerReady
+      ? browserBridgeProfileState(executionWorkspaceForPlugin(plugin)!, profile.alias)
+      : "unknown";
+    response.json({
+      ready: markerReady && bridgeState !== "missing",
+      bridgeState,
+      error:
+        markerReady && bridgeState === "missing"
+          ? `A ContentFlow Browser Bridge não permaneceu instalada neste perfil. Em chrome://extensions, carregue uma única vez a pasta estável ${browserBridgeDirectory ?? "indicada na Central de Plugins"} e prepare novamente.`
+          : undefined,
+      message:
+        result.status === "success" && typeof result.values.message === "string"
+          ? result.values.message
+          : undefined,
+    });
+  } catch (error) {
+    response.status(422).json({
+      ready: false,
+      error: error instanceof Error ? error.message : "Não foi possível preparar o perfil.",
+    });
+  }
 });
 
 app.post("/api/plugins/:pluginId/profile", async (request, response) => {
@@ -2389,47 +2667,13 @@ app.post("/api/plugins/:pluginId/profile", async (request, response) => {
     response.status(422).json({ error: "Informe o nome do perfil antes de prepará-lo." });
     return;
   }
-  const capability = plugin.manifest.capabilities.find(
-    (candidate) => candidate.blockConfigSchema.properties?.[profileKey],
-  );
-  if (!capability) {
-    response.status(422).json({ error: "O perfil não pertence à configuração deste plugin." });
-    return;
-  }
-
   try {
-    const pluginSecrets: Record<string, string> = {};
-    for (const declaredSecret of plugin.manifest.secretKeys ?? []) {
-      const storedSecret = await getPluginSecret(plugin.id, declaredSecret);
-      if (storedSecret) pluginSecrets[declaredSecret] = storedSecret;
-    }
-    const pluginRequest: PluginExecutionRequest = {
-      executionId: `profile-${randomUUID()}`,
-      traceId: randomUUID(),
-      blockId: "profile-setup",
-      capabilityId: capability.id,
-      attempt: 1,
-      invocation: { mode: "configure", action: action as "status" | "prepare" },
-      configuration: { [profileKey]: profileName.trim() },
-      settings: {},
-      inputs: {},
-      inputContract: [],
-      outputContract: [],
-      context: {
-        locale: "pt-BR",
-        timeZone: "America/Sao_Paulo",
-        channel: { id: "profile-setup", name: "Configuração", language: "pt-BR", niche: "" },
-        project: { id: "profile-setup", title: "Preparação de perfil" },
-        processType: "theme",
-        block: { type: "CRIAR", name: "Preparar perfil", instructions: "" },
-        previousProcessOutputs: [],
-        previousBlockOutputs: [],
-      },
-    };
-    const timeoutMs = action === "prepare" ? undefined : 30_000;
-    const result = await executeRegisteredPlugin(plugin, pluginRequest, timeoutMs, pluginSecrets, {
-      workspaceDirectory: executionWorkspaceForPlugin(plugin),
-    });
+    pluginProfiles.ensure({ id: randomUUID(), pluginId: plugin.id, alias: profileName.trim() });
+    const result = await executePluginProfileAction(
+      plugin,
+      action as "status" | "prepare",
+      profileName.trim(),
+    );
     if (result.status === "error") {
       response.status(action === "status" ? 200 : 422).json({
         ready: false,
@@ -2818,6 +3062,7 @@ app.delete("/api/plugins/:pluginId", async (request, response) => {
       await deletePluginSecret(plugin.id, secretKey);
     }
     database.prepare("DELETE FROM plugin_connections WHERE plugin_id = ?").run(plugin.id);
+    database.prepare("DELETE FROM plugin_profiles WHERE plugin_id = ?").run(plugin.id);
     initializePluginRunner();
     response.status(204).end();
   } catch (error) {

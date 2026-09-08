@@ -16,6 +16,7 @@ const USER_STATE_TABLES = [
   "channels",
   "projects",
   "plugin_connections",
+  "plugin_profiles",
   "plugin_consents",
   "plugin_jobs",
   "plugin_workspaces",

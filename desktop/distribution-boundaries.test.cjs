@@ -29,6 +29,16 @@ test("atualizações preservam plugins, mas o instalador não os fornece", () =>
   assert.equal(packageJson.build.files.includes("ecosystem/plugins/reference/**/*"), false);
 });
 
+test("distribui a Browser Bridge separadamente em uma pasta estável", () => {
+  const bridgeResource = packageJson.build.extraResources.find(
+    (entry) => typeof entry === "object" && entry.from === "ecosystem/browser-bridge",
+  );
+  assert.equal(bridgeResource.to, "browser-bridge");
+  assert.ok(bridgeResource.filter.includes("manifest.json"));
+  assert.ok(bridgeResource.filter.includes("service-worker.js"));
+  assert.ok(bridgeResource.filter.includes("content-script.js"));
+});
+
 test("dependências requeridas pela API empacotada são dependências de produção", () => {
   assert.equal(packageJson.dependencies.archiver, "^7.0.1");
   assert.equal(packageJson.devDependencies.archiver, undefined);

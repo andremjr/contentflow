@@ -1,0 +1,80 @@
+{
+  "apiVersion": "1",
+  "id": "com.contentflow.e2e-profile",
+  "name": "Plugin de Perfis E2E",
+  "version": "1.0.0",
+  "description": "Fixture isolada para validar o gerenciamento de perfis.",
+  "author": "ContentFlow Tests",
+  "license": "Proprietary",
+  "runtime": {
+    "kind": "node",
+    "version": ">=26 <27",
+    "module": "esm"
+  },
+  "entrypoint": "handler.mjs",
+  "permissions": ["filesystem:read", "filesystem:write"],
+  "deliveryTypes": ["text"],
+  "profileSetup": {
+    "configurationKey": "accountProfile",
+    "fallbackConfigurationKey": "fallbackAccountProfiles",
+    "label": "Preparar perfil",
+    "description": "Prepara um perfil isolado para o teste E2E."
+  },
+  "capabilities": [
+    {
+      "id": "generate",
+      "operator": "IA",
+      "instructionUsage": "required",
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["title"],
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Resultado",
+          "producedTypes": ["text"],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": [],
+      "producedOutputTypes": ["text"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 30000,
+        "supportsCancellation": true,
+        "maxConcurrency": 1
+      },
+      "sideEffects": [],
+      "cost": {
+        "model": "free",
+        "estimateSupported": true
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": false
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "accountProfile": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+          },
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "required": ["accountProfile"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "result": { "type": "string" }
+        },
+        "required": ["result"]
+      }
+    }
+  ]
+}

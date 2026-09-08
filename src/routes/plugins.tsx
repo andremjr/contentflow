@@ -5,7 +5,10 @@ import {
   AudioLines,
   Bot,
   Boxes,
+  CheckCircle2,
+  CircleUserRound,
   Code2,
+  Copy,
   Download,
   ExternalLink,
   FileText,
@@ -13,6 +16,7 @@ import {
   Image,
   KeyRound,
   LoaderCircle,
+  Pencil,
   Plug,
   RefreshCw,
   Search,
@@ -71,6 +75,7 @@ type DiscoveredPlugin = {
   executable: boolean;
   sandboxed: boolean;
   networkIsolation: boolean;
+  profileCount?: number;
 };
 
 type PluginIssue = { directory: string; message: string };
@@ -91,6 +96,22 @@ type PluginMethodDependency = {
   blockId: string;
   blockName: string;
   capabilityId: string;
+};
+
+type PluginProfileUsage = PluginMethodDependency & {
+  methodName: string;
+  role: "primary" | "fallback";
+  fallbackPosition?: number;
+};
+
+type ManagedPluginProfile = {
+  id: string;
+  pluginId: string;
+  name: string;
+  alias: string;
+  createdAt: string;
+  updatedAt: string;
+  usages: PluginProfileUsage[];
 };
 
 const BLOCK_LABEL: Record<BlockType, string> = {
@@ -654,6 +675,12 @@ function PluginCard({
           <p className="mt-1.5 line-clamp-3 min-h-[2.75rem] max-w-[15rem] text-[11px] leading-snug text-muted-foreground">
             {manifest.description}
           </p>
+          {manifest.profileSetup && (
+            <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-brand-soft">
+              <CircleUserRound className="size-3" /> {plugin.profileCount ?? 0}{" "}
+              {plugin.profileCount === 1 ? "perfil" : "perfis"}
+            </span>
+          )}
         </button>
       </DialogTrigger>
 
@@ -774,6 +801,8 @@ function PluginCard({
 
         <CommunityAccessPanel plugin={plugin} onChanged={onChanged} />
 
+        {manifest.profileSetup && <PluginProfilesPanel plugin={plugin} />}
+
         {plugin.source === "installed" && (
           <UpdateInstalledPluginPanel plugin={plugin} update={update} onChanged={onChanged} />
         )}
@@ -811,6 +840,401 @@ function PluginCard({
         </footer>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
+  type ProfileStatus = "unknown" | "checking" | "ready" | "missing" | "preparing";
+  const [profiles, setProfiles] = useState<ManagedPluginProfile[]>([]);
+  const [statuses, setStatuses] = useState<Record<string, ProfileStatus>>({});
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [editingId, setEditingId] = useState<string>();
+  const [editingName, setEditingName] = useState("");
+  const [browserBridgeDirectory, setBrowserBridgeDirectory] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/profiles`);
+      const result = (await response.json()) as {
+        profiles?: ManagedPluginProfile[];
+        browserBridgeDirectory?: string;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar os perfis.");
+      setProfiles(result.profiles ?? []);
+      setBrowserBridgeDirectory(result.browserBridgeDirectory ?? "");
+    } catch (error) {
+      toast.error("Não foi possível carregar os perfis", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [plugin.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const profileIds = profiles.map((profile) => profile.id).join("|");
+  useEffect(() => {
+    if (!profileIds || !plugin.enabled || !plugin.executable) return;
+    const controller = new AbortController();
+    setStatuses(Object.fromEntries(profiles.map((profile) => [profile.id, "checking"])));
+    void Promise.all(
+      profiles.map(async (profile) => {
+        try {
+          const response = await fetch(
+            `/api/plugins/${encodeURIComponent(plugin.id)}/profiles/${encodeURIComponent(profile.id)}/status`,
+            { method: "POST", signal: controller.signal },
+          );
+          const result = (await response.json()) as { ready?: boolean };
+          return [profile.id, response.ok && result.ready ? "ready" : "missing"] as const;
+        } catch {
+          return [profile.id, "missing"] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (!controller.signal.aborted) setStatuses(Object.fromEntries(entries));
+    });
+    return () => controller.abort();
+    // Profiles are rechecked only when the inventory itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plugin.enabled, plugin.executable, plugin.id, profileIds]);
+
+  async function createProfile() {
+    setCreating(true);
+    try {
+      const response = await fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/profiles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const result = (await response.json()) as ManagedPluginProfile & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível criar o perfil.");
+      setName("");
+      await load();
+      toast.success("Perfil adicionado", {
+        description: "Agora prepare a conta para confirmar a sessão neste perfil.",
+      });
+    } catch (error) {
+      toast.error("Não foi possível adicionar o perfil", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function copyBrowserBridgeDirectory() {
+    if (!browserBridgeDirectory) return;
+    await navigator.clipboard.writeText(browserBridgeDirectory);
+    toast.success("Caminho da extensão copiado");
+  }
+
+  async function renameProfile(profile: ManagedPluginProfile) {
+    try {
+      const response = await fetch(
+        `/api/plugins/${encodeURIComponent(plugin.id)}/profiles/${encodeURIComponent(profile.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: editingName }),
+        },
+      );
+      const result = (await response.json()) as ManagedPluginProfile & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível renomear o perfil.");
+      setEditingId(undefined);
+      await load();
+      toast.success("Perfil renomeado");
+    } catch (error) {
+      toast.error("Não foi possível renomear o perfil", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  }
+
+  async function prepareProfile(profile: ManagedPluginProfile) {
+    setStatuses((current) => ({ ...current, [profile.id]: "preparing" }));
+    toast.info("Prepare a conta na janela do navegador", {
+      description: plugin.manifest.profileSetup?.description,
+    });
+    try {
+      const response = await fetch(
+        `/api/plugins/${encodeURIComponent(plugin.id)}/profiles/${encodeURIComponent(profile.id)}/prepare`,
+        { method: "POST" },
+      );
+      const result = (await response.json()) as {
+        ready?: boolean;
+        error?: string;
+        message?: string;
+      };
+      if (!response.ok || !result.ready) {
+        throw new Error(result.error ?? "O login não foi confirmado pelo plugin.");
+      }
+      setStatuses((current) => ({ ...current, [profile.id]: "ready" }));
+      toast.success("Perfil pronto", { description: result.message });
+    } catch (error) {
+      setStatuses((current) => ({ ...current, [profile.id]: "missing" }));
+      toast.error("Não foi possível preparar o perfil", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  }
+
+  async function removeProfile(profile: ManagedPluginProfile) {
+    if (profile.usages.length) return;
+    if (
+      !window.confirm(
+        `Remover ${profile.name} do gerenciamento? A pasta de sessão local não será apagada.`,
+      )
+    )
+      return;
+    try {
+      const response = await fetch(
+        `/api/plugins/${encodeURIComponent(plugin.id)}/profiles/${encodeURIComponent(profile.id)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        const result = (await response.json()) as { error?: string };
+        throw new Error(result.error ?? "Não foi possível remover o perfil.");
+      }
+      await load();
+      toast.success("Perfil removido do gerenciamento");
+    } catch (error) {
+      toast.error("Não foi possível remover o perfil", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  }
+
+  return (
+    <details className="group rounded-xl border border-brand/25 bg-brand/5 p-3">
+      <summary className="flex cursor-pointer list-none items-center gap-3">
+        <span className="grid size-9 place-items-center rounded-lg bg-brand/10 text-brand-soft">
+          <CircleUserRound className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-semibold">Perfis e contas</span>
+          <span className="block text-[10px] text-muted-foreground">
+            Cadastre, prepare e veja onde cada perfil é utilizado.
+          </span>
+        </span>
+        <Badge variant="secondary" className="text-[9px]">
+          {loading ? "…" : profiles.length}
+        </Badge>
+      </summary>
+
+      <div className="mt-4 space-y-3 border-t border-border/70 pt-4">
+        {browserBridgeDirectory && (
+          <div className="rounded-lg border border-border bg-background/60 p-3">
+            <p className="text-[11px] font-semibold">Extensão persistente do navegador</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Ao preparar uma conta, carregue esta pasta uma única vez em chrome://extensions. Ela
+              fica fora da pasta do código e não muda quando o aplicativo é atualizado ou renomeado.
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1.5 text-[10px]">
+                {browserBridgeDirectory}
+              </code>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="size-8 shrink-0"
+                aria-label="Copiar caminho da extensão"
+                onClick={() => void copyBrowserBridgeDirectory()}
+              >
+                <Copy className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+        <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border bg-background/50 p-3 sm:flex-row">
+          <Input
+            value={name}
+            maxLength={64}
+            placeholder="Nome do novo perfil"
+            onChange={(event) => setName(event.target.value)}
+          />
+          <Button
+            type="button"
+            size="sm"
+            disabled={creating || !name.trim()}
+            onClick={() => void createProfile()}
+          >
+            {creating ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <CircleUserRound className="size-3.5" />
+            )}
+            Adicionar perfil
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+            <LoaderCircle className="size-4 animate-spin" /> Carregando perfis…
+          </div>
+        ) : profiles.length ? (
+          <div className="space-y-2">
+            {profiles.map((profile) => {
+              const status = statuses[profile.id] ?? "unknown";
+              const channels = new Set(profile.usages.map((usage) => usage.channelId)).size;
+              const primaryCount = profile.usages.filter(
+                (usage) => usage.role === "primary",
+              ).length;
+              const fallbackCount = profile.usages.length - primaryCount;
+              return (
+                <article
+                  key={profile.id}
+                  className="rounded-lg border border-border bg-background/70 p-3"
+                >
+                  <div className="flex flex-wrap items-start gap-2">
+                    <span
+                      className={`mt-0.5 size-2.5 rounded-full ${
+                        status === "ready"
+                          ? "bg-emerald-500"
+                          : status === "missing"
+                            ? "bg-warning"
+                            : status === "checking" || status === "preparing"
+                              ? "animate-pulse bg-muted-foreground/50"
+                              : "bg-muted-foreground/50"
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      {editingId === profile.id ? (
+                        <div className="flex gap-2">
+                          <Input
+                            value={editingName}
+                            maxLength={80}
+                            className="h-8"
+                            onChange={(event) => setEditingName(event.target.value)}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={!editingName.trim()}
+                            onClick={() => void renameProfile(profile)}
+                          >
+                            Salvar
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-xs font-semibold">{profile.name}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Identificador local: {profile.alias}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={status === "ready" ? "outline" : "default"}
+                      disabled={status === "checking" || status === "preparing" || !plugin.enabled}
+                      onClick={() => void prepareProfile(profile)}
+                    >
+                      {status === "checking" || status === "preparing" ? (
+                        <LoaderCircle className="size-3.5 animate-spin" />
+                      ) : status === "ready" ? (
+                        <CheckCircle2 className="size-3.5" />
+                      ) : (
+                        <CircleUserRound className="size-3.5" />
+                      )}
+                      {!plugin.enabled
+                        ? "Ative o plugin"
+                        : status === "ready"
+                          ? "Pronto"
+                          : status === "preparing"
+                            ? "Preparando"
+                            : "Preparar"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="size-8"
+                      aria-label={`Renomear ${profile.name}`}
+                      onClick={() => {
+                        setEditingId(profile.id);
+                        setEditingName(profile.name);
+                      }}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="size-8 text-destructive"
+                      aria-label={`Remover ${profile.name}`}
+                      title={
+                        profile.usages.length
+                          ? "Troque as referências antes de remover"
+                          : "Remover do gerenciamento"
+                      }
+                      disabled={Boolean(profile.usages.length)}
+                      onClick={() => void removeProfile(profile)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <Badge variant="outline" className="text-[9px]">
+                      {channels} {channels === 1 ? "canal" : "canais"}
+                    </Badge>
+                    <Badge variant="outline" className="text-[9px]">
+                      Principal em {primaryCount}
+                    </Badge>
+                    <Badge variant="outline" className="text-[9px]">
+                      Fallback em {fallbackCount}
+                    </Badge>
+                  </div>
+
+                  {profile.usages.length ? (
+                    <details className="mt-2 rounded-md bg-muted/35 px-2.5 py-2">
+                      <summary className="cursor-pointer text-[10px] font-medium text-muted-foreground">
+                        Ver {profile.usages.length} {profile.usages.length === 1 ? "uso" : "usos"}
+                      </summary>
+                      <div className="mt-2 space-y-1.5">
+                        {profile.usages.map((usage) => (
+                          <p
+                            key={`${usage.channelId}-${usage.processType}-${usage.blockId}-${usage.role}`}
+                            className="text-[10px]"
+                          >
+                            <span className="font-medium">{usage.channelName}</span> ·{" "}
+                            {PROCESS_META[usage.processType].label} · {usage.blockName} ·{" "}
+                            <span className="text-muted-foreground">
+                              {usage.role === "primary"
+                                ? "principal"
+                                : `fallback ${usage.fallbackPosition ?? ""}`.trim()}
+                            </span>
+                          </p>
+                        ))}
+                      </div>
+                    </details>
+                  ) : (
+                    <p className="mt-2 text-[10px] text-muted-foreground">
+                      Este perfil ainda não é utilizado por nenhum Método.
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+            Nenhum perfil cadastrado para este plugin.
+          </p>
+        )}
+      </div>
+    </details>
   );
 }
 

@@ -1,0 +1,47 @@
+{
+  "executionId": "profile-e2e-execution",
+  "traceId": "profile-e2e-trace",
+  "blockId": "profile-e2e-block",
+  "capabilityId": "generate",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": {
+    "accountProfile": "perfil-e2e",
+    "fallbackAccountProfiles": ""
+  },
+  "settings": {},
+  "inputs": {},
+  "inputContract": [],
+  "outputContract": [
+    {
+      "portKey": "result",
+      "label": "Resultado",
+      "key": "result",
+      "type": "text",
+      "required": true
+    }
+  ],
+  "resolvedInstruction": "resultado do teste",
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "profile-e2e-channel",
+      "name": "Canal de teste",
+      "language": "pt-BR",
+      "niche": "Teste"
+    },
+    "project": {
+      "id": "profile-e2e-project",
+      "title": "Projeto de teste"
+    },
+    "processType": "title",
+    "block": {
+      "type": "CRIAR",
+      "name": "Criar título",
+      "instructions": "resultado do teste"
+    },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

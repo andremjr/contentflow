@@ -946,6 +946,37 @@ async function launchOrReuseChrome({
   );
 }
 
+async function waitForChildExit(child, timeoutMs = 5000) {
+  if (!child || child.exitCode !== null) return true;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (exited) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.removeListener("exit", onExit);
+      resolve(exited);
+    };
+    const onExit = () => finish(true);
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    timer.unref?.();
+    child.once("exit", onExit);
+  });
+}
+
+async function closeBrowserGracefully(client, child) {
+  try {
+    await client?.send("Browser.close");
+  } catch {}
+  const exited = await waitForChildExit(child);
+  client?.close();
+  if (!exited && child?.exitCode === null) {
+    try {
+      child.kill();
+    } catch {}
+  }
+}
+
 class CdpClient {
   constructor(wsUrl, trace) {
     this.wsUrl = wsUrl;
@@ -1513,13 +1544,7 @@ async function configureProfile(request, services) {
     );
   } finally {
     bridge?.dispose();
-    try {
-      await client?.send("Browser.close");
-    } catch {}
-    client?.close();
-    try {
-      child?.kill();
-    } catch {}
+    await closeBrowserGracefully(client, child);
   }
 }
 
@@ -1842,6 +1867,8 @@ export const __test = {
   profilePathFor,
   runtimeProfilePath,
   profilePort,
+  waitForChildExit,
+  closeBrowserGracefully,
   searchResponseValues,
   targetCharacterPlan,
   promptWithCharacterBudget,

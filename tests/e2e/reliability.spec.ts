@@ -230,6 +230,91 @@ test("editor solicita entradas temporárias e visualiza o resultado do bloco", a
   await expect(page.getByText(/não entrou no histórico do Canal/i)).toBeVisible();
 });
 
+test("centraliza perfis no plugin e deixa o Método apenas selecionar perfis existentes", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  const pluginId = "com.contentflow.e2e-profile";
+  expect(
+    (
+      await request.put(`/api/plugins/${encodeURIComponent(pluginId)}/consent`, {
+        data: { enabled: true },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const block = {
+    id: "managed-profile-block",
+    type: "CRIAR",
+    operator: "IA",
+    name: "Criar título com perfil",
+    instructions: "Crie um título.",
+    inputs: [],
+    outputs: [
+      {
+        id: "managed-profile-result",
+        key: "result",
+        label: "Resultado",
+        type: "text",
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 0,
+    plugin: {
+      pluginId,
+      capabilityId: "generate",
+      configuration: {
+        accountProfile: "principal-legado",
+        fallbackAccountProfiles: "reserva-legado",
+      },
+    },
+  };
+  expect(
+    (
+      await request.put(`/api/channels/${channel.id}/methods/title`, {
+        data: { name: "Títulos com perfil", blocks: [block] },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  await page.goto("/plugins");
+  await page.getByRole("button", { name: "Abrir detalhes de Plugin de Perfis E2E" }).click();
+  await page.getByText("Perfis e contas", { exact: true }).click();
+  await expect(page.getByText("principal-legado", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("reserva-legado", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Principal em 1", { exact: true })).toBeVisible();
+  await expect(page.getByText("Fallback em 1", { exact: true })).toBeVisible();
+
+  await page.getByPlaceholder("Nome do novo perfil").fill("Perfil novo com acento");
+  await page.getByRole("button", { name: "Adicionar perfil", exact: true }).click();
+  await expect(page.getByText("Perfil novo com acento", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.goto(`/channel/${channel.id}/methods?process=title`);
+  await page.getByText("Criar título com perfil", { exact: true }).first().click();
+  const profileSection = page.locator("section").filter({
+    hasText: "Selecione um perfil já cadastrado",
+  });
+  await expect(profileSection).toBeVisible();
+  await expect(profileSection.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Preparar perfil" })).toHaveCount(0);
+  await profileSection.getByRole("combobox").click();
+  await page.getByRole("option", { name: "Perfil novo com acento", exact: true }).click();
+  await profileSection.getByLabel("principal-legado", { exact: true }).check();
+
+  await expect
+    .poll(async () => {
+      const channels = (await (await request.get("/api/channels")).json()) as Channel[];
+      const saved = channels.find((candidate) => candidate.id === channel.id);
+      return saved?.methods.title.blocks[0]?.plugin?.configuration;
+    })
+    .toEqual({
+      accountProfile: "Perfil-novo-com-acento",
+      fallbackAccountProfiles: "reserva-legado\nprincipal-legado",
+    });
+});
+
 test("editor mantém entradas e variáveis do prompt sincronizadas", async ({ page, request }) => {
   const channel = await seed(request);
   const block = {
@@ -492,7 +577,9 @@ test("salva separadamente som e notificações do Windows", async ({ page, reque
     .toBe(true);
 
   await page.reload();
+  await expect(page.getByText("Carregando seus canais...", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Preferências", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("checkbox", { name: "Som de alerta", exact: true })).toBeChecked();
   await expect(
     page.getByRole("checkbox", { name: "Notificações do Windows", exact: true }),
@@ -510,6 +597,34 @@ test("salva separadamente som e notificações do Windows", async ({ page, reque
       })
     ).ok(),
   ).toBeTruthy();
+});
+
+test("persiste a visualização escolhida na Biblioteca de Métodos", async ({ page, request }) => {
+  const preferences = await (await request.get("/api/preferences")).json();
+  expect(preferences.methodsLibraryView).toBe("channels");
+  await request.put("/api/preferences", {
+    data: { ...preferences, methodsLibraryView: "methods" },
+  });
+
+  await page.goto("/methods");
+  await expect(page.getByRole("button", { name: "Métodos", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "Canais", exact: true }).click();
+  await expect
+    .poll(async () => (await (await request.get("/api/preferences")).json()).methodsLibraryView)
+    .toBe("channels");
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Canais", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "Métodos", exact: true }).click();
+  await expect
+    .poll(async () => (await (await request.get("/api/preferences")).json()).methodsLibraryView)
+    .toBe("methods");
 });
 
 test("carrega um projeto sem mostrar inexistência enquanto aguarda o banco", async ({
@@ -673,4 +788,51 @@ test("Biblioteca alterna entre Métodos e Canais e persiste o nome personalizado
   await saved;
   await page.reload();
   await expect(page.getByLabel("Nome do método", { exact: true })).toHaveValue(renamed);
+});
+
+test("interface nova de Métodos e Plugins acompanha inglês e espanhol sem traduzir dados do usuário", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  const original = (await (await request.get("/api/preferences")).json()) as Record<
+    string,
+    unknown
+  >;
+
+  try {
+    await request.put("/api/preferences", { data: { ...original, language: "en" } });
+    await page.goto("/methods");
+    await expect(
+      page.getByText("Use, share, and manage Methods saved in your channels", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByPlaceholder("Search by name, Channel, process, or action...", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(channel.name, { exact: true }).first()).toBeVisible();
+
+    await page.goto("/plugins");
+    await expect(page.getByRole("button", { name: "Install plugin", exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder("Search plugins by name...", { exact: true })).toBeVisible();
+
+    await request.put("/api/preferences", { data: { ...original, language: "es" } });
+    await page.goto("/methods");
+    await expect(
+      page.getByText("Usa, comparte y gestiona los Métodos guardados en tus canales", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByPlaceholder("Buscar por nombre, Canal, proceso o acción...", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(channel.name, { exact: true }).first()).toBeVisible();
+
+    await page.goto("/plugins");
+    await expect(page.getByRole("button", { name: "Instalar plugin", exact: true })).toBeVisible();
+    await expect(
+      page.getByPlaceholder("Buscar plugins por nombre...", { exact: true }),
+    ).toBeVisible();
+  } finally {
+    await request.put("/api/preferences", { data: original });
+  }
 });

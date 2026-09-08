@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.google-flow-batch-images",
   "name": "Google Flow Browser Images",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Gera imagens reais e vídeos no Google Flow com modelos Nano Banana e Veo, proporções configuráveis, animação de imagens, referências visuais e continuidade de projeto.",
   "author": "Local user",
   "license": "MIT",

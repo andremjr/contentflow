@@ -12,6 +12,11 @@ await cp(
   path.join(localPluginsDirectory, "kit-generated-text-transform"),
   { recursive: true },
 );
+await cp(
+  path.resolve("tests/fixtures/profile-plugin"),
+  path.join(localPluginsDirectory, "profile-plugin"),
+  { recursive: true },
+);
 const env = { ...process.env, CONTENTFLOW_DATA_DIR: directory, CONTENTFLOW_API_PORT: "8895" };
 const children = [
   spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {

@@ -50,6 +50,7 @@ import {
   type StrategicCollection,
   type UniversalProcess,
 } from "@/lib/domain";
+import { useAppPreferences } from "@/lib/app-preferences";
 import {
   collectMethodRequirements,
   copyImportedMethods,
@@ -97,10 +98,10 @@ const OPERATOR_ICON: Record<BlockOperator, typeof Bot> = {
 function MethodsLibraryPage() {
   const channels = useChannels();
   const collections = useLibraryCollections();
+  const { methodsLibraryView: view, setMethodsLibraryView } = useAppPreferences();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [processFilter, setProcessFilter] = useState<UniversalProcess | "all">("all");
-  const [view, setView] = useState<"methods" | "channels">("methods");
   const [transfer, setTransfer] = useState<TransferDraft>();
   const [targetChannelId, setTargetChannelId] = useState("");
   const [newChannelName, setNewChannelName] = useState("");
@@ -421,19 +422,25 @@ function MethodsLibraryPage() {
             <div className="flex rounded-md border border-border p-0.5">
               <Button
                 size="sm"
-                variant={view === "methods" ? "secondary" : "ghost"}
-                onClick={() => setView("methods")}
-                className="gap-1.5"
-              >
-                <LayoutGrid className="size-3.5" /> Métodos
-              </Button>
-              <Button
-                size="sm"
                 variant={view === "channels" ? "secondary" : "ghost"}
-                onClick={() => setView("channels")}
+                onClick={() => {
+                  if (view !== "channels") setMethodsLibraryView("channels");
+                }}
+                aria-pressed={view === "channels"}
                 className="gap-1.5"
               >
                 <Layers3 className="size-3.5" /> Canais
+              </Button>
+              <Button
+                size="sm"
+                variant={view === "methods" ? "secondary" : "ghost"}
+                onClick={() => {
+                  if (view !== "methods") setMethodsLibraryView("methods");
+                }}
+                aria-pressed={view === "methods"}
+                className="gap-1.5"
+              >
+                <LayoutGrid className="size-3.5" /> Métodos
               </Button>
             </div>
           </div>
