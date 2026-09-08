@@ -58,6 +58,12 @@ Os artefatos intermediários são gerados em `release/v0`. Os binários não ent
 
 O workflow `release-windows.yml` publica uma release estável quando recebe uma tag `v<versão>` exatamente igual à versão de `package.json`. Ele executa `npm ci`, `npm run check`, monta instalador e portátil, publica `latest.yml` e os arquivos auxiliares do updater e anexa o manifesto SHA-256. Release draft, prerelease ou sem `latest.yml` não é considerada pelo canal estável.
 
+### Contingência para bloqueio de cobrança do GitHub Actions
+
+Quando um job não chega a iniciar exclusivamente porque a conta do GitHub Actions está bloqueada por cobrança, uma release já autorizada não precisa de nova decisão do titular. Use o mesmo commit e a mesma tag, execute `npm run release:verify`, gere localmente instalador, portátil, blockmap, `latest.yml`, manifesto SHA-256 e pacotes do ecossistema, e publique esses arquivos na mesma release estável pela API do GitHub.
+
+A autenticação deve reutilizar a credencial de sessão existente no Git Credential Manager. O token nunca deve aparecer na saída, em logs, documentação, scripts versionados, variáveis persistentes ou arquivos temporários. Depois do upload, confirme pela API pública que a tag é a release `latest`, que todos os assets estão no estado `uploaded`, que os tamanhos e hashes correspondem aos arquivos locais, que o catálogo contém as versões esperadas e que `https://andremjr.github.io/contentflow/` aponta para a release correta. Essa contingência não se aplica a falhas de teste, build, assinatura, integridade ou conteúdo; nesses casos, corrija e valide antes de publicar.
+
 Assinatura Authenticode é a política recomendada para distribuição pública da V1. O workflow aceita `WINDOWS_CSC_LINK` e `WINDOWS_CSC_KEY_PASSWORD` como secrets do repositório; enquanto o certificado não estiver configurado, o Windows pode continuar exibindo aviso, embora a verificação HTTPS e SHA-512 do updater permaneça ativa.
 
 Depois do build, gere o manifesto de integridade no PowerShell:
