@@ -1,6 +1,7 @@
 import express, { type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import { executionCommands } from "./execution-commands";
+import { createMethodPackage, readMethodPackage } from "./method-package";
 import { deriveProcessOutput } from "../src/lib/process-output";
 import Database from "better-sqlite3";
 import {
@@ -25,6 +26,7 @@ import type {
   ChannelLibraryItem,
   HumanFieldType,
   ProcessExecution,
+  ProcessMethod,
   Project,
   RuntimeValue,
   StoredFile,
@@ -824,7 +826,12 @@ function startOrchestratedProcess(
 
   const savedMethod = channel.methods?.[processType];
   const method = savedMethod
-    ? { processType, blocks: normalizeMethodBlocks(savedMethod.blocks ?? [], processType) }
+    ? {
+        name: savedMethod.name || `Método de ${PROCESS_META[processType].label}`,
+        imageUrl: savedMethod.imageUrl,
+        processType,
+        blocks: normalizeMethodBlocks(savedMethod.blocks ?? [], processType),
+      }
     : undefined;
   const issue = getMethodConfigurationIssue(method);
   if (!method || issue) return { issue: issue ?? "O método deste processo não está disponível." };
@@ -2076,7 +2083,7 @@ const methodTestCleanupTimer = setInterval(cleanupExpiredMethodTests, 15 * 60 * 
 methodTestCleanupTimer.unref();
 
 const app = express();
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "20mb" }));
 app.use(
   "/api/files",
   express.static(uploadsDirectory, {
@@ -2218,6 +2225,57 @@ app.post(
 app.get("/api/health", (_request, response) => {
   response.json({ ok: true });
 });
+
+app.post("/api/method-packages/export", async (request, response) => {
+  try {
+    if (typeof request.body?.manifest !== "string") {
+      response.status(400).json({ error: "Manifesto ausente." });
+      return;
+    }
+    const archive = await createMethodPackage(request.body.manifest, (url) => {
+      const storedName = url.slice("/api/files/".length);
+      if (!/^[a-zA-Z0-9._-]+$/.test(storedName)) throw new Error("Capa local inválida.");
+      return readFileSync(path.join(uploadsDirectory, storedName));
+    });
+    response.type("application/zip").send(archive);
+  } catch (error) {
+    response.status(400).json({
+      error: error instanceof Error ? error.message : "Não foi possível criar o pacote.",
+    });
+  }
+});
+
+app.post(
+  "/api/method-packages/import",
+  express.raw({ type: ["application/zip", "application/octet-stream"], limit: "20mb" }),
+  async (request, response) => {
+    try {
+      if (!Buffer.isBuffer(request.body) || !request.body.length) {
+        response.status(400).json({ error: "Pacote vazio ou inválido." });
+        return;
+      }
+      const manifest = await readMethodPackage(request.body, (assetPath, data) => {
+        if (uploadDirectorySize() + data.length > maxUploadStorageBytes) {
+          throw new Error(
+            `O armazenamento local de uploads atingiu o limite de ${maxUploadStorageGb} GB.`,
+          );
+        }
+        const extension = path.extname(assetPath).toLowerCase();
+        if (![".webp", ".png", ".jpg"].includes(extension)) {
+          throw new Error("Formato de capa inválido.");
+        }
+        const storedName = `${randomUUID()}${extension}`;
+        writeFileSync(path.join(uploadsDirectory, storedName), data);
+        return `/api/files/${storedName}`;
+      });
+      response.json({ manifest });
+    } catch (error) {
+      response.status(400).json({
+        error: error instanceof Error ? error.message : "Não foi possível abrir o pacote.",
+      });
+    }
+  },
+);
 
 app.get("/api/preferences", (_request, response) => {
   response.json(readPreferences());
@@ -4439,9 +4497,20 @@ app.put("/api/channels/:id/preferences", (request, response) => {
 });
 
 app.post("/api/channels", (request, response) => {
-  const channel = request.body as StoredPayload;
+  const channel = request.body as Channel;
   if (!channel?.id || !channel.createdAt) {
     response.status(400).json({ error: "Canal inválido." });
+    return;
+  }
+  if (
+    typeof channel.methodsImageUrl === "string" &&
+    (!(
+      /^data:image\/(webp|png|jpeg);base64,/.test(channel.methodsImageUrl) ||
+      /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(channel.methodsImageUrl)
+    ) ||
+      channel.methodsImageUrl.length > 1_500_000)
+  ) {
+    response.status(400).json({ error: "Capa do Canal inválida." });
     return;
   }
   const insertChannel = database.transaction(() => {
@@ -4503,6 +4572,16 @@ app.put("/api/channels/:id/methods/:processType", (request, response) => {
     return;
   }
   channel.methods[processType] = {
+    name:
+      typeof request.body?.name === "string" && request.body.name.trim()
+        ? request.body.name.trim().slice(0, 200)
+        : channel.methods[processType]?.name || `Método de ${PROCESS_META[processType].label}`,
+    imageUrl:
+      typeof request.body?.imageUrl === "string" &&
+      (/^data:image\/(webp|png|jpeg);base64,/.test(request.body.imageUrl) ||
+        /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(request.body.imageUrl))
+        ? request.body.imageUrl.slice(0, 1_500_000)
+        : channel.methods[processType]?.imageUrl,
     processType,
     blocks: normalizeMethodBlocks(request.body.blocks, processType),
   };
@@ -4512,10 +4591,68 @@ app.put("/api/channels/:id/methods/:processType", (request, response) => {
   response.json(channel.methods[processType]);
 });
 
+app.put("/api/channels/:id/methods", (request, response) => {
+  const channel = readPayload<Channel>("channels", request.params.id);
+  const methods = request.body?.methods as
+    Partial<Record<UniversalProcess, ProcessMethod>> | undefined;
+  if (!channel) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+  if (!methods || typeof methods !== "object" || Array.isArray(methods)) {
+    response.status(400).json({ error: "Pacote de Métodos inválido." });
+    return;
+  }
+  const entries = Object.entries(methods) as [UniversalProcess, ProcessMethod][];
+  if (
+    !entries.length ||
+    entries.some(
+      ([processType, method]) =>
+        !PROCESS_ORDER.includes(processType) ||
+        method?.processType !== processType ||
+        !Array.isArray(method.blocks),
+    )
+  ) {
+    response.status(400).json({ error: "Pacote de Métodos inválido." });
+    return;
+  }
+  for (const [processType, method] of entries) {
+    channel.methods[processType] = {
+      name:
+        typeof method.name === "string" && method.name.trim()
+          ? method.name.trim().slice(0, 200)
+          : `Método de ${PROCESS_META[processType].label}`,
+      imageUrl:
+        typeof method.imageUrl === "string" &&
+        (/^data:image\/(webp|png|jpeg);base64,/.test(method.imageUrl) ||
+          /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(method.imageUrl))
+          ? method.imageUrl.slice(0, 1_500_000)
+          : undefined,
+      processType,
+      blocks: normalizeMethodBlocks(method.blocks, processType),
+    };
+  }
+  database
+    .prepare("UPDATE channels SET payload = ? WHERE id = ?")
+    .run(JSON.stringify(channel), channel.id);
+  response.json({ methods: channel.methods });
+});
+
 app.put("/api/channels/:id", (request, response) => {
   const channel = request.body as Channel;
   if (!channel?.id || channel.id !== request.params.id) {
     response.status(400).json({ error: "Canal inválido." });
+    return;
+  }
+  if (
+    typeof channel.methodsImageUrl === "string" &&
+    (!(
+      /^data:image\/(webp|png|jpeg);base64,/.test(channel.methodsImageUrl) ||
+      /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(channel.methodsImageUrl)
+    ) ||
+      channel.methodsImageUrl.length > 1_500_000)
+  ) {
+    response.status(400).json({ error: "Capa do Canal inválida." });
     return;
   }
   const current = readPayload<Channel>("channels", channel.id);

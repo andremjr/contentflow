@@ -19,7 +19,7 @@ function executionFor(
     projectId: "project-1",
     channelId: "channel-1",
     processType,
-    methodSnapshot: { processType, blocks: [block] },
+    methodSnapshot: { name: "Método de teste", processType, blocks: [block] },
     blocks: [{ blockId: block.id, status: "completed", values: {}, attempt: 1 }],
     status: "completed",
     outputStatus: "completed",

@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ProcessMethod } from "../src/lib/domain";
-import { copyImportedBlocks, parseMethodFile, serializeMethodFile } from "../src/lib/method-file";
+import type { ProcessMethod, StrategicCollection } from "../src/lib/domain";
+import {
+  copyImportedBlocks,
+  copyImportedMethods,
+  parseMethodFile,
+  parseMethodImportFile,
+  serializeMethodFile,
+  serializeMethodPackFile,
+} from "../src/lib/method-file";
 
 const method: ProcessMethod = {
+  name: "Roteiro",
   processType: "script",
   blocks: [
     {
@@ -53,6 +61,7 @@ test("cópia interna pode preservar a referência local sem copiar secrets", () 
 
 test("exporta e remapeia continuidade de conversa sem expor a conta local", () => {
   const continued: ProcessMethod = {
+    name: "Roteiro contínuo",
     processType: "script",
     blocks: [
       method.blocks[0],
@@ -82,6 +91,7 @@ test("exporta e remapeia continuidade de conversa sem expor a conta local", () =
 
 test("exporta requisito de ESCOLHER sem expor collectionId local", () => {
   const choosing: ProcessMethod = {
+    name: "Estrutura de título",
     processType: "title",
     blocks: [
       {
@@ -95,8 +105,89 @@ test("exporta requisito de ESCOLHER sem expor collectionId local", () => {
     ],
   };
 
-  const contents = serializeMethodFile("Estrutura de título", choosing);
+  const collections: StrategicCollection[] = [
+    {
+      id: "local-title-structures",
+      channelId: "channel",
+      name: "Estruturas de título",
+      fields: [
+        { id: "formula", label: "Fórmula", type: "textarea", required: true },
+        { id: "example", label: "Exemplo", type: "text", required: false },
+      ],
+      createdAt: "2026-09-08T00:00:00.000Z",
+    },
+  ];
+  const contents = serializeMethodFile("Estrutura de título", choosing, collections);
   assert.doesNotMatch(contents, /local-title-structures/);
   const parsed = parseMethodFile(contents);
   assert.equal(parsed.method.blocks[0].collectionId, undefined);
+  assert.deepEqual(parsed.requirements?.[0], {
+    kind: "collection",
+    name: "Estruturas de título",
+    blockName: "ESCOLHER",
+    fields: [
+      { key: "formula", label: "Fórmula", type: "textarea", required: true },
+      { key: "example", label: "Exemplo", type: "text", required: false },
+    ],
+  });
+});
+
+test("arquivo individual antigo ganha nome persistente ao importar", () => {
+  const legacy = JSON.parse(serializeMethodFile("Roteiro legado", method));
+  delete legacy.method.name;
+  const parsed = parseMethodFile(JSON.stringify(legacy));
+  assert.equal(parsed.method.name, "Roteiro legado");
+});
+
+test("pacote preserva nomes e remapeia referências entre processos", () => {
+  const title: ProcessMethod = {
+    name: "Títulos fortes",
+    processType: "title",
+    blocks: [
+      {
+        id: "create-title",
+        type: "CRIAR",
+        operator: "Humano",
+        parameters: [],
+        outputs: [
+          { id: "title-output", label: "Título", key: "title", type: "text", required: true },
+        ],
+        order: 0,
+      },
+    ],
+  };
+  const script: ProcessMethod = {
+    name: "Roteiro conectado",
+    processType: "script",
+    blocks: [
+      {
+        id: "write-script",
+        type: "CRIAR",
+        operator: "Humano",
+        parameters: [],
+        inputs: [
+          {
+            id: "title-input",
+            label: "Título",
+            type: "text",
+            source: "previous_process",
+            sourceProcessType: "title",
+            sourceKey: "title",
+            blockId: "create-title",
+          },
+        ],
+        order: 0,
+      },
+    ],
+  };
+  const contents = serializeMethodPackFile("Kit", "Canal de origem", [title, script]);
+  const parsed = parseMethodImportFile(contents);
+  assert.equal(parsed.format, "contentflow-method-pack");
+  if (parsed.format !== "contentflow-method-pack") return;
+  assert.deepEqual(
+    parsed.methods.map((item) => item.name),
+    ["Títulos fortes", "Roteiro conectado"],
+  );
+  const copied = copyImportedMethods(parsed.methods, (prefix) => `${prefix}-new`);
+  assert.equal(copied[1].blocks[0].inputs?.[0].blockId, copied[0].blocks[0].id);
 });

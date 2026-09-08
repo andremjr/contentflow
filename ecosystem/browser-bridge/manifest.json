@@ -12,7 +12,8 @@
     "https://flow.google.com/*",
     "https://labs.google/*",
     "https://meta.ai/*",
-    "https://www.meta.ai/*"
+    "https://www.meta.ai/*",
+    "https://playground.microsoft.ai/*"
   ],
   "background": {
     "service_worker": "service-worker.js"
@@ -27,7 +28,8 @@
         "https://flow.google.com/*",
         "https://labs.google/*",
         "https://meta.ai/*",
-        "https://www.meta.ai/*"
+        "https://www.meta.ai/*",
+        "https://playground.microsoft.ai/*"
       ],
       "js": ["content-script.js"],
       "run_at": "document_idle",

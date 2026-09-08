@@ -84,6 +84,8 @@ function normalizeChannel(channel: Channel): Channel {
       return [
         processType,
         {
+          name: saved.name?.trim() || `Método de ${PROCESS_META[processType].label}`,
+          imageUrl: saved.imageUrl,
           processType,
           blocks: (saved.blocks ?? []).map((block, order) => ({
             ...normalizeActionBlock(block, processType),
@@ -450,6 +452,7 @@ export async function setChannelMethod(
     .catch(() => undefined)
     .then(async () => {
       await request(`/api/channels/${channelId}/methods/${processType}`, "PUT", {
+        name: method.name,
         processType,
         blocks: normalizeMethodBlocks(method.blocks, processType),
       });
@@ -462,6 +465,14 @@ export async function setChannelMethod(
   } finally {
     if (methodQueues.get(key) === pending) methodQueues.delete(key);
   }
+}
+
+export async function setChannelMethods(
+  channelId: string,
+  methods: Partial<Record<UniversalProcess, ProcessMethod>>,
+) {
+  await request(`/api/channels/${channelId}/methods`, "PUT", { methods });
+  await refreshState(true);
 }
 
 export async function removeChannel(id: string) {

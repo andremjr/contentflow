@@ -261,6 +261,8 @@ export function MethodBuilder({
   const channels = useChannels();
   const collections = useLibraryCollections(channelId);
   const [processType, setProcessType] = useState<UniversalProcess>(initialProcess ?? "theme");
+  const [draftName, setDraftName] = useState("");
+  const [draftImageUrl, setDraftImageUrl] = useState<string>();
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [draftBlocks, setDraftBlocks] = useState<ActionBlock[]>([]);
@@ -290,9 +292,9 @@ export function MethodBuilder({
     .filter((candidate) => candidate.id !== channelId)
     .map((candidate) => ({
       channel: candidate,
-      blocks: candidate.methods?.[processType]?.blocks ?? [],
+      method: candidate.methods?.[processType],
     }))
-    .filter((candidate) => candidate.blocks.length > 0);
+    .filter((candidate) => candidate.method?.blocks.length);
 
   currentProcessRef.current = processType;
 
@@ -329,8 +331,11 @@ export function MethodBuilder({
     if (!changedProcess && isDirty) return;
 
     const recovered = changedProcess ? readMethodDraft(channelId, processType) : undefined;
+    const loadedMethod = recovered ?? method;
+    setDraftName(loadedMethod?.name ?? `Método de ${PROCESS_META[processType].label}`);
+    setDraftImageUrl(loadedMethod?.imageUrl);
     setDraftBlocks(
-      structuredClone(recovered?.blocks ?? method?.blocks ?? []).map((block) =>
+      structuredClone(loadedMethod?.blocks ?? []).map((block) =>
         normalizeActionBlock(block, processType),
       ),
     );
@@ -351,6 +356,8 @@ export function MethodBuilder({
         .catch(() => undefined)
         .then(() =>
           setChannelMethod(channel.id, savingProcess, {
+            name: draftName.trim() || `Método de ${PROCESS_META[savingProcess].label}`,
+            imageUrl: draftImageUrl,
             processType: savingProcess,
             blocks: savingBlocks,
           }),
@@ -379,7 +386,7 @@ export function MethodBuilder({
         });
       }
     },
-    [blocks, channel, processType],
+    [blocks, channel, draftImageUrl, draftName, processType],
   );
 
   useEffect(() => {
@@ -405,9 +412,20 @@ export function MethodBuilder({
       pendingFileImport.method.blocks,
       uid,
     ).map((block) => normalizeActionBlock(block, processType));
+    const importedName = pendingFileImport.method.name || pendingFileImport.name;
+    setDraftName(importedName);
+    setDraftImageUrl(pendingFileImport.method.imageUrl);
     setDraftBlocks(importedBlocks);
-    rememberMethodDraft(channelId, processType, { processType, blocks: importedBlocks }, (error) =>
-      toast.error("Método não salvo", { description: error.message }),
+    rememberMethodDraft(
+      channelId,
+      processType,
+      {
+        name: importedName,
+        imageUrl: pendingFileImport.method.imageUrl,
+        processType,
+        blocks: importedBlocks,
+      },
+      (error) => toast.error("Método não salvo", { description: error.message }),
     );
     setSelectedBlockId(importedBlocks[0]?.id ?? null);
     setIsDirty(true);
@@ -423,8 +441,12 @@ export function MethodBuilder({
 
   const saveBlocks = (nextBlocks: ActionBlock[]) => {
     editVersionRef.current += 1;
-    rememberMethodDraft(channelId, processType, { processType, blocks: nextBlocks }, (error) =>
-      toast.error("Método não salvo; rascunho preservado", { description: error.message }),
+    rememberMethodDraft(
+      channelId,
+      processType,
+      { name: draftName, imageUrl: draftImageUrl, processType, blocks: nextBlocks },
+      (error) =>
+        toast.error("Método não salvo; rascunho preservado", { description: error.message }),
     );
     setDraftBlocks(nextBlocks.map((block, order) => ({ ...block, order })));
     setIsDirty(true);
@@ -445,10 +467,12 @@ export function MethodBuilder({
     });
   };
 
-  const importMethod = (sourceChannelName: string, sourceBlocks: ActionBlock[]) => {
-    const importedBlocks = copyImportedBlocks(processType, sourceBlocks, uid, {
+  const importMethod = (sourceChannelName: string, sourceMethod: ProcessMethod) => {
+    const importedBlocks = copyImportedBlocks(processType, sourceMethod.blocks, uid, {
       preserveLocalConnections: true,
     }).map((block) => normalizeActionBlock(block, processType));
+    setDraftName(sourceMethod.name);
+    setDraftImageUrl(sourceMethod.imageUrl);
     saveBlocks(importedBlocks);
     setSelectedBlockId(importedBlocks[0]?.id ?? null);
     setLibraryOpen(false);
@@ -460,9 +484,26 @@ export function MethodBuilder({
   const shareMethod = async () => {
     if (!blocks.length) return;
     const processLabel = PROCESS_META[processType].label;
-    const fileName = `metodo-${processType}.contentflow-method.json`;
-    const contents = serializeMethodFile(`Método de ${processLabel}`, { processType, blocks });
-    const file = new File([contents], fileName, { type: "application/json" });
+    const fileName = `metodo-${processType}.contentflow-method.zip`;
+    const methodName = draftName.trim() || `Método de ${processLabel}`;
+    const contents = serializeMethodFile(
+      methodName,
+      { name: methodName, imageUrl: draftImageUrl, processType, blocks },
+      collections,
+    );
+    const packageResponse = await fetch("/api/method-packages/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ manifest: contents }),
+    });
+    if (!packageResponse.ok) {
+      const result = (await packageResponse.json()) as { error?: string };
+      toast.error("Não foi possível criar o pacote", {
+        description: result.error,
+      });
+      return;
+    }
+    const file = new File([await packageResponse.blob()], fileName, { type: "application/zip" });
 
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
       try {
@@ -490,7 +531,22 @@ export function MethodBuilder({
 
   const importSharedMethod = async (file: File) => {
     try {
-      const sharedMethod = parseMethodFile(await file.text());
+      let contents: string;
+      if (file.name.toLocaleLowerCase().endsWith(".zip")) {
+        const response = await fetch("/api/method-packages/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/zip" },
+          body: file,
+        });
+        const result = (await response.json()) as { manifest?: string; error?: string };
+        if (!response.ok || !result.manifest) {
+          throw new Error(result.error ?? "O pacote não pôde ser aberto.");
+        }
+        contents = result.manifest;
+      } else {
+        contents = await file.text();
+      }
+      const sharedMethod = parseMethodFile(contents);
       if (
         isDirty &&
         !window.confirm("Importar substituirá as alterações ainda não salvas. Continuar?")
@@ -571,7 +627,27 @@ export function MethodBuilder({
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold">Método de {PROCESS_META[processType].label}</h2>
+              <Input
+                value={draftName}
+                onChange={(event) => {
+                  const name = event.target.value.slice(0, 200);
+                  setDraftName(name);
+                  editVersionRef.current += 1;
+                  rememberMethodDraft(
+                    channelId,
+                    processType,
+                    { name, imageUrl: draftImageUrl, processType, blocks },
+                    (error) =>
+                      toast.error("Método não salvo; rascunho preservado", {
+                        description: error.message,
+                      }),
+                  );
+                  setIsDirty(true);
+                  setSaveStatus("pending");
+                }}
+                aria-label="Nome do método"
+                className="h-9 max-w-md text-lg font-semibold"
+              />
               <Badge variant="outline" className="border-brand/30 text-brand-soft">
                 {blocks.length} {blocks.length === 1 ? "bloco" : "blocos"}
               </Badge>
@@ -584,7 +660,7 @@ export function MethodBuilder({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".json,.contentflow-method.json,application/json"
+              accept=".zip,.json,.contentflow-method.json,application/zip,application/json"
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -629,20 +705,25 @@ export function MethodBuilder({
                 </DialogHeader>
                 {reusableMethods.length ? (
                   <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
-                    {reusableMethods.map(({ channel: sourceChannel, blocks: sourceBlocks }) => (
+                    {reusableMethods.map(({ channel: sourceChannel, method: sourceMethod }) => (
                       <button
                         key={sourceChannel.id}
                         type="button"
-                        onClick={() => importMethod(sourceChannel.name, sourceBlocks)}
+                        onClick={() =>
+                          sourceMethod && importMethod(sourceChannel.name, sourceMethod)
+                        }
                         className="flex w-full items-center gap-3 rounded-xl border border-border/70 bg-card p-3 text-left transition hover:border-brand/50 hover:bg-brand/5"
                       >
                         <ChannelAvatar channel={sourceChannel} size="md" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold">
+                            {sourceMethod?.name}
+                          </span>
+                          <span className="block truncate text-[11px] text-muted-foreground">
                             {sourceChannel.name}
                           </span>
                           <span className="mt-1 flex flex-wrap gap-1">
-                            {sourceBlocks.map((block, index) => (
+                            {sourceMethod?.blocks.map((block, index) => (
                               <Badge key={block.id} variant="secondary" className="text-[9px]">
                                 {index + 1}. {BLOCK_META[block.type].label}
                               </Badge>

@@ -63,7 +63,7 @@ function execution({
     projectId,
     channelId,
     processType,
-    methodSnapshot: { processType, blocks: [block] },
+    methodSnapshot: { name: "Método de teste", processType, blocks: [block] },
     blocks: [
       {
         blockId: block.id,
@@ -134,12 +134,17 @@ test("histórico do canal só pode ser configurado nos blocos ESCOLHER e CRIAR",
   };
 
   assert.match(
-    getMethodConfigurationIssue({ processType: "script", blocks: [invalidBlock] }) ?? "",
+    getMethodConfigurationIssue({
+      name: "Método de teste",
+      processType: "script",
+      blocks: [invalidBlock],
+    }) ?? "",
     /só pode orientar um bloco “Escolher” ou “Criar”/,
   );
 
   assert.equal(
     getMethodConfigurationIssue({
+      name: "Método de teste",
       processType: "script",
       blocks: [{ ...invalidBlock, type: "CRIAR" }],
     }),

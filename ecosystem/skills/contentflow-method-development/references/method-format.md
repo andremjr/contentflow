@@ -17,6 +17,14 @@
 
 `format` é sempre `contentflow-method`; `version` é `1`; `name` tem até 200 caracteres; `exportedAt` é ISO 8601; `processType` é `theme`, `title`, `thumbnail`, `script`, `narration`, `assets`, `editing` ou `publishing`; `blocks` contém 1–200 blocos.
 
+O compartilhável principal é `.contentflow-method.zip`, uma pasta compactada com `manifest.json` e, quando houver capa, `assets/method-<processType>.webp`. O JSON acima continua sendo aceito diretamente por compatibilidade.
+
+## Pacote de Métodos do Canal
+
+`contentflow-method-pack`, versão `1`, reúne de 1 a 8 Métodos individuais com `processType` único. O ZIP contém `manifest.json`, `assets/channel-cover.webp` opcional e uma capa opcional por Método. Não contém Projetos, Histórico, itens da Biblioteca Estratégica, credenciais, `connectionId` ou `collectionId`.
+
+Cada Método ou pacote pode declarar requisitos portáteis para `previous_process`, plugin/capacidade/conexão e coleção estratégica. O requisito de coleção informa nome e, quando a coleção ainda estiver disponível na origem, seus campos com label, key, type e obrigatoriedade. Esses metadados servem para a prévia; não criam nem vinculam a coleção automaticamente.
+
 ## Bloco
 
 ```json
@@ -55,14 +63,14 @@ Tipos: `text`, `number`, `select`, `boolean`, `textarea`. `value` é string, num
 
 A forma mínima é `{id, label, type, source}`. As fontes são:
 
-| Fonte | Campos adicionais |
-| --- | --- |
-| `project` | `sourceKey`: `title` ou `deadline`. |
-| `previous_process` | `sourceProcessType`, `sourceKey` e opcionalmente `blockId`. |
-| `previous_block` | `blockId` e `sourceKey` quando necessário. |
-| `channel_history` | `records` com `sourceProcessType`, `blockId`, `sourceKey` e `historyLimit` de 1 a 100; somente em `ESCOLHER`/`CRIAR`. |
-| `channel_library` | Coleção do canal; o vínculo local precisa ser reassociado após importar. |
-| `static` | `staticValue`. |
+| Fonte              | Campos adicionais                                                                                                     |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `project`          | `sourceKey`: `title` ou `deadline`.                                                                                   |
+| `previous_process` | `sourceProcessType`, `sourceKey` e opcionalmente `blockId`.                                                           |
+| `previous_block`   | `blockId` e `sourceKey` quando necessário.                                                                            |
+| `channel_history`  | `records` com `sourceProcessType`, `blockId`, `sourceKey` e `historyLimit` de 1 a 100; somente em `ESCOLHER`/`CRIAR`. |
+| `channel_library`  | Coleção do canal; o vínculo local precisa ser reassociado após importar.                                              |
+| `static`           | `staticValue`.                                                                                                        |
 
 Tipos de input: `text`, `number`, `select`, `boolean`, `textarea`, `multiselect`, `list`, `records`, `datetime`, `url`, `file`, `image`, `audio`, `video`, `files`, `approval`, `thumbnail_layout`.
 
@@ -108,13 +116,13 @@ Para `type: "records"`, declare `recordFields` com `id`, `label`, `key`, `type` 
 
 ## Outputs oficiais
 
-| Processo | Key | Type |
-| --- | --- | --- |
-| `theme` | `theme` | `textarea` |
-| `title` | `title` | `text` |
-| `thumbnail` | `thumbnail` | `image` |
-| `script` | `script` | `textarea` |
-| `narration` | `audio` | `audio` |
-| `assets` | `assets` | `files` |
-| `editing` | `video` | `video` |
-| `publishing` | `url` | `url` |
+| Processo     | Key         | Type       |
+| ------------ | ----------- | ---------- |
+| `theme`      | `theme`     | `textarea` |
+| `title`      | `title`     | `text`     |
+| `thumbnail`  | `thumbnail` | `image`    |
+| `script`     | `script`    | `textarea` |
+| `narration`  | `audio`     | `audio`    |
+| `assets`     | `assets`    | `files`    |
+| `editing`    | `video`     | `video`    |
+| `publishing` | `url`       | `url`      |

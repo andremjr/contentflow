@@ -27,6 +27,7 @@ export default tseslint.config(
       "ecosystem/plugins/reference/google-flow-browser-images/scripts/generation-rpcs.json",
       "ecosystem/plugins/reference/google-flow-browser-images/scripts/print-ui-actions.mjs",
       "ecosystem/plugins/reference/google-flow-browser-images/scripts/rpc-analysis.json",
+      "ecosystem/plugins/reference/*/windows-enterprise-install/artifacts",
     ],
   },
   {

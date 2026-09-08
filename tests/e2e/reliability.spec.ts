@@ -642,3 +642,35 @@ test("salva o Método mesmo saindo imediatamente do editor e preserva o snapshot
   await page.goto(`/channel/${channel.id}/methods?process=theme`);
   await expect(page.getByText("Alteração antes de sair", { exact: true })).toBeVisible();
 });
+
+test("Biblioteca alterna entre Métodos e Canais e persiste o nome personalizado", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  const customName = `Método da Comunidade ${channel.id.slice(0, 6)}`;
+  const update = await request.put(`/api/channels/${channel.id}/methods/theme`, {
+    data: { ...channel.methods.theme, name: customName },
+  });
+  expect(update.ok()).toBeTruthy();
+
+  await page.goto("/methods");
+  await expect(page.getByRole("heading", { name: customName, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Canais", exact: true }).click();
+  await expect(page.getByRole("heading", { name: channel.name, exact: true })).toBeVisible();
+
+  await page.goto(`/channel/${channel.id}/methods?process=theme`);
+  const name = page.getByLabel("Nome do método", { exact: true });
+  await expect(name).toHaveValue(customName);
+  const renamed = `${customName} — Adaptado`;
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/channels/${channel.id}/methods/theme`) &&
+      response.request().method() === "PUT" &&
+      response.ok(),
+  );
+  await name.fill(renamed);
+  await saved;
+  await page.reload();
+  await expect(page.getByLabel("Nome do método", { exact: true })).toHaveValue(renamed);
+});

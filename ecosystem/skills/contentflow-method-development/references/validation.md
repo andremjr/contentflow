@@ -4,7 +4,7 @@
 
 Valide nesta ordem:
 
-1. JSON parseável; `format` = `contentflow-method`; `version` = 1; `exportedAt` ISO 8601.
+1. ZIP seguro com `manifest.json` parseável, ou JSON legado; `format` = `contentflow-method` ou `contentflow-method-pack`; `version` = 1; `exportedAt` ISO 8601.
 2. `processType` pertence aos oito processos e há 1–200 blocos.
 3. IDs são únicos; `order` é 0, 1, 2…; `parameters` existe em todos os blocos.
 4. Types, operators, parameter types, field types, renderers e validation modes são enums válidos.
@@ -38,4 +38,4 @@ Teste um fluxo `BUSCAR/IA` → `VALIDAR/Humano`: a pesquisa produz `list`; a val
 
 ## Importação
 
-Salve como `nome-do-processo.contentflow-method.json` e importe em Métodos do Canal → Processo → Importar. Após importar, configure no Canal as coleções estratégicas, plugins, contas, settings e secrets. Execute primeiro um Projeto de teste e confirme cada output pelo tipo e pelo conteúdo antes de produção.
+Salve preferencialmente como `nome-do-processo.contentflow-method.zip`; um conjunto usa `.contentflow-method-pack.zip`. Importe em Métodos do Canal → Processo → Importar ou na Biblioteca global de Métodos. Revise a prévia de processos anteriores, coleções e seus campos, plugins e conexões. Após importar, configure os vínculos locais e execute primeiro um Projeto de teste.

@@ -63,7 +63,7 @@ A experiência do usuário no ContentFlow apoia-se em 3 camadas de interface cla
 No nível global, a navegação principal possui três áreas:
 
 - `/dashboard`: visão geral dos canais.
-- `/methods`: Biblioteca de Métodos, derivada dos métodos salvos nos canais, com busca, reutilização, importação e compartilhamento.
+- `/methods`: Biblioteca de Métodos, derivada dos métodos salvos nos canais, com cards alternáveis por Método ou Canal, busca, capas opcionais, reutilização, importação e compartilhamento.
 - `/plugins`: Gerenciador de Plugins locais, responsável por descobrir e apresentar manifestos reais instalados no aplicativo.
 
 O Gerenciador de Plugins organiza o catálogo em cards quadrados, compactos e pesquisáveis. Em telas grandes, a galeria apresenta quatro cards por linha; cada card exibe somente o ícone local validado e o nome do plugin, além de uma sinalização mínima de erro ou desativação. Versão, origem, permissões, capacidades e ações de ciclo de vida aparecem nos detalhes abertos pelo card.
@@ -215,8 +215,11 @@ O plugin apenas produz a lista estruturada. Revisão, criação de Projetos, ide
 
 O ContentFlow apoia-se em dois tipos de compartilhamento comunitário:
 
-1. **Templates de Métodos (Caixa-Aberta)**: Exportação e importação de sequências de blocos com prompts e regras prontas por arquivo. Referências de plugins e requisitos de conexão permanecem explícitos, mas IDs locais e secrets são removidos; instalação, consentimento e associação a uma conexão local são ações separadas do usuário.
-2. **Plugins Independentes**: Pastas instaláveis ou vinculadas podem adaptar APIs HTTPS, scripts, executáveis, filas externas, n8n/Make/FastAPI públicos e automações de navegador sem acrescentar um novo tipo de integração ao núcleo.
+1. **Templates de Métodos (Caixa-Aberta)**: Exportação e importação de sequências de blocos com prompts e regras prontas, individualmente ou como pacote dos Métodos configurados em um Canal. O compartilhável principal é uma pasta ZIP com `manifest.json` e `assets/` para capas; JSONs individuais legados continuam importáveis. Cada Método do manifesto continua pertencendo a exatamente um Processo Universal. Referências de processos anteriores, plugins, conexões e coleções estratégicas permanecem explícitas como requisitos; coleções informam nome e schema esperado quando disponíveis. IDs locais e secrets são removidos, e instalação, consentimento, criação de coleções e associação a vínculos locais são ações separadas do usuário.
+
+Métodos e Canais podem possuir uma capa própria para a Biblioteca de Métodos. Na ausência dela, a interface usa o símbolo local do ContentFlow. A capa do Canal nessa biblioteca é independente do avatar ou banner sincronizado do YouTube. Pacotes de Canal carregam a capa do conjunto e as capas de seus Métodos dentro de `assets/`, sem exportar outras propriedades ou conteúdos do Canal.
+
+A importação apresenta uma prévia antes de gravar: Métodos incluídos, conflitos com processos já configurados, dependências de processos anteriores, plugins/capacidades, necessidade de conexão e coleções estratégicas com seus campos. O usuário escolhe os processos que deseja substituir. A aplicação de vários Métodos a um Canal é atômica; não pode deixar uma importação parcial após falha. 2. **Plugins Independentes**: Pastas instaláveis ou vinculadas podem adaptar APIs HTTPS, scripts, executáveis, filas externas, n8n/Make/FastAPI públicos e automações de navegador sem acrescentar um novo tipo de integração ao núcleo.
 
 A Biblioteca de Métodos global não cria uma segunda cópia independente no banco. Ela agrega os métodos existentes nos canais. Uma cópia só é criada quando o usuário escolhe usar um método em outro canal ou importa um arquivo compartilhado.
 

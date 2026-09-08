@@ -959,6 +959,11 @@ function cfResolveComparison(){const body=document.body?.innerText||'';if(!/givi
 function cfResponseState(){const comparisonResolved=cfResolveComparison(),nodes=cfAssistantNodes(),entries=nodes.map(el=>({text:(el.innerText||el.textContent||'').trim(),links:[...el.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text);return{texts:entries.map(x=>x.text),entries,stop:cfGenerating(),comparisonResolved,bodyHint:(document.body?.innerText||'').slice(0,6000)}}
 `;
 
+export const CHATGPT_SEND_BUTTON_SELECTORS = [
+  'button[data-testid="send-button"]:not(:disabled):not([aria-disabled="true"])',
+  'button#composer-submit-button:not(:disabled):not([aria-disabled="true"])',
+];
+
 async function openNewConversation(client, sessionId, signal) {
   await client.send("Page.navigate", { url: CHATGPT_NEW_URL }, sessionId);
   const deadline = Date.now() + 20000;
@@ -1301,9 +1306,7 @@ async function clickSend(client, sessionId, bridge, signal, operationKey) {
       bridge.dispatch(
         "click",
         {
-          selectors: [
-            'button[data-testid="send-button"]:not(:disabled):not([aria-disabled="true"])',
-          ],
+          selectors: CHATGPT_SEND_BUTTON_SELECTORS,
         },
         `${operationKey}:${attempt}`,
       ),

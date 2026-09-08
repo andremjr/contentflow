@@ -1,0 +1,50 @@
+{
+  "executionId": "mai-fixture",
+  "traceId": "mai-fixture-trace",
+  "blockId": "mai-fixture-block",
+  "capabilityId": "generate-voice-in-browser",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": {
+    "model": "mai-voice-2",
+    "voice": "alder",
+    "style": "neutral",
+    "accountProfile": "default"
+  },
+  "settings": { "diagnosticMockResponse": "Narração de teste gerada pelo modelo de mock." },
+  "inputs": { "text": "Este é um teste de áudio narrado pelo plugin." },
+  "inputContract": [
+    { "id": "input", "portKey": "text", "label": "Texto da narração", "type": "textarea" }
+  ],
+  "outputContract": [
+    {
+      "portKey": "audio",
+      "label": "Áudio narrado",
+      "key": "audio",
+      "type": "audio",
+      "required": true
+    },
+    {
+      "portKey": "transcript",
+      "label": "Texto falado",
+      "key": "transcript",
+      "type": "textarea",
+      "required": false
+    }
+  ],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "channel",
+      "name": "Canal de Teste",
+      "language": "pt-BR",
+      "niche": "Histórias"
+    },
+    "project": { "id": "project", "title": "Projeto de Teste" },
+    "processType": "narration",
+    "block": { "type": "CRIAR", "name": "Criar narração", "instructions": "Narre o texto com clareza." },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

@@ -4,9 +4,10 @@ Versão **1.3.1**.
 
 Plugin avançado de geração de imagens e vídeos no Google Flow através do Chrome dedicado com perfil persistente. A versão 1.3.1 expande as capacidades para suportar o ecossistema completo de criação do Google Flow:
 
-- **Geração de Imagens** com Nano Banana 2, Nano Banana Pro e proporções (16:9, 9:16, 1:1).
+- **Geração de Imagens** com Nano Banana 2, Nano Banana Pro, modelos adicionais pelo rótulo visível do Flow e proporções (16:9, 4:3, 1:1, 3:4, 9:16).
 - **Animação de Imagens (Image-to-Video)** com Veo 3.1 (Quality, Fast, Lite) e Omni 1.1 Flash.
-- **Geração Direta de Vídeo (Text-to-Video)** com Veo 3.1.
+- **Geração Direta de Vídeo (Text-to-Video)** com modelos selecionáveis, referências visuais, modo Frame/Elemento, duração, proporção e resolução.
+- **Fila interna em projeto único:** a capability recebe a lista completa (até 100 prompts), cria ou abre um projeto uma vez e mantém os envios e esperas dentro desse mesmo projeto.
 - **Continuidade de Projeto e Chat (`project_url`)** para encadeamento de múltiplos blocos no Método preservando personagens, galeria e histórico.
 - **Intervenção humana segura**: login, reautenticação e CAPTCHA permanecem visíveis para conclusão manual, sem tentativa de contornar as proteções do provedor.
 
@@ -18,7 +19,7 @@ Plugin avançado de geração de imagens e vídeos no Google Flow através do Ch
 - **Entradas:** `prompts` (obrigatório), `reference_images` (opcional), `project_url` (opcional).
 - **Saídas:** `images` (imagem única ou galeria de imagens JPEG do Flow), `project_url` (URL do projeto ativo).
 - **Modelos:** Automático do Flow, Nano Banana 2, Nano Banana Pro (com fallback inteligente).
-- **Proporções:** Atual do Flow, Paisagem (16:9), Retrato (9:16), Quadrada (1:1).
+- **Proporções:** Atual do Flow, 16:9, 4:3, 1:1, 3:4 e 9:16.
 
 ### 2. `animate-image-in-browser` (Animar Imagem / Image-to-Video)
 
@@ -26,15 +27,15 @@ Plugin avançado de geração de imagens e vídeos no Google Flow através do Ch
 - **Entradas:** `images` (imagem base para animar), `prompts` (instrução opcional de movimento/câmera), `project_url` (opcional).
 - **Saídas:** `video` (arquivo MP4 renderizado em alta definição), `project_url` (URL do projeto ativo).
 - **Modelos de Vídeo:** Veo 3.1 - Quality, Veo 3.1 - Fast, Veo 3.1 - Lite, Omni 1.1 Flash.
-- **Resoluções:** Padrão do Flow, 720p, 1080p.
+- **Configuração:** modelo predefinido ou rótulo de modelo novo, imagem como Frame/Elemento, duração de 4/6/8/10 s, proporção e resolução (padrão, 720p, 1080p).
 
 ### 3. `generate-video-in-browser` (Geração de Vídeo / Text-to-Video)
 
 - **Operador:** IA | **Bloco:** CRIAR | **Processos:** `assets`, `editing`
-- **Entradas:** `prompts` (prompts de vídeo com descrição de cena e movimento), `project_url` (opcional).
+- **Entradas:** `prompts` (prompts de vídeo com descrição de cena e movimento), `reference_images` (imagens/elementos opcionais), `project_url` (opcional).
 - **Saídas:** `video` (arquivo MP4 renderizado), `project_url` (URL do projeto ativo).
 - **Modelos de Vídeo:** Veo 3.1 - Quality, Veo 3.1 - Fast, Veo 3.1 - Lite, Omni 1.1 Flash.
-- **Proporções e Resoluções:** 16:9, 9:16, 1:1 e resoluções até 1080p.
+- **Configuração:** modelo predefinido ou rótulo de modelo novo, referências como Frames/Elementos, duração de 4/6/8/10 s, proporções 16:9 e 9:16 e resoluções até 1080p.
 
 ## Continuidade de Projeto e Chat (`project_url`)
 

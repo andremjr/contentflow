@@ -1,5 +1,10 @@
 import { z } from "zod";
-import type { ActionBlock, ProcessMethod, UniversalProcess } from "@/lib/domain";
+import type {
+  ActionBlock,
+  ProcessMethod,
+  StrategicCollection,
+  UniversalProcess,
+} from "@/lib/domain";
 import { normalizeFieldPresentation } from "@/lib/presentation";
 
 const universalProcessSchema = z.enum([
@@ -202,21 +207,163 @@ const actionBlockSchema = z.object({
   order: z.number().int().nonnegative(),
 });
 
+const collectionRequirementFieldSchema = z.object({
+  label: z.string().max(200),
+  key: z.string().max(200),
+  type: z.enum(["text", "textarea", "number", "image", "url", "thumbnail_layout"]),
+  required: z.boolean(),
+});
+
+const methodRequirementSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("previous_process"),
+    processType: universalProcessSchema,
+    sourceKey: z.string().max(200).optional(),
+    blockName: z.string().max(200).optional(),
+  }),
+  z.object({
+    kind: z.literal("collection"),
+    name: z.string().max(200),
+    blockName: z.string().max(200).optional(),
+    fields: z.array(collectionRequirementFieldSchema).max(100),
+  }),
+  z.object({
+    kind: z.literal("plugin"),
+    pluginId: z.string().min(1).max(160),
+    capabilityId: z.string().min(1).max(100),
+    connectionRequired: z.boolean(),
+  }),
+]);
+
+const portableImageSchema = z
+  .string()
+  .max(1_500_000)
+  .refine(
+    (value) =>
+      /^data:image\/(webp|png|jpeg);base64,/.test(value) ||
+      /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(value),
+    "Capa inválida.",
+  );
+
+const portableMethodSchema = z.object({
+  name: z.string().max(200).optional(),
+  imageUrl: portableImageSchema.optional(),
+  processType: universalProcessSchema,
+  blocks: z.array(actionBlockSchema).min(1).max(200),
+});
+
 const sharedMethodSchema = z.object({
   format: z.literal("contentflow-method"),
   version: z.literal(1),
   name: z.string().max(200),
   exportedAt: z.string(),
-  method: z.object({
-    processType: universalProcessSchema,
-    blocks: z.array(actionBlockSchema).min(1).max(200),
-  }),
+  requirements: z.array(methodRequirementSchema).max(300).optional(),
+  method: portableMethodSchema,
 });
 
-export type SharedMethodFile = z.infer<typeof sharedMethodSchema>;
+const sharedMethodPackSchema = z
+  .object({
+    format: z.literal("contentflow-method-pack"),
+    version: z.literal(1),
+    name: z.string().min(1).max(200),
+    channelName: z.string().min(1).max(200),
+    channelImageUrl: portableImageSchema.optional(),
+    exportedAt: z.string(),
+    methods: z.array(portableMethodSchema).min(1).max(8),
+    requirements: z.record(z.array(methodRequirementSchema).max(300)).optional(),
+  })
+  .superRefine((pack, context) => {
+    const processTypes = pack.methods.map((method) => method.processType);
+    if (new Set(processTypes).size !== processTypes.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "Processos duplicados no pacote." });
+    }
+  });
 
-export function serializeMethodFile(name: string, method: ProcessMethod) {
-  const portableMethod = {
+export type MethodRequirement = z.infer<typeof methodRequirementSchema>;
+export type SharedMethodFile = Omit<z.infer<typeof sharedMethodSchema>, "method"> & {
+  method: ProcessMethod;
+};
+export type SharedMethodPackFile = Omit<z.infer<typeof sharedMethodPackSchema>, "methods"> & {
+  methods: ProcessMethod[];
+};
+export type SharedMethodImport = SharedMethodFile | SharedMethodPackFile;
+
+export function collectMethodRequirements(
+  method: ProcessMethod,
+  collections: StrategicCollection[] = [],
+): MethodRequirement[] {
+  const requirements: MethodRequirement[] = [];
+  for (const block of method.blocks) {
+    if (block.type === "ESCOLHER") {
+      const collection = collections.find((item) => item.id === block.collectionId);
+      requirements.push({
+        kind: "collection",
+        name: collection?.name ?? "Coleção estratégica não identificada",
+        blockName: block.name ?? block.type,
+        fields:
+          collection?.fields.map(({ id, label, type, required }) => ({
+            label,
+            key: id,
+            type,
+            required,
+          })) ?? [],
+      });
+    }
+    for (const input of block.inputs ?? []) {
+      if (input.source === "previous_process" && input.sourceProcessType) {
+        requirements.push({
+          kind: "previous_process",
+          processType: input.sourceProcessType,
+          sourceKey: input.sourceKey,
+          blockName: block.name ?? block.type,
+        });
+      }
+      if (input.source === "channel_library") {
+        requirements.push({
+          kind: "collection",
+          name: input.collection?.trim() || "Coleção estratégica não identificada",
+          blockName: block.name ?? block.type,
+          fields: (input.recordFields ?? []).flatMap((field) =>
+            ["text", "textarea", "number", "image", "url"].includes(field.type)
+              ? [
+                  {
+                    label: field.label,
+                    key: field.key,
+                    type: field.type as "text" | "textarea" | "number" | "image" | "url",
+                    required: field.required,
+                  },
+                ]
+              : [],
+          ),
+        });
+      }
+    }
+    if (block.plugin) {
+      requirements.push({
+        kind: "plugin",
+        pluginId: block.plugin.pluginId,
+        capabilityId: block.plugin.capabilityId,
+        connectionRequired: block.plugin.connectionRequired ?? Boolean(block.plugin.connectionId),
+      });
+      const conversation = block.plugin.conversation;
+      if (conversation?.mode === "reuse" && conversation.sourceProcessType !== method.processType) {
+        requirements.push({
+          kind: "previous_process",
+          processType: conversation.sourceProcessType,
+          blockName: block.name ?? block.type,
+        });
+      }
+    }
+  }
+  return requirements.filter(
+    (requirement, index, all) =>
+      all.findIndex((candidate) => JSON.stringify(candidate) === JSON.stringify(requirement)) ===
+      index,
+  );
+}
+
+function createPortableMethod(method: ProcessMethod) {
+  return {
     ...structuredClone(method),
     blocks: method.blocks.map((block) => ({
       ...structuredClone(block),
@@ -234,12 +381,45 @@ export function serializeMethodFile(name: string, method: ProcessMethod) {
         : undefined,
     })),
   };
+}
+
+export function serializeMethodFile(
+  name: string,
+  method: ProcessMethod,
+  collections: StrategicCollection[] = [],
+) {
+  const portableMethod = createPortableMethod({ ...method, name: method.name || name });
   const file = sharedMethodSchema.parse({
     format: "contentflow-method",
     version: 1,
     name,
     exportedAt: new Date().toISOString(),
+    requirements: collectMethodRequirements(method, collections),
     method: portableMethod,
+  });
+  return JSON.stringify(file, null, 2);
+}
+
+export function serializeMethodPackFile(
+  name: string,
+  channelName: string,
+  methods: ProcessMethod[],
+  collections: StrategicCollection[] = [],
+  channelImageUrl?: string,
+) {
+  const included = methods.filter((method) => method.blocks.length > 0);
+  const requirements = Object.fromEntries(
+    included.map((method) => [method.processType, collectMethodRequirements(method, collections)]),
+  );
+  const file = sharedMethodPackSchema.parse({
+    format: "contentflow-method-pack",
+    version: 1,
+    name,
+    channelName,
+    channelImageUrl,
+    exportedAt: new Date().toISOString(),
+    methods: included.map(createPortableMethod),
+    requirements,
   });
   return JSON.stringify(file, null, 2);
 }
@@ -256,7 +436,39 @@ export function parseMethodFile(contents: string): SharedMethodFile {
   if (!result.success) {
     throw new Error("Este não é um arquivo de método válido do ContentFlow.");
   }
-  return result.data;
+  return {
+    ...result.data,
+    requirements:
+      result.data.requirements ?? collectMethodRequirements(result.data.method as ProcessMethod),
+    method: {
+      ...result.data.method,
+      name: result.data.method.name?.trim() || result.data.name,
+    },
+  } as SharedMethodFile;
+}
+
+export function parseMethodImportFile(contents: string): SharedMethodImport {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(contents);
+  } catch {
+    throw new Error("O arquivo selecionado não contém um JSON válido.");
+  }
+  if ((parsed as { format?: unknown })?.format === "contentflow-method") {
+    return parseMethodFile(contents);
+  }
+  const result = sharedMethodPackSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error("Este não é um arquivo de Método ou pacote válido do ContentFlow.");
+  }
+  return {
+    ...result.data,
+    requirements: result.data.requirements ?? {},
+    methods: result.data.methods.map((method) => ({
+      ...method,
+      name: method.name?.trim() || `Método de ${method.processType}`,
+    })),
+  } as SharedMethodPackFile;
 }
 
 export function copyImportedBlocks(
@@ -269,6 +481,16 @@ export function copyImportedBlocks(
   const blockIds = new Map(
     copied.map((block) => [block.id, createId(`${processType}-${block.type.toLowerCase()}`)]),
   );
+  return copyBlocksWithIds(processType, copied, blockIds, createId, options);
+}
+
+function copyBlocksWithIds(
+  processType: UniversalProcess,
+  copied: ActionBlock[],
+  blockIds: Map<string, string>,
+  createId: (prefix: string) => string,
+  options: { preserveLocalConnections?: boolean },
+) {
   return copied.map((block, order) => ({
     ...block,
     collectionId: undefined,
@@ -279,8 +501,7 @@ export function copyImportedBlocks(
           ...block.plugin,
           connectionId: options.preserveLocalConnections ? block.plugin.connectionId : undefined,
           conversation:
-            block.plugin.conversation?.mode === "reuse" &&
-            block.plugin.conversation.sourceProcessType === processType
+            block.plugin.conversation?.mode === "reuse"
               ? {
                   ...block.plugin.conversation,
                   sourceBlockId:
@@ -302,11 +523,8 @@ export function copyImportedBlocks(
         id: createId(`${processType}-record-field`),
       })),
       blockId:
-        (input.source === "previous_block" ||
-          (input.source === "channel_history" && input.sourceProcessType === processType)) &&
-        input.blockId &&
-        input.blockId !== "__process_output__"
-          ? blockIds.get(input.blockId)
+        input.blockId && input.blockId !== "__process_output__"
+          ? (blockIds.get(input.blockId) ?? input.blockId)
           : input.blockId,
     })),
     outputs: block.outputs?.map((output) => ({
@@ -317,16 +535,35 @@ export function copyImportedBlocks(
         id: createId(`${processType}-record-field`),
       })),
       optionsSourceBlockId: output.optionsSourceBlockId
-        ? blockIds.get(output.optionsSourceBlockId)
+        ? (blockIds.get(output.optionsSourceBlockId) ?? output.optionsSourceBlockId)
         : undefined,
     })),
     validation: block.validation
       ? {
           ...block.validation,
           targetBlockId: block.validation.targetBlockId
-            ? blockIds.get(block.validation.targetBlockId)
+            ? (blockIds.get(block.validation.targetBlockId) ?? block.validation.targetBlockId)
             : undefined,
         }
       : undefined,
+  }));
+}
+
+export function copyImportedMethods(
+  sourceMethods: ProcessMethod[],
+  createId: (prefix: string) => string,
+  options: { preserveLocalConnections?: boolean } = {},
+) {
+  const copied = structuredClone(sourceMethods);
+  const blockIds = new Map<string, string>();
+  for (const method of copied) {
+    for (const block of method.blocks) {
+      blockIds.set(block.id, createId(`${method.processType}-${block.type.toLowerCase()}`));
+    }
+  }
+  return copied.map((method) => ({
+    name: method.name,
+    processType: method.processType,
+    blocks: copyBlocksWithIds(method.processType, method.blocks, blockIds, createId, options),
   }));
 }

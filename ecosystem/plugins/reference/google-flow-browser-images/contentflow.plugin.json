@@ -171,14 +171,9 @@
       "producedOutputTypes": ["image", "files", "text", "url"],
       "execution": {
         "mode": "immediate",
-        "defaultTimeoutMs": 900000,
+        "defaultTimeoutMs": 86400000,
         "supportsCancellation": true,
-        "maxConcurrency": 1,
-        "itemOrchestration": {
-          "inputPort": "prompts",
-          "outputPort": "images",
-          "mode": "sequential"
-        }
+        "maxConcurrency": 1
       },
       "sideEffects": ["external_write", "local_artifact", "subprocess"],
       "cost": {
@@ -258,6 +253,13 @@
             ],
             "description": "Modelo de geração de imagem selecionado na interface do Google Flow."
           },
+          "imageModelLabel": {
+            "type": "string",
+            "title": "Outro modelo de imagem (rótulo do Flow)",
+            "default": "",
+            "maxLength": 120,
+            "description": "Opcional. Usa exatamente o rótulo visível de um modelo novo do Flow e substitui a seleção predefinida."
+          },
           "fallbackOnModelLimit": {
             "type": "boolean",
             "title": "Fallback de modelo",
@@ -278,8 +280,16 @@
                 "title": "Paisagem (16:9)"
               },
               {
+                "const": "landscape_4_3",
+                "title": "Paisagem (4:3)"
+              },
+              {
                 "const": "portrait",
                 "title": "Retrato (9:16)"
+              },
+              {
+                "const": "portrait_3_4",
+                "title": "Retrato (3:4)"
               },
               {
                 "const": "square",
@@ -290,9 +300,9 @@
           "maxPrompts": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 16,
-            "default": 8,
-            "description": "Limite de prompts por execução."
+            "maximum": 100,
+            "default": 100,
+            "description": "Limite de prompts consumidos pela fila interna dentro do mesmo projeto do Flow."
           },
           "delayBetweenPromptsMs": {
             "type": "integer",
@@ -314,6 +324,13 @@
             "maximum": 2,
             "default": 1,
             "description": "Novas tentativas para cada prompt que falhar."
+          },
+          "rateLimitRetryAttempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "default": 8,
+            "description": "Reenvios do item após rate limit transitório, sempre respeitando a espera indicada pelo provedor."
           },
           "maxReferenceImages": {
             "type": "integer",
@@ -484,6 +501,59 @@
             ],
             "description": "Modelo de geração de vídeo utilizado na animação."
           },
+          "videoModelLabel": {
+            "type": "string",
+            "title": "Outro modelo de vídeo (rótulo do Flow)",
+            "default": "",
+            "maxLength": 120,
+            "description": "Opcional. Usa exatamente o rótulo visível de um modelo novo do Flow e substitui a seleção predefinida."
+          },
+          "aspectRatio": {
+            "type": "string",
+            "title": "Proporção do vídeo",
+            "default": "flow_current",
+            "oneOf": [
+              {
+                "const": "flow_current",
+                "title": "Atual do Flow"
+              },
+              {
+                "const": "landscape",
+                "title": "Paisagem (16:9)"
+              },
+              {
+                "const": "portrait",
+                "title": "Retrato (9:16)"
+              }
+            ]
+          },
+          "videoReferenceMode": {
+            "type": "string",
+            "title": "Usar imagem como",
+            "default": "frames",
+            "oneOf": [
+              {
+                "const": "frames",
+                "title": "Frame"
+              },
+              {
+                "const": "elements",
+                "title": "Elemento de referência"
+              }
+            ],
+            "description": "Define se a imagem animada entra no vídeo como frame ou como elemento de referência."
+          },
+          "videoDurationSeconds": {
+            "type": "integer",
+            "title": "Duração",
+            "default": 8,
+            "oneOf": [
+              { "const": 4, "title": "4 segundos" },
+              { "const": 6, "title": "6 segundos" },
+              { "const": 8, "title": "8 segundos" },
+              { "const": 10, "title": "10 segundos (somente modelos compatíveis)" }
+            ]
+          },
           "videoResolution": {
             "type": "string",
             "title": "Resolução do vídeo",
@@ -538,6 +608,19 @@
           "multiple": true
         },
         {
+          "key": "reference_images",
+          "label": "Imagens ou elementos de referência",
+          "description": "Imagens opcionais usadas como elementos de referência nos vídeos do mesmo projeto.",
+          "acceptedTypes": ["image", "file", "files"],
+          "required": false,
+          "multiple": true,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/*"]
+          }
+        },
+        {
           "key": "project_url",
           "label": "URL do projeto",
           "description": "URL opcional do projeto do Flow para gerar o vídeo dentro da mesma sala.",
@@ -567,7 +650,7 @@
           "required": false
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "list", "url"],
+      "acceptedInputTypes": ["text", "textarea", "list", "image", "file", "files", "url"],
       "producedOutputTypes": ["video", "file", "files", "text", "url"],
       "execution": {
         "mode": "immediate",
@@ -650,6 +733,13 @@
               }
             ]
           },
+          "videoModelLabel": {
+            "type": "string",
+            "title": "Outro modelo de vídeo (rótulo do Flow)",
+            "default": "",
+            "maxLength": 120,
+            "description": "Opcional. Usa exatamente o rótulo visível de um modelo novo do Flow e substitui a seleção predefinida."
+          },
           "aspectRatio": {
             "type": "string",
             "title": "Proporção",
@@ -666,6 +756,51 @@
               {
                 "const": "portrait",
                 "title": "Retrato (9:16)"
+              }
+            ]
+          },
+          "videoReferenceMode": {
+            "type": "string",
+            "title": "Usar referências como",
+            "default": "elements",
+            "oneOf": [
+              {
+                "const": "frames",
+                "title": "Frames"
+              },
+              {
+                "const": "elements",
+                "title": "Elementos de referência"
+              }
+            ]
+          },
+          "videoDurationSeconds": {
+            "type": "integer",
+            "title": "Duração",
+            "default": 8,
+            "oneOf": [
+              { "const": 4, "title": "4 segundos" },
+              { "const": 6, "title": "6 segundos" },
+              { "const": 8, "title": "8 segundos" },
+              { "const": 10, "title": "10 segundos (somente modelos compatíveis)" }
+            ]
+          },
+          "videoResolution": {
+            "type": "string",
+            "title": "Resolução do vídeo",
+            "default": "flow_current",
+            "oneOf": [
+              {
+                "const": "flow_current",
+                "title": "Padrão do Flow"
+              },
+              {
+                "const": "res_720p",
+                "title": "720p"
+              },
+              {
+                "const": "res_1080p",
+                "title": "1080p"
               }
             ]
           },

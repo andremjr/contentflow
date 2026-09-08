@@ -9,6 +9,7 @@ test("reconecta a sessão e despacha atomicamente sem confundir execuções no m
     "claude-browser-text",
     "gemini-browser-studio",
     "grok-browser-studio",
+    "mai-playground-browser",
     "meta-ai-browser-studio",
   ];
   const sources = await Promise.all(

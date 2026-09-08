@@ -17,6 +17,7 @@ const outputDirectory = path.resolve(repositoryRoot, process.argv[2] ?? "release
 const googleFlowLocalFiles = [
   "captured-flow-session.json",
   "iniciar-captura.bat",
+  "iniciar-chrome.bat",
   "scripts/analyze-captured-session.mjs",
   "scripts/capture-flow-session.mjs",
   "scripts/extract-generations.mjs",
@@ -24,6 +25,7 @@ const googleFlowLocalFiles = [
   "scripts/generation-rpcs.json",
   "scripts/print-ui-actions.mjs",
   "scripts/rpc-analysis.json",
+  "windows-enterprise-install/artifacts/**",
 ];
 const referencePluginReleaseIgnore = googleFlowLocalFiles.map(
   (fileName) => `google-flow-browser-images/${fileName}`,

@@ -1,6 +1,6 @@
 {
   "name": "contentflow",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "productName": "ContentFlow",
   "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
@@ -54,7 +54,7 @@
     "test:plugin-kit": "tsx server/plugin-kit.test.ts",
     "test:plugin-branding": "tsx --test server/plugin-branding.test.ts",
     "test:plugin-dependencies": "tsx --test server/plugin-dependencies.test.ts",
-    "test:method-file": "tsx --test server/method-file.test.ts",
+    "test:method-file": "tsx --test server/method-file.test.ts server/method-package.test.ts",
     "test:plugin-connections": "tsx --test server/plugin-connections.test.ts",
     "test:plugin-connection-runtime": "tsx --test server/plugin-connection-runtime.test.ts",
     "test:plugin-conversation": "tsx --test server/plugin-conversation.test.ts",

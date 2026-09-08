@@ -195,6 +195,8 @@ export type ActionBlock = {
 };
 
 export type ProcessMethod = {
+  name: string;
+  imageUrl?: string;
   processType: UniversalProcess;
   blocks: ActionBlock[];
 };
@@ -207,6 +209,7 @@ export type Channel = {
   color: string;
   subscribers: string;
   avatarUrl?: string;
+  methodsImageUrl?: string;
   bannerUrl?: string;
   lastSyncedAt?: string;
   description?: string;
@@ -440,6 +443,9 @@ export const STATE_META: Record<
 
 export function createEmptyMethods(): Record<UniversalProcess, ProcessMethod> {
   return Object.fromEntries(
-    PROCESS_ORDER.map((processType) => [processType, { processType, blocks: [] }]),
+    PROCESS_ORDER.map((processType) => [
+      processType,
+      { name: `Método de ${PROCESS_META[processType].label}`, processType, blocks: [] },
+    ]),
   ) as unknown as Record<UniversalProcess, ProcessMethod>;
 }

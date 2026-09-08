@@ -1,5 +1,6 @@
 import { deriveProcessOutput } from "../src/lib/process-output";
 import {
+  PROCESS_META,
   PROCESS_ORDER,
   type ActionBlock,
   type Channel,
@@ -63,7 +64,12 @@ export function executionCommands(db: {
     const channel = project ? db.channels.find((item) => item.id === project.channelId) : undefined;
     const method = channel?.methods[processType];
     const normalizedMethod = method
-      ? { processType, blocks: normalizeMethodBlocks(method.blocks, processType) }
+      ? {
+          name: method.name || `Método de ${PROCESS_META[processType].label}`,
+          imageUrl: method.imageUrl,
+          processType,
+          blocks: normalizeMethodBlocks(method.blocks, processType),
+        }
       : undefined;
     if (
       !project ||
@@ -75,6 +81,8 @@ export function executionCommands(db: {
     }
     const now = new Date().toISOString();
     const methodSnapshot: ProcessMethod = {
+      name: normalizedMethod.name,
+      imageUrl: normalizedMethod.imageUrl,
       processType,
       blocks: structuredClone(normalizedMethod.blocks),
     };

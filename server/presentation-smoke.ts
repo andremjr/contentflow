@@ -39,8 +39,8 @@ const legacyMethod = {
 };
 
 const parsedLegacy = parseMethodFile(JSON.stringify(legacyMethod));
-assert.equal(parsedLegacy.method.blocks[0].inputs?.[0].presentation.renderer, "auto");
-assert.equal(parsedLegacy.method.blocks[0].outputs?.[0].presentation.renderer, "auto");
+assert.equal(parsedLegacy.method.blocks[0].inputs?.[0].presentation?.renderer, "auto");
+assert.equal(parsedLegacy.method.blocks[0].outputs?.[0].presentation?.renderer, "auto");
 
 const gallery = normalizeFieldPresentation("files", {
   renderer: "image-gallery",
@@ -71,6 +71,6 @@ assert.equal(
 
 const exported = serializeMethodFile("Método normalizado", parsedLegacy.method);
 const reparsed = parseMethodFile(exported);
-assert.equal(reparsed.method.blocks[0].outputs?.[0].presentation.renderer, "auto");
+assert.equal(reparsed.method.blocks[0].outputs?.[0].presentation?.renderer, "auto");
 
 console.log("Presentation contract smoke test passed.");

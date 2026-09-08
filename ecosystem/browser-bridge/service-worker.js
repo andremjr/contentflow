@@ -36,6 +36,10 @@ const PLUGIN_POLICIES = Object.freeze({
     ["https://meta.ai", "https://www.meta.ai"],
     ["https://meta.ai/*", "https://www.meta.ai/*"],
   ),
+  "local.contentflow.mai-playground-browser": policy(
+    ["https://playground.microsoft.ai"],
+    ["https://playground.microsoft.ai/*"],
+  ),
 });
 const inFlight = new Map();
 const tabQueues = new Map();
@@ -334,7 +338,17 @@ function readFocusedText() {
 }
 
 async function sendCdp(tabId, method, params = {}) {
-  return await chrome.debugger.sendCommand({ tabId }, method, params);
+  try {
+    return await chrome.debugger.sendCommand({ tabId }, method, params);
+  } catch (err) {
+    if (String(err?.message || "").includes("Debugger is not attached")) {
+      try {
+        await chrome.debugger.attach({ tabId }, CDP_VERSION);
+        return await chrome.debugger.sendCommand({ tabId }, method, params);
+      } catch {}
+    }
+    throw err;
+  }
 }
 
 async function evaluateValue(tabId, expression) {
@@ -641,29 +655,6 @@ async function dispatchCdpAction(tabId, command, policy) {
   return bridgeError("UNKNOWN_ACTION", `Ação não suportada: ${String(command.action)}`);
 }
 
-async function withAttachedDebugger(tabId, operation) {
-  let attached = false;
-  let result;
-  let failure;
-  try {
-    await chrome.debugger.attach({ tabId }, CDP_VERSION);
-    attached = true;
-    result = await operation();
-  } catch (error) {
-    failure = error;
-  } finally {
-    if (attached) {
-      try {
-        await chrome.debugger.detach({ tabId });
-      } catch (error) {
-        failure ||= error;
-      }
-    }
-  }
-  if (failure) throw failure;
-  return result;
-}
-
 async function detachSessionDebugger(session) {
   if (!Number.isInteger(session?.attachedTabId)) return;
   const tabId = session.attachedTabId;
@@ -680,7 +671,6 @@ async function detachSessionDebugger(session) {
 }
 
 async function withJobDebugger(tabId, command, operation) {
-  if (command.pluginId !== FLOW_PLUGIN_ID) return await withAttachedDebugger(tabId, operation);
   const session = activeSessions.get(command.sessionToken);
   if (!session) throw new Error("Sessão da Browser Bridge não encontrada.");
   if (session.attachedTabId !== tabId) {
@@ -837,4 +827,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true, ...identity() });
   }
   return false;
+});
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port?.name !== "contentflow-provider-page") return;
+  port.onMessage.addListener(() => {
+    // Receber o heartbeat renova a vida do service worker durante o job.
+  });
 });

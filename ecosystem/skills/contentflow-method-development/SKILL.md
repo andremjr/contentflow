@@ -10,7 +10,7 @@ Use esta skill para modelar processos executáveis de produção de vídeo no Co
 ## Princípios obrigatórios
 
 1. **Modele um vídeo individual.** Estratégia permanente de canal, nicho, público, posicionamento, monetização, mercado e audiência geral ficam fora do Método. Só proponha uma coleção da Biblioteca Estratégica quando ela já existir antes do vídeo, for reutilizada em vários vídeos, for consumida por um bloco e tiver schema definível.
-2. **Use um processo por arquivo.** Todo arquivo importável contém exatamente um `processType`: `theme`, `title`, `thumbnail`, `script`, `narration`, `assets`, `editing` ou `publishing`.
+2. **Use um processo por Método.** Todo Método individual contém exatamente um `processType`: `theme`, `title`, `thumbnail`, `script`, `narration`, `assets`, `editing` ou `publishing`. Um pacote de Canal pode reunir vários Métodos individuais sem fundi-los em um fluxo novo.
 3. **Classifique pela origem do item.** `BUSCAR` recupera dados externos; `CRIAR` produz algo novo; `ESCOLHER` aplica item pré-existente de coleção estratégica do mesmo canal; `VALIDAR` aprova, reprova ou seleciona resultado produzido durante a execução.
 4. **Escolha o executor real.** Use `IA`, `Humano` ou `Código`. Se o relato não esclarecer, use `Humano` e registre a suposição; não esconda revisão humana em prompt de IA.
 5. **Separe contrato de dados de apresentação.** `type` define o valor universal; `presentation` só define renderer. Não inclua HTML, scripts, React, secrets, `deliveryId` ou `itemId` no Método.
@@ -33,23 +33,23 @@ Siga esta sequência em qualquer criação ou revisão:
 9. **Modele validação.** Para aprovação, seleção ou reprovação de resultado gerado/pesquisado, use `VALIDAR` com `targetBlockId`, `targetOutputKey`, `mode`, `onReject` e `maxAttempts`.
 10. **Mostre uma prévia antes do JSON**, salvo pedido explícito de JSON pronto. Inclua processo, resumo, blocos, exclusões estratégicas, coleções propostas, suposições e perguntas mínimas.
 11. **Gere e valide o JSON.** Use [method-format.md](references/method-format.md), o template em `templates/method-skeleton.json` e a lista de validação em [validation.md](references/validation.md), incluindo obrigatoriamente a matriz de [data-compatibility.md](references/data-compatibility.md).
-12. **Teste e importe.** Salve como `.contentflow-method.json`, importe no processo do Canal, configure coleções/plugins/secrets manualmente e execute um Projeto de teste antes da produção.
+12. **Teste e importe.** Prefira o pacote `.contentflow-method.zip`, que contém `manifest.json` e capas em `assets/`; JSONs individuais continuam válidos para compatibilidade. Importe no processo ou na Biblioteca de Métodos, configure coleções/plugins/secrets manualmente e execute um Projeto de teste antes da produção.
 
 ## Decisões rápidas
 
-| Necessidade | Decisão |
-| --- | --- |
-| Pesquisar notícias, canais, API, fontes ou mídia externa | `BUSCAR` |
-| Gerar lista, texto, áudio, imagem, vídeo, arquivo ou síntese | `CRIAR` |
+| Necessidade                                                       | Decisão                                                                          |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Pesquisar notícias, canais, API, fontes ou mídia externa          | `BUSCAR`                                                                         |
+| Gerar lista, texto, áudio, imagem, vídeo, arquivo ou síntese      | `CRIAR`                                                                          |
 | Aplicar template/layout/estrutura já salvo na Biblioteca do Canal | `ESCOLHER`; o JSON portátil preserva o requisito, mas não o `collectionId` local |
-| Aprovar, reprovar, escolher ou curar resultado desta execução | `VALIDAR` |
-| Tema recém-gerado e escolha humana | `CRIAR` → `VALIDAR/select_one` |
-| Banco permanente reutilizado em vários vídeos | Propor coleção; não misturar automaticamente no JSON portátil |
-| Contexto de canal anterior aos vídeos | Excluir do Método e documentar na prévia |
-| Output de processo anterior | `previous_process` + `sourceProcessType` + `sourceKey` |
-| Output de bloco anterior do mesmo processo | `previous_block` + `blockId` + `sourceKey` |
-| Memória de Projetos anteriores do Canal | `channel_history` como `records`, somente em `ESCOLHER`/`CRIAR` |
-| Continuar conversa de plugin | `plugin.conversation.mode = reuse` + processo/bloco anterior compatível |
+| Aprovar, reprovar, escolher ou curar resultado desta execução     | `VALIDAR`                                                                        |
+| Tema recém-gerado e escolha humana                                | `CRIAR` → `VALIDAR/select_one`                                                   |
+| Banco permanente reutilizado em vários vídeos                     | Propor coleção; não misturar automaticamente no JSON portátil                    |
+| Contexto de canal anterior aos vídeos                             | Excluir do Método e documentar na prévia                                         |
+| Output de processo anterior                                       | `previous_process` + `sourceProcessType` + `sourceKey`                           |
+| Output de bloco anterior do mesmo processo                        | `previous_block` + `blockId` + `sourceKey`                                       |
+| Memória de Projetos anteriores do Canal                           | `channel_history` como `records`, somente em `ESCOLHER`/`CRIAR`                  |
+| Continuar conversa de plugin                                      | `plugin.conversation.mode = reuse` + processo/bloco anterior compatível          |
 
 ## Contrato mínimo de bloco
 
@@ -63,13 +63,13 @@ Para detalhes normativos de envelope, campos, fontes, outputs, records e apresen
 
 Trate cinco camadas separadamente:
 
-| Camada | Conteúdo |
-| --- | --- |
-| `instructions` | Ação desta etapa e critério de entrega. |
-| `parameters` | Limites e escolhas do Método: quantidade, duração, preset, estilo. |
-| Executor/plugin | Modelo, endpoint, codec, formato ou operação específica. |
-| Settings | Preferências da instalação ou do canal. |
-| Secrets | Credenciais em cofre; nunca serializar no Método. |
+| Camada          | Conteúdo                                                           |
+| --------------- | ------------------------------------------------------------------ |
+| `instructions`  | Ação desta etapa e critério de entrega.                            |
+| `parameters`    | Limites e escolhas do Método: quantidade, duração, preset, estilo. |
+| Executor/plugin | Modelo, endpoint, codec, formato ou operação específica.           |
+| Settings        | Preferências da instalação ou do canal.                            |
+| Secrets         | Credenciais em cofre; nunca serializar no Método.                  |
 
 Use placeholders somente quando a fonte estiver declarada, por exemplo `{{project.title}}`, `{{video.topic}}` ou `{{block_01.output}}`. Para IA, peça saída compatível com o `type` do output e não misture seleção humana dentro da geração. Para Código, declare entrada, formato, artefato e erro esperado. Para Humano, declare o que revisar ou entregar e como o resultado será representado.
 

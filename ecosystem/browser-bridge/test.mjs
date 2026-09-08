@@ -6,15 +6,22 @@ export async function testExtensionBridge(source) {
   const storage = {};
   const debuggerCalls = [];
   let focusedText = "";
+  let currentTabUrl = "https://flow.google.com/project/project-1";
   let failNextMousePress = false;
   let attachGate;
   let runtimeListener;
+  let runtimePortListener;
   const chrome = {
     runtime: {
       getManifest: () => ({ version: "2.0.0" }),
       onMessage: {
         addListener(listener) {
           runtimeListener = listener;
+        },
+      },
+      onConnect: {
+        addListener(listener) {
+          runtimePortListener = listener;
         },
       },
     },
@@ -34,7 +41,7 @@ export async function testExtensionBridge(source) {
           {
             id: 7,
             windowId: 70,
-            url: "https://flow.google.com/project/project-1",
+            url: currentTabUrl,
           },
         ];
       },
@@ -92,8 +99,8 @@ export async function testExtensionBridge(source) {
           return {
             result: {
               value: {
-                url: "https://flow.google.com/project/project-1",
-                origin: "https://flow.google.com",
+                url: currentTabUrl,
+                origin: new URL(currentTabUrl).origin,
                 title: "Flow",
               },
             },
@@ -135,6 +142,7 @@ export async function testExtensionBridge(source) {
   assert.equal(bridge.identity.bridgeId, "com.contentflow.browser-bridge");
   assert.equal(bridge.identity.protocolVersion, 2);
   assert.equal(typeof runtimeListener, "function");
+  assert.equal(typeof runtimePortListener, "function");
 
   const handshake = {
     pluginId: "local.contentflow.google-flow-batch-images",
@@ -333,10 +341,65 @@ export async function testExtensionBridge(source) {
     ["local.contentflow.gemini-browser-studio", "https://gemini.google.com/app"],
     ["local.contentflow.grok-browser-studio", "https://grok.com/"],
     ["local.contentflow.meta-ai-browser-studio", "https://www.meta.ai/"],
+    ["local.contentflow.mai-playground-browser", "https://playground.microsoft.ai/chat"],
   ]) {
     const result = bridge.connect({ ...handshake, pluginId: provider[0] });
     assert.equal(result.ok, true, `${provider[0]} deve estar na allowlist da ponte v2`);
   }
+
+  currentTabUrl = "https://chatgpt.com/";
+  const chatGptSessionToken = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  assert.equal(
+    bridge.connect({
+      ...handshake,
+      pluginId: "local.contentflow.chatgpt-browser-studio",
+      sessionToken: chatGptSessionToken,
+    }).ok,
+    true,
+  );
+  const debuggerAttachCount = debuggerCalls.filter((entry) => entry.operation === "attach").length;
+  const chatGptCommand = (ordinal, action) => ({
+    ...command(400 + ordinal),
+    pluginId: "local.contentflow.chatgpt-browser-studio",
+    sessionToken: chatGptSessionToken,
+    executionKey: "execution-key-chatgpt-persistent-debugger",
+    commandId: createHash("sha256").update(`chatgpt:${ordinal}`).digest("hex"),
+    expectedUrl: currentTabUrl,
+    action,
+    payload:
+      action === "setText"
+        ? { selectors: ["#prompt-textarea"], text: "prompt do ChatGPT" }
+        : { selectors: ['button[data-testid="send-button"]'] },
+  });
+  assert.equal((await bridge.dispatch(chatGptCommand(1, "setText"))).ok, true);
+  assert.equal((await bridge.dispatch(chatGptCommand(2, "click"))).ok, true);
+  assert.equal(
+    debuggerCalls.filter((entry) => entry.operation === "attach").length,
+    debuggerAttachCount + 1,
+    "o ChatGPT deve manter um único depurador durante toda a sessão",
+  );
+  assert.equal(
+    debuggerCalls.filter((entry) => entry.operation === "detach").length,
+    2,
+    "o ChatGPT não deve remover o depurador entre preencher e enviar",
+  );
+  assert.equal(
+    (
+      await bridge.disconnect({
+        pluginId: "local.contentflow.chatgpt-browser-studio",
+        protocolVersion: handshake.protocolVersion,
+        sessionToken: chatGptSessionToken,
+        profileId: handshake.profileId,
+      })
+    ).ok,
+    true,
+  );
+  assert.equal(
+    debuggerCalls.filter((entry) => entry.operation === "detach").length,
+    3,
+    "o depurador do ChatGPT deve ser removido ao encerrar a sessão",
+  );
+  currentTabUrl = "https://flow.google.com/project/project-1";
 
   const anchorToken = "ffffffff-ffff-4fff-8fff-ffffffffffff";
   assert.equal(bridge.connect({ ...handshake, sessionToken: anchorToken }).ok, true);
