@@ -360,7 +360,11 @@ function ImageGalleryRenderer({ value, compact }: PresentationRendererProps) {
       : [];
   const images = files.length ? files : stringValues;
   return (
-    <div className={compact ? "grid gap-2 sm:grid-cols-2" : "grid gap-3 md:grid-cols-2"}>
+    <div
+      className={
+        compact ? "grid grid-cols-2 gap-2 lg:grid-cols-4" : "grid grid-cols-2 gap-3 lg:grid-cols-4"
+      }
+    >
       {images.map((file) => (
         <figure
           key={file.id}

@@ -554,6 +554,14 @@ const PHRASES: Record<string, Translation> = {
   Aprovar: ["Approve", "Aprobar"],
   Reprovar: ["Reject", "Rechazar"],
   "Ação humana necessária": ["Human action required", "Se requiere una acción humana"],
+  "Ações humanas e erros de execução aparecerão aqui quando precisarem de atenção.": [
+    "Human actions and execution errors will appear here when they need attention.",
+    "Las acciones humanas y los errores de ejecución aparecerán aquí cuando requieran atención.",
+  ],
+  "Ações humanas e falhas permanecem aqui até serem resolvidas.": [
+    "Human actions and failures remain here until they are resolved.",
+    "Las acciones humanas y los fallos permanecen aquí hasta que se resuelvan.",
+  ],
   "Concluir ação humana": ["Complete human action", "Completar acción humana"],
   "Sua biblioteca está vazia": ["Your library is empty", "Tu biblioteca está vacía"],
   "Use “Adicionar item” para preencher os campos definidos na coleção.": [
@@ -593,15 +601,15 @@ const PHRASES: Record<string, Translation> = {
   Notificações: ["Notifications", "Notificaciones"],
   "Notificações do Windows": ["Windows notifications", "Notificaciones de Windows"],
   Preferências: ["Preferences", "Preferencias"],
-  "Reproduzir um som quando uma nova validação precisar de atenção.": [
-    "Play a sound when a new validation needs attention.",
-    "Reproducir un sonido cuando una nueva validación necesite atención.",
+  "Reproduzir um som quando uma nova pendência ou erro precisar de atenção.": [
+    "Play a sound when a new task or error needs attention.",
+    "Reproducir un sonido cuando una nueva tarea o error requiera atención.",
   ],
   "Som de alerta": ["Alert sound", "Sonido de alerta"],
   "Sempre ativo": ["Always on", "Siempre activo"],
-  "Validações na barra de tarefas": [
-    "Validations on the taskbar",
-    "Validaciones en la barra de tareas",
+  "Pendências e erros na barra de tarefas": [
+    "Tasks and errors on the taskbar",
+    "Tareas y errores en la barra de tareas",
   ],
   "Importar método": ["Import method", "Importar método"],
   Importar: ["Import", "Importar"],
@@ -639,6 +647,7 @@ const PHRASES: Record<string, Translation> = {
     "No human actions waiting",
     "No hay acciones humanas pendientes",
   ],
+  "Nenhuma pendência ou erro": ["No tasks or errors", "No hay tareas ni errores"],
   "Nenhuma imagem selecionada": ["No image selected", "Ninguna imagen seleccionada"],
   "Nenhuma coleção vinculada": ["No collection linked", "No hay una colección vinculada"],
   "Nenhuma entrada específica. Os resultados anteriores continuam disponíveis como contexto durante a produção.":
@@ -672,6 +681,10 @@ const PHRASES: Record<string, Translation> = {
   "Página não encontrada": ["Page not found", "Página no encontrada"],
   "Pausar produção": ["Pause production", "Pausar producción"],
   "Pendências humanas": ["Human tasks", "Tareas humanas"],
+  "Pendências e erros": ["Tasks and errors", "Tareas y errores"],
+  "Erro no bloco": ["Block error", "Error en el bloque"],
+  "Erros de execução": ["Execution errors", "Errores de ejecución"],
+  "Validação pendente": ["Pending validation", "Validación pendiente"],
   "Plugin executor": ["Runner plugin", "Plugin ejecutor"],
   "Plugin necessário para continuar": [
     "Plugin required to continue",
@@ -1329,6 +1342,17 @@ function translateDynamic(source: string, language: AppLanguage): string {
     return language === "en"
       ? `${match[1]} pending human tasks`
       : `${match[1]} tareas humanas pendientes`;
+  match = source.match(/^(\d+) erros de execução e (\d+) tarefas humanas pendentes$/);
+  if (match)
+    return language === "en"
+      ? `${match[1]} execution errors and ${match[2]} pending human tasks`
+      : `${match[1]} errores de ejecución y ${match[2]} tareas humanas pendientes`;
+  match = source.match(/^(\d+) (pendente|pendentes)$/);
+  if (match) {
+    if (language === "en")
+      return `${match[1]} ${match[1] === "1" ? "pending item" : "pending items"}`;
+    return `${match[1]} ${match[1] === "1" ? "pendiente" : "pendientes"}`;
+  }
   match = source.match(/^(\d+) perfis?$/);
   if (match)
     return language === "en"

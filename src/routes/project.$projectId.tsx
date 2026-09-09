@@ -1,10 +1,16 @@
 import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
-import { LockKeyhole, UserRound } from "lucide-react";
+import { AlertTriangle, LockKeyhole, UserRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { PROCESS_META, PROCESS_ORDER, type ProcessId } from "@/lib/domain";
-import { useChannel, useDatabaseReady, useHumanTasks, useProject } from "@/lib/store";
+import {
+  useChannel,
+  useDatabaseReady,
+  useExecutionErrors,
+  useHumanTasks,
+  useProject,
+} from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/project/$projectId")({ component: ProjectLayout });
@@ -25,6 +31,7 @@ function ProjectLayout() {
   const project = useProject(projectId);
   const channel = useChannel(project?.channelId ?? "");
   const humanTasks = useHumanTasks();
+  const executionErrors = useExecutionErrors();
   const databaseReady = useDatabaseReady();
   const pathname = useLocation({ select: (state) => state.pathname });
   if (!databaseReady) {
@@ -78,6 +85,9 @@ function ProjectLayout() {
             const waitingHuman = humanTasks.some(
               (task) => task.project.id === project.id && task.execution.processType === process,
             );
+            const hasError = executionErrors.some(
+              (error) => error.project.id === project.id && error.execution.processType === process,
+            );
             return (
               <Link
                 key={process}
@@ -98,7 +108,11 @@ function ProjectLayout() {
                 <Icon className="hidden size-3.5 sm:inline" />
                 <span className="whitespace-nowrap">{meta.label}</span>
                 {blocked && <LockKeyhole className="size-3 text-destructive/80" />}
-                {waitingHuman && <UserRound className="size-3 text-warning" />}
+                {hasError ? (
+                  <AlertTriangle className="size-3 text-destructive" />
+                ) : (
+                  waitingHuman && <UserRound className="size-3 text-warning" />
+                )}
               </Link>
             );
           })}

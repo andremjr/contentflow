@@ -551,7 +551,16 @@ test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da
   ).toBeVisible();
   await page.goto(`/project/${id}/thumbnail`);
   await expect(page.getByRole("button", { name: "Executar novamente", exact: true })).toBeVisible();
-  await expect(page.getByText("thumbnail-fixture.png", { exact: true }).first()).toBeVisible();
+  const intermediateResult = page.locator("details").filter({ hasText: "Entrega thumbnail" });
+  await expect(intermediateResult).not.toHaveAttribute("open", "");
+  await expect(
+    intermediateResult.getByText("thumbnail-fixture.png", { exact: true }),
+  ).not.toBeVisible();
+  await expect(page.getByText("thumbnail-fixture.png", { exact: true }).last()).toBeVisible();
+  await intermediateResult.locator("summary").click();
+  await expect(
+    intermediateResult.getByText("thumbnail-fixture.png", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Produtos do projeto", { exact: true })).toHaveCount(0);
   await page.goto(`/channel/${channel.id}`);
   const projectThumbnail = page.getByRole("img", {

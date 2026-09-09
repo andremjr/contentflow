@@ -60,6 +60,8 @@ test("a API inesperadamente encerrada também fecha o Electron quando retorna c�
 
 test("pendências humanas atualizam badge e notificações pelo preload isolado", () => {
   assert.match(desktopMain, /setOverlayIcon/);
+  assert.match(desktopMain, /tone === "error"/);
+  assert.match(desktopMain, /value\.severity === "error"/);
   assert.match(desktopMain, /new Notification/);
   assert.match(desktopMain, /notification\.on\("click"/);
   assert.match(desktopPreload, /humanTasks:\s*Object\.freeze/);

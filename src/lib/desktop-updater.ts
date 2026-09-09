@@ -32,11 +32,14 @@ export type DesktopHumanTaskNotification = {
   title: string;
   body: string;
   route: string;
+  severity: "warning" | "error";
 };
 
 export type DesktopHumanTasksBridge = {
   update(input: {
     count: number;
+    badgeTone: "warning" | "error";
+    badgeDescription: string;
     notificationSound: boolean;
     systemNotifications: boolean;
     tasks: DesktopHumanTaskNotification[];

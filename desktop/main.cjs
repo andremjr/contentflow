@@ -168,7 +168,12 @@ function configureHumanTaskNotifications() {
     for (const id of notifiedHumanTasks) {
       if (!currentIds.has(id)) notifiedHumanTasks.delete(id);
     }
-    setHumanTaskBadge(count);
+    const badgeTone = tasks.some((task) => task.severity === "error") ? "error" : "warning";
+    const badgeDescription =
+      typeof input?.badgeDescription === "string" && input.badgeDescription.trim()
+        ? input.badgeDescription.trim().slice(0, 200)
+        : undefined;
+    setHumanTaskBadge(count, badgeTone, badgeDescription);
 
     for (const task of tasks) {
       if (notifiedHumanTasks.has(task.id)) continue;
@@ -197,23 +202,25 @@ function validHumanTask(value) {
     title: value.title.slice(0, 120),
     body: value.body.slice(0, 300),
     route: value.route,
+    severity: value.severity === "error" ? "error" : "warning",
   };
 }
 
-function setHumanTaskBadge(count) {
+function setHumanTaskBadge(count, tone = "warning", providedDescription) {
   if (!mainWindow) return;
   const description =
-    count === 0
+    providedDescription ||
+    (count === 0
       ? "Nenhuma validação pendente"
-      : `${count} ${count === 1 ? "validação pendente" : "validações pendentes"}`;
+      : `${count} ${count === 1 ? "validação pendente" : "validações pendentes"}`);
   if (process.platform === "win32") {
-    mainWindow.setOverlayIcon(count > 0 ? createBadgeIcon(count) : null, description);
+    mainWindow.setOverlayIcon(count > 0 ? createBadgeIcon(count, tone) : null, description);
     return;
   }
   app.setBadgeCount(count);
 }
 
-function createBadgeIcon(count) {
+function createBadgeIcon(count, tone = "warning") {
   const label = count > 99 ? "99+" : String(count);
   const size = 32;
   const bitmap = Buffer.alloc(size * size * 4);
@@ -229,7 +236,8 @@ function createBadgeIcon(count) {
     for (let x = 0; x < size; x += 1) {
       const distance = Math.hypot(x - 15.5, y - 15.5);
       if (distance <= 15) setPixel(x, y, [17, 24, 39, 255]);
-      if (distance <= 13) setPixel(x, y, [245, 158, 11, 255]);
+      if (distance <= 13)
+        setPixel(x, y, tone === "error" ? [220, 38, 38, 255] : [245, 158, 11, 255]);
     }
   }
 

@@ -207,7 +207,7 @@ test("mostra a quantidade de validações pendentes no ícone da barra de tarefa
         return testState.__contentflowBadgeCalls?.at(-1);
       }),
     )
-    .toEqual({ description: "1 validação pendente", hasIcon: true });
+    .toEqual({ description: "1 tarefas humanas pendentes", hasIcon: true });
 });
 
 test("testa um bloco no editor do Electron sem persistir o resultado", async () => {

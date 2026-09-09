@@ -459,7 +459,7 @@ function ExecutionResults({
         Resultados produzidos
       </h3>
       <div className="mt-3 space-y-2">
-        {visibleResults.map((blockExecution, index) => {
+        {visibleResults.map((blockExecution) => {
           const block = execution.methodSnapshot.blocks.find(
             (candidate) => candidate.id === blockExecution.blockId,
           );
@@ -480,7 +480,6 @@ function ExecutionResults({
             <details
               key={blockExecution.blockId}
               className="group rounded-lg border border-border/60 bg-background/30"
-              open={blockExecution.status === "in_progress" || index === visibleResults.length - 1}
             >
               <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium">
                 {blockExecution.status === "completed" ? (
@@ -1500,7 +1499,7 @@ function ProcessCompleted({
         <LoaderCircle className="mx-auto mt-4 size-4 animate-spin text-muted-foreground" />
       )}
       {output && Object.keys(output).length > 0 && (
-        <div className="mx-auto mt-5 max-w-2xl border-t border-border pt-4 text-left">
+        <div className="mx-auto mt-5 w-full max-w-6xl border-t border-border pt-4 text-left">
           {createProcessOutputFields(processType).map((field) => (
             <ResultValue
               key={field.id}

@@ -324,6 +324,14 @@ export type HumanTask = {
   channel: Channel;
 };
 
+export type ExecutionErrorTask = {
+  execution: ProcessExecution;
+  block: ActionBlock;
+  blockExecution: BlockExecution;
+  project: Project;
+  channel: Channel;
+};
+
 export function useHumanTasks(): HumanTask[] {
   const storeVersion = useClientStoreVersion();
   if (storeVersion < 0) return [];
@@ -367,6 +375,29 @@ export function useHumanTasks(): HumanTask[] {
         });
       }
       return tasks;
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.blockExecution.startedAt ?? a.execution.updatedAt).getTime() -
+        new Date(b.blockExecution.startedAt ?? b.execution.updatedAt).getTime(),
+    );
+}
+
+export function useExecutionErrors(): ExecutionErrorTask[] {
+  const storeVersion = useClientStoreVersion();
+  if (storeVersion < 0) return [];
+  return db.executions
+    .flatMap<ExecutionErrorTask>((execution) => {
+      const project = db.projects.find((item) => item.id === execution.projectId);
+      const channel = db.channels.find((item) => item.id === execution.channelId);
+      if (!project || !channel) return [];
+      return execution.blocks.flatMap<ExecutionErrorTask>((blockExecution) => {
+        if (blockExecution.status !== "failed") return [];
+        const block = execution.methodSnapshot.blocks.find(
+          (item) => item.id === blockExecution.blockId,
+        );
+        return block ? [{ execution, block, blockExecution, project, channel }] : [];
+      });
     })
     .sort(
       (a, b) =>

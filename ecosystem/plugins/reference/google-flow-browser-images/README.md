@@ -1,13 +1,14 @@
 # Google Flow Browser Images — ContentFlow
 
-Versão **1.3.1**.
+Versão **1.3.3**.
 
-Plugin avançado de geração de imagens e vídeos no Google Flow através do Chrome dedicado com perfil persistente. A versão 1.3.1 expande as capacidades para suportar o ecossistema completo de criação do Google Flow:
+Plugin avançado de geração de imagens e vídeos no Google Flow através do Chrome dedicado com perfil persistente. A versão 1.3.3 mantém uma única fila por execução e persiste o progresso de cada prompt concluído para retomada sem duplicação:
 
 - **Geração de Imagens** com Nano Banana 2, Nano Banana Pro, modelos adicionais pelo rótulo visível do Flow e proporções (16:9, 4:3, 1:1, 3:4, 9:16).
 - **Animação de Imagens (Image-to-Video)** com Veo 3.1 (Quality, Fast, Lite) e Omni 1.1 Flash.
 - **Geração Direta de Vídeo (Text-to-Video)** com modelos selecionáveis, referências visuais, modo Frame/Elemento, duração, proporção e resolução.
-- **Fila interna em projeto único:** a capability recebe a lista completa (até 100 prompts), cria ou abre um projeto uma vez e mantém os envios e esperas dentro desse mesmo projeto.
+- **Fila interna em projeto único:** a capability recebe a lista completa sem impor teto local, cria ou abre um projeto uma vez e mantém os envios e esperas dentro desse mesmo projeto.
+- **Retomada sem duplicação:** cada prompt concluído é registrado no checkpoint local; após troca de perfil, somente os índices ainda pendentes voltam para a fila.
 - **Continuidade de Projeto e Chat (`project_url`)** para encadeamento de múltiplos blocos no Método preservando personagens, galeria e histórico.
 - **Intervenção humana segura**: login, reautenticação e CAPTCHA permanecem visíveis para conclusão manual, sem tentativa de contornar as proteções do provedor.
 
@@ -47,7 +48,7 @@ Para fluxos complexos em que um bloco cria os personagens ou elementos visuais e
 
 ## Login, CAPTCHA e proteção da conta
 
-A versão 1.3.1 mantém o fluxo observável e respeita os controles do Google:
+A versão 1.3.3 mantém o fluxo observável e respeita os controles do Google:
 
 1. **Janela acessível:** `startMinimized` é `true` por padrão, mas o Chrome dedicado nunca roda em modo headless e continua acessível pela barra de tarefas.
 2. **Intervenção manual:** quando o Google solicitar login, reautenticação ou CAPTCHA, o plugin aguarda a conclusão pelo usuário na janela do Chrome.

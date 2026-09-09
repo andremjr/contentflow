@@ -8,7 +8,7 @@ import { testExtensionBridge } from "../../../browser-bridge/test.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.3.2");
+assert.equal(manifest.version, "1.3.3");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
@@ -40,8 +40,7 @@ assert.deepEqual(
   cap.blockConfigSchema.properties.aspectRatio.oneOf.map((item) => item.const),
   ["flow_current", "landscape", "landscape_4_3", "portrait", "portrait_3_4", "square"],
 );
-assert.equal(cap.blockConfigSchema.properties.maxPrompts.default, 100);
-assert.equal(cap.blockConfigSchema.properties.maxPrompts.maximum, 100);
+assert.equal(cap.blockConfigSchema.properties.maxPrompts, undefined);
 assert.equal(cap.execution.itemOrchestration, undefined);
 assert.equal(cap.blockConfigSchema.properties.maxConcurrentGenerations.default, 1);
 assert.equal(cap.blockConfigSchema.properties.delayBetweenPromptsMs.default, 6000);
@@ -498,6 +497,38 @@ assert.equal(
   undefined,
 );
 await __test.clearCaptchaRetryNavigation(failedRequest, retryServices);
+const checkpointRequest = {
+  executionId: "execution-checkpoint",
+  blockId: "flow-images",
+};
+const checkpointPrompts = ["primeiro", "segundo", "terceiro"];
+await __test.saveGenerationCheckpoint(checkpointRequest, retryServices, checkpointPrompts, {
+  completedPromptIndexes: [1, 0, 1],
+  files: [
+    { id: "image-1", name: "001.webp", mimeType: "image/webp", url: "artifact://image-1" },
+    { id: "image-2", name: "002.webp", mimeType: "image/webp", url: "artifact://image-2" },
+  ],
+  projectUrl: "https://flow.google.com/project/checkpoint-project",
+  accountProfile: "conta-a",
+});
+const savedCheckpoint = await __test.readGenerationCheckpoint(
+  checkpointRequest,
+  retryServices,
+  checkpointPrompts,
+);
+assert.deepEqual(savedCheckpoint.completedPromptIndexes, [0, 1]);
+assert.equal(savedCheckpoint.files.length, 2);
+assert.equal(savedCheckpoint.accountProfile, "conta-a");
+assert.equal(savedCheckpoint.projectUrl, "https://flow.google.com/project/checkpoint-project");
+assert.equal(
+  await __test.readGenerationCheckpoint(checkpointRequest, retryServices, ["lista alterada"]),
+  undefined,
+);
+await __test.clearGenerationCheckpoint(checkpointRequest, retryServices);
+assert.equal(
+  await __test.readGenerationCheckpoint(checkpointRequest, retryServices, checkpointPrompts),
+  undefined,
+);
 await rm(retryDirectory, { recursive: true, force: true });
 
 const defaultRuntime = __test.resolveProfileRuntime({
@@ -620,7 +651,7 @@ await assert.rejects(
 assert.equal(submissions, 1, "failFast não deve enviar os prompts restantes");
 
 let volumeSubmissions = 0;
-const volumePrompts = Array.from({ length: 100 }, (_, index) => `prompt ${index + 1}`);
+const volumePrompts = Array.from({ length: 1000 }, (_, index) => `prompt ${index + 1}`);
 const volumePlan = await __test.runGenerationPlan({
   prompts: volumePrompts,
   maxInFlight: 1,
@@ -633,9 +664,33 @@ const volumePlan = await __test.runGenerationPlan({
     return { completion: Promise.resolve([{ file: task.prompt, artifact: task.index }]) };
   },
 });
-assert.equal(volumeSubmissions, 100);
-assert.equal(volumePlan.results.length, 100);
+assert.equal(volumeSubmissions, 1000);
+assert.equal(volumePlan.results.length, 1000);
 assert.equal(volumePlan.failures.length, 0);
+
+const completedBeforeFailure = [];
+await assert.rejects(
+  __test.runGenerationPlan({
+    prompts: ["ok", "falha"],
+    maxInFlight: 2,
+    retryAttempts: 0,
+    failFast: true,
+    minDelayMs: 0,
+    submit(task) {
+      return {
+        completion:
+          task.index === 0
+            ? Promise.resolve([{ file: "ok", artifact: "ok" }])
+            : Promise.reject(Object.assign(new Error("falha paralela"), { code: "JOB_FAILED" })),
+      };
+    },
+    onItemCompleted({ task }) {
+      completedBeforeFailure.push(task.index);
+    },
+  }),
+  /falha paralela/,
+);
+assert.deepEqual(completedBeforeFailure, [0]);
 
 let rateLimitedSubmissions = 0;
 const retryWaits = [];
@@ -964,5 +1019,5 @@ await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), 
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v1.3.2 validado (lotes dinâmicos para qualquer quantidade de prompts, entrega image/video e ponte testada com estresse de 300 comandos).",
+  "OK: v1.3.3 validado (fila interna sem teto local, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
 );

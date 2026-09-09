@@ -826,6 +826,66 @@ async function clearCaptchaRetryNavigation(request, services) {
   if (statePath) await rm(statePath, { force: true }).catch(() => undefined);
 }
 
+function generationCheckpointPath(request, services) {
+  if (typeof services?.getWorkspacePath !== "function") return undefined;
+  const key = createHash("sha256")
+    .update(`${request?.executionId || "execution"}:${request?.blockId || "block"}`)
+    .digest("hex")
+    .slice(0, 24);
+  return services.getWorkspacePath(`.flow-generation-${key}.json`);
+}
+
+function generationPromptDigest(prompts) {
+  return createHash("sha256").update(JSON.stringify(prompts)).digest("hex");
+}
+
+async function readGenerationCheckpoint(request, services, prompts) {
+  const statePath = generationCheckpointPath(request, services);
+  if (!statePath) return undefined;
+  try {
+    const state = JSON.parse(await readFile(statePath, "utf8"));
+    if (
+      state?.executionId !== request.executionId ||
+      state?.blockId !== request.blockId ||
+      state?.promptDigest !== generationPromptDigest(prompts) ||
+      !Array.isArray(state.completedPromptIndexes) ||
+      !Array.isArray(state.files)
+    ) {
+      return undefined;
+    }
+    return state;
+  } catch {
+    return undefined;
+  }
+}
+
+async function saveGenerationCheckpoint(request, services, prompts, state) {
+  const statePath = generationCheckpointPath(request, services);
+  if (!statePath) return;
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      executionId: request.executionId,
+      blockId: request.blockId,
+      promptDigest: generationPromptDigest(prompts),
+      completedPromptIndexes: [...new Set(state.completedPromptIndexes)].sort((a, b) => a - b),
+      files: state.files,
+      accountProfile: state.accountProfile,
+      projectUrl:
+        state.projectUrl && isFlowUrl(state.projectUrl, true)
+          ? validateFlowUrl(state.projectUrl)
+          : undefined,
+      updatedAt: new Date().toISOString(),
+    }),
+    { encoding: "utf8", flag: "w" },
+  );
+}
+
+async function clearGenerationCheckpoint(request, services) {
+  const statePath = generationCheckpointPath(request, services);
+  if (statePath) await rm(statePath, { force: true }).catch(() => undefined);
+}
+
 function defaultProfilePath() {
   return join(homedir(), ".contentflow", "google-flow-chrome-profile");
 }
@@ -3193,6 +3253,7 @@ async function runGenerationPlan({
   minDelayMs = 0,
   submit,
   onState,
+  onItemCompleted,
   wait = sleep,
   signal,
 }) {
@@ -3216,6 +3277,7 @@ async function runGenerationPlan({
           errors[index] = undefined;
           completed = true;
           controller.success();
+          await onItemCompleted?.({ task, value: results[index] });
         } catch (error) {
           errors[index] = error;
           const isRate = error?.code === "RATE_LIMIT" || error?.isUnusualActivity === true;
@@ -3260,16 +3322,17 @@ async function runGenerationPlan({
       signal,
       failFast,
     });
-    if (failFast && outcome.failed.length > 0) throw outcome.failed[0].error;
     for (const success of outcome.succeeded) {
       results[success.task.index] = success.value;
       errors[success.task.index] = undefined;
       controller.success();
+      await onItemCompleted?.(success);
     }
     for (const failure of outcome.failed) {
       errors[failure.task.index] = failure.error;
       controller.failure(failure.error);
     }
+    if (failFast && outcome.failed.length > 0) throw outcome.failed[0].error;
     tasks = outcome.failed
       .sort((left, right) => left.task.index - right.task.index)
       .map(({ task }) => ({ ...task, attempt: task.attempt + 1 }));
@@ -4114,17 +4177,6 @@ export async function execute(request, services) {
   const coreBatchIndex = Number.isInteger(request?.batch?.index) ? request.batch.index : undefined;
   const coreBatchTotal = Number.isInteger(request?.batch?.total) ? request.batch.total : undefined;
 
-  const maxPrompts = Number.isInteger(request?.configuration?.maxPrompts)
-    ? request.configuration.maxPrompts
-    : 8;
-  if (maxPrompts < 1 || maxPrompts > 100)
-    return resultError("INVALID_CONFIGURATION", "maxPrompts deve ficar entre 1 e 100.");
-  if (prompts.length > maxPrompts)
-    return resultError(
-      "INVALID_INPUT",
-      `Recebi ${prompts.length} prompts; o limite configurado é ${maxPrompts}.`,
-    );
-
   const settings = request?.settings ?? {};
   const keepBrowserOpen = settings.keepBrowserOpen === true;
   const startMinimized = settings.startMinimized !== false;
@@ -4191,6 +4243,21 @@ export async function execute(request, services) {
       : "Depuração contínua ativa durante o job inteiro.",
   );
 
+  const generationCheckpoint =
+    capabilityId === "generate-images-in-browser" && coreBatchIndex === undefined
+      ? await readGenerationCheckpoint(request, services, prompts)
+      : undefined;
+  const completedPromptIndexes = new Set(
+    (generationCheckpoint?.completedPromptIndexes ?? []).filter(
+      (index) => Number.isInteger(index) && index >= 0 && index < prompts.length,
+    ),
+  );
+  if (completedPromptIndexes.size > 0) {
+    step(
+      `Retomando a fila interna com ${completedPromptIndexes.size} prompt(s) já concluído(s), sem reenviá-los.`,
+    );
+  }
+
   let navigation;
   let chromeExecutables;
   let profileRuntime;
@@ -4211,8 +4278,16 @@ export async function execute(request, services) {
         `O perfil ${profileRuntime.accountProfile} ainda não foi salvo. Abra a configuração do Método e use Salvar perfil antes de executar.`,
       );
     }
+    const checkpointNavigation =
+      generationCheckpoint?.accountProfile === profileRuntime.accountProfile &&
+      generationCheckpoint?.projectUrl &&
+      isFlowUrl(generationCheckpoint.projectUrl, true)
+        ? { url: validateFlowUrl(generationCheckpoint.projectUrl), pinned: true }
+        : undefined;
     navigation =
-      (await readCaptchaRetryNavigation(request, services)) ?? resolveNavigationTarget(request);
+      (await readCaptchaRetryNavigation(request, services)) ??
+      checkpointNavigation ??
+      resolveNavigationTarget(request);
     if (navigation.captchaRetry) {
       step("Retomando o projeto recém-verificado após CAPTCHA.");
     }
@@ -4240,7 +4315,9 @@ export async function execute(request, services) {
   let activeProjectUrl;
   let referencesAttached = navigation.referencesAttached === true;
   let generationSubmitted = false;
-  const files = [];
+  const files = Array.isArray(generationCheckpoint?.files)
+    ? structuredClone(generationCheckpoint.files)
+    : [];
   const artifacts = [];
   try {
     browserInfo = await launchOrReuseChrome({
@@ -4608,10 +4685,17 @@ export async function execute(request, services) {
     if (navigation.referencesAttached)
       step("Retomando o projeto com a referência já anexada, sem repetir o upload.");
 
+    const pendingPromptEntries = prompts
+      .map((prompt, index) => ({ prompt, index }))
+      .filter((entry) => !completedPromptIndexes.has(entry.index));
+    const pendingPrompts = pendingPromptEntries.map((entry) => entry.prompt);
+    const originalPromptIndex = (queueIndex) =>
+      pendingPromptEntries[queueIndex]?.index ?? queueIndex;
     const maxConcurrentGenerations = Math.min(2, Math.max(1, requestedConcurrentGenerations));
     let submissionLock = Promise.resolve();
     const submit = async (task) => {
       if (services.signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+      task = { ...task, index: originalPromptIndex(task.index) };
       const absolutePromptIndex = coreBatchIndex ?? task.index;
       const promptTotal = coreBatchTotal ?? prompts.length;
       const label = `Prompt ${absolutePromptIndex + 1}/${promptTotal} (tentativa ${task.attempt}/${retryAttempts + 1})`;
@@ -4891,28 +4975,54 @@ export async function execute(request, services) {
     };
 
     step(
-      `Gerenciador iniciado: ${prompts.length} prompt(s), até ${maxConcurrentGenerations} geração(ões) simultânea(s), ${retryAttempts} nova(s) tentativa(s) após a fila inicial.`,
+      `Gerenciador iniciado: ${pendingPrompts.length} prompt(s) pendente(s) de ${prompts.length}, até ${maxConcurrentGenerations} geração(ões) simultânea(s), ${retryAttempts} nova(s) tentativa(s) após a fila inicial.`,
     );
-    const plan = await runGenerationPlan({
-      prompts,
+    await runGenerationPlan({
+      prompts: pendingPrompts,
       maxInFlight: maxConcurrentGenerations,
       retryAttempts,
       submit,
       minDelayMs: delayBetweenPromptsMs,
       signal: services.signal,
       failFast: true,
+      async onItemCompleted({ task, value }) {
+        const index = originalPromptIndex(task.index);
+        if (!Array.isArray(value) || value.length === 0)
+          throw codedError(
+            "OUTPUT_VALIDATION_FAILED",
+            `A fila terminou sem resultado para o prompt ${index + 1}.`,
+          );
+        for (const result of value) {
+          if (!result?.file || !result?.artifact)
+            throw codedError(
+              "OUTPUT_VALIDATION_FAILED",
+              `A fila terminou com um artifact inválido no prompt ${index + 1}.`,
+            );
+          files.push(result.file);
+          artifacts.push(result.artifact);
+        }
+        completedPromptIndexes.add(index);
+        await saveGenerationCheckpoint(request, services, prompts, {
+          completedPromptIndexes: [...completedPromptIndexes],
+          files,
+          projectUrl: activeProjectUrl,
+          accountProfile: profileRuntime.accountProfile,
+        });
+        step(`Fila: prompt ${index + 1} persistido localmente antes de avançar.`);
+      },
       onState(event) {
+        const index = originalPromptIndex(event.task?.index ?? 0);
         if (event.type === "submitted") {
           step(
-            `Fila: prompt ${event.task.index + 1} enviado; ${event.active}/${maxConcurrentGenerations} em andamento; ${event.pending} aguardando nesta rodada.`,
+            `Fila: prompt ${index + 1} enviado; ${event.active}/${maxConcurrentGenerations} em andamento; ${event.pending} aguardando nesta rodada.`,
           );
         } else if (event.type === "succeeded") {
           step(
-            `Fila: prompt ${event.task.index + 1} concluído; ${event.active}/${maxConcurrentGenerations} em andamento.`,
+            `Fila: prompt ${index + 1} concluído; ${event.active}/${maxConcurrentGenerations} em andamento.`,
           );
         } else if (event.type === "failed") {
           step(
-            `Fila interrompida no prompt ${event.task.index + 1} (${event.error?.code || "JOB_FAILED"}: ${event.error?.message || "erro não detalhado"}).`,
+            `Fila interrompida no prompt ${index + 1} (${event.error?.code || "JOB_FAILED"}: ${event.error?.message || "erro não detalhado"}).`,
           );
         } else if (event.type === "retry-round") {
           step(
@@ -4920,25 +5030,11 @@ export async function execute(request, services) {
           );
         } else if (event.type === "rate-limit-backoff") {
           step(
-            `Fila: desacelerando (rate-limit / atividade incomum detectada). Aguardando ${Math.round(event.waitMs / 1000)}s antes de re-tentar prompt ${event.task.index + 1} (tentativa ${event.attempt}).`,
+            `Fila: desacelerando (rate-limit / atividade incomum detectada). Aguardando ${Math.round(event.waitMs / 1000)}s antes de re-tentar prompt ${index + 1} (tentativa ${event.attempt}).`,
           );
         }
       },
     });
-
-    for (const resultGroup of plan.results) {
-      if (!Array.isArray(resultGroup) || resultGroup.length === 0)
-        throw codedError(
-          "OUTPUT_VALIDATION_FAILED",
-          "A fila terminou sem resultado para um dos prompts.",
-        );
-      for (const result of resultGroup) {
-        if (!result?.file || !result?.artifact)
-          throw codedError("OUTPUT_VALIDATION_FAILED", "A fila terminou com um artifact inválido.");
-        files.push(result.file);
-        artifacts.push(result.artifact);
-      }
-    }
 
     activeProjectUrl = (await getActiveFlowProjectUrl(client, sessionId)) || activeProjectUrl;
     if (settings.minimizeWhenReady === true)
@@ -4950,6 +5046,7 @@ export async function execute(request, services) {
     await maybeCloseBrowser(client, browserInfo, keepBrowserOpen);
     client = null;
     await clearCaptchaRetryNavigation(request, services);
+    await clearGenerationCheckpoint(request, services);
 
     return {
       status: "success",
@@ -5022,7 +5119,7 @@ export async function execute(request, services) {
       }
     }
     if (artifacts.length > 0) {
-      errorResponse.artifacts = artifacts;
+      errorResponse.partialArtifacts = artifacts;
     }
     errorResponse.logs = [...stepLogs, ...diagnosticLogs];
     return errorResponse;
@@ -5063,6 +5160,10 @@ export const __test = {
   readCaptchaRetryNavigation,
   saveCaptchaRetryNavigation,
   clearCaptchaRetryNavigation,
+  generationCheckpointPath,
+  readGenerationCheckpoint,
+  saveGenerationCheckpoint,
+  clearGenerationCheckpoint,
   defaultProfilePath,
   defaultProfilesRootPath,
   normalizeAccountProfile,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { PRESENTATION_RENDERER_IDS } from "../src/lib/domain";
 import { parseMethodFile, serializeMethodFile } from "../src/lib/method-file";
 import {
@@ -72,5 +73,26 @@ assert.equal(
 const exported = serializeMethodFile("Método normalizado", parsedLegacy.method);
 const reparsed = parseMethodFile(exported);
 assert.equal(reparsed.method.blocks[0].outputs?.[0].presentation?.renderer, "auto");
+
+const processRunnerSource = readFileSync(
+  new URL("../src/components/process-runner.tsx", import.meta.url),
+  "utf8",
+);
+const executionResultsSource = processRunnerSource.slice(
+  processRunnerSource.indexOf("function ExecutionResults"),
+  processRunnerSource.indexOf("function ResultValue"),
+);
+assert.doesNotMatch(executionResultsSource, /<details[^>]*\sopen=/s);
+assert.match(processRunnerSource, /w-full max-w-6xl border-t/);
+
+const rendererSource = readFileSync(
+  new URL("../src/components/runtime-value-renderers.tsx", import.meta.url),
+  "utf8",
+);
+const imageGallerySource = rendererSource.slice(
+  rendererSource.indexOf("function ImageGalleryRenderer"),
+  rendererSource.indexOf("function AudioRenderer"),
+);
+assert.match(imageGallerySource, /lg:grid-cols-4/);
 
 console.log("Presentation contract smoke test passed.");

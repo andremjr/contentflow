@@ -13,7 +13,6 @@
     "imageModel": "flow_auto",
     "fallbackOnModelLimit": true,
     "aspectRatio": "flow_current",
-    "maxPrompts": 3,
     "delayBetweenPromptsMs": 5000,
     "maxConcurrentGenerations": 1,
     "retryAttempts": 1,

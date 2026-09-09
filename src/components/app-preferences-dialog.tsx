@@ -122,7 +122,9 @@ export function AppPreferencesDialog() {
             <div className="flex min-h-14 items-center gap-3 px-2 py-2.5">
               <Bell className="size-4 shrink-0 text-brand-soft" />
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold">Validações na barra de tarefas</span>
+                <span className="block text-sm font-semibold">
+                  Pendências e erros na barra de tarefas
+                </span>
                 <span className="block text-[11px] text-muted-foreground">
                   A contagem de validações pendentes aparece sempre no ícone do aplicativo.
                 </span>
@@ -136,7 +138,7 @@ export function AppPreferencesDialog() {
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold">Som de alerta</span>
                 <span className="block text-[11px] text-muted-foreground">
-                  Reproduzir um som quando uma nova validação precisar de atenção.
+                  Reproduzir um som quando uma nova pendência ou erro precisar de atenção.
                 </span>
               </span>
               <Checkbox

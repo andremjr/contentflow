@@ -43,3 +43,24 @@ test("preserves user-created and plugin-authored content", () => {
     );
   }
 });
+
+test("translates execution attention and error notifications", () => {
+  assert.equal(translate("Pendências e erros", "en"), "Tasks and errors");
+  assert.equal(translate("Pendências e erros", "es"), "Tareas y errores");
+  assert.equal(
+    translate("2 erros de execução e 3 tarefas humanas pendentes", "en"),
+    "2 execution errors and 3 pending human tasks",
+  );
+  assert.equal(
+    translate("2 erros de execução e 3 tarefas humanas pendentes", "es"),
+    "2 errores de ejecución y 3 tareas humanas pendientes",
+  );
+  assert.equal(
+    translate("Pendências e erros na barra de tarefas", "en"),
+    "Tasks and errors on the taskbar",
+  );
+  assert.equal(
+    translate("Pendências e erros na barra de tarefas", "es"),
+    "Tareas y errores en la barra de tareas",
+  );
+});
