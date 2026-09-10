@@ -13,6 +13,47 @@ type ConnectionRuntimeDependencies = {
   getSecret: (connectionId: string, secretKey: string) => Promise<string | undefined>;
 };
 
+export function normalizeConnectionSecretPatch(
+  declaredSecretKeys: string[],
+  inputSecrets: unknown,
+  inputRemovedSecretKeys: unknown = [],
+  existingSecretKeys: string[] = [],
+) {
+  const secrets =
+    inputSecrets && typeof inputSecrets === "object" && !Array.isArray(inputSecrets)
+      ? (inputSecrets as Record<string, unknown>)
+      : {};
+  const removeSecretKeys = Array.isArray(inputRemovedSecretKeys)
+    ? inputRemovedSecretKeys.filter((value): value is string => typeof value === "string")
+    : [];
+  const declared = new Set(declaredSecretKeys);
+  const unknownSecretKey = [...Object.keys(secrets), ...removeSecretKeys].find(
+    (secretKey) => !declared.has(secretKey),
+  );
+  if (unknownSecretKey) {
+    throw new Error(`A credencial ${unknownSecretKey} não foi declarada pelo plugin.`);
+  }
+
+  const values = Object.fromEntries(
+    Object.entries(secrets).flatMap(([secretKey, value]) => {
+      const normalized = typeof value === "string" ? value.trim() : "";
+      return normalized ? [[secretKey, normalized]] : [];
+    }),
+  );
+  const nextSecretKeys = new Set(existingSecretKeys);
+  Object.keys(values).forEach((secretKey) => nextSecretKeys.add(secretKey));
+  removeSecretKeys.forEach((secretKey) => nextSecretKeys.delete(secretKey));
+  if (!nextSecretKeys.size) {
+    throw new Error("Informe ao menos uma credencial para esta conexão.");
+  }
+
+  return {
+    values,
+    removeSecretKeys: [...new Set(removeSecretKeys)],
+    connectedSecretKeys: [...nextSecretKeys],
+  };
+}
+
 export async function resolvePluginConnectionSecrets(
   plugin: ConnectionPlugin,
   requestedConnectionId: string | undefined,

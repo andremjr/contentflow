@@ -114,6 +114,17 @@ type ManagedPluginProfile = {
   usages: PluginProfileUsage[];
 };
 
+type LocalPluginConnection = {
+  id: string;
+  pluginId: string;
+  name: string;
+  connected: boolean;
+  updatedAt: string;
+  metadata: Record<string, unknown>;
+  requiredSecretKeys: string[];
+  connectedSecretKeys: string[];
+};
+
 const BLOCK_LABEL: Record<BlockType, string> = {
   BUSCAR: "Buscar",
   ESCOLHER: "Escolher",
@@ -801,6 +812,8 @@ function PluginCard({
 
         <CommunityAccessPanel plugin={plugin} onChanged={onChanged} />
 
+        {manifest.secretKeys?.length ? <PluginConnectionsPanel plugin={plugin} /> : null}
+
         {manifest.profileSetup && <PluginProfilesPanel plugin={plugin} />}
 
         {plugin.source === "installed" && (
@@ -840,6 +853,255 @@ function PluginCard({
         </footer>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PluginConnectionsPanel({ plugin }: { plugin: DiscoveredPlugin }) {
+  const secretKeys = plugin.manifest.secretKeys ?? [];
+  const [connections, setConnections] = useState<LocalPluginConnection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState("");
+  const [secrets, setSecrets] = useState<Record<string, string>>({});
+  const [editingId, setEditingId] = useState<string>();
+  const [editingName, setEditingName] = useState("");
+  const [editingSecrets, setEditingSecrets] = useState<Record<string, string>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/connections`);
+      const result = (await response.json()) as {
+        connections?: LocalPluginConnection[];
+        error?: string;
+      };
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível listar as conexões.");
+      setConnections(result.connections ?? []);
+    } catch (error) {
+      toast.error("Não foi possível carregar as conexões", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [plugin.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function createConnection() {
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/connections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, secrets }),
+      });
+      const result = (await response.json()) as LocalPluginConnection & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível criar a conexão.");
+      setName("");
+      setSecrets({});
+      await load();
+      toast.success("Conexão criada", {
+        description: "As credenciais foram protegidas no cofre do sistema.",
+      });
+    } catch (error) {
+      toast.error("Não foi possível criar a conexão", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateConnection(connection: LocalPluginConnection) {
+    setSaving(true);
+    try {
+      const response = await fetch(
+        `/api/plugins/${encodeURIComponent(plugin.id)}/connections/${encodeURIComponent(connection.id)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: editingName, secrets: editingSecrets }),
+        },
+      );
+      const result = (await response.json()) as LocalPluginConnection & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível atualizar a conexão.");
+      setEditingId(undefined);
+      setEditingSecrets({});
+      await load();
+      toast.success("Conexão atualizada", {
+        description: "As novas credenciais foram protegidas no cofre do sistema.",
+      });
+    } catch (error) {
+      toast.error("Não foi possível atualizar a conexão", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const canCreate = Boolean(name.trim()) && Object.values(secrets).some((value) => value.trim());
+
+  return (
+    <details className="group rounded-xl border border-brand/25 bg-brand/5 p-3" open>
+      <summary className="flex cursor-pointer list-none items-center gap-3">
+        <span className="grid size-9 place-items-center rounded-lg bg-brand/10 text-brand-soft">
+          <KeyRound className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-semibold">Credenciais e conexões</span>
+          <span className="mt-0.5 block text-[10px] text-muted-foreground">
+            Adicione, substitua e organize chaves protegidas no cofre local.
+          </span>
+        </span>
+        <Badge variant="secondary" className="text-[9px]">
+          {connections.length} {connections.length === 1 ? "conexão" : "conexões"}
+        </Badge>
+      </summary>
+
+      <div className="mt-3 space-y-3 border-t border-brand/15 pt-3">
+        {loading ? (
+          <p className="text-[11px] text-muted-foreground">Carregando conexões...</p>
+        ) : connections.length ? (
+          connections.map((connection) => {
+            const editing = editingId === connection.id;
+            return (
+              <article
+                key={connection.id}
+                className="rounded-lg border border-border bg-card/55 p-3"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold" data-i18n-ignore>
+                      {connection.name}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {connection.connectedSecretKeys.length} de {secretKeys.length} credenciais
+                      configuradas
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5"
+                    onClick={() => {
+                      setEditingId(editing ? undefined : connection.id);
+                      setEditingName(connection.name);
+                      setEditingSecrets({});
+                    }}
+                  >
+                    <Pencil className="size-3.5" /> {editing ? "Cancelar" : "Editar"}
+                  </Button>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {secretKeys.map((secretKey) => (
+                    <Badge
+                      key={secretKey}
+                      variant={
+                        connection.connectedSecretKeys.includes(secretKey) ? "secondary" : "outline"
+                      }
+                      className="font-mono text-[9px]"
+                      data-i18n-ignore
+                    >
+                      {secretKey}
+                    </Badge>
+                  ))}
+                </div>
+                {editing && (
+                  <div className="mt-3 space-y-2 border-t border-border pt-3">
+                    <Input
+                      value={editingName}
+                      placeholder="Nome da conexão"
+                      onChange={(event) => setEditingName(event.target.value)}
+                    />
+                    {secretKeys.map((secretKey) => (
+                      <div key={secretKey} className="space-y-1">
+                        <Label className="font-mono text-[10px]" data-i18n-ignore>
+                          {secretKey}
+                        </Label>
+                        <Input
+                          type="password"
+                          autoComplete="off"
+                          value={editingSecrets[secretKey] ?? ""}
+                          placeholder={
+                            connection.connectedSecretKeys.includes(secretKey)
+                              ? "Nova chave (deixe vazio para manter)"
+                              : "Cole a chave para adicionar"
+                          }
+                          onChange={(event) =>
+                            setEditingSecrets((current) => ({
+                              ...current,
+                              [secretKey]: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={saving || !editingName.trim()}
+                      onClick={() => void updateConnection(connection)}
+                    >
+                      {saving && <LoaderCircle className="size-3.5 animate-spin" />}
+                      Salvar alterações
+                    </Button>
+                  </div>
+                )}
+              </article>
+            );
+          })
+        ) : (
+          <p className="rounded-lg border border-dashed border-border p-3 text-center text-[11px] text-muted-foreground">
+            Nenhuma conexão cadastrada para este plugin.
+          </p>
+        )}
+
+        <details className="rounded-lg border border-border bg-background/40 p-3">
+          <summary className="cursor-pointer text-xs font-medium">Adicionar conexão</summary>
+          <div className="mt-3 space-y-2">
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+              Preencha somente os provedores que deseja usar. Você pode criar outras conexões,
+              inclusive para adicionar outra chave do mesmo provedor.
+            </p>
+            <Input
+              value={name}
+              placeholder="Ex.: Pexels principal"
+              onChange={(event) => setName(event.target.value)}
+            />
+            {secretKeys.map((secretKey) => (
+              <div key={secretKey} className="space-y-1">
+                <Label className="font-mono text-[10px]" data-i18n-ignore>
+                  {secretKey}
+                </Label>
+                <Input
+                  type="password"
+                  autoComplete="off"
+                  value={secrets[secretKey] ?? ""}
+                  placeholder="Cole a chave"
+                  onChange={(event) =>
+                    setSecrets((current) => ({ ...current, [secretKey]: event.target.value }))
+                  }
+                />
+              </div>
+            ))}
+            <Button
+              type="button"
+              size="sm"
+              disabled={saving || !canCreate}
+              onClick={() => void createConnection()}
+            >
+              {saving && <LoaderCircle className="size-3.5 animate-spin" />}
+              Salvar no cofre local
+            </Button>
+          </div>
+        </details>
+      </div>
+    </details>
   );
 }
 
@@ -1456,91 +1718,6 @@ function CommunityAccessPanel({
         {saving && <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />}
         {plugin.enabled ? "Desativar plugin" : "Ativar e permitir"}
       </Button>
-    </div>
-  );
-}
-
-export function CommunitySecretField({
-  pluginId,
-  secretKey,
-}: {
-  pluginId: string;
-  secretKey: string;
-}) {
-  const [connected, setConnected] = useState(false);
-  const [value, setValue] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    const response = await fetch(
-      `/api/plugins/${encodeURIComponent(pluginId)}/secrets/${encodeURIComponent(secretKey)}`,
-    );
-    if (response.ok) {
-      const result = (await response.json()) as { connected: boolean };
-      setConnected(result.connected);
-    }
-  }, [pluginId, secretKey]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  async function save(remove = false) {
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `/api/plugins/${encodeURIComponent(pluginId)}/secrets/${encodeURIComponent(secretKey)}`,
-        {
-          method: remove ? "DELETE" : "PUT",
-          headers: remove ? undefined : { "Content-Type": "application/json" },
-          body: remove ? undefined : JSON.stringify({ value }),
-        },
-      );
-      const result = (await response.json()) as { connected?: boolean; error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Não foi possível salvar a credencial.");
-      setConnected(Boolean(result.connected));
-      setValue("");
-      toast.success(remove ? "Credencial removida" : "Credencial protegida no cofre do sistema");
-    } catch (error) {
-      toast.error("Não foi possível atualizar a credencial", {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="mt-3 rounded-lg border border-border p-3">
-      <div className="flex items-center gap-2">
-        <KeyRound className="size-3.5 text-brand-soft" />
-        <Label htmlFor={`${pluginId}-${secretKey}`} className="font-mono text-[11px]">
-          {secretKey}
-        </Label>
-        {connected && (
-          <Badge variant="secondary" className="ml-auto text-[9px]">
-            Conectada
-          </Badge>
-        )}
-      </div>
-      <div className="mt-2 flex gap-2">
-        <Input
-          id={`${pluginId}-${secretKey}`}
-          type="password"
-          autoComplete="off"
-          value={value}
-          placeholder={connected ? "Substituir credencial" : "Cole a credencial"}
-          onChange={(event) => setValue(event.target.value)}
-        />
-        <Button size="sm" disabled={loading || !value.trim()} onClick={() => void save()}>
-          Salvar
-        </Button>
-        {connected && (
-          <Button size="sm" variant="ghost" disabled={loading} onClick={() => void save(true)}>
-            Remover
-          </Button>
-        )}
-      </div>
     </div>
   );
 }

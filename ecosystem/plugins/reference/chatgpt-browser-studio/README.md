@@ -1,6 +1,6 @@
 # ChatGPT Browser Studio
 
-Versão **1.0.9** para ContentFlow Plugin API v1.
+Versão **1.0.11** para ContentFlow Plugin API v1.
 
 ## Contrato simplificado
 
@@ -43,7 +43,7 @@ Depois de informar um alias no construtor do Método, use **Salvar perfil**. O C
 
 Por padrão, o perfil continua dedicado. Para reutilizar uma pasta Chrome escolhida conscientemente, configure `profilesBasePath`, selecione o alias correspondente e ative `allowExistingChromeProfile`. Feche outras instâncias que estejam usando o mesmo perfil antes de preparar ou executar.
 
-A espera de respostas combina `MutationObserver` com polling de segurança e timeout máximo. Em execução normal, preenchimento e cliques passam pela ContentFlow Browser Bridge v2, sem mouse, teclado ou foco de janela via CDP.
+A espera de respostas combina `MutationObserver`, sinais fortes de conclusão da interface e polling de segurança. Quando a resposta já terminou, o plugin confirma o texto e o captura imediatamente; o fallback conservador continua protegendo contra fragmentos incompletos. Em execução normal, preenchimento e cliques passam pela ContentFlow Browser Bridge v2, sem mouse, teclado ou foco de janela via CDP.
 
 ## Anexos e artifacts
 

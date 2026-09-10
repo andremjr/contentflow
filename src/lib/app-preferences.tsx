@@ -45,6 +45,57 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 type Translation = [english: string, spanish: string];
 
 const PHRASES: Record<string, Translation> = {
+  "Credenciais e conexões": ["Credentials and connections", "Credenciales y conexiones"],
+  "Adicione, substitua e organize chaves protegidas no cofre local.": [
+    "Add, replace, and organize keys protected in the local vault.",
+    "Añade, reemplaza y organiza claves protegidas en el almacén local.",
+  ],
+  "Carregando conexões...": ["Loading connections...", "Cargando conexiones..."],
+  "Nenhuma conexão cadastrada para este plugin.": [
+    "No connections registered for this plugin.",
+    "No hay conexiones registradas para este plugin.",
+  ],
+  "Adicionar conexão": ["Add connection", "Añadir conexión"],
+  "Preencha somente os provedores que deseja usar. Você pode criar outras conexões, inclusive para adicionar outra chave do mesmo provedor.":
+    [
+      "Fill in only the providers you want to use. You can create other connections, including another key for the same provider.",
+      "Completa solo los proveedores que quieras usar. Puedes crear otras conexiones, incluso para añadir otra clave del mismo proveedor.",
+    ],
+  "Preencha somente as credenciais necessárias para esta conexão.": [
+    "Fill in only the credentials needed for this connection.",
+    "Completa solo las credenciales necesarias para esta conexión.",
+  ],
+  "Nome da conexão": ["Connection name", "Nombre de la conexión"],
+  "Ex.: Pexels principal": ["E.g.: Primary Pexels", "Ej.: Pexels principal"],
+  "Nova chave (deixe vazio para manter)": [
+    "New key (leave blank to keep it)",
+    "Nueva clave (déjala en blanco para conservarla)",
+  ],
+  "Cole a chave para adicionar": ["Paste the key to add it", "Pega la clave para añadirla"],
+  "Cole a chave": ["Paste the key", "Pega la clave"],
+  "Salvar no cofre local": ["Save to local vault", "Guardar en el almacén local"],
+  "Conexão criada": ["Connection created", "Conexión creada"],
+  "Conexão atualizada": ["Connection updated", "Conexión actualizada"],
+  "As credenciais foram protegidas no cofre do sistema.": [
+    "The credentials were protected in the system vault.",
+    "Las credenciales se protegieron en el almacén del sistema.",
+  ],
+  "As novas credenciais foram protegidas no cofre do sistema.": [
+    "The new credentials were protected in the system vault.",
+    "Las nuevas credenciales se protegieron en el almacén del sistema.",
+  ],
+  "Não foi possível criar a conexão": [
+    "Could not create the connection",
+    "No se pudo crear la conexión",
+  ],
+  "Não foi possível atualizar a conexão": [
+    "Could not update the connection",
+    "No se pudo actualizar la conexión",
+  ],
+  "Não foi possível carregar as conexões": [
+    "Could not load the connections",
+    "No se pudieron cargar las conexiones",
+  ],
   "Perfis e contas": ["Profiles and accounts", "Perfiles y cuentas"],
   "Cadastre, prepare e veja onde cada perfil é utilizado.": [
     "Register, prepare, and see where each profile is used.",
@@ -1358,6 +1409,16 @@ function translateDynamic(source: string, language: AppLanguage): string {
     return language === "en"
       ? `${match[1]} ${match[1] === "1" ? "profile" : "profiles"}`
       : `${match[1]} ${match[1] === "1" ? "perfil" : "perfiles"}`;
+  match = source.match(/^(\d+) (conexão|conexões)$/);
+  if (match)
+    return language === "en"
+      ? `${match[1]} ${match[1] === "1" ? "connection" : "connections"}`
+      : `${match[1]} ${match[1] === "1" ? "conexión" : "conexiones"}`;
+  match = source.match(/^(\d+) de (\d+) credenciais configuradas$/);
+  if (match)
+    return language === "en"
+      ? `${match[1]} of ${match[2]} credentials configured`
+      : `${match[1]} de ${match[2]} credenciales configuradas`;
   match = source.match(/^de (\d+)$/);
   if (match) return language === "en" ? `of ${match[1]}` : `de ${match[1]}`;
   match = source.match(/^(\d+) Métodos incluídos, com suas capas\.$/);

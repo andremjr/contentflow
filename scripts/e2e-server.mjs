@@ -17,6 +17,11 @@ await cp(
   path.join(localPluginsDirectory, "profile-plugin"),
   { recursive: true },
 );
+await cp(
+  path.resolve("ecosystem/plugins/reference/free-stock-media-studio"),
+  path.join(localPluginsDirectory, "free-stock-media-studio"),
+  { recursive: true },
+);
 const env = { ...process.env, CONTENTFLOW_DATA_DIR: directory, CONTENTFLOW_API_PORT: "8895" };
 const children = [
   spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {

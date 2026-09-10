@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PluginConnection } from "./plugin-connections";
-import { resolvePluginConnectionSecrets } from "./plugin-connection-runtime";
+import {
+  normalizeConnectionSecretPatch,
+  resolvePluginConnectionSecrets,
+} from "./plugin-connection-runtime";
 
 const plugin = {
   id: "example.plugin",
@@ -74,5 +77,38 @@ test("conexão revogada nunca é resolvida", async () => {
       dependencies([connection("account-a", "2026-08-27T01:00:00.000Z")]),
     ),
     /não está mais disponível/,
+  );
+});
+
+test("conexão aceita somente parte das credenciais declaradas pelo plugin", () => {
+  assert.deepEqual(
+    normalizeConnectionSecretPatch(["PEXELS_API_KEY", "PIXABAY_API_KEY", "UNSPLASH_ACCESS_KEY"], {
+      PEXELS_API_KEY: " pexels-key ",
+      PIXABAY_API_KEY: "",
+    }),
+    {
+      values: { PEXELS_API_KEY: "pexels-key" },
+      removeSecretKeys: [],
+      connectedSecretKeys: ["PEXELS_API_KEY"],
+    },
+  );
+});
+
+test("edição preserva credenciais existentes e permite substituir uma delas", () => {
+  assert.deepEqual(
+    normalizeConnectionSecretPatch(
+      ["PEXELS_API_KEY", "PIXABAY_API_KEY"],
+      { PEXELS_API_KEY: "nova-chave" },
+      [],
+      ["PEXELS_API_KEY", "PIXABAY_API_KEY"],
+    ).connectedSecretKeys,
+    ["PEXELS_API_KEY", "PIXABAY_API_KEY"],
+  );
+});
+
+test("edição não permite remover a última credencial da conexão", () => {
+  assert.throws(
+    () => normalizeConnectionSecretPatch(["API_KEY"], {}, ["API_KEY"], ["API_KEY"]),
+    /ao menos uma credencial/,
   );
 });

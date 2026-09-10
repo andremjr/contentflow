@@ -68,7 +68,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "1.0.10");
+  assert.equal(manifest.version, "1.0.11");
   assert.equal(manifest.supportsConversationContinuation, undefined);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -790,6 +790,43 @@ test("reconhece o controle de geração nos idiomas usados pelo ChatGPT", () => 
   assert.equal(__test.generationControlIsStop("Detener respuesta", "composer-submit-button"), true);
   assert.equal(__test.generationControlIsStop("Enviar mensagem", "composer-submit-button"), false);
   assert.equal(__test.generationControlIsStop("", "stop-button"), true);
+});
+
+test("reconhece o controle de voz pronto sem depender de um único idioma", () => {
+  assert.equal(__test.voiceControlIsReady("Start Voice"), true);
+  assert.equal(__test.voiceControlIsReady("Iniciar voz"), true);
+  assert.equal(__test.voiceControlIsReady("Iniciar chat de voz"), true);
+  assert.equal(__test.voiceControlIsReady("Start Voice", true), false);
+  assert.equal(__test.voiceControlIsReady("Start Voice", false, "true"), false);
+  assert.equal(__test.voiceControlIsReady("Start dictation"), false);
+});
+
+test("aceita apenas sinais fortes associados a uma nova resposta concluída", () => {
+  const completed = {
+    hasNewResponse: true,
+    generating: false,
+    voiceReady: false,
+    completedActionCount: 3,
+    baselineCompletedActionCount: 2,
+  };
+  assert.equal(__test.responseHasStrongCompletionSignal(completed), true);
+  assert.equal(
+    __test.responseHasStrongCompletionSignal({
+      ...completed,
+      completedActionCount: 2,
+      voiceReady: true,
+    }),
+    true,
+  );
+  assert.equal(
+    __test.responseHasStrongCompletionSignal({ ...completed, hasNewResponse: false }),
+    false,
+  );
+  assert.equal(__test.responseHasStrongCompletionSignal({ ...completed, generating: true }), false);
+  assert.equal(
+    __test.responseHasStrongCompletionSignal({ ...completed, completedActionCount: 2 }),
+    false,
+  );
 });
 
 test("envia pelo seletor atual e pelo seletor legado do compositor", () => {

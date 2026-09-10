@@ -2061,7 +2061,7 @@ function PluginConnectionSelector({
   const selected = connections.find((connection) => connection.id === value);
   const canCreate =
     Boolean(name.trim()) &&
-    (plugin.manifest.secretKeys ?? []).every((secretKey) => secrets[secretKey]?.trim());
+    (plugin.manifest.secretKeys ?? []).some((secretKey) => secrets[secretKey]?.trim());
 
   return (
     <section className="rounded-lg border border-border/70 bg-card/60 p-3">
@@ -2108,6 +2108,9 @@ function PluginConnectionSelector({
       <details className="mt-3 rounded-md border border-border/70 bg-background/40 p-2.5">
         <summary className="cursor-pointer text-xs font-medium">Criar nova conexão</summary>
         <div className="mt-3 space-y-2">
+          <p className="text-[10px] leading-relaxed text-muted-foreground">
+            Preencha somente as credenciais necessárias para esta conexão.
+          </p>
           <Input
             value={name}
             placeholder="Ex.: Conta principal do canal"

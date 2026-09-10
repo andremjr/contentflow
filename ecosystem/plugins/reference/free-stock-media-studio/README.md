@@ -1,5 +1,7 @@
 # Free Stock Media Studio
 
+Versão **0.3.1**, compatível com ContentFlow **0.5.7** ou mais recente.
+
 Plugin unificado do ContentFlow para pesquisar e baixar mídia stock gratuita e acervos abertos. Ele mantém cada provedor identificável nos resultados, na atribuição e na licença, sem esconder diferenças de uso.
 
 ## Capacidades
@@ -56,7 +58,7 @@ As buscas manuais também usam `provider_max` por padrão. `custom` permite redu
 - `UNSPLASH_ACCESS_KEY`
 - `COVERR_API_KEY`
 
-A Secret Key do Unsplash não é necessária e não é solicitada pelo plugin. As credenciais ficam no cofre do ContentFlow e nunca entram em outputs, records, cache ou logs do handler.
+A Secret Key do Unsplash não é necessária e não é solicitada pelo plugin. Cada conexão pode guardar somente os provedores desejados. Também é possível criar várias conexões, inclusive para cadastrar outra chave do mesmo provedor. As credenciais ficam no cofre do ContentFlow e nunca entram em outputs, records, cache ou logs do handler.
 
 ## Regras dos provedores
 

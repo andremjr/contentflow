@@ -116,7 +116,10 @@ import {
   PluginProfileStore,
   syncPluginProfilesFromMethods,
 } from "./plugin-profiles";
-import { resolvePluginConnectionSecrets } from "./plugin-connection-runtime";
+import {
+  normalizeConnectionSecretPatch,
+  resolvePluginConnectionSecrets,
+} from "./plugin-connection-runtime";
 import { normalizePluginConversationId, resolvePluginConversation } from "./plugin-conversation";
 import { discoverPluginDirectories, normalizeUserProvidedPath } from "./plugin-package";
 import {
@@ -1270,10 +1273,8 @@ async function processPluginJob(
     const resolvedConnection = await resolvePluginConnection(plugin, requestedConnectionId);
     storedSecrets = resolvedConnection.secrets;
     secrets = { ...storedSecrets, ...transientSecrets };
-    for (const secretKey of plugin.manifest.secretKeys ?? []) {
-      if (!secrets[secretKey]) {
-        throw new Error("Crie ou associe uma conta local válida a este bloco antes de executar.");
-      }
+    if ((plugin.manifest.secretKeys?.length ?? 0) > 0 && !Object.keys(secrets).length) {
+      throw new Error("Crie ou associe uma conta local válida a este bloco antes de executar.");
     }
     if (isPluginJobTimedOut(job)) {
       if (job.jobId && capability.execution.supportsCancellation) {
@@ -3262,10 +3263,7 @@ async function publicPluginConnection(
     revokedAt: connection.revokedAt,
     requiredSecretKeys,
     connectedSecretKeys,
-    connected:
-      !connection.revokedAt &&
-      requiredSecretKeys.length > 0 &&
-      connectedSecretKeys.length === requiredSecretKeys.length,
+    connected: !connection.revokedAt && connectedSecretKeys.length > 0,
   };
 }
 
@@ -3308,19 +3306,7 @@ app.post("/api/plugins/:pluginId/connections", async (request, response) => {
   let connectionId: string | undefined;
   try {
     const name = normalizedConnectionName(request.body?.name);
-    const secrets =
-      request.body?.secrets &&
-      typeof request.body.secrets === "object" &&
-      !Array.isArray(request.body.secrets)
-        ? (request.body.secrets as Record<string, unknown>)
-        : {};
-    const values = Object.fromEntries(
-      requiredSecretKeys.map((secretKey) => {
-        const value = typeof secrets[secretKey] === "string" ? secrets[secretKey].trim() : "";
-        if (!value) throw new Error(`Informe a credencial ${secretKey}.`);
-        return [secretKey, value];
-      }),
-    );
+    const { values } = normalizeConnectionSecretPatch(requiredSecretKeys, request.body?.secrets);
     connectionId = randomUUID();
     const connection = pluginConnections.create({ id: connectionId, pluginId: plugin.id, name });
     for (const [secretKey, value] of Object.entries(values)) {
@@ -3348,16 +3334,37 @@ app.put("/api/plugins/:pluginId/connections/:connectionId", async (request, resp
     return;
   }
   try {
-    const renamed = pluginConnections.rename(
-      plugin.id,
-      request.params.connectionId,
-      normalizedConnectionName(request.body?.name),
-    );
-    if (!renamed) {
+    const connection = pluginConnections.get(plugin.id, request.params.connectionId);
+    if (!connection || connection.revokedAt) {
       response.status(404).json({ error: "Conexão ativa não encontrada." });
       return;
     }
-    response.json(await publicPluginConnection(plugin, renamed));
+    const current = await publicPluginConnection(plugin, connection);
+    const hasSecretPatch =
+      request.body?.secrets !== undefined || request.body?.removeSecretKeys !== undefined;
+    if (hasSecretPatch) {
+      const patch = normalizeConnectionSecretPatch(
+        plugin.manifest.secretKeys ?? [],
+        request.body?.secrets,
+        request.body?.removeSecretKeys,
+        current.connectedSecretKeys,
+      );
+      for (const [secretKey, value] of Object.entries(patch.values)) {
+        await setPluginConnectionSecret(plugin.id, connection.id, secretKey, value);
+      }
+      for (const secretKey of patch.removeSecretKeys) {
+        await deletePluginConnectionSecret(plugin.id, connection.id, secretKey);
+      }
+    }
+    const updated =
+      request.body?.name === undefined
+        ? pluginConnections.get(plugin.id, connection.id)!
+        : pluginConnections.rename(
+            plugin.id,
+            connection.id,
+            normalizedConnectionName(request.body.name),
+          )!;
+    response.json(await publicPluginConnection(plugin, updated));
   } catch (error) {
     response.status(422).json({
       error: error instanceof Error ? error.message : "Não foi possível renomear a conexão.",
@@ -3379,9 +3386,9 @@ app.post("/api/plugins/:pluginId/connections/:connectionId/test", async (request
     const secrets: Record<string, string> = {};
     for (const secretKey of plugin.manifest.secretKeys ?? []) {
       const value = await getPluginConnectionSecret(plugin.id, connection.id, secretKey);
-      if (!value) throw new Error(`A conexão não possui ${secretKey}.`);
-      secrets[secretKey] = value;
+      if (value) secrets[secretKey] = value;
     }
+    if (!Object.keys(secrets).length) throw new Error("A conexão não possui credenciais.");
     const tested = pluginConnections.updateMetadata(plugin.id, connection.id, {
       ...connection.metadata,
       testedAt: new Date().toISOString(),
@@ -3652,12 +3659,12 @@ app.post("/api/method-block-tests", async (request, response) => {
     });
     return;
   }
-  const missingSecret = (plugin.manifest.secretKeys ?? []).find(
-    (secretKey) => !resolvedConnection.secrets[secretKey],
-  );
-  if (missingSecret) {
+  if (
+    (plugin.manifest.secretKeys?.length ?? 0) > 0 &&
+    !Object.keys(resolvedConnection.secrets).length
+  ) {
     response.status(422).json({
-      error: `Crie ou associe uma conta local válida a este bloco (${missingSecret}).`,
+      error: "Crie ou associe uma conta local válida a este bloco.",
     });
     return;
   }
@@ -4262,12 +4269,9 @@ app.post("/api/execute-block", async (request, response) => {
     return;
   }
   const pluginSecrets: Record<string, string> = { ...resolvedConnection.secrets };
-  const missingSecret = (plugin.manifest.secretKeys ?? []).find(
-    (declaredSecret) => !pluginSecrets[declaredSecret],
-  );
-  if (missingSecret) {
+  if ((plugin.manifest.secretKeys?.length ?? 0) > 0 && !Object.keys(pluginSecrets).length) {
     response.status(422).json({
-      error: `Crie ou associe uma conta local válida a este bloco (${missingSecret}).`,
+      error: "Crie ou associe uma conta local válida a este bloco.",
     });
     return;
   }

@@ -973,3 +973,38 @@ test("interface nova de Métodos e Plugins acompanha inglês e espanhol sem trad
     await request.put("/api/preferences", { data: original });
   }
 });
+
+test("Free Stock permite conexões parciais, troca de chave e várias chaves do mesmo provedor", async ({
+  page,
+}) => {
+  await page.goto("/plugins");
+  await page
+    .getByRole("button", { name: "Abrir detalhes de Free Stock Media Studio", exact: true })
+    .click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Credenciais e conexões", { exact: true })).toBeVisible();
+  await dialog.getByText("Adicionar conexão", { exact: true }).click();
+  const createForm = dialog.locator("details").filter({ hasText: "Adicionar conexão" });
+  await createForm.getByPlaceholder("Ex.: Pexels principal").fill("Pexels principal");
+  await createForm.locator('input[type="password"]').first().fill("pexels-chave-1");
+  const save = createForm.getByRole("button", { name: "Salvar no cofre local", exact: true });
+  await expect(save).toBeEnabled();
+  await save.click();
+
+  await expect(dialog.getByText("Pexels principal", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("1 de 4 credenciais configuradas", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Editar", exact: true }).click();
+  await dialog
+    .getByPlaceholder("Nova chave (deixe vazio para manter)")
+    .first()
+    .fill("pexels-chave-2");
+  await dialog.getByRole("button", { name: "Salvar alterações", exact: true }).click();
+  await expect(page.getByText("Conexão atualizada", { exact: true })).toBeVisible();
+
+  await createForm.getByPlaceholder("Ex.: Pexels principal").fill("Pexels reserva");
+  await createForm.locator('input[type="password"]').first().fill("pexels-chave-3");
+  await save.click();
+  await expect(dialog.getByText("Pexels reserva", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("2 conexões", { exact: true })).toBeVisible();
+});

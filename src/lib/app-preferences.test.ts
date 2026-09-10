@@ -33,6 +33,22 @@ test("translates recently added Methods and plugin profile UI in Spanish", () =>
   assert.equal(translate(", entrega “theme”", "es"), ", salida “theme”");
 });
 
+test("translates plugin credential management in English and Spanish", () => {
+  assert.equal(translate("Credenciais e conexões", "en"), "Credentials and connections");
+  assert.equal(translate("Credenciais e conexões", "es"), "Credenciales y conexiones");
+  assert.equal(translate("1 conexão", "en"), "1 connection");
+  assert.equal(translate("2 conexões", "es"), "2 conexiones");
+  assert.equal(translate("1 de 4 credenciais configuradas", "en"), "1 of 4 credentials configured");
+  assert.equal(
+    translate("1 de 4 credenciais configuradas", "es"),
+    "1 de 4 credenciales configuradas",
+  );
+  assert.equal(
+    translate("Preencha somente as credenciais necessárias para esta conexão.", "en"),
+    "Fill in only the credentials needed for this connection.",
+  );
+});
+
 test("translates every collapsible block configuration heading", () => {
   assert.deepEqual(
     ["O que faz", "Quem executa", "O que precisa", "O que entrega"].map((label) =>
