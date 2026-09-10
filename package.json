@@ -30,7 +30,7 @@
     "desktop:portable": "npm run desktop:prepare && electron-builder --win portable --x64",
     "desktop:installer": "npm run desktop:prepare && electron-builder --win nsis --x64",
     "desktop:v0": "npm run desktop:prepare && electron-builder --win portable nsis --x64",
-    "desktop:release": "npm run desktop:prepare && electron-builder --win portable nsis --x64 --publish always",
+    "desktop:release": "npm run desktop:prepare && electron-builder --win portable nsis --x64 --publish never",
     "ecosystem:package": "node scripts/package-ecosystem.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",

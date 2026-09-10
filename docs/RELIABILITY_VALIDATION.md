@@ -4,7 +4,7 @@
 
 Execute `npm ci`, `npx playwright install chromium` e `npm run release:verify`.
 Esse comando verifica código, contratos, integrações, build e interação no navegador.
-O workflow de release também exige os testes E2E antes de publicar artefatos.
+A publicação direta de release também exige essa validação local completa antes de enviar qualquer artefato. GitHub Actions não faz parte do fluxo.
 
 Os testes em `tests/e2e` iniciam sua própria API e interface nas portas 8895 e 8095,
 com banco temporário separado. Não usam os canais, perfis de navegador ou credenciais

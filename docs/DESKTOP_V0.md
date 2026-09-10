@@ -56,15 +56,13 @@ npm run desktop:v0
 
 Os artefatos intermediários são gerados em `release/v0`. Os binários não entram no histórico Git, evitando dependência de Git LFS e mantendo o clone leve.
 
-O workflow `release-windows.yml` publica uma release estável quando recebe uma tag `v<versão>` exatamente igual à versão de `package.json`. Ele executa `npm ci`, `npm run check`, monta instalador e portátil, publica `latest.yml` e os arquivos auxiliares do updater e anexa o manifesto SHA-256. Release draft, prerelease ou sem `latest.yml` não é considerada pelo canal estável.
+### Publicação direta com a credencial de sessão
 
-### Contingência para bloqueio de cobrança do GitHub Actions
+O ContentFlow não usa GitHub Actions para validar, montar ou publicar releases. O repositório não deve manter workflow acionado por tags, e o envio de uma tag nunca deve iniciar um job. Toda release autorizada é validada e construída localmente no estado exato do commit com `npm run release:verify`; instalador, portátil, blockmap, `latest.yml`, manifesto SHA-256 e pacotes do ecossistema são publicados diretamente na mesma release estável pela API do GitHub.
 
-Quando um job não chega a iniciar exclusivamente porque a conta do GitHub Actions está bloqueada por cobrança, uma release já autorizada não precisa de nova decisão do titular. Use o mesmo commit e a mesma tag, execute `npm run release:verify`, gere localmente instalador, portátil, blockmap, `latest.yml`, manifesto SHA-256 e pacotes do ecossistema, e publique esses arquivos na mesma release estável pela API do GitHub.
+A autenticação deve reutilizar exclusivamente a credencial de sessão existente no Git Credential Manager. O token nunca deve aparecer na saída, em logs, documentação, scripts versionados, variáveis persistentes ou arquivos temporários. Depois do upload, confirme pela API pública que a tag é a release `latest`, que todos os assets estão no estado `uploaded`, que os tamanhos e hashes correspondem aos arquivos locais, que o catálogo contém as versões esperadas e que `https://andremjr.github.io/contentflow/` aponta para a release correta. Falhas de teste, build, assinatura, integridade ou conteúdo devem ser corrigidas e validadas antes de publicar.
 
-A autenticação deve reutilizar a credencial de sessão existente no Git Credential Manager. O token nunca deve aparecer na saída, em logs, documentação, scripts versionados, variáveis persistentes ou arquivos temporários. Depois do upload, confirme pela API pública que a tag é a release `latest`, que todos os assets estão no estado `uploaded`, que os tamanhos e hashes correspondem aos arquivos locais, que o catálogo contém as versões esperadas e que `https://andremjr.github.io/contentflow/` aponta para a release correta. Essa contingência não se aplica a falhas de teste, build, assinatura, integridade ou conteúdo; nesses casos, corrija e valide antes de publicar.
-
-Assinatura Authenticode é a política recomendada para distribuição pública da V1. O workflow aceita `WINDOWS_CSC_LINK` e `WINDOWS_CSC_KEY_PASSWORD` como secrets do repositório; enquanto o certificado não estiver configurado, o Windows pode continuar exibindo aviso, embora a verificação HTTPS e SHA-512 do updater permaneça ativa.
+Assinatura Authenticode é a política recomendada para distribuição pública da V1. Quando houver certificado, o build local poderá receber `CSC_LINK` e `CSC_KEY_PASSWORD` somente durante o processo seguro de montagem; enquanto ele não estiver configurado, o Windows pode continuar exibindo aviso, embora a verificação HTTPS e SHA-512 do updater permaneça ativa.
 
 Depois do build, gere o manifesto de integridade no PowerShell:
 
@@ -77,6 +75,6 @@ Get-FileHash -Algorithm SHA256 `
   Set-Content -Encoding ascii "release/v0/ContentFlow-V0-$releaseVersion-SHA256.txt"
 ```
 
-Antes de enviar a tag estável, atualize `package.json`, valide localmente e prepare as notas da versão. O push da tag dispara o workflow; não reutilize uma versão ou tag já publicada. Builds beta devem usar outra política futura e não entram no canal `latest` da V1.
+Antes de enviar a tag estável, atualize `package.json`, valide localmente, prepare as notas da versão e confirme que não existe workflow acionado pela tag. Depois do push, crie ou atualize a release diretamente pela API do GitHub com a credencial segura da sessão. Não reutilize uma versão ou tag já publicada. Builds beta devem usar outra política futura e não entram no canal `latest` da V1.
 
 O empacotamento inclui o runtime Node 26 privado em `resources/runtime/node.exe`. A API inicia em uma porta local aleatória e a janela Electron encaminha `/api` internamente, evitando portas fixas e conflitos com uma cópia de desenvolvimento.
