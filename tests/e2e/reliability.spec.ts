@@ -100,6 +100,34 @@ test("cria uma coleção estratégica com o campo de nome focável e clicável",
   await expect(page.getByText("Estruturas E2E", { exact: true })).toBeVisible();
 });
 
+test("canal preserva somente o código regional escolhido no campo de idioma", async ({
+  page,
+  request,
+}) => {
+  const original = (await (await request.get("/api/preferences")).json()) as Record<
+    string,
+    unknown
+  >;
+  const channelName = `Canal regional ${randomUUID().slice(0, 6)}`;
+  const existingChannel = await seed(request);
+
+  try {
+    await request.put("/api/preferences", { data: { ...original, language: "pt-BR" } });
+    await page.goto("/dashboard");
+    await expect(page.getByText(existingChannel.name, { exact: true }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Novo canal", exact: true }).click();
+    await page.getByLabel("Nome do canal *", { exact: true }).fill(channelName);
+    await page.getByLabel("Idioma", { exact: true }).click();
+    await page.getByRole("option", { name: /inglês.*EN-AU/i }).click();
+    await page.getByRole("button", { name: "Criar canal", exact: true }).click();
+
+    const channels = (await (await request.get("/api/channels")).json()) as Channel[];
+    expect(channels.find((channel) => channel.name === channelName)?.language).toBe("EN-AU");
+  } finally {
+    await request.put("/api/preferences", { data: original });
+  }
+});
+
 test("testa um bloco com entradas temporárias sem criar execução ou histórico", async ({
   request,
 }) => {
@@ -370,14 +398,95 @@ test("editor mantém entradas e variáveis do prompt sincronizadas", async ({ pa
   const prompt = page.locator("textarea").first();
   await prompt.fill("Use apenas o contexto.");
   await prompt.blur();
+  await page.getByRole("button", { name: /O que precisa Informações de entrada/ }).click();
   await expect(page.getByText(/Este bloco não precisa de uma entrada específica/i)).toBeVisible();
 
   await page.getByRole("button", { name: "Adicionar entrada", exact: true }).last().click();
-  await expect(prompt).toHaveValue("Use apenas o contexto. {{inputs.nova_entrada_1}}");
+  await page.getByRole("button", { name: /O que faz Ação e instrução/ }).click();
+  await expect(page.locator("textarea").first()).toHaveValue(
+    "Use apenas o contexto. {{inputs.nova_entrada_1}}",
+  );
+  await page.getByRole("button", { name: /O que precisa Informações de entrada/ }).click();
   await page.getByPlaceholder("Nome da entrada", { exact: true }).fill("Briefing");
-  await expect(prompt).toHaveValue("Use apenas o contexto. {{inputs.briefing}}");
+  await page.getByRole("button", { name: /O que faz Ação e instrução/ }).click();
+  await expect(page.locator("textarea").first()).toHaveValue(
+    "Use apenas o contexto. {{inputs.briefing}}",
+  );
+  await page.getByRole("button", { name: /O que precisa Informações de entrada/ }).click();
   await page.getByRole("button", { name: "Remover entrada Briefing", exact: true }).click();
-  await expect(prompt).toHaveValue("Use apenas o contexto.");
+  await page.getByRole("button", { name: /O que faz Ação e instrução/ }).click();
+  await expect(page.locator("textarea").first()).toHaveValue("Use apenas o contexto.");
+});
+
+test("editor destaca o tipo do bloco junto ao ícone na visão geral", async ({ page, request }) => {
+  const channel = await seed(request);
+  await page.goto(`/channel/${channel.id}/methods?process=theme`);
+
+  const card = page.locator("article > button").filter({ hasText: "Entrega theme" });
+  const type = card.getByText("Criar", { exact: true });
+  const title = card.getByText("Entrega theme", { exact: true });
+
+  await expect(type).toHaveClass(/text-brand/);
+  const icon = type.locator("xpath=..").locator("svg");
+  await expect(icon).toHaveClass(/text-brand/);
+  const typeBox = await type.boundingBox();
+  const titleBox = await title.boundingBox();
+  expect(typeBox).not.toBeNull();
+  expect(titleBox).not.toBeNull();
+  expect(typeBox!.x).toBeLessThan(titleBox!.x);
+});
+
+test("editor expande uma única seção de configuração do bloco por vez", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  await page.goto(`/channel/${channel.id}/methods?process=theme`);
+  await page.getByText("Entrega theme", { exact: true }).first().click();
+
+  const action = page.getByRole("button", { name: /O que faz Ação e instrução/ });
+  const operator = page.getByRole("button", {
+    name: /Quem executa Operador responsável/,
+  });
+  const inputs = page.getByRole("button", { name: /O que precisa Informações de entrada/ });
+  const outputs = page.getByRole("button", { name: /O que entrega Resultado desta ação/ });
+
+  await expect(action).toHaveAttribute("aria-expanded", "true");
+  await expect(operator).toHaveAttribute("aria-expanded", "false");
+  await expect(inputs).toHaveAttribute("aria-expanded", "false");
+  await expect(outputs).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByPlaceholder("Ex: Criar referências", { exact: true })).toBeVisible();
+
+  await operator.click();
+  await expect(action).toHaveAttribute("aria-expanded", "false");
+  await expect(operator).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByPlaceholder("Ex: Criar referências", { exact: true })).toHaveCount(0);
+
+  await inputs.click();
+  await expect(operator).toHaveAttribute("aria-expanded", "false");
+  await expect(inputs).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    page.getByText("Este bloco não precisa de uma entrada específica para começar.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+
+  await outputs.click();
+  await expect(inputs).toHaveAttribute("aria-expanded", "false");
+  await expect(outputs).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Adicionar entrega", exact: true })).toBeVisible();
+
+  const visualStyle = await action.evaluate((button) => {
+    const section = button.closest("section")!;
+    const eyebrow = button.querySelector("span > span")!;
+    return {
+      sectionClass: section.className,
+      eyebrowClass: eyebrow.className,
+    };
+  });
+  expect(visualStyle.sectionClass).toContain("border-brand/30");
+  expect(visualStyle.sectionClass).not.toContain("bg-brand/");
+  expect(visualStyle.eyebrowClass).toContain("text-brand");
 });
 
 test("validação resume contextos extensos e permite expandir cada entrega", async ({
@@ -824,6 +933,17 @@ test("interface nova de Métodos e Plugins acompanha inglês e espanhol sem trad
     await expect(page.getByRole("button", { name: "Install plugin", exact: true })).toBeVisible();
     await expect(page.getByPlaceholder("Search plugins by name...", { exact: true })).toBeVisible();
 
+    await page.goto("/dashboard");
+    await page.getByRole("button", { name: "New channel", exact: true }).click();
+    const englishLanguage = page.getByLabel("Language", { exact: true });
+    await expect(englishLanguage).toContainText(/Portuguese.*PT-BR/i);
+    await englishLanguage.click();
+    await expect(page.getByRole("option")).toHaveCount(98);
+    await expect(page.getByRole("option", { name: /English.*EN-US/i })).toBeVisible();
+    await expect(page.getByRole("option", { name: /Spanish.*ES-MX/i })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Close" }).click();
+
     await request.put("/api/preferences", { data: { ...original, language: "es" } });
     await page.goto("/methods");
     await expect(
@@ -841,6 +961,14 @@ test("interface nova de Métodos e Plugins acompanha inglês e espanhol sem trad
     await expect(
       page.getByPlaceholder("Buscar plugins por nombre...", { exact: true }),
     ).toBeVisible();
+
+    await page.goto("/dashboard");
+    await page.getByRole("button", { name: "Nuevo canal", exact: true }).click();
+    const spanishLanguage = page.getByLabel("Idioma", { exact: true });
+    await expect(spanishLanguage).toContainText(/portugués.*PT-BR/i);
+    await spanishLanguage.click();
+    await expect(page.getByRole("option", { name: /inglés.*EN-AU/i })).toBeVisible();
+    await expect(page.getByRole("option", { name: /español.*ES-ES/i })).toBeVisible();
   } finally {
     await request.put("/api/preferences", { data: original });
   }

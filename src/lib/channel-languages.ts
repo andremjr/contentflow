@@ -1,0 +1,127 @@
+import type { AppLanguage } from "@/lib/app-preferences";
+
+export const CHANNEL_LANGUAGE_CODES = [
+  "PT-BR",
+  "PT-PT",
+  "EN",
+  "EN-US",
+  "EN-GB",
+  "EN-CA",
+  "EN-AU",
+  "EN-NZ",
+  "EN-IE",
+  "EN-IN",
+  "EN-ZA",
+  "ES",
+  "ES-ES",
+  "ES-MX",
+  "ES-US",
+  "ES-AR",
+  "ES-CO",
+  "ES-CL",
+  "ES-PE",
+  "ES-VE",
+  "FR",
+  "FR-FR",
+  "FR-CA",
+  "FR-BE",
+  "FR-CH",
+  "DE",
+  "DE-DE",
+  "DE-AT",
+  "DE-CH",
+  "IT-IT",
+  "NL-NL",
+  "NL-BE",
+  "SV-SE",
+  "DA-DK",
+  "NO-NO",
+  "FI-FI",
+  "IS-IS",
+  "PL-PL",
+  "CS-CZ",
+  "SK-SK",
+  "HU-HU",
+  "RO-RO",
+  "BG-BG",
+  "UK-UA",
+  "RU-RU",
+  "EL-GR",
+  "TR-TR",
+  "CA-ES",
+  "EU-ES",
+  "GL-ES",
+  "HR-HR",
+  "SR-RS",
+  "SL-SI",
+  "BS-BA",
+  "SQ-AL",
+  "MK-MK",
+  "ET-EE",
+  "LV-LV",
+  "LT-LT",
+  "AR-SA",
+  "AR-EG",
+  "AR-AE",
+  "HE-IL",
+  "FA-IR",
+  "HI-IN",
+  "BN-BD",
+  "UR-PK",
+  "TA-IN",
+  "TE-IN",
+  "MR-IN",
+  "GU-IN",
+  "KN-IN",
+  "ML-IN",
+  "PA-IN",
+  "NE-NP",
+  "SI-LK",
+  "ZH-CN",
+  "ZH-TW",
+  "ZH-HK",
+  "JA-JP",
+  "KO-KR",
+  "ID-ID",
+  "MS-MY",
+  "FIL-PH",
+  "TH-TH",
+  "VI-VN",
+  "MY-MM",
+  "KM-KH",
+  "LO-LA",
+  "MN-MN",
+  "SW-KE",
+  "AF-ZA",
+  "AM-ET",
+  "UZ-UZ",
+  "KK-KZ",
+  "AZ-AZ",
+  "KA-GE",
+  "HY-AM",
+] as const;
+
+const displayNames = new Map<AppLanguage, Intl.DisplayNames>();
+
+export function getChannelLanguageName(code: string, appLanguage: AppLanguage) {
+  let formatter = displayNames.get(appLanguage);
+  if (!formatter) {
+    formatter = new Intl.DisplayNames([appLanguage], {
+      type: "language",
+      languageDisplay: "standard",
+    });
+    displayNames.set(appLanguage, formatter);
+  }
+  const name = formatter.of(code) ?? code;
+  return `${name.charAt(0).toLocaleUpperCase(appLanguage)}${name.slice(1)}`;
+}
+
+export function getChannelLanguageOptions(appLanguage: AppLanguage) {
+  const collator = new Intl.Collator(appLanguage, { sensitivity: "base" });
+  return CHANNEL_LANGUAGE_CODES.map((code) => ({
+    code,
+    name: getChannelLanguageName(code, appLanguage),
+  })).sort(
+    (left, right) => collator.compare(left.name, right.name) || left.code.localeCompare(right.code),
+  );
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Layers3, Plus } from "lucide-react";
 import {
   Dialog,
@@ -24,10 +24,11 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { createEmptyMethods, type Channel } from "@/lib/domain";
 import { createChannel, updateChannel } from "@/lib/store";
+import { useAppPreferences } from "@/lib/app-preferences";
+import { getChannelLanguageName, getChannelLanguageOptions } from "@/lib/channel-languages";
 
 const COLOR_PRESETS = ["#2563EB", "#4F6B8F", "#60727A", "#6B7080"];
 
-const LANGUAGES = ["PT-BR", "EN", "ES", "FR", "DE"];
 const FREQUENCIES = ["1x / semana", "2x / semana", "3x / semana", "Diário", "Quinzenal"];
 
 export function NewChannelDialog({
@@ -43,6 +44,7 @@ export function NewChannelDialog({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
+  const { language: appLanguage } = useAppPreferences();
   const [internalOpen, setInternalOpen] = useState(false);
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
@@ -51,6 +53,7 @@ export function NewChannelDialog({
   const [frequency, setFrequency] = useState("1x / semana");
   const [color, setColor] = useState(COLOR_PRESETS[0]);
   const [description, setDescription] = useState("");
+  const languageOptions = useMemo(() => getChannelLanguageOptions(appLanguage), [appLanguage]);
 
   const isEditing = Boolean(channel);
   const open = controlledOpen ?? internalOpen;
@@ -221,12 +224,24 @@ export function NewChannelDialog({
               <Label htmlFor="ch-lang">Idioma</Label>
               <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger id="ch-lang">
-                  <SelectValue />
+                  <SelectValue>
+                    <span className="flex min-w-0 items-baseline gap-1.5">
+                      <span className="truncate font-medium">
+                        {getChannelLanguageName(language, appLanguage)}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        ({language})
+                      </span>
+                    </span>
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
-                  {LANGUAGES.map((l) => (
-                    <SelectItem key={l} value={l}>
-                      {l}
+                <SelectContent className="min-w-[18rem]">
+                  {languageOptions.map(({ code, name }) => (
+                    <SelectItem key={code} value={code}>
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="truncate font-medium">{name}</span>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">({code})</span>
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>

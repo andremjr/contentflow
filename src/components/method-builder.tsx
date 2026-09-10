@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Bot,
   Braces,
@@ -1033,18 +1033,16 @@ function MethodBlockCardContent({
       <span className="w-6 shrink-0 self-start pt-1 font-mono text-[10px] text-muted-foreground">
         {String(index + 1).padStart(2, "0")}
       </span>
-      <span
-        className={cn("grid size-9 shrink-0 place-items-center rounded-md border", meta.className)}
-      >
-        <Icon className="size-4" />
+      <span className="flex w-14 shrink-0 flex-col items-center gap-1.5 self-start">
+        <span className={cn("grid size-9 place-items-center rounded-md border", meta.className)}>
+          <Icon className="size-4 text-brand" />
+        </span>
+        <span className="text-center text-[9px] font-semibold uppercase tracking-[0.08em] text-brand">
+          {meta.label}
+        </span>
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm font-semibold text-foreground">{title}</span>
-          <span className="text-[10px] font-medium uppercase text-muted-foreground">
-            {meta.label}
-          </span>
-        </span>
+        <span className="text-sm font-semibold text-foreground">{title}</span>
         <span className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
           {summary}
         </span>
@@ -1090,29 +1088,60 @@ function MethodBlockPreview({
   );
 }
 
+type MethodEditorSectionId = "action" | "operator" | "inputs" | "outputs";
+
 function MethodEditorSection({
+  sectionId,
   eyebrow,
   title,
   description,
+  open,
+  onOpenChange,
   children,
 }: {
+  sectionId: MethodEditorSectionId;
   eyebrow: string;
   title: string;
   description: string;
+  open: boolean;
+  onOpenChange: (sectionId: MethodEditorSectionId | null) => void;
   children: ReactNode;
 }) {
+  const contentId = useId();
+
   return (
-    <section className="min-w-0 rounded-xl border border-border/80 bg-card/35 p-4 sm:p-5">
-      <div className="mb-4 border-b border-border/60 pb-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          {eyebrow}
-        </p>
-        <h3 className="mt-1 text-sm font-semibold text-foreground">{title}</h3>
-        <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
-          {description}
-        </p>
-      </div>
-      {children}
+    <section className="min-w-0 overflow-hidden rounded-xl border border-brand/30 bg-card/35">
+      <button
+        type="button"
+        className={cn(
+          "flex w-full items-start justify-between gap-4 p-4 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset sm:p-5",
+          open && "border-b border-brand/30",
+        )}
+        aria-expanded={open}
+        aria-controls={contentId}
+        onClick={() => onOpenChange(open ? null : sectionId)}
+      >
+        <span className="min-w-0">
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-brand">
+            {eyebrow}
+          </span>
+          <span className="mt-1 block text-sm font-semibold text-foreground">{title}</span>
+          <span className="mt-1 block max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
+            {description}
+          </span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "mt-1 size-4 shrink-0 text-brand transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open && (
+        <div id={contentId} className="p-4 sm:p-5">
+          {children}
+        </div>
+      )}
     </section>
   );
 }
@@ -1142,6 +1171,7 @@ function BlockEditor({
   onChange: (patch: Partial<ActionBlock>) => void;
   onRemove: () => void;
 }) {
+  const [openSection, setOpenSection] = useState<MethodEditorSectionId | null>("action");
   const meta = BLOCK_META[block.type];
   const Icon = meta.icon;
   const compatibleCapabilities = plugins.flatMap((plugin) =>
@@ -1250,9 +1280,12 @@ function BlockEditor({
 
       <div className="mt-6 space-y-4">
         <MethodEditorSection
+          sectionId="action"
           eyebrow="O que faz"
           title="Ação e instrução"
           description="Dê um nome claro ao bloco e registre o prompt ou a orientação usada para realizar esta ação."
+          open={openSection === "action"}
+          onOpenChange={setOpenSection}
         >
           <div className="space-y-1.5">
             <Label>Nome da ação</Label>
@@ -1275,9 +1308,12 @@ function BlockEditor({
         </MethodEditorSection>
 
         <MethodEditorSection
+          sectionId="operator"
           eyebrow="Quem executa"
           title="Operador responsável"
           description="Escolha se esta ação será realizada por uma pessoa, por IA ou por uma operação de código."
+          open={openSection === "operator"}
+          onOpenChange={setOpenSection}
         >
           <Select
             value={block.operator}
@@ -1308,9 +1344,12 @@ function BlockEditor({
       {block.type === "ESCOLHER" && (
         <div className="mt-4 space-y-4">
           <MethodEditorSection
+            sectionId="inputs"
             eyebrow="O que precisa"
             title="Coleção e contexto"
             description="Indique onde estão as opções que já existem e, se necessário, quais informações ajudam na escolha."
+            open={openSection === "inputs"}
+            onOpenChange={setOpenSection}
           >
             <div className="space-y-1.5">
               <Label>Coleção estratégica</Label>
@@ -1358,9 +1397,12 @@ function BlockEditor({
             />
           </MethodEditorSection>
           <MethodEditorSection
+            sectionId="outputs"
             eyebrow="O que entrega"
             title="Item escolhido"
             description="O item selecionado e os campos definidos na coleção ficam disponíveis para os próximos blocos."
+            open={openSection === "outputs"}
+            onOpenChange={setOpenSection}
           >
             <p className="text-xs text-muted-foreground">
               A estrutura desta entrega acompanha a coleção estratégica vinculada acima.
@@ -1372,9 +1414,12 @@ function BlockEditor({
       {block.type === "VALIDAR" && (
         <div className="mt-4 space-y-4">
           <MethodEditorSection
+            sectionId="inputs"
             eyebrow="O que precisa"
             title="Resultado que será validado"
             description="Escolha uma entrega anterior, defina a decisão esperada e o que acontece quando ela é reprovada."
+            open={openSection === "inputs"}
+            onOpenChange={setOpenSection}
           >
             <ValidationEditor
               block={block}
@@ -1392,9 +1437,12 @@ function BlockEditor({
             />
           </MethodEditorSection>
           <MethodEditorSection
+            sectionId="outputs"
             eyebrow="O que entrega"
             title="Decisão da validação"
             description="A aprovação, reprovação ou seleção feita aqui fica disponível como resultado deste bloco."
+            open={openSection === "outputs"}
+            onOpenChange={setOpenSection}
           >
             <p className="text-xs text-muted-foreground">
               O formato da decisão acompanha o modo de validação escolhido acima.
@@ -1411,6 +1459,8 @@ function BlockEditor({
           processType={processType}
           channelMethods={channelMethods}
           onChange={onChange}
+          openSection={openSection}
+          onOpenSectionChange={setOpenSection}
         />
       )}
 
@@ -3078,6 +3128,8 @@ function DataContractEditor({
   processType,
   channelMethods,
   onChange,
+  openSection,
+  onOpenSectionChange,
 }: {
   block: ActionBlock;
   methodBlocks: ActionBlock[];
@@ -3085,6 +3137,8 @@ function DataContractEditor({
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
   onChange: (patch: Partial<ActionBlock>) => void;
+  openSection: MethodEditorSectionId | null;
+  onOpenSectionChange: (sectionId: MethodEditorSectionId | null) => void;
 }) {
   const inputs = block.inputs ?? [];
   const regularInputs = inputs.filter((input) => input.source !== "channel_history");
@@ -3116,9 +3170,12 @@ function DataContractEditor({
   return (
     <div className="mt-4 space-y-4">
       <MethodEditorSection
+        sectionId="inputs"
         eyebrow="O que precisa"
         title={block.type === "BUSCAR" ? "Informações para a busca" : "Informações de entrada"}
         description="Defina o que precisa estar disponível antes desta ação começar. Cada entrada cria e mantém sua variável correspondente no prompt."
+        open={openSection === "inputs"}
+        onOpenChange={onOpenSectionChange}
       >
         {block.type === "CRIAR" && (
           <div className="mb-3">
@@ -3171,9 +3228,12 @@ function DataContractEditor({
       </MethodEditorSection>
 
       <MethodEditorSection
+        sectionId="outputs"
         eyebrow="O que entrega"
         title={block.type === "BUSCAR" ? "Resultados encontrados" : "Resultado desta ação"}
         description="Defina o que ficará pronto quando esta ação terminar e poderá ser usado pelos próximos blocos."
+        open={openSection === "outputs"}
+        onOpenChange={onOpenSectionChange}
       >
         <div className="flex flex-wrap justify-end gap-1">
           <Button

@@ -33,6 +33,21 @@ test("translates recently added Methods and plugin profile UI in Spanish", () =>
   assert.equal(translate(", entrega “theme”", "es"), ", salida “theme”");
 });
 
+test("translates every collapsible block configuration heading", () => {
+  assert.deepEqual(
+    ["O que faz", "Quem executa", "O que precisa", "O que entrega"].map((label) =>
+      translate(label, "en"),
+    ),
+    ["What it does", "Who runs it", "What it needs", "What it outputs"],
+  );
+  assert.deepEqual(
+    ["O que faz", "Quem executa", "O que precisa", "O que entrega"].map((label) =>
+      translate(label, "es"),
+    ),
+    ["Qué hace", "Quién lo ejecuta", "Qué necesita", "Qué entrega"],
+  );
+});
+
 test("preserves user-created and plugin-authored content", () => {
   for (const language of ["en", "es"] as const) {
     assert.equal(translate("Históricos Contentflow", language), "Históricos Contentflow");
