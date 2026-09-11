@@ -149,7 +149,7 @@
           "key": "sections",
           "label": "Quantidade de blocos",
           "description": "Quando não há outline, cria esta quantidade de etapas consecutivas.",
-          "acceptedTypes": ["number", "text", "textarea"],
+          "acceptedTypes": ["number"],
           "required": false,
           "multiple": false
         },

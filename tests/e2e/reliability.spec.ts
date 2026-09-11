@@ -5,6 +5,7 @@ import {
   PROCESS_ORDER,
   type Channel,
   type Project,
+  type StrategicCollection,
 } from "../../src/lib/domain";
 
 async function seed(request: APIRequestContext) {
@@ -416,6 +417,76 @@ test("editor mantém entradas e variáveis do prompt sincronizadas", async ({ pa
   await page.getByRole("button", { name: "Remover entrada Briefing", exact: true }).click();
   await page.getByRole("button", { name: /O que faz Ação e instrução/ }).click();
   await expect(page.locator("textarea").first()).toHaveValue("Use apenas o contexto.");
+});
+
+test("editor expõe um campo da coleção como saída do bloco Escolher", async ({ page, request }) => {
+  const channel = await seed(request);
+  const collection: StrategicCollection = {
+    id: randomUUID(),
+    channelId: channel.id,
+    name: "Layouts E2E",
+    fields: [
+      { id: "layout-name", label: "Nome do layout", type: "text", required: true },
+      { id: "layout-field", label: "Layout", type: "thumbnail_layout", required: true },
+    ],
+    createdAt: new Date().toISOString(),
+  };
+  expect((await request.post("/api/library/collections", { data: collection })).ok()).toBeTruthy();
+
+  const chooseBlock = {
+    id: "choose-thumbnail-layout",
+    type: "ESCOLHER",
+    operator: "Humano",
+    name: "Escolher layout",
+    instructions: "",
+    inputs: [],
+    outputs: [],
+    parameters: [],
+    order: 0,
+    collectionId: collection.id,
+  };
+  const createBlock = {
+    id: "create-thumbnail-from-layout",
+    type: "CRIAR",
+    operator: "Humano",
+    name: "Criar thumbnail do layout",
+    instructions: "Use {{inputs.layout_escolhido}}.",
+    inputs: [
+      {
+        id: "chosen-layout",
+        label: "layout escolhido",
+        type: "thumbnail_layout",
+        source: "previous_block",
+        blockId: chooseBlock.id,
+        sourceKey: "layout-field",
+      },
+    ],
+    outputs: [
+      {
+        id: "thumbnail-output",
+        key: "thumbnail",
+        label: "Thumbnail",
+        type: "image",
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 1,
+  };
+  expect(
+    (
+      await request.put(`/api/channels/${channel.id}/methods/thumbnail`, {
+        data: { name: "Thumbnail com layout", blocks: [chooseBlock, createBlock] },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  await page.goto(`/channel/${channel.id}/methods?process=thumbnail`);
+  await page.getByText("Criar thumbnail do layout", { exact: true }).first().click();
+  await page.getByRole("button", { name: /O que precisa Informações de entrada/ }).click();
+
+  const sourceField = page.getByText("Saída do bloco", { exact: true }).locator("xpath=..");
+  await expect(sourceField.getByRole("combobox")).toContainText("Layout");
 });
 
 test("editor destaca o tipo do bloco junto ao ícone na visão geral", async ({ page, request }) => {

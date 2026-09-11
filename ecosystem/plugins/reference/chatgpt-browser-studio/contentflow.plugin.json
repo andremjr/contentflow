@@ -858,7 +858,19 @@
         {
           "key": "prompt",
           "label": "Prompt da imagem",
-          "acceptedTypes": ["text", "textarea"],
+          "acceptedTypes": [
+            "text",
+            "textarea",
+            "number",
+            "boolean",
+            "list",
+            "records",
+            "select",
+            "multiselect",
+            "datetime",
+            "url",
+            "thumbnail_layout"
+          ],
           "required": true,
           "multiple": true
         },
@@ -898,7 +910,22 @@
           "required": false
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "image", "file", "files"],
+      "acceptedInputTypes": [
+        "text",
+        "textarea",
+        "number",
+        "boolean",
+        "list",
+        "records",
+        "select",
+        "multiselect",
+        "datetime",
+        "url",
+        "thumbnail_layout",
+        "image",
+        "file",
+        "files"
+      ],
       "producedOutputTypes": ["image", "files", "textarea"],
       "execution": {
         "mode": "immediate",

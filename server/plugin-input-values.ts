@@ -41,16 +41,26 @@ function presentationScore(input: BlockInputBinding, port: PluginInputPort) {
 function semanticIdentityScore(input: BlockInputBinding, port: PluginInputPort) {
   const normalize = (value: string | undefined) =>
     (value ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, " ")
       .trim();
   const portKey = normalize(port.key);
   if (!portKey) return 0;
-  if (normalize(input.sourceKey) === portKey) return 20;
+  if (normalize(input.sourceKey) === portKey) return 30;
+  const inputLabel = normalize(input.label);
+  const portLabel = normalize(port.label);
+  if (inputLabel && portLabel && inputLabel === portLabel) return 24;
   const inputIdTokens = normalize(input.id).split(" ");
-  if (inputIdTokens.includes(portKey)) return 12;
-  const inputLabelTokens = normalize(input.label).split(" ");
-  return inputLabelTokens.includes(portKey) ? 8 : 0;
+  if (inputIdTokens.includes(portKey)) return 16;
+  const inputLabelTokens = inputLabel.split(" ");
+  if (inputLabelTokens.includes(portKey)) return 12;
+  const portLabelTokens = portLabel.split(" ").filter(Boolean);
+  return portLabelTokens.length > 1 &&
+    portLabelTokens.every((token) => inputLabelTokens.includes(token))
+    ? 10
+    : 0;
 }
 
 export function selectPluginInputPort(
@@ -71,6 +81,27 @@ export function selectPluginInputPort(
         (semanticIdentityScore(input, left.port) + presentationScore(input, left.port));
       return scoreDifference || left.index - right.index;
     })[0]?.port;
+}
+
+export function selectPluginImplicitContextPort(
+  ports: PluginInputPort[],
+  assignedValues: Readonly<Record<string, RuntimeValue>>,
+) {
+  const isContextPort = (key: string) => {
+    const tokens = key
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .split(" ");
+    return tokens.includes("content") || tokens.includes("context") || tokens.includes("prompt");
+  };
+
+  return ports.find(
+    (port) =>
+      assignedValues[port.key] === undefined &&
+      isContextPort(port.key) &&
+      (port.acceptedTypes.includes("text") || port.acceptedTypes.includes("textarea")),
+  );
 }
 
 export function composePluginPortValue(

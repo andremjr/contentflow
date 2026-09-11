@@ -90,6 +90,9 @@ test("manifesto declara as seis capabilities do Claude Browser Studio", () => {
     capability.outputPorts.map((item) => item.key),
     ["result", "parts", "document"],
   );
+  assert.deepEqual(capability.inputPorts.find((item) => item.key === "sections").acceptedTypes, [
+    "number",
+  ]);
   assert.deepEqual(
     manifest.capabilities.map((item) => item.id),
     [

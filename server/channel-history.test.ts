@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type {
   ActionBlock,
+  ChannelLibraryItem,
   ProcessExecution,
   Project,
   RuntimeValue,
+  StrategicCollection,
   UniversalProcess,
 } from "../src/lib/domain";
 import { recordBlockDeliveries, recordProcessOutputDelivery } from "../src/lib/deliveries";
@@ -174,6 +176,121 @@ test("ESCOLHER materializa o item selecionado como entrega histórica", () => {
   assert.equal(result.deliveries?.length, 1);
   assert.equal(result.deliveries?.[0].outputKey, "selectedItemId");
   assert.equal(result.deliveries?.[0].items[0].value, "structure-4");
+});
+
+test("resolve explicitamente um layout do item escolhido para o bloco seguinte", () => {
+  const layout = {
+    aspectRatio: "16:9" as const,
+    boxes: [
+      {
+        id: "background",
+        label: "Fundo",
+        color: "#2563EB",
+        x: 0,
+        y: 0,
+        w: 100,
+        h: 100,
+      },
+    ],
+  };
+  const collection: StrategicCollection = {
+    id: "thumbnail-layouts",
+    channelId: "channel-a",
+    name: "Layouts de thumbnail",
+    fields: [
+      {
+        id: "layout-field",
+        label: "Layout",
+        type: "thumbnail_layout",
+        required: true,
+      },
+    ],
+    createdAt: now,
+  };
+  const item: ChannelLibraryItem = {
+    id: "centered-layout",
+    channelId: "channel-a",
+    collectionId: collection.id,
+    values: { "layout-field": layout },
+    createdAt: now,
+  };
+  const chooseBlock: ActionBlock = {
+    id: "choose-layout",
+    type: "ESCOLHER",
+    operator: "Humano",
+    name: "Escolher layout",
+    collectionId: collection.id,
+    inputs: [],
+    outputs: [],
+    parameters: [],
+    order: 0,
+  };
+  const createBlock: ActionBlock = {
+    id: "create-thumbnail",
+    type: "CRIAR",
+    operator: "IA",
+    name: "Criar thumbnail",
+    inputs: [
+      {
+        id: "chosen-layout",
+        label: "Layout escolhido",
+        type: "thumbnail_layout",
+        source: "previous_block",
+        blockId: chooseBlock.id,
+        sourceKey: "layout-field",
+      },
+    ],
+    outputs: [
+      {
+        id: "thumbnail-output",
+        label: "Thumbnail produzida",
+        key: "thumbnail",
+        type: "image",
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 1,
+  };
+  const currentProject = project("thumbnail-project");
+  const currentExecution: ProcessExecution = {
+    id: "thumbnail-execution",
+    projectId: currentProject.id,
+    channelId: currentProject.channelId,
+    processType: "thumbnail",
+    methodSnapshot: {
+      name: "Método de thumbnail",
+      processType: "thumbnail",
+      blocks: [chooseBlock, createBlock],
+    },
+    blocks: [
+      {
+        blockId: chooseBlock.id,
+        status: "completed",
+        values: { selectedItemId: item.id },
+        attempt: 1,
+        completedAt: now,
+      },
+      { blockId: createBlock.id, status: "pending", values: {}, attempt: 1 },
+    ],
+    status: "running",
+    outputStatus: "pending",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const [resolved] = resolveBlockInputs({
+    block: createBlock,
+    execution: currentExecution,
+    project: currentProject,
+    projectExecutions: [currentExecution],
+    collections: [collection],
+    libraryItems: [item],
+  });
+
+  assert.equal(resolved.resolved, true);
+  assert.equal(resolved.resolvedSourceKey, "layout-field");
+  assert.deepEqual(resolved.value, layout);
 });
 
 test("CRIAR recebe os resultados finais anteriores do mesmo processo", () => {

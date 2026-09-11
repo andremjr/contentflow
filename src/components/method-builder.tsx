@@ -116,6 +116,7 @@ import {
 } from "@/lib/method-file";
 import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
 import { createChannelHistoryRecordFields } from "@/lib/channel-history";
+import { getBlockSourceFields } from "@/lib/method-source-fields";
 import {
   addInstructionInputVariable,
   instructionInputKey,
@@ -1303,6 +1304,7 @@ function BlockEditor({
             blockIndex={index}
             processType={processType}
             channelMethods={channelMethods}
+            collections={collections}
             onChange={onChange}
           />
         </MethodEditorSection>
@@ -1393,6 +1395,7 @@ function BlockEditor({
               blockIndex={index}
               processType={processType}
               channelMethods={channelMethods}
+              collections={collections}
               onChange={onChange}
             />
           </MethodEditorSection>
@@ -1433,6 +1436,7 @@ function BlockEditor({
               blockIndex={index}
               processType={processType}
               channelMethods={channelMethods}
+              collections={collections}
               onChange={onChange}
             />
           </MethodEditorSection>
@@ -1458,6 +1462,7 @@ function BlockEditor({
           blockIndex={index}
           processType={processType}
           channelMethods={channelMethods}
+          collections={collections}
           onChange={onChange}
           openSection={openSection}
           onOpenSectionChange={setOpenSection}
@@ -2157,6 +2162,7 @@ function InstructionEditor({
   blockIndex,
   processType,
   channelMethods,
+  collections,
   onChange,
 }: {
   block: ActionBlock;
@@ -2165,6 +2171,7 @@ function InstructionEditor({
   blockIndex: number;
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
+  collections: StrategicCollection[];
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -2223,7 +2230,7 @@ function InstructionEditor({
     };
   };
   const previousBlockInputs = methodBlocks.slice(0, blockIndex).flatMap((sourceBlock) =>
-    (sourceBlock.outputs ?? [])
+    getBlockSourceFields(sourceBlock, collections)
       .filter((output) => acceptsInputType(output.type))
       .map((output) =>
         toAvailableInput(
@@ -3033,6 +3040,7 @@ function ContextInputsEditor({
   blockIndex,
   processType,
   channelMethods,
+  collections,
   onChange,
 }: {
   block: ActionBlock;
@@ -3040,6 +3048,7 @@ function ContextInputsEditor({
   blockIndex: number;
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
+  collections: StrategicCollection[];
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const inputs = block.inputs ?? [];
@@ -3089,6 +3098,7 @@ function ContextInputsEditor({
             availableBlocks={methodBlocks.slice(0, blockIndex)}
             processType={processType}
             channelMethods={channelMethods}
+            collections={collections}
             onChange={(patch) => {
               const nextInput = { ...input, ...patch };
               onChange({
@@ -3130,6 +3140,7 @@ function DataContractEditor({
   blockIndex,
   processType,
   channelMethods,
+  collections,
   onChange,
   openSection,
   onOpenSectionChange,
@@ -3139,6 +3150,7 @@ function DataContractEditor({
   blockIndex: number;
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
+  collections: StrategicCollection[];
   onChange: (patch: Partial<ActionBlock>) => void;
   openSection: MethodEditorSectionId | null;
   onOpenSectionChange: (sectionId: MethodEditorSectionId | null) => void;
@@ -3198,6 +3210,7 @@ function DataContractEditor({
               availableBlocks={methodBlocks.slice(0, blockIndex)}
               processType={processType}
               channelMethods={channelMethods}
+              collections={collections}
               onChange={(patch) => {
                 const nextInput = { ...input, ...patch };
                 onChange({
@@ -3286,6 +3299,7 @@ function InputBindingEditor({
   availableBlocks,
   processType,
   channelMethods,
+  collections,
   onChange,
   onRemove,
 }: {
@@ -3293,10 +3307,12 @@ function InputBindingEditor({
   availableBlocks: ActionBlock[];
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
+  collections: StrategicCollection[];
   onChange: (patch: Partial<BlockInputBinding>) => void;
   onRemove: () => void;
 }) {
   const sourceBlock = availableBlocks.find((block) => block.id === input.blockId);
+  const sourceFields = getBlockSourceFields(sourceBlock, collections);
   const previousProcesses = PROCESS_ORDER.slice(0, PROCESS_ORDER.indexOf(processType));
   const previousDeliverySources = previousProcesses.flatMap((sourceProcessType) => {
     const method = channelMethods[sourceProcessType];
@@ -3532,7 +3548,7 @@ function InputBindingEditor({
           <Select
             value={input.sourceKey ?? "automatic"}
             onValueChange={(sourceKey) => {
-              const output = sourceBlock?.outputs?.find((candidate) => candidate.key === sourceKey);
+              const output = sourceFields.find((candidate) => candidate.key === sourceKey);
               onChange({
                 label: output ? instructionInputLabel(output) : input.label,
                 sourceKey: sourceKey === "automatic" ? undefined : sourceKey,
@@ -3547,7 +3563,7 @@ function InputBindingEditor({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="automatic">Saída compatível</SelectItem>
-              {(sourceBlock?.outputs ?? []).map((output) => (
+              {sourceFields.map((output) => (
                 <SelectItem key={output.id} value={output.key}>
                   {instructionInputLabel(output)}
                 </SelectItem>

@@ -74,7 +74,11 @@ import {
   type RegisteredPlugin,
 } from "./plugin-runner";
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
-import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
+import {
+  composePluginPortValue,
+  selectPluginImplicitContextPort,
+  selectPluginInputPort,
+} from "./plugin-input-values";
 import { instructionWithRetryFeedback } from "../src/lib/retry-feedback";
 import {
   pluginConversationFallbackAttachments,
@@ -4115,11 +4119,7 @@ app.post("/api/execute-block", async (request, response) => {
       presentation: field.presentation,
     });
   }
-  const textPort = capability.inputPorts.find(
-    (candidate) =>
-      inputs[candidate.key] === undefined &&
-      (candidate.acceptedTypes.includes("text") || candidate.acceptedTypes.includes("textarea")),
-  );
+  const textPort = selectPluginImplicitContextPort(capability.inputPorts, inputs);
   const previousProcessContextText = projectExecutions
     .filter(
       (candidate) =>

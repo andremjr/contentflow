@@ -85,6 +85,19 @@ test("manifesto declara oito capabilities modulares", () => {
   const imageGeneration = manifest.capabilities.find(
     (item) => item.id === "generate-image-in-browser",
   );
+  assert.deepEqual(imageGeneration.inputPorts.find((port) => port.key === "prompt").acceptedTypes, [
+    "text",
+    "textarea",
+    "number",
+    "boolean",
+    "list",
+    "records",
+    "select",
+    "multiselect",
+    "datetime",
+    "url",
+    "thumbnail_layout",
+  ]);
   assert.deepEqual(
     imageGeneration.outputPorts.find((port) => port.key === "images").producedTypes,
     ["files"],
