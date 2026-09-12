@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { ProcessExecution, Project } from "./domain";
-import { applyGeneratedProjectTitle } from "./project-title";
+import { applyGeneratedProjectTitle, reconcileGeneratedProjectTitles } from "./project-title";
 
 const project = {
   id: "project-1",
@@ -68,4 +68,14 @@ test("não altera o nome por uma execução incompleta ou output sem texto", () 
     false,
   );
   assert.equal(target.title, "Nome provisório");
+});
+
+test("reconcilia projetos existentes que já possuem um título final", () => {
+  const existing = structuredClone(project);
+  const untouched = { ...structuredClone(project), id: "project-2", title: "Ainda manual" };
+  const changed = reconcileGeneratedProjectTitles([existing, untouched], [execution()]);
+
+  assert.deepEqual(changed.map((item) => item.id), [existing.id]);
+  assert.equal(existing.title, "O título final");
+  assert.equal(untouched.title, "Ainda manual");
 });

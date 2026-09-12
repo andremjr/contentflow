@@ -3,7 +3,10 @@ import { z } from "zod";
 import { executionCommands } from "./execution-commands";
 import { createMethodPackage, readMethodPackage } from "./method-package";
 import { deriveProcessOutput } from "../src/lib/process-output";
-import { applyGeneratedProjectTitle } from "../src/lib/project-title";
+import {
+  applyGeneratedProjectTitle,
+  reconcileGeneratedProjectTitles,
+} from "../src/lib/project-title";
 import Database from "better-sqlite3";
 import {
   cpSync,
@@ -467,6 +470,24 @@ function readPayload<T>(table: string, id: string): T | undefined {
     { payload: string } | undefined;
   return row ? (JSON.parse(row.payload) as T) : undefined;
 }
+
+function reconcileStoredProjectTitles() {
+  const projects = parseRows(
+    database.prepare("SELECT payload FROM projects").all() as { payload: string }[],
+  ) as Project[];
+  const executions = parseRows(
+    database.prepare("SELECT payload FROM process_executions").all() as { payload: string }[],
+  ) as ProcessExecution[];
+  const changedProjects = reconcileGeneratedProjectTitles(projects, executions);
+  if (!changedProjects.length) return;
+
+  const updateProject = database.prepare("UPDATE projects SET payload = ? WHERE id = ?");
+  database.transaction(() => {
+    for (const project of changedProjects) updateProject.run(JSON.stringify(project), project.id);
+  })();
+}
+
+reconcileStoredProjectTitles();
 
 type PluginConsent = {
   version: string;

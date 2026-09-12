@@ -22,3 +22,18 @@ export function applyGeneratedProjectTitle(project: Project, execution: ProcessE
   project.title = title;
   return true;
 }
+
+/** Reconciles Projects created before title promotion was introduced. */
+export function reconcileGeneratedProjectTitles(
+  projects: Project[],
+  executions: ProcessExecution[],
+): Project[] {
+  const changed: Project[] = [];
+  for (const project of projects) {
+    const titleExecution = executions.find(
+      (execution) => execution.projectId === project.id && execution.processType === "title",
+    );
+    if (titleExecution && applyGeneratedProjectTitle(project, titleExecution)) changed.push(project);
+  }
+  return changed;
+}
