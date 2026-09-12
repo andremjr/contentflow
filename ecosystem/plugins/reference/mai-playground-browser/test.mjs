@@ -11,6 +11,11 @@ import {
   buildVoicePrompt,
   buildTextPrompt,
   generateSilenceWav,
+  splitVoiceText,
+  concatenateWavBuffers,
+  selectVoiceAndStyle,
+  isAudioGenerationInProgress,
+  latestArtifactAudioUrl,
   expandTemplate,
 } from "./handler.mjs";
 
@@ -42,6 +47,25 @@ test("manifesto possui estrutura e capabilities válidas conforme API v1", async
   assert.deepEqual(voiceCap.processTypes, ["narration"]);
   assert.ok(voiceCap.inputPorts.some((p) => p.key === "text"));
   assert.ok(voiceCap.outputPorts.some((p) => p.key === "audio"));
+  assert.equal(voiceCap.blockConfigSchema.properties.voice.default, "Caio");
+  assert.ok(voiceCap.blockConfigSchema.properties.voice.enum.includes("Luana"));
+  assert.deepEqual(voiceCap.blockConfigSchema.properties.style.enum, [
+    "Neutral",
+    "Angry",
+    "Confused",
+    "Determined",
+    "Embarrassed",
+    "Excited",
+    "Happy",
+    "Hopeful",
+    "Joyful",
+    "Regretful",
+    "Relieved",
+    "Sad",
+    "Shouting",
+    "Softvoice",
+    "Whispering",
+  ]);
 
   const textCap = caps.find((c) => c.id === "generate-text-in-browser");
   assert.ok(textCap);
@@ -83,6 +107,55 @@ test("constrói prompt de voz e valida entrada obrigatória", () => {
   );
 });
 
+test("divide narração no ponto final mais próximo de 800 sem cortar palavras", () => {
+  const firstSentence = `${"palavra ".repeat(90).trim()}.`;
+  const secondSentence = `${"continuação ".repeat(20).trim()}.`;
+  const chunks = splitVoiceText(`${firstSentence} ${secondSentence}`, 800);
+
+  assert.equal(chunks.length, 2);
+  assert.equal(chunks[0], firstSentence);
+  assert.equal(chunks.join(" "), `${firstSentence} ${secondSentence}`);
+  assert.ok(chunks.every((chunk) => chunk.length <= 800));
+  assert.ok(
+    chunks.every((chunk) => !/^\S/.test(chunk.slice(-1)) || /[.\wÀ-ÿ)]/.test(chunk.at(-1))),
+  );
+});
+
+test("usa espaço como fallback quando não existe ponto final antes do limite", () => {
+  const text = "palavra ".repeat(130).trim();
+  const chunks = splitVoiceText(text, 800);
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((chunk) => chunk.length <= 800));
+  assert.equal(chunks.join(" "), text);
+});
+
+test("rejeita palavra maior que o limite em vez de cortá-la", () => {
+  assert.throws(() => splitVoiceText("x".repeat(801), 800), /sem cortar essa palavra/);
+});
+
+test("seleciona voz e estilo mesmo quando os menus ainda precisam ser abertos", async () => {
+  const calls = [];
+  const bridge = {
+    async dispatch(_action, payload, operationKey) {
+      calls.push({ payload, operationKey });
+      if (operationKey.includes("already-open")) throw new Error("menu fechado");
+      return { ok: true };
+    },
+  };
+  await selectVoiceAndStyle(bridge, "Caio", "Neutral");
+  assert.deepEqual(
+    calls.map((call) => call.operationKey),
+    [
+      "select-voice-Caio-already-open",
+      "open-voice-picker-1",
+      "select-voice-Caio-1",
+      "select-style-Neutral-already-open",
+      "open-style-picker-1",
+      "select-style-Neutral-1",
+    ],
+  );
+});
+
 test("expande placeholders e instruções do bloco para texto", () => {
   const request = {
     resolvedInstruction: "Crie um roteiro sobre produtividade",
@@ -106,6 +179,37 @@ test("gera áudio silence WAV estruturado e válido", () => {
   assert.equal(wav.readUInt32LE(24), 16000); // Sample rate
   assert.equal(wav.subarray(36, 40).toString(), "data");
   assert.ok(wav.length > 44);
+});
+
+test("concatena trechos WAV preservando formato e ordem", () => {
+  const first = generateSilenceWav(1, 16000);
+  const second = generateSilenceWav(2, 16000);
+  const joined = concatenateWavBuffers([first, second]);
+  assert.equal(joined.subarray(0, 4).toString(), "RIFF");
+  assert.equal(joined.subarray(8, 12).toString(), "WAVE");
+  assert.equal(joined.readUInt32LE(40), first.readUInt32LE(40) + second.readUInt32LE(40));
+  assert.equal(joined.length, 44 + first.readUInt32LE(40) + second.readUInt32LE(40));
+});
+
+test("não confunde o modelo MAI-Thinking-1 do menu com geração de áudio", () => {
+  assert.equal(
+    isAudioGenerationInProgress([], "MAI-Thinking-1\nText-to-speech made natural"),
+    false,
+  );
+  assert.equal(isAudioGenerationInProgress(["Stop generation"], ""), true);
+  assert.equal(isAudioGenerationInProgress([], "Generating audio"), true);
+});
+
+test("identifica o WAV entregue pelo Playground mesmo sem elemento audio", () => {
+  const url = "https://playground.microsoft.ai/api/artifacts/user/conversation/response/audio.wav";
+  assert.equal(
+    latestArtifactAudioUrl(["https://playground.microsoft.ai/api/chat/stream", url]),
+    url,
+  );
+  assert.equal(
+    latestArtifactAudioUrl(["https://playground.microsoft.ai/model-assets/voice.json"]),
+    "",
+  );
 });
 
 test("mock de TTS gera arquivo de áudio e artifact válido sem abrir navegador", async () => {
@@ -134,8 +238,8 @@ test("mock de TTS gera arquivo de áudio e artifact válido sem abrir navegador"
     },
     configuration: {
       model: "mai-voice-2",
-      voice: "alder",
-      style: "neutral",
+      voice: "Caio",
+      style: "Neutral",
     },
   };
 

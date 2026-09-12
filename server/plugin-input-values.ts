@@ -68,6 +68,17 @@ export function selectPluginInputPort(
   ports: PluginInputPort[],
   usedInputPorts: ReadonlySet<string>,
 ) {
+  if (input.portKey) {
+    const explicitPort = ports.find((port) => port.key === input.portKey);
+    if (
+      !explicitPort ||
+      !explicitPort.acceptedTypes.includes(input.type) ||
+      (!explicitPort.multiple && usedInputPorts.has(explicitPort.key))
+    ) {
+      return undefined;
+    }
+    return explicitPort;
+  }
   return ports
     .map((port, index) => ({ port, index }))
     .filter(

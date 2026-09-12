@@ -20,17 +20,16 @@ Ele não utiliza APIs oficiais pagas nem requer chaves de API secretas. A autent
 
 - **Processo Universal:** `narration` ("Narração e Áudio").
 - **Bloco:** `CRIAR` com Operador `IA`.
-- **Entrada:** `text` (Texto da narração a ser falado).
+- **Entrada:** `text` (Texto da narração a ser falado). Textos acima de 800 caracteres são divididos no último ponto final disponível antes do limite; quando não existe ponto, o fallback usa o último espaço e nunca corta uma palavra.
 - **Saídas:**
   - `audio`: Arquivo de áudio sintetizado, renderizado via reprodutor de áudio nativo (`audio-player`).
   - `transcript`: Transcrição do texto falado.
 - **Modelos suportados:**
   - `mai-voice-2` (padrão)
   - `mai-voice-2-flash` (alta velocidade)
-- **Vozes Copilot disponíveis:**
-  - `alder`, `acacia`, `birch`, `elm`, `grove`, `moss`, `oak`, `rain`, `sage`, `teak`, `wave`.
-- **Tons e Estilos:**
-  - `neutral`, `narration`, `cheerful`, `adventurous`, `news`, `reflection`, `whisper`, etc.
+- **Vozes disponíveis:** as 43 opções expostas atualmente pelo Playground, incluindo `Caio`, `Luana`, `Pedro` e `Rafael` para português do Brasil.
+- **Tons e Estilos:** `Neutral`, `Angry`, `Confused`, `Determined`, `Embarrassed`, `Excited`, `Happy`, `Hopeful`, `Joyful`, `Regretful`, `Relieved`, `Sad`, `Shouting`, `Softvoice` e `Whispering`.
+- **Entrega longa:** cada trecho é enviado somente depois que o áudio anterior termina; os WAVs são concatenados na ordem e entregues como um único artifact.
 
 ### `generate-text-in-browser` (Geração de Texto / Raciocínio)
 
@@ -54,7 +53,7 @@ Cada perfil armazena seus dados em uma pasta isolada e opera em uma porta CDP pr
 3. A janela do Chrome dedicado será aberta na interface do Microsoft AI Playground.
 4. Faça login com sua conta Microsoft ou feche avisos e termos iniciais até que a área de criação/chat esteja disponível.
 5. O plugin registrará a sessão como pronta e fechará o navegador.
-6. A partir desse momento, as execuções do Método ocorrerão em background de forma automatizada.
+6. A preparação confirma o perfil e a Browser Bridge. Como o Playground pode exigir autenticação novamente a cada abertura, a execução de voz abre o Chrome dedicado de forma visível, espera o usuário concluir o login e só continua quando a interface autenticada e o campo de texto estiverem disponíveis.
 
 ---
 

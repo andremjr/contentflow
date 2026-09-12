@@ -49,18 +49,31 @@ test("translates plugin credential management in English and Spanish", () => {
   );
 });
 
-test("translates every collapsible block configuration heading", () => {
+test("translates the unified block configuration labels", () => {
   assert.deepEqual(
-    ["O que faz", "Quem executa", "O que precisa", "O que entrega"].map((label) =>
-      translate(label, "en"),
+    ["Nome da ação", "Prompt do bloco", "Operador responsável", "Informações de entrada"].map(
+      (label) => translate(label, "en"),
     ),
-    ["What it does", "Who runs it", "What it needs", "What it outputs"],
+    ["Action name", "Block prompt", "Responsible operator", "Input information"],
   );
   assert.deepEqual(
-    ["O que faz", "Quem executa", "O que precisa", "O que entrega"].map((label) =>
-      translate(label, "es"),
+    ["Nome da ação", "Prompt do bloco", "Operador responsável", "Resultado desta ação"].map(
+      (label) => translate(label, "es"),
     ),
-    ["Qué hace", "Quién lo ejecuta", "Qué necesita", "Qué entrega"],
+    [
+      "Nombre de la acción",
+      "Prompt del bloque",
+      "Operador responsable",
+      "Resultado de esta acción",
+    ],
+  );
+  assert.equal(
+    translate("Defina apenas as entradas adicionais que esta ação precisa.", "en"),
+    "Define only the additional inputs this action needs.",
+  );
+  assert.equal(
+    translate("Cada entrega fica disponível para os próximos blocos.", "es"),
+    "Cada salida queda disponible para los bloques siguientes.",
   );
 });
 
@@ -73,6 +86,18 @@ test("preserves user-created and plugin-authored content", () => {
       "Automação modular criada pelo autor do plugin.",
     );
   }
+});
+
+test("translates the compact plugin contract validator", () => {
+  assert.equal(translate("Plugin executor", "en"), "Runner plugin");
+  assert.equal(translate("Requer ajustes", "es"), "Requiere ajustes");
+  assert.equal(translate("Entrada · Sequência de prompts", "en"), "Input · Sequência de prompts");
+  assert.equal(translate("Parâmetros do prompt (2)", "es"), "Parámetros del prompt (2)");
+});
+
+test("translates the long-text output character counter", () => {
+  assert.equal(translate("caracteres", "en"), "characters");
+  assert.equal(translate("caracteres", "es"), "caracteres");
 });
 
 test("translates execution attention and error notifications", () => {

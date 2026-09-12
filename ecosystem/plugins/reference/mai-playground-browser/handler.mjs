@@ -141,6 +141,59 @@ export function buildVoicePrompt(request) {
   return text;
 }
 
+export function splitVoiceText(text, maxLength = 800) {
+  const source = String(text ?? "")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+  if (!source) {
+    throw codedError("INVALID_INPUT", "O texto para narração não pode estar vazio.");
+  }
+  if (!Number.isInteger(maxLength) || maxLength < 1) {
+    throw codedError("INVALID_CONFIGURATION", "O limite de caracteres da narração é inválido.");
+  }
+
+  const chunks = [];
+  let remaining = source;
+  while (remaining.length > maxLength) {
+    const window = remaining.slice(0, maxLength);
+    let cut = -1;
+
+    for (let index = window.length - 1; index >= 0; index -= 1) {
+      if (window[index] !== ".") continue;
+      const next = remaining[index + 1];
+      if (next === undefined || /\s/.test(next)) {
+        cut = index + 1;
+        break;
+      }
+    }
+
+    if (cut < 1) {
+      for (let index = window.length - 1; index >= 0; index -= 1) {
+        if (/\s/.test(window[index])) {
+          cut = index;
+          break;
+        }
+      }
+    }
+
+    if (cut < 1) {
+      throw codedError(
+        "INVALID_INPUT",
+        `Há uma palavra com mais de ${maxLength} caracteres; o texto não pode ser dividido sem cortar essa palavra.`,
+      );
+    }
+
+    const chunk = remaining.slice(0, cut).trim();
+    if (!chunk || chunk.length > maxLength) {
+      throw codedError("INVALID_INPUT", "Não foi possível dividir a narração com segurança.");
+    }
+    chunks.push(chunk);
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
 export function buildTextPrompt(request) {
   const template =
     request?.configuration?.promptTemplate ?? "{{BLOCK_INSTRUCTIONS}}\n\n{{CONTENT}}";
@@ -458,6 +511,39 @@ export async function attachPage(client, signal, targetUrl, activate = false, fo
   return { sessionId, targetId: t.targetId, created };
 }
 
+export async function attachExistingPage(client, targetId) {
+  const { sessionId } = await client.send("Target.attachToTarget", {
+    targetId,
+    flatten: true,
+  });
+  await client.send("Page.enable", {}, sessionId);
+  await client.send("Runtime.enable", {}, sessionId);
+  return sessionId;
+}
+
+export async function closeDuplicateProviderPages(client, keepTargetId) {
+  const { targetInfos = [] } = await client.send("Target.getTargets");
+  let closedAny = false;
+  for (const target of targetInfos) {
+    if (
+      target.type === "page" &&
+      target.targetId !== keepTargetId &&
+      String(target.url || "").includes(HOST)
+    ) {
+      await client.send("Target.closeTarget", { targetId: target.targetId }).catch(() => undefined);
+      closedAny = true;
+    }
+  }
+  // A extensão consulta chrome.tabs. Espere a remoção ser observável antes de
+  // delegar o próximo comando, para que ela não escolha uma aba duplicada.
+  if (closedAny) await sleep(500);
+}
+
+export async function detachPage(client, sessionId) {
+  if (!sessionId) return;
+  await client.send("Target.detachFromTarget", { sessionId });
+}
+
 const DOM_HELPERS = String.raw`
 function vis(e) {
   if (!e || !(e instanceof Element)) return false;
@@ -516,7 +602,12 @@ export async function waitForComposer(client, sessionId, timeoutMs, signal) {
         dismissDisclaimer();
         const body = document.body?.innerText || '';
         const composer = findComposer();
-        const needsLogin = /sign in|entrar|fazer login|login|welcome to the playground.*18 years old/i.test(body) && !composer;
+        const loginControl = [...document.querySelectorAll('button, a')].find((element) => {
+          if (!vis(element)) return false;
+          const label = txt(element).toLowerCase();
+          return /^(log in|sign in|entrar|fazer login)(\\s|$)/i.test(label);
+        });
+        const needsLogin = location.hostname !== ${JSON.stringify(HOST)} || Boolean(loginControl);
         return {
           host: location.hostname,
           url: location.href,
@@ -536,7 +627,7 @@ export async function waitForComposer(client, sessionId, timeoutMs, signal) {
   if (lastState?.needsLogin) {
     throw codedError(
       "AUTHENTICATION_FAILED",
-      "É necessário fazer login com conta Microsoft no Playground. Utilize o botão 'Salvar perfil' no Método para autenticar uma vez no Chrome dedicado.",
+      "O login no Microsoft AI Playground não foi concluído dentro do prazo. Conclua o login na janela visível do Chrome dedicado e mantenha-a aberta até o campo de texto aparecer.",
       true,
     );
   }
@@ -571,57 +662,98 @@ export function generateSilenceWav(durationSec = 1, sampleRate = 16000) {
 
 export async function selectVoiceAndStyle(bridge, voice, style) {
   if (!voice && !style) return;
-  try {
-    // Tenta abrir o seletor de voz caso esteja presente na interface
-    await bridge.dispatch(
-      "click",
-      {
-        selectors: [
-          'button[aria-label*="voice" i]',
-          'button[aria-label*="style" i]',
-          'button[title*="voice" i]',
-          'button[data-telemetry-action="voice_picker"]',
-        ],
-      },
-      "open-voice-picker",
-      5000,
+  const choose = async (kind, triggerSelector, value) => {
+    const optionSelectors = ['button[role="option"]', '[role="option"]', '[role="menuitem"]'];
+    const selectOpenOption = async (attempt) =>
+      await bridge.dispatch(
+        "click",
+        { selectors: optionSelectors, textIncludes: [value] },
+        `select-${kind}-${value}-${attempt}`,
+        5000,
+      );
+
+    // When a user has just interacted with the page, the picker can already
+    // be open. Prefer that state instead of toggling the picker closed.
+    try {
+      await selectOpenOption("already-open");
+      await sleep(250);
+      return;
+    } catch {}
+
+    let lastError;
+    // The Playground renders options asynchronously. If the first click
+    // happened while an already-open picker was closing, the second pass
+    // deliberately opens it again with a distinct idempotency key.
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        await bridge.dispatch(
+          "click",
+          { selectors: [triggerSelector] },
+          `open-${kind}-picker-${attempt}`,
+          5000,
+        );
+        await sleep(800);
+        await selectOpenOption(attempt);
+        await sleep(300);
+        return;
+      } catch (error) {
+        lastError = error;
+        await sleep(500);
+      }
+    }
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      `Não foi possível selecionar ${kind === "voice" ? "a voz" : "o estilo"} “${value}” no Microsoft AI Playground: ${lastError?.message || "controle não encontrado"}.`,
+      true,
     );
-    if (voice) {
-      await bridge.dispatch(
-        "click",
-        {
-          selectors: ['[role="option"]', '[role="button"]', "button"],
-          textIncludes: [voice],
-        },
-        `select-voice-${voice}`,
-        5000,
-      );
-    }
-    if (style && style !== "neutral") {
-      await bridge.dispatch(
-        "click",
-        {
-          selectors: ['[role="option"]', '[role="button"]', "button"],
-          textIncludes: [style],
-        },
-        `select-style-${style}`,
-        5000,
-      );
-    }
-  } catch {
-    // Se a interface não exibir o seletor modal neste momento, o Playground usará a voz selecionada na URL ou default
-  }
+  };
+
+  if (voice) await choose("voice", 'button[aria-label^="Voice:" i]', voice);
+  if (style) await choose("style", 'button[aria-label^="Style:" i]', style);
 }
 
-export async function sendPrompt(client, sessionId, bridge, text, signal) {
+export async function verifyVoiceAndStyle(client, sessionId, voice, style) {
+  const selected = await evaluate(
+    client,
+    sessionId,
+    `(() => {
+      const buttons = [...document.querySelectorAll('button[aria-label]')];
+      const voice = buttons.find((button) => /^voice:/i.test(button.getAttribute('aria-label') || ''))?.getAttribute('aria-label') || '';
+      const style = buttons.find((button) => /^style:/i.test(button.getAttribute('aria-label') || ''))?.getAttribute('aria-label') || '';
+      return { voice, style };
+    })()`,
+  );
+  if (voice && !selected.voice.toLowerCase().includes(String(voice).toLowerCase())) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      `A voz solicitada (${voice}) não ficou selecionada. A interface informa: ${selected.voice || "voz não identificada"}.`,
+      true,
+    );
+  }
+  if (style && !selected.style.toLowerCase().includes(String(style).toLowerCase())) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      `O estilo solicitado (${style}) não ficou selecionado. A interface informa: ${selected.style || "estilo não identificado"}.`,
+      true,
+    );
+  }
+  return selected;
+}
+
+export async function sendPrompt(client, sessionId, bridge, text, signal, operationKey = "single") {
   // Preenche via bridge com os seletores usuais de textarea/composer
   await bridge.dispatch(
     "setText",
     {
-      selectors: ["textarea", '[contenteditable="true"][role="textbox"]', '[role="textbox"]'],
+      selectors: [
+        'textarea[placeholder="Type what you\'d like to hear"]',
+        "textarea",
+        '[contenteditable="true"][role="textbox"]',
+        '[role="textbox"]',
+      ],
       text,
     },
-    "set-prompt",
+    `set-prompt-${operationKey}`,
     30000,
   );
 
@@ -640,11 +772,18 @@ export async function sendPrompt(client, sessionId, bridge, text, signal) {
           'button[type="submit"]',
         ],
       },
-      "click-send",
+      `click-send-${operationKey}`,
       5000,
     );
     sent = true;
   } catch {
+    if (!sessionId) {
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        "O botão de envio do Microsoft AI Playground não foi encontrado ou permaneceu desabilitado.",
+        true,
+      );
+    }
     // Fallback de submissão via Enter através de evento de teclado
     await client.send(
       "Input.dispatchKeyEvent",
@@ -673,13 +812,27 @@ export async function sendPrompt(client, sessionId, bridge, text, signal) {
   return sent;
 }
 
-export async function waitForAudioGeneration(
-  client,
-  sessionId,
-  timeoutMs,
-  baselineAudioCount,
-  signal,
-) {
+export function isAudioGenerationInProgress(buttonLabels, pageText) {
+  return (
+    (buttonLabels ?? []).some((label) =>
+      /stop generation|parar geração|parar ger[ae]ção/i.test(label),
+    ) ||
+    /generating audio|creating audio|gerando [áa]udio|criando [áa]udio/i.test(
+      String(pageText ?? ""),
+    )
+  );
+}
+
+export function latestArtifactAudioUrl(resourceUrls) {
+  const urls = (resourceUrls ?? []).filter(
+    (url) =>
+      typeof url === "string" &&
+      /\/api\/artifacts\/[^?#]+\.(?:wav|mp3|ogg|m4a)(?:[?#].*)?$/i.test(url),
+  );
+  return urls.at(-1) || "";
+}
+
+export async function waitForAudioGeneration(client, sessionId, timeoutMs, baseline, signal) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
@@ -690,22 +843,37 @@ export async function waitForAudioGeneration(
       `(() => {
         ${DOM_HELPERS}
         const audios = [...document.querySelectorAll('audio')].filter(a => a.src || a.currentSrc || a.querySelector('source'));
+        const artifactUrls = performance.getEntriesByType('resource')
+          .map(entry => entry.name)
+          .filter(url => {
+            const clean = String(url).split(/[?#]/)[0].toLowerCase();
+            return clean.includes('/api/artifacts/') && ['.wav', '.mp3', '.ogg', '.m4a'].some(ext => clean.endsWith(ext));
+          });
         const downloadBtns = [...document.querySelectorAll('button[aria-label*="download audio" i], button[title*="download audio" i]')];
-        const isGenerating = [...document.querySelectorAll('button')].some(b => vis(b) && /stop generation|parar/i.test(txt(b))) ||
-                             /generating audio|transcribing|thinking/i.test(document.body?.innerText || '');
+        const isGenerating = [...document.querySelectorAll('button')].some(b => vis(b) && /stop generation|parar geração|parar ger[ae]ção/i.test(txt(b))) ||
+                             /generating audio|creating audio|gerando [áa]udio|criando [áa]udio/i.test(document.body?.innerText || '');
         return {
           audioCount: audios.length,
+          artifactCount: artifactUrls.length,
           downloadCount: downloadBtns.length,
           isGenerating,
-          latestSrc: audios.at(-1)?.currentSrc || audios.at(-1)?.src || audios.at(-1)?.querySelector('source')?.src || ''
+          latestSrc: audios.at(-1)?.currentSrc || audios.at(-1)?.src || audios.at(-1)?.querySelector('source')?.src || artifactUrls.at(-1) || ''
         };
       })()`,
     );
 
-    if (state.audioCount > baselineAudioCount && state.latestSrc && !state.isGenerating) {
+    const baselineState =
+      typeof baseline === "number"
+        ? { audioCount: baseline, artifactCount: 0, downloadCount: 0, latestSrc: "" }
+        : baseline || { audioCount: 0, artifactCount: 0, downloadCount: 0, latestSrc: "" };
+    const hasNewAudio =
+      state.audioCount > baselineState.audioCount ||
+      state.artifactCount > (baselineState.artifactCount || 0) ||
+      (state.latestSrc && state.latestSrc !== baselineState.latestSrc);
+    if (hasNewAudio && state.latestSrc && !state.isGenerating) {
       return state.latestSrc;
     }
-    if (state.downloadCount > 0 && !state.isGenerating) {
+    if (state.downloadCount > baselineState.downloadCount && !state.isGenerating) {
       // Audio element might be hidden, download button confirms completion
       return state.latestSrc || "ready-by-download-button";
     }
@@ -719,7 +887,30 @@ export async function waitForAudioGeneration(
   );
 }
 
-export async function captureAudioArtifact(client, sessionId, services, request, audioSrc) {
+export async function readAudioState(client, sessionId) {
+  return await evaluate(
+    client,
+    sessionId,
+    `(() => {
+      const audios = [...document.querySelectorAll('audio')].filter(a => a.src || a.currentSrc || a.querySelector('source'));
+      const artifactUrls = performance.getEntriesByType('resource')
+        .map(entry => entry.name)
+        .filter(url => {
+          const clean = String(url).split(/[?#]/)[0].toLowerCase();
+          return clean.includes('/api/artifacts/') && ['.wav', '.mp3', '.ogg', '.m4a'].some(ext => clean.endsWith(ext));
+        });
+      const downloadButtons = [...document.querySelectorAll('button[aria-label*="download audio" i], button[title*="download audio" i]')];
+      return {
+        audioCount: audios.length,
+        artifactCount: artifactUrls.length,
+        downloadCount: downloadButtons.length,
+        latestSrc: audios.at(-1)?.currentSrc || audios.at(-1)?.src || audios.at(-1)?.querySelector('source')?.src || artifactUrls.at(-1) || ''
+      };
+    })()`,
+  );
+}
+
+export async function captureAudioBytes(client, sessionId, audioSrc) {
   let base64 = "";
   let mimeType = "audio/wav";
 
@@ -773,6 +964,73 @@ export async function captureAudioArtifact(client, sessionId, services, request,
     throw codedError("OUTPUT_VALIDATION_FAILED", "O áudio capturado está vazio.", true);
   }
 
+  return { bytes, mimeType };
+}
+
+export function concatenateWavBuffers(buffers) {
+  if (!Array.isArray(buffers) || buffers.length < 1) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", "Nenhum trecho de áudio foi recebido.");
+  }
+  const parsed = buffers.map((buffer) => {
+    if (
+      !Buffer.isBuffer(buffer) ||
+      buffer.length < 44 ||
+      buffer.toString("ascii", 0, 4) !== "RIFF" ||
+      buffer.toString("ascii", 8, 12) !== "WAVE"
+    ) {
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        "O Playground devolveu um trecho de áudio que não é WAV válido.",
+      );
+    }
+    let offset = 12;
+    let format;
+    let data;
+    while (offset + 8 <= buffer.length) {
+      const id = buffer.toString("ascii", offset, offset + 4);
+      const size = buffer.readUInt32LE(offset + 4);
+      const start = offset + 8;
+      const end = start + size;
+      if (end > buffer.length) break;
+      if (id === "fmt ") format = buffer.subarray(start, end);
+      if (id === "data") data = buffer.subarray(start, end);
+      offset = end + (size % 2);
+    }
+    if (!format || !data) {
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        "O trecho WAV não contém formato e dados de áudio.",
+      );
+    }
+    return { format, data };
+  });
+  const expectedFormat = parsed[0].format;
+  if (parsed.some((part) => !part.format.equals(expectedFormat))) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      "Os trechos WAV usam formatos incompatíveis e não podem ser concatenados com segurança.",
+    );
+  }
+  const data = Buffer.concat(parsed.map((part) => part.data));
+  const formatPadding = expectedFormat.length % 2;
+  const dataPadding = data.length % 2;
+  const output = Buffer.alloc(
+    12 + 8 + expectedFormat.length + formatPadding + 8 + data.length + dataPadding,
+  );
+  output.write("RIFF", 0);
+  output.writeUInt32LE(output.length - 8, 4);
+  output.write("WAVE", 8);
+  output.write("fmt ", 12);
+  output.writeUInt32LE(expectedFormat.length, 16);
+  expectedFormat.copy(output, 20);
+  const dataHeader = 20 + expectedFormat.length + formatPadding;
+  output.write("data", dataHeader);
+  output.writeUInt32LE(data.length, dataHeader + 4);
+  data.copy(output, dataHeader + 8);
+  return output;
+}
+
+export async function writeAudioArtifact(services, request, bytes, mimeType) {
   const ext =
     mimeType.includes("mpeg") || mimeType.includes("mp3")
       ? "mp3"
@@ -805,6 +1063,11 @@ export async function captureAudioArtifact(client, sessionId, services, request,
   };
 
   return { file, artifact };
+}
+
+export async function captureAudioArtifact(client, sessionId, services, request, audioSrc) {
+  const { bytes, mimeType } = await captureAudioBytes(client, sessionId, audioSrc);
+  return await writeAudioArtifact(services, request, bytes, mimeType);
 }
 
 export async function waitForTextGeneration(client, sessionId, timeoutMs, baselineCount, signal) {
@@ -1010,7 +1273,8 @@ export async function execute(request, services) {
       {
         ...settings,
         keepBrowserOpen: settings.keepBrowserOpen !== false,
-        startMinimized: settings.startMinimized !== false,
+        startMinimized:
+          capabilityId === "generate-voice-in-browser" ? false : settings.startMinimized !== false,
       },
       profileDir,
       port,
@@ -1024,9 +1288,16 @@ export async function execute(request, services) {
       settings.diagnosticTrace ? (m) => process.stderr.write(`[MAI Playground] ${m}\n`) : null,
     ).connect(services.signal);
 
-    const taskPage = await attachPage(client, services.signal, targetUrl, false, launched.reused);
-    const { sessionId } = taskPage;
+    const taskPage = await attachPage(
+      client,
+      services.signal,
+      targetUrl,
+      capabilityId === "generate-voice-in-browser",
+      false,
+    );
+    let { sessionId } = taskPage;
     taskTargetId = taskPage.targetId;
+    await closeDuplicateProviderPages(client, taskTargetId);
 
     // Garante que está na URL do modelo desejado
     const currentUrl = await evaluate(client, sessionId, "location.href");
@@ -1039,45 +1310,97 @@ export async function execute(request, services) {
     await waitForComposer(client, sessionId, waitTimeoutMs, services.signal);
     await dismissBanners(client, sessionId);
 
-    bridge = await attachContentFlowBridge({
-      client,
-      pageSessionId: sessionId,
-      pluginId: PLUGIN_ID,
-      profileId: profile,
-      request,
-      signal: services.signal,
-      allowedOrigins: ALLOWED_ORIGINS,
-    });
-
     if (capabilityId === "generate-voice-in-browser") {
-      if (cfg.voice || cfg.style) {
-        await selectVoiceAndStyle(bridge, cfg.voice, cfg.style);
+      const voice = cfg.voice || "Caio";
+      const style = cfg.style || "Neutral";
+      const chunks = splitVoiceText(promptText, 800);
+      const responseTimeoutMs = clamp(settings.responseTimeoutSeconds, 600, 30, 3600) * 1000;
+      const audioParts = [];
+      let mimeType = "";
+      // The Playground preserves its selected voice and style between runs.
+      // Reading that state before yielding the tab to Browser Bridge avoids
+      // reopening an already-correct picker (which can be transient while a
+      // previous generated item is being rendered).
+      let voiceAndStyleAlreadySelected = false;
+      try {
+        await verifyVoiceAndStyle(client, sessionId, voice, style);
+        voiceAndStyleAlreadySelected = true;
+      } catch {
+        // A different saved selection is a normal case: Browser Bridge will
+        // change it below and the result is verified again afterwards.
+      }
+      for (let index = 0; index < chunks.length; index += 1) {
+        // The provider needs a small idle interval between completed audio
+        // turns and the next text submission. This also prevents a fresh
+        // composer from being targeted while its previous turn still renders.
+        if (index > 0) await sleep(2000, services.signal);
+        const baseline = await readAudioState(client, sessionId);
+        await detachPage(client, sessionId);
+        sessionId = undefined;
+        // Chrome releases a flattened CDP attachment asynchronously. Give the
+        // Browser Bridge the same two-second handoff window used between text
+        // submissions before it attaches chrome.debugger to this tab.
+        await sleep(2000, services.signal);
+        bridge = await attachContentFlowBridge({
+          client,
+          pageTargetId: taskTargetId,
+          expectedUrl: targetUrl,
+          pluginId: PLUGIN_ID,
+          profileId: profile,
+          request,
+          signal: services.signal,
+          allowedOrigins: ALLOWED_ORIGINS,
+        });
+        if (index === 0 && !voiceAndStyleAlreadySelected)
+          await selectVoiceAndStyle(bridge, voice, style);
+        await sendPrompt(
+          client,
+          undefined,
+          bridge,
+          chunks[index],
+          services.signal,
+          `voice-${index}`,
+        );
+        await bridge.dispose();
+        bridge = undefined;
+        sessionId = await attachExistingPage(client, taskTargetId);
+        if (index === 0) await verifyVoiceAndStyle(client, sessionId, voice, style);
+        const audioSrc = await waitForAudioGeneration(
+          client,
+          sessionId,
+          responseTimeoutMs,
+          baseline,
+          services.signal,
+        );
+        const captured = await captureAudioBytes(client, sessionId, audioSrc);
+        if (mimeType && captured.mimeType !== mimeType) {
+          throw codedError(
+            "OUTPUT_VALIDATION_FAILED",
+            "O Playground devolveu formatos de áudio diferentes entre os trechos.",
+            true,
+          );
+        }
+        mimeType = captured.mimeType;
+        audioParts.push(captured.bytes);
       }
 
-      // Conta de baseline de áudios já presentes na página
-      const baselineAudioCount = await evaluate(
-        client,
-        sessionId,
-        "document.querySelectorAll('audio').length",
-      );
-
-      await sendPrompt(client, sessionId, bridge, promptText, services.signal);
-
-      const responseTimeoutMs = clamp(settings.responseTimeoutSeconds, 600, 30, 3600) * 1000;
-      const audioSrc = await waitForAudioGeneration(
-        client,
-        sessionId,
-        responseTimeoutMs,
-        baselineAudioCount,
-        services.signal,
-      );
-
-      const { file, artifact } = await captureAudioArtifact(
-        client,
-        sessionId,
+      const finalBytes =
+        audioParts.length === 1
+          ? audioParts[0]
+          : mimeType.includes("wav")
+            ? concatenateWavBuffers(audioParts)
+            : (() => {
+                throw codedError(
+                  "OUTPUT_VALIDATION_FAILED",
+                  `A concatenação segura de ${audioParts.length} trechos exige WAV, mas o Playground devolveu ${mimeType}.`,
+                  true,
+                );
+              })();
+      const { file, artifact } = await writeAudioArtifact(
         services,
         request,
-        audioSrc,
+        finalBytes,
+        mimeType || "audio/wav",
       );
 
       return {
@@ -1089,6 +1412,15 @@ export async function execute(request, services) {
         artifacts: [artifact],
       };
     } else {
+      bridge = await attachContentFlowBridge({
+        client,
+        pageSessionId: sessionId,
+        pluginId: PLUGIN_ID,
+        profileId: profile,
+        request,
+        signal: services.signal,
+        allowedOrigins: ALLOWED_ORIGINS,
+      });
       // Geração de texto
       const baselineBubbleCount = await evaluate(
         client,
@@ -1122,7 +1454,7 @@ export async function execute(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
-    bridge?.dispose();
+    await bridge?.dispose();
     if (taskTargetId && settings.keepBrowserOpen === false) {
       try {
         await client?.send("Target.closeTarget", { targetId: taskTargetId });

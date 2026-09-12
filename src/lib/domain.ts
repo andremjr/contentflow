@@ -125,6 +125,8 @@ export type BlockInputBinding = {
   historyEligibility?: ChannelHistoryEligibility;
   recordFields?: RecordFieldDefinition[];
   presentation?: FieldPresentation;
+  /** Stable semantic input port selected from the plugin capability. */
+  portKey?: string;
 };
 
 export type BlockFieldDefinition = {
@@ -140,6 +142,8 @@ export type BlockFieldDefinition = {
   optionsSourceKey?: string;
   recordFields?: RecordFieldDefinition[];
   presentation?: FieldPresentation;
+  /** Stable semantic output port selected from the plugin capability. */
+  portKey?: string;
 };
 
 export type BlockParameter = {

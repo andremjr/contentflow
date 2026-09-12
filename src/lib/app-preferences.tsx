@@ -1165,29 +1165,16 @@ const PHRASES: Record<string, Translation> = {
       "The block instructions define what must be done. The plugin's editable templates define how those instructions and context are assembled and sent to the provider.",
       "Las instrucciones del bloque definen qué debe hacerse. Las plantillas editables del plugin definen cómo se ensamblan y envían al proveedor esas instrucciones y el contexto.",
     ],
-  "Testar somente este bloco": ["Test this block only", "Probar solo este bloque"],
-  "Usa a configuração atual, abre o navegador visivelmente quando necessário e descarta o resultado ao fechar o editor. Não cria Projeto, Execução, Entrega nem Histórico do Canal.":
-    [
-      "Uses the current configuration, visibly opens the browser when needed, and discards the result when the editor closes. It does not create a Project, Execution, Output, or Channel History.",
-      "Usa la configuración actual, abre visiblemente el navegador cuando es necesario y descarta el resultado al cerrar el editor. No crea Proyecto, Ejecución, Salida ni Historial del Canal.",
-    ],
-  "Executar teste": ["Run test", "Ejecutar prueba"],
-  "Título fictício do Projeto": ["Sample Project title", "Título ficticio del Proyecto"],
-  "Histórico de escolhas para teste": [
-    "Choice history for testing",
-    "Historial de elecciones para la prueba",
-  ],
-  "O resultado é temporário no ContentFlow, mas a chamada ao provedor é real e pode usar cota, criar conversa ou produzir mídia na conta configurada.":
-    [
-      "The result is temporary in ContentFlow, but the provider call is real and may use quota, create a conversation, or produce media in the configured account.",
-      "El resultado es temporal en ContentFlow, pero la llamada al proveedor es real y puede usar cuota, crear una conversación o producir contenido en la cuenta configurada.",
-    ],
   "O que faz": ["What it does", "Qué hace"],
   "Quem executa": ["Who runs it", "Quién lo ejecuta"],
   "O que precisa": ["What it needs", "Qué necesita"],
   "O que entrega": ["What it outputs", "Qué entrega"],
   "Informações de entrada": ["Input information", "Información de entrada"],
   "Informações para a busca": ["Search information", "Información para la búsqueda"],
+  "Defina apenas as entradas adicionais que esta ação precisa.": [
+    "Define only the additional inputs this action needs.",
+    "Define solo las entradas adicionales que necesita esta acción.",
+  ],
   "Defina o que precisa estar disponível antes desta ação começar. Cada entrada cria e mantém sua variável correspondente no prompt.":
     [
       "Define what must be available before this action begins. Each input creates and maintains its corresponding variable in the prompt.",
@@ -1205,6 +1192,11 @@ const PHRASES: Record<string, Translation> = {
   Formato: ["Format", "Formato"],
   "Resultado desta ação": ["Result of this action", "Resultado de esta acción"],
   "Resultados encontrados": ["Results found", "Resultados encontrados"],
+  "Cada entrega fica disponível para os próximos blocos.": [
+    "Each output becomes available to subsequent blocks.",
+    "Cada salida queda disponible para los bloques siguientes.",
+  ],
+  caracteres: ["characters", "caracteres"],
   "Defina o que ficará pronto quando esta ação terminar e poderá ser usado pelos próximos blocos.":
     [
       "Define what will be ready when this action ends and can be used by subsequent blocks.",
@@ -1227,26 +1219,71 @@ const PHRASES: Record<string, Translation> = {
     "The decision format follows the validation mode selected above.",
     "El formato de la decisión sigue el modo de validación elegido arriba.",
   ],
-  "Este bloco é humano: o formulário acima já representa sua prévia e não há executor automático para chamar.":
-    [
-      "This is a human block: the form above already represents its preview, and there is no automatic executor to call.",
-      "Este es un bloque humano: el formulario de arriba ya representa su vista previa y no hay un ejecutor automático al que llamar.",
-    ],
-  "Histórico de escolhas para teste*": [
-    "Choice history for testing*",
-    "Historial de elecciones para la prueba*",
-  ],
-  "Histórico de criações para teste*": [
-    "Creation history for testing*",
-    "Historial de creaciones para la prueba*",
-  ],
-  "Nova entrada para teste*": ["New input for testing*", "Nueva entrada para la prueba*"],
   "Instrução da operação": ["Operation instructions", "Instrucciones de la operación"],
   "Entrega anterior": ["Previous output", "Salida anterior"],
   "Processo, bloco e entrega": ["Process, block, and output", "Proceso, bloque y salida"],
   "Configurações avançadas do executor": [
     "Advanced executor settings",
     "Configuración avanzada del ejecutor",
+  ],
+  "Selecione quem executará esta ação": [
+    "Select who will perform this action",
+    "Selecciona quién ejecutará esta acción",
+  ],
+  "Requer ajustes": ["Needs attention", "Requiere ajustes"],
+  "Pronto para executar": ["Ready to run", "Listo para ejecutar"],
+  "Revise o contrato antes de executar": [
+    "Review the contract before running",
+    "Revisa el contrato antes de ejecutar",
+  ],
+  "O plugin está recebendo tudo o que precisa": [
+    "The plugin is receiving everything it needs",
+    "El plugin está recibiendo todo lo que necesita",
+  ],
+  "Escolha como as entradas e entregas ambíguas serão usadas pelo plugin.": [
+    "Choose how ambiguous inputs and outputs will be used by the plugin.",
+    "Elige cómo usará el plugin las entradas y salidas ambiguas.",
+  ],
+  "Entradas, entregas e formatos são compatíveis com esta capacidade.": [
+    "Inputs, outputs, and formats are compatible with this capability.",
+    "Las entradas, salidas y formatos son compatibles con esta capacidad.",
+  ],
+  "Dados usados pelo plugin": ["Data used by the plugin", "Datos usados por el plugin"],
+  "Escolha necessária": ["Selection required", "Selección necesaria"],
+  "Como o plugin usará este dado?": [
+    "How will the plugin use this data?",
+    "¿Cómo usará el plugin este dato?",
+  ],
+  "O que o plugin entregará aqui?": [
+    "What will the plugin output here?",
+    "¿Qué entregará el plugin aquí?",
+  ],
+  "Parâmetros do prompt": ["Prompt parameters", "Parámetros del prompt"],
+  "Novo parâmetro": ["New parameter", "Nuevo parámetro"],
+  "Adicionar parâmetro": ["Add parameter", "Añadir parámetro"],
+  chave: ["key", "clave"],
+  "Uma vez": ["Once", "Una vez"],
+  "Como executar": ["How to run", "Cómo ejecutar"],
+  "Valores reutilizáveis no prompt como {{parameters.chave}}. Eles ficam salvos no Método.": [
+    "Reusable prompt values such as {{parameters.key}}. They are saved in the Method.",
+    "Valores reutilizables en el prompt como {{parameters.clave}}. Se guardan en el Método.",
+  ],
+  "Automático conforme a entrada": ["Automatic based on input", "Automático según la entrada"],
+  "Uma vez por item, na mesma conversa": [
+    "Once per item, in the same conversation",
+    "Una vez por elemento, en la misma conversación",
+  ],
+  "Envia cada item em ordem e mantém todos na mesma conversa do provedor.": [
+    "Sends each item in order and keeps them in the same provider conversation.",
+    "Envía cada elemento en orden y los mantiene en la misma conversación del proveedor.",
+  ],
+  "Usa sequência quando a porta de estrutura recebe vários itens; caso contrário, envia uma vez.": [
+    "Uses a sequence when the structure port receives multiple items; otherwise, sends once.",
+    "Usa una secuencia cuando el puerto de estructura recibe varios elementos; de lo contrario, envía una vez.",
+  ],
+  "Executa este bloco uma única vez com todo o contexto recebido.": [
+    "Runs this block once with all received context.",
+    "Ejecuta este bloque una vez con todo el contexto recibido.",
   ],
   canal: ["channel", "canal"],
   canais: ["channels", "canales"],
@@ -1324,6 +1361,25 @@ function translateDynamic(source: string, language: AppLanguage): string {
   if (match) return language === "en" ? `Collection: ${match[1]}` : `Colección: ${match[1]}`;
   match = source.match(/^Entrega: (.+)$/);
   if (match) return language === "en" ? `Output: ${match[1]}` : `Salida: ${match[1]}`;
+  match = source.match(/^Entrada · (.+)$/);
+  if (match) return language === "en" ? `Input · ${match[1]}` : `Entrada · ${match[1]}`;
+  match = source.match(/^Entrega · (.+)$/);
+  if (match) return language === "en" ? `Output · ${match[1]}` : `Salida · ${match[1]}`;
+  match = source.match(/^Parâmetros do prompt \((\d+)\)$/);
+  if (match)
+    return language === "en"
+      ? `Prompt parameters (${match[1]})`
+      : `Parámetros del prompt (${match[1]})`;
+  match = source.match(/^Nenhuma porta aceita o formato (.+)\.$/);
+  if (match)
+    return language === "en"
+      ? `No port accepts the ${match[1]} format.`
+      : `Ningún puerto acepta el formato ${match[1]}.`;
+  match = source.match(/^Falta uma entrada para: (.+)\.$/);
+  if (match)
+    return language === "en"
+      ? `An input is missing for: ${match[1]}.`
+      : `Falta una entrada para: ${match[1]}.`;
   match = source.match(/^Usa: (.+)$/);
   if (match) {
     const translatedUsage = match[1]

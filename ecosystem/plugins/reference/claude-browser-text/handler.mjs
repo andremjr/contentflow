@@ -910,7 +910,18 @@ async function launchOrReuseChrome({
     "--no-default-browser-check",
     CLAUDE_NEW_URL,
   ];
-  if (startMinimized) args.unshift("--start-minimized");
+  if (startMinimized) {
+    // O job opera pela Bridge, sem foco. Preserve a execução da página quando
+    // a janela dedicada estiver minimizada para que a UI e os heartbeats não
+    // sejam estrangulados pelo agendador de segundo plano do Chrome.
+    args.unshift(
+      "--start-minimized",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-features=CalculateNativeWinOcclusion",
+    );
+  }
   const failures = [];
   for (const executable of executables) {
     let child;

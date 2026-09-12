@@ -539,7 +539,17 @@ async function launch(settings, p, port, signal) {
     "--no-default-browser-check",
     URL_NEW,
   ];
-  if (settings.startMinimized !== false) args.unshift("--start-minimized");
+  if (settings.startMinimized !== false) {
+    // A execução normal permanece minimizada; desative o throttling de
+    // janela ocluída para a página do provedor continuar processando a UI.
+    args.unshift(
+      "--start-minimized",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-features=CalculateNativeWinOcclusion",
+    );
+  }
   for (const exe of exes) {
     let child;
     try {

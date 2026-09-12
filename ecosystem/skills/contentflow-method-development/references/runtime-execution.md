@@ -15,7 +15,9 @@ O Método armazena referências estruturais. O runtime resolve a referência par
 - `channel_library` para coleção dependente do Canal;
 - `static` para contexto fixo com `staticValue`.
 
-A heurística pode priorizar o bloco anterior mais próximo, outputs de processos anteriores, semelhança de nomes e compatibilidade de tipo. Não confie na heurística para resolver conflito de schema: declare referências e valide-as explicitamente. O mesmo output não deve ser usado duas vezes como entrada do mesmo bloco quando isso criar ambiguidade.
+A heurística pode priorizar o bloco anterior mais próximo, outputs de processos anteriores, semelhança de nomes e compatibilidade de tipo. Não confie na heurística para resolver conflito de schema: declare referências e valide-as explicitamente. Quando uma capability possui mais de uma porta compatível, salve `portKey` na entrada ou saída pelo painel do plugin. O mesmo output não deve ser usado duas vezes como entrada do mesmo bloco quando isso criar ambiguidade.
+
+Listas não implicam sozinhas um loop. O comportamento depende da porta e do contrato do plugin: uma porta de contexto pode receber a lista inteira; uma porta de estrutura pode conduzir uma sequência interna; `execution.itemOrchestration` pode solicitar chamadas atômicas do núcleo. O painel do plugin deve informar qual desses comportamentos será usado antes da execução.
 
 ## Execução de blocos
 
@@ -27,16 +29,16 @@ Quando um plugin declara continuidade de conversa, o runtime pode reutilizar o I
 
 ## Outputs oficiais
 
-| Processo | Campo oficial | Type |
-| --- | --- | --- |
-| `theme` | `theme` | `textarea` |
-| `title` | `title` | `text` |
-| `thumbnail` | `thumbnail` | `image` |
-| `script` | `script` | `textarea` |
-| `narration` | `audio` | `audio` |
-| `assets` | `assets` | `files` |
-| `editing` | `video` | `video` |
-| `publishing` | `url` | `url` |
+| Processo     | Campo oficial | Type       |
+| ------------ | ------------- | ---------- |
+| `theme`      | `theme`       | `textarea` |
+| `title`      | `title`       | `text`     |
+| `thumbnail`  | `thumbnail`   | `image`    |
+| `script`     | `script`      | `textarea` |
+| `narration`  | `audio`       | `audio`    |
+| `assets`     | `assets`      | `files`    |
+| `editing`    | `video`       | `video`    |
+| `publishing` | `url`         | `url`      |
 
 Se a cadeia não produzir o output oficial, o Processo deve aguardar uma entrega humana ou um bloco adicional que transforme o valor para o tipo correto. Não promover `thumbnail_layout` para `image` sem renderização.
 

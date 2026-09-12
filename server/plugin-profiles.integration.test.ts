@@ -130,29 +130,6 @@ test("faz backup e inventaria perfis legados sem reescrever o Canal", async () =
       { method: "POST" },
     );
     assert.equal(prepareResponse.ok, true, JSON.stringify(await prepareResponse.json()));
-
-    const executionResponse = await fetch(`${apiBase}/api/method-block-tests`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        runId: "2f8b8484-9e38-4ec5-a072-6a14662f87c9",
-        channelId: originalChannel.id,
-        processType: "title",
-        blockId: "legacy-block",
-        blocks: originalChannel.methods.title.blocks.map((block) => ({
-          ...block,
-          outputs: [
-            { id: "result", key: "result", label: "Resultado", type: "textarea", required: true },
-          ],
-        })),
-        inputValues: {},
-        projectTitle: "Teste de continuidade",
-        projectDeadline: "",
-      }),
-    });
-    const executionResult = await executionResponse.json();
-    assert.equal(executionResponse.ok, true, JSON.stringify(executionResult));
-    assert.equal(executionResult.values.result, "Crie um título.");
   } finally {
     if (server.exitCode === null) {
       server.kill();

@@ -145,7 +145,6 @@ const defaultDataDirectory =
     : path.join(applicationRoot, "data");
 const dataDirectory = path.resolve(process.env.CONTENTFLOW_DATA_DIR ?? defaultDataDirectory);
 const uploadsDirectory = path.join(dataDirectory, "uploads");
-const methodTestsDirectory = path.join(dataDirectory, "method-tests");
 const installedPluginsDirectory = path.resolve(
   process.env.CONTENTFLOW_INSTALLED_PLUGINS_DIR ?? path.join(dataDirectory, "plugins", "installed"),
 );
@@ -219,7 +218,6 @@ if (
 }
 
 mkdirSync(uploadsDirectory, { recursive: true });
-mkdirSync(methodTestsDirectory, { recursive: true });
 mkdirSync(installedPluginsDirectory, { recursive: true });
 mkdirSync(developmentLinksDirectory, { recursive: true });
 
@@ -2112,34 +2110,6 @@ function migrateLegacyLibraryItems() {
 
 migrateLegacyLibraryItems();
 
-const methodTestRunIdPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const methodTestRetentionMs = 60 * 60 * 1_000;
-
-function methodTestRunDirectory(runId: string) {
-  if (!methodTestRunIdPattern.test(runId)) {
-    throw new Error("Identificador de teste inválido.");
-  }
-  return path.join(methodTestsDirectory, runId);
-}
-
-function cleanupExpiredMethodTests() {
-  const cutoff = Date.now() - methodTestRetentionMs;
-  for (const entry of readdirSync(methodTestsDirectory, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !methodTestRunIdPattern.test(entry.name)) continue;
-    const directory = path.join(methodTestsDirectory, entry.name);
-    try {
-      if (statSync(directory).mtimeMs < cutoff) rmSync(directory, { recursive: true, force: true });
-    } catch {
-      // Another request may have removed the temporary run concurrently.
-    }
-  }
-}
-
-cleanupExpiredMethodTests();
-const methodTestCleanupTimer = setInterval(cleanupExpiredMethodTests, 15 * 60 * 1_000);
-methodTestCleanupTimer.unref();
-
 const app = express();
 app.use(express.json({ limit: "20mb" }));
 app.use(
@@ -2155,88 +2125,6 @@ app.use(
     },
   }),
 );
-app.use(
-  "/api/method-block-tests/files",
-  express.static(methodTestsDirectory, {
-    dotfiles: "deny",
-    fallthrough: false,
-    setHeaders(response, filePath) {
-      response.setHeader("Cache-Control", "no-store");
-      response.setHeader("X-Content-Type-Options", "nosniff");
-      response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
-      if (activeUploadExtensions.has(path.extname(filePath).toLowerCase())) {
-        response.setHeader("Content-Disposition", "attachment");
-      }
-    },
-  }),
-);
-
-app.post(
-  "/api/method-block-tests/:runId/uploads",
-  express.raw({ type: "application/octet-stream", limit: maxUploadBytes }),
-  (request, response) => {
-    let runDirectory: string;
-    try {
-      runDirectory = methodTestRunDirectory(request.params.runId);
-    } catch (error) {
-      response
-        .status(400)
-        .json({ error: error instanceof Error ? error.message : "Teste inválido." });
-      return;
-    }
-    const originalName = decodeUploadName(request.headers["x-file-name"]);
-    const mimeType = String(request.headers["x-file-type"] ?? "application/octet-stream")
-      .split(";", 1)[0]
-      .trim()
-      .toLowerCase();
-    if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
-      response.status(400).json({ error: "Arquivo vazio ou inválido." });
-      return;
-    }
-    const extension = path
-      .extname(originalName)
-      .replace(/[^a-zA-Z0-9.]/g, "")
-      .slice(0, 12)
-      .toLowerCase();
-    if (activeUploadExtensions.has(extension) || activeUploadMimeTypes.has(mimeType)) {
-      response.status(415).json({
-        error:
-          "Esse formato ativo não pode ser usado no teste. Envie uma mídia ou arquivo de dados.",
-      });
-      return;
-    }
-    if (directorySize(methodTestsDirectory, true) + request.body.length > maxUploadStorageBytes) {
-      response.status(507).json({
-        error: `Os arquivos temporários de teste atingiram o limite de ${maxUploadStorageGb} GB.`,
-      });
-      return;
-    }
-    const filesDirectory = path.join(runDirectory, "files");
-    mkdirSync(filesDirectory, { recursive: true });
-    const id = randomUUID();
-    const storedName = `${id}${extension}`;
-    writeFileSync(path.join(filesDirectory, storedName), request.body);
-    response.status(201).json({
-      id,
-      name: path.basename(originalName),
-      mimeType,
-      size: request.body.length,
-      url: `/api/method-block-tests/files/${request.params.runId}/files/${storedName}`,
-    });
-  },
-);
-
-app.delete("/api/method-block-tests/:runId", (request, response) => {
-  try {
-    rmSync(methodTestRunDirectory(request.params.runId), { recursive: true, force: true });
-    response.status(204).end();
-  } catch (error) {
-    response
-      .status(400)
-      .json({ error: error instanceof Error ? error.message : "Teste inválido." });
-  }
-});
-
 app.post(
   "/api/uploads",
   express.raw({ type: "application/octet-stream", limit: maxUploadBytes }),
@@ -3433,433 +3321,6 @@ app.delete("/api/plugins/:pluginId/connections/:connectionId", async (request, r
   response.json(await publicPluginConnection(plugin, revoked));
 });
 
-let activeMethodBlockTests = 0;
-
-app.post("/api/method-block-tests", async (request, response) => {
-  const body = request.body as {
-    runId?: string;
-    channelId?: string;
-    processType?: UniversalProcess;
-    blockId?: string;
-    blocks?: ActionBlock[];
-    inputValues?: Record<string, RuntimeValue>;
-    projectTitle?: string;
-    projectDeadline?: string;
-  };
-  let runDirectory: string;
-  try {
-    if (!body.runId) throw new Error("Identificador de teste ausente.");
-    runDirectory = methodTestRunDirectory(body.runId);
-  } catch (error) {
-    response
-      .status(400)
-      .json({ error: error instanceof Error ? error.message : "Teste inválido." });
-    return;
-  }
-  if (
-    !body.channelId ||
-    !body.processType ||
-    !PROCESS_ORDER.includes(body.processType) ||
-    !body.blockId ||
-    !Array.isArray(body.blocks) ||
-    body.blocks.length < 1 ||
-    body.blocks.length > 200 ||
-    !body.inputValues ||
-    typeof body.inputValues !== "object" ||
-    Array.isArray(body.inputValues)
-  ) {
-    response.status(400).json({ error: "Configuração do teste de bloco inválida." });
-    return;
-  }
-
-  let blocks: ActionBlock[];
-  try {
-    blocks = normalizeMethodBlocks(body.blocks, body.processType);
-  } catch (error) {
-    response.status(422).json({
-      error: error instanceof Error ? error.message : "O bloco não possui uma configuração válida.",
-    });
-    return;
-  }
-  const block = blocks.find((candidate) => candidate.id === body.blockId);
-  const channel = readPayload<Channel>("channels", body.channelId);
-  if (!block || !channel) {
-    response.status(404).json({ error: "Bloco ou canal não encontrado." });
-    return;
-  }
-  if (block.operator === "Humano") {
-    response.status(422).json({
-      error: "Blocos humanos não executam plugin. Use a prévia dos campos para revisar o contrato.",
-    });
-    return;
-  }
-  if (!block.plugin) {
-    response.status(422).json({ error: "Selecione um plugin e uma capacidade antes de testar." });
-    return;
-  }
-
-  const plugin = getRegisteredPlugin(block.plugin.pluginId);
-  if (!plugin) {
-    response.status(404).json({ error: "Plugin não encontrado no registro local." });
-    return;
-  }
-  if (!plugin.executable || !pluginConsentIsCurrent(plugin)) {
-    response.status(403).json({
-      error: "Ative este plugin e confirme suas permissões na Central de Plugins.",
-    });
-    return;
-  }
-  const capability = plugin.manifest.capabilities.find(
-    (candidate) => candidate.id === block.plugin?.capabilityId,
-  );
-  if (
-    !capability ||
-    capability.operator !== block.operator ||
-    !capability.blockTypes.includes(block.type) ||
-    (capability.processTypes && !capability.processTypes.includes(body.processType))
-  ) {
-    response.status(422).json({ error: "A capacidade não é compatível com este bloco." });
-    return;
-  }
-
-  const testInputs: BlockInputBinding[] = [...(block.inputs ?? [])];
-  if (block.type === "VALIDAR" && block.validation?.targetBlockId) {
-    const targetBlock = blocks.find(
-      (candidate) => candidate.id === block.validation?.targetBlockId,
-    );
-    const targetOutput =
-      targetBlock?.outputs?.find((field) => field.key === block.validation?.targetOutputKey) ??
-      targetBlock?.outputs?.[0];
-    if (targetOutput) {
-      testInputs.unshift({
-        id: "__validation_target__",
-        label: targetOutput.label,
-        type: targetOutput.type,
-        source: "static",
-        recordFields: targetOutput.recordFields,
-        presentation: targetOutput.presentation,
-      });
-    }
-  }
-  const resolvedTestInputs = testInputs.map((input) => ({
-    input,
-    value:
-      body.inputValues?.[input.id] ??
-      (input.source === "static" && typeof input.staticValue === "string"
-        ? input.staticValue
-        : undefined),
-  }));
-  const missingInputs = resolvedTestInputs.filter(({ value }) => isEmptyRuntimeValue(value));
-  if (missingInputs.length) {
-    response.status(422).json({
-      error: `Preencha os dados de teste: ${missingInputs.map(({ input }) => input.label).join(", ")}.`,
-    });
-    return;
-  }
-  const usedInputPorts = new Set<string>();
-  const assignedInputs = resolvedTestInputs.map(({ input, value }) => {
-    const port = selectPluginInputPort(input, capability.inputPorts, usedInputPorts);
-    if (port && !port.multiple) usedInputPorts.add(port.key);
-    return { input, value: value!, port };
-  });
-  const unsupportedInputs = assignedInputs.filter((item) => !item.port);
-  if (unsupportedInputs.length) {
-    response.status(422).json({
-      error: `O plugin não aceita: ${unsupportedInputs.map(({ input }) => input.label).join(", ")}.`,
-    });
-    return;
-  }
-
-  const inputs = Object.fromEntries(
-    capability.inputPorts.flatMap((port) => {
-      const assigned = assignedInputs.filter((item) => item.port?.key === port.key);
-      return assigned.length
-        ? [
-            [
-              port.key,
-              composePluginPortValue(
-                assigned.map(({ input, value }) => ({ label: input.label, value })),
-              ),
-            ],
-          ]
-        : [];
-    }),
-  ) as Record<string, RuntimeValue>;
-  const inputContract = assignedInputs.map(({ input, port }) => ({
-    id: input.id,
-    portKey: port?.key ?? input.id,
-    label: input.label,
-    type: input.type,
-    recordFields: input.recordFields,
-    presentation: input.presentation,
-  }));
-  const outputContract: PluginFieldContract[] =
-    block.type === "ESCOLHER"
-      ? [
-          {
-            label: "Item escolhido",
-            key: "selectedItemId",
-            type: "text",
-            required: true,
-            portKey: capability.outputPorts[0]?.key ?? "result",
-          },
-        ]
-      : (block.outputs ?? []).map((field) => ({
-          label: field.label,
-          key: field.key,
-          type: field.type,
-          required: field.required,
-          options: field.options,
-          recordFields: field.recordFields,
-          presentation: field.presentation,
-          portKey:
-            capability.outputPorts.find((port) => port.producedTypes.includes(field.type))?.key ??
-            capability.outputPorts[0]?.key ??
-            field.key,
-        }));
-  if (!outputContract.length) {
-    response.status(422).json({ error: "Defina ao menos uma entrega antes de testar o bloco." });
-    return;
-  }
-
-  const executionParameters = Object.fromEntries(
-    (block.parameters ?? []).map((parameter) => [parameter.key, parameter.value]),
-  );
-  const resolvedInstruction = resolveInstructionTemplate(block.instructions ?? "", {
-    channel: { name: channel.name, language: channel.language, niche: channel.niche },
-    project: {
-      title: body.projectTitle?.trim() || "Projeto de teste",
-      deadline: body.projectDeadline?.trim() || "",
-    },
-    block: { name: block.name ?? block.type, type: block.type },
-    inputs: assignedInputs.map(({ input, port, value }) => ({
-      id: input.id,
-      label: input.label,
-      sourceKey: input.sourceKey,
-      portKey: port?.key,
-      value,
-    })),
-    parameters: executionParameters,
-  });
-  if (resolvedInstruction.unresolved.length) {
-    response.status(422).json({
-      error: `Variáveis sem valor no teste: ${resolvedInstruction.unresolved
-        .map((variable) => `{{${variable}}}`)
-        .join(", ")}.`,
-    });
-    return;
-  }
-  if (capability.instructionUsage === "required" && !resolvedInstruction.instruction) {
-    response.status(422).json({ error: "Defina a instrução do bloco antes de testar." });
-    return;
-  }
-
-  let resolvedConnection: Awaited<ReturnType<typeof resolvePluginConnection>>;
-  try {
-    resolvedConnection = await resolvePluginConnection(plugin, block.plugin.connectionId);
-  } catch (error) {
-    response.status(422).json({
-      error: error instanceof Error ? error.message : "Não foi possível carregar a conexão.",
-    });
-    return;
-  }
-  if (
-    (plugin.manifest.secretKeys?.length ?? 0) > 0 &&
-    !Object.keys(resolvedConnection.secrets).length
-  ) {
-    response.status(422).json({
-      error: "Crie ou associe uma conta local válida a este bloco.",
-    });
-    return;
-  }
-
-  const selectedCollection =
-    block.type === "ESCOLHER" && block.collectionId
-      ? readPayload<StrategicCollection>("library_collections", block.collectionId)
-      : undefined;
-  const selectedCollectionItems = selectedCollection
-    ? (
-        database
-          .prepare("SELECT payload FROM library_items WHERE collection_id = ?")
-          .all(selectedCollection.id) as { payload: string }[]
-      ).map((row) => JSON.parse(row.payload) as ChannelLibraryItem)
-    : [];
-  if (block.type === "ESCOLHER" && (!selectedCollection || !selectedCollectionItems.length)) {
-    response.status(422).json({ error: "A coleção vinculada precisa possuir itens para o teste." });
-    return;
-  }
-
-  const referencedInputIds = new Set(resolvedInstruction.referencedInputIds);
-  const instructionContextInputs = Object.fromEntries(
-    capability.inputPorts.flatMap((port) => {
-      const unreferenced = assignedInputs.filter(
-        (item) => item.port?.key === port.key && !referencedInputIds.has(item.input.id),
-      );
-      return unreferenced.length
-        ? [
-            [
-              port.key,
-              composePluginPortValue(
-                unreferenced.map(({ input, value }) => ({ label: input.label, value })),
-              ),
-            ],
-          ]
-        : [];
-    }),
-  ) as Record<string, RuntimeValue>;
-  const pluginRequest: PluginExecutionRequest = {
-    executionId: `method-test-${body.runId}`,
-    traceId: randomUUID(),
-    blockId: block.id,
-    capabilityId: capability.id,
-    attempt: 1,
-    invocation: { mode: "start" },
-    configuration: { ...block.plugin.configuration, ...executionParameters },
-    settings: resolvedConnection.connectionId
-      ? { connectionId: resolvedConnection.connectionId }
-      : {},
-    inputs,
-    instructionContextInputs,
-    inputContract,
-    inputDeliveries: inputContract.map((item) => ({
-      inputId: item.id,
-      portKey: item.portKey,
-      itemIds: [],
-    })),
-    outputContract,
-    validation: block.validation,
-    resolvedInstruction: resolvedInstruction.instruction,
-    unresolvedInstructionVariables: [],
-    conversation: plugin.manifest.supportsConversationContinuation ? { mode: "new" } : undefined,
-    context: {
-      runMode: "method_test",
-      locale: channel.language || "pt-BR",
-      timeZone: "America/Sao_Paulo",
-      channel: {
-        id: channel.id,
-        name: channel.name,
-        language: channel.language,
-        niche: channel.niche,
-      },
-      project: {
-        id: `method-test-${body.runId}`,
-        title: body.projectTitle?.trim() || "Projeto de teste",
-      },
-      processType: body.processType,
-      block: {
-        type: block.type,
-        name: block.name ?? block.type,
-        instructions: block.instructions ?? "",
-      },
-      selectedCollection: selectedCollection
-        ? {
-            collectionId: selectedCollection.id,
-            items: selectedCollectionItems.map((item) => ({
-              id: item.id,
-              values: collectionItemValuesForPlugin(selectedCollection, item),
-            })),
-          }
-        : undefined,
-      previousProcessOutputs: [],
-      previousBlockOutputs: [],
-      previousDeliveries: [],
-    },
-  };
-  const slot = pluginConcurrencySlotForRequest(
-    plugin,
-    plugin.id,
-    capability.id,
-    pluginRequest.configuration,
-  );
-  const activeInSlot = activePluginConcurrencySlots.get(slot.key) ?? 0;
-  if (activeMethodBlockTests >= 2 || activeInSlot >= slot.limit) {
-    response.status(409).json({
-      error: "Esse plugin ou perfil já está em uso. Aguarde a execução atual terminar.",
-    });
-    return;
-  }
-
-  mkdirSync(path.join(runDirectory, "files"), { recursive: true });
-  const controller = new AbortController();
-  const abortIfDisconnected = () => {
-    if (!response.writableEnded) controller.abort();
-  };
-  request.once("aborted", abortIfDisconnected);
-  response.once("close", abortIfDisconnected);
-  activeMethodBlockTests += 1;
-  activePluginConcurrencySlots.set(slot.key, activeInSlot + 1);
-  try {
-    const workspaceDirectory = plugin.manifest.profileSetup
-      ? executionWorkspaceForPlugin(plugin)
-      : path.join(runDirectory, "workspace", plugin.id.replace(/[^A-Za-z0-9._-]/g, "_"));
-    const executionOptions = {
-      workspaceDirectory,
-      artifactDirectory: path.join(runDirectory, "files"),
-      artifactUrlPrefix: `/api/method-block-tests/files/${body.runId}/files`,
-      signal: controller.signal,
-    };
-    const deadline = Date.now() + (capability.execution.defaultTimeoutMs ?? 60_000);
-    let pluginResponse: PluginExecutionResponse = await executeRegisteredPlugin(
-      plugin,
-      pluginRequest,
-      Math.max(1_000, deadline - Date.now()),
-      resolvedConnection.secrets,
-      executionOptions,
-    );
-    let storedArtifacts = pluginResponse.storedArtifacts ?? [];
-    while (pluginResponse.status === "pending") {
-      if (capability.execution.mode !== "async") {
-        throw new Error("Uma capacidade imediata não pode devolver pending.");
-      }
-      if (!pluginResponse.jobId || Date.now() >= deadline) {
-        throw new Error("O teste excedeu o tempo máximo declarado pelo plugin.");
-      }
-      const pollAfterMs = pluginResponse.pollAfterMs;
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.max(250, Math.min(30_000, pollAfterMs))),
-      );
-      pluginResponse = await executeRegisteredPlugin(
-        plugin,
-        { ...pluginRequest, invocation: { mode: "resume", jobId: pluginResponse.jobId } },
-        Math.max(1_000, deadline - Date.now()),
-        resolvedConnection.secrets,
-        { ...executionOptions, existingArtifacts: storedArtifacts },
-      );
-      storedArtifacts = pluginResponse.storedArtifacts ?? storedArtifacts;
-    }
-    if (pluginResponse.status === "error") {
-      response.status(422).json({
-        error: pluginResponse.message,
-        code: pluginResponse.code,
-        values: pluginResponse.partialValues ?? {},
-      });
-      return;
-    }
-    response.json({
-      ok: true,
-      runId: body.runId,
-      values: mappedPluginValues(block, pluginResponse.values, outputContract),
-      outputs: block.type === "ESCOLHER" ? outputContract : (block.outputs ?? []),
-      usage: pluginResponse.usage,
-      temporary: true,
-    });
-  } catch (error) {
-    if (!response.headersSent) {
-      response.status(controller.signal.aborted ? 499 : 422).json({
-        error: error instanceof Error ? error.message : "Não foi possível testar o bloco.",
-      });
-    }
-  } finally {
-    request.off("aborted", abortIfDisconnected);
-    response.off("close", abortIfDisconnected);
-    activeMethodBlockTests -= 1;
-    const remaining = (activePluginConcurrencySlots.get(slot.key) ?? 1) - 1;
-    if (remaining > 0) activePluginConcurrencySlots.set(slot.key, remaining);
-    else activePluginConcurrencySlots.delete(slot.key);
-    void processDuePluginJobs();
-  }
-});
-
 app.post("/api/execute-block", async (request, response) => {
   const body = request.body as {
     projectId?: string;
@@ -4172,6 +3633,22 @@ app.post("/api/execute-block", async (request, response) => {
     return;
   }
 
+  const invalidOutputBindings = (block.outputs ?? []).filter(
+    (field) =>
+      field.portKey &&
+      !capability.outputPorts.some(
+        (port) => port.key === field.portKey && port.producedTypes.includes(field.type),
+      ),
+  );
+  if (invalidOutputBindings.length) {
+    response.status(422).json({
+      error: `O plugin não consegue entregar: ${invalidOutputBindings
+        .map((field) => field.label)
+        .join(", ")}. Revise o vínculo da entrega no painel do plugin.`,
+    });
+    return;
+  }
+
   const outputContract: PluginFieldContract[] =
     block.type === "ESCOLHER"
       ? [
@@ -4192,6 +3669,7 @@ app.post("/api/execute-block", async (request, response) => {
           recordFields: field.recordFields,
           presentation: field.presentation,
           portKey:
+            field.portKey ??
             capability.outputPorts.find((port) => port.producedTypes.includes(field.type))?.key ??
             capability.outputPorts[0]?.key ??
             field.key,

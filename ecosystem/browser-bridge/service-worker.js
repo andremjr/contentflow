@@ -677,7 +677,18 @@ async function withJobDebugger(tabId, command, operation) {
     await detachSessionDebugger(session);
     let owners = debuggerSessionsByTab.get(tabId);
     if (!owners) {
-      await chrome.debugger.attach({ tabId }, CDP_VERSION);
+      try {
+        await chrome.debugger.attach({ tabId }, CDP_VERSION);
+      } catch (error) {
+        // A worker can be restarted while Chrome still holds this extension's
+        // previous debugger attachment. The in-memory owners map is then
+        // empty even though the extension can first release its own stale
+        // attachment. Retry once; another extension remains protected because
+        // chrome.debugger.detach only addresses this extension's debugger.
+        if (!/already attached/i.test(String(error?.message || error))) throw error;
+        await chrome.debugger.detach({ tabId }).catch(() => undefined);
+        await chrome.debugger.attach({ tabId }, CDP_VERSION);
+      }
       owners = new Set();
       debuggerSessionsByTab.set(tabId, owners);
     }

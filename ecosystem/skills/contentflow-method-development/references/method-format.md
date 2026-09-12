@@ -78,7 +78,9 @@ Nunca gravar IDs de execução. Use referências estruturais; o runtime resolve 
 
 ## Outputs
 
-Toda saída contém `id`, `label`, `key`, `type` e `required`. Pode conter `placeholder`, `helpText`, `options`, `optionsSourceBlockId`, `optionsSourceKey`, `recordFields` e `presentation`. `key` deve ser única no bloco.
+Toda saída contém `id`, `label`, `key`, `type` e `required`. Pode conter `placeholder`, `helpText`, `options`, `optionsSourceBlockId`, `optionsSourceKey`, `recordFields`, `presentation` e `portKey`. `key` deve ser única no bloco.
+
+Entradas e saídas podem salvar `portKey`, a chave semântica da porta declarada pela capability do plugin. Use-a sempre que duas ou mais portas aceitam o mesmo tipo. O editor mostra essa escolha dentro do painel do plugin e a preserva na exportação; não tente reproduzir esse vínculo renomeando labels.
 
 `optionsSourceBlockId`/`optionsSourceKey` permitem que `select` ou `multiselect` use opções de uma saída anterior. Para VALIDAR, use convencionalmente `decision`, `selected_value`, `selected_values` e `feedback`.
 

@@ -148,13 +148,13 @@ try {
     integrationOutput,
     uploadsDirectory,
     manifest,
-    { urlPrefix: "/api/method-block-tests/files/run/files" },
+    { urlPrefix: "/api/files/runtime-artifacts" },
   );
   assert.equal(importedPartial.status, "pending");
   if (importedPartial.status !== "pending") throw new Error("Artifact parcial não foi importado.");
   const partialFile = importedPartial.storedArtifacts?.[0];
   assert.ok(partialFile?.sha256);
-  assert.match(partialFile?.url ?? "", /^\/api\/method-block-tests\/files\/run\/files\//);
+  assert.match(partialFile?.url ?? "", /^\/api\/files\/runtime-artifacts\//);
   assert.equal(
     Array.isArray(importedPartial.partialValues?.files)
       ? (importedPartial.partialValues.files[0] as { url?: string }).url

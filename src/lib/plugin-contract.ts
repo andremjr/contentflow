@@ -179,8 +179,6 @@ export type PluginManifest = {
 };
 
 export type PluginExecutionContext = {
-  /** Optional execution surface hint. Older plugins safely ignore this field. */
-  runMode?: "production" | "method_test";
   locale: string;
   timeZone: string;
   channel: { id: string; name: string; language: string; niche: string };

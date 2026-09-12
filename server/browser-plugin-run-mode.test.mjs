@@ -11,6 +11,12 @@ const browserPlugins = [
   "meta-ai-browser-studio",
 ];
 
+const backgroundSafeBrowserPlugins = [
+  "chatgpt-browser-studio",
+  "claude-browser-text",
+  "gemini-browser-studio",
+];
+
 test("todos os jobs de navegador iniciam minimizados por padrão", async () => {
   for (const plugin of browserPlugins) {
     const root = new URL(`../ecosystem/plugins/reference/${plugin}/`, import.meta.url);
@@ -25,9 +31,24 @@ test("todos os jobs de navegador iniciam minimizados por padrão", async () => {
       source.includes("settings.startMinimized !== false"),
       `${plugin} precisa respeitar startMinimized em qualquer modo de job`,
     );
-    assert.ok(
-      !/runMode\s*!==\s*["']method_test["'][\s\S]{0,100}settings\.startMinimized/.test(source),
-      `${plugin} não pode abrir automaticamente só porque o job é um teste de bloco`,
-    );
+  }
+});
+
+test("Browser Studios selecionados preservam a execução com a janela minimizada", async () => {
+  const requiredFlags = [
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+    "--disable-features=CalculateNativeWinOcclusion",
+  ];
+  for (const plugin of backgroundSafeBrowserPlugins) {
+    const root = new URL(`../ecosystem/plugins/reference/${plugin}/`, import.meta.url);
+    const source = await readFile(new URL("handler.mjs", root), "utf8");
+    for (const flag of requiredFlags) {
+      assert.ok(
+        source.includes(flag),
+        `${plugin} precisa iniciar o Chrome minimizado sem throttling de segundo plano (${flag})`,
+      );
+    }
   }
 });

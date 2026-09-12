@@ -58,6 +58,8 @@ async function evaluateWorker(client, sessionId, expression) {
 export async function attachContentFlowBridge({
   client,
   pageSessionId,
+  pageTargetId,
+  expectedUrl,
   pluginId,
   profileId,
   request,
@@ -137,11 +139,25 @@ export async function attachContentFlowBridge({
   const origins = new Set(allowedOrigins);
   const dispatch = async (action, payload = {}, operationKey = action, timeoutMs = 30000) => {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    const page = await evaluateWorker(
-      client,
-      pageSessionId,
-      "({ url: location.href, origin: location.origin })",
-    );
+    // During an interactive Microsoft login the DevTools target can briefly
+    // report the previous identity-provider URL after the page has already
+    // returned to the Playground. The caller may provide the last validated
+    // provider URL; the Browser Bridge still verifies the actual tab before
+    // performing every command.
+    const page = expectedUrl
+      ? { url: String(expectedUrl), origin: new URL(String(expectedUrl)).origin }
+      : pageSessionId
+        ? await evaluateWorker(
+            client,
+            pageSessionId,
+            "({ url: location.href, origin: location.origin })",
+          )
+        : await client
+            .send("Target.getTargetInfo", { targetId: pageTargetId })
+            .then(({ targetInfo }) => ({
+              url: targetInfo?.url || "",
+              origin: new URL(targetInfo?.url || "about:blank").origin,
+            }));
     if (!origins.has(page?.origin)) {
       throw codedError(
         "OUTPUT_VALIDATION_FAILED",
@@ -163,11 +179,35 @@ export async function attachContentFlowBridge({
       action,
       payload,
     };
-    const response = await evaluateWorker(
-      client,
-      workerSessionId,
-      `(() => { const bridge = globalThis.contentFlowBridge; const connected = bridge.connect(${JSON.stringify({ pluginId, protocolVersion: PROTOCOL_VERSION, profileId, sessionToken })}); if (!connected?.ok) return connected; return Promise.race([bridge.dispatch(${JSON.stringify(command)}),new Promise(resolve=>setTimeout(()=>resolve({ok:false,code:"COMMAND_TIMEOUT",message:"A extensão não respondeu no prazo."}),${commandTimeoutMs + 1000}))]); })()`,
-    );
+    const dispatchExpression =
+      // connect() replaces a bridge session. Calling it before every command
+      // can race chrome.debugger.detach from the prior command with the next
+      // chrome.debugger.attach on the same Playground tab. The session created
+      // above remains alive while dispatch() updates its activity timestamp.
+      `(() => { const bridge = globalThis.contentFlowBridge; return Promise.race([bridge.dispatch(${JSON.stringify(command)}),new Promise(resolve=>setTimeout(()=>resolve({ok:false,code:"COMMAND_TIMEOUT",message:"A extensão não respondeu no prazo."}),${commandTimeoutMs + 1000}))]); })()`;
+    let response = await evaluateWorker(client, workerSessionId, dispatchExpression);
+    if (response?.code === "SESSION_MISMATCH") {
+      // A suspended/restarted worker has lost its in-memory session. Reconnect
+      // once only after that explicit signal; ordinary commands keep the same
+      // session and therefore do not race a debugger reattachment.
+      const reconnect = await evaluateWorker(
+        client,
+        workerSessionId,
+        `globalThis.contentFlowBridge.connect(${JSON.stringify({
+          pluginId,
+          protocolVersion: PROTOCOL_VERSION,
+          profileId,
+          sessionToken,
+        })})`,
+      );
+      if (!reconnect?.ok) {
+        throw codedError(
+          "INVALID_CONFIGURATION",
+          reconnect?.message || "A extensão recusou a reconexão efêmera do plugin.",
+        );
+      }
+      response = await evaluateWorker(client, workerSessionId, dispatchExpression);
+    }
     if (!response?.ok) {
       const code = String(response?.code || "");
       if (code === "CANCELLED") throw codedError("CANCELLED", "Execução cancelada.");
@@ -226,12 +266,39 @@ export async function attachContentFlowBridge({
 
   let ping;
   try {
-    ping = await dispatch("ping", {}, "bridge-ready");
+    try {
+      ping = await dispatch("ping", {}, "bridge-ready");
+    } catch (error) {
+      if (error?.code !== "UPSTREAM_UNAVAILABLE") throw error;
+      if (pageSessionId) {
+        await client.send("Page.reload", { ignoreCache: true }, pageSessionId);
+        await delay(1500, signal);
+        ping = await dispatch("ping", {}, "bridge-ready-after-reload");
+      } else {
+        // Voice execution deliberately releases the direct CDP page session so
+        // the Browser Bridge can own the debugger. In that mode there is no
+        // Page.reload target; wait for the extension to settle and retry ping.
+        await delay(750, signal);
+        ping = await dispatch("ping", {}, "bridge-ready-retry");
+      }
+    }
   } catch (error) {
-    if (error?.code !== "UPSTREAM_UNAVAILABLE") throw error;
-    await client.send("Page.reload", { ignoreCache: true }, pageSessionId);
-    await delay(1500, signal);
-    ping = await dispatch("ping", {}, "bridge-ready-after-reload");
+    // A failed initialization must not leave chrome.debugger attached. A
+    // later chunk needs to acquire the same provider tab exclusively.
+    await evaluateWorker(
+      client,
+      workerSessionId,
+      `globalThis.contentFlowBridge?.disconnect(${JSON.stringify({
+        pluginId,
+        protocolVersion: PROTOCOL_VERSION,
+        profileId,
+        sessionToken,
+      })})`,
+    ).catch(() => undefined);
+    await client
+      .send("Target.detachFromTarget", { sessionId: workerSessionId })
+      .catch(() => undefined);
+    throw error;
   }
   if (ping?.protocolVersion !== PROTOCOL_VERSION) {
     throw codedError("INVALID_CONFIGURATION", "A ContentFlow Browser Bridge está desatualizada.");
@@ -240,12 +307,12 @@ export async function attachContentFlowBridge({
   return {
     dispatch,
     identity,
-    dispose() {
+    async dispose() {
       if (disposed) return;
       disposed = true;
       signal?.removeEventListener("abort", cancel);
       const payload = { pluginId, protocolVersion: PROTOCOL_VERSION, profileId, sessionToken };
-      void client
+      await client
         .send(
           "Runtime.evaluate",
           {
@@ -255,12 +322,10 @@ export async function attachContentFlowBridge({
           },
           workerSessionId,
         )
-        .catch(() => undefined)
-        .finally(() =>
-          client
-            .send("Target.detachFromTarget", { sessionId: workerSessionId })
-            .catch(() => undefined),
-        );
+        .catch(() => undefined);
+      await client
+        .send("Target.detachFromTarget", { sessionId: workerSessionId })
+        .catch(() => undefined);
     },
   };
 }

@@ -18,6 +18,11 @@ await cp(
   { recursive: true },
 );
 await cp(
+  path.resolve("tests/fixtures/contract-plugin"),
+  path.join(localPluginsDirectory, "contract-plugin"),
+  { recursive: true },
+);
+await cp(
   path.resolve("ecosystem/plugins/reference/free-stock-media-studio"),
   path.join(localPluginsDirectory, "free-stock-media-studio"),
   { recursive: true },

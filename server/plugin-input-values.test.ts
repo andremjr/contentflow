@@ -208,3 +208,57 @@ test("prioriza o rótulo semântico da porta sobre uma porta genérica", () => {
 
   assert.equal(selectPluginInputPort(input, ports, new Set())?.key, "sections");
 });
+
+test("respeita a porta explícita escolhida no editor mesmo quando outra aparece primeiro", () => {
+  const input: BlockInputBinding = {
+    id: "prompts",
+    label: "Sequência de prompts",
+    type: "list",
+    source: "previous_block",
+    portKey: "outline",
+  };
+  const ports: PluginInputPort[] = [
+    {
+      key: "content",
+      label: "Contexto",
+      acceptedTypes: ["list"],
+      required: false,
+      multiple: true,
+    },
+    {
+      key: "outline",
+      label: "Estrutura",
+      acceptedTypes: ["list"],
+      required: false,
+    },
+  ];
+
+  assert.equal(selectPluginInputPort(input, ports, new Set())?.key, "outline");
+});
+
+test("não mascara uma porta explícita inválida com binding automático", () => {
+  const input: BlockInputBinding = {
+    id: "prompts",
+    label: "Sequência de prompts",
+    type: "list",
+    source: "previous_block",
+    portKey: "sections",
+  };
+  const ports: PluginInputPort[] = [
+    {
+      key: "content",
+      label: "Contexto",
+      acceptedTypes: ["list"],
+      required: false,
+      multiple: true,
+    },
+    {
+      key: "sections",
+      label: "Quantidade",
+      acceptedTypes: ["number"],
+      required: false,
+    },
+  ];
+
+  assert.equal(selectPluginInputPort(input, ports, new Set()), undefined);
+});

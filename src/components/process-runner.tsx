@@ -501,6 +501,7 @@ function ExecutionResults({
                         label={field.label}
                         type={field.type}
                         value={selectedItem.values[field.id]}
+                        showCharacterCount
                       />
                     ))}
                   </div>
@@ -513,6 +514,7 @@ function ExecutionResults({
                         type={output.type}
                         presentation={output.presentation}
                         value={blockExecution.values[output.key]}
+                        showCharacterCount
                       />
                     ))}
                   </div>
@@ -536,12 +538,14 @@ function ResultValue({
   presentation,
   value,
   source,
+  showCharacterCount = false,
 }: {
   label: string;
   type: Parameters<typeof RuntimeValueViewer>[0]["type"];
   presentation?: Parameters<typeof RuntimeValueViewer>[0]["presentation"];
   value: RuntimeValue | undefined;
   source?: string;
+  showCharacterCount?: boolean;
 }) {
   return (
     <div className="min-w-0 rounded-lg border border-border/50 bg-card/60 p-3">
@@ -555,7 +559,13 @@ function ResultValue({
           </Badge>
         )}
       </div>
-      <RuntimeValueViewer type={type} presentation={presentation} value={value} compact />
+      <RuntimeValueViewer
+        type={type}
+        presentation={presentation}
+        value={value}
+        compact
+        showCharacterCount={showCharacterCount}
+      />
     </div>
   );
 }
@@ -1307,6 +1317,7 @@ function HumanBlockGate({
             )}
             values={values}
             dynamicOptions={dynamicOptions}
+            showTextareaCharacterCount
             onChange={updateValues}
           />
         ) : (
@@ -1372,6 +1383,7 @@ function ProcessOutputGate({
         <RuntimeFieldsForm
           fields={fields}
           values={values}
+          showTextareaCharacterCount
           onChange={(next) => {
             setValues(next);
             void saveProcessOutputDraft(execution.id, next).catch((error) =>
@@ -1506,6 +1518,7 @@ function ProcessCompleted({
               label={field.label}
               type={field.type}
               value={output[field.key]}
+              showCharacterCount
             />
           ))}
         </div>

@@ -1,4 +1,5 @@
 import { CompositionPreview } from "@/components/composition-canvas";
+import { OutputCharacterCount } from "@/components/output-character-count";
 import { PRESENTATION_RENDERER_REGISTRY } from "@/components/runtime-value-renderers";
 import type {
   FieldPresentation,
@@ -14,11 +15,13 @@ export function RuntimeValueViewer({
   value,
   presentation,
   compact = false,
+  showCharacterCount = false,
 }: {
   type: HumanFieldType;
   value: RuntimeValue | StructuredRecord | undefined;
   presentation?: FieldPresentation;
   compact?: boolean;
+  showCharacterCount?: boolean;
 }) {
   if (isEmptyPresentationValue(value)) {
     return <span className="text-xs text-muted-foreground">Não informado</span>;
@@ -34,7 +37,20 @@ export function RuntimeValueViewer({
     return <span className="text-xs text-muted-foreground">Visualização indisponível</span>;
   }
   const Renderer = renderer.Renderer;
-  return <Renderer type={type} value={value} compact={compact} presentation={presentation} />;
+  const content = (
+    <Renderer type={type} value={value} compact={compact} presentation={presentation} />
+  );
+
+  if (showCharacterCount && type === "textarea" && typeof value === "string") {
+    return (
+      <div className="relative pb-5">
+        {content}
+        <OutputCharacterCount value={value} className="absolute bottom-0 right-0" />
+      </div>
+    );
+  }
+
+  return content;
 }
 
 function isEmptyPresentationValue(value: unknown) {

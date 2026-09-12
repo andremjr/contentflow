@@ -362,6 +362,28 @@ function textAsList(text) {
   return lines.length > 1 ? lines : [String(text ?? "").trim()].filter(Boolean);
 }
 
+function textAsFiniteNumber(text) {
+  const normalized = String(text ?? "")
+    .trim()
+    .replace(",", ".");
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(normalized)) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      "O ChatGPT precisava devolver somente um número válido para esta entrega.",
+      true,
+    );
+  }
+  const value = Number(normalized);
+  if (!Number.isFinite(value)) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      "O ChatGPT devolveu um número inválido para esta entrega.",
+      true,
+    );
+  }
+  return value;
+}
+
 function searchResponseValues(text, sources, request) {
   const fields = Array.isArray(request?.outputContract) ? request.outputContract : [];
   if (!fields.length) return { result: text, sources };
@@ -381,7 +403,11 @@ function generationResponseValues(result, responses, request) {
   for (const field of request?.outputContract ?? []) {
     if (field?.key === "parts") values.parts = responses.map((response) => response.text);
     else if (["list", "multiselect"].includes(field?.type)) values[field.key] = textAsList(result);
-    else values[field.key] = result;
+    else if (field?.type === "number") {
+      const value = textAsFiniteNumber(result);
+      values[field.key] = value;
+      if (field.portKey === "result") values.result = value;
+    } else values[field.key] = result;
   }
   return values;
 }
@@ -686,7 +712,18 @@ async function launchOrReuseChrome({
     "--no-default-browser-check",
     CHATGPT_NEW_URL,
   ];
-  if (startMinimized) args.unshift("--start-minimized");
+  if (startMinimized) {
+    // A janela dedicada pode ficar minimizada durante todo o job. Sem estes
+    // flags, o Chrome reduz timers e renderização de uma janela oculta e a UI
+    // do provedor deixa de avançar antes de o polling do handler expirar.
+    args.unshift(
+      "--start-minimized",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-features=CalculateNativeWinOcclusion",
+    );
+  }
   const failures = [];
   for (const executable of executables) {
     let child;

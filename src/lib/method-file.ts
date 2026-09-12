@@ -121,6 +121,7 @@ const inputSchema = z
     historyEligibility: z.enum(["completed", "published"]).optional(),
     recordFields: z.array(recordFieldSchema).max(100).optional(),
     presentation: presentationSchema.optional(),
+    portKey: z.string().min(1).max(100).optional(),
   })
   .transform((input) => ({
     ...input,
@@ -159,6 +160,7 @@ const outputSchema = z
     optionsSourceKey: z.string().max(200).optional(),
     recordFields: z.array(recordFieldSchema).max(100).optional(),
     presentation: presentationSchema.optional(),
+    portKey: z.string().min(1).max(100).optional(),
   })
   .transform((output) => ({
     ...output,
