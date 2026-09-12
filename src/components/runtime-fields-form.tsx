@@ -141,6 +141,8 @@ export function RuntimeFieldsForm({
     <div className="space-y-4">
       {fields.map((field) => {
         const value = values[field.key];
+        const showTextCharacterCount =
+          showTextareaCharacterCount && (field.type === "text" || field.type === "textarea");
         const options = [
           ...new Set([...(field.options ?? []), ...(dynamicOptions[field.id] ?? [])]),
         ];
@@ -161,12 +163,12 @@ export function RuntimeFieldsForm({
                 <Textarea
                   id={field.id}
                   rows={6}
-                  className={showTextareaCharacterCount ? "pb-7" : undefined}
+                  className={showTextCharacterCount ? "pb-7" : undefined}
                   value={typeof value === "string" ? value : ""}
                   placeholder={field.placeholder}
                   onChange={(event) => update(field.key, event.target.value)}
                 />
-                {showTextareaCharacterCount && (
+                {showTextCharacterCount && (
                   <OutputCharacterCount
                     value={typeof value === "string" ? value : ""}
                     className="absolute bottom-2 right-3 rounded bg-background/85 px-1"
@@ -322,13 +324,22 @@ export function RuntimeFieldsForm({
                 </label>
               </div>
             ) : (
-              <Input
-                id={field.id}
-                type={field.type === "url" ? "url" : "text"}
-                value={typeof value === "string" ? value : ""}
-                placeholder={field.placeholder}
-                onChange={(event) => update(field.key, event.target.value)}
-              />
+              <div className={showTextCharacterCount ? "relative" : undefined}>
+                <Input
+                  id={field.id}
+                  type={field.type === "url" ? "url" : "text"}
+                  className={showTextCharacterCount ? "pr-10" : undefined}
+                  value={typeof value === "string" ? value : ""}
+                  placeholder={field.placeholder}
+                  onChange={(event) => update(field.key, event.target.value)}
+                />
+                {showTextCharacterCount && (
+                  <OutputCharacterCount
+                    value={typeof value === "string" ? value : ""}
+                    className="absolute inset-y-0 right-3 flex items-center rounded bg-background/85 px-1"
+                  />
+                )}
+              </div>
             )}
           </div>
         );
@@ -427,6 +438,8 @@ function RecordValueInput({
   onChange: (value: StructuredRecord[string]) => void;
 }) {
   const [uploading, setUploading] = useState(false);
+  const showTextCharacterCount =
+    showTextareaCharacterCount && (field.type === "text" || field.type === "textarea");
 
   async function uploadRecordFile(file?: File) {
     if (!file) return;
@@ -452,11 +465,11 @@ function RecordValueInput({
         <div className="relative">
           <Textarea
             rows={4}
-            className={showTextareaCharacterCount ? "pb-7" : undefined}
+            className={showTextCharacterCount ? "pb-7" : undefined}
             value={typeof value === "string" ? value : ""}
             onChange={(event) => onChange(event.target.value)}
           />
-          {showTextareaCharacterCount && (
+          {showTextCharacterCount && (
             <OutputCharacterCount
               value={typeof value === "string" ? value : ""}
               className="absolute bottom-2 right-3 rounded bg-background/85 px-1"
@@ -518,11 +531,20 @@ function RecordValueInput({
           </label>
         </div>
       ) : (
-        <Input
-          type={field.type === "url" ? "url" : "text"}
-          value={typeof value === "string" ? value : ""}
-          onChange={(event) => onChange(event.target.value)}
-        />
+        <div className={showTextCharacterCount ? "relative" : undefined}>
+          <Input
+            type={field.type === "url" ? "url" : "text"}
+            className={showTextCharacterCount ? "pr-10" : undefined}
+            value={typeof value === "string" ? value : ""}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          {showTextCharacterCount && (
+            <OutputCharacterCount
+              value={typeof value === "string" ? value : ""}
+              className="absolute inset-y-0 right-3 flex items-center rounded bg-background/85 px-1"
+            />
+          )}
+        </div>
       )}
     </div>
   );

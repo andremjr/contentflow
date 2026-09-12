@@ -41,7 +41,7 @@ export function RuntimeValueViewer({
     <Renderer type={type} value={value} compact={compact} presentation={presentation} />
   );
 
-  if (showCharacterCount && type === "textarea" && typeof value === "string") {
+  if (showCharacterCount && (type === "text" || type === "textarea") && typeof value === "string") {
     return (
       <div className="relative pb-5">
         {content}

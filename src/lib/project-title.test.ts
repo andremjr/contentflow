@@ -75,7 +75,10 @@ test("reconcilia projetos existentes que já possuem um título final", () => {
   const untouched = { ...structuredClone(project), id: "project-2", title: "Ainda manual" };
   const changed = reconcileGeneratedProjectTitles([existing, untouched], [execution()]);
 
-  assert.deepEqual(changed.map((item) => item.id), [existing.id]);
+  assert.deepEqual(
+    changed.map((item) => item.id),
+    [existing.id],
+  );
   assert.equal(existing.title, "O título final");
   assert.equal(untouched.title, "Ainda manual");
 });

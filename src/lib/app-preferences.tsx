@@ -1196,7 +1196,6 @@ const PHRASES: Record<string, Translation> = {
     "Each output becomes available to subsequent blocks.",
     "Cada salida queda disponible para los bloques siguientes.",
   ],
-  caracteres: ["characters", "caracteres"],
   "Defina o que ficará pronto quando esta ação terminar e poderá ser usado pelos próximos blocos.":
     [
       "Define what will be ready when this action ends and can be used by subsequent blocks.",

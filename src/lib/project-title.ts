@@ -33,7 +33,9 @@ export function reconcileGeneratedProjectTitles(
     const titleExecution = executions.find(
       (execution) => execution.projectId === project.id && execution.processType === "title",
     );
-    if (titleExecution && applyGeneratedProjectTitle(project, titleExecution)) changed.push(project);
+    if (titleExecution && applyGeneratedProjectTitle(project, titleExecution)) {
+      changed.push(project);
+    }
   }
   return changed;
 }

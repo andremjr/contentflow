@@ -611,9 +611,9 @@ test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da
   const id = projects.find((item) => item.channelId === channel.id)!.id;
   await page.goto(`/project/${id}/theme`);
   await page.getByRole("button", { name: "Executar processo", exact: true }).dblclick();
-  await expect(page.getByTestId("output-character-count")).toHaveText("0 caracteres");
+  await expect(page.getByTestId("output-character-count")).toHaveText("0");
   await page.getByLabel("Resultado theme").fill("Tema preservado após recarregar");
-  await expect(page.getByTestId("output-character-count")).toHaveText("31 caracteres");
+  await expect(page.getByTestId("output-character-count")).toHaveText("31");
   await expect
     .poll(async () => {
       const state = await (await request.get("/api/state")).json();
@@ -635,7 +635,9 @@ test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da
     })
     .toBe("awaiting_human");
   await page.goto(`/project/${id}/title`);
+  await expect(page.getByTestId("output-character-count")).toHaveText("0");
   await page.getByLabel("Resultado title").fill("Título concluído");
+  await expect(page.getByTestId("output-character-count")).toHaveText("16");
   await page.getByRole("button", { name: "Concluir ação humana", exact: true }).click();
   await expect
     .poll(async () => {
@@ -689,7 +691,11 @@ test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da
   ).toBeVisible();
   await expect(page.getByText("Produtos do projeto", { exact: true })).toHaveCount(0);
   await page.goto(`/project/${id}/theme`);
-  await expect(page.getByTestId("output-character-count").first()).toHaveText("31 caracteres");
+  await expect(page.getByTestId("output-character-count").first()).toHaveText("31");
+  await page.goto(`/project/${id}/title`);
+  const titleIntermediateResult = page.locator("details").filter({ hasText: "Entrega title" });
+  await titleIntermediateResult.locator("summary").click();
+  await expect(titleIntermediateResult.getByTestId("output-character-count")).toHaveText("16");
   await page.goto(`/channel/${channel.id}`);
   const projectThumbnail = page.getByRole("img", {
     name: "Thumbnail do projeto Título concluído",
