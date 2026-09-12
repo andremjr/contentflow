@@ -93,6 +93,8 @@ test("translates the compact plugin contract validator", () => {
   assert.equal(translate("Requer ajustes", "es"), "Requiere ajustes");
   assert.equal(translate("Entrada · Sequência de prompts", "en"), "Input · Sequência de prompts");
   assert.equal(translate("Parâmetros do prompt (2)", "es"), "Parámetros del prompt (2)");
+  assert.equal(translate("Prévia do envio à IA", "en"), "AI delivery preview");
+  assert.equal(translate("Prévia do envio à IA", "es"), "Vista previa del envío a la IA");
 });
 
 test("translates the long-text output character counter", () => {

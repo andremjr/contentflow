@@ -91,6 +91,9 @@
     {
       "id": "generate-voice-in-browser",
       "operator": "IA",
+      "promptPreview": {
+        "template": "{{INPUT:text}}"
+      },
       "blockTypes": ["CRIAR"],
       "processTypes": ["narration"],
       "inputPorts": [
@@ -251,6 +254,10 @@
       "id": "generate-text-in-browser",
       "operator": "IA",
       "instructionUsage": "required",
+      "promptPreview": {
+        "template": "{{BLOCK_INSTRUCTIONS}}\n\n{{CONTENT}}",
+        "templateConfigurationKey": "promptTemplate"
+      },
       "blockTypes": ["CRIAR"],
       "processTypes": [
         "theme",

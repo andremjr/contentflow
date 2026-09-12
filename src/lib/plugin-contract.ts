@@ -93,6 +93,14 @@ export type PluginExecutionPolicy = {
 /** Declares whether a capability consumes the Method block instruction. */
 export type PluginInstructionUsage = "required" | "optional" | "not_applicable";
 
+/** Declarative, secret-free shape of the textual message sent by a capability. */
+export type PluginPromptPreview = {
+  /** Supports {{BLOCK_INSTRUCTIONS}}, {{CONTENT}}, {{CONTEXT_INPUTS}} and {{INPUT:portKey}}. */
+  template: string;
+  /** Uses a non-secret block configuration string as the template when it is set. */
+  templateConfigurationKey?: string;
+};
+
 export type PluginSideEffect =
   "external_read" | "external_write" | "public_publish" | "local_artifact" | "subprocess";
 
@@ -120,6 +128,8 @@ export type PluginCapability = {
   operator: PluginOperator;
   /** Optional in API v1 for backwards compatibility; omitted means `optional`. */
   instructionUsage?: PluginInstructionUsage;
+  /** Exact structural prompt shape declared by the plugin; it never includes secrets. */
+  promptPreview?: PluginPromptPreview;
   blockTypes: BlockType[];
   processTypes?: UniversalProcess[];
   inputPorts: PluginInputPort[];

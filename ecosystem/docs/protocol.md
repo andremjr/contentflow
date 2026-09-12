@@ -259,6 +259,7 @@ No nível do manifesto, `deliveryTypes` classifica o plugin para descoberta na g
 
 - `operator` aceita somente `IA` ou `Código`.
 - `instructionUsage` pode ser `required`, `optional` ou `not_applicable` e declara se a capability consome a instrução resolvida do bloco. A ausência preserva plugins v1 existentes e equivale a `optional`.
+- `promptPreview`, quando presente, declara o formato textual completo que a capability envia ao provedor, sem valores reais ou secrets. Seu `template` aceita `{{BLOCK_INSTRUCTIONS}}`, `{{CONTENT}}`, `{{CONTEXT_INPUTS}}`, `{{ALL_INPUTS}}`, `{{INPUT:portKey}}`, metadados estruturais (`{{CHANNEL_NAME}}`, `{{NICHE}}`, `{{PROJECT_TITLE}}`, `{{PROCESS}}`, `{{BLOCK_NAME}}`, `{{BLOCK_TYPE}}`), `{{OUTPUT_CONTRACT}}` e `{{CONFIG:chave}}` somente para configuração não secreta. `templateConfigurationKey` pode apontar somente para uma configuração não secreta que substitui o template. O editor preserva as variáveis do Método na prévia e a execução resolve os valores reais antes de chamar o plugin.
 - `blockTypes` contém um ou mais dos quatro blocos.
 - `processTypes` restringe a capacidade; ausência significa todos os processos.
 - `inputPorts` e `outputPorts` descrevem os papéis semânticos.

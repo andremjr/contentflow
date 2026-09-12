@@ -6,6 +6,7 @@ import type { PluginManifest } from "../src/lib/plugin-contract";
 const semver =
   /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const identifier = /^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$/;
+const configurationKey = /^[A-Za-z][A-Za-z0-9_-]*$/;
 const pluginId = /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/;
 const host =
   /^(?:\*\.)?(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
@@ -100,11 +101,18 @@ const profileSetupSchema = z
     prepareTimeoutMs: z.number().int().min(30_000).max(900_000).optional(),
   })
   .strict();
+const promptPreviewSchema = z
+  .object({
+    template: z.string().min(1).max(20_000),
+    templateConfigurationKey: z.string().min(1).max(100).regex(configurationKey).optional(),
+  })
+  .strict();
 const capabilitySchema = z
   .object({
     id: z.string().min(1).max(100).regex(identifier),
     operator: z.enum(["IA", "Código"]),
     instructionUsage: z.enum(["required", "optional", "not_applicable"]).optional(),
+    promptPreview: promptPreviewSchema.optional(),
     blockTypes: z
       .array(z.enum(["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"]))
       .min(1)
@@ -299,6 +307,37 @@ export const pluginManifestSchema = z
       }
     }
     for (const [index, capability] of manifest.capabilities.entries()) {
+      const preview = capability.promptPreview;
+      if (preview) {
+        const inputKeys = new Set(capability.inputPorts.map((port) => port.key));
+        for (const match of preview.template.matchAll(/\{\{INPUT:([A-Za-z][A-Za-z0-9_-]*)\}\}/g)) {
+          if (!inputKeys.has(match[1])) {
+            context.addIssue({
+              code: "custom",
+              path: ["capabilities", index, "promptPreview", "template"],
+              message: `referencia a porta de entrada inexistente ${match[1]}`,
+            });
+          }
+        }
+        const configurationKeys = new Set(
+          Object.keys((capability.blockConfigSchema.properties ?? {}) as Record<string, unknown>),
+        );
+        const referencedConfigurationKeys = [
+          ...(preview.templateConfigurationKey ? [preview.templateConfigurationKey] : []),
+          ...[...preview.template.matchAll(/\{\{CONFIG:([A-Za-z][A-Za-z0-9_-]*)\}\}/g)].map(
+            (match) => match[1],
+          ),
+        ];
+        for (const key of referencedConfigurationKeys) {
+          if (!configurationKeys.has(key)) {
+            context.addIssue({
+              code: "custom",
+              path: ["capabilities", index, "promptPreview"],
+              message: `referencia a configuração inexistente ${key}`,
+            });
+          }
+        }
+      }
       const orchestration = capability.execution.itemOrchestration;
       if (!orchestration) continue;
       if (!capability.inputPorts.some((port) => port.key === orchestration.inputPort)) {

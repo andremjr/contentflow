@@ -30,7 +30,7 @@ Atue como um engenheiro de integração responsável por criar um pacote indepen
    npm run plugin:kit -- create ./meu-plugin --template text-transform
    ```
    Escolha o template mais restritivo que resolva o caso.
-5. **Projetar o manifesto.** Crie `contentflow.plugin.json` com `apiVersion: "1"`, ID reverso imutável, SemVer, runtime Node/ESM, entrypoint, capabilities, portas, schemas, permissões mínimas, secrets por nome, `deliveryTypes`, `sideEffects`, `cost` e `dataPolicy`. Declare `branding.iconPath`, `instructionUsage`, `profileSetup`, `execution.itemOrchestration` e `supportsConversationContinuation` somente quando implementados.
+5. **Projetar o manifesto.** Crie `contentflow.plugin.json` com `apiVersion: "1"`, ID reverso imutável, SemVer, runtime Node/ESM, entrypoint, capabilities, portas, schemas, permissões mínimas, secrets por nome, `deliveryTypes`, `sideEffects`, `cost` e `dataPolicy`. Declare `branding.iconPath`, `instructionUsage`, `profileSetup`, `execution.itemOrchestration` e `supportsConversationContinuation` somente quando implementados. Se a capability escreve em um chat ou prompt, declare também `promptPreview` com o mesmo formato textual que o handler envia, usando somente placeholders públicos (`{{BLOCK_INSTRUCTIONS}}`, `{{CONTENT}}`, `{{CONTEXT_INPUTS}}`, `{{INPUT:porta}}`) e nunca secrets.
 6. **Implementar o handler.** Exporte `async function execute(request, services)`. Valide inputs e configuration; consuma `resolvedInstruction` conforme `instructionUsage`; trate `conversation`, `batch` e `invocation.mode = configure` quando declarados; use `services.getSecret`, `resolveInputFile`, `getOutputPath`, `getWorkspacePath` e `signal` somente quando necessário; devolva `success`, `pending` ou `error` no contrato.
 7. **Adicionar testes.** Crie `test.mjs` ou `test.js` e `fixtures/execution.json`. Cubra sucesso, input ausente/incorreto, output inválido, erro do provedor, timeout, cancelamento, idempotência, artifacts, secrets e limites de concorrência.
 8. **Validar localmente.** Execute:
@@ -45,19 +45,19 @@ Atue como um engenheiro de integração responsável por criar um pacote indepen
 
 ## Decisões por tipo de automação
 
-| Necessidade | Implementação recomendada | Referência |
-| --- | --- | --- |
-| Transformação local em memória | `text-transform`, sem permissões | `references/patterns.md` |
-| API/SaaS/webhook HTTPS | `hosted-api`, `network`, `networkHosts`, secret declarado | `references/patterns.md` |
-| Leitura e geração de arquivo | `file-artifact`, `resolveInputFile`, `getOutputPath` | `references/artifacts.md` |
-| Python, FFmpeg ou executável | Handler Node + processo empacotado; `process` avançado | `references/security.md` |
-| Fila externa/renderização longa | `pending`, `resume`, `cancel`, jobId opaco | `references/protocol.md` |
-| API oficial do provedor | HTTPS direto, `network`, host e secret declarados; não usa Browser Bridge | `references/patterns.md` |
-| Interface web do provedor | ContentFlow Browser Bridge, perfil dedicado e autenticação explícita | `references/browser-automation.md` |
-| Plugin que valida outro bloco | `VALIDAR`, `decision`, `retryFeedback`; não reiniciar o bloco | `references/protocol.md` |
-| Conversa entre blocos | `supportsConversationContinuation`, request/response `conversation` com ID opaco | `references/protocol.md` |
-| Preparação de conta/perfil | `profileSetup` + `configure/status/prepare`; nunca serializar sessão | `references/browser-automation.md` |
-| Lista processada item a item | `execution.itemOrchestration` + `request.batch`; persistência pertence ao núcleo | `references/protocol.md` |
+| Necessidade                     | Implementação recomendada                                                        | Referência                         |
+| ------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------- |
+| Transformação local em memória  | `text-transform`, sem permissões                                                 | `references/patterns.md`           |
+| API/SaaS/webhook HTTPS          | `hosted-api`, `network`, `networkHosts`, secret declarado                        | `references/patterns.md`           |
+| Leitura e geração de arquivo    | `file-artifact`, `resolveInputFile`, `getOutputPath`                             | `references/artifacts.md`          |
+| Python, FFmpeg ou executável    | Handler Node + processo empacotado; `process` avançado                           | `references/security.md`           |
+| Fila externa/renderização longa | `pending`, `resume`, `cancel`, jobId opaco                                       | `references/protocol.md`           |
+| API oficial do provedor         | HTTPS direto, `network`, host e secret declarados; não usa Browser Bridge        | `references/patterns.md`           |
+| Interface web do provedor       | ContentFlow Browser Bridge, perfil dedicado e autenticação explícita             | `references/browser-automation.md` |
+| Plugin que valida outro bloco   | `VALIDAR`, `decision`, `retryFeedback`; não reiniciar o bloco                    | `references/protocol.md`           |
+| Conversa entre blocos           | `supportsConversationContinuation`, request/response `conversation` com ID opaco | `references/protocol.md`           |
+| Preparação de conta/perfil      | `profileSetup` + `configure/status/prepare`; nunca serializar sessão             | `references/browser-automation.md` |
+| Lista processada item a item    | `execution.itemOrchestration` + `request.batch`; persistência pertence ao núcleo | `references/protocol.md`           |
 
 ## Contrato mínimo do handler
 
@@ -93,7 +93,7 @@ A chave de idempotência lógica é `executionId + blockId + capabilityId + atte
 
 ## Checklist antes de concluir
 
-Confirme que o manifesto é válido, IDs são estáveis, runtime e entrypoint existem, `deliveryTypes` e `instructionUsage` são honestos, ícone local é válido/licenciado quando declarado, portas são semânticas, schemas rejeitam propriedades extras, defaults são visíveis, permissões são mínimas, efeitos/custos/provedores/dados estão declarados, secrets não aparecem em request/log/output, artifacts usam caminhos relativos e o plugin não depende de instalações em runtime.
+Confirme que o manifesto é válido, IDs são estáveis, runtime e entrypoint existem, `deliveryTypes`, `instructionUsage` e, quando aplicável, `promptPreview` são honestos, ícone local é válido/licenciado quando declarado, portas são semânticas, schemas rejeitam propriedades extras, defaults são visíveis, permissões são mínimas, efeitos/custos/provedores/dados estão declarados, secrets não aparecem em request/log/output, artifacts usam caminhos relativos e o plugin não depende de instalações em runtime.
 
 Execute testes de input ausente/incorreto, instrução resolvida/ausente, output inválido, rate limit, indisponibilidade, timeout, cancelamento, retry, concorrência, idempotência, traversal, symlink, SSRF, prompt injection, command injection, redaction de logs, remoção, instalação em lote e atualização. Quando declarados, teste também `configure`, item orchestration, conversa nova/reutilizada e rejeição de ID inválido. Se a capacidade usar navegador, teste login, CAPTCHA, reautenticação, cota, upgrade, publicação e confirmação humana.
 

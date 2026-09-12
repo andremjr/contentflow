@@ -25,6 +25,9 @@
       "id": "generate-or-validate-text",
       "operator": "IA",
       "instructionUsage": "optional",
+      "promptPreview": {
+        "template": "INSTRUÇÕES DO PROVEDOR:\n{{CONFIG:system_prompt}}\n\nMENSAGEM ENVIADA:\nCanal: {{CHANNEL_NAME}}\nNicho: {{NICHE}}\nProjeto: {{PROJECT_TITLE}}\nProcesso: {{PROCESS}}\nAção: {{BLOCK_NAME}}\nTipo de ação: {{BLOCK_TYPE}}\n\nInstruções da ação:\n{{BLOCK_INSTRUCTIONS}}\n\nEntradas resolvidas:\n{{ALL_INPUTS}}\n\n{{OUTPUT_CONTRACT}}"
+      },
       "blockTypes": ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
       "processTypes": [
         "theme",

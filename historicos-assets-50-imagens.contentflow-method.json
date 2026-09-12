@@ -1,0 +1,121 @@
+{
+  "format": "contentflow-method",
+  "version": 1,
+  "name": "Históricos — 50 imagens do roteiro",
+  "exportedAt": "2026-09-06T03:00:00.000Z",
+  "method": {
+    "processType": "assets",
+    "blocks": [
+      {
+        "id": "assets-historicos-criar-50-prompts",
+        "type": "CRIAR",
+        "operator": "IA",
+        "name": "Dividir roteiro e criar 50 prompts visuais",
+        "instructions": "Leia integralmente o roteiro em espanhol. Divida sua progressão narrativa em exatamente {{parameters.scene_count}} trechos cronológicos de cobertura aproximadamente uniforme, sem omitir a abertura, as transições importantes nem a conclusão. Para cada trecho, escreva um prompt visual autônomo em espanhol, historicamente fiel ao período e ao local narrados, com sujeito e ação concretos, ambiente, enquadramento, iluminação cinematográfica e detalhes de época. Preserve continuidade visual razoável entre cenas recorrentes. Não invente fatos que contradigam o roteiro. Não inclua texto visível, legendas, logotipos, marcas d'água, molduras ou colagens. Entregue exatamente {{parameters.scene_count}} linhas não vazias, uma linha por prompt, sem numeração, marcadores, cabeçalho, explicação ou quebra interna. Roteiro: {{inputs.roteiro_do_video}}",
+        "inputs": [
+          {
+            "id": "assets-historicos-input-script",
+            "label": "Roteiro do vídeo",
+            "type": "textarea",
+            "source": "previous_process",
+            "sourceProcessType": "script",
+            "sourceKey": "script",
+            "blockId": "__process_output__"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "assets-historicos-output-prompts",
+            "label": "50 prompts visuais",
+            "key": "visual_prompts",
+            "type": "list",
+            "required": true,
+            "presentation": {
+              "renderer": "list",
+              "itemType": "text"
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "id": "assets-historicos-scene-count",
+            "label": "Quantidade de cenas",
+            "key": "scene_count",
+            "type": "number",
+            "value": 50,
+            "placeholder": "50"
+          }
+        ],
+        "order": 0,
+        "plugin": {
+          "pluginId": "local.contentflow.chatgpt-browser-studio",
+          "pluginVersion": "1.0.9",
+          "capabilityId": "generate-text-in-browser",
+          "configuration": {
+            "accountProfile": "default",
+            "fallbackAccountProfiles": ""
+          },
+          "connectionRequired": false
+        }
+      },
+      {
+        "id": "assets-historicos-gerar-flow",
+        "type": "CRIAR",
+        "operator": "IA",
+        "name": "Gerar 50 imagens no Google Flow",
+        "instructions": "Gere uma imagem original para cada prompt recebido, mantendo a ordem da lista e entregando todos os arquivos do lote.",
+        "inputs": [
+          {
+            "id": "assets-historicos-input-prompts",
+            "label": "Prompts visuais",
+            "type": "list",
+            "source": "previous_block",
+            "blockId": "assets-historicos-criar-50-prompts",
+            "sourceKey": "visual_prompts",
+            "presentation": {
+              "renderer": "list",
+              "itemType": "text"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "assets-historicos-output-assets",
+            "label": "Assets visuais do vídeo",
+            "key": "assets",
+            "type": "files",
+            "required": true,
+            "presentation": {
+              "renderer": "image-gallery",
+              "itemType": "image",
+              "acceptedMimeTypes": ["image/jpeg", "image/png", "image/webp"]
+            }
+          }
+        ],
+        "parameters": [],
+        "order": 1,
+        "plugin": {
+          "pluginId": "local.contentflow.google-flow-batch-images",
+          "pluginVersion": "1.3.3",
+          "capabilityId": "generate-images-in-browser",
+          "configuration": {
+            "accountProfile": "default",
+            "fallbackAccountProfiles": "",
+            "projectMode": "auto",
+            "projectUrl": "",
+            "imageModel": "flow_auto",
+            "fallbackOnModelLimit": true,
+            "aspectRatio": "landscape",
+            "delayBetweenPromptsMs": 6000,
+            "maxConcurrentGenerations": 1,
+            "retryAttempts": 1,
+            "rateLimitRetryAttempts": 8,
+            "maxReferenceImages": 10,
+            "maxImagesPerPrompt": 1
+          },
+          "connectionRequired": false
+        }
+      }
+    ]
+  }
+}

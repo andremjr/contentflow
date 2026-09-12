@@ -113,6 +113,9 @@
     {
       "id": "generate-images-in-browser",
       "operator": "IA",
+      "promptPreview": {
+        "template": "{{INPUT:prompts}}"
+      },
       "blockTypes": ["CRIAR"],
       "processTypes": ["thumbnail", "assets"],
       "inputPorts": [
@@ -356,6 +359,9 @@
     {
       "id": "animate-image-in-browser",
       "operator": "IA",
+      "promptPreview": {
+        "template": "{{INPUT:prompts}}"
+      },
       "blockTypes": ["CRIAR"],
       "processTypes": ["assets", "editing"],
       "inputPorts": [
@@ -589,6 +595,9 @@
     {
       "id": "generate-video-in-browser",
       "operator": "IA",
+      "promptPreview": {
+        "template": "{{INPUT:prompts}}"
+      },
       "blockTypes": ["CRIAR"],
       "processTypes": ["assets", "editing"],
       "inputPorts": [

@@ -1249,6 +1249,17 @@ const PHRASES: Record<string, Translation> = {
     "Las entradas, salidas y formatos son compatibles con esta capacidad.",
   ],
   "Dados usados pelo plugin": ["Data used by the plugin", "Datos usados por el plugin"],
+  "Prévia do envio à IA": ["AI delivery preview", "Vista previa del envío a la IA"],
+  "Este é o formato que o plugin declarou que enviará. As variáveis serão substituídas pelos dados do Projeto na execução.":
+    [
+      "This is the format the plugin declares it will send. Variables are replaced with Project data during execution.",
+      "Este es el formato que el plugin declara que enviará. Las variables se sustituyen por los datos del Proyecto durante la ejecución.",
+    ],
+  "Este plugin ainda não declarou seu formato próprio. A prévia mostra a instrução e os dados que o núcleo encaminhará ao executor.":
+    [
+      "This plugin has not declared its own format yet. The preview shows the instruction and data the core will pass to the runner.",
+      "Este plugin aún no ha declarado su propio formato. La vista previa muestra la instrucción y los datos que el núcleo enviará al ejecutor.",
+    ],
   "Escolha necessária": ["Selection required", "Selección necesaria"],
   "Como o plugin usará este dado?": [
     "How will the plugin use this data?",

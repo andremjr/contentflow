@@ -96,6 +96,9 @@
       "id": "generate-text-in-browser",
       "operator": "IA",
       "instructionUsage": "required",
+      "promptPreview": {
+        "template": "INSTRUÇÕES DO BLOCO:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO DAS ENTRADAS:\n{{CONTEXT_INPUTS}}"
+      },
       "blockTypes": ["CRIAR"],
       "processTypes": [
         "theme",

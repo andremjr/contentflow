@@ -15,17 +15,21 @@ O prompt não substitui o schema. O `type` do output e `recordFields` são a aut
 
 ## Camadas
 
-| Camada | Coloque aqui |
-| --- | --- |
-| `instructions` | Ação e critérios desta etapa. |
-| `parameters` | Quantidade, duração, preset, limite ou estilo editável. |
-| Configuração do executor | Modelo, endpoint, formato, codec e operação. |
-| Settings | Preferência local/canal. |
-| Secrets | Credenciais no cofre, nunca no JSON. |
+| Camada                   | Coloque aqui                                            |
+| ------------------------ | ------------------------------------------------------- |
+| `instructions`           | Ação e critérios desta etapa.                           |
+| `parameters`             | Quantidade, duração, preset, limite ou estilo editável. |
+| Configuração do executor | Modelo, endpoint, formato, codec e operação.            |
+| Settings                 | Preferência local/canal.                                |
+| Secrets                  | Credenciais no cofre, nunca no JSON.                    |
 
 ## Placeholders
 
 Use placeholders somente quando a origem estiver declarada e o tipo puder ser resolvido: `{{project.title}}`, `{{video.topic}}`, `{{block_01.output}}`. Não use nomes que não existam no Método, valores arbitrários ou IDs de execução.
+
+## Prévia do envio ao executor
+
+Quando a capability de plugin declarar `promptPreview`, confira a prévia antes de salvar o Método. Ela mostra o formato do texto que o plugin declarou enviar, preservando variáveis como `{{inputs.tema}}`; valores reais só são resolvidos no Projeto. Escolha cada porta pelo significado: `outline` é estrutura/itens sequenciais quando o plugin assim declara; `context` ou `content` são informações de apoio; `prompt` é o pedido direto enviado ao provedor. Compatibilidade de tipo não prova que duas portas têm o mesmo papel.
 
 ## IA
 

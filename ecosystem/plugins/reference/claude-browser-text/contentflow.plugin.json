@@ -106,6 +106,9 @@
       "id": "generate-text-in-browser",
       "operator": "IA",
       "instructionUsage": "required",
+      "promptPreview": {
+        "template": "INSTRUÇÕES DO BLOCO:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO DAS ENTRADAS:\n{{CONTEXT_INPUTS}}"
+      },
       "blockTypes": ["CRIAR"],
       "processTypes": [
         "theme",
@@ -121,6 +124,7 @@
         {
           "key": "content",
           "label": "Contexto para geração",
+          "description": "Informações de apoio que acompanham a instrução principal; não cria uma etapa separada.",
           "acceptedTypes": [
             "text",
             "textarea",

@@ -113,6 +113,7 @@ import {
 import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
 import { createChannelHistoryRecordFields } from "@/lib/channel-history";
 import { getBlockSourceFields } from "@/lib/method-source-fields";
+import { renderPluginPromptPreview } from "@/lib/plugin-prompt-preview";
 import {
   addInstructionInputVariable,
   instructionInputKey,
@@ -1636,6 +1637,14 @@ function BlockEditor({
                     </div>
                   </details>
                 )}
+                <PluginPromptPreview
+                  block={block}
+                  capability={selectedCapability}
+                  inputs={inputPortState.map(({ input, selected }) => ({
+                    input,
+                    portKey: selected?.key,
+                  }))}
+                />
                 <MethodParametersEditor
                   block={block}
                   onChange={(parameters) => onChange({ parameters })}
@@ -1780,6 +1789,35 @@ function BlockEditor({
         </details>
       )}
     </div>
+  );
+}
+
+function PluginPromptPreview({
+  block,
+  capability,
+  inputs,
+}: {
+  block: ActionBlock;
+  capability: PluginCapability;
+  inputs: Array<{ input: BlockInputBinding; portKey?: string }>;
+}) {
+  const preview = renderPluginPromptPreview(block, capability, inputs);
+  if (!preview) return null;
+  const declaredByPlugin = Boolean(capability.promptPreview);
+  return (
+    <details className="rounded-lg border border-brand/30 bg-brand/5 p-3" open>
+      <summary className="cursor-pointer text-xs font-medium text-foreground">
+        Prévia do envio à IA
+      </summary>
+      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+        {declaredByPlugin
+          ? "Este é o formato que o plugin declarou que enviará. As variáveis serão substituídas pelos dados do Projeto na execução."
+          : "Este plugin ainda não declarou seu formato próprio. A prévia mostra a instrução e os dados que o núcleo encaminhará ao executor."}
+      </p>
+      <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-md border border-border/70 bg-background/70 p-3 font-mono text-[11px] leading-relaxed text-foreground">
+        {preview}
+      </pre>
+    </details>
   );
 }
 
