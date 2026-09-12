@@ -1,4 +1,5 @@
 import { deriveProcessOutput } from "../src/lib/process-output";
+import { applyGeneratedProjectTitle } from "../src/lib/project-title";
 import {
   PROCESS_META,
   PROCESS_ORDER,
@@ -129,7 +130,10 @@ export function executionCommands(db: {
       recordProcessOutputDelivery(execution, output.values, output.createdAt);
       execution.outputStatus = "completed";
       execution.status = "completed";
-      if (project) completeProjectStage(project, execution.processType);
+      if (project) {
+        completeProjectStage(project, execution.processType);
+        applyGeneratedProjectTitle(project, execution);
+      }
     } else {
       execution.outputStatus = "awaiting_human";
       execution.status = "awaiting_output";
@@ -440,7 +444,10 @@ export function executionCommands(db: {
     execution.outputStatus = "completed";
     execution.status = "completed";
     const project = db.projects.find((item) => item.id === execution.projectId);
-    if (project) completeProjectStage(project, execution.processType);
+    if (project) {
+      completeProjectStage(project, execution.processType);
+      applyGeneratedProjectTitle(project, execution);
+    }
     touchExecution(execution);
     return { ok: true };
   }

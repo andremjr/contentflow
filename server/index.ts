@@ -3,6 +3,7 @@ import { z } from "zod";
 import { executionCommands } from "./execution-commands";
 import { createMethodPackage, readMethodPackage } from "./method-package";
 import { deriveProcessOutput } from "../src/lib/process-output";
+import { applyGeneratedProjectTitle } from "../src/lib/project-title";
 import Database from "better-sqlite3";
 import {
   cpSync,
@@ -712,6 +713,7 @@ function persistPluginExecution(execution: ProcessExecution, project: Project) {
   execution.revision = (executionById(execution.id)?.revision ?? 0) + 1;
   execution.updatedAt = new Date().toISOString();
   updateProjectAfterPluginBlock(project, execution);
+  applyGeneratedProjectTitle(project, execution);
   const persist = () => {
     database
       .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")

@@ -45,6 +45,7 @@
     "test:channel-history": "tsx --test server/channel-history.test.ts",
     "test:instructions": "tsx --test server/instruction-template.test.ts",
     "test:method-sources": "tsx --test src/lib/method-source-fields.test.ts",
+    "test:project-title": "tsx --test src/lib/project-title.test.ts",
     "test:remote-artifacts": "tsx server/remote-artifact-downloader.test.ts",
     "test:plugin-jobs": "tsx server/plugin-job-store.test.ts",
     "test:plugin-concurrency": "tsx --test server/plugin-concurrency.test.ts",
@@ -66,7 +67,7 @@
     "test:data-migration": "tsx --test server/data-directory-migration.test.ts",
     "test:i18n": "tsx --test src/lib/app-preferences.test.ts src/lib/channel-languages.test.ts",
     "plugin:kit": "tsx ecosystem/plugin-kit/cli.ts",
-    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:instructions && npm run test:method-sources && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-concurrency && npm run test:plugin-fallback && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:orchestrator && npm run test:plugin-kit && npm run test:plugin-branding && npm run test:plugin-dependencies && npm run test:method-file && npm run test:plugin-connections && npm run test:plugin-profiles && npm run test:plugin-connection-runtime && npm run test:plugin-conversation && npm run test:plugin-package && npm run test:updater && npm run test:distribution-boundaries && npm run test:data-migration && npm run test:browser-bridge && npm run test:browser-plugins && npm run build",
+    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:instructions && npm run test:method-sources && npm run test:project-title && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-concurrency && npm run test:plugin-fallback && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:orchestrator && npm run test:plugin-kit && npm run test:plugin-branding && npm run test:plugin-dependencies && npm run test:method-file && npm run test:plugin-connections && npm run test:plugin-profiles && npm run test:plugin-connection-runtime && npm run test:plugin-conversation && npm run test:plugin-package && npm run test:updater && npm run test:distribution-boundaries && npm run test:data-migration && npm run test:browser-bridge && npm run test:browser-plugins && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {

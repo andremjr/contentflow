@@ -637,6 +637,12 @@ test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da
   await page.goto(`/project/${id}/title`);
   await page.getByLabel("Resultado title").fill("Título concluído");
   await page.getByRole("button", { name: "Concluir ação humana", exact: true }).click();
+  await expect
+    .poll(async () => {
+      const projects = (await (await request.get("/api/projects")).json()) as Project[];
+      return projects.find((item) => item.id === id)?.title;
+    })
+    .toBe("Título concluído");
   await expect(page).toHaveURL(new RegExp(`/project/${id}/thumbnail`));
   await page.locator('input[type="file"]').setInputFiles({
     name: "thumbnail-fixture.png",
@@ -686,7 +692,7 @@ test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da
   await expect(page.getByTestId("output-character-count").first()).toHaveText("31 caracteres");
   await page.goto(`/channel/${channel.id}`);
   const projectThumbnail = page.getByRole("img", {
-    name: "Thumbnail do projeto Produção ponta a ponta",
+    name: "Thumbnail do projeto Título concluído",
     exact: true,
   });
   await expect(projectThumbnail).toBeVisible();
