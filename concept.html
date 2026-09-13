@@ -10,6 +10,7 @@
       data-precedence="next"
     />
     <link rel="stylesheet" href="concept-bridge.css" />
+    <link rel="stylesheet" href="shared-header.css" />
     <link
       rel="preload"
       as="script"
@@ -92,7 +93,7 @@
   <body class="antialiased">
     <div hidden=""><!--$--><!--/$--></div>
     <main class="concept-page">
-      <header class="site-header">
+      <header class="topbar">
         <a class="brand" href="index.html" aria-label="ContentFlow — início"
           ><img
             class="brand-logo"
@@ -105,13 +106,15 @@
           ><a href="community.html">Comunidade VIP</a
           ><a href="concept.html" aria-current="page">Conceito</a>
         </nav>
-        <a
-          class="header-cta"
+        <div class="header-actions"><div class="language" aria-label="Idioma">
+          <button aria-pressed="true">PT</button><button>EN</button><button>ES</button>
+        </div><a
+          class="download compact"
           href="https://github.com/andremjr/contentflow/releases/download/v0.6.1/ContentFlow-V0-0.6.1-x64-Setup.exe"
           target="_blank"
           rel="noreferrer"
-          >Baixar grátis <span aria-hidden="true">↗</span></a
-        >
+          ><span class="windows">⊞</span><span>Baixar para Windows</span></a>
+        </div>
       </header>
       <section class="concept-intro">
         <p>CONTENTFLOW / CONCEITO</p>
