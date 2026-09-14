@@ -117,7 +117,7 @@ body {
 }
 .method {
   max-width: none;
-  background: #eff2ff;
+  background: linear-gradient(120deg, #dce6ff, #e7edff);
   padding: 105px max(24px, calc((100vw - 1192px) / 2));
   display: grid;
   grid-template-columns: 0.86fr 1.14fr;
