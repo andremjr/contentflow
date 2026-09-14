@@ -196,7 +196,7 @@
             <i></i><span data-k="joinEyebrow">COMUNIDADE VIP CONTENTFLOW</span>
           </p>
           <h2 data-k="joinTitle">
-            Seu próximo vídeo pode começar com uma conversa melhor.
+            Seu próximo vídeo pode começar com uma estratégia melhor.
           </h2>
           <p data-k="joinText">
             Entre para acompanhar as aulas ao vivo, acessar as gravações e
@@ -230,6 +230,13 @@
       ><a href="concept/" data-k="concept">Conceito</a>
     </footer>
     <script src="community.js"></script>
+    <script>
+      const joinTitleIndex = keys.indexOf('joinTitle');
+      text.pt[joinTitleIndex] = 'Seu próximo vídeo pode começar com uma estratégia melhor.';
+      text.en[joinTitleIndex] = 'Your next video can start with a better strategy.';
+      text.es[joinTitleIndex] = 'Tu próximo vídeo puede empezar con una estrategia mejor.';
+      setLanguage(localStorage.getItem('contentflow-site-language') || 'pt');
+    </script>
     <script>
       const specialCopy={pt:{proof:'Entre para ter direção nas decisões do canal — com aulas, repertório e espaço para trazer o que você está vivendo agora.',cta:'Condição especial no primeiro mês',note:'Quer conhecer a comunidade no primeiro mês sem entrar em recorrência? Fale comigo no WhatsApp.'},en:{proof:'Join to make clearer decisions for your channel — with classes, judgment, and room to bring what you are facing right now.',cta:'Special first-month option',note:'Want to explore the community in the first month without starting a recurring membership? Talk to me on WhatsApp.'},es:{proof:'Entra para tomar decisiones más claras para tu canal — con clases, criterio y espacio para traer lo que estás viviendo ahora.',cta:'Condición especial el primer mes',note:'¿Quieres conocer la comunidad el primer mes sin comenzar una suscripción recurrente? Háblame por WhatsApp.'}};
       function setSpecialCopy(lang){document.querySelectorAll('[data-special]').forEach(el=>el.textContent=specialCopy[lang][el.dataset.special])};setSpecialCopy(localStorage.getItem('contentflow-site-language')||'pt');document.querySelectorAll('[data-lang]').forEach(btn=>btn.addEventListener('click',()=>setSpecialCopy(btn.dataset.lang)));
