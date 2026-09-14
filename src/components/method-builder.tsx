@@ -42,6 +42,7 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAppPreferences } from "@/lib/app-preferences";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
 import { LineListTextarea } from "@/components/line-list-textarea";
@@ -315,7 +316,7 @@ export function MethodBuilder({
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/plugins")
+    void fetch("/api/plugins", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Falha ao consultar plugins.");
         return response.json() as Promise<{ plugins: DiscoveredPlugin[] }>;
@@ -1119,14 +1120,15 @@ function BlockEditor({
       .filter(
         (capability) =>
           capability.operator === block.operator &&
-          capability.blockTypes.includes(block.type) &&
-          (!capability.processTypes || capability.processTypes.includes(processType)) &&
-          (block.inputs ?? []).every((field) =>
-            capability.inputPorts.some((port) => port.acceptedTypes.includes(field.type)),
-          ) &&
-          (block.outputs ?? []).every((field) =>
-            capability.outputPorts.some((port) => port.producedTypes.includes(field.type)),
-          ),
+          (capability.operator === "Humano" ||
+            (capability.blockTypes.includes(block.type) &&
+              (!capability.processTypes || capability.processTypes.includes(processType)) &&
+              (block.inputs ?? []).every((field) =>
+                capability.inputPorts.some((port) => port.acceptedTypes.includes(field.type)),
+              ) &&
+              (block.outputs ?? []).every((field) =>
+                capability.outputPorts.some((port) => port.producedTypes.includes(field.type)),
+              ))),
       )
       .map((capability) => ({ plugin, capability })),
   );
@@ -1134,6 +1136,7 @@ function BlockEditor({
   const selectedCapability = selectedPlugin?.manifest.capabilities.find(
     (capability) => capability.id === block.plugin?.capabilityId,
   );
+  const isManualHumanTool = selectedCapability?.operator === "Humano";
   const configProperties = selectedCapability?.blockConfigSchema.properties ?? {};
   const profileSetup = selectedPlugin?.manifest.profileSetup;
   const profileConfigurationKeys = [
@@ -1179,7 +1182,7 @@ function BlockEditor({
     });
   });
   const inputPortState = (() => {
-    if (!selectedCapability) return [];
+    if (!selectedCapability || isManualHumanTool) return [];
     const used = new Set<string>();
     return (block.inputs ?? []).map((input) => {
       const compatible = selectedCapability.inputPorts.filter(
@@ -1194,21 +1197,27 @@ function BlockEditor({
       return { input, compatible, selected, ambiguous: !input.portKey && compatible.length > 1 };
     });
   })();
-  const outputPortState = (block.outputs ?? []).map((field) => {
-    const compatible =
-      selectedCapability?.outputPorts.filter((port) => port.producedTypes.includes(field.type)) ??
-      [];
-    const selected = field.portKey
-      ? compatible.find((port) => port.key === field.portKey)
-      : compatible.length === 1
-        ? compatible[0]
-        : undefined;
-    return { field, compatible, selected, ambiguous: !field.portKey && compatible.length > 1 };
-  });
+  const outputPortState = isManualHumanTool
+    ? []
+    : (block.outputs ?? []).map((field) => {
+        const compatible =
+          selectedCapability?.outputPorts.filter((port) =>
+            port.producedTypes.includes(field.type),
+          ) ?? [];
+        const selected = field.portKey
+          ? compatible.find((port) => port.key === field.portKey)
+          : compatible.length === 1
+            ? compatible[0]
+            : undefined;
+        return { field, compatible, selected, ambiguous: !field.portKey && compatible.length > 1 };
+      });
   const requiredPortsMissing =
-    selectedCapability?.inputPorts.filter(
-      (port) => port.required && !inputPortState.some((item) => item.selected?.key === port.key),
-    ) ?? [];
+    (isManualHumanTool
+      ? []
+      : selectedCapability?.inputPorts.filter(
+          (port) =>
+            port.required && !inputPortState.some((item) => item.selected?.key === port.key),
+        )) ?? [];
   const contractIssues =
     [
       ...inputPortState.filter((item) => !item.selected),
@@ -1220,7 +1229,14 @@ function BlockEditor({
       key={key}
       propertyKey={key}
       schema={schema}
-      value={block.plugin?.configuration[key]}
+      value={
+        block.plugin?.configuration[key] ??
+        (typeof schema.default === "string" ||
+        typeof schema.default === "number" ||
+        typeof schema.default === "boolean"
+          ? schema.default
+          : undefined)
+      }
       onChange={(value) =>
         onChange({
           plugin: {
@@ -1391,403 +1407,398 @@ function BlockEditor({
         )}
       </div>
 
-      {block.operator !== "Humano" && (
-        <details
-          className="group mt-4 rounded-xl border border-brand/30 bg-brand/5"
-          open={pluginExpanded}
-          onToggle={(event) => setPluginExpanded(event.currentTarget.open)}
-        >
-          <summary className="flex cursor-pointer list-none items-center gap-3 p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
-            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Plugin executor</p>
-              <p className="truncate text-[11px] text-muted-foreground">
-                {selectedPlugin && selectedCapability
-                  ? `${selectedPlugin.manifest.name} · ${selectedCapability.id}`
-                  : "Selecione quem executará esta ação"}
+      <details
+        className="group mt-4 rounded-xl border border-brand/30 bg-brand/5"
+        open={pluginExpanded}
+        onToggle={(event) => setPluginExpanded(event.currentTarget.open)}
+      >
+        <summary className="flex cursor-pointer list-none items-center gap-3 p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Plugin executor</p>
+            <p className="truncate text-[11px] text-muted-foreground">
+              {selectedPlugin && selectedCapability
+                ? `${selectedPlugin.manifest.name} · ${selectedCapability.id}`
+                : "Selecione quem executará esta ação"}
+            </p>
+          </div>
+          {selectedCapability && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "shrink-0 text-[9px] font-normal",
+                contractIssues
+                  ? "border-amber-500/50 text-amber-700 dark:text-amber-300"
+                  : "border-emerald-500/50 text-emerald-700 dark:text-emerald-300",
+              )}
+            >
+              {contractIssues ? "Requer ajustes" : "Pronto para executar"}
+            </Badge>
+          )}
+        </summary>
+        <div className="space-y-4 border-t border-brand/20 p-4 sm:p-5">
+          <div className="space-y-1.5">
+            <Label>Plugin e capacidade</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Escolha a ferramenta que realizará esta ação com o contrato definido acima.
+            </p>
+            {compatibleCapabilities.length ? (
+              <Select
+                value={block.plugin ? `${block.plugin.pluginId}::${block.plugin.capabilityId}` : ""}
+                onValueChange={(value) => {
+                  const [pluginId, capabilityId] = value.split("::");
+                  const selection = compatibleCapabilities.find(
+                    (item) => item.plugin.id === pluginId && item.capability.id === capabilityId,
+                  );
+                  const properties = selection?.capability.blockConfigSchema.properties ?? {};
+                  const managedProfileKeys = [
+                    selection?.plugin.manifest.profileSetup?.configurationKey,
+                    selection?.plugin.manifest.profileSetup?.fallbackConfigurationKey,
+                  ].filter((key): key is string => Boolean(key));
+                  const configuration = Object.fromEntries(
+                    Object.entries(properties)
+                      .filter(
+                        ([key, schema]) =>
+                          schema.default !== undefined && !managedProfileKeys.includes(key),
+                      )
+                      .map(([key, schema]) => [key, schema.default as string | number | boolean]),
+                  );
+                  const requestedInputs = block.inputs?.map((input) => {
+                    const compatiblePorts =
+                      selection?.capability.inputPorts.filter((candidate) =>
+                        candidate.acceptedTypes.includes(input.type),
+                      ) ?? [];
+                    const port = compatiblePorts[0];
+                    const current = normalizeFieldPresentation(input.type, input.presentation);
+                    return {
+                      ...input,
+                      portKey: compatiblePorts.length === 1 ? port?.key : undefined,
+                      presentation: normalizeFieldPresentation(
+                        input.type,
+                        current.renderer === "auto" ? (port?.presentation ?? current) : current,
+                      ),
+                    };
+                  });
+                  const requestedOutputs = block.outputs?.map((output) => {
+                    const compatiblePorts =
+                      selection?.capability.outputPorts.filter((candidate) =>
+                        candidate.producedTypes.includes(output.type),
+                      ) ?? [];
+                    const port = compatiblePorts[0];
+                    const current = normalizeFieldPresentation(output.type, output.presentation);
+                    return {
+                      ...output,
+                      portKey: compatiblePorts.length === 1 ? port?.key : undefined,
+                      presentation: normalizeFieldPresentation(
+                        output.type,
+                        current.renderer === "auto" ? (port?.presentation ?? current) : current,
+                      ),
+                    };
+                  });
+                  onChange({
+                    plugin: {
+                      pluginId,
+                      pluginVersion: selection?.plugin.manifest.version,
+                      capabilityId,
+                      configuration,
+                      connectionRequired: Boolean(selection?.plugin.manifest.secretKeys?.length),
+                    },
+                    inputs: requestedInputs,
+                    outputs: requestedOutputs,
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um plugin compatível" />
+                </SelectTrigger>
+                <SelectContent>
+                  {compatibleCapabilities.map(({ plugin, capability }) => (
+                    <SelectItem
+                      key={`${plugin.id}::${capability.id}`}
+                      value={`${plugin.id}::${capability.id}`}
+                    >
+                      {plugin.manifest.name} · {capability.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                Nenhum plugin instalado é compatível com este bloco, processo e contrato de saída.
               </p>
-            </div>
-            {selectedCapability && (
-              <Badge
-                variant="outline"
+            )}
+          </div>
+
+          {selectedCapability && (
+            <div className="space-y-3">
+              <div
                 className={cn(
-                  "shrink-0 text-[9px] font-normal",
+                  "rounded-lg border p-3 text-[11px]",
                   contractIssues
-                    ? "border-amber-500/50 text-amber-700 dark:text-amber-300"
-                    : "border-emerald-500/50 text-emerald-700 dark:text-emerald-300",
+                    ? "border-amber-500/40 bg-amber-500/5 text-amber-800 dark:text-amber-200"
+                    : "border-emerald-500/40 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200",
                 )}
               >
-                {contractIssues ? "Requer ajustes" : "Pronto para executar"}
-              </Badge>
-            )}
-          </summary>
-          <div className="space-y-4 border-t border-brand/20 p-4 sm:p-5">
-            <div className="space-y-1.5">
-              <Label>Plugin e capacidade</Label>
-              <p className="text-[11px] text-muted-foreground">
-                Escolha a ferramenta que realizará esta ação com o contrato definido acima.
-              </p>
-              {compatibleCapabilities.length ? (
-                <Select
-                  value={
-                    block.plugin ? `${block.plugin.pluginId}::${block.plugin.capabilityId}` : ""
-                  }
-                  onValueChange={(value) => {
-                    const [pluginId, capabilityId] = value.split("::");
-                    const selection = compatibleCapabilities.find(
-                      (item) => item.plugin.id === pluginId && item.capability.id === capabilityId,
-                    );
-                    const properties = selection?.capability.blockConfigSchema.properties ?? {};
-                    const managedProfileKeys = [
-                      selection?.plugin.manifest.profileSetup?.configurationKey,
-                      selection?.plugin.manifest.profileSetup?.fallbackConfigurationKey,
-                    ].filter((key): key is string => Boolean(key));
-                    const configuration = Object.fromEntries(
-                      Object.entries(properties)
-                        .filter(
-                          ([key, schema]) =>
-                            schema.default !== undefined && !managedProfileKeys.includes(key),
-                        )
-                        .map(([key, schema]) => [key, schema.default as string | number | boolean]),
-                    );
-                    const requestedInputs = block.inputs?.map((input) => {
-                      const compatiblePorts =
-                        selection?.capability.inputPorts.filter((candidate) =>
-                          candidate.acceptedTypes.includes(input.type),
-                        ) ?? [];
-                      const port = compatiblePorts[0];
-                      const current = normalizeFieldPresentation(input.type, input.presentation);
-                      return {
-                        ...input,
-                        portKey: compatiblePorts.length === 1 ? port?.key : undefined,
-                        presentation: normalizeFieldPresentation(
-                          input.type,
-                          current.renderer === "auto" ? (port?.presentation ?? current) : current,
-                        ),
-                      };
-                    });
-                    const requestedOutputs = block.outputs?.map((output) => {
-                      const compatiblePorts =
-                        selection?.capability.outputPorts.filter((candidate) =>
-                          candidate.producedTypes.includes(output.type),
-                        ) ?? [];
-                      const port = compatiblePorts[0];
-                      const current = normalizeFieldPresentation(output.type, output.presentation);
-                      return {
-                        ...output,
-                        portKey: compatiblePorts.length === 1 ? port?.key : undefined,
-                        presentation: normalizeFieldPresentation(
-                          output.type,
-                          current.renderer === "auto" ? (port?.presentation ?? current) : current,
-                        ),
-                      };
-                    });
-                    onChange({
-                      plugin: {
-                        pluginId,
-                        pluginVersion: selection?.plugin.manifest.version,
-                        capabilityId,
-                        configuration,
-                        connectionRequired: Boolean(selection?.plugin.manifest.secretKeys?.length),
-                      },
-                      inputs: requestedInputs,
-                      outputs: requestedOutputs,
-                    });
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um plugin compatível" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {compatibleCapabilities.map(({ plugin, capability }) => (
-                      <SelectItem
-                        key={`${plugin.id}::${capability.id}`}
-                        value={`${plugin.id}::${capability.id}`}
-                      >
-                        {plugin.manifest.name} · {capability.id}
-                      </SelectItem>
+                <p className="font-medium">
+                  {contractIssues
+                    ? "Revise o contrato antes de executar"
+                    : "O plugin está recebendo tudo o que precisa"}
+                </p>
+                <p className="mt-0.5 opacity-80">
+                  {contractIssues
+                    ? "Escolha como as entradas e entregas ambíguas serão usadas pelo plugin."
+                    : "Entradas, entregas e formatos são compatíveis com esta capacidade."}
+                </p>
+              </div>
+
+              {(inputPortState.length > 0 || outputPortState.length > 0) && (
+                <details className="rounded-lg border border-border/70 bg-card/60 p-3">
+                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                    Dados usados pelo plugin
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {inputPortState.map(({ input, compatible, selected, ambiguous }) => (
+                      <div key={input.id} className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <Label className="text-[10px] text-muted-foreground">
+                            Entrada · {instructionInputLabel(input)}
+                          </Label>
+                          {ambiguous && (
+                            <span className="text-[9px] font-medium text-amber-700 dark:text-amber-300">
+                              Escolha necessária
+                            </span>
+                          )}
+                        </div>
+                        <Select
+                          value={input.portKey ?? (selected ? selected.key : "")}
+                          onValueChange={(portKey) =>
+                            onChange({
+                              inputs: (block.inputs ?? []).map((item) =>
+                                item.id === input.id ? { ...item, portKey } : item,
+                              ),
+                            })
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Como o plugin usará este dado?" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {compatible.map((port) => (
+                              <SelectItem key={port.key} value={port.key}>
+                                {port.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selected?.description && (
+                          <p className="text-[10px] text-muted-foreground">
+                            {selected.description}
+                          </p>
+                        )}
+                        {!compatible.length && (
+                          <p className="text-[10px] text-destructive">
+                            Nenhuma porta aceita o formato {input.type}.
+                          </p>
+                        )}
+                      </div>
                     ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-                  Nenhum plugin instalado é compatível com este bloco, processo e contrato de saída.
+                    {outputPortState.map(({ field, compatible, selected, ambiguous }) => (
+                      <div key={field.id} className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <Label className="text-[10px] text-muted-foreground">
+                            Entrega · {instructionInputLabel(field)}
+                          </Label>
+                          {ambiguous && (
+                            <span className="text-[9px] font-medium text-amber-700 dark:text-amber-300">
+                              Escolha necessária
+                            </span>
+                          )}
+                        </div>
+                        <Select
+                          value={field.portKey ?? (selected ? selected.key : "")}
+                          onValueChange={(portKey) =>
+                            onChange({
+                              outputs: (block.outputs ?? []).map((item) =>
+                                item.id === field.id ? { ...item, portKey } : item,
+                              ),
+                            })
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="O que o plugin entregará aqui?" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {compatible.map((port) => (
+                              <SelectItem key={port.key} value={port.key}>
+                                {port.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selected?.description && (
+                          <p className="text-[10px] text-muted-foreground">
+                            {selected.description}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    {requiredPortsMissing.map((port) => (
+                      <p key={port.key} className="text-[10px] text-destructive">
+                        Falta uma entrada para: {port.label}.
+                      </p>
+                    ))}
+                  </div>
+                </details>
+              )}
+              <PluginPromptPreview
+                block={block}
+                capability={selectedCapability}
+                inputs={inputPortState.map(({ input, selected }) => ({
+                  input,
+                  portKey: selected?.key,
+                }))}
+              />
+              <MethodParametersEditor
+                block={block}
+                onChange={(parameters) => onChange({ parameters })}
+              />
+              {selectedCapability.instructionUsage !== "not_applicable" && (
+                <p className="rounded-lg border border-brand/20 bg-brand/5 p-3 text-[11px] text-muted-foreground">
+                  A instrução do bloco define o que deve ser feito. Os templates editáveis do plugin
+                  definem como essa instrução e o contexto são montados e enviados ao provedor.
                 </p>
               )}
-            </div>
-
-            {selectedCapability && (
-              <div className="space-y-3">
-                <div
-                  className={cn(
-                    "rounded-lg border p-3 text-[11px]",
-                    contractIssues
-                      ? "border-amber-500/40 bg-amber-500/5 text-amber-800 dark:text-amber-200"
-                      : "border-emerald-500/40 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200",
-                  )}
-                >
-                  <p className="font-medium">
-                    {contractIssues
-                      ? "Revise o contrato antes de executar"
-                      : "O plugin está recebendo tudo o que precisa"}
-                  </p>
-                  <p className="mt-0.5 opacity-80">
-                    {contractIssues
-                      ? "Escolha como as entradas e entregas ambíguas serão usadas pelo plugin."
-                      : "Entradas, entregas e formatos são compatíveis com esta capacidade."}
-                  </p>
-                </div>
-
-                {(inputPortState.length > 0 || outputPortState.length > 0) && (
-                  <details className="rounded-lg border border-border/70 bg-card/60 p-3">
-                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                      Dados usados pelo plugin
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      {inputPortState.map(({ input, compatible, selected, ambiguous }) => (
-                        <div key={input.id} className="space-y-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <Label className="text-[10px] text-muted-foreground">
-                              Entrada · {instructionInputLabel(input)}
-                            </Label>
-                            {ambiguous && (
-                              <span className="text-[9px] font-medium text-amber-700 dark:text-amber-300">
-                                Escolha necessária
-                              </span>
-                            )}
-                          </div>
-                          <Select
-                            value={input.portKey ?? (selected ? selected.key : "")}
-                            onValueChange={(portKey) =>
-                              onChange({
-                                inputs: (block.inputs ?? []).map((item) =>
-                                  item.id === input.id ? { ...item, portKey } : item,
-                                ),
-                              })
-                            }
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Como o plugin usará este dado?" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {compatible.map((port) => (
-                                <SelectItem key={port.key} value={port.key}>
-                                  {port.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {selected?.description && (
-                            <p className="text-[10px] text-muted-foreground">
-                              {selected.description}
-                            </p>
-                          )}
-                          {!compatible.length && (
-                            <p className="text-[10px] text-destructive">
-                              Nenhuma porta aceita o formato {input.type}.
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                      {outputPortState.map(({ field, compatible, selected, ambiguous }) => (
-                        <div key={field.id} className="space-y-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <Label className="text-[10px] text-muted-foreground">
-                              Entrega · {instructionInputLabel(field)}
-                            </Label>
-                            {ambiguous && (
-                              <span className="text-[9px] font-medium text-amber-700 dark:text-amber-300">
-                                Escolha necessária
-                              </span>
-                            )}
-                          </div>
-                          <Select
-                            value={field.portKey ?? (selected ? selected.key : "")}
-                            onValueChange={(portKey) =>
-                              onChange({
-                                outputs: (block.outputs ?? []).map((item) =>
-                                  item.id === field.id ? { ...item, portKey } : item,
-                                ),
-                              })
-                            }
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="O que o plugin entregará aqui?" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {compatible.map((port) => (
-                                <SelectItem key={port.key} value={port.key}>
-                                  {port.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {selected?.description && (
-                            <p className="text-[10px] text-muted-foreground">
-                              {selected.description}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                      {requiredPortsMissing.map((port) => (
-                        <p key={port.key} className="text-[10px] text-destructive">
-                          Falta uma entrada para: {port.label}.
-                        </p>
-                      ))}
-                    </div>
-                  </details>
-                )}
-                <PluginPromptPreview
-                  block={block}
-                  capability={selectedCapability}
-                  inputs={inputPortState.map(({ input, selected }) => ({
-                    input,
-                    portKey: selected?.key,
-                  }))}
+              {selectedPlugin?.manifest.secretKeys?.length && block.plugin && (
+                <PluginConnectionSelector
+                  plugin={selectedPlugin}
+                  value={block.plugin.connectionId}
+                  onChange={(connectionId) =>
+                    onChange({
+                      plugin: {
+                        ...block.plugin!,
+                        connectionId,
+                        connectionRequired: true,
+                      },
+                    })
+                  }
                 />
-                <MethodParametersEditor
-                  block={block}
-                  onChange={(parameters) => onChange({ parameters })}
+              )}
+              {profileSetup && block.plugin && (
+                <ManagedProfileSelector
+                  plugin={selectedPlugin}
+                  profileSetup={profileSetup}
+                  configuration={block.plugin.configuration}
+                  onChange={(configuration) =>
+                    onChange({ plugin: { ...block.plugin!, configuration } })
+                  }
                 />
-                {selectedCapability.instructionUsage !== "not_applicable" && (
-                  <p className="rounded-lg border border-brand/20 bg-brand/5 p-3 text-[11px] text-muted-foreground">
-                    A instrução do bloco define o que deve ser feito. Os templates editáveis do
-                    plugin definem como essa instrução e o contexto são montados e enviados ao
-                    provedor.
-                  </p>
-                )}
-                {selectedPlugin?.manifest.secretKeys?.length && block.plugin && (
-                  <PluginConnectionSelector
-                    plugin={selectedPlugin}
-                    value={block.plugin.connectionId}
-                    onChange={(connectionId) =>
+              )}
+              {selectedPlugin?.manifest.supportsConversationContinuation && block.plugin && (
+                <div className="space-y-1.5">
+                  <Label>Conversa</Label>
+                  <Select
+                    value={
+                      block.plugin.conversation?.mode === "reuse"
+                        ? `${block.plugin.conversation.sourceProcessType}::${block.plugin.conversation.sourceBlockId}`
+                        : "new"
+                    }
+                    onValueChange={(value) => {
+                      const [sourceProcessType, sourceBlockId] = value.split("::");
                       onChange({
                         plugin: {
                           ...block.plugin!,
-                          connectionId,
-                          connectionRequired: true,
+                          conversation:
+                            value === "new"
+                              ? { mode: "new" }
+                              : {
+                                  mode: "reuse",
+                                  sourceProcessType: sourceProcessType as UniversalProcess,
+                                  sourceBlockId,
+                                },
                         },
-                      })
-                    }
-                  />
-                )}
-                {profileSetup && block.plugin && (
-                  <ManagedProfileSelector
-                    plugin={selectedPlugin}
-                    profileSetup={profileSetup}
-                    configuration={block.plugin.configuration}
-                    onChange={(configuration) =>
-                      onChange({ plugin: { ...block.plugin!, configuration } })
-                    }
-                  />
-                )}
-                {selectedPlugin?.manifest.supportsConversationContinuation && block.plugin && (
-                  <div className="space-y-1.5">
-                    <Label>Conversa</Label>
-                    <Select
-                      value={
-                        block.plugin.conversation?.mode === "reuse"
-                          ? `${block.plugin.conversation.sourceProcessType}::${block.plugin.conversation.sourceBlockId}`
-                          : "new"
-                      }
-                      onValueChange={(value) => {
-                        const [sourceProcessType, sourceBlockId] = value.split("::");
-                        onChange({
-                          plugin: {
-                            ...block.plugin!,
-                            conversation:
-                              value === "new"
-                                ? { mode: "new" }
-                                : {
-                                    mode: "reuse",
-                                    sourceProcessType: sourceProcessType as UniversalProcess,
-                                    sourceBlockId,
-                                  },
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new">Iniciar uma conversa nova</SelectItem>
+                      {conversationSources.map((source) => (
+                        <SelectItem
+                          key={`${source.processType}::${source.block.id}`}
+                          value={`${source.processType}::${source.block.id}`}
+                        >
+                          Continuar: {PROCESS_META[source.processType].label} ·{" "}
+                          {source.block.name ?? source.block.type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Use a mesma conversa para preservar o contexto do provedor. Se o perfil mudar ou
+                    a conversa não abrir, o plugin inicia outra e recebe o contexto do bloco de
+                    origem.
+                  </p>
+                </div>
+              )}
+              {primaryConfigurationEntries.map(renderConfigurationField)}
+              {supportsItemSequence && block.plugin && (
+                <div className="space-y-1.5">
+                  <Label>Como executar</Label>
+                  <Select
+                    value={simpleGenerationMode}
+                    onValueChange={(value) => {
+                      if (!generationModeOptions.includes(value)) return;
+                      onChange({
+                        plugin: {
+                          ...block.plugin!,
+                          configuration: {
+                            ...block.plugin!.configuration,
+                            generationMode: value,
                           },
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="new">Iniciar uma conversa nova</SelectItem>
-                        {conversationSources.map((source) => (
-                          <SelectItem
-                            key={`${source.processType}::${source.block.id}`}
-                            value={`${source.processType}::${source.block.id}`}
-                          >
-                            Continuar: {PROCESS_META[source.processType].label} ·{" "}
-                            {source.block.name ?? source.block.type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[11px] text-muted-foreground">
-                      Use a mesma conversa para preservar o contexto do provedor. Se o perfil mudar
-                      ou a conversa não abrir, o plugin inicia outra e recebe o contexto do bloco de
-                      origem.
-                    </p>
+                        },
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single">Uma vez</SelectItem>
+                      {generationModeOptions.includes("auto") && (
+                        <SelectItem value="auto">Automático conforme a entrada</SelectItem>
+                      )}
+                      {sequenceModeValue && (
+                        <SelectItem value={sequenceModeValue}>
+                          Uma vez por item, na mesma conversa
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    {simpleGenerationMode === sequenceModeValue
+                      ? "Envia cada item em ordem e mantém todos na mesma conversa do provedor."
+                      : simpleGenerationMode === "auto"
+                        ? "Usa sequência quando a porta de estrutura recebe vários itens; caso contrário, envia uma vez."
+                        : "Executa este bloco uma única vez com todo o contexto recebido."}
+                  </p>
+                </div>
+              )}
+              {advancedConfigurationEntries.length > 0 && (
+                <details className="rounded-lg border border-border/70 bg-card/60 p-3">
+                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                    Configurações avançadas do executor ({advancedConfigurationEntries.length})
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {advancedConfigurationEntries.map(renderConfigurationField)}
                   </div>
-                )}
-                {primaryConfigurationEntries.map(renderConfigurationField)}
-                {supportsItemSequence && block.plugin && (
-                  <div className="space-y-1.5">
-                    <Label>Como executar</Label>
-                    <Select
-                      value={simpleGenerationMode}
-                      onValueChange={(value) => {
-                        if (!generationModeOptions.includes(value)) return;
-                        onChange({
-                          plugin: {
-                            ...block.plugin!,
-                            configuration: {
-                              ...block.plugin!.configuration,
-                              generationMode: value,
-                            },
-                          },
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="single">Uma vez</SelectItem>
-                        {generationModeOptions.includes("auto") && (
-                          <SelectItem value="auto">Automático conforme a entrada</SelectItem>
-                        )}
-                        {sequenceModeValue && (
-                          <SelectItem value={sequenceModeValue}>
-                            Uma vez por item, na mesma conversa
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[11px] text-muted-foreground">
-                      {simpleGenerationMode === sequenceModeValue
-                        ? "Envia cada item em ordem e mantém todos na mesma conversa do provedor."
-                        : simpleGenerationMode === "auto"
-                          ? "Usa sequência quando a porta de estrutura recebe vários itens; caso contrário, envia uma vez."
-                          : "Executa este bloco uma única vez com todo o contexto recebido."}
-                    </p>
-                  </div>
-                )}
-                {advancedConfigurationEntries.length > 0 && (
-                  <details className="rounded-lg border border-border/70 bg-card/60 p-3">
-                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                      Configurações avançadas do executor ({advancedConfigurationEntries.length})
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      {advancedConfigurationEntries.map(renderConfigurationField)}
-                    </div>
-                  </details>
-                )}
-              </div>
-            )}
-          </div>
-        </details>
-      )}
+                </details>
+              )}
+            </div>
+          )}
+        </div>
+      </details>
     </div>
   );
 }
@@ -2614,7 +2625,9 @@ function PluginConfigurationField({
   options?: Array<{ value: string; label: string }>;
   onChange: (value: string | number | boolean) => void;
 }) {
-  const label = schema.title ?? propertyKey;
+  const { t } = useAppPreferences();
+  const label =
+    propertyKey === "startMinimized" ? t("Iniciar minimizado") : (schema.title ?? propertyKey);
   const choices =
     options ??
     (schema.oneOf ?? []).flatMap((option) =>

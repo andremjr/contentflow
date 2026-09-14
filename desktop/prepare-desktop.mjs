@@ -49,6 +49,16 @@ await build({
   },
 });
 
+await build({
+  entryPoints: [path.join(projectRoot, "server", "mcp.ts")],
+  outfile: path.join(desktopBuildDirectory, "mcp.mjs"),
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node26",
+  sourcemap: false,
+});
+
 const packageJsonPath = path.join(projectRoot, "package.json");
 const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 writeFileSync(

@@ -68,7 +68,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "1.0.12");
+  assert.equal(manifest.version, "1.0.13");
   assert.equal(manifest.supportsConversationContinuation, undefined);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -77,6 +77,7 @@ test("manifesto declara oito capabilities modulares", () => {
   assert.deepEqual(Object.keys(generation.blockConfigSchema.properties), [
     "fallbackAccountProfiles",
     "accountProfile",
+    "startMinimized",
   ]);
   assert.deepEqual(generation.outputPorts.find((port) => port.key === "result").producedTypes, [
     "text",

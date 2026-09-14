@@ -14,7 +14,7 @@ import type {
 
 export const CONTENTFLOW_PLUGIN_API_VERSION = "1" as const;
 
-export type PluginOperator = "IA" | "Código";
+export type PluginOperator = "Humano" | "IA" | "Código";
 export type PluginPermission =
   "network" | "filesystem:read" | "filesystem:write" | "process" | "worker" | "native";
 
@@ -195,9 +195,11 @@ export type PluginExecutionContext = {
   project: { id: string; title: string };
   processType: UniversalProcess;
   block: { type: BlockType; name: string; instructions: string };
-  previousProcessOutputs: ProcessOutput[];
-  previousBlockOutputs: Array<{ blockId: string; values: Record<string, RuntimeValue> }>;
-  /** Entregas anteriores com identidade universal, ordem e proveniência. */
+  /** @deprecated Desde a API v1 atual, o núcleo não popula histórico implícito. Use bindings em `inputs`. */
+  previousProcessOutputs?: ProcessOutput[];
+  /** @deprecated Desde a API v1 atual, o núcleo não popula histórico implícito. Use bindings em `inputs`. */
+  previousBlockOutputs?: Array<{ blockId: string; values: Record<string, RuntimeValue> }>;
+  /** @deprecated Desde a API v1 atual, o núcleo não popula histórico implícito. Use `inputDeliveries`. */
   previousDeliveries?: ProjectDelivery[];
   selectedCollection?: {
     collectionId: string;

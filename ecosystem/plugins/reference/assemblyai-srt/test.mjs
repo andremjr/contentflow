@@ -65,6 +65,11 @@ test("aceita uma lista arbitrária de chaves sem expô-las", () => {
   assert.deepEqual(__test.parseApiKeys("key-a, key-b\nkey-c"), ["key-a", "key-b", "key-c"]);
 });
 
+test("aceita a referência opaca da conexão fornecida pelo núcleo", () => {
+  assert.doesNotThrow(() => __test.validateSettings({ connectionId: "connection-123" }));
+  assert.throws(() => __test.validateSettings({ unexpected: true }), /configurações locais/);
+});
+
 test("rejeita mídia fora dos formatos do script", () => {
   assert.throws(
     () =>

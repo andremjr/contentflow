@@ -44,12 +44,13 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 });
 test("manifesto possui oito capabilities e permissões mínimas", () => {
   assert.equal(manifest.id, "local.contentflow.gemini-browser-studio");
-  assert.equal(manifest.version, "1.0.7");
+  assert.equal(manifest.version, "1.0.8");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.capabilities[0].instructionUsage, "required");
   assert.deepEqual(Object.keys(manifest.capabilities[0].blockConfigSchema.properties), [
     "fallbackAccountProfiles",
     "accountProfile",
+    "startMinimized",
   ]);
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
   assert.equal(manifest.capabilities.length, 8);
@@ -293,4 +294,78 @@ test("mock textual não abre navegador", async () => {
     ).values,
     { result: "Pesquisa", sources: [] },
   );
+});
+
+test("não confunde botão de upgrade ou rodapé com limite de uso", () => {
+  const normalPageState = {
+    alerts: [],
+    lastResponseText: "Aqui está o roteiro solicitado sobre a história de Roma.",
+    body: "Menu Nova Conversa Fazer upgrade para o Gemini Advanced Termos e Privacidade Limitações do Gemini",
+  };
+  const result = __test.classifyGeminiError(normalPageState);
+  assert.equal(result, null);
+});
+
+test("identifica mensagem real de esgotamento de limite de mensagens como RATE_LIMIT", () => {
+  const ptLimitState = {
+    alerts: [],
+    lastResponseText:
+      "Você atingiu o limite de mensagens para o Gemini 1.5 Flash. Tente novamente após as 15:30 ou faça upgrade para o Gemini Advanced.",
+    body: "Gemini",
+  };
+  const errPt = __test.classifyGeminiError(ptLimitState);
+  assert.ok(errPt);
+  assert.equal(errPt.code, "RATE_LIMIT");
+  assert.equal(errPt.retryable, true);
+  assert.equal(errPt.retryAfterMs, 45000);
+
+  const enLimitState = {
+    alerts: ["You've reached your message limit for Gemini. Try again later."],
+    lastResponseText: "",
+    body: "Gemini",
+  };
+  const errEn = __test.classifyGeminiError(enLimitState);
+  assert.ok(errEn);
+  assert.equal(errEn.code, "RATE_LIMIT");
+  assert.equal(errEn.retryable, true);
+});
+
+test("identifica detecção de bot e atividade incomum com backoff adaptativo", () => {
+  const botState = {
+    alerts: ["Notamos uma atividade incomum na sua rede."],
+    lastResponseText: "",
+    body: "Gemini",
+  };
+  const botErr = __test.classifyGeminiError(botState);
+  assert.ok(botErr);
+  assert.equal(botErr.code, "RATE_LIMIT");
+  assert.equal(botErr.isUnusualActivity, true);
+  assert.equal(botErr.retryAfterMs, 45000);
+});
+
+test("identifica alta demanda no Gemini", () => {
+  const highDemandState = {
+    alerts: [],
+    lastResponseText: "O Gemini está com alta demanda no momento. Tente novamente mais tarde.",
+    body: "Gemini",
+  };
+  const demandErr = __test.classifyGeminiError(highDemandState);
+  assert.ok(demandErr);
+  assert.equal(demandErr.code, "RATE_LIMIT");
+  assert.equal(demandErr.retryAfterMs, 60000);
+});
+
+test("calcula jitter e atraso dinâmico de timing", () => {
+  assert.ok(__test.TIMING.SHORT);
+  assert.ok(__test.TIMING.MEDIUM);
+  assert.ok(__test.TIMING.LONG);
+  const delay = __test.calculateJitteredDelay(1000);
+  assert.ok(delay >= 800 && delay <= 1250);
+});
+
+test("lança Chrome com flags anti-detecção e resolução realista", async () => {
+  const source = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
+  assert.ok(source.includes("--disable-blink-features=AutomationControlled"));
+  assert.ok(source.includes("--window-size=1280,900"));
+  assert.doesNotMatch(source, /if\s*\(\/limite\|rate limit\|upgrade\/i\.test\(st\.body\)\)/);
 });

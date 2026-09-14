@@ -33,6 +33,24 @@ test("translates recently added Methods and plugin profile UI in Spanish", () =>
   assert.equal(translate(", entrega “theme”", "es"), ", salida “theme”");
 });
 
+test("translates the MCP Method builder connection UI", () => {
+  assert.equal(translate("Conectar agente via MCP", "en"), "Connect agent via MCP");
+  assert.equal(translate("Conectar agente via MCP", "es"), "Conectar agente mediante MCP");
+  assert.equal(
+    translate("Configuração do servidor MCP local", "en"),
+    "Local MCP server configuration",
+  );
+  assert.equal(translate("Copiar configuração", "es"), "Copiar configuración");
+  assert.equal(translate("Preparando configuração MCP...", "en"), "Preparing MCP configuration...");
+  assert.equal(
+    translate(
+      "Use esta configuração em qualquer agente compatível com MCP. O ContentFlow precisa permanecer aberto durante a criação e os testes dos Métodos.",
+      "es",
+    ),
+    "Usa esta configuración con cualquier agente compatible con MCP. ContentFlow debe permanecer abierto durante la creación y las pruebas de los Métodos.",
+  );
+});
+
 test("translates plugin credential management in English and Spanish", () => {
   assert.equal(translate("Credenciais e conexões", "en"), "Credentials and connections");
   assert.equal(translate("Credenciais e conexões", "es"), "Credenciales y conexiones");
@@ -50,6 +68,8 @@ test("translates plugin credential management in English and Spanish", () => {
 });
 
 test("translates the unified block configuration labels", () => {
+  assert.equal(translate("Iniciar minimizado", "en"), "Start minimized");
+  assert.equal(translate("Iniciar minimizado", "es"), "Iniciar minimizado");
   assert.deepEqual(
     ["Nome da ação", "Prompt do bloco", "Operador responsável", "Informações de entrada"].map(
       (label) => translate(label, "en"),

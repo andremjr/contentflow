@@ -589,6 +589,9 @@ test("validação resume contextos extensos e permite expandir cada entrega", as
   await contextItem.locator("summary").click();
   await expect(contextItem).toHaveAttribute("open", "");
   await expect(contextItem.getByText(/Final exclusivo\./)).toBeVisible();
+  await expect(contextItem.getByTestId("output-character-count")).toHaveText(
+    String(Array.from(longContext).length),
+  );
 });
 
 test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da tela", async ({
@@ -635,9 +638,11 @@ test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da
     })
     .toBe("awaiting_human");
   await page.goto(`/project/${id}/title`);
-  await expect(page.getByTestId("output-character-count")).toHaveText("0");
-  await page.getByLabel("Resultado title").fill("Título concluído");
-  await expect(page.getByTestId("output-character-count")).toHaveText("16");
+  const titleResult = page.getByLabel("Resultado title");
+  const titleCharacterCount = titleResult.locator("..").getByTestId("output-character-count");
+  await expect(titleCharacterCount).toHaveText("0");
+  await titleResult.fill("Título concluído");
+  await expect(titleCharacterCount).toHaveText("16");
   await page.getByRole("button", { name: "Concluir ação humana", exact: true }).click();
   await expect
     .poll(async () => {

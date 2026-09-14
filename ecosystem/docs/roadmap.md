@@ -29,7 +29,7 @@ Ordem recomendada de implementação:
 
 Essa seleção cobre uma produção completa com poucas dependências. Runway, HeyGen, outros LLMs e outros bancos de mídia entram depois que essa linha estiver confiável.
 
-Os contratos sugeridos abaixo usam campos como `segment_id`, `cue_id`, `slot_id` e `asset_id` quando um formato ou provedor externo se beneficia deles. Esses IDs de domínio não substituem a identidade universal do núcleo. Cada output e elemento recebe `deliveryId`/`itemId`, e plugins posteriores podem recuperar essa proveniência em `request.inputDeliveries` e `context.previousDeliveries`.
+Os contratos sugeridos abaixo usam campos como `segment_id`, `cue_id`, `slot_id` e `asset_id` quando um formato ou provedor externo se beneficia deles. Esses IDs de domínio não substituem a identidade universal do núcleo. Cada output e elemento recebe `deliveryId`/`itemId`, e plugins posteriores recuperam essa proveniência em `request.inputDeliveries` quando a entrega for conectada explicitamente no Método.
 
 ## 3. Catálogo mínimo por Processo Universal
 

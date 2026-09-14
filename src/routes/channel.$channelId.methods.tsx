@@ -31,7 +31,7 @@ function ChannelMethodsPage() {
           { label: "Métodos de Criação" },
         ]}
       />
-      <MethodAgentCta className="px-4 pt-4 sm:px-6" />
+      <MethodAgentCta className="px-4 pt-4 sm:px-6" channelId={channel.id} />
       <MethodBuilder key={channel.id} channelId={channel.id} initialProcess={process} />
     </AppShell>
   );

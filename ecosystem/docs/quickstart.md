@@ -119,7 +119,7 @@ O plugin devolve valores; o núcleo registra a identidade:
 - `records` e coleções de arquivos preservam ordem e identidade por elemento;
 - uma nova tentativa cria a identidade da nova tentativa e invalida a anterior;
 - inputs resolvidos podem trazer `request.inputDeliveries` com os IDs de origem;
-- `request.context.previousDeliveries` permite consultar entregas anteriores autorizadas do Projeto atual.
+- entregas anteriores só chegam ao plugin quando o Método as conecta explicitamente a uma entrada do bloco.
 - Um input `channel_history` chega como `records` em `request.inputs`, sempre limitado a outros Projetos do mesmo Canal. Em `ESCOLHER`, contém escolhas anteriores do próprio bloco; em `CRIAR`, contém os resultados oficiais anteriores do mesmo Processo. O plugin não consulta o banco diretamente.
 
 Não invente IDs do núcleo. Quando um provedor possuir `jobId`, `assetId` ou outro ID externo, preserve-o em um campo do seu registro para proveniência e idempotência.

@@ -20,7 +20,7 @@ Um plugin é uma pasta independente com `contentflow.plugin.json` e um entrypoin
 
 - `request.inputs` contém os valores indexados por `portKey`.
 - `request.inputContract` e `request.outputContract` descrevem o binding atual.
-- `request.inputDeliveries` e `request.context.previousDeliveries` fornecem somente o histórico autorizado.
+- `request.inputDeliveries` fornece a proveniência de cada entrada explicitamente conectada; o plugin não recebe histórico implícito de outros blocos ou Processos.
 - `services.signal` controla cancelamento e timeout.
 - `getSecret`, `resolveInputFile`, `getOutputPath` e `getWorkspacePath` dão acesso controlado aos recursos declarados.
 - arquivos produzidos usam `artifact://<id>` em `values` e o mesmo ID em `artifacts`.

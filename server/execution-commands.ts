@@ -97,7 +97,7 @@ export function executionCommands(db: {
         blockId: block.id,
         status:
           index === 0
-            ? block.operator === "Humano"
+            ? block.operator === "Humano" && !block.plugin
               ? "awaiting_human"
               : "blocked_executor"
             : "pending",
@@ -106,7 +106,9 @@ export function executionCommands(db: {
         startedAt: index === 0 ? now : undefined,
       })),
       status:
-        methodSnapshot.blocks[0]?.operator === "Humano" ? "awaiting_human" : "blocked_executor",
+        methodSnapshot.blocks[0]?.operator === "Humano" && !methodSnapshot.blocks[0]?.plugin
+          ? "awaiting_human"
+          : "blocked_executor",
       outputStatus: "pending",
       createdAt: now,
       updatedAt: now,
@@ -156,7 +158,8 @@ export function executionCommands(db: {
     nextExecution.startedAt = now;
     nextExecution.attempt = Math.max(1, nextExecution.attempt ?? 1);
     nextExecution.error = undefined;
-    nextExecution.status = nextBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
+    nextExecution.status =
+      nextBlock.operator === "Humano" && !nextBlock.plugin ? "awaiting_human" : "blocked_executor";
     execution.status =
       nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
     const project = db.projects.find((item) => item.id === execution.projectId);
@@ -306,7 +309,9 @@ export function executionCommands(db: {
         blockExecution.retryConversationContext = retryConversationContext;
         blockExecution.retryConversationAttachments = retryConversationAttachments;
         blockExecution.status =
-          targetBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
+          targetBlock.operator === "Humano" && !targetBlock.plugin
+            ? "awaiting_human"
+            : "blocked_executor";
       } else {
         blockExecution.startedAt = undefined;
         blockExecution.status = "pending";
@@ -461,7 +466,8 @@ export function executionCommands(db: {
     invalidateBlockDeliveries(execution, [blockId]);
     blockExecution.error = undefined;
     blockExecution.pluginConversation = undefined;
-    blockExecution.status = block.operator === "Humano" ? "awaiting_human" : "blocked_executor";
+    blockExecution.status =
+      block.operator === "Humano" && !block.plugin ? "awaiting_human" : "blocked_executor";
     execution.error = undefined;
     execution.status =
       blockExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";

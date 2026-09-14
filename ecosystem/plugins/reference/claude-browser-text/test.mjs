@@ -11,7 +11,7 @@ const manifest = JSON.parse(
 const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "1.1.3");
+  assert.equal(manifest.version, "1.1.4");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
 });
@@ -84,6 +84,7 @@ test("manifesto declara as seis capabilities do Claude Browser Studio", () => {
     "generationMode",
     "characterTolerancePercent",
     "maxLengthRepairPrompts",
+    "startMinimized",
   ]);
   assert.deepEqual(capability.blockTypes, ["CRIAR"]);
   assert.deepEqual(
@@ -113,6 +114,22 @@ test("manifesto declara as seis capabilities do Claude Browser Studio", () => {
 test("reúne anexos autorizados sem duplicar arquivos", () => {
   const image = { id: "img-1", name: "frame.png", url: "staging://img-1" };
   assert.deepEqual(__test.collectStoredFiles([image, { nested: image }]), [image, image]);
+});
+
+test("aceita SRT como documento anexado", () => {
+  assert.equal(__test.supportedUploadExtensions.has(".srt"), true);
+});
+
+test("reconhece o chip SRT quando o Claude renomeia o arquivo enviado", () => {
+  assert.equal(
+    __test.attachmentUploadIsReady(
+      { prompt: true, body: "arquivo 4764c716-19d8.srt SRT", previewCount: 0 },
+      ["mai-audio.srt"],
+      ["srt"],
+      0,
+    ),
+    true,
+  );
 });
 
 test("usa instrução e contexto para visão e documentos", () => {

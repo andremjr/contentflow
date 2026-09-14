@@ -1,4 +1,9 @@
-import express, { type ErrorRequestHandler } from "express";
+import express, {
+  type ErrorRequestHandler,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 import { z } from "zod";
 import { executionCommands } from "./execution-commands";
 import { createMethodPackage, readMethodPackage } from "./method-package";
@@ -20,7 +25,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import path from "node:path";
 import type {
   ActionBlock,
@@ -78,11 +83,7 @@ import {
   type RegisteredPlugin,
 } from "./plugin-runner";
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
-import {
-  composePluginPortValue,
-  selectPluginImplicitContextPort,
-  selectPluginInputPort,
-} from "./plugin-input-values";
+import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
 import { instructionWithRetryFeedback } from "../src/lib/retry-feedback";
 import {
   pluginConversationFallbackAttachments,
@@ -140,6 +141,11 @@ import { migrateSiblingDataDirectory } from "./data-directory-migration";
 import { browserBridgeProfileState, stageBrowserBridge } from "./browser-profile-readiness";
 import { fetchYouTubeChannel } from "./youtube";
 import { pluginConcurrencySlot, pluginConcurrencySlotForRequest } from "./plugin-concurrency";
+import {
+  BUILDER_METHOD_CONTRACT,
+  validateBuilderMethods,
+  type BuilderPluginContext,
+} from "./builder-methods";
 
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
 const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
@@ -195,6 +201,37 @@ const activeUploadMimeTypes = new Set([
 ]);
 mkdirSync(dataDirectory, { recursive: true });
 const browserBridgeDirectory = stageBrowserBridge(applicationRoot, dataDirectory);
+const builderMcpSessionPath = path.join(dataDirectory, "builder-mcp-session.json");
+const builderMcpToken = randomBytes(32).toString("base64url");
+
+function builderMcpLaunch(channelId?: string) {
+  const bundledEntry = path.join(applicationRoot, "desktop-dist", "mcp.mjs");
+  const sourceEntry = path.join(applicationRoot, "server", "mcp.ts");
+  const tsxEntry = path.join(applicationRoot, "node_modules", "tsx", "dist", "cli.mjs");
+  const bundled = existsSync(bundledEntry);
+  const command = process.env.CONTENTFLOW_PLUGIN_NODE_EXECUTABLE ?? process.execPath;
+  const args = bundled
+    ? [bundledEntry, "--session", builderMcpSessionPath]
+    : [tsxEntry, sourceEntry, "--session", builderMcpSessionPath];
+  if (channelId) args.push("--channel", channelId);
+  return { command, args };
+}
+
+writeFileSync(
+  builderMcpSessionPath,
+  JSON.stringify(
+    {
+      version: 1,
+      apiUrl: `http://127.0.0.1:${port}`,
+      token: builderMcpToken,
+      pid: process.pid,
+      createdAt: new Date().toISOString(),
+    },
+    null,
+    2,
+  ),
+  { encoding: "utf8", mode: 0o600 },
+);
 
 const databasePath = path.join(dataDirectory, "contentflow.sqlite");
 const legacyDataDirectory = path.join(applicationRoot, "data");
@@ -629,6 +666,15 @@ function finishPluginBlock(
   values: Record<string, RuntimeValue>,
 ) {
   const now = new Date().toISOString();
+  if (block.operator === "Humano") {
+    blockExecution.status = "awaiting_human";
+    blockExecution.error = undefined;
+    blockExecution.progress = undefined;
+    blockExecution.progressMessage = undefined;
+    execution.status = "awaiting_human";
+    execution.updatedAt = now;
+    return;
+  }
   blockExecution.values = values;
   blockExecution.status = "completed";
   blockExecution.completedAt = now;
@@ -686,7 +732,9 @@ function finishPluginBlock(
         targetExecution.retryConversationAttachments = retryConversationAttachments;
         targetExecution.startedAt = now;
         targetExecution.status =
-          targetBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
+          targetBlock.operator === "Humano" && !targetBlock.plugin
+            ? "awaiting_human"
+            : "blocked_executor";
         invalidateBlockDeliveries(
           execution,
           execution.methodSnapshot.blocks.slice(targetIndex).map((candidate) => candidate.id),
@@ -702,7 +750,8 @@ function finishPluginBlock(
   const nextBlock = execution.methodSnapshot.blocks[completedIndex + 1];
 
   if (nextExecution && nextBlock) {
-    nextExecution.status = nextBlock.operator === "Humano" ? "awaiting_human" : "blocked_executor";
+    nextExecution.status =
+      nextBlock.operator === "Humano" && !nextBlock.plugin ? "awaiting_human" : "blocked_executor";
     nextExecution.startedAt = now;
     execution.status =
       nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
@@ -769,13 +818,7 @@ function scheduleAutomaticPluginBlock(execution: ProcessExecution) {
   const block = blockExecution
     ? execution.methodSnapshot.blocks.find((item) => item.id === blockExecution.blockId)
     : undefined;
-  if (
-    !blockExecution ||
-    blockExecution.status !== "blocked_executor" ||
-    !block ||
-    block.operator === "Humano" ||
-    !block.plugin
-  ) {
+  if (!blockExecution || blockExecution.status !== "blocked_executor" || !block || !block.plugin) {
     return;
   }
 
@@ -929,7 +972,7 @@ function startOrchestratedProcess(
       blockId: block.id,
       status:
         index === 0
-          ? block.operator === "Humano"
+          ? block.operator === "Humano" && !block.plugin
             ? "awaiting_human"
             : "blocked_executor"
           : "pending",
@@ -937,7 +980,10 @@ function startOrchestratedProcess(
       attempt: 1,
       startedAt: index === 0 ? now : undefined,
     })),
-    status: methodSnapshot.blocks[0].operator === "Humano" ? "awaiting_human" : "blocked_executor",
+    status:
+      methodSnapshot.blocks[0].operator === "Humano" && !methodSnapshot.blocks[0].plugin
+        ? "awaiting_human"
+        : "blocked_executor",
     outputStatus: "pending",
     createdAt: now,
     updatedAt: now,
@@ -2008,7 +2054,7 @@ function isPluginManifest(manifest: Record<string, unknown>) {
 
       return (
         isNonEmptyString(capability.id) &&
-        ["IA", "Código"].includes(String(capability.operator)) &&
+        ["Humano", "IA", "Código"].includes(String(capability.operator)) &&
         isUniqueStringArray(capability.blockTypes, blockTypes) &&
         capability.blockTypes.length > 0 &&
         (capability.processTypes === undefined ||
@@ -3344,6 +3390,198 @@ app.delete("/api/plugins/:pluginId/connections/:connectionId", async (request, r
   response.json(await publicPluginConnection(plugin, revoked));
 });
 
+function requireBuilderMcp(request: Request, response: Response, next: NextFunction) {
+  if (request.get("authorization") !== `Bearer ${builderMcpToken}`) {
+    response.status(401).json({ error: "Sessão MCP local inválida ou expirada." });
+    return;
+  }
+  next();
+}
+
+async function builderPluginContexts(): Promise<BuilderPluginContext[]> {
+  const registry = initializePluginRunner();
+  return Promise.all(
+    registry.plugins.map(async (plugin) => ({
+      plugin,
+      enabled: pluginConsentIsCurrent(plugin),
+      connections: await Promise.all(
+        pluginConnections.list(plugin.id).map(async (connection) => {
+          const publicConnection = await publicPluginConnection(plugin, connection);
+          return {
+            id: publicConnection.id,
+            name: publicConnection.name,
+            connected: publicConnection.connected,
+          };
+        }),
+      ),
+      profiles: plugin.manifest.profileSetup
+        ? profileInventory(plugin).map((profile) => ({
+            id: profile.id,
+            name: profile.name,
+            alias: profile.alias,
+          }))
+        : [],
+    })),
+  );
+}
+
+function publicBuilderPlugin(entry: BuilderPluginContext) {
+  const { manifest } = entry.plugin;
+  return {
+    id: entry.plugin.id,
+    name: manifest.name,
+    version: manifest.version,
+    description: manifest.description,
+    enabled: entry.enabled,
+    executable: entry.plugin.executable && entry.enabled,
+    connectionRequired: Boolean(manifest.secretKeys?.length),
+    connections: entry.connections,
+    profiles: entry.profiles,
+    profileSetup: manifest.profileSetup,
+    capabilities: manifest.capabilities,
+  };
+}
+
+function channelCollections(channelId: string) {
+  return parseRows(
+    database
+      .prepare("SELECT payload FROM library_collections WHERE channel_id = ? ORDER BY created_at")
+      .all(channelId) as { payload: string }[],
+  ) as StrategicCollection[];
+}
+
+app.get("/api/builder/mcp-info", (request, response) => {
+  const channelId =
+    typeof request.query.channelId === "string" ? request.query.channelId : undefined;
+  if (channelId && !readPayload<Channel>("channels", channelId)) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+  const launch = builderMcpLaunch(channelId);
+  response.json({
+    available: true,
+    transport: "stdio",
+    scope: channelId ? "channel" : "workspace",
+    channelId,
+    config: JSON.stringify(
+      {
+        mcpServers: {
+          contentflow: { command: launch.command, args: launch.args },
+        },
+      },
+      null,
+      2,
+    ),
+  });
+});
+
+app.get("/api/builder/channels", requireBuilderMcp, (_request, response) => {
+  response.json({
+    channels: (storedChannels() as Channel[]).map((channel) => ({
+      id: channel.id,
+      name: channel.name,
+      handle: channel.handle,
+      niche: channel.niche,
+      language: channel.language,
+      configuredProcesses: PROCESS_ORDER.filter(
+        (processType) => channel.methods?.[processType]?.blocks?.length,
+      ),
+    })),
+  });
+});
+
+app.get("/api/builder/method-contract", requireBuilderMcp, (_request, response) => {
+  response.json(BUILDER_METHOD_CONTRACT);
+});
+
+app.get(
+  "/api/builder/channels/:channelId/context",
+  requireBuilderMcp,
+  async (request, response) => {
+    const channel = readPayload<Channel>("channels", String(request.params.channelId));
+    if (!channel) {
+      response.status(404).json({ error: "Canal não encontrado." });
+      return;
+    }
+    const plugins = await builderPluginContexts();
+    response.json({
+      channel: {
+        id: channel.id,
+        name: channel.name,
+        handle: channel.handle,
+        niche: channel.niche,
+        language: channel.language,
+        description: channel.description,
+        methods: channel.methods,
+      },
+      collections: channelCollections(channel.id),
+      plugins: plugins.map(publicBuilderPlugin),
+      contract: BUILDER_METHOD_CONTRACT,
+    });
+  },
+);
+
+app.post(
+  "/api/builder/channels/:channelId/validate",
+  requireBuilderMcp,
+  async (request, response) => {
+    const channel = readPayload<Channel>("channels", String(request.params.channelId));
+    if (!channel) {
+      response.status(404).json({ error: "Canal não encontrado." });
+      return;
+    }
+    const result = validateBuilderMethods({
+      channel,
+      methods: request.body?.methods,
+      plugins: await builderPluginContexts(),
+      collections: channelCollections(channel.id),
+    });
+    response.status(result.ok ? 200 : 422).json(result);
+  },
+);
+
+app.post("/api/builder/channels/:channelId/apply", requireBuilderMcp, async (request, response) => {
+  const channel = readPayload<Channel>("channels", String(request.params.channelId));
+  if (!channel) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+  const result = validateBuilderMethods({
+    channel,
+    methods: request.body?.methods,
+    plugins: await builderPluginContexts(),
+    collections: channelCollections(channel.id),
+  });
+  if (!result.ok || !result.methods) {
+    response.status(422).json(result);
+    return;
+  }
+  for (const [processType, method] of Object.entries(result.methods) as [
+    UniversalProcess,
+    ProcessMethod,
+  ][]) {
+    channel.methods[processType] = {
+      ...method,
+      imageUrl:
+        typeof method.imageUrl === "string" &&
+        (/^data:image\/(webp|png|jpeg);base64,/.test(method.imageUrl) ||
+          /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(method.imageUrl))
+          ? method.imageUrl.slice(0, 1_500_000)
+          : undefined,
+    };
+  }
+  database
+    .prepare("UPDATE channels SET payload = ? WHERE id = ?")
+    .run(JSON.stringify(channel), channel.id);
+  response.json({
+    ok: true,
+    channelId: channel.id,
+    appliedProcesses: Object.keys(result.methods),
+    warnings: result.warnings,
+    methods: channel.methods,
+  });
+});
+
 app.post("/api/execute-block", async (request, response) => {
   const body = request.body as {
     projectId?: string;
@@ -3410,11 +3648,7 @@ app.post("/api/execute-block", async (request, response) => {
     });
     return;
   }
-  if (
-    block.operator === "Humano" ||
-    blockExecution.status !== "blocked_executor" ||
-    block.plugin?.pluginId !== plugin.id
-  ) {
+  if (blockExecution.status !== "blocked_executor" || block.plugin?.pluginId !== plugin.id) {
     response.status(409).json({
       error: "Este bloco não está pronto ou não está vinculado ao plugin informado.",
     });
@@ -3570,76 +3804,9 @@ app.post("/api/execute-block", async (request, response) => {
       });
     }
   }
-  // The builder intentionally allows a block without declared inputs while
-  // still advertising prior deliveries as available context. Materialize that
-  // context for plugins so browser automations receive the actual values, not
-  // only instructions that refer to them.
-  const currentBlockIndex = execution.blocks.indexOf(blockExecution);
-  const contextValues = execution.methodSnapshot.blocks
-    .slice(0, Math.max(0, currentBlockIndex))
-    .flatMap((previousBlock) =>
-      (previousBlock.outputs ?? []).flatMap((field) => {
-        const previousExecution = execution.blocks.find(
-          (item) => item.blockId === previousBlock.id,
-        );
-        const value = previousExecution?.values[field.key];
-        return value === undefined || isEmptyRuntimeValue(value) ? [] : [{ field, value }];
-      }),
-    );
-  for (const { field, value } of contextValues) {
-    if (!["image", "audio", "video", "file", "files"].includes(field.type)) continue;
-    const port = capability.inputPorts.find(
-      (candidate) =>
-        inputs[candidate.key] === undefined && candidate.acceptedTypes.includes(field.type),
-    );
-    if (!port) continue;
-    inputs[port.key] = value;
-    inputContract.push({
-      id: `context-${field.id}`,
-      portKey: port.key,
-      label: field.label,
-      type: field.type,
-      recordFields: field.recordFields,
-      presentation: field.presentation,
-    });
-  }
-  const textPort = selectPluginImplicitContextPort(capability.inputPorts, inputs);
-  const previousProcessContextText = projectExecutions
-    .filter(
-      (candidate) =>
-        candidate.outputStatus === "completed" &&
-        PROCESS_ORDER.indexOf(candidate.processType) < PROCESS_ORDER.indexOf(execution.processType),
-    )
-    .flatMap((candidate) =>
-      Object.entries(candidate.output?.values ?? {}).map(
-        ([key, value]) =>
-          `${candidate.processType}.${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
-      ),
-    )
-    .join("\n\n");
-  if (textPort && (contextValues.length || previousProcessContextText)) {
-    const currentProcessContextText = contextValues
-      .filter(({ field }) => !["image", "audio", "video", "file", "files"].includes(field.type))
-      .map(
-        ({ field, value }) =>
-          `${field.label}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
-      )
-      .join("\n\n");
-    const contextText = [previousProcessContextText, currentProcessContextText]
-      .filter(Boolean)
-      .join("\n\n");
-    if (contextText) {
-      inputs[textPort.key] = contextText;
-      inputContract.push({
-        id: "previous-block-context",
-        portKey: textPort.key,
-        label: "Contexto dos blocos anteriores",
-        type: "textarea",
-        recordFields: undefined,
-        presentation: undefined,
-      });
-    }
-  }
+  // A plugin receives values only through bindings that are visible in the
+  // Method. Outputs from previous blocks and processes must never be inferred
+  // into an unbound port or serialized as hidden textual context.
   const selectedCollection =
     block.type === "ESCOLHER"
       ? collections.find((item) => item.id === block.collectionId)
@@ -3813,11 +3980,15 @@ app.post("/api/execute-block", async (request, response) => {
       timeZone: "America/Sao_Paulo",
       channel: {
         id: channel.id,
-        name: channel.name,
-        language: channel.language,
-        niche: channel.niche,
+        // Channel content is available only through an explicit block input or
+        // a placeholder resolved in the block instruction.
+        name: "",
+        language: "",
+        niche: "",
       },
-      project: { id: project.id, title: project.title },
+      // The opaque project ID scopes plugin workspaces; its title is content
+      // and must be supplied explicitly when a capability needs it.
+      project: { id: project.id, title: "" },
       processType: body.processType,
       block: {
         type: block.type,
@@ -3833,21 +4004,6 @@ app.post("/api/execute-block", async (request, response) => {
             })),
           }
         : undefined,
-      previousProcessOutputs: projectExecutions
-        .filter(
-          (item) => item.outputStatus === "completed" && item.processType !== body.processType,
-        )
-        .map((item) => item.output!)
-        .filter(Boolean),
-      previousBlockOutputs: execution.blocks
-        .filter((item) => item.status === "completed")
-        .map((item) => ({ blockId: item.blockId, values: item.values })),
-      previousDeliveries: activeProjectDeliveries(projectExecutions).filter(
-        (delivery) =>
-          PROCESS_ORDER.indexOf(delivery.processType) <
-            PROCESS_ORDER.indexOf(execution.processType) ||
-          (delivery.processType === execution.processType && delivery.blockId !== block.id),
-      ),
     },
   };
 

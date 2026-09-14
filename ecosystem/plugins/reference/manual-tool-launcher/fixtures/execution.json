@@ -1,0 +1,28 @@
+{
+  "executionId": "manual-tool-fixture",
+  "traceId": "manual-tool-fixture-trace",
+  "blockId": "manual-tool-fixture-block",
+  "capabilityId": "open-tool",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": {
+    "destinationType": "browser",
+    "browserExecutablePath": "C:\\browser.exe",
+    "browserProfilePath": "C:\\profile",
+    "url": "http://example.test"
+  },
+  "settings": {},
+  "inputs": {},
+  "inputContract": [],
+  "outputContract": [],
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": { "id": "channel", "name": "Canal", "language": "pt-BR", "niche": "Teste" },
+    "project": { "id": "project", "title": "Projeto" },
+    "processType": "theme",
+    "block": { "type": "CRIAR", "name": "Abrir ferramenta", "instructions": "" },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

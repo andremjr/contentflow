@@ -8,7 +8,7 @@ import { testExtensionBridge } from "../../../browser-bridge/test.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.3.3");
+assert.equal(manifest.version, "1.3.4");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
@@ -1019,5 +1019,5 @@ await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), 
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v1.3.3 validado (fila interna sem teto local, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
+  "OK: v1.3.4 validado (fila interna sem teto local, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
 );

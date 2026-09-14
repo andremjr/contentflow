@@ -24,7 +24,7 @@
       "id": "transcribe-to-srt",
       "operator": "Código",
       "blockTypes": ["CRIAR"],
-      "processTypes": ["narration", "editing"],
+      "processTypes": ["narration", "assets", "editing"],
       "inputPorts": [
         {
           "key": "media_files",

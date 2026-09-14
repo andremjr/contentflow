@@ -110,7 +110,7 @@ const promptPreviewSchema = z
 const capabilitySchema = z
   .object({
     id: z.string().min(1).max(100).regex(identifier),
-    operator: z.enum(["IA", "Código"]),
+    operator: z.enum(["Humano", "IA", "Código"]),
     instructionUsage: z.enum(["required", "optional", "not_applicable"]).optional(),
     promptPreview: promptPreviewSchema.optional(),
     blockTypes: z

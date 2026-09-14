@@ -26,6 +26,7 @@ const DOCUMENT_EXTENSIONS = new Set([
   ".htm",
   ".odt",
   ".rtf",
+  ".srt",
   ".epub",
   ".json",
   ".xlsx",
@@ -1342,6 +1343,9 @@ async function attachFiles(client, sessionId, attachments, signal) {
     sessionId,
   );
   const expected = attachments.map((attachment) => attachment.name.toLowerCase());
+  const expectedExtensions = attachments
+    .map((attachment) => extname(attachment.name).toLowerCase().replace(/^\./, ""))
+    .filter(Boolean);
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
@@ -1350,12 +1354,7 @@ async function attachFiles(client, sessionId, attachments, signal) {
       sessionId,
       `(() => { ${PAGE_HELPERS}; const body=(document.body?.innerText||'').toLowerCase(); const previewCount=[...document.querySelectorAll('img')].filter(el => { const r=el.getBoundingClientRect(); return r.width>40 && r.height>40; }).length; return {body, prompt:!!cfPrompt(), previewCount}; })()`,
     );
-    if (
-      state?.prompt &&
-      (expected.every((name) => state.body.includes(name)) ||
-        Number(state.previewCount) > Number(baselinePreviewCount))
-    )
-      return;
+    if (attachmentUploadIsReady(state, expected, expectedExtensions, baselinePreviewCount)) return;
     if (
       /upload failed|falha.*upload|arquivo.*grande|file.*large/i.test(String(state?.body ?? ""))
     ) {
@@ -1370,6 +1369,17 @@ async function attachFiles(client, sessionId, attachments, signal) {
     "TIMEOUT",
     "Os anexos não ficaram prontos no Claude dentro de 120 segundos.",
     true,
+  );
+}
+
+function attachmentUploadIsReady(state, expectedNames, expectedExtensions, baselinePreviewCount) {
+  if (!state?.prompt) return false;
+  const body = String(state.body ?? "").toLowerCase();
+  return (
+    expectedNames.every((name) => body.includes(name)) ||
+    Number(state.previewCount) > Number(baselinePreviewCount) ||
+    (expectedExtensions.length > 0 &&
+      expectedExtensions.every((extension) => body.includes(extension)))
   );
 }
 
@@ -1563,6 +1573,10 @@ export async function execute(request, services) {
   if (request?.invocation?.mode === "configure") return await configureProfile(request, services);
   const settings = request?.settings ?? {};
   const capabilityId = String(request?.capabilityId ?? "generate-text-in-browser");
+  const startMinimized =
+    typeof request?.configuration?.startMinimized === "boolean"
+      ? request.configuration.startMinimized
+      : settings.startMinimized !== false;
   const mockResponse = String(settings?.diagnosticMockResponse ?? "").trim();
   if (mockResponse) {
     try {
@@ -1672,7 +1686,7 @@ export async function execute(request, services) {
       executables,
       profilePath,
       port,
-      startMinimized: settings.startMinimized !== false,
+      startMinimized,
       keepBrowserOpen,
       signal: services.signal,
     });
@@ -1887,4 +1901,6 @@ export const __test = {
   serializeInputs,
   summarizeBlock,
   responsePhase,
+  supportedUploadExtensions: SUPPORTED_UPLOAD_EXTENSIONS,
+  attachmentUploadIsReady,
 };

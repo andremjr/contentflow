@@ -17,6 +17,8 @@ import {
   isAudioGenerationInProgress,
   latestArtifactAudioUrl,
   expandTemplate,
+  AUDIO_PROMPT_INTERVAL_MS,
+  closeBrowserSession,
 } from "./handler.mjs";
 
 test("manifesto possui estrutura e capabilities válidas conforme API v1", async () => {
@@ -47,6 +49,8 @@ test("manifesto possui estrutura e capabilities válidas conforme API v1", async
   assert.deepEqual(voiceCap.processTypes, ["narration"]);
   assert.ok(voiceCap.inputPorts.some((p) => p.key === "text"));
   assert.ok(voiceCap.outputPorts.some((p) => p.key === "audio"));
+  assert.equal(manifest.version, "1.0.3");
+  assert.equal(manifest.settingsSchema.properties.keepBrowserOpen.default, false);
   assert.equal(voiceCap.blockConfigSchema.properties.voice.default, "Caio");
   assert.ok(voiceCap.blockConfigSchema.properties.voice.enum.includes("Luana"));
   assert.deepEqual(voiceCap.blockConfigSchema.properties.style.enum, [
@@ -210,6 +214,27 @@ test("identifica o WAV entregue pelo Playground mesmo sem elemento audio", () =>
     latestArtifactAudioUrl(["https://playground.microsoft.ai/model-assets/voice.json"]),
     "",
   );
+});
+
+test("aguarda cinco segundos entre os prompts de áudio", () => {
+  assert.equal(AUDIO_PROMPT_INTERVAL_MS, 5000);
+});
+
+test("fecha a sessão do navegador depois da execução", async () => {
+  const calls = [];
+  const client = {
+    async send(method) {
+      calls.push(method);
+    },
+    close() {
+      calls.push("client.close");
+    },
+  };
+  const child = { kill: () => calls.push("child.kill") };
+
+  await closeBrowserSession(client, child);
+
+  assert.deepEqual(calls, ["Browser.close", "client.close", "child.kill"]);
 });
 
 test("mock de TTS gera arquivo de áudio e artifact válido sem abrir navegador", async () => {

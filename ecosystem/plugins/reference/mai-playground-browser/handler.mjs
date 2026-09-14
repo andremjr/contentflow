@@ -14,6 +14,7 @@ const DEFAULT_MODEL_VOICE = "mai-voice-2";
 const DEFAULT_MODEL_TEXT = "mai-thinking-1-latest";
 const ALLOWED_ORIGINS = ["https://playground.microsoft.ai"];
 const PROFILE_SETUP_WAIT_MS = Number.POSITIVE_INFINITY;
+export const AUDIO_PROMPT_INTERVAL_MS = 5000;
 
 export function codedError(code, message, retryable = false) {
   const e = new Error(message);
@@ -542,6 +543,16 @@ export async function closeDuplicateProviderPages(client, keepTargetId) {
 export async function detachPage(client, sessionId) {
   if (!sessionId) return;
   await client.send("Target.detachFromTarget", { sessionId });
+}
+
+export async function closeBrowserSession(client, child) {
+  try {
+    await client?.send("Browser.close");
+  } catch {}
+  client?.close();
+  try {
+    child?.kill();
+  } catch {}
 }
 
 const DOM_HELPERS = String.raw`
@@ -1190,6 +1201,10 @@ export async function execute(request, services) {
 
   const settings = request?.settings ?? {};
   const capabilityId = String(request?.capabilityId ?? "generate-voice-in-browser");
+  const startMinimized =
+    typeof request?.configuration?.startMinimized === "boolean"
+      ? request.configuration.startMinimized
+      : settings.startMinimized !== false;
   const mock = String(settings.diagnosticMockResponse ?? "").trim();
 
   // Execução mock para testes determinísticos sem navegador
@@ -1272,9 +1287,8 @@ export async function execute(request, services) {
     const launched = await launchBrowser(
       {
         ...settings,
-        keepBrowserOpen: settings.keepBrowserOpen !== false,
-        startMinimized:
-          capabilityId === "generate-voice-in-browser" ? false : settings.startMinimized !== false,
+        keepBrowserOpen: false,
+        startMinimized,
       },
       profileDir,
       port,
@@ -1333,7 +1347,7 @@ export async function execute(request, services) {
         // The provider needs a small idle interval between completed audio
         // turns and the next text submission. This also prevents a fresh
         // composer from being targeted while its previous turn still renders.
-        if (index > 0) await sleep(2000, services.signal);
+        if (index > 0) await sleep(AUDIO_PROMPT_INTERVAL_MS, services.signal);
         const baseline = await readAudioState(client, sessionId);
         await detachPage(client, sessionId);
         sessionId = undefined;
@@ -1455,16 +1469,6 @@ export async function execute(request, services) {
     );
   } finally {
     await bridge?.dispose();
-    if (taskTargetId && settings.keepBrowserOpen === false) {
-      try {
-        await client?.send("Target.closeTarget", { targetId: taskTargetId });
-      } catch {}
-    }
-    client?.close();
-    if (settings.keepBrowserOpen === false) {
-      try {
-        child?.kill();
-      } catch {}
-    }
+    await closeBrowserSession(client, child);
   }
 }

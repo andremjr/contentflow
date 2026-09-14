@@ -62,6 +62,22 @@ function sleep(ms, signal) {
     signal?.addEventListener("abort", a, { once: true });
   });
 }
+const TIMING = Object.freeze({
+  SHORT: [350, 700],
+  MEDIUM: [600, 1200],
+  LONG: [1000, 1800],
+  DOM_SETTLE: [300, 600],
+  HUMAN_READ: [1200, 2500],
+});
+function dynamicSleep(range, signal) {
+  const [min, max] = Array.isArray(range) ? range : [range, range];
+  const ms = Math.round(min + Math.random() * Math.max(0, max - min));
+  return sleep(ms, signal);
+}
+function calculateJitteredDelay(baseMs) {
+  if (!baseMs || baseMs <= 0) return 0;
+  return Math.round(baseMs * (0.85 + Math.random() * 0.3));
+}
 function serialize(v) {
   if (typeof v === "string") return v;
   try {
@@ -537,6 +553,8 @@ async function launch(settings, p, port, signal) {
     `--user-data-dir=${p}`,
     "--no-first-run",
     "--no-default-browser-check",
+    "--disable-blink-features=AutomationControlled",
+    "--window-size=1280,900",
     URL_NEW,
   ];
   if (settings.startMinimized !== false) {
@@ -681,6 +699,51 @@ function responsePhase({ hasNewResponse, generating, stablePolls }) {
   if (stablePolls < 2) return "stabilizing";
   return "completed";
 }
+function classifyGeminiError(st) {
+  if (!st) return null;
+  const alertTexts = Array.isArray(st.alerts) ? st.alerts.join(" ") : "";
+  const lastResponse = String(st.lastResponseText || "");
+  const combinedRelevant = `${alertTexts} ${lastResponse}`.toLowerCase();
+  // 1. Detecção de atividade incomum / bot detection
+  if (
+    /notamos uma atividade incomum|atividade incomum|unusual activity|unusual traffic|suspicious activity|tr[áa]fego incomum/i.test(
+      combinedRelevant,
+    )
+  ) {
+    const error = err("RATE_LIMIT", "Notamos uma atividade incomum no Gemini ou na rede.", true);
+    error.isUnusualActivity = true;
+    error.retryAfterMs = 45000;
+    return error;
+  }
+
+  // 2. Alta demanda no servidor
+  if (/alta demanda|high demand|experiencing high demand/i.test(combinedRelevant)) {
+    const error = err("RATE_LIMIT", "Alta demanda no Gemini no momento.", true);
+    error.retryAfterMs = 60000;
+    return error;
+  }
+
+  // 3. Limite real de mensagens / cota da conta
+  if (
+    /voc[êe] atingiu o limite de mensagens|you('ve| have) reached (your|the) (message )?limit|tente novamente (ap[óo]s|mais tarde)|try again (later|at)|aguarde at[é|e]|rate limit reached|muitas solicita[çc][õo]es|too many requests|voc[êe] chegou ao limite|limite de mensagens atingido/i.test(
+      combinedRelevant,
+    )
+  ) {
+    const error = err(
+      "RATE_LIMIT",
+      "Você atingiu o limite de mensagens do Gemini no momento.",
+      true,
+    );
+    error.retryAfterMs = 45000;
+    return error;
+  }
+
+  if (/captcha|recaptcha|verifique se [ée] voc[êe]|verify it's you/i.test(combinedRelevant)) {
+    return err("AUTHENTICATION_FAILED", "Gemini exige verificação manual.", true);
+  }
+
+  return null;
+}
 async function waitForDomMutation(c, s, waitMs, signal) {
   if (signal?.aborted) throw err("CANCELLED", "Execução cancelada.");
   const timeoutMs = clamp(waitMs, 1_000, 100, 5_000);
@@ -736,7 +799,7 @@ async function attach(c, signal, activate = false, forceNew = false) {
   await c.send("Runtime.enable", {}, sessionId);
   return { sessionId, targetId: t.targetId, created };
 }
-const HELP = String.raw`function vis(e){if(!e||!(e instanceof Element))return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>8&&r.height>8}function txt(e){return[e?.innerText,e?.textContent,e?.getAttribute?.('aria-label'),e?.getAttribute?.('data-test-id')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()}function prompt(){return [...document.querySelectorAll('[contenteditable="true"][role="textbox"],[role="textbox"][aria-label*="Gemini" i],[role="textbox"][aria-label*="comando" i]')].find(vis)||null}function responses(){const sels=['.model-response-text','structured-content-container','.response-container-content','[data-test-id="model-response"]','message-content'];for(const s of sels){const n=[...document.querySelectorAll(s)].filter(vis);if(n.length)return n}return[]}function state(){const n=responses(),entries=n.map(e=>({text:(e.innerText||e.textContent||'').trim(),links:[...e.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text&&!/^(?:gemini said|gemini disse)$/i.test(x.text.trim())),stop=[...document.querySelectorAll('button')].some(e=>vis(e)&&/parar|stop/i.test(txt(e)));return{texts:entries.map(x=>x.text),entries,stop,body:(document.body?.innerText||'').slice(0,6000)}}`;
+const HELP = String.raw`function vis(e){if(!e||!(e instanceof Element))return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>8&&r.height>8}function txt(e){return[e?.innerText,e?.textContent,e?.getAttribute?.('aria-label'),e?.getAttribute?.('data-test-id')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()}function prompt(){return [...document.querySelectorAll('[contenteditable="true"][role="textbox"],[role="textbox"][aria-label*="Gemini" i],[role="textbox"][aria-label*="comando" i]')].find(vis)||null}function responses(){const sels=['.model-response-text','structured-content-container','.response-container-content','[data-test-id="model-response"]','message-content'];for(const s of sels){const n=[...document.querySelectorAll(s)].filter(vis);if(n.length)return n}return[]}function alerts(){const sels=['[role="alert"]','mat-snack-bar-container','.toast','.snack-bar','.error-banner','snack-bar-container','[data-test-id*="error" i]','[class*="error-message" i]'];const out=[];for(const s of sels){for(const el of document.querySelectorAll(s)){if(vis(el)){const t=txt(el);if(t)out.push(t)}}}return out}function state(){const n=responses(),entries=n.map(e=>({text:(e.innerText||e.textContent||'').trim(),links:[...e.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text&&!/^(?:gemini said|gemini disse)$/i.test(x.text.trim())),stop=[...document.querySelectorAll('button')].some(e=>vis(e)&&/parar|stop/i.test(txt(e)));return{texts:entries.map(x=>x.text),entries,stop,alerts:alerts(),lastResponseText:entries.length?entries[entries.length-1].text:'',body:(document.body?.innerText||'').slice(0,6000)}}`;
 async function newChat(c, s, signal) {
   await c.send("Page.navigate", { url: URL_NEW }, s);
   const d = Date.now() + 20000;
@@ -942,6 +1005,7 @@ async function setPrompt(bridge, text, operationKey) {
   );
 }
 async function send(c, s, bridge, signal, operationKey) {
+  await dynamicSleep(TIMING.SHORT, signal);
   let clickError;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
@@ -958,7 +1022,33 @@ async function send(c, s, bridge, signal, operationKey) {
     } catch (error) {
       clickError = error;
       if (error?.code !== "OUTPUT_VALIDATION_FAILED" || attempt === 19) throw error;
-      await sleep(250, signal);
+      if (attempt >= 2) {
+        try {
+          await c.send(
+            "Input.dispatchKeyEvent",
+            {
+              type: "rawKeyDown",
+              key: "Enter",
+              code: "Enter",
+              windowsVirtualKeyCode: 13,
+              nativeVirtualKeyCode: 13,
+            },
+            s,
+          );
+          await c.send(
+            "Input.dispatchKeyEvent",
+            {
+              type: "keyUp",
+              key: "Enter",
+              code: "Enter",
+              windowsVirtualKeyCode: 13,
+              nativeVirtualKeyCode: 13,
+            },
+            s,
+          );
+        } catch {}
+      }
+      await dynamicSleep(TIMING.SHORT, signal);
     }
   }
   if (clickError) throw clickError;
@@ -971,9 +1061,11 @@ async function send(c, s, bridge, signal, operationKey) {
         s,
         `(()=>{${HELP};const e=prompt();return !(e?.innerText||e?.textContent||'').trim()})()`,
       )
-    )
+    ) {
+      await dynamicSleep(TIMING.DOM_SETTLE, signal);
       return;
-    await sleep(150, signal);
+    }
+    await dynamicSleep([150, 300], signal);
   }
   throw err("OUTPUT_VALIDATION_FAILED", "O Gemini não confirmou o envio do prompt.", true);
 }
@@ -999,9 +1091,9 @@ async function textTurn(c, s, bridge, promptText, settings, signal, operationKey
       stablePolls: stable,
     });
     if (phase === "completed") return { text, links: st.entries?.at(-1)?.links ?? [] };
-    if (/limite|rate limit|upgrade/i.test(st.body))
-      throw err("RATE_LIMIT", "Gemini informou limite de uso.", true);
-    await waitForDomMutation(c, s, 1_000, signal);
+    const detectedError = classifyGeminiError(st);
+    if (detectedError) throw detectedError;
+    await waitForDomMutation(c, s, calculateJitteredDelay(1_000), signal);
   }
   throw err("TIMEOUT", "Gemini não concluiu resposta.", true);
 }
@@ -1018,7 +1110,12 @@ async function mediaTurn(c, s, bridge, promptText, settings, signal, type, opera
       `(()=>{const els=[...document.querySelectorAll(${JSON.stringify(selector)})].filter(e=>${type === "image" ? "e.complete&&e.naturalWidth>=256&&e.naturalHeight>=256&&!/profile|avatar|logo/i.test(e.alt||'')" : "(e.currentSrc||e.src||e.querySelector?.('source')?.src)"});const e=els.at(-1);return{count:els.length,src:e?.currentSrc||e?.src||e?.querySelector?.('source')?.src||'',label:e?.alt||'Mídia gerada'}})()`,
     );
     if (st.count > base && st.src) return { text: st.label, links: [] };
-    await sleep(1200, signal);
+    const pageState = await responseState(c, s).catch(() => null);
+    if (pageState) {
+      const detectedError = classifyGeminiError(pageState);
+      if (detectedError) throw detectedError;
+    }
+    await dynamicSleep(TIMING.LONG, signal);
   }
   throw err("TIMEOUT", `Gemini não concluiu ${type}.`, true);
 }
@@ -1134,6 +1231,10 @@ export async function execute(request, services) {
   const settings = request?.settings ?? {},
     id = String(request?.capabilityId ?? "generate-text-in-browser"),
     mock = String(settings.diagnosticMockResponse ?? "").trim();
+  const startMinimized =
+    typeof request?.configuration?.startMinimized === "boolean"
+      ? request.configuration.startMinimized
+      : settings.startMinimized !== false;
   if (mock) {
     try {
       if (id === "choose-library-item-in-browser")
@@ -1190,7 +1291,7 @@ export async function execute(request, services) {
       {
         ...settings,
         keepBrowserOpen: settings.keepBrowserOpen !== false,
-        startMinimized: settings.startMinimized !== false,
+        startMinimized,
       },
       path,
       port,
@@ -1259,11 +1360,12 @@ export async function execute(request, services) {
         } catch (e) {
           last = e;
           if (!e.retryable || a === retries) break;
-          await sleep(2000 * (a + 1), services.signal);
+          const waitMs = e.retryAfterMs || 2000 * (a + 1);
+          await dynamicSleep([waitMs, calculateJitteredDelay(waitMs)], services.signal);
         }
       }
       if (last) throw last;
-      if (i < parts.length - 1) await sleep(0, services.signal);
+      if (i < parts.length - 1) await dynamicSleep(TIMING.SHORT, services.signal);
     }
     const combined = responses.map((x) => x.text).join("\n\n");
     const conversationId = await currentConversationUrl(client, sessionId);
@@ -1306,7 +1408,12 @@ export async function execute(request, services) {
   } catch (e) {
     if (services.signal?.aborted || e.code === "CANCELLED")
       return failure("CANCELLED", "Execução cancelada.");
-    return failure(e.code || "UPSTREAM_UNAVAILABLE", e.message || "Falha Gemini.", !!e.retryable);
+    return failure(
+      e.code || "UPSTREAM_UNAVAILABLE",
+      e.message || "Falha Gemini.",
+      !!e.retryable,
+      e.retryAfterMs,
+    );
   } finally {
     bridge?.dispose();
     if (closeTaskTarget && taskTargetId)
@@ -1352,4 +1459,8 @@ export const __test = {
   searchValues,
   summarize,
   responsePhase,
+  TIMING,
+  dynamicSleep,
+  calculateJitteredDelay,
+  classifyGeminiError,
 };

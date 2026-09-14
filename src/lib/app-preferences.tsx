@@ -45,6 +45,7 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 type Translation = [english: string, spanish: string];
 
 const PHRASES: Record<string, Translation> = {
+  "Iniciar minimizado": ["Start minimized", "Iniciar minimizado"],
   "Credenciais e conexões": ["Credentials and connections", "Credenciales y conexiones"],
   "Adicione, substitua e organize chaves protegidas no cofre local.": [
     "Add, replace, and organize keys protected in the local vault.",
@@ -840,12 +841,65 @@ const PHRASES: Record<string, Translation> = {
     "Buscar por nombre, Canal, proceso o acción...",
   ],
   "Recursos para criar Métodos": ["Resources for creating Methods", "Recursos para crear Métodos"],
+  "Use um agente conectado ao ContentFlow, o agente guiado ou a skill atualizada.": [
+    "Use an agent connected to ContentFlow, the guided agent, or the updated skill.",
+    "Usa un agente conectado a ContentFlow, el agente guiado o la skill actualizada.",
+  ],
+  "Conectar agente via MCP": ["Connect agent via MCP", "Conectar agente mediante MCP"],
+  "Configuração direta no canal": [
+    "Direct channel configuration",
+    "Configuración directa en el canal",
+  ],
+  "Conectar um agente ao ContentFlow": [
+    "Connect an agent to ContentFlow",
+    "Conectar un agente a ContentFlow",
+  ],
+  "Use esta configuração em qualquer agente compatível com MCP. O ContentFlow precisa permanecer aberto durante a criação e os testes dos Métodos.":
+    [
+      "Use this configuration with any MCP-compatible agent. ContentFlow must remain open while Methods are created and tested.",
+      "Usa esta configuración con cualquier agente compatible con MCP. ContentFlow debe permanecer abierto durante la creación y las pruebas de los Métodos.",
+    ],
+  "Abra as configurações MCP do seu agente.": [
+    "Open your agent's MCP settings.",
+    "Abre la configuración MCP de tu agente.",
+  ],
+  "Cole a configuração abaixo e inicie a conexão.": [
+    "Paste the configuration below and start the connection.",
+    "Pega la configuración de abajo e inicia la conexión.",
+  ],
+  "Descreva como você produz e peça para o agente validar antes de aplicar.": [
+    "Describe how you produce content and ask the agent to validate before applying.",
+    "Describe cómo produces contenido y pide al agente que valide antes de aplicar.",
+  ],
+  "O agente pode ler este canal, os Métodos e as capacidades dos plugins instalados. Ele pode associar conexões locais existentes, mas não cria canais nem plugins e nunca recebe senhas, tokens ou outros segredos.":
+    [
+      "The agent can read this channel, its Methods, and installed plugin capabilities. It can associate existing local connections, but it cannot create channels or plugins and never receives passwords, tokens, or other secrets.",
+      "El agente puede leer este canal, sus Métodos y las capacidades de los plugins instalados. Puede asociar conexiones locales existentes, pero no crea canales ni plugins y nunca recibe contraseñas, tokens ni otros secretos.",
+    ],
+  "Preparando configuração MCP...": [
+    "Preparing MCP configuration...",
+    "Preparando la configuración MCP...",
+  ],
+  "Não foi possível preparar a conexão MCP.": [
+    "The MCP connection could not be prepared.",
+    "No se pudo preparar la conexión MCP.",
+  ],
+  "Configuração do servidor MCP local": [
+    "Local MCP server configuration",
+    "Configuración del servidor MCP local",
+  ],
+  "Copiar configuração": ["Copy configuration", "Copiar configuración"],
+  Copiado: ["Copied", "Copiado"],
+  "Configuração MCP copiada": ["MCP configuration copied", "Configuración MCP copiada"],
+  "Alguns agentes pedem os campos command e args separadamente; os mesmos valores aparecem nesta configuração.":
+    [
+      "Some agents request the command and args fields separately; the same values appear in this configuration.",
+      "Algunos agentes solicitan los campos command y args por separado; los mismos valores aparecen en esta configuración.",
+    ],
   "Use o agente guiado ou baixe a skill atualizada para trabalhar com seu agente de IA.": [
     "Use the guided agent or download the updated skill to work with your AI agent.",
     "Usa el agente guiado o descarga la skill actualizada para trabajar con tu agente de IA.",
   ],
-  "Abrir agente de Métodos": ["Open Methods agent", "Abrir agente de Métodos"],
-  "Criação guiada no ChatGPT": ["Guided creation in ChatGPT", "Creación guiada en ChatGPT"],
   "Baixar skill de Métodos": ["Download Methods skill", "Descargar skill de Métodos"],
   "Contrato e referências atualizados": [
     "Updated contract and references",

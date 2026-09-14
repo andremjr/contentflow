@@ -1788,6 +1788,10 @@ export async function execute(request, services) {
   const settings = request?.settings ?? {},
     capabilityId = String(request?.capabilityId ?? "generate-text-in-browser"),
     mock = String(settings.diagnosticMockResponse ?? "").trim();
+  const startMinimized =
+    typeof request?.configuration?.startMinimized === "boolean"
+      ? request.configuration.startMinimized
+      : settings.startMinimized !== false;
   if (mock) {
     try {
       if (capabilityId === "choose-library-item-in-browser")
@@ -1875,7 +1879,7 @@ export async function execute(request, services) {
       executables: await resolveChromeExecutables(settings),
       profilePath,
       port,
-      startMinimized: settings.startMinimized !== false,
+      startMinimized,
       keepBrowserOpen,
       signal: services.signal,
     });

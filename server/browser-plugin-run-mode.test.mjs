@@ -8,6 +8,7 @@ const browserPlugins = [
   "gemini-browser-studio",
   "google-flow-browser-images",
   "grok-browser-studio",
+  "mai-playground-browser",
   "meta-ai-browser-studio",
 ];
 
@@ -27,9 +28,16 @@ test("todos os jobs de navegador iniciam minimizados por padrão", async () => {
       true,
       `${plugin} precisa manter startMinimized como padrão`,
     );
+    for (const capability of manifest.capabilities) {
+      assert.deepEqual(
+        capability.blockConfigSchema?.properties?.startMinimized,
+        { type: "boolean", default: true },
+        `${plugin}/${capability.id} precisa expor startMinimized no bloco`,
+      );
+    }
     assert.ok(
-      source.includes("settings.startMinimized !== false"),
-      `${plugin} precisa respeitar startMinimized em qualquer modo de job`,
+      source.includes('typeof request?.configuration?.startMinimized === "boolean"'),
+      `${plugin} precisa priorizar a configuração startMinimized do bloco`,
     );
   }
 });

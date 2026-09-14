@@ -153,10 +153,17 @@ function validateConfiguration(value) {
 }
 
 function validateSettings(settings) {
-  if (!isPlainObject(settings ?? {}) || Object.keys(settings ?? {}).length) {
+  const value = settings ?? {};
+  const keys = isPlainObject(value) ? Object.keys(value) : [];
+  if (
+    !isPlainObject(value) ||
+    keys.some((key) => key !== "connectionId") ||
+    ("connectionId" in value &&
+      (typeof value.connectionId !== "string" || !value.connectionId.trim()))
+  ) {
     throw new PluginFailure(
       "INVALID_CONFIGURATION",
-      "Este plugin não possui configurações locais adicionais.",
+      "As configurações locais do plugin são inválidas.",
     );
   }
 }
@@ -771,4 +778,5 @@ export const __test = Object.freeze({
   maximumSegments,
   targetSegments,
   validateConfiguration,
+  validateSettings,
 });

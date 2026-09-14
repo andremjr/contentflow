@@ -538,7 +538,7 @@ function ResultValue({
   presentation,
   value,
   source,
-  showCharacterCount = false,
+  showCharacterCount = true,
 }: {
   label: string;
   type: Parameters<typeof RuntimeValueViewer>[0]["type"];
@@ -607,7 +607,13 @@ function CollapsibleResultValue({
         <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
       </summary>
       <div className="border-t border-border/50 p-3">
-        <RuntimeValueViewer type={type} presentation={presentation} value={value} compact />
+        <RuntimeValueViewer
+          type={type}
+          presentation={presentation}
+          value={value}
+          compact
+          showCharacterCount
+        />
       </div>
     </details>
   );

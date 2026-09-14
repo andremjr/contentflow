@@ -24,7 +24,7 @@ export type Answers = {
   author: string;
   license: string;
   description: string;
-  operator: "IA" | "Código";
+  operator: "Humano" | "IA" | "Código";
   blockTypes: Array<"BUSCAR" | "ESCOLHER" | "CRIAR" | "VALIDAR">;
   input: { key: string; label: string; type: DataType };
   output: { key: string; label: string; type: DataType };

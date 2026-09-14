@@ -4179,7 +4179,10 @@ export async function execute(request, services) {
 
   const settings = request?.settings ?? {};
   const keepBrowserOpen = settings.keepBrowserOpen === true;
-  const startMinimized = settings.startMinimized !== false;
+  const startMinimized =
+    typeof request?.configuration?.startMinimized === "boolean"
+      ? request.configuration.startMinimized
+      : settings.startMinimized !== false;
   const requestTimeoutSeconds = Number.isInteger(settings.requestTimeoutSeconds)
     ? settings.requestTimeoutSeconds
     : isVideoCapability

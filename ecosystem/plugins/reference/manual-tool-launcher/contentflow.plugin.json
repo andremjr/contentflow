@@ -1,0 +1,64 @@
+{
+  "apiVersion": "1",
+  "id": "contentflow.manual-tool-launcher",
+  "name": "Abrir ferramenta manual",
+  "version": "1.0.1",
+  "description": "Abre um navegador configurado com perfil e URL HTTPS ou um aplicativo local para o operador humano continuar o trabalho manualmente.",
+  "author": "ContentFlow",
+  "license": "LicenseRef-ContentFlow-Source-Available-1.0",
+  "branding": { "iconPath": "assets/icon.png" },
+  "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
+  "entrypoint": "handler.mjs",
+  "permissions": ["process"],
+  "deliveryTypes": ["processing"],
+  "capabilities": [
+    {
+      "id": "open-tool",
+      "operator": "Humano",
+      "instructionUsage": "not_applicable",
+      "blockTypes": ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "key": "opened",
+          "label": "Ferramenta aberta",
+          "producedTypes": ["boolean"],
+          "required": false
+        }
+      ],
+      "execution": { "mode": "immediate", "defaultTimeoutMs": 30000, "maxConcurrency": 1 },
+      "sideEffects": ["subprocess"],
+      "cost": { "model": "free", "estimateSupported": false },
+      "dataPolicy": { "sendsDataToThirdParties": false },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "destinationType": {
+            "type": "string",
+            "title": "Tipo de destino",
+            "enum": ["browser", "application"],
+            "default": "browser"
+          },
+          "browserExecutablePath": {
+            "type": "string",
+            "title": "Executável do navegador",
+            "default": ""
+          },
+          "browserProfilePath": { "type": "string", "title": "Pasta do perfil", "default": "" },
+          "url": { "type": "string", "title": "URL HTTPS", "default": "https://" },
+          "applicationExecutablePath": {
+            "type": "string",
+            "title": "Executável do aplicativo",
+            "default": ""
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "opened": { "type": "boolean" } }
+      }
+    }
+  ]
+}
