@@ -25,9 +25,13 @@ body {
 }
 .intro {
   margin-top: 45px;
-  padding: 78px 72px;
+  padding: 56px 64px;
   border-radius: 22px;
   background: linear-gradient(120deg, #eff1ff, #fafbff 62%, #e2f7ff);
+  display: grid;
+  grid-template-columns: 0.92fr 1.08fr;
+  gap: 58px;
+  align-items: center;
 }
 .intro p,
 .heading > p,
@@ -57,6 +61,16 @@ body {
   line-height: 1.65;
   margin-top: 20px;
 }
+.intro-summary { display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin-top:28px; color:#363c58; font:500 10px "DM Mono"; letter-spacing:.15px; }
+.intro-summary i { width:4px; height:4px; border-radius:50%; background:#7b70ee; }
+.intro-map { padding:18px; border:1px solid #d9dff2; border-radius:15px; background:rgba(255,255,255,.8); box-shadow:0 12px 35px rgba(84,99,150,.08); }
+.intro-map > small { display:block; padding:0 5px 13px; color:#65729d; font:500 9px "DM Mono"; letter-spacing:1px; }
+.intro-map article { display:grid; grid-template-columns:32px 1fr auto; align-items:center; gap:12px; padding:13px 14px; border:1px solid #e0e5f1; border-radius:10px; background:#fff; }
+.intro-map article > b { display:grid; place-items:center; width:29px; height:29px; border-radius:50%; background:#edf0ff; color:#6156df; font:500 10px "DM Mono"; }
+.intro-map article span { display:block; margin:0; color:#707a95; font:500 9px "DM Mono"; letter-spacing:.75px; }
+.intro-map article strong { display:block; margin-top:3px; color:#25304d; font-size:12px; line-height:1.35; }
+.intro-map article em { border:1px solid #cbd3ed; border-radius:99px; padding:4px 7px; color:#5e55d5; font:500 8px "DM Mono"; font-style:normal; letter-spacing:.5px; }
+.intro-map > i { display:block; height:14px; color:#8d87e9; text-align:center; font-style:normal; font-size:12px; line-height:14px; }
 .layers {
   padding: 78px 0;
 }
@@ -208,6 +222,8 @@ footer a:first-of-type {
   .intro {
     margin: 20px 16px;
     padding: 42px 25px;
+    grid-template-columns: 1fr;
+    gap: 32px;
   }
   .layers,
   .operators {
