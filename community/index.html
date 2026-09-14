@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="community.css" />
     <link rel="stylesheet" href="shared-header.css" />
     <style>
-      .hero-proof{max-width:535px;margin:0 0 22px;color:#fff;font-size:13px;line-height:1.55;font-weight:700}.actions{flex-wrap:wrap;gap:11px}.cta.secondary{background:transparent;border:1px solid #a9b0e7;color:#fff;min-width:250px}.special-note{max-width:520px;margin:13px 0 0;color:#c9cfea;font-size:11px;line-height:1.5}
+      .hero-proof{max-width:535px;margin:0 0 22px;color:#fff;font-size:13px;line-height:1.55;font-weight:700}.actions{flex-wrap:wrap;gap:11px}.cta.secondary{background:transparent;border:1px solid #a9b0e7;color:#fff;min-width:250px}.special-note{max-width:520px;margin:13px 0 0;color:#c9cfea;font-size:11px;line-height:1.5}.join-card .special-offer{width:100%;margin-top:10px;background:#f0efff;color:#4e47c5;border:1px solid #d8d5ff}
     </style>
   </head>
   <body>
@@ -221,6 +221,7 @@
             rel="noreferrer"
             ><span data-k="cta">Entrar na Comunidade VIP</span><b>→</b></a
           >
+          <a class="cta special-offer" href="https://wa.me/5516992821590" target="_blank" rel="noreferrer"><span data-special="cta">20% de desconto no primeiro mês</span><b>↗</b></a>
         </div>
       </section>
     </main>
@@ -238,7 +239,7 @@
       setLanguage(localStorage.getItem('contentflow-site-language') || 'pt');
     </script>
     <script>
-      const specialCopy={pt:{proof:'Entre para ter direção nas decisões do canal — com aulas, repertório e espaço para trazer o que você está vivendo agora.',cta:'Condição especial no primeiro mês',note:'Quer conhecer a comunidade no primeiro mês sem entrar em recorrência? Fale comigo no WhatsApp.'},en:{proof:'Join to make clearer decisions for your channel — with classes, judgment, and room to bring what you are facing right now.',cta:'Special first-month option',note:'Want to explore the community in the first month without starting a recurring membership? Talk to me on WhatsApp.'},es:{proof:'Entra para tomar decisiones más claras para tu canal — con clases, criterio y espacio para traer lo que estás viviendo ahora.',cta:'Condición especial el primer mes',note:'¿Quieres conocer la comunidad el primer mes sin comenzar una suscripción recurrente? Háblame por WhatsApp.'}};
+      const specialCopy={pt:{proof:'Entre para ter direção nas decisões do canal — com aulas, repertório e espaço para trazer o que você está vivendo agora.',cta:'20% de desconto no primeiro mês',note:'Quer conhecer a comunidade no primeiro mês sem entrar em recorrência? Fale comigo no WhatsApp.'},en:{proof:'Join to make clearer decisions for your channel — with classes, judgment, and room to bring what you are facing right now.',cta:'20% off your first month',note:'Want to explore the community in the first month without starting a recurring membership? Talk to me on WhatsApp.'},es:{proof:'Entra para tomar decisiones más claras para tu canal — con clases, criterio y espacio para traer lo que estás viviendo ahora.',cta:'20% de descuento el primer mes',note:'¿Quieres conocer la comunidad el primer mes sin comenzar una suscripción recurrente? Háblame por WhatsApp.'}};
       function setSpecialCopy(lang){document.querySelectorAll('[data-special]').forEach(el=>el.textContent=specialCopy[lang][el.dataset.special])};setSpecialCopy(localStorage.getItem('contentflow-site-language')||'pt');document.querySelectorAll('[data-lang]').forEach(btn=>btn.addEventListener('click',()=>setSpecialCopy(btn.dataset.lang)));
     </script>
   </body>
