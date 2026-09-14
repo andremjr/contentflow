@@ -5,6 +5,7 @@
   --violet: #6257ff;
   --line: #e6e9f1;
 }
+.layers{padding:78px 0}.heading{display:block;margin-bottom:34px}.layer-grid article{min-height:230px}.layer-grid small{margin-top:30px}.operators{padding:80px 0;text-align:left}.operators>div{margin-top:31px}.processes{padding:80px 0}.section-lead{max-width:650px;margin-bottom:30px}.process-grid article{min-height:145px}.example{padding-top:82px;padding-bottom:82px;gap:80px}.study-grid{margin-top:80px;margin-bottom:80px}.study-grid article{min-height:205px}.study-grid h3{margin-top:30px}.questions{margin-bottom:80px;text-align:left}.questions>div{max-width:900px;margin:30px 0 0}
 * {
   box-sizing: border-box;
 }
@@ -57,13 +58,11 @@ body {
   margin-top: 20px;
 }
 .layers {
-  padding: 110px 0;
+  padding: 78px 0;
 }
 .heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: end;
-  margin-bottom: 36px;
+  display: block;
+  margin-bottom: 34px;
 }
 .heading h2 {
   font-size: 42px;
@@ -135,8 +134,8 @@ body {
   color: #5d55dd;
 }
 .operators {
-  padding: 105px 0;
-  text-align: center;
+  padding: 80px 0;
+  text-align: left;
 }
 .operators h2 {
   font-size: 42px;
