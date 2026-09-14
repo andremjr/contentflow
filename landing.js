@@ -234,7 +234,7 @@ document
   .querySelectorAll("[data-language]")
   .forEach((b) => (b.onclick = () => setLanguage(b.dataset.language)));
 setLanguage(localStorage.getItem("contentflow-site-language") || "pt");
-const extraLabels = { pt: { navCommunity: "Comunidade VIP", freeForever: "ContentFlow é gratuito. E sempre será." }, en: { navCommunity: "VIP Community", freeForever: "ContentFlow is free. And always will be." }, es: { navCommunity: "Comunidad VIP", freeForever: "ContentFlow es gratuito. Y siempre lo será." } };
-function setExtraLabels() { const language = localStorage.getItem("contentflow-site-language") || "pt"; document.querySelectorAll('[data-i18n="navCommunity"], [data-i18n="freeForever"]').forEach((node) => node.innerHTML = extraLabels[language][node.dataset.i18n]); }
+const extraLabels = { pt: { navCommunity: "Comunidade VIP", navEcosystem: "Ecossistema", freeForever: "ContentFlow é gratuito. E sempre será." }, en: { navCommunity: "VIP Community", navEcosystem: "Ecosystem", freeForever: "ContentFlow is free. And always will be." }, es: { navCommunity: "Comunidad VIP", navEcosystem: "Ecosistema", freeForever: "ContentFlow es gratuito. Y siempre lo será." } };
+function setExtraLabels() { const language = localStorage.getItem("contentflow-site-language") || "pt"; document.querySelectorAll('[data-i18n="navCommunity"], [data-i18n="navEcosystem"], [data-i18n="freeForever"]').forEach((node) => node.innerHTML = extraLabels[language][node.dataset.i18n]); }
 setExtraLabels();
 document.querySelectorAll("[data-language]").forEach((button) => button.addEventListener("click", setExtraLabels));
