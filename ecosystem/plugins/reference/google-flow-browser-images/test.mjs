@@ -8,7 +8,7 @@ import { testExtensionBridge } from "../../../browser-bridge/test.mjs";
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
-assert.equal(manifest.version, "1.3.4");
+assert.equal(manifest.version, "1.3.6");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
@@ -47,6 +47,45 @@ assert.equal(cap.blockConfigSchema.properties.delayBetweenPromptsMs.default, 600
 assert.equal(cap.blockConfigSchema.properties.rateLimitRetryAttempts.default, 8);
 assert.equal(cap.blockConfigSchema.properties.maxReferenceImages.maximum, 10);
 assert.equal(cap.blockConfigSchema.properties.maxImagesPerPrompt.maximum, 4);
+
+const productionCap = manifest.capabilities.find(
+  (item) => item.id === "produce-visual-assets-in-browser",
+);
+assert.ok(productionCap);
+assert.deepEqual(
+  productionCap.inputPorts.map((port) => port.key),
+  ["prompts", "character_prompts", "animation_prompts", "reference_images", "project_url"],
+);
+assert.deepEqual(
+  productionCap.outputPorts.map((port) => port.key),
+  ["images", "character_references", "videos", "project_url"],
+);
+assert.equal(productionCap.blockConfigSchema.properties.productionMode.default, "images_only");
+assert.deepEqual(
+  productionCap.blockConfigSchema.properties.productionMode.oneOf.map((item) => item.const),
+  ["images_only", "text_to_video", "images_then_selected_videos", "images_to_video_all"],
+);
+assert.equal(productionCap.blockConfigSchema.properties.maxVideosToAnimate.default, 3);
+assert.equal(productionCap.blockConfigSchema.properties.maxCharacterReferences.default, 1);
+assert.equal(productionCap.blockConfigSchema.properties.saveCharacterReferences.default, true);
+assert.equal(productionCap.blockConfigSchema.properties.enableCharacterConsistency.default, false);
+assert.deepEqual(productionCap.blockConfigSchema.properties.characterPrompts.visibleWhen, {
+  property: "enableCharacterConsistency",
+  values: [true],
+});
+assert.deepEqual(
+  productionCap.blockConfigSchema.properties.animationSelection.oneOf.map((item) => item.const),
+  ["first", "last", "evenly_spaced", "manual_indexes"],
+);
+assert.deepEqual(__test.selectAnimationIndexes(10, { maxVideosToAnimate: 3 }), [0, 1, 2]);
+assert.deepEqual(
+  __test.selectAnimationIndexes(10, {
+    maxVideosToAnimate: 3,
+    animationSelection: "manual_indexes",
+    animationIndexes: "1, 5-6, 9",
+  }),
+  [0, 4, 5],
+);
 
 const closeCalls = [];
 await __test.maybeCloseBrowser(
@@ -1013,11 +1052,13 @@ assert.ok(source.includes("DOM.setFileInputFiles"));
 assert.ok(source.includes("limite do modelo atingido"));
 assert.ok(source.includes("Nano Banana 2 Lite"));
 assert.ok(source.includes("Quantidade por prompt confirmada"));
+assert.ok(source.includes("produce-visual-assets-in-browser"));
+assert.ok(source.includes("Produção visual:"));
 assert.ok(!source.includes("createFallbackArtifact"));
 assert.ok(!source.includes("FALLBACK_IMAGE_BASE64"));
 await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), /ENOENT/);
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v1.3.4 validado (fila interna sem teto local, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
+  "OK: v1.3.6 validado (modos de produção visual, fila interna sem teto local, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
 );

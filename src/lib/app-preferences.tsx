@@ -45,6 +45,9 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 type Translation = [english: string, spanish: string];
 
 const PHRASES: Record<string, Translation> = {
+  "O que este plugin faz": ["What this plugin does", "Qué hace este plugin"],
+  "Recursos disponíveis": ["Available features", "Funciones disponibles"],
+  "Detalhes técnicos": ["Technical details", "Detalles técnicos"],
   "Iniciar minimizado": ["Start minimized", "Iniciar minimizado"],
   "Credenciais e conexões": ["Credentials and connections", "Credenciales y conexiones"],
   "Adicione, substitua e organize chaves protegidas no cofre local.": [

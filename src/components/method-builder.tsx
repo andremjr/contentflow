@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAppPreferences } from "@/lib/app-preferences";
+import { pluginCapabilityLabel } from "@/lib/plugin-capability-label";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
 import { LineListTextarea } from "@/components/line-list-textarea";
@@ -1122,13 +1123,7 @@ function BlockEditor({
           capability.operator === block.operator &&
           (capability.operator === "Humano" ||
             (capability.blockTypes.includes(block.type) &&
-              (!capability.processTypes || capability.processTypes.includes(processType)) &&
-              (block.inputs ?? []).every((field) =>
-                capability.inputPorts.some((port) => port.acceptedTypes.includes(field.type)),
-              ) &&
-              (block.outputs ?? []).every((field) =>
-                capability.outputPorts.some((port) => port.producedTypes.includes(field.type)),
-              ))),
+              (!capability.processTypes || capability.processTypes.includes(processType)))),
       )
       .map((capability) => ({ plugin, capability })),
   );
@@ -1161,15 +1156,23 @@ function BlockEditor({
   )
     ? String(generationMode)
     : String(generationModeSchema?.default ?? "single");
-  const primaryConfigurationEntries = Object.entries(configProperties).filter(([key]) =>
-    ["model", "voice_id"].includes(key),
+  const isConfigurationVisible = (schema: JsonSchema) => {
+    const rule = schema.visibleWhen;
+    return !rule || rule.values.includes(block.plugin?.configuration[rule.property] as never);
+  };
+  const primaryConfigurationEntries = Object.entries(configProperties).filter(
+    ([key, schema]) =>
+      ["model", "voice_id", "productionMode"].includes(key) && isConfigurationVisible(schema),
   );
   const advancedConfigurationEntries = Object.entries(configProperties).filter(
-    ([key]) =>
+    ([key, schema]) =>
+      isConfigurationVisible(schema) &&
       !(supportsItemSequence && key === "generationMode") &&
       !profileConfigurationKeys.includes(key) &&
       !primaryConfigurationEntries.some(([primaryKey]) => primaryKey === key),
   );
+  const isCompactConfigurationField = ([, schema]: [string, JsonSchema]) =>
+    schema.type === "integer" || schema.type === "number" || schema.type === "boolean";
   const conversationSources = PROCESS_ORDER.flatMap((candidateProcess) => {
     const processIndex = PROCESS_ORDER.indexOf(candidateProcess);
     const currentProcessIndex = PROCESS_ORDER.indexOf(processType);
@@ -1418,7 +1421,7 @@ function BlockEditor({
             <p className="text-sm font-semibold">Plugin executor</p>
             <p className="truncate text-[11px] text-muted-foreground">
               {selectedPlugin && selectedCapability
-                ? `${selectedPlugin.manifest.name} · ${selectedCapability.id}`
+                ? `${selectedPlugin.manifest.name} · ${pluginCapabilityLabel(selectedCapability)}`
                 : "Selecione quem executará esta ação"}
             </p>
           </div>
@@ -1517,7 +1520,7 @@ function BlockEditor({
                       key={`${plugin.id}::${capability.id}`}
                       value={`${plugin.id}::${capability.id}`}
                     >
-                      {plugin.manifest.name} · {capability.id}
+                      {plugin.manifest.name} · {pluginCapabilityLabel(capability)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1790,8 +1793,15 @@ function BlockEditor({
                   <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
                     Configurações avançadas do executor ({advancedConfigurationEntries.length})
                   </summary>
-                  <div className="mt-3 space-y-3">
-                    {advancedConfigurationEntries.map(renderConfigurationField)}
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    {advancedConfigurationEntries.map((entry) => (
+                      <div
+                        key={entry[0]}
+                        className={isCompactConfigurationField(entry) ? undefined : "md:col-span-2"}
+                      >
+                        {renderConfigurationField(entry)}
+                      </div>
+                    ))}
                   </div>
                 </details>
               )}

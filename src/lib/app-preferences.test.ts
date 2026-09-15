@@ -117,6 +117,12 @@ test("translates the compact plugin contract validator", () => {
   assert.equal(translate("Prévia do envio à IA", "es"), "Vista previa del envío a la IA");
 });
 
+test("translates the simplified plugin capability presentation", () => {
+  assert.equal(translate("O que este plugin faz", "en"), "What this plugin does");
+  assert.equal(translate("Recursos disponíveis", "es"), "Funciones disponibles");
+  assert.equal(translate("Detalhes técnicos", "en"), "Technical details");
+});
+
 test("translates execution attention and error notifications", () => {
   assert.equal(translate("Pendências e erros", "en"), "Tasks and errors");
   assert.equal(translate("Pendências e erros", "es"), "Tareas y errores");

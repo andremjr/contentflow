@@ -237,6 +237,7 @@ Cada plugin possui `contentflow.plugin.json` na raiz:
 - `version` segue SemVer.
 - `minCoreVersion` declara a versão mínima pretendida. Na versão atual ele é metadado de compatibilidade; o autor ainda deve testar e informar a versão suportada no README.
 - `capability.id` é único dentro do plugin e não muda depois de publicado.
+- `capability.name` e `capability.description` são opcionais, exibidos ao usuário para explicar a entrega da capability. O identificador técnico permanece interno ao contrato e pode ser consultado nos detalhes técnicos.
 - `license` identifica a licença do pacote com expressão SPDX quando existir; licenças personalizadas usam um identificador estável e incluem o arquivo integral no pacote.
 - `homepage` e `repository`, quando informados, usam URLs HTTPS e apontam para páginas controladas pelo publicador.
 - Nome, descrição, autor, licença e URLs são metadados não confiáveis: a interface escapa o conteúdo e nunca renderiza HTML fornecido pelo manifesto.

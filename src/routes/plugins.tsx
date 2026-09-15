@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/select";
 import { PROCESS_META, type BlockType, type UniversalProcess } from "@/lib/domain";
 import { ECOSYSTEM_DOWNLOADS } from "@/lib/ecosystem-downloads";
+import { pluginCapabilityDescription, pluginCapabilityLabel } from "@/lib/plugin-capability-label";
 import type { PluginDeliveryType, PluginManifest } from "@/lib/plugin-contract";
 
 export const Route = createFileRoute("/plugins")({
@@ -747,7 +748,7 @@ function PluginCard({
         </div>
 
         <section>
-          <h3 className="text-xs font-semibold">Entregas e capacidades</h3>
+          <h3 className="text-xs font-semibold">O que este plugin faz</h3>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {types.map((type) => {
               const meta = DELIVERY_META[type];
@@ -762,35 +763,67 @@ function PluginCard({
               );
             })}
           </div>
-          <div className="mt-3 divide-y divide-border rounded-xl border border-border px-3">
-            {manifest.capabilities.map((capability) => (
-              <div key={capability.id} className="py-3">
-                <div className="flex flex-wrap items-center gap-1.5">
+          <div className="mt-3 space-y-2">
+            {manifest.capabilities.slice(0, 3).map((capability) => (
+              <div
+                key={capability.id}
+                className="rounded-lg border border-border/70 bg-card/50 px-3 py-2.5"
+              >
+                <div className="flex items-center gap-2">
                   {capability.operator === "IA" ? (
                     <Bot className="size-3.5 text-brand-soft" />
                   ) : (
                     <Code2 className="size-3.5 text-brand-soft" />
                   )}
-                  <span className="text-xs font-medium">{capability.id}</span>
-                  <Badge variant="outline" className="ml-auto text-[9px]">
-                    {capability.operator}
-                  </Badge>
+                  <span className="text-xs font-medium">{pluginCapabilityLabel(capability)}</span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {capability.blockTypes.map((block) => (
-                    <Badge key={block} variant="secondary" className="text-[9px]">
-                      {BLOCK_LABEL[block]}
-                    </Badge>
-                  ))}
-                  {(capability.processTypes ?? []).map((process) => (
-                    <Badge key={process} variant="outline" className="text-[9px]">
-                      {PROCESS_META[process as UniversalProcess].label}
-                    </Badge>
-                  ))}
-                </div>
+                {pluginCapabilityDescription(capability) && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {pluginCapabilityDescription(capability)}
+                  </p>
+                )}
               </div>
             ))}
+            {manifest.capabilities.length > 3 && (
+              <p className="flex items-center gap-1 px-1 text-[11px] text-muted-foreground">
+                <span>+ {manifest.capabilities.length - 3}</span>
+                <span>Recursos disponíveis</span>
+              </p>
+            )}
           </div>
+          <details className="mt-3 rounded-lg border border-border/70 bg-card/40 px-3">
+            <summary className="flex cursor-pointer items-center gap-1 py-2.5 text-[11px] font-medium text-muted-foreground">
+              <span>Detalhes técnicos</span>
+              <span>({manifest.capabilities.length})</span>
+            </summary>
+            <div className="divide-y divide-border">
+              {manifest.capabilities.map((capability) => (
+                <div key={capability.id} className="py-2.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-medium">{pluginCapabilityLabel(capability)}</span>
+                    <Badge variant="outline" className="ml-auto text-[9px]">
+                      {capability.operator}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {capability.blockTypes.map((block) => (
+                      <Badge key={block} variant="secondary" className="text-[9px]">
+                        {BLOCK_LABEL[block]}
+                      </Badge>
+                    ))}
+                    {(capability.processTypes ?? []).map((process) => (
+                      <Badge key={process} variant="outline" className="text-[9px]">
+                        {PROCESS_META[process as UniversalProcess].label}
+                      </Badge>
+                    ))}
+                  </div>
+                  <code className="mt-2 block text-[10px] text-muted-foreground">
+                    {capability.id}
+                  </code>
+                </div>
+              ))}
+            </div>
+          </details>
         </section>
 
         <section className="rounded-xl border border-border bg-muted/15 p-3">

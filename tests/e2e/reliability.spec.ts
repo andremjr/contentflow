@@ -163,6 +163,57 @@ test("expõe e persiste o contrato ambíguo do plugin no editor do Método", asy
     .toEqual(["outline", "sections"]);
 });
 
+test("lista o plugin do processo antes de o contrato do bloco estar compatível", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  expect(
+    (
+      await request.put("/api/plugins/com.contentflow.e2e-contract/consent", {
+        data: { enabled: true },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const block = {
+    id: "incompatible-output",
+    type: "CRIAR",
+    operator: "IA",
+    name: "Imagem ainda sem contrato",
+    instructions: "Crie uma imagem.",
+    inputs: [],
+    outputs: [
+      {
+        id: "image",
+        key: "image",
+        label: "Imagem",
+        type: "image",
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 0,
+  };
+  expect(
+    (
+      await request.put(`/api/channels/${channel.id}/methods/script`, {
+        data: { name: "Roteiro", blocks: [block] },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  await page.goto(`/channel/${channel.id}/methods?process=script`);
+  await page.getByRole("button", { name: /01 Criar Imagem ainda sem contrato/ }).click();
+  const pluginDetails = page.locator("details").filter({ hasText: "Plugin executor" });
+  await pluginDetails.evaluate((element: HTMLDetailsElement) => {
+    element.open = true;
+  });
+  await pluginDetails.getByRole("combobox").click();
+  await expect(
+    page.getByRole("option", { name: "Plugin de Contrato E2E · Resultado", exact: true }),
+  ).toBeVisible();
+});
+
 test("cria uma coleção estratégica com o campo de nome focável e clicável", async ({
   page,
   request,

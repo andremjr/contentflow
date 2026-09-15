@@ -1028,6 +1028,231 @@ function requestsSingleVideo(request) {
   );
 }
 
+function selectAnimationIndexes(total, configuration = {}) {
+  const requested = Number.isInteger(configuration.maxVideosToAnimate)
+    ? configuration.maxVideosToAnimate
+    : 0;
+  const limit = Math.min(Math.max(requested, 0), total);
+  if (limit === 0 || total === 0) return [];
+
+  const strategy = String(configuration.animationSelection ?? "first");
+  if (strategy === "manual_indexes") {
+    const selected = new Set();
+    for (const token of String(configuration.animationIndexes ?? "").split(/[,;\s]+/)) {
+      const range = token.match(/^(\d+)-(\d+)$/);
+      if (range) {
+        const start = Number(range[1]);
+        const end = Number(range[2]);
+        for (let index = Math.min(start, end); index <= Math.max(start, end); index += 1) {
+          if (index >= 1 && index <= total) selected.add(index - 1);
+        }
+      } else if (/^\d+$/.test(token)) {
+        const index = Number(token);
+        if (index >= 1 && index <= total) selected.add(index - 1);
+      }
+    }
+    return [...selected].sort((a, b) => a - b).slice(0, limit);
+  }
+  if (strategy === "last")
+    return Array.from({ length: limit }, (_, index) => total - limit + index);
+  if (strategy === "evenly_spaced" && limit > 1) {
+    return [
+      ...new Set(
+        Array.from({ length: limit }, (_, index) =>
+          Math.round((index * (total - 1)) / (limit - 1)),
+        ),
+      ),
+    ];
+  }
+  return Array.from({ length: limit }, (_, index) => index);
+}
+
+async function executeVisualProductionBatch(request, services) {
+  const prompts = normalizePrompts(request?.inputs?.prompts);
+  if (prompts.length === 0)
+    return resultError("INVALID_INPUT", "Informe pelo menos um prompt visual.");
+  const configuration = request?.configuration ?? {};
+  const productionMode = String(configuration.productionMode ?? "images_only");
+  if (
+    ![
+      "images_only",
+      "text_to_video",
+      "images_then_selected_videos",
+      "images_to_video_all",
+    ].includes(productionMode)
+  ) {
+    return resultError("INVALID_CONFIGURATION", "Modo de produção visual inválido.");
+  }
+  if (productionMode === "text_to_video") {
+    const videoResult = await execute(
+      {
+        ...request,
+        capabilityId: "generate-video-in-browser",
+        inputs: {
+          prompts,
+          reference_images: request?.inputs?.reference_images,
+          project_url: request?.inputs?.project_url,
+        },
+        outputContract: [{ portKey: "video", type: "files" }],
+      },
+      services,
+    );
+    if (videoResult.status !== "success") return videoResult;
+    return {
+      ...videoResult,
+      values: {
+        videos: normalizeReferenceImages(videoResult.values?.video),
+        project_url: videoResult.values?.project_url,
+      },
+      logs: ["Produção visual: modo texto para vídeo.", ...(videoResult.logs ?? [])],
+    };
+  }
+  const characterPrompts = normalizePrompts(
+    request?.inputs?.character_prompts ??
+      (configuration.enableCharacterConsistency === true
+        ? configuration.characterPrompts
+        : undefined),
+  );
+  let characterReferences = [];
+  let characterArtifacts = [];
+  let activeProjectUrl = request?.inputs?.project_url;
+  if (characterPrompts.length > 0) {
+    const characterResult = await execute(
+      {
+        ...request,
+        capabilityId: "generate-images-in-browser",
+        inputs: {
+          prompts: characterPrompts,
+          reference_images: request?.inputs?.reference_images,
+          project_url: activeProjectUrl,
+        },
+        outputContract: [{ portKey: "images", type: "files" }],
+      },
+      services,
+    );
+    if (characterResult.status !== "success") return characterResult;
+    const characterLimit = Number.isInteger(configuration.maxCharacterReferences)
+      ? Math.max(1, Math.min(configuration.maxCharacterReferences, 10))
+      : 1;
+    characterReferences = normalizeReferenceImages(characterResult.values?.images).slice(
+      0,
+      characterLimit,
+    );
+    const characterIds = new Set(characterReferences.map((image) => image?.id).filter(Boolean));
+    characterArtifacts = (characterResult.artifacts ?? []).filter((artifact) =>
+      characterIds.has(artifact?.id),
+    );
+    activeProjectUrl = characterResult.values?.project_url ?? activeProjectUrl;
+  }
+  const imageRequest = {
+    ...request,
+    capabilityId: "generate-images-in-browser",
+    inputs: {
+      prompts,
+      reference_images: [request?.inputs?.reference_images, characterReferences],
+      project_url: activeProjectUrl,
+    },
+    outputContract: [{ portKey: "images", type: "files" }],
+  };
+  const imageResult = await execute(imageRequest, services);
+  if (imageResult.status !== "success") return imageResult;
+
+  const images = normalizeReferenceImages(imageResult.values?.images);
+  const selectedIndexes =
+    productionMode === "images_to_video_all"
+      ? Array.from({ length: images.length }, (_, index) => index)
+      : productionMode === "images_then_selected_videos"
+        ? selectAnimationIndexes(images.length, configuration)
+        : [];
+  const retainImages = configuration.imageRetention !== "omit_from_final_delivery";
+  const retainedImages =
+    configuration.imageRetention === "keep_animated_only"
+      ? selectedIndexes.map((index) => images[index])
+      : images;
+  const retainedImageIds = new Set(retainedImages.map((image) => image?.id).filter(Boolean));
+  const retainedImageArtifacts =
+    configuration.imageRetention === "keep_animated_only"
+      ? (imageResult.artifacts ?? []).filter((artifact) => retainedImageIds.has(artifact?.id))
+      : (imageResult.artifacts ?? []);
+  const animationPrompts = normalizePrompts(request?.inputs?.animation_prompts);
+  const videos = [];
+  const videoArtifacts = [];
+  const logs = [
+    ...(characterPrompts.length > 0
+      ? [`Produção visual: ${characterReferences.length} referência(s) de personagem gerada(s).`]
+      : []),
+    ...(imageResult.logs ?? []),
+  ];
+  logs.push(
+    `Produção visual: ${images.length} imagem(ns) gerada(s); ${selectedIndexes.length} selecionada(s) para animação.`,
+  );
+
+  for (let position = 0; position < selectedIndexes.length; position += 1) {
+    const imageIndex = selectedIndexes[position];
+    const animationRequest = {
+      ...request,
+      capabilityId: "animate-image-in-browser",
+      inputs: {
+        images: images[imageIndex],
+        prompts:
+          animationPrompts[imageIndex] ?? animationPrompts[position] ?? prompts[imageIndex] ?? "",
+        project_url: imageResult.values?.project_url,
+      },
+      outputContract: [{ portKey: "video", type: "files" }],
+    };
+    const animationResult = await execute(animationRequest, services);
+    logs.push(...(animationResult.logs ?? []));
+    if (animationResult.status !== "success") {
+      const failure = {
+        ...animationResult,
+        partialValues: {
+          ...(retainImages ? { images: retainedImages } : {}),
+          ...(configuration.saveCharacterReferences === true
+            ? { character_references: characterReferences }
+            : {}),
+          ...(videos.length > 0 ? { videos } : {}),
+          project_url: imageResult.values?.project_url,
+        },
+        partialArtifacts: [
+          ...(retainImages ? retainedImageArtifacts : []),
+          ...(configuration.saveCharacterReferences === true ? characterArtifacts : []),
+          ...videoArtifacts,
+        ],
+        logs,
+      };
+      return failure;
+    }
+    videos.push(...normalizeReferenceImages(animationResult.values?.video));
+    videoArtifacts.push(...(animationResult.artifacts ?? []));
+    logs.push(
+      `Produção visual: animação ${position + 1}/${selectedIndexes.length} concluída (imagem ${imageIndex + 1}).`,
+    );
+  }
+
+  return {
+    status: "success",
+    values: {
+      ...(retainImages ? { images: retainedImages } : {}),
+      ...(configuration.saveCharacterReferences === true
+        ? { character_references: characterReferences }
+        : {}),
+      ...(videos.length > 0 ? { videos } : {}),
+      project_url: imageResult.values?.project_url,
+    },
+    artifacts: [
+      ...(configuration.saveCharacterReferences === true ? characterArtifacts : []),
+      ...(retainImages ? retainedImageArtifacts : []),
+      ...videoArtifacts,
+    ],
+    usage: {
+      provider: "Google Labs / Flow",
+      outputUnits: images.length + videos.length,
+      unit: "visual_asset",
+    },
+    logs,
+  };
+}
+
 function resolveVideoPreferences(configuration = {}) {
   const videoModelKey = configuration.videoModel || "veo_3_1_fast";
   const videoResolutionKey = configuration.videoResolution || "flow_current";
@@ -4136,6 +4361,9 @@ export async function execute(request, services) {
   }
 
   const capabilityId = String(request?.capabilityId ?? "generate-images-in-browser");
+  if (capabilityId === "produce-visual-assets-in-browser") {
+    return executeVisualProductionBatch(request, services);
+  }
   const isVideoGeneration = capabilityId === "generate-video-in-browser";
   const isImageAnimation = capabilityId === "animate-image-in-browser";
   const isVideoCapability = isVideoGeneration || isImageAnimation;
@@ -5180,6 +5408,7 @@ export const __test = {
   normalizeReferenceImages,
   requestsSingleImage,
   requestsSingleVideo,
+  selectAnimationIndexes,
   mediaItemsFromImageUrls,
   mediaItemsFromImageCandidates,
   mediaItemsFromVideoUrls,

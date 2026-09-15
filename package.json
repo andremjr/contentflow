@@ -1,6 +1,6 @@
 {
   "name": "contentflow",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "productName": "ContentFlow",
   "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
@@ -33,6 +33,8 @@
     "desktop:v0": "npm run desktop:prepare && electron-builder --win portable nsis --x64",
     "desktop:release": "npm run desktop:prepare && electron-builder --win portable nsis --x64 --publish never",
     "ecosystem:package": "node scripts/package-ecosystem.mjs",
+    "ecosystem:catalog": "node scripts/prepare-official-catalog.mjs",
+    "github:capacity": "node scripts/github-capacity-report.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "test:e2e": "playwright test",

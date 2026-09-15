@@ -52,6 +52,11 @@ export type JsonSchema = {
   oneOf?: JsonSchema[];
   not?: JsonSchema;
   additionalProperties?: boolean | JsonSchema;
+  /** Declarative UI hint: only renders a field when another configuration value matches. */
+  visibleWhen?: {
+    property: string;
+    values: Array<string | number | boolean>;
+  };
 };
 
 export type PluginDataType = HumanFieldType;
@@ -125,6 +130,10 @@ export type PluginFieldContract = Pick<
 
 export type PluginCapability = {
   id: string;
+  /** Friendly, user-facing capability name. The stable `id` remains internal to the contract. */
+  name?: string;
+  /** Short user-facing explanation of what this capability accomplishes. */
+  description?: string;
   operator: PluginOperator;
   /** Optional in API v1 for backwards compatibility; omitted means `optional`. */
   instructionUsage?: PluginInstructionUsage;

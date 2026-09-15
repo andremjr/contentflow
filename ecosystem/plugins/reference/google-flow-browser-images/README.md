@@ -1,8 +1,8 @@
 # Google Flow Browser Images — ContentFlow
 
-Versão **1.3.3**.
+Versão **1.3.6**.
 
-Plugin avançado de geração de imagens e vídeos no Google Flow através do Chrome dedicado com perfil persistente. A versão 1.3.3 mantém uma única fila por execução e persiste o progresso de cada prompt concluído para retomada sem duplicação:
+Plugin avançado de geração de imagens e vídeos no Google Flow através do Chrome dedicado com perfil persistente. A versão 1.3.6 mantém uma única fila por execução, persiste o progresso de cada prompt concluído para retomada sem duplicação e inclui produção visual completa em lote:
 
 - **Geração de Imagens** com Nano Banana 2, Nano Banana Pro, modelos adicionais pelo rótulo visível do Flow e proporções (16:9, 4:3, 1:1, 3:4, 9:16).
 - **Animação de Imagens (Image-to-Video)** com Veo 3.1 (Quality, Fast, Lite) e Omni 1.1 Flash.
@@ -10,11 +10,23 @@ Plugin avançado de geração de imagens e vídeos no Google Flow através do Ch
 - **Fila interna em projeto único:** a capability recebe a lista completa sem impor teto local, cria ou abre um projeto uma vez e mantém os envios e esperas dentro desse mesmo projeto.
 - **Retomada sem duplicação:** cada prompt concluído é registrado no checkpoint local; após troca de perfil, somente os índices ainda pendentes voltam para a fila.
 - **Continuidade de Projeto e Chat (`project_url`)** para encadeamento de múltiplos blocos no Método preservando personagens, galeria e histórico.
+- **Produção visual em lote:** gera todas as imagens de uma lista ordenada de cenas e anima somente a quantidade escolhida, sem exigir que o Método crie um bloco por cena.
 - **Intervenção humana segura**: login, reautenticação e CAPTCHA permanecem visíveis para conclusão manual, sem tentativa de contornar as proteções do provedor.
 
 ## Capacidades Disponíveis no Método
 
-### 1. `generate-images-in-browser` (Geração de Imagens)
+### 1. `produce-visual-assets-in-browser` (Produção visual em lote)
+
+- **Operador:** IA | **Bloco:** CRIAR | **Processo:** `assets`
+- **Entradas:** `prompts` (cenas, obrigatório), `character_prompts` (referências de personagem a gerar, opcional), `animation_prompts` (movimento/câmera, opcional), `reference_images` (personagem, produto, cenário e estilo, opcional) e `project_url` (opcional).
+- **Modo de produção:** escolha diretamente entre somente imagens, texto para vídeo, imagens com algumas animações ou imagens com todas as animações. A tela mostra apenas os controles relevantes ao modo escolhido.
+- **Fluxo de imagens:** produz as imagens na ordem dos prompts, seleciona as imagens a animar e então cria os vídeos um a um, preservando checkpoints da fila de imagens.
+- **Orçamento de vídeo:** `maxVideosToAnimate` permite gerar, por exemplo, 300 imagens e animar apenas 3; `0` entrega somente imagens.
+- **Seleção:** primeiras, últimas, distribuídas pela fila ou índices manuais (por exemplo, `1, 7, 10-14`).
+- **Retenção:** salva todas as imagens, somente as animadas, ou apenas os vídeos na entrega final. As imagens continuam disponíveis ao plugin durante a animação mesmo quando não forem entregues à etapa de edição.
+- **Consistência de personagens:** `character_prompts` gera referências antes das cenas. Defina quantas entram nas cenas e se elas também devem ser preservadas como entrega para outros blocos.
+
+### 2. `generate-images-in-browser` (Geração de Imagens)
 
 - **Operador:** IA | **Bloco:** CRIAR | **Processos:** `thumbnail`, `assets`
 - **Entradas:** `prompts` (obrigatório), `reference_images` (opcional), `project_url` (opcional).
@@ -22,7 +34,7 @@ Plugin avançado de geração de imagens e vídeos no Google Flow através do Ch
 - **Modelos:** Automático do Flow, Nano Banana 2, Nano Banana Pro (com fallback inteligente).
 - **Proporções:** Atual do Flow, 16:9, 4:3, 1:1, 3:4 e 9:16.
 
-### 2. `animate-image-in-browser` (Animar Imagem / Image-to-Video)
+### 3. `animate-image-in-browser` (Animar Imagem / Image-to-Video)
 
 - **Operador:** IA | **Bloco:** CRIAR | **Processos:** `assets`, `editing`
 - **Entradas:** `images` (imagem base para animar), `prompts` (instrução opcional de movimento/câmera), `project_url` (opcional).
@@ -30,7 +42,7 @@ Plugin avançado de geração de imagens e vídeos no Google Flow através do Ch
 - **Modelos de Vídeo:** Veo 3.1 - Quality, Veo 3.1 - Fast, Veo 3.1 - Lite, Omni 1.1 Flash.
 - **Configuração:** modelo predefinido ou rótulo de modelo novo, imagem como Frame/Elemento, duração de 4/6/8/10 s, proporção e resolução (padrão, 720p, 1080p).
 
-### 3. `generate-video-in-browser` (Geração de Vídeo / Text-to-Video)
+### 4. `generate-video-in-browser` (Geração de Vídeo / Text-to-Video)
 
 - **Operador:** IA | **Bloco:** CRIAR | **Processos:** `assets`, `editing`
 - **Entradas:** `prompts` (prompts de vídeo com descrição de cena e movimento), `reference_images` (imagens/elementos opcionais), `project_url` (opcional).
@@ -48,7 +60,7 @@ Para fluxos complexos em que um bloco cria os personagens ou elementos visuais e
 
 ## Login, CAPTCHA e proteção da conta
 
-A versão 1.3.3 mantém o fluxo observável e respeita os controles do Google:
+A versão 1.3.5 mantém o fluxo observável e respeita os controles do Google:
 
 1. **Janela acessível:** `startMinimized` é `true` por padrão, mas o Chrome dedicado nunca roda em modo headless e continua acessível pela barra de tarefas.
 2. **Intervenção manual:** quando o Google solicitar login, reautenticação ou CAPTCHA, o plugin aguarda a conclusão pelo usuário na janela do Chrome.
