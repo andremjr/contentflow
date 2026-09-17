@@ -45,6 +45,90 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 type Translation = [english: string, spanish: string];
 
 const PHRASES: Record<string, Translation> = {
+  "Lote híbrido": ["Hybrid batch", "Lote híbrido"],
+  "Agrupa Tema, Título e Thumbnail no lote; do Roteiro em diante, mantém a fila por projeto.": [
+    "Groups Theme, Title, and Thumbnail in the batch; from Script onward, keeps the per-project queue.",
+    "Agrupa Tema, Título y Thumbnail en el lote; desde Guion en adelante, mantiene la cola por proyecto.",
+  ],
+  Concluídos: ["Completed", "Completados"],
+  Pendentes: ["Pending", "Pendientes"],
+  "Falhou no item": ["Failed on item", "Falló en el elemento"],
+  "Continuar pendentes": ["Continue pending items", "Continuar pendientes"],
+  "Recomeçar tudo": ["Restart all", "Reiniciar todo"],
+  "O núcleo preservou os itens concluídos deste lote.": [
+    "The core preserved the completed items in this batch.",
+    "El núcleo conservó los elementos completados de este lote.",
+  ],
+  "Itens pendentes preparados para continuar.": [
+    "Pending items are ready to continue.",
+    "Los elementos pendientes están listos para continuar.",
+  ],
+  "Item preparado para uma nova tentativa.": [
+    "Item prepared for another attempt.",
+    "Elemento preparado para un nuevo intento.",
+  ],
+  "Finalizar com entregas atuais": [
+    "Finish with current outputs",
+    "Finalizar con las salidas actuales",
+  ],
+  "Usar entrega atual e continuar": [
+    "Use current output and continue",
+    "Usar la salida actual y continuar",
+  ],
+  "Refazer este bloco": ["Rerun this block", "Rehacer este bloque"],
+  "Reiniciar processo do zero": ["Restart process from scratch", "Reiniciar proceso desde cero"],
+  "O que já foi concluído permanece consolidado. Escolha como continuar.": [
+    "Completed work remains consolidated. Choose how to continue.",
+    "El trabajo completado permanece consolidado. Elige cómo continuar.",
+  ],
+  "Não foi possível usar a entrega atual": [
+    "Could not use the current output",
+    "No se pudo usar la salida actual",
+  ],
+  "Não foi possível usar a entrega atual.": [
+    "Could not use the current output.",
+    "No se pudo usar la salida actual.",
+  ],
+  "Processo concluído com as entregas atuais.": [
+    "Process completed with the current outputs.",
+    "Proceso completado con las salidas actuales.",
+  ],
+  "Entrega atual consolidada. O processo continuará.": [
+    "Current output consolidated. The process will continue.",
+    "Salida actual consolidada. El proceso continuará.",
+  ],
+  "Bloco preparado para uma nova tentativa.": [
+    "Block prepared for another attempt.",
+    "Bloque preparado para un nuevo intento.",
+  ],
+  "Itens da execução": ["Execution items", "Elementos de la ejecución"],
+  "Edite textos ou substitua mídias sem alterar a posição do item.": [
+    "Edit text or replace media without changing the item's position.",
+    "Edita textos o sustituye medios sin cambiar la posición del elemento.",
+  ],
+  "Editar item": ["Edit item", "Editar elemento"],
+  "Salvar item": ["Save item", "Guardar elemento"],
+  "Substituir arquivo": ["Replace file", "Sustituir archivo"],
+  "Regenerar item": ["Regenerate item", "Regenerar elemento"],
+  "Item atualizado": ["Item updated", "Elemento actualizado"],
+  "Item substituído": ["Item replaced", "Elemento sustituido"],
+  "Não foi possível atualizar o item": [
+    "Could not update the item",
+    "No se pudo actualizar el elemento",
+  ],
+  "Não foi possível substituir o item": [
+    "Could not replace the item",
+    "No se pudo sustituir el elemento",
+  ],
+  "Escolha um arquivo do mesmo tipo de mídia.": [
+    "Choose a file with the same media type.",
+    "Elige un archivo del mismo tipo de medio.",
+  ],
+  "Sem resultado materializado.": ["No materialized result.", "Sin resultado materializado."],
+  "Ver tentativas anteriores": ["View previous attempts", "Ver intentos anteriores"],
+  Tentativa: ["Attempt", "Intento"],
+  Pendente: ["Pending", "Pendiente"],
+  "Tentar novamente": ["Try again", "Intentar de nuevo"],
   "O que este plugin faz": ["What this plugin does", "Qué hace este plugin"],
   "Recursos disponíveis": ["Available features", "Funciones disponibles"],
   "Detalhes técnicos": ["Technical details", "Detalles técnicos"],
@@ -792,6 +876,13 @@ const PHRASES: Record<string, Translation> = {
   Roteiro: ["Script", "Guion"],
   "Salvar agora": ["Save now", "Guardar ahora"],
   "Salvar alterações": ["Save changes", "Guardar cambios"],
+  "Editar entrega": ["Edit output", "Editar salida"],
+  "Entrega atualizada": ["Output updated", "Salida actualizada"],
+  Falhou: ["Failed", "Falló"],
+  "Não foi possível salvar a edição": [
+    "Could not save the changes",
+    "No se pudieron guardar los cambios",
+  ],
   "Salvo automaticamente": ["Saved automatically", "Guardado automáticamente"],
   "Selecionar imagem": ["Select image", "Seleccionar imagen"],
   "Selecione o canal": ["Select a channel", "Selecciona un canal"],

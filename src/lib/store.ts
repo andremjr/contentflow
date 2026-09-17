@@ -4,6 +4,7 @@ import {
   PROCESS_META,
   PROCESS_ORDER,
   type ActionBlock,
+  type BlockItemRetryScope,
   type BlockExecution,
   type Channel,
   type ChannelLibraryItem,
@@ -667,8 +668,19 @@ export function completeProcessOutput(executionId: string, values: Record<string
     values,
   });
 }
-export function retryBlockExecution(executionId: string, blockId: string) {
-  return command<boolean>("retry", { executionId, blockId });
+export function acceptBlockDelivery(executionId: string, blockId: string) {
+  return command<{ ok: true; completedProcess: boolean } | { ok: false; missing: string[] }>(
+    "acceptBlockDelivery",
+    { executionId, blockId },
+  );
+}
+export function retryBlockExecution(
+  executionId: string,
+  blockId: string,
+  retryScope: BlockItemRetryScope = "all",
+  itemId?: string,
+) {
+  return command<boolean>("retry", { executionId, blockId, retryScope, itemId });
 }
 export function resetStage(projectId: string, stage: ProcessId) {
   return command<boolean>("reset", { projectId, processType: stage });
@@ -684,6 +696,34 @@ export async function refreshProcessExecution(
   _processType?: ProcessId,
 ) {
   return refreshState();
+}
+
+export async function updateBlockExecutionValues(
+  executionId: string,
+  blockId: string,
+  revision: number,
+  values: Record<string, RuntimeValue>,
+) {
+  await request(`/api/executions/${executionId}/blocks/${blockId}/values`, "PATCH", {
+    revision,
+    values,
+  });
+  await refreshState(true);
+}
+
+export async function updateBlockExecutionItemOutput(
+  executionId: string,
+  blockId: string,
+  itemId: string,
+  revision: number,
+  output: unknown,
+) {
+  await request(
+    `/api/executions/${executionId}/blocks/${blockId}/items/${encodeURIComponent(itemId)}`,
+    "PATCH",
+    { revision, output },
+  );
+  await refreshState(true);
 }
 
 export async function createLibraryItem(
@@ -746,7 +786,7 @@ export async function uploadLocalFile(file: File): Promise<StoredFile> {
   return response.json() as Promise<StoredFile>;
 }
 
-async function request(url: string, method: "POST" | "PUT" | "DELETE", body?: unknown) {
+async function request(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown) {
   const response = await fetch(url, {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,

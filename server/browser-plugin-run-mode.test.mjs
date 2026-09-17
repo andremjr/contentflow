@@ -29,10 +29,16 @@ test("todos os jobs de navegador iniciam minimizados por padrão", async () => {
       `${plugin} precisa manter startMinimized como padrão`,
     );
     for (const capability of manifest.capabilities) {
-      assert.deepEqual(
-        capability.blockConfigSchema?.properties?.startMinimized,
-        { type: "boolean", default: true },
+      const startMinimized = capability.blockConfigSchema?.properties?.startMinimized;
+      assert.equal(
+        startMinimized?.type,
+        "boolean",
         `${plugin}/${capability.id} precisa expor startMinimized no bloco`,
+      );
+      assert.equal(
+        startMinimized?.default,
+        true,
+        `${plugin}/${capability.id} precisa iniciar minimizado por padrão`,
       );
     }
     assert.ok(

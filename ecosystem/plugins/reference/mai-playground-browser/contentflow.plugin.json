@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.mai-playground-browser",
   "name": "MAI Playground Browser",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Gera narração em áudio (TTS) com MAI-Voice-2 e texto no Microsoft AI Playground usando um perfil Chrome dedicado.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
@@ -339,7 +339,14 @@
         "mode": "immediate",
         "defaultTimeoutMs": 600000,
         "supportsCancellation": true,
-        "maxConcurrency": 1
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "inputPort": "content",
+          "outputPort": "parts",
+          "combinedOutputPort": "result",
+          "separator": "\n\n",
+          "mode": "sequential"
+        }
       },
       "sideEffects": ["external_write", "subprocess"],
       "cost": {

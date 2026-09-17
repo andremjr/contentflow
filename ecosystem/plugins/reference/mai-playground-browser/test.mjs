@@ -49,7 +49,7 @@ test("manifesto possui estrutura e capabilities válidas conforme API v1", async
   assert.deepEqual(voiceCap.processTypes, ["narration"]);
   assert.ok(voiceCap.inputPorts.some((p) => p.key === "text"));
   assert.ok(voiceCap.outputPorts.some((p) => p.key === "audio"));
-  assert.equal(manifest.version, "1.0.3");
+  assert.equal(manifest.version, "1.0.4");
   assert.equal(manifest.settingsSchema.properties.keepBrowserOpen.default, false);
   assert.equal(voiceCap.blockConfigSchema.properties.voice.default, "Caio");
   assert.ok(voiceCap.blockConfigSchema.properties.voice.enum.includes("Luana"));

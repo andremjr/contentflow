@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, extname, join } from "node:path";
 import { attachContentFlowBridge } from "./browser-bridge-client.mjs";
@@ -1041,7 +1041,7 @@ export function concatenateWavBuffers(buffers) {
   return output;
 }
 
-export async function writeAudioArtifact(services, request, bytes, mimeType) {
+export async function writeAudioArtifact(services, request, bytes, mimeType, suffix = "") {
   const ext =
     mimeType.includes("mpeg") || mimeType.includes("mp3")
       ? "mp3"
@@ -1052,7 +1052,9 @@ export async function writeAudioArtifact(services, request, bytes, mimeType) {
           : "wav";
 
   const id = `mai-audio-${createHash("sha256")
-    .update(`${request.executionId || "e"}:${request.blockId || "b"}:${request.attempt || 1}`)
+    .update(
+      `${request.executionId || "e"}:${request.blockId || "b"}:${request.attempt || 1}:${suffix}`,
+    )
     .digest("hex")
     .slice(0, 16)}`;
   const filename = `${id}.${ext}`;
@@ -1331,6 +1333,28 @@ export async function execute(request, services) {
       const responseTimeoutMs = clamp(settings.responseTimeoutSeconds, 600, 30, 3600) * 1000;
       const audioParts = [];
       let mimeType = "";
+      const checkpointId = createHash("sha256")
+        .update(`${promptText}\n${model}\n${voice}\n${style}`)
+        .digest("hex")
+        .slice(0, 24);
+      const checkpointPath = services.getWorkspacePath(
+        `mai-voice-checkpoints/${checkpointId}.json`,
+      );
+      const checkpointPartPath = (index) =>
+        services.getWorkspacePath(`mai-voice-checkpoints/${checkpointId}-${index + 1}.part`);
+      try {
+        const checkpoint = JSON.parse(await readFile(checkpointPath, "utf8"));
+        if (
+          checkpoint?.id === checkpointId &&
+          checkpoint?.total === chunks.length &&
+          Number.isInteger(checkpoint?.completed)
+        ) {
+          mimeType = String(checkpoint.mimeType || "");
+          for (let index = 0; index < Math.min(checkpoint.completed, chunks.length); index += 1) {
+            audioParts.push(await readFile(checkpointPartPath(index)));
+          }
+        }
+      } catch {}
       // The Playground preserves its selected voice and style between runs.
       // Reading that state before yielding the tab to Browser Bridge avoids
       // reopening an already-correct picker (which can be transient while a
@@ -1343,7 +1367,7 @@ export async function execute(request, services) {
         // A different saved selection is a normal case: Browser Bridge will
         // change it below and the result is verified again afterwards.
       }
-      for (let index = 0; index < chunks.length; index += 1) {
+      for (let index = audioParts.length; index < chunks.length; index += 1) {
         // The provider needs a small idle interval between completed audio
         // turns and the next text submission. This also prevents a fresh
         // composer from being targeted while its previous turn still renders.
@@ -1396,6 +1420,33 @@ export async function execute(request, services) {
         }
         mimeType = captured.mimeType;
         audioParts.push(captured.bytes);
+        await writeFile(checkpointPartPath(index), captured.bytes);
+        await writeFile(
+          checkpointPath,
+          JSON.stringify({
+            id: checkpointId,
+            total: chunks.length,
+            completed: audioParts.length,
+            mimeType,
+          }),
+          "utf8",
+        );
+        const partial = await writeAudioArtifact(
+          services,
+          request,
+          captured.bytes,
+          captured.mimeType,
+          `parte-${index + 1}`,
+        );
+        await services.publishPartial?.({
+          values: {
+            audio: partial.file,
+            transcript: chunks.slice(0, index + 1).join(" "),
+          },
+          artifacts: [partial.artifact],
+          progress: (index + 1) / chunks.length,
+          message: `Trecho de áudio ${index + 1} de ${chunks.length} capturado.`,
+        });
       }
 
       const finalBytes =
@@ -1416,6 +1467,10 @@ export async function execute(request, services) {
         finalBytes,
         mimeType || "audio/wav",
       );
+      await Promise.all([
+        rm(checkpointPath, { force: true }),
+        ...chunks.map((_, index) => rm(checkpointPartPath(index), { force: true })),
+      ]).catch(() => undefined);
 
       return {
         status: "success",
@@ -1452,6 +1507,12 @@ export async function execute(request, services) {
         baselineBubbleCount,
         services.signal,
       );
+
+      await services.publishPartial?.({
+        values: { result: generatedText, parts: [generatedText] },
+        progress: 1,
+        message: "Resposta capturada.",
+      });
 
       return {
         status: "success",

@@ -398,47 +398,52 @@ ContentFlow
 
 ## Fase 6 — Lote inteligente de Projetos
 
-**Objetivo:** substituir o lote sequencial por processo por uma única geração estruturada de temas, seguida da criação e execução dos Projetos.
+**Objetivo:** substituir o lote sequencial puro pelo lote híbrido: Tema, Título e Thumbnail funcionam como três etapas agregadas de N Production Items; Roteiro, Voz, Assets, Edição e Postagem continuam no motor linear por Projeto. O plano técnico detalhado está em `docs/ITEM_EXECUTION_AND_HYBRID_BATCH_ROADMAP.md`.
 
 ### Fluxo de produto
 
-1. Usuário informa quantidade, contexto e critérios.
-2. Escolhe plugin, capability e conexão.
-3. O executor recebe um único pedido de geração.
-4. Retorna `list` ou `records` estruturados e validados.
-5. O ContentFlow apresenta uma revisão editável.
-6. Usuário confirma os itens que realmente virarão Projetos.
-7. O núcleo materializa um Projeto por item e registra seu Tema oficial.
-8. A fila continua os processos seguintes, preferencialmente ponta a ponta.
+1. Usuário informa a quantidade e inicia o lote.
+2. O Orquestrador cria/preserva a identidade estável dos N Production Items.
+3. Tema executa como uma coleção administrável de N itens.
+4. Título recebe os mesmos IDs e o Tema correspondente de cada item.
+5. Thumbnail recebe os mesmos IDs e o contexto correspondente.
+6. O ContentFlow permite inspecionar, editar e repetir itens sem deslocar os demais.
+7. Depois de Thumbnail, cada item continua como Projeto individual em Roteiro.
+8. Roteiro–Postagem reutilizam o motor linear, inclusive `execution.itemOrchestration` interno quando o Método precisar.
 
 ### Restrições arquiteturais
 
-- O gerador de lote pertence ao Orquestrador, não a um Método normal de vídeo individual.
+- O lote pertence ao Orquestrador, não a um Método normal de vídeo individual.
 - Não criar novo Processo Universal, Bloco ou Operador.
-- O plugin continua sendo uma capability; o núcleo controla revisão, criação, persistência, IDs, cursor e retomada.
-- Projetos só devem ser materializados após validação estrutural e confirmação do usuário.
+- Item é uma primitiva operacional transversal, não uma peça nova da gramática.
+- O núcleo controla IDs, ordem, estado, retry, persistência e retomada; o plugin escolhe a estratégia de processamento da coleção quando declarar suporte nativo.
+- Respostas agregadas precisam mapear resultados por `itemId`; posição isolada não é identidade suficiente.
+- Filas antigas preservam sua versão de estratégia até terminarem.
 
 ### Entregas
 
-- Definir schema mínimo dos candidatos de Tema.
-- Criar configuração de quantidade, critérios, executor e conexão.
-- Implementar uma única invocação com output estruturado.
-- Criar tela de revisão, edição, exclusão, reordenação e regeneração.
-- Validar quantidade, campos obrigatórios e duplicidade.
-- Criar Projetos e promover o Tema de forma idempotente.
-- Persistir checkpoints para retomar sem duplicar Projetos.
-- Migrar ou retirar o modo atual “Em lote por processo” depois da validação do substituto.
+- Consolidar `BlockExecution.items` com identidade, input, status, tentativa, output e histórico.
+- Implementar retry seletivo e workspace universal de itens.
+- Persistir `strategyVersion` no Orquestrador.
+- Modelar Tema/Título/Thumbnail como etapas agregadas.
+- Manter adaptador de compatibilidade usando o motor atual até a capability aceitar coleção nativa.
+- Definir e validar o contrato `CollectionExecutionRequest/Response` keyed por `itemId`.
+- Migrar Tema, depois Título e depois Thumbnail para coleção nativa.
+- Persistir checkpoints antes de avançar cada item e cada fase.
+- Medir redução de chamadas, sessões externas e tempo total.
 
 ### Critérios de aceite
 
-- [ ] Dez temas podem ser produzidos por uma única invocação compatível.
-- [ ] Nenhum Projeto é criado antes da confirmação da lista.
-- [ ] Repetir uma requisição após falha não duplica Projetos já materializados.
-- [ ] Lista incompleta ou inválida pode ser corrigida ou regenerada.
-- [ ] Projetos criados recebem Tema oficial com proveniência rastreável.
-- [ ] Continuação ponta a ponta usa o motor linear existente.
-- [ ] Parada, falha, retomada e reinício do aplicativo preservam o cursor.
-- [ ] O lote sequencial antigo é removido somente depois da equivalência funcional necessária.
+- [x] Novas filas distinguem estratégia híbrida de filas antigas persistidas.
+- [x] Tema/Título/Thumbnail existem como etapas agregadas no planejador.
+- [x] Plugins atuais continuam executando pelo adaptador de compatibilidade.
+- [ ] Um item pode ser regenerado sem executar os demais.
+- [ ] Dez ou mais Production Items podem ser processados por uma única execução nativa compatível.
+- [ ] Tema → Título → Thumbnail preserva correspondência estrita por ID.
+- [ ] Resposta com ID ausente, duplicado ou desconhecido é rejeitada.
+- [ ] Parada, falha, retomada e reinício preservam item, cursor e outputs concluídos.
+- [ ] Roteiro inicia pelo motor linear sem conversão manual de dados.
+- [ ] O adaptador sequencial deixa de ser necessário para plugins de referência dos três primeiros processos.
 
 ## Fase 7 — Estabilização e release V1.0.0
 

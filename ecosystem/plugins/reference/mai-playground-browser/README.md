@@ -2,7 +2,7 @@
 
 Plugin de referência para automação de navegador do **Microsoft AI Playground** (`https://playground.microsoft.ai/chat`), com foco especial em **Text-to-Speech (TTS)** com `mai-voice-2` e `mai-voice-2-flash`.
 
-Versão **1.0.3** para ContentFlow Plugin API v1.
+Versão **1.0.4** para ContentFlow Plugin API v1.
 
 ---
 

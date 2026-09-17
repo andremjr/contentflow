@@ -23,6 +23,14 @@ Consequentemente:
 
 Manter pacotes de plugins no mesmo repositório de desenvolvimento, quando conveniente, não os transforma em parte do núcleo nem autoriza que sejam empacotados com sua release.
 
+### 1.2. Princípio de composição: o núcleo fornece peças, não fluxos prontos
+
+O ContentFlow não deve transformar maneiras específicas de produzir conteúdo em regras rígidas do código. O núcleo fornece primitivas universais e combináveis — Processos Universais, Blocos, Operadores, entradas e saídas tipadas, identidade de entregas, persistência, retomada, validação e orquestração — e o usuário monta o fluxo desejado por meio de Métodos e plugins.
+
+Sempre que uma necessidade recorrente surgir, a primeira pergunta arquitetural deve ser qual é a menor capacidade genérica que falta ao núcleo. A solução deve permanecer independente de fornecedor, mídia, nicho, quantidade e técnica de produção. Regras como “gerar uma imagem para cada cena”, “pesquisar uma palavra-chave no Pexels”, “sintetizar cada trecho de áudio” ou “pedir 124 respostas a um modelo” pertencem à composição feita pelo Método e às capabilities dos plugins; o núcleo deve oferecer somente as peças necessárias para que todas essas composições sejam possíveis.
+
+Esse princípio vale também para UX: uma função universal pode aparecer de forma simples na execução, sem introduzir um novo Processo Universal, tipo de Bloco, Operador ou fluxo especializado. O produto cresce preferencialmente pela ampliação de primitivas reutilizáveis, não pelo acúmulo de modos de trabalho codificados.
+
 ---
 
 ## 2. A Estrutura das 3 Interfaces da Aplicação (UX/UI)
@@ -186,28 +194,52 @@ A página do processo mantém um painel expansível de resultados concluídos. O
 
 Renderers são componentes internos do ContentFlow. Plugins podem apenas indicar um identificador permitido e restrições declarativas de item ou MIME; nunca fornecem React, HTML, scripts ou outra interface arbitrária. Preferências incompatíveis ou desconhecidas são ignoradas pelo núcleo e recaem no modo automático.
 
-### 7.1. Orquestrador de execução entre Projetos
+### 7.1. Itens operacionais universais
+
+Quando uma capability declara `execution.itemOrchestration`, uma entrada em lista passa a ser um lote ordenado administrado pelo núcleo. O significado dos itens é irrelevante para o motor: podem ser prompts de texto, descrições de imagens, trechos de áudio, palavras-chave de pesquisa, registros de cenas, arquivos ou qualquer outro valor aceito pelo contrato universal. O núcleo não precisa conhecer Pexels, Pixabay, um modelo de IA ou a finalidade editorial do lote.
+
+Para cada item, o núcleo só considera o trabalho resolvido depois que a chamada correspondente produz uma resposta válida e sua entrega parcial é persistida. Antes de avançar, ele mantém a identidade do lote, a ordem, o cursor e os resultados já materializados. Uma falha, troca de perfil, reinicialização ou nova tentativa não pode transformar itens ainda não resolvidos em concluídos nem repetir silenciosamente itens já persistidos.
+
+O item é uma primitiva operacional transversal, não uma nova peça da gramática. Cada unidade persistente possui identidade do núcleo, referência opcional ao item da entrega de origem, ordem, entrada, estado, tentativa lógica atual, saída, erro e histórico de tentativas. O `BlockExecution` expõe essa coleção para a interface e o job persistente continua sendo a autoridade durante uma execução ativa. O resumo `itemProgress` permanece disponível para telas que precisam somente de total, concluídos, pendentes e posição atual.
+
+A identidade do item não depende da posição textual devolvida por um modelo. Retomadas da mesma coleção preservam os IDs já atribuídos; quando a entrada veio de uma entrega anterior, `sourceItemId` mantém a linhagem. Uma nova tentativa editorial de um item incrementa sua tentativa sem apagar o histórico anterior. Essa identidade é a base para edição, regeneração, seleção múltipla, comparação de tentativas e continuidade parcial sem deslocar os demais itens.
+
+Quando uma tentativa termina com parte do lote concluída, a interface oferece operações genéricas de recuperação no nível do Bloco:
+
+1. **Continuar pendentes**: cria uma nova tentativa, confirma que a entrada é a mesma — preferencialmente pelos IDs universais da entrega —, reaproveita as entregas e artifacts concluídos e retoma no primeiro item ainda não resolvido. Se a identidade da entrada mudou, o núcleo não mistura lotes e recomeça a execução completa.
+2. **Usar a entrega atual**: quando um Bloco falhou ou foi cancelado, mas já possui valores persistidos que satisfazem seu contrato de saída, o usuário pode consolidar esses valores como a entrega concluída do Bloco. Se for o último Bloco, o Processo pode ser finalizado diretamente; se houver Blocos posteriores, a execução continua a partir do próximo. Essa operação não chama novamente o plugin.
+3. **Refazer este Bloco**: cria uma nova tentativa somente para o primeiro Bloco não concluído, preservando integralmente os Blocos anteriores já concluídos. A tentativa pode descartar a entrega parcial do Bloco atual ou, quando houver orquestração item a item compatível, retomar somente os itens pendentes. Reiniciar o Processo inteiro permanece uma ação separada e explícita.
+
+O plugin continua responsável apenas por executar a capability sobre o item recebido e devolver seu resultado. A reconciliação entre recebido, concluído e pendente, a persistência, a decisão de retomar e a prevenção de duplicação pertencem ao núcleo. Essa capacidade não cria loops no canvas nem um novo tipo de validação editorial: é infraestrutura de execução reutilizável por qualquer Bloco e qualquer tipo de entrega compatível.
+
+### 7.2. Orquestrador de execução entre Projetos
 
 Na visualização em lista do Canal, o Orquestrador de execução agenda vários Projetos sobre o mesmo motor linear. Ele não cria um novo Processo Universal, Bloco ou Operador e não altera o Método de cada Canal. Sua responsabilidade é somente criar a fila e iniciar a próxima combinação `Projeto / Processo Universal` quando a combinação atual terminar.
 
-Na implementação anterior à V1 existem dois modos de ordenação:
+Existem dois modos de ordenação:
 
 1. **Ponta a ponta**: executa os 8 Processos Universais de um Projeto antes de iniciar o Projeto seguinte.
-2. **Em lote por processo — transitório**: executa o mesmo Processo Universal em todos os Projetos, de forma sequencial, antes de avançar ao processo seguinte. Assim, um lote de 10 executa 10 Temas, depois 10 Títulos, 10 Thumbnails e assim por diante. Esse modo permanece disponível somente até o substituto da V1 atingir equivalência de parada, retomada e recuperação.
+2. **Lote híbrido**: trata `Tema`, `Título` e `Thumbnail` como três etapas agregadas, cada uma contendo N itens de produção com identidade estável. Depois dessa fronteira, `Roteiro`, `Voz`, `Assets`, `Edição` e `Postagem` continuam usando o motor linear por Projeto e a ordenação do lote por processo.
+
+O ponto de transição é `Roteiro`. Até `Thumbnail`, o ganho principal vem de coalescer trabalhos pequenos de vários vídeos numa coleção administrável. A partir de `Roteiro`, cada vídeo passa a carregar contexto e produção interna suficientes para continuar como uma execução de Projeto independente, inclusive quando um Bloco do próprio Projeto expande N itens internos.
+
+Filas antigas persistidas com o planejamento sequencial anterior conservam sua estratégia original até terminarem. Novas filas em lote usam uma versão de estratégia persistida, de forma que uma atualização do aplicativo nunca reinterprete o significado do cursor de uma fila já iniciada.
 
 A fila do Orquestrador nunca inicia dois itens em paralelo. Estados `awaiting_human` e `awaiting_output` pausam a fila no item atual e continuam alimentando a Central Global de Pendências Humanas. Um executor ausente mantém a fila bloqueada. Uma falha pausa a fila com erro: depois que o usuário corrige ou repete a etapa no Projeto, pode retomar a mesma fila no cursor preservado, sem recriar Projetos nem repetir etapas concluídas. Enquanto não for retomada, a falha também não impede que uma nova fila seja criada.
 
 O usuário pode parar uma fila em execução, aguardando humano, bloqueada ou com erro. O Stop cancela também a execução atual, impede o início dos itens restantes e preserva os Projetos já criados. Enquanto uma fila estiver ativa, seus Projetos não podem ser excluídos; primeiro é necessário pará-la. A fila, seu cursor, modo e Projetos pertencentes são persistidos localmente para permitir retomada após reiniciar o aplicativo.
 
-### 7.2. Lote inteligente da V1
+### 7.3. Execução agregada dos três primeiros processos
 
-O lote inteligente é uma função do Orquestrador para preparar vários Projetos; não é um Método, Processo Universal, Bloco ou Operador novo. Um Método continua descrevendo a execução de um vídeo individual.
+O lote híbrido é uma estratégia do Orquestrador; não é um Método, Processo Universal, Bloco ou Operador novo. Um Método continua descrevendo a execução de um vídeo individual e o núcleo continua sem conhecer regras específicas de ChatGPT, Claude, Gemini, Flow ou qualquer outro fornecedor.
 
-O usuário informa quantidade e critérios, escolhe plugin, capacidade e conexão, e autoriza uma única invocação que deve retornar `list` ou `records` estruturados. Cada candidato exige `theme`; `angle`, `promise` e `notes` são opcionais. O núcleo valida o contrato, quantidade e duplicidade e apresenta uma revisão editável. Nenhum Projeto é criado antes da confirmação humana dessa lista.
+Nos três primeiros processos, o Orquestrador constrói uma coleção ordenada de itens de produção. Cada item possui uma identidade estável que atravessa `Tema → Título → Thumbnail`; qualquer protocolo agregado deve transportar essa identidade até o resultado. O núcleo rejeita uma resposta que não consiga associar deterministicamente cada resultado ao item correspondente. Índice ou posição podem ser usados como informação auxiliar, nunca como a única identidade.
 
-Depois da confirmação, o núcleo materializa um Projeto por item, promove `theme` como output oficial com proveniência e continua os processos seguintes pelo motor linear existente, preferencialmente no modo ponta a ponta. O Orquestrador persiste candidatos, confirmação, IDs criados e cursor antes de avançar. Repetições após falha reutilizam esses IDs e nunca duplicam Projetos já materializados.
+O contrato alvo é `core entrega coleção → plugin escolhe estratégia`. Uma capability compatível pode executar a coleção numa única chamada de LLM, sequencialmente dentro da mesma sessão de navegador, em pequenos grupos ou com paralelismo próprio quando permitido. O plugin não escolhe a identidade, a ordem lógica, a política de retomada ou quais itens já estão aprovados; essas decisões pertencem ao núcleo.
 
-O plugin apenas produz a lista estruturada. Revisão, criação de Projetos, identidade, persistência, deduplicação, parada e retomada pertencem ao núcleo. O lote inteligente não é a mesma coisa que `execution.itemOrchestration`: esse contrato continua servindo para expandir uma lista dentro de um único Bloco/Projeto e persistir cada item sequencialmente.
+Durante a migração, a etapa agregada pode usar um adaptador de compatibilidade que percorre os Projetos pelo motor existente. Isso preserva parada, retomada, validação humana, snapshots e plugins atuais enquanto o protocolo nativo de coleção é introduzido. O estado persistido distingue a estratégia da fila, permitindo substituir a implementação interna sem alterar o modelo mental do usuário.
+
+`execution.itemOrchestration` e o lote híbrido compartilham a mesma primitiva de Item, mas atuam em escalas diferentes. O primeiro expande uma coleção dentro de um único Bloco/Projeto; o segundo coordena itens de produção entre Projetos. Um Projeto em lote pode, portanto, chegar a `Assets` e possuir 50 itens internos sem criar uma estrutura plana global nem misturar a identidade do vídeo com a identidade de suas cenas, prompts, áudios ou arquivos.
 
 ---
 

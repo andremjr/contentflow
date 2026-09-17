@@ -329,6 +329,55 @@ export type BlockExecutionStatus =
   | "failed"
   | "cancelled";
 
+export type BlockItemRetryScope = "remaining" | "all" | "selected";
+
+export type BlockItemProgress = {
+  /** Quantidade total de itens recebidos pela entrada orquestrada. */
+  total: number;
+  /** Prefixo sequencial já concluído e persistido pelo núcleo. */
+  completed: number;
+  /** Quantidade ainda não concluída, incluindo o item atual quando houver. */
+  pending: number;
+  /** Índice zero-based atualmente em execução ou que falhou. */
+  currentIndex?: number;
+  /** Índice zero-based do item que encerrou a tentativa com falha. */
+  failedIndex?: number;
+};
+
+export type BlockExecutionItemStatus =
+  "pending" | "in_progress" | "completed" | "failed" | "cancelled";
+
+export type BlockExecutionItemValue = RuntimeValue | StructuredRecord;
+
+export type BlockExecutionItemAttempt = {
+  attempt: number;
+  status: BlockExecutionItemStatus;
+  input: BlockExecutionItemValue;
+  output?: BlockExecutionItemValue;
+  error?: string;
+  startedAt?: string;
+  completedAt?: string;
+};
+
+/**
+ * Unidade operacional persistente de uma execução item a item.
+ *
+ * O significado editorial do item permanece externo ao núcleo. O ID pertence
+ * ao ContentFlow e sobrevive a retomadas da mesma coleção, enquanto
+ * `sourceItemId` preserva a linhagem com a entrega que originou a entrada.
+ */
+export type BlockExecutionItem = {
+  id: string;
+  sourceItemId?: string;
+  order: number;
+  input: BlockExecutionItemValue;
+  status: BlockExecutionItemStatus;
+  attempt: number;
+  output?: BlockExecutionItemValue;
+  error?: string;
+  attempts: BlockExecutionItemAttempt[];
+};
+
 export type BlockExecution = {
   blockId: string;
   status: BlockExecutionStatus;
@@ -341,6 +390,14 @@ export type BlockExecution = {
   traceId?: string;
   progress?: number;
   progressMessage?: string;
+  /** Resumo compacto do validador universal de uma entrada executada item a item. */
+  itemProgress?: BlockItemProgress;
+  /** Itens operacionais persistentes quando o bloco executa uma coleção. */
+  items?: BlockExecutionItem[];
+  /** Política escolhida pelo usuário para a próxima tentativa manual do lote. */
+  itemRetryScope?: BlockItemRetryScope;
+  /** Item específico solicitado quando a próxima tentativa é isolada. */
+  itemRetryId?: string;
   startedAt?: string;
   completedAt?: string;
   /** Referência opaca devolvida pelo plugin para continuidade entre blocos. */

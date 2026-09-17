@@ -4,6 +4,7 @@ import {
   PROCESS_META,
   PROCESS_ORDER,
   type ActionBlock,
+  type BlockItemRetryScope,
   type Channel,
   type ChannelLibraryItem,
   type ProcessExecution,
@@ -174,6 +175,30 @@ export function executionCommands(db: {
     }
     touchExecution(execution);
     return execution;
+  }
+
+  function blockDeliveryIssues(block: ActionBlock, values: Record<string, RuntimeValue>) {
+    const issues = (block.outputs ?? [])
+      .filter((output) => output.required && isEmptyRuntimeValue(values[output.key]))
+      .map((output) => output.label);
+    for (const output of block.outputs ?? []) {
+      const issue = getPresentationRestrictionIssue(output.presentation, values[output.key]);
+      if (issue) issues.push(`${output.label}: ${issue}`);
+    }
+    for (const output of (block.outputs ?? []).filter((field) => field.type === "records")) {
+      const storedRecords = values[output.key];
+      const records = Array.isArray(storedRecords) ? storedRecords : [];
+      records.forEach((record, index) => {
+        if (!record || typeof record !== "object" || Array.isArray(record) || "url" in record)
+          return;
+        for (const recordField of (output.recordFields ?? []).filter((field) => field.required)) {
+          if (isEmptyRuntimeValue(record[recordField.key] as RuntimeValue | undefined)) {
+            issues.push(`${output.label} · registro ${index + 1} · ${recordField.label}`);
+          }
+        }
+      });
+    }
+    return issues;
   }
 
   function chooseCollectionItem(executionId: string, blockId: string, itemId: string) {
@@ -383,26 +408,7 @@ export function executionCommands(db: {
         missing: unresolvedInputs.map((item) => `Entrada: ${item.input.label}`),
       };
     }
-    const missing = (block.outputs ?? [])
-      .filter((output) => output.required && isEmptyRuntimeValue(values[output.key]))
-      .map((output) => output.label);
-    for (const output of block.outputs ?? []) {
-      const issue = getPresentationRestrictionIssue(output.presentation, values[output.key]);
-      if (issue) missing.push(`${output.label}: ${issue}`);
-    }
-    for (const output of (block.outputs ?? []).filter((field) => field.type === "records")) {
-      const storedRecords = values[output.key];
-      const records = Array.isArray(storedRecords) ? storedRecords : [];
-      records.forEach((record, index) => {
-        if (!record || typeof record !== "object" || Array.isArray(record) || "url" in record)
-          return;
-        for (const recordField of (output.recordFields ?? []).filter((field) => field.required)) {
-          if (isEmptyRuntimeValue(record[recordField.key] as RuntimeValue | undefined)) {
-            missing.push(`${output.label} · registro ${index + 1} · ${recordField.label}`);
-          }
-        }
-      });
-    }
+    const missing = blockDeliveryIssues(block, values);
     if (missing.length) return { ok: false, missing };
     const rejected = (block.outputs ?? []).some(
       (output) => output.type === "approval" && values[output.key] === "rejected",
@@ -457,15 +463,75 @@ export function executionCommands(db: {
     return { ok: true };
   }
 
-  function retryBlockExecution(executionId: string, blockId: string) {
+  function acceptBlockDelivery(executionId: string, blockId: string) {
     const execution = db.executions.find((item) => item.id === executionId);
     const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
     const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
-    if (!execution || !blockExecution || !block || blockExecution.status !== "failed") return false;
+    if (
+      !execution ||
+      !blockExecution ||
+      !block ||
+      !["failed", "cancelled"].includes(blockExecution.status) ||
+      block.type === "ESCOLHER" ||
+      block.type === "VALIDAR"
+    ) {
+      return { ok: false as const, missing: ["Esta entrega não pode ser finalizada neste estado"] };
+    }
+    const missing = blockDeliveryIssues(block, blockExecution.values);
+    if (missing.length) return { ok: false as const, missing };
+
+    const now = new Date().toISOString();
+    blockExecution.status = "completed";
+    blockExecution.completedAt = now;
+    blockExecution.error = undefined;
+    blockExecution.progress = 1;
+    blockExecution.progressMessage = undefined;
+    blockExecution.itemProgress = undefined;
+    blockExecution.itemRetryScope = undefined;
+    recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
+    execution.error = undefined;
+    const updated = activateNextBlock(execution, execution.blocks.indexOf(blockExecution));
+    return { ok: true as const, completedProcess: updated.status === "completed" };
+  }
+
+  function retryBlockExecution(
+    executionId: string,
+    blockId: string,
+    retryScope: BlockItemRetryScope = "all",
+    itemId?: string,
+  ) {
+    const execution = db.executions.find((item) => item.id === executionId);
+    const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
+    const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
+    if (
+      !execution ||
+      !blockExecution ||
+      !block ||
+      (!["failed", "cancelled"].includes(blockExecution.status) &&
+        !(retryScope === "selected" && blockExecution.status === "completed"))
+    )
+      return false;
     blockExecution.attempt = (blockExecution.attempt ?? 1) + 1;
     invalidateBlockDeliveries(execution, [blockId]);
     blockExecution.error = undefined;
     blockExecution.pluginConversation = undefined;
+    blockExecution.jobId = undefined;
+    blockExecution.traceId = undefined;
+    if (retryScope === "selected" && !blockExecution.items?.some((item) => item.id === itemId)) {
+      return false;
+    }
+    blockExecution.itemRetryScope = retryScope;
+    blockExecution.itemRetryId = retryScope === "selected" ? itemId : undefined;
+    blockExecution.completedAt = undefined;
+    if (retryScope === "all") {
+      blockExecution.values = {};
+      blockExecution.itemProgress = undefined;
+      blockExecution.progress = undefined;
+    } else if (blockExecution.itemProgress?.total) {
+      blockExecution.progress =
+        blockExecution.itemProgress.completed / blockExecution.itemProgress.total;
+    }
+    blockExecution.progressMessage = undefined;
     blockExecution.status =
       block.operator === "Humano" && !block.plugin ? "awaiting_human" : "blocked_executor";
     execution.error = undefined;
@@ -490,6 +556,7 @@ export function executionCommands(db: {
     chooseCollectionItem,
     completeHumanBlock,
     completeProcessOutput,
+    acceptBlockDelivery,
     saveHumanBlockDraft,
     retryBlockExecution,
   };

@@ -27,8 +27,21 @@ test("ordena todos os processos de cada projeto no modo ponta a ponta", () => {
   assert.deepEqual(steps[8], { projectId: "project-2", processType: "theme" });
 });
 
-test("ordena todos os projetos por processo no modo em lote", () => {
+test("agrupa os três primeiros processos e mantém os demais por projeto no lote híbrido", () => {
   const steps = buildOrchestratorSteps(["project-1", "project-2"], "batch");
+
+  assert.equal(steps.length, 13);
+  assert.deepEqual(steps.slice(0, 5), [
+    { kind: "aggregate", projectIds: ["project-1", "project-2"], processType: "theme" },
+    { kind: "aggregate", projectIds: ["project-1", "project-2"], processType: "title" },
+    { kind: "aggregate", projectIds: ["project-1", "project-2"], processType: "thumbnail" },
+    { projectId: "project-1", processType: "script" },
+    { projectId: "project-2", processType: "script" },
+  ]);
+});
+
+test("preserva o planejamento legado para filas em lote já persistidas", () => {
+  const steps = buildOrchestratorSteps(["project-1", "project-2"], "batch", 1);
 
   assert.equal(steps.length, 16);
   assert.deepEqual(steps.slice(0, 4), [

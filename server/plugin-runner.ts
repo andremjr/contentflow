@@ -20,6 +20,7 @@ import type {
   PluginExecutionResponse,
   PluginArtifact,
   PluginManifest,
+  PluginPartialUpdate,
 } from "../src/lib/plugin-contract";
 import type { RuntimeValue, StoredFile } from "../src/lib/domain";
 import {
@@ -48,6 +49,7 @@ const maxArtifactBytes = 4 * 1024 * 1024 * 1024;
 const maxArtifactBatchBytes = 4 * 1024 * 1024 * 1024;
 const maxRemoteArtifactBatchBytes = 2 * 1024 * 1024 * 1024;
 const maxArtifactsPerResponse = 100;
+const partialPrefix = "CONTENTFLOW_PARTIAL\t";
 const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
 const defaultDataRoot =
   process.platform === "win32" && process.env.APPDATA
@@ -187,6 +189,7 @@ export async function executeRegisteredPlugin(
     artifactDirectory?: string;
     artifactUrlPrefix?: string;
     signal?: AbortSignal;
+    onPartial?: (update: PluginPartialUpdate & { storedArtifacts?: StoredFile[] }) => Promise<void>;
   } = {},
 ): Promise<PluginExecutionResponse> {
   if (!plugin.executable) {
@@ -263,7 +266,10 @@ export async function executeRegisteredPlugin(
 
   return new Promise((resolve, reject) => {
     let stdout = "";
+    let stdoutBuffer = "";
     let stderr = "";
+    let partialArtifacts = [...(options.existingArtifacts ?? [])];
+    let partialChain = Promise.resolve();
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const abort = () => {
@@ -292,9 +298,51 @@ export async function executeRegisteredPlugin(
       );
     }
 
+    const consumeStdoutLine = (line: string) => {
+      if (!line.startsWith(partialPrefix)) {
+        stdout += `${line}\n`;
+        return;
+      }
+      const payload = line.slice(partialPrefix.length);
+      partialChain = partialChain.then(async () => {
+        const event = JSON.parse(payload) as { sequence: number; update: PluginPartialUpdate };
+        const update = event.update;
+        const imported = await importPluginArtifacts(
+          {
+            status: "pending",
+            jobId: `stream:${event.sequence}`,
+            pollAfterMs: 1_000,
+            progress: update.progress,
+            message: update.message,
+            partialValues: update.values,
+            partialArtifacts: update.artifacts,
+            logs: update.logs,
+          },
+          outputDirectory,
+          artifactDirectory,
+          plugin.manifest,
+          {
+            existingArtifacts: partialArtifacts,
+            urlPrefix: options.artifactUrlPrefix,
+          },
+        );
+        partialArtifacts = imported.storedArtifacts ?? partialArtifacts;
+        await options.onPartial?.({
+          ...update,
+          values:
+            imported.status === "pending"
+              ? (imported.partialValues ?? update.values)
+              : update.values,
+          storedArtifacts: imported.storedArtifacts,
+        });
+      });
+    };
     child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
-      if (stdout.length > 2_000_000) child.kill();
+      stdoutBuffer += chunk.toString("utf8");
+      const lines = stdoutBuffer.split("\n");
+      stdoutBuffer = lines.pop() ?? "";
+      lines.forEach(consumeStdoutLine);
+      if (stdout.length + stdoutBuffer.length > 2_000_000) child.kill();
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString("utf8");
@@ -302,26 +350,35 @@ export async function executeRegisteredPlugin(
     });
     child.on("error", (error) => finish(() => reject(error)));
     child.on("close", () => {
-      finish(() => {
-        try {
-          const pluginResponse = JSON.parse(stdout) as PluginExecutionResponse;
-          void importPluginArtifacts(
-            pluginResponse,
-            outputDirectory,
-            artifactDirectory,
-            plugin.manifest,
-            {
-              existingArtifacts: options.existingArtifacts,
-              urlPrefix: options.artifactUrlPrefix,
-            },
-          )
-            .then(resolve, reject)
-            .finally(() => rmSync(outputDirectory, { recursive: true, force: true }));
-        } catch {
-          reject(new Error(stderr.trim() || "O plugin devolveu uma resposta inválida."));
-          rmSync(outputDirectory, { recursive: true, force: true });
-        }
-      });
+      if (stdoutBuffer) consumeStdoutLine(stdoutBuffer);
+      void partialChain.then(
+        () =>
+          finish(() => {
+            try {
+              const pluginResponse = JSON.parse(stdout.trim()) as PluginExecutionResponse;
+              void importPluginArtifacts(
+                pluginResponse,
+                outputDirectory,
+                artifactDirectory,
+                plugin.manifest,
+                {
+                  existingArtifacts: partialArtifacts,
+                  urlPrefix: options.artifactUrlPrefix,
+                },
+              )
+                .then(resolve, reject)
+                .finally(() => rmSync(outputDirectory, { recursive: true, force: true }));
+            } catch {
+              reject(new Error(stderr.trim() || "O plugin devolveu uma resposta inválida."));
+              rmSync(outputDirectory, { recursive: true, force: true });
+            }
+          }),
+        (error) =>
+          finish(() => {
+            rmSync(outputDirectory, { recursive: true, force: true });
+            reject(error);
+          }),
+      );
     });
     const declaredSecrets = new Set(plugin.manifest.secretKeys ?? []);
     const authorizedSecrets = Object.fromEntries(
@@ -377,7 +434,8 @@ export async function importPluginArtifacts(
       ? { ...response, values, storedArtifacts }
       : { ...response, partialValues: values, storedArtifacts };
   }
-  if (artifacts.length > maxArtifactsPerResponse) {
+  const newArtifacts = artifacts.filter((artifact) => !imported.has(artifact.id));
+  if (newArtifacts.length > maxArtifactsPerResponse) {
     throw new Error(`A resposta excede o limite de ${maxArtifactsPerResponse} artifacts.`);
   }
   const artifactIds = artifacts.map((artifact) => artifact.id);

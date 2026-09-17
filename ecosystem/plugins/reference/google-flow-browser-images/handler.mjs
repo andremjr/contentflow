@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, join } from "node:path";
 
@@ -835,6 +835,112 @@ function generationCheckpointPath(request, services) {
   return services.getWorkspacePath(`.flow-generation-${key}.json`);
 }
 
+function generationCacheDirectory(request, services) {
+  if (typeof services?.getWorkspacePath !== "function") return undefined;
+  const key = createHash("sha256")
+    .update(`${request?.executionId || "execution"}:${request?.blockId || "block"}`)
+    .digest("hex")
+    .slice(0, 24);
+  return services.getWorkspacePath(`.flow-generation-cache-${key}`);
+}
+
+async function findFileRecursively(root, filename) {
+  if (!root || !existsSync(root)) return undefined;
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const candidate = join(root, entry.name);
+    if (entry.isFile() && entry.name === filename) return candidate;
+    if (entry.isDirectory()) {
+      const nested = await findFileRecursively(candidate, filename);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
+async function cacheGenerationArtifact(request, services, artifact) {
+  if (!artifact?.source?.path || typeof services?.getOutputPath !== "function") return;
+  const cacheDirectory = generationCacheDirectory(request, services);
+  if (!cacheDirectory) return;
+  const sourcePath = services.getOutputPath(artifact.source.path);
+  if (!existsSync(sourcePath)) return;
+  await mkdir(cacheDirectory, { recursive: true });
+  await copyFile(sourcePath, join(cacheDirectory, artifact.source.path));
+}
+
+async function restoreCheckpointArtifacts(request, services, files) {
+  if (!Array.isArray(files) || files.length === 0) return [];
+  const cacheDirectory = generationCacheDirectory(request, services);
+  const executionOutputRoot =
+    typeof services?.getWorkspacePath === "function"
+      ? services.getWorkspacePath(`.contentflow-output/${request.executionId}`)
+      : undefined;
+  const artifacts = [];
+  for (const file of files) {
+    if (!file?.id || !file?.name || !file?.mimeType) continue;
+    if (typeof services?.getOutputPath === "function") {
+      const targetPath = services.getOutputPath(file.name);
+      if (!existsSync(targetPath)) {
+        const cachedPath = cacheDirectory ? join(cacheDirectory, file.name) : undefined;
+        const sourcePath =
+          cachedPath && existsSync(cachedPath)
+            ? cachedPath
+            : await findFileRecursively(executionOutputRoot, file.name);
+        if (sourcePath) {
+          await copyFile(sourcePath, targetPath).catch(() => undefined);
+        }
+      }
+    }
+    artifacts.push({
+      id: file.id,
+      name: file.name,
+      mimeType: file.mimeType,
+      size: file.size,
+      source: { kind: "path", path: file.name },
+    });
+  }
+  return artifacts;
+}
+
+function durableResumeFiles(request, kind) {
+  const files = Array.isArray(request?.resume?.artifacts) ? request.resume.artifacts : [];
+  return files
+    .filter((file) => {
+      const mimeType = String(file?.mimeType || "").toLowerCase();
+      return kind === "video" ? mimeType.startsWith("video/") : mimeType.startsWith("image/");
+    })
+    .sort((left, right) => {
+      const leftMatch = String(left?.id || left?.name || "").match(/(?:image-|video-|^)(\d{3})/i);
+      const rightMatch = String(right?.id || right?.name || "").match(
+        /(?:image-|video-|^)(\d{3})/i,
+      );
+      return Number(leftMatch?.[1] || 0) - Number(rightMatch?.[1] || 0);
+    });
+}
+
+function durableResumeOutputFiles(request, portKey, kind) {
+  const field = (request?.outputContract ?? []).find((item) => item?.portKey === portKey);
+  const mappedKey = field?.key;
+  const mappedValue = mappedKey ? request?.resume?.values?.[mappedKey] : undefined;
+  const candidates = normalizeReferenceImages(mappedValue);
+  const typed = candidates.filter((file) => {
+    const mimeType = String(file?.mimeType || "").toLowerCase();
+    return kind === "video" ? mimeType.startsWith("video/") : mimeType.startsWith("image/");
+  });
+  return typed.length > 0 ? typed : durableResumeFiles(request, kind);
+}
+
+function promptIndexFromGeneratedFile(file, kind) {
+  const prefix = kind === "video" ? "google-flow-video-" : "google-flow-image-";
+  const id = String(file?.id || "");
+  if (id.startsWith(prefix)) {
+    const ordinal = Number(id.slice(prefix.length).match(/^\d+/)?.[0]);
+    if (Number.isInteger(ordinal) && ordinal > 0) return ordinal - 1;
+  }
+  const ordinal = Number(String(file?.name || "").match(/^(\d{3})_/)?.[1]);
+  return Number.isInteger(ordinal) && ordinal > 0 ? ordinal - 1 : undefined;
+}
+
 function generationPromptDigest(prompts) {
   return createHash("sha256").update(JSON.stringify(prompts)).digest("hex");
 }
@@ -847,6 +953,9 @@ async function readGenerationCheckpoint(request, services, prompts) {
     if (
       state?.executionId !== request.executionId ||
       state?.blockId !== request.blockId ||
+      (state?.capabilityId
+        ? state.capabilityId !== request.capabilityId
+        : request.capabilityId !== "generate-images-in-browser") ||
       state?.promptDigest !== generationPromptDigest(prompts) ||
       !Array.isArray(state.completedPromptIndexes) ||
       !Array.isArray(state.files)
@@ -867,6 +976,7 @@ async function saveGenerationCheckpoint(request, services, prompts, state) {
     JSON.stringify({
       executionId: request.executionId,
       blockId: request.blockId,
+      capabilityId: request.capabilityId,
       promptDigest: generationPromptDigest(prompts),
       completedPromptIndexes: [...new Set(state.completedPromptIndexes)].sort((a, b) => a - b),
       files: state.files,
@@ -884,6 +994,9 @@ async function saveGenerationCheckpoint(request, services, prompts, state) {
 async function clearGenerationCheckpoint(request, services) {
   const statePath = generationCheckpointPath(request, services);
   if (statePath) await rm(statePath, { force: true }).catch(() => undefined);
+  const cacheDirectory = generationCacheDirectory(request, services);
+  if (cacheDirectory)
+    await rm(cacheDirectory, { recursive: true, force: true }).catch(() => undefined);
 }
 
 function defaultProfilePath() {
@@ -980,18 +1093,112 @@ function resolveGenerationPreferences(configuration = {}) {
     throw codedError("INVALID_CONFIGURATION", "aspectRatio não é reconhecido.");
   }
   const modelKey = requestedModelKey === "flow_auto" ? "nano_banana_pro" : requestedModelKey;
+  const customModelLabel = String(configuration.imageModelLabel || "").trim();
   return {
     requestedModelKey,
     modelKey,
     imageModelName: IMAGE_MODELS[modelKey],
-    imageModelLabel: configuration.imageModelLabel || MODEL_LABELS[requestedModelKey] || null,
+    imageModelLabel: customModelLabel || MODEL_LABELS[requestedModelKey] || null,
     aspectRatioKey,
     imageAspectRatio: ASPECT_RATIOS[aspectRatioKey],
+    // "flow_auto" is the automatic Pro -> 2 -> 2 Lite chain by definition.
+    // Older Method snapshots may contain fallbackOnModelLimit=false from the
+    // previous schema default, so that stale flag must not disable auto mode.
+    // A custom visible Flow label has no known fallback chain and therefore
+    // remains isolated from the preset model sequence.
     fallbackOnModelLimit:
-      configuration.fallbackOnModelLimit !== undefined
-        ? configuration.fallbackOnModelLimit !== false
-        : requestedModelKey !== "flow_auto",
+      !customModelLabel &&
+      (requestedModelKey === "flow_auto" || configuration.fallbackOnModelLimit !== false),
   };
+}
+
+function visualProductionCheckpointPath(request, services) {
+  if (typeof services?.getWorkspacePath !== "function") return undefined;
+  const key = createHash("sha256")
+    .update(`${request?.executionId || "execution"}:${request?.blockId || "block"}`)
+    .digest("hex")
+    .slice(0, 24);
+  return services.getWorkspacePath(`.flow-visual-production-${key}.json`);
+}
+
+function visualProductionDigest({ prompts, characterPrompts, animationPrompts, configuration }) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        prompts,
+        characterPrompts,
+        animationPrompts,
+        productionMode: configuration.productionMode ?? "images_only",
+        animationSelection: configuration.animationSelection,
+        animationIndexes: configuration.animationIndexes,
+        maxVideosToAnimate: configuration.maxVideosToAnimate,
+        imageRetention: configuration.imageRetention,
+        maxCharacterReferences: configuration.maxCharacterReferences,
+        saveCharacterReferences: configuration.saveCharacterReferences,
+        enableCharacterConsistency: configuration.enableCharacterConsistency,
+      }),
+    )
+    .digest("hex");
+}
+
+async function readVisualProductionCheckpoint(request, services, descriptor) {
+  const statePath = visualProductionCheckpointPath(request, services);
+  if (!statePath) return undefined;
+  try {
+    const state = JSON.parse(await readFile(statePath, "utf8"));
+    if (
+      state?.executionId !== request.executionId ||
+      state?.blockId !== request.blockId ||
+      state?.digest !== visualProductionDigest(descriptor)
+    ) {
+      return undefined;
+    }
+    return state;
+  } catch {
+    return undefined;
+  }
+}
+
+async function saveVisualProductionCheckpoint(request, services, descriptor, state) {
+  const statePath = visualProductionCheckpointPath(request, services);
+  if (!statePath) return;
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      executionId: request.executionId,
+      blockId: request.blockId,
+      digest: visualProductionDigest(descriptor),
+      characterReferences: state.characterReferences ?? [],
+      images: state.images ?? [],
+      animationResults: state.animationResults ?? [],
+      accountProfile: normalizeAccountProfile(request?.configuration?.accountProfile),
+      projectUrl:
+        state.projectUrl && isFlowUrl(state.projectUrl, true)
+          ? validateFlowUrl(state.projectUrl)
+          : undefined,
+      updatedAt: new Date().toISOString(),
+    }),
+    { encoding: "utf8", flag: "w" },
+  );
+}
+
+async function clearVisualProductionCheckpoint(request, services) {
+  const statePath = visualProductionCheckpointPath(request, services);
+  if (statePath) await rm(statePath, { force: true }).catch(() => undefined);
+}
+
+function checkpointProjectUrlForProfile(checkpoint, accountProfile) {
+  if (!checkpoint?.projectUrl) return undefined;
+  return checkpoint.accountProfile === normalizeAccountProfile(accountProfile)
+    ? checkpoint.projectUrl
+    : undefined;
+}
+
+function visualProductionProjectUrlForProfile(checkpoint, accountProfile, inputProjectUrl) {
+  if (checkpoint) return checkpointProjectUrlForProfile(checkpoint, accountProfile);
+  return inputProjectUrl && isFlowUrl(inputProjectUrl, true)
+    ? validateFlowUrl(inputProjectUrl)
+    : undefined;
 }
 
 function nextImageModelFallback(modelKey) {
@@ -1095,7 +1302,17 @@ async function executeVisualProductionBatch(request, services) {
         },
         outputContract: [{ portKey: "video", type: "files" }],
       },
-      services,
+      {
+        ...services,
+        publishPartial: async (update) =>
+          await services.publishPartial?.({
+            ...update,
+            values: {
+              videos: normalizeReferenceImages(update.values?.video),
+              ...(update.values?.project_url ? { project_url: update.values.project_url } : {}),
+            },
+          }),
+      },
     );
     if (videoResult.status !== "success") return videoResult;
     return {
@@ -1113,10 +1330,31 @@ async function executeVisualProductionBatch(request, services) {
         ? configuration.characterPrompts
         : undefined),
   );
-  let characterReferences = [];
-  let characterArtifacts = [];
-  let activeProjectUrl = request?.inputs?.project_url;
-  if (characterPrompts.length > 0) {
+  const animationPrompts = normalizePrompts(request?.inputs?.animation_prompts);
+  const checkpointDescriptor = {
+    prompts,
+    characterPrompts,
+    animationPrompts,
+    configuration,
+  };
+  const productionCheckpoint = await readVisualProductionCheckpoint(
+    request,
+    services,
+    checkpointDescriptor,
+  );
+  const durableImages = durableResumeOutputFiles(request, "images", "image").filter((file) => {
+    const index = promptIndexFromGeneratedFile(file, "image");
+    return Number.isInteger(index) && index >= 0 && index < prompts.length;
+  });
+  let characterReferences = normalizeReferenceImages(productionCheckpoint?.characterReferences);
+  let characterArtifacts = await restoreCheckpointArtifacts(request, services, characterReferences);
+  const checkpointProjectUrl = visualProductionProjectUrlForProfile(
+    productionCheckpoint,
+    configuration.accountProfile,
+    request?.inputs?.project_url,
+  );
+  let activeProjectUrl = checkpointProjectUrl;
+  if (characterPrompts.length > 0 && characterReferences.length === 0) {
     const characterResult = await execute(
       {
         ...request,
@@ -1128,7 +1366,17 @@ async function executeVisualProductionBatch(request, services) {
         },
         outputContract: [{ portKey: "images", type: "files" }],
       },
-      services,
+      {
+        ...services,
+        publishPartial: async (update) =>
+          await services.publishPartial?.({
+            ...update,
+            values: {
+              character_references: normalizeReferenceImages(update.values?.images),
+              ...(update.values?.project_url ? { project_url: update.values.project_url } : {}),
+            },
+          }),
+      },
     );
     if (characterResult.status !== "success") return characterResult;
     const characterLimit = Number.isInteger(configuration.maxCharacterReferences)
@@ -1143,21 +1391,51 @@ async function executeVisualProductionBatch(request, services) {
       characterIds.has(artifact?.id),
     );
     activeProjectUrl = characterResult.values?.project_url ?? activeProjectUrl;
+    await saveVisualProductionCheckpoint(request, services, checkpointDescriptor, {
+      characterReferences,
+      images: productionCheckpoint?.images,
+      animationResults: productionCheckpoint?.animationResults,
+      projectUrl: activeProjectUrl,
+    });
+  } else if (characterReferences.length > 0) {
+    characterReferences = characterReferences.slice(
+      0,
+      Number.isInteger(configuration.maxCharacterReferences)
+        ? Math.max(1, Math.min(configuration.maxCharacterReferences, 10))
+        : 1,
+    );
   }
-  const imageRequest = {
-    ...request,
-    capabilityId: "generate-images-in-browser",
-    inputs: {
-      prompts,
-      reference_images: [request?.inputs?.reference_images, characterReferences],
-      project_url: activeProjectUrl,
-    },
-    outputContract: [{ portKey: "images", type: "files" }],
-  };
-  const imageResult = await execute(imageRequest, services);
-  if (imageResult.status !== "success") return imageResult;
-
-  const images = normalizeReferenceImages(imageResult.values?.images);
+  let images =
+    durableImages.length > 0
+      ? durableImages
+      : normalizeReferenceImages(productionCheckpoint?.images);
+  let imageArtifacts =
+    durableImages.length > 0 ? [] : await restoreCheckpointArtifacts(request, services, images);
+  let imageLogs = [];
+  if (images.length < prompts.length) {
+    const imageRequest = {
+      ...request,
+      capabilityId: "generate-images-in-browser",
+      inputs: {
+        prompts,
+        reference_images: [request?.inputs?.reference_images, characterReferences],
+        project_url: activeProjectUrl,
+      },
+      outputContract: [{ portKey: "images", type: "files" }],
+    };
+    const imageResult = await execute(imageRequest, services);
+    if (imageResult.status !== "success") return imageResult;
+    images = normalizeReferenceImages(imageResult.values?.images);
+    imageArtifacts = imageResult.artifacts ?? [];
+    imageLogs = imageResult.logs ?? [];
+    activeProjectUrl = imageResult.values?.project_url ?? activeProjectUrl;
+    await saveVisualProductionCheckpoint(request, services, checkpointDescriptor, {
+      characterReferences,
+      images,
+      animationResults: productionCheckpoint?.animationResults,
+      projectUrl: activeProjectUrl,
+    });
+  }
   const selectedIndexes =
     productionMode === "images_to_video_all"
       ? Array.from({ length: images.length }, (_, index) => index)
@@ -1172,16 +1450,23 @@ async function executeVisualProductionBatch(request, services) {
   const retainedImageIds = new Set(retainedImages.map((image) => image?.id).filter(Boolean));
   const retainedImageArtifacts =
     configuration.imageRetention === "keep_animated_only"
-      ? (imageResult.artifacts ?? []).filter((artifact) => retainedImageIds.has(artifact?.id))
-      : (imageResult.artifacts ?? []);
-  const animationPrompts = normalizePrompts(request?.inputs?.animation_prompts);
-  const videos = [];
-  const videoArtifacts = [];
+      ? imageArtifacts.filter((artifact) => retainedImageIds.has(artifact?.id))
+      : imageArtifacts;
+  const animationResults = new Map(
+    (Array.isArray(productionCheckpoint?.animationResults)
+      ? productionCheckpoint.animationResults
+      : []
+    )
+      .filter((entry) => Number.isInteger(entry?.imageIndex) && Array.isArray(entry?.videos))
+      .map((entry) => [entry.imageIndex, normalizeReferenceImages(entry.videos)]),
+  );
+  let videos = selectedIndexes.flatMap((imageIndex) => animationResults.get(imageIndex) ?? []);
+  const videoArtifacts = await restoreCheckpointArtifacts(request, services, videos);
   const logs = [
     ...(characterPrompts.length > 0
       ? [`Produção visual: ${characterReferences.length} referência(s) de personagem gerada(s).`]
       : []),
-    ...(imageResult.logs ?? []),
+    ...imageLogs,
   ];
   logs.push(
     `Produção visual: ${images.length} imagem(ns) gerada(s); ${selectedIndexes.length} selecionada(s) para animação.`,
@@ -1189,6 +1474,12 @@ async function executeVisualProductionBatch(request, services) {
 
   for (let position = 0; position < selectedIndexes.length; position += 1) {
     const imageIndex = selectedIndexes[position];
+    if (animationResults.has(imageIndex)) {
+      logs.push(
+        `Produção visual: animação ${position + 1}/${selectedIndexes.length} já concluída; retomando da próxima tarefa.`,
+      );
+      continue;
+    }
     const animationRequest = {
       ...request,
       capabilityId: "animate-image-in-browser",
@@ -1196,13 +1487,28 @@ async function executeVisualProductionBatch(request, services) {
         images: images[imageIndex],
         prompts:
           animationPrompts[imageIndex] ?? animationPrompts[position] ?? prompts[imageIndex] ?? "",
-        project_url: imageResult.values?.project_url,
+        project_url: activeProjectUrl,
       },
       outputContract: [{ portKey: "video", type: "files" }],
     };
     const animationResult = await execute(animationRequest, services);
     logs.push(...(animationResult.logs ?? []));
     if (animationResult.status !== "success") {
+      activeProjectUrl =
+        animationResult.partialValues?.project_url ??
+        animationResult.values?.project_url ??
+        activeProjectUrl;
+      await saveVisualProductionCheckpoint(request, services, checkpointDescriptor, {
+        characterReferences,
+        images,
+        animationResults: [...animationResults.entries()].map(
+          ([completedImageIndex, resultVideos]) => ({
+            imageIndex: completedImageIndex,
+            videos: resultVideos,
+          }),
+        ),
+        projectUrl: activeProjectUrl,
+      });
       const failure = {
         ...animationResult,
         partialValues: {
@@ -1211,7 +1517,7 @@ async function executeVisualProductionBatch(request, services) {
             ? { character_references: characterReferences }
             : {}),
           ...(videos.length > 0 ? { videos } : {}),
-          project_url: imageResult.values?.project_url,
+          project_url: activeProjectUrl,
         },
         partialArtifacts: [
           ...(retainImages ? retainedImageArtifacts : []),
@@ -1222,12 +1528,45 @@ async function executeVisualProductionBatch(request, services) {
       };
       return failure;
     }
-    videos.push(...normalizeReferenceImages(animationResult.values?.video));
+    const completedVideos = normalizeReferenceImages(animationResult.values?.video);
+    animationResults.set(imageIndex, completedVideos);
+    videos = selectedIndexes.flatMap((selectedIndex) => animationResults.get(selectedIndex) ?? []);
     videoArtifacts.push(...(animationResult.artifacts ?? []));
+    activeProjectUrl = animationResult.values?.project_url ?? activeProjectUrl;
+    await saveVisualProductionCheckpoint(request, services, checkpointDescriptor, {
+      characterReferences,
+      images,
+      animationResults: [...animationResults.entries()].map(
+        ([completedImageIndex, resultVideos]) => ({
+          imageIndex: completedImageIndex,
+          videos: resultVideos,
+        }),
+      ),
+      projectUrl: activeProjectUrl,
+    });
     logs.push(
       `Produção visual: animação ${position + 1}/${selectedIndexes.length} concluída (imagem ${imageIndex + 1}).`,
     );
+    await services.publishPartial?.({
+      values: {
+        ...(retainImages ? { images: retainedImages } : {}),
+        ...(configuration.saveCharacterReferences === true
+          ? { character_references: characterReferences }
+          : {}),
+        videos,
+        project_url: activeProjectUrl,
+      },
+      artifacts: [
+        ...(configuration.saveCharacterReferences === true ? characterArtifacts : []),
+        ...(retainImages ? retainedImageArtifacts : []),
+        ...videoArtifacts,
+      ],
+      progress: (position + 1) / selectedIndexes.length,
+      message: `Animação ${position + 1} de ${selectedIndexes.length} capturada.`,
+    });
   }
+
+  await clearVisualProductionCheckpoint(request, services);
 
   return {
     status: "success",
@@ -1237,7 +1576,7 @@ async function executeVisualProductionBatch(request, services) {
         ? { character_references: characterReferences }
         : {}),
       ...(videos.length > 0 ? { videos } : {}),
-      project_url: imageResult.values?.project_url,
+      project_url: activeProjectUrl,
     },
     artifacts: [
       ...(configuration.saveCharacterReferences === true ? characterArtifacts : []),
@@ -4474,10 +4813,41 @@ export async function execute(request, services) {
       : "Depuração contínua ativa durante o job inteiro.",
   );
 
-  const generationCheckpoint =
-    capabilityId === "generate-images-in-browser" && coreBatchIndex === undefined
+  const localGenerationCheckpoint =
+    (capabilityId === "generate-images-in-browser" ||
+      capabilityId === "generate-video-in-browser") &&
+    coreBatchIndex === undefined
       ? await readGenerationCheckpoint(request, services, prompts)
       : undefined;
+  const durableGenerationFiles =
+    coreBatchIndex === undefined &&
+    (capabilityId === "generate-images-in-browser" || capabilityId === "generate-video-in-browser")
+      ? durableResumeFiles(
+          request,
+          capabilityId === "generate-video-in-browser" ? "video" : "image",
+        ).filter((file) => {
+          const index = promptIndexFromGeneratedFile(
+            file,
+            capabilityId === "generate-video-in-browser" ? "video" : "image",
+          );
+          return Number.isInteger(index) && index >= 0 && index < prompts.length;
+        })
+      : [];
+  const generationCheckpoint =
+    durableGenerationFiles.length > 0
+      ? {
+          ...(localGenerationCheckpoint ?? {}),
+          completedPromptIndexes: durableGenerationFiles
+            .map((file) =>
+              promptIndexFromGeneratedFile(
+                file,
+                capabilityId === "generate-video-in-browser" ? "video" : "image",
+              ),
+            )
+            .filter(Number.isInteger),
+          files: durableGenerationFiles,
+        }
+      : localGenerationCheckpoint;
   const completedPromptIndexes = new Set(
     (generationCheckpoint?.completedPromptIndexes ?? []).filter(
       (index) => Number.isInteger(index) && index >= 0 && index < prompts.length,
@@ -4549,7 +4919,14 @@ export async function execute(request, services) {
   const files = Array.isArray(generationCheckpoint?.files)
     ? structuredClone(generationCheckpoint.files)
     : [];
-  const artifacts = [];
+  const durableGenerationArtifactIds = new Set(
+    durableGenerationFiles.map((file) => file?.id).filter(Boolean),
+  );
+  const artifacts = generationCheckpoint
+    ? (await restoreCheckpointArtifacts(request, services, files)).filter(
+        (artifact) => !durableGenerationArtifactIds.has(artifact?.id),
+      )
+    : [];
   try {
     browserInfo = await launchOrReuseChrome({
       executables: chromeExecutables,
@@ -4720,6 +5097,15 @@ export async function execute(request, services) {
       files.push(result.file);
       artifacts.push(result.artifact);
       step(`Vídeo animado salvo (${result.file.name}).`);
+      await services.publishPartial?.({
+        values: {
+          video: singleVideoOutput ? files[0] : files,
+          ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
+        },
+        artifacts,
+        progress: 1,
+        message: "Vídeo animado capturado.",
+      });
 
       activeProjectUrl = (await getActiveFlowProjectUrl(client, sessionId)) || activeProjectUrl;
       if (settings.minimizeWhenReady === true)
@@ -4813,6 +5199,15 @@ export async function execute(request, services) {
         files.push(result.file);
         artifacts.push(result.artifact);
         step(`${label}: salvo (${result.file.name}).`);
+        await services.publishPartial?.({
+          values: {
+            video: singleVideoOutput ? files[0] : files,
+            ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
+          },
+          artifacts,
+          progress: (index + 1) / prompts.length,
+          message: `${label}: vídeo capturado.`,
+        });
 
         if (index + 1 < prompts.length && delayBetweenPromptsMs > 0) {
           await sleep(delayBetweenPromptsMs, services.signal);
@@ -5208,14 +5603,14 @@ export async function execute(request, services) {
     step(
       `Gerenciador iniciado: ${pendingPrompts.length} prompt(s) pendente(s) de ${prompts.length}, até ${maxConcurrentGenerations} geração(ões) simultânea(s), ${retryAttempts} nova(s) tentativa(s) após a fila inicial.`,
     );
-    await runGenerationPlan({
+    const generationPlan = await runGenerationPlan({
       prompts: pendingPrompts,
       maxInFlight: maxConcurrentGenerations,
       retryAttempts,
       submit,
       minDelayMs: delayBetweenPromptsMs,
       signal: services.signal,
-      failFast: true,
+      failFast: false,
       async onItemCompleted({ task, value }) {
         const index = originalPromptIndex(task.index);
         if (!Array.isArray(value) || value.length === 0)
@@ -5229,6 +5624,7 @@ export async function execute(request, services) {
               "OUTPUT_VALIDATION_FAILED",
               `A fila terminou com um artifact inválido no prompt ${index + 1}.`,
             );
+          await cacheGenerationArtifact(request, services, result.artifact);
           files.push(result.file);
           artifacts.push(result.artifact);
         }
@@ -5240,6 +5636,15 @@ export async function execute(request, services) {
           accountProfile: profileRuntime.accountProfile,
         });
         step(`Fila: prompt ${index + 1} persistido localmente antes de avançar.`);
+        await services.publishPartial?.({
+          values: {
+            images: singleImageOutput ? files[0] : files,
+            ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
+          },
+          artifacts,
+          progress: completedPromptIndexes.size / prompts.length,
+          message: `Prompt ${index + 1} de ${prompts.length} capturado.`,
+        });
       },
       onState(event) {
         const index = originalPromptIndex(event.task?.index ?? 0);
@@ -5253,7 +5658,7 @@ export async function execute(request, services) {
           );
         } else if (event.type === "failed") {
           step(
-            `Fila interrompida no prompt ${index + 1} (${event.error?.code || "JOB_FAILED"}: ${event.error?.message || "erro não detalhado"}).`,
+            `Fila: prompt ${index + 1} falhou (${event.error?.code || "JOB_FAILED"}: ${event.error?.message || "erro não detalhado"}); os demais prompts continuam.`,
           );
         } else if (event.type === "retry-round") {
           step(
@@ -5266,6 +5671,28 @@ export async function execute(request, services) {
         }
       },
     });
+
+    if (generationPlan.failures.length > 0) {
+      const failedPrompts = generationPlan.failures.map(({ task, error }) => {
+        const index = originalPromptIndex(task.index);
+        return {
+          index,
+          prompt: prompts[index],
+          code: error?.code || "JOB_FAILED",
+          message: error?.message || "A geração não foi concluída.",
+          retryable: error?.retryable !== false,
+        };
+      });
+      const summary = failedPrompts
+        .map((item) => `#${item.index + 1} ${item.code}: ${item.message}`)
+        .join(" | ");
+      const partialFailure = codedError(
+        "PARTIAL_FAILURE",
+        `${failedPrompts.length} prompt(s) não foram concluídos; as imagens já geradas foram preservadas. ${summary}`,
+      );
+      partialFailure.retryable = failedPrompts.some((item) => item.retryable);
+      throw partialFailure;
+    }
 
     activeProjectUrl = (await getActiveFlowProjectUrl(client, sessionId)) || activeProjectUrl;
     if (settings.minimizeWhenReady === true)
@@ -5348,6 +5775,8 @@ export async function execute(request, services) {
           ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
         };
       }
+    } else if (activeProjectUrl) {
+      errorResponse.partialValues = { project_url: activeProjectUrl };
     }
     if (artifacts.length > 0) {
       errorResponse.partialArtifacts = artifacts;
@@ -5395,6 +5824,15 @@ export const __test = {
   readGenerationCheckpoint,
   saveGenerationCheckpoint,
   clearGenerationCheckpoint,
+  durableResumeFiles,
+  durableResumeOutputFiles,
+  promptIndexFromGeneratedFile,
+  visualProductionCheckpointPath,
+  readVisualProductionCheckpoint,
+  saveVisualProductionCheckpoint,
+  clearVisualProductionCheckpoint,
+  checkpointProjectUrlForProfile,
+  visualProductionProjectUrlForProfile,
   defaultProfilePath,
   defaultProfilesRootPath,
   normalizeAccountProfile,

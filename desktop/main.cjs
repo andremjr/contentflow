@@ -15,6 +15,12 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { configureDesktopUpdater } = require("./updater.cjs");
 
+app.setName("ContentFlow");
+app.setAppUserModelId("com.contentflow.app");
+if (process.env.CONTENTFLOW_ELECTRON_USER_DATA_DIR) {
+  app.setPath("userData", path.resolve(process.env.CONTENTFLOW_ELECTRON_USER_DATA_DIR));
+}
+
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
 
@@ -30,12 +36,6 @@ const HUMAN_TASKS_UPDATE_CHANNEL = "contentflow:human-tasks-update";
 const HUMAN_TASKS_NAVIGATE_CHANNEL = "contentflow:human-tasks-navigate";
 const HUMAN_TASK_ROUTE =
   /^\/project\/[^/]+\/(theme|title|thumbnail|script|narration|assets|edit|publish)$/;
-
-app.setName("ContentFlow");
-app.setAppUserModelId("com.contentflow.app");
-if (process.env.CONTENTFLOW_ELECTRON_USER_DATA_DIR) {
-  app.setPath("userData", path.resolve(process.env.CONTENTFLOW_ELECTRON_USER_DATA_DIR));
-}
 
 app.on("second-instance", () => {
   if (!mainWindow) return;

@@ -8,9 +8,12 @@ import {
   ChevronDown,
   Code2,
   LoaderCircle,
+  Pencil,
   Play,
   RotateCcw,
   Square,
+  Upload,
+  X,
   UserRound,
 } from "lucide-react";
 import { RuntimeFieldsForm } from "@/components/runtime-fields-form";
@@ -25,6 +28,9 @@ import {
   PROCESS_ORDER,
   type ActionBlock,
   type BlockExecution,
+  type BlockExecutionItem,
+  type BlockItemProgress,
+  type BlockItemRetryScope,
   type ChannelLibraryItem,
   type HumanFieldType,
   type ProcessExecution,
@@ -43,6 +49,7 @@ import {
 } from "@/lib/human-workflow";
 import { resolveBlockInputs } from "@/lib/runtime-contract";
 import {
+  acceptBlockDelivery,
   cancelProcessExecution,
   chooseCollectionItem,
   completeHumanBlock,
@@ -54,6 +61,9 @@ import {
   readRuntimeDraft,
   saveProcessOutputDraft,
   startProcessExecution,
+  updateBlockExecutionItemOutput,
+  updateBlockExecutionValues,
+  uploadLocalFile,
   useChannel,
   useChannelExecutions,
   useLibraryCollections,
@@ -93,6 +103,9 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
   const method = channel?.methods[processId];
   const meta = PROCESS_META[processId];
   const completed = execution?.status === "completed";
+  const canCancelExecution = Boolean(
+    execution && !["completed", "failed", "cancelled"].includes(execution.status),
+  );
   const nextProcess = PROCESS_ORDER[PROCESS_ORDER.indexOf(processId) + 1];
   const nextNavigationTimer = useRef<number | undefined>(undefined);
   const previousExecutionStatus = useRef(execution?.status);
@@ -101,6 +114,16 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
   const activeBlock = activeExecution
     ? execution?.methodSnapshot.blocks.find((item) => item.id === activeExecution.blockId)
     : undefined;
+  const activeBlockIndex = activeExecution
+    ? (execution?.blocks.findIndex((item) => item.blockId === activeExecution.blockId) ?? -1)
+    : -1;
+  const activeBlockIsLast = Boolean(
+    execution && activeBlockIndex >= 0 && activeBlockIndex === execution.blocks.length - 1,
+  );
+  const hasActiveDelivery = Boolean(
+    activeExecution &&
+    Object.values(activeExecution.values).some((value) => !isEmptyDisplayValue(value)),
+  );
   const waitingForHumanAction =
     activeExecution?.status === "awaiting_human" && activeBlock?.operator === "Humano";
   const waitingForHumanChoice =
@@ -209,17 +232,46 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
     }
   }
 
-  async function retry() {
+  async function retry(retryScope: BlockItemRetryScope = "all", itemId?: string) {
     try {
       if (
         !execution ||
         !activeExecution ||
-        !(await retryBlockExecution(execution.id, activeExecution.blockId))
+        !(await retryBlockExecution(execution.id, activeExecution.blockId, retryScope, itemId))
       )
         return;
-      toast.success("Bloco preparado para uma nova tentativa.");
+      toast.success(
+        retryScope === "selected"
+          ? "Item preparado para uma nova tentativa."
+          : retryScope === "remaining"
+            ? "Itens pendentes preparados para continuar."
+            : "Bloco preparado para uma nova tentativa.",
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível repetir.");
+    }
+  }
+
+  async function acceptCurrentDelivery() {
+    try {
+      if (!execution || !activeExecution) return;
+      const result = await acceptBlockDelivery(execution.id, activeExecution.blockId);
+      if (!result.ok) {
+        toast.error("Não foi possível usar a entrega atual", {
+          description: result.missing.join(" · "),
+        });
+        return;
+      }
+      toast.success(
+        result.completedProcess
+          ? "Processo concluído com as entregas atuais."
+          : "Entrega atual consolidada. O processo continuará.",
+      );
+      if (result.completedProcess) scheduleNextProcess();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Não foi possível usar a entrega atual.",
+      );
     }
   }
 
@@ -236,7 +288,7 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
               <p className="text-xs text-muted-foreground">{description}</p>
             </div>
           </div>
-          {completed || execution?.status === "cancelled" ? (
+          {completed ? (
             <Button
               variant="outline"
               size="sm"
@@ -254,11 +306,11 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
             <Button size="sm" onClick={start} className="gradient-brand text-white">
               <Play className="mr-1.5 size-3.5 fill-current" /> Executar processo
             </Button>
-          ) : (
+          ) : canCancelExecution ? (
             <Button size="sm" variant="outline" onClick={() => void cancel()}>
               <Square className="mr-1.5 size-3.5 fill-current" /> Cancelar execução
             </Button>
-          )}
+          ) : null}
         </div>
       </section>
 
@@ -275,6 +327,10 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
             execution={execution}
             collections={collections}
             libraryItems={libraryItems}
+            onRetryItem={(blockId, itemId) => {
+              if (activeExecution?.blockId !== blockId) return;
+              void retry("selected", itemId);
+            }}
           />
           {waitingForHumanChoice && activeBlock ? (
             <HumanChoiceGate
@@ -321,10 +377,24 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
             <FailedExecutionGate
               block={activeBlock}
               error={activeExecution.error ?? execution.error}
+              itemProgress={activeExecution.itemProgress}
+              canAcceptCurrent={hasActiveDelivery}
+              isLastBlock={activeBlockIsLast}
+              onAcceptCurrent={acceptCurrentDelivery}
               onRetry={retry}
             />
-          ) : execution.status === "cancelled" ? (
-            <ExecutionCancelled />
+          ) : execution.status === "cancelled" && activeBlock && activeExecution ? (
+            <ExecutionCancelled
+              block={activeBlock}
+              blockExecution={activeExecution}
+              canAcceptCurrent={hasActiveDelivery}
+              isLastBlock={activeBlockIsLast}
+              onAcceptCurrent={acceptCurrentDelivery}
+              onRetry={retry}
+              onRestartProcess={() =>
+                void resetStage(project.id, processId).catch((error) => toast.error(error.message))
+              }
+            />
           ) : completed ? (
             <ProcessCompleted
               processType={processId}
@@ -440,15 +510,20 @@ function ExecutionResults({
   execution,
   collections,
   libraryItems,
+  onRetryItem,
 }: {
   execution: ProcessExecution;
   collections: StrategicCollection[];
   libraryItems: ChannelLibraryItem[];
+  onRetryItem: (blockId: string, itemId: string) => void;
 }) {
+  const [editingBlockId, setEditingBlockId] = useState<string>();
+  const [editValues, setEditValues] = useState<Record<string, RuntimeValue>>({});
+  const [savingBlockId, setSavingBlockId] = useState<string>();
   const visibleResults = execution.blocks.filter(
     (item) =>
       item.status === "completed" ||
-      (item.status === "in_progress" &&
+      ((item.status === "in_progress" || item.status === "failed" || item.status === "cancelled") &&
         Object.values(item.values).some((value) => !isEmptyDisplayValue(value))),
   );
   if (!visibleResults.length) return null;
@@ -475,24 +550,101 @@ function ExecutionResults({
           const outputs = (block.outputs ?? []).filter(
             (output) => !isEmptyDisplayValue(blockExecution.values[output.key]),
           );
+          const editing = editingBlockId === blockExecution.blockId;
+
+          async function saveEditedValues() {
+            setSavingBlockId(blockExecution.blockId);
+            try {
+              await updateBlockExecutionValues(
+                execution.id,
+                blockExecution.blockId,
+                execution.revision ?? 0,
+                editValues,
+              );
+              setEditingBlockId(undefined);
+              toast.success("Entrega atualizada");
+            } catch (error) {
+              toast.error("Não foi possível salvar a edição", {
+                description: error instanceof Error ? error.message : undefined,
+              });
+            } finally {
+              setSavingBlockId(undefined);
+            }
+          }
 
           return (
             <details
               key={blockExecution.blockId}
+              open={blockExecution.status !== "completed"}
               className="group rounded-lg border border-border/60 bg-background/30"
             >
               <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium">
                 {blockExecution.status === "completed" ? (
                   <CheckCircle2 className="size-4 text-muted-foreground" />
+                ) : blockExecution.status === "failed" ? (
+                  <AlertTriangle className="size-4 text-destructive" />
+                ) : blockExecution.status === "cancelled" ? (
+                  <Square className="size-4 text-muted-foreground" />
                 ) : (
                   <LoaderCircle className="size-4 animate-spin text-brand-soft" />
                 )}
                 <span className="min-w-0 flex-1 truncate">{block.name ?? block.type}</span>
                 <Badge variant="outline" className="text-[9px] text-muted-foreground">
-                  {blockExecution.status === "completed" ? "Concluído" : "Atualizando"}
+                  {STATUS_LABEL[blockExecution.status]}
                 </Badge>
               </summary>
               <div className="border-t border-border/60 p-3">
+                {blockExecution.items?.length ? (
+                  <ExecutionItemsWorkspace
+                    execution={execution}
+                    blockExecution={blockExecution}
+                    onRetryItem={(itemId) => onRetryItem(blockExecution.blockId, itemId)}
+                  />
+                ) : null}
+                {!selectedItem &&
+                  blockExecution.status === "completed" &&
+                  (block.outputs ?? []).length > 0 && (
+                    <div className="mb-3 flex justify-end gap-2">
+                      {editing ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1.5"
+                            disabled={savingBlockId === blockExecution.blockId}
+                            onClick={() => setEditingBlockId(undefined)}
+                          >
+                            <X className="size-3.5" /> Cancelar
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="gap-1.5"
+                            disabled={savingBlockId === blockExecution.blockId}
+                            onClick={() => void saveEditedValues()}
+                          >
+                            {savingBlockId === blockExecution.blockId ? (
+                              <LoaderCircle className="size-3.5 animate-spin" />
+                            ) : (
+                              <Check className="size-3.5" />
+                            )}
+                            Salvar alterações
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5"
+                          onClick={() => {
+                            setEditValues(structuredClone(blockExecution.values));
+                            setEditingBlockId(blockExecution.blockId);
+                          }}
+                        >
+                          <Pencil className="size-3.5" /> Editar entrega
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 {selectedItem && collection ? (
                   <div className="grid gap-3 md:grid-cols-2">
                     {collection.fields.map((field) => (
@@ -505,6 +657,13 @@ function ExecutionResults({
                       />
                     ))}
                   </div>
+                ) : editing ? (
+                  <RuntimeFieldsForm
+                    fields={block.outputs ?? []}
+                    values={editValues}
+                    showTextareaCharacterCount
+                    onChange={setEditValues}
+                  />
                 ) : outputs.length ? (
                   <div className="grid gap-3 md:grid-cols-2">
                     {outputs.map((output) => (
@@ -568,6 +727,283 @@ function ResultValue({
       />
     </div>
   );
+}
+
+function ExecutionItemsWorkspace({
+  execution,
+  blockExecution,
+  onRetryItem,
+}: {
+  execution: ProcessExecution;
+  blockExecution: BlockExecution;
+  onRetryItem: (itemId: string) => void;
+}) {
+  const [editingItemId, setEditingItemId] = useState<string>();
+  const [draft, setDraft] = useState("");
+  const [savingItemId, setSavingItemId] = useState<string>();
+  const [replacingItemId, setReplacingItemId] = useState<string>();
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const items = [...(blockExecution.items ?? [])].sort((a, b) => a.order - b.order);
+
+  async function saveTextItem(item: BlockExecutionItem) {
+    setSavingItemId(item.id);
+    try {
+      await updateBlockExecutionItemOutput(
+        execution.id,
+        blockExecution.blockId,
+        item.id,
+        execution.revision ?? 0,
+        preserveItemOutputShape(item.output, draft),
+      );
+      setEditingItemId(undefined);
+      toast.success("Item atualizado");
+    } catch (error) {
+      toast.error("Não foi possível atualizar o item", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setSavingItemId(undefined);
+    }
+  }
+
+  async function replaceMediaItem(item: BlockExecutionItem, file?: File) {
+    if (!file) return;
+    const kind = itemOutputKind(item.output);
+    if (!kind || kind === "text" || !file.type.startsWith(`${kind}/`)) {
+      toast.error("Escolha um arquivo do mesmo tipo de mídia.");
+      return;
+    }
+    setReplacingItemId(item.id);
+    try {
+      const stored = await uploadLocalFile(file);
+      await updateBlockExecutionItemOutput(
+        execution.id,
+        blockExecution.blockId,
+        item.id,
+        execution.revision ?? 0,
+        preserveItemOutputShape(item.output, stored),
+      );
+      toast.success("Item substituído");
+    } catch (error) {
+      toast.error("Não foi possível substituir o item", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setReplacingItemId(undefined);
+      const input = fileInputRefs.current[item.id];
+      if (input) input.value = "";
+    }
+  }
+
+  return (
+    <div className="mb-4 rounded-lg border border-border/60 bg-card/40 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold">Itens da execução</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Edite textos ou substitua mídias sem alterar a posição do item.
+          </p>
+        </div>
+        {blockExecution.itemProgress ? (
+          <ItemProgressSummary itemProgress={blockExecution.itemProgress} />
+        ) : null}
+      </div>
+      <div className="mx-auto mt-4 grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {items.map((item) => {
+          const output = singleItemOutput(item.output);
+          const kind = itemOutputKind(item.output);
+          const isEditing = editingItemId === item.id;
+          const busy = savingItemId === item.id || replacingItemId === item.id;
+          const canMutate = blockExecution.status !== "in_progress";
+          const media = isStoredFileValue(output) ? output : undefined;
+          return (
+            <article
+              key={item.id}
+              className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-background/60 shadow-sm"
+            >
+              <div className="flex min-h-10 items-center gap-2 border-b border-border/50 px-3 py-2">
+                <Badge variant="outline" className="shrink-0 text-[10px]">
+                  Item {item.order + 1}
+                </Badge>
+                <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground">
+                  {itemStatusLabel(item.status)}
+                </span>
+                <span className="shrink-0 text-[10px] text-muted-foreground">
+                  Tentativa {item.attempt}
+                </span>
+              </div>
+
+              {isEditing && kind === "text" ? (
+                <div className="flex min-h-56 flex-1 flex-col gap-2 p-3">
+                  <textarea
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    className="min-h-40 flex-1 resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => setEditingItemId(undefined)}>
+                      Cancelar
+                    </Button>
+                    <Button size="sm" disabled={busy} onClick={() => void saveTextItem(item)}>
+                      {busy ? <LoaderCircle className="mr-1.5 size-3.5 animate-spin" /> : null}
+                      Salvar item
+                    </Button>
+                  </div>
+                </div>
+              ) : kind === "image" && media ? (
+                <div className="flex aspect-[4/3] items-center justify-center bg-muted/20">
+                  <img
+                    src={media.url || undefined}
+                    alt={media.name}
+                    className="h-full w-full object-contain"
+                    loading="lazy"
+                  />
+                </div>
+              ) : kind === "video" && media ? (
+                <div className="flex aspect-video items-center justify-center bg-black">
+                  <video
+                    controls
+                    src={media.url || undefined}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              ) : kind === "audio" && media ? (
+                <div className="flex min-h-36 flex-1 flex-col justify-center gap-3 bg-muted/15 p-4">
+                  <p className="truncate text-xs font-medium">{media.name}</p>
+                  <audio controls src={media.url || undefined} className="w-full" />
+                </div>
+              ) : kind === "text" && typeof output === "string" ? (
+                <div className="min-h-52 flex-1 overflow-auto p-3">
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                    {output}
+                  </p>
+                </div>
+              ) : output !== undefined ? (
+                <div className="min-h-40 flex-1 p-3">
+                  <RuntimeValueViewer
+                    type={kind ?? "text"}
+                    value={output as RuntimeValue}
+                    compact
+                  />
+                </div>
+              ) : (
+                <div className="flex min-h-40 flex-1 items-center justify-center p-3">
+                  <p className="text-xs text-muted-foreground">Sem resultado materializado.</p>
+                </div>
+              )}
+
+              {canMutate && !isEditing ? (
+                <div className="mt-auto flex items-center gap-1 border-t border-border/50 bg-card/70 p-1.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
+                    disabled={busy}
+                    onClick={() => onRetryItem(item.id)}
+                  >
+                    <RotateCcw className="size-3.5 shrink-0" />
+                    <span className="truncate">Regenerar item</span>
+                  </Button>
+                  {kind === "text" ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
+                      onClick={() => {
+                        setDraft(typeof output === "string" ? output : "");
+                        setEditingItemId(item.id);
+                      }}
+                    >
+                      <Pencil className="size-3.5 shrink-0" />
+                      <span className="truncate">Editar item</span>
+                    </Button>
+                  ) : kind ? (
+                    <>
+                      <input
+                        ref={(element) => {
+                          fileInputRefs.current[item.id] = element;
+                        }}
+                        type="file"
+                        accept={`${kind}/*`}
+                        className="hidden"
+                        onChange={(event) => void replaceMediaItem(item, event.target.files?.[0])}
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
+                        disabled={busy}
+                        onClick={() => fileInputRefs.current[item.id]?.click()}
+                      >
+                        {busy ? (
+                          <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
+                        ) : (
+                          <Upload className="size-3.5 shrink-0" />
+                        )}
+                        <span className="truncate">Substituir arquivo</span>
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {item.attempts.length > 1 ? (
+                <details className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer text-[10px]">
+                    Ver tentativas anteriores
+                  </summary>
+                  <div className="mt-2 space-y-1 text-[10px]">
+                    {item.attempts.map((attempt) => (
+                      <div
+                        key={attempt.attempt}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span>Tentativa {attempt.attempt}</span>
+                        <span>{itemStatusLabel(attempt.status)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function singleItemOutput(value: BlockExecutionItem["output"]) {
+  return Array.isArray(value) && value.length === 1 ? value[0] : value;
+}
+
+function preserveItemOutputShape(
+  current: BlockExecutionItem["output"],
+  replacement: string | StoredFile,
+) {
+  return Array.isArray(current) ? [replacement] : replacement;
+}
+
+function itemOutputKind(
+  value: BlockExecutionItem["output"],
+): "text" | "image" | "audio" | "video" | undefined {
+  const output = singleItemOutput(value);
+  if (typeof output === "string") return "text";
+  if (!isStoredFileValue(output)) return undefined;
+  if (output.mimeType.startsWith("image/")) return "image";
+  if (output.mimeType.startsWith("audio/")) return "audio";
+  if (output.mimeType.startsWith("video/")) return "video";
+  return undefined;
+}
+
+function itemStatusLabel(status: BlockExecutionItem["status"]) {
+  return {
+    pending: "Pendente",
+    in_progress: "Em execução",
+    completed: "Concluído",
+    failed: "Falhou",
+    cancelled: "Cancelado",
+  }[status];
 }
 
 function CollapsibleResultValue({
@@ -716,6 +1152,9 @@ function ActiveExecutionBlock({
           </div>
           <Progress value={blockExecution.progress * 100} className="h-1.5" />
         </div>
+      )}
+      {blockExecution.itemProgress && (
+        <ItemProgressSummary itemProgress={blockExecution.itemProgress} />
       )}
       <div className="mt-4 flex justify-center">
         <OperatorBadge block={block} />
@@ -1454,14 +1893,60 @@ function PluginExecutionGate({ block }: { block: ActionBlock }) {
   );
 }
 
-function ExecutionCancelled() {
+function ExecutionCancelled({
+  block,
+  blockExecution,
+  canAcceptCurrent,
+  isLastBlock,
+  onAcceptCurrent,
+  onRetry,
+  onRestartProcess,
+}: {
+  block: ActionBlock;
+  blockExecution: BlockExecution;
+  canAcceptCurrent: boolean;
+  isLastBlock: boolean;
+  onAcceptCurrent: () => void;
+  onRetry: (retryScope: BlockItemRetryScope) => void;
+  onRestartProcess: () => void;
+}) {
+  const canContinuePending = Boolean(
+    blockExecution.itemProgress &&
+    blockExecution.itemProgress.completed > 0 &&
+    blockExecution.itemProgress.pending > 0,
+  );
   return (
     <section className="rounded-xl border border-border/70 bg-card p-8 text-center">
       <Square className="mx-auto size-7 text-muted-foreground" />
       <h3 className="mt-3 text-base font-semibold">Execução cancelada</h3>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Use “Executar novamente” para iniciar uma nova execução deste processo.
+      <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
+        O que já foi concluído permanece consolidado. Escolha como continuar.
       </p>
+      <Badge variant="outline" className="mt-3">
+        {block.name ? <span data-i18n-ignore>{block.name}</span> : block.type}
+      </Badge>
+      {blockExecution.itemProgress && (
+        <ItemProgressSummary itemProgress={blockExecution.itemProgress} />
+      )}
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
+        {canAcceptCurrent && (
+          <Button onClick={onAcceptCurrent}>
+            <Check className="mr-1.5 size-4" />
+            {isLastBlock ? "Finalizar com entregas atuais" : "Usar entrega atual e continuar"}
+          </Button>
+        )}
+        {canContinuePending && (
+          <Button variant="outline" onClick={() => onRetry("remaining")}>
+            <Play className="mr-1.5 size-4" /> Continuar pendentes
+          </Button>
+        )}
+        <Button variant="outline" onClick={() => onRetry("all")}>
+          <RotateCcw className="mr-1.5 size-4" /> Refazer este bloco
+        </Button>
+        <Button variant="ghost" onClick={onRestartProcess}>
+          Reiniciar processo do zero
+        </Button>
+      </div>
     </section>
   );
 }
@@ -1469,12 +1954,23 @@ function ExecutionCancelled() {
 function FailedExecutionGate({
   block,
   error,
+  itemProgress,
+  canAcceptCurrent,
+  isLastBlock,
+  onAcceptCurrent,
   onRetry,
 }: {
   block: ActionBlock;
   error?: string;
-  onRetry: () => void;
+  itemProgress?: BlockItemProgress;
+  canAcceptCurrent: boolean;
+  isLastBlock: boolean;
+  onAcceptCurrent: () => void;
+  onRetry: (retryScope: BlockItemRetryScope) => void;
 }) {
+  const canContinuePending = Boolean(
+    itemProgress && itemProgress.completed > 0 && itemProgress.pending > 0,
+  );
   return (
     <section className="rounded-xl border border-destructive/40 bg-destructive/5 p-8 text-center">
       <AlertTriangle className="mx-auto size-7 text-destructive" />
@@ -1482,10 +1978,61 @@ function FailedExecutionGate({
       <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
         {error ?? "A execução não pôde ser concluída."}
       </p>
-      <Button className="mt-5" variant="destructive" onClick={onRetry}>
-        <RotateCcw className="mr-1.5 size-4" /> Tentar novamente
-      </Button>
+      {itemProgress && <ItemProgressSummary itemProgress={itemProgress} showFailure />}
+      {canAcceptCurrent && (
+        <Button className="mt-5" onClick={onAcceptCurrent}>
+          <Check className="mr-1.5 size-4" />
+          {isLastBlock ? "Finalizar com entregas atuais" : "Usar entrega atual e continuar"}
+        </Button>
+      )}
+      {canContinuePending ? (
+        <>
+          <p className="mx-auto mt-4 max-w-xl text-xs text-muted-foreground">
+            O núcleo preservou os itens concluídos deste lote.
+          </p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <Button variant="destructive" onClick={() => onRetry("remaining")}>
+              <Play className="mr-1.5 size-4" /> Continuar pendentes
+            </Button>
+            <Button variant="outline" onClick={() => onRetry("all")}>
+              <RotateCcw className="mr-1.5 size-4" /> Refazer este bloco
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Button
+          className={canAcceptCurrent ? "mt-3" : "mt-5"}
+          variant="outline"
+          onClick={() => onRetry("all")}
+        >
+          <RotateCcw className="mr-1.5 size-4" /> Refazer este bloco
+        </Button>
+      )}
     </section>
+  );
+}
+
+function ItemProgressSummary({
+  itemProgress,
+  showFailure = false,
+}: {
+  itemProgress: BlockItemProgress;
+  showFailure?: boolean;
+}) {
+  return (
+    <div className="mx-auto mt-4 flex max-w-lg flex-wrap justify-center gap-2 text-xs">
+      <Badge variant="outline">
+        <span>Concluídos</span>: {itemProgress.completed}/{itemProgress.total}
+      </Badge>
+      <Badge variant="outline">
+        <span>Pendentes</span>: {itemProgress.pending}
+      </Badge>
+      {showFailure && itemProgress.failedIndex !== undefined && (
+        <Badge variant="outline">
+          <span>Falhou no item</span>: {itemProgress.failedIndex + 1}
+        </Badge>
+      )}
+    </div>
   );
 }
 

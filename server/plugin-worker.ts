@@ -5,7 +5,10 @@ import type {
   PluginEntrypoint,
   PluginExecutionRequest,
   PluginExecutionResponse,
+  PluginPartialUpdate,
 } from "../src/lib/plugin-contract";
+
+const PARTIAL_PREFIX = "CONTENTFLOW_PARTIAL\t";
 
 type WorkerEnvelope = {
   entrypoint: string;
@@ -39,6 +42,7 @@ async function main() {
 
   const controller = new AbortController();
   const permissions = new Set(envelope.sandbox.permissions);
+  let partialSequence = 0;
   const response = await execute(envelope.request, {
     signal: controller.signal,
     getSecret: async (key: string) => envelope.secrets[key],
@@ -86,6 +90,14 @@ async function main() {
       if (permissions.has("filesystem:write") && resolved !== envelope.sandbox.workspaceDirectory)
         mkdirSync(path.dirname(resolved), { recursive: true });
       return resolved;
+    },
+    publishPartial: async (update: PluginPartialUpdate) => {
+      if (!update || typeof update !== "object" || !update.values) {
+        throw new Error("A entrega parcial do plugin é inválida.");
+      }
+      process.stdout.write(
+        `${PARTIAL_PREFIX}${JSON.stringify({ sequence: ++partialSequence, update })}\n`,
+      );
     },
   });
   process.stdout.write(JSON.stringify(response satisfies PluginExecutionResponse));

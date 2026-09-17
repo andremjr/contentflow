@@ -143,3 +143,69 @@ test("translates execution attention and error notifications", () => {
     "Tareas y errores en la barra de tareas",
   );
 });
+
+test("translates completed output editing controls", () => {
+  assert.equal(translate("Editar entrega", "en"), "Edit output");
+  assert.equal(translate("Editar entrega", "es"), "Editar salida");
+  assert.equal(translate("Salvar alterações", "en"), "Save changes");
+  assert.equal(translate("Entrega atualizada", "es"), "Salida actualizada");
+  assert.equal(translate("Não foi possível salvar a edição", "en"), "Could not save the changes");
+});
+
+test("translates universal item delivery recovery controls", () => {
+  assert.equal(translate("Concluídos", "en"), "Completed");
+  assert.equal(translate("Pendentes", "es"), "Pendientes");
+  assert.equal(translate("Falhou no item", "en"), "Failed on item");
+  assert.equal(translate("Continuar pendentes", "es"), "Continuar pendientes");
+  assert.equal(translate("Recomeçar tudo", "en"), "Restart all");
+  assert.equal(
+    translate("O núcleo preservou os itens concluídos deste lote.", "es"),
+    "El núcleo conservó los elementos completados de este lote.",
+  );
+  assert.equal(
+    translate("Itens pendentes preparados para continuar.", "en"),
+    "Pending items are ready to continue.",
+  );
+  assert.equal(translate("Finalizar com entregas atuais", "en"), "Finish with current outputs");
+  assert.equal(
+    translate("Usar entrega atual e continuar", "es"),
+    "Usar la salida actual y continuar",
+  );
+  assert.equal(translate("Refazer este bloco", "en"), "Rerun this block");
+  assert.equal(translate("Reiniciar processo do zero", "es"), "Reiniciar proceso desde cero");
+  assert.equal(
+    translate("O que já foi concluído permanece consolidado. Escolha como continuar.", "en"),
+    "Completed work remains consolidated. Choose how to continue.",
+  );
+  assert.equal(
+    translate("Processo concluído com as entregas atuais.", "es"),
+    "Proceso completado con las salidas actuales.",
+  );
+  assert.equal(translate("Itens da execução", "en"), "Execution items");
+  assert.equal(translate("Editar item", "es"), "Editar elemento");
+  assert.equal(translate("Substituir arquivo", "en"), "Replace file");
+  assert.equal(translate("Item substituído", "es"), "Elemento sustituido");
+  assert.equal(
+    translate("Edite textos ou substitua mídias sem alterar a posição do item.", "en"),
+    "Edit text or replace media without changing the item's position.",
+  );
+});
+
+test("translates the hybrid batch orchestrator labels", () => {
+  assert.equal(translate("Lote híbrido", "en"), "Hybrid batch");
+  assert.equal(translate("Lote híbrido", "es"), "Lote híbrido");
+  assert.equal(
+    translate(
+      "Agrupa Tema, Título e Thumbnail no lote; do Roteiro em diante, mantém a fila por projeto.",
+      "en",
+    ),
+    "Groups Theme, Title, and Thumbnail in the batch; from Script onward, keeps the per-project queue.",
+  );
+  assert.equal(
+    translate(
+      "Agrupa Tema, Título e Thumbnail no lote; do Roteiro em diante, mantém a fila por projeto.",
+      "es",
+    ),
+    "Agrupa Tema, Título y Thumbnail en el lote; desde Guion en adelante, mantiene la cola por proyecto.",
+  );
+});

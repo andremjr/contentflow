@@ -132,10 +132,17 @@ type PluginExecutionServices = {
   resolveInputFile(file: StoredFile): Promise<string>;
   getOutputPath(relativePath: string): string;
   getWorkspacePath(relativePath: string): string;
+  publishPartial(update: {
+    values: Record<string, RuntimeValue>;
+    artifacts?: PluginArtifact[];
+    progress?: number;
+    message?: string;
+    logs?: string[];
+  }): Promise<void>;
 };
 ```
 
-O plugin encaminha `signal` a operações abortáveis. `getSecret` aceita apenas chaves declaradas pelo próprio manifesto. `resolveInputFile` abre uma entrada, `getOutputPath` cria um artifact temporário e `getWorkspacePath` aponta para arquivos/checkpoints persistentes na pasta escolhida pelo usuário ou na pasta interna padrão. Os serviços retornam caminhos dentro das raízes concedidas, nunca um caminho arbitrário escolhido pelo código do plugin.
+O plugin encaminha `signal` a operações abortáveis. `getSecret` aceita apenas chaves declaradas pelo próprio manifesto. `resolveInputFile` abre uma entrada, `getOutputPath` cria um artifact temporário e `getWorkspacePath` aponta para arquivos/checkpoints persistentes na pasta escolhida pelo usuário ou na pasta interna padrão. `publishPartial` importa artifacts e persiste um snapshot intermediário enquanto uma invocação `immediate` ainda está rodando; o plugin deve chamá-lo depois de cada item concluído, antes de iniciar o seguinte. Os serviços retornam caminhos dentro das raízes concedidas, nunca um caminho arbitrário escolhido pelo código do plugin.
 
 Webhooks e runtimes adicionais podem ser oferecidos depois por adapters oficiais, sem tornar a API v1 genérica demais.
 
@@ -404,7 +411,9 @@ Plugins que declaram `profileSetup` também podem receber `invocation.mode = "co
 
 Quando `fallbackConfigurationKey` estiver declarado, o usuário prepara explicitamente cada alias. O núcleo preserva a ordem configurada e avança para o próximo perfil quando a tentativa terminar com qualquer resposta de erro, independentemente de `code` ou `retryable`, inclusive `AUTHENTICATION_FAILED`, `RATE_LIMIT`, cota, permissão, bloqueio, upgrade e validação de output. `CANCELLED`, cancelamento já solicitado e esgotamento da lista nunca avançam o cursor. Respostas pendentes continuam no perfil atual.
 
-`execution.itemOrchestration` aceita `inputPort`, `outputPort` e `mode: "sequential"`. Se a entrada indicada for uma lista com mais de um item, o núcleo chama o plugin uma vez por item, inclui `request.batch` com ID, índice e total, acumula a saída indicada e persiste cada resultado antes de iniciar o seguinte. Assim, um erro ou fallback não repete itens já entregues.
+`execution.itemOrchestration` aceita `inputPort`, `outputPort` e `mode: "sequential"`. Se a entrada indicada for uma lista com mais de um item, o núcleo chama o plugin uma vez por item, inclui `request.batch` com ID, índice e total, acumula a saída indicada e persiste cada resultado antes de iniciar o seguinte. Para texto, `combinedOutputPort` pode apontar para a saída consolidada e `separator` define como os itens acumulados são unidos. O núcleo mantém um resumo universal com total, quantidade concluída, quantidade pendente e índice atual/falho, independente do tipo de mídia ou do provedor.
+
+Depois de uma falha com entregas parciais, uma nova tentativa pode recomeçar todo o lote ou continuar somente os itens pendentes. A retomada só reutiliza o cursor, os valores e os artifacts anteriores quando o núcleo confirma que a entrada é a mesma, preferencialmente pela identidade universal da entrega e dos seus itens; caso contrário, a tentativa recomeça integralmente. O plugin não decide quais itens estão concluídos e não precisa implementar essa reconciliação: ele continua recebendo um item por chamada e o núcleo controla identidade, cursor, persistência e prevenção de duplicação.
 
 ### 9.3 Execução assíncrona
 

@@ -1968,6 +1968,16 @@ export async function execute(request, services) {
         }
       }
       if (lastError) throw lastError;
+      if (capabilityId === "generate-text-in-browser") {
+        const partialText = cleanGeneratedText(
+          responses.map((response) => response.text).join("\n\n"),
+        );
+        await services.publishPartial?.({
+          values: { result: partialText, parts: responses.map((response) => response.text) },
+          progress: (index + 1) / parts.length,
+          message: `Resposta ${index + 1} de ${parts.length} capturada.`,
+        });
+      }
       if (index < parts.length - 1) await sleep(delayBetweenPartsMs, services.signal);
     }
     const combined = responses.map((response) => response.text).join("\n\n"),
@@ -1991,6 +2001,12 @@ export async function execute(request, services) {
         } catch (error) {
           if (!isCdpConnectionLoss(error)) throw error;
         }
+      await services.publishPartial?.({
+        values: imageResponseValues(captured, combined),
+        artifacts: captured.artifacts,
+        progress: 1,
+        message: `${captured.files.length} imagem(ns) capturada(s).`,
+      });
       return {
         status: "success",
         values: imageResponseValues(captured, combined),

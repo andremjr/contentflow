@@ -157,6 +157,8 @@ const capabilitySchema = z
             inputPort: z.string().min(1).max(100).regex(identifier),
             outputPort: z.string().min(1).max(100).regex(identifier),
             mode: z.literal("sequential"),
+            combinedOutputPort: z.string().min(1).max(100).regex(identifier).optional(),
+            separator: z.string().max(20).optional(),
           })
           .strict()
           .optional(),
@@ -353,6 +355,16 @@ export const pluginManifestSchema = z
         context.addIssue({
           code: "custom",
           path: ["capabilities", index, "execution", "itemOrchestration", "outputPort"],
+          message: "precisa referenciar uma porta de saída existente",
+        });
+      }
+      if (
+        orchestration.combinedOutputPort &&
+        !capability.outputPorts.some((port) => port.key === orchestration.combinedOutputPort)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["capabilities", index, "execution", "itemOrchestration", "combinedOutputPort"],
           message: "precisa referenciar uma porta de saída existente",
         });
       }

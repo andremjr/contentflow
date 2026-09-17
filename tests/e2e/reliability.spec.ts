@@ -4,7 +4,9 @@ import {
   createEmptyMethods,
   PROCESS_ORDER,
   type Channel,
+  type ProcessExecution,
   type Project,
+  type StoredFile,
   type StrategicCollection,
 } from "../../src/lib/domain";
 
@@ -759,6 +761,345 @@ test("rascunho sobrevive ao reload e a produção avança até thumbnail fora da
   });
   await expect(projectThumbnail).toBeVisible();
   await expect(projectThumbnail).toHaveAttribute("src", thumbnail.url);
+});
+
+test("edita uma entrega concluída e atualiza a saída oficial do processo", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  await page.goto(`/channel/${channel.id}`);
+  await page.getByRole("button", { name: "Novo projeto", exact: true }).first().click();
+  await page.getByLabel("Título *", { exact: true }).fill("Edição de entrega");
+  await page.getByRole("button", { name: "Criar projeto", exact: true }).click();
+  const projects = (await (await request.get("/api/projects")).json()) as Project[];
+  const project = projects.find(
+    (item) => item.channelId === channel.id && item.title === "Edição de entrega",
+  )!;
+
+  await page.goto(`/project/${project.id}/theme`);
+  await page.getByRole("button", { name: "Executar processo", exact: true }).click();
+  await page.getByLabel("Resultado theme").fill("Aqui vai a sua resposta: tema original");
+  await page.getByRole("button", { name: "Concluir ação humana", exact: true }).click();
+  await page.goto(`/project/${project.id}/theme`);
+
+  const result = page.locator("details").filter({ hasText: "Entrega theme" });
+  await result.locator("summary").click();
+  await result.getByRole("button", { name: "Editar entrega", exact: true }).click();
+  await result.getByLabel("Resultado theme").fill("Tema corrigido manualmente");
+  await result.getByRole("button", { name: "Salvar alterações", exact: true }).click();
+  await expect(page.getByText("Entrega atualizada", { exact: true })).toBeVisible();
+
+  await expect
+    .poll(async () => {
+      const state = await (await request.get("/api/state")).json();
+      const execution = state.executions.find(
+        (item: { projectId: string; processType: string }) =>
+          item.projectId === project.id && item.processType === "theme",
+      );
+      return {
+        block: execution?.blocks[0]?.values?.theme,
+        output: execution?.output?.values?.theme,
+      };
+    })
+    .toEqual({
+      block: "Tema corrigido manualmente",
+      output: "Tema corrigido manualmente",
+    });
+});
+
+test("persiste e exibe o snapshot do plugin antes da resposta final", async ({ request }) => {
+  const channel = await seed(request);
+  expect(
+    (
+      await request.put("/api/plugins/com.contentflow.e2e-contract/consent", {
+        data: { enabled: true },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const block = {
+    id: "incremental-plugin",
+    type: "CRIAR",
+    operator: "IA",
+    name: "Resposta incremental",
+    instructions: "Responda.",
+    inputs: [],
+    outputs: [
+      {
+        id: "script",
+        key: "script",
+        label: "Resultado",
+        type: "textarea",
+        required: true,
+        portKey: "result",
+      },
+    ],
+    parameters: [],
+    order: 0,
+    plugin: {
+      pluginId: "com.contentflow.e2e-contract",
+      capabilityId: "generate",
+      configuration: {},
+    },
+  };
+  expect(
+    (
+      await request.put(`/api/channels/${channel.id}/methods/script`, {
+        data: { name: "Roteiro incremental", blocks: [block] },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const projectId = randomUUID();
+  expect(
+    (
+      await request.post("/api/projects", {
+        data: {
+          id: projectId,
+          channelId: channel.id,
+          title: "Plugin incremental",
+          createdAt: new Date().toISOString(),
+          stages: Object.fromEntries(PROCESS_ORDER.map((process) => [process, "not_started"])),
+          currentStage: "script",
+          state: "not_started",
+          progress: 0,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const started = await (
+    await request.post("/api/commands", {
+      data: {
+        id: randomUUID(),
+        action: "start",
+        projectId,
+        processType: "script",
+      },
+    })
+  ).json();
+  let observedPartial = false;
+  await expect
+    .poll(async () => {
+      const state = await (await request.get(`/api/executions/${started.result.id}/state`)).json();
+      if (
+        state.execution.blocks[0].status === "in_progress" &&
+        state.execution.blocks[0].values.script === "resultado parcial"
+      ) {
+        observedPartial = true;
+      }
+      return {
+        observedPartial,
+        status: state.execution.status,
+        result: state.execution.blocks[0].values.script,
+        error: state.execution.error,
+      };
+    })
+    .toEqual({
+      observedPartial: true,
+      status: "completed",
+      result: "resultado final",
+      error: undefined,
+    });
+});
+
+test("edita texto e substitui mídia de um item sem alterar identidade ou posição", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  const textBlock = {
+    id: "item-text-block",
+    type: "CRIAR" as const,
+    operator: "Humano" as const,
+    name: "Blocos de roteiro",
+    instructions: "",
+    inputs: [],
+    outputs: [
+      {
+        id: "parts",
+        key: "parts",
+        label: "Blocos",
+        type: "list" as const,
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 0,
+  };
+  const mediaBlock = {
+    id: "item-media-block",
+    type: "CRIAR" as const,
+    operator: "Humano" as const,
+    name: "Assets visuais",
+    instructions: "",
+    inputs: [],
+    outputs: [
+      {
+        id: "files",
+        key: "files",
+        label: "Arquivos",
+        type: "files" as const,
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 1,
+  };
+  expect(
+    (
+      await request.put(`/api/channels/${channel.id}/methods/script`, {
+        data: { name: "Itens temporários", blocks: [textBlock, mediaBlock] },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  const projectId = randomUUID();
+  expect(
+    (
+      await request.post("/api/projects", {
+        data: {
+          id: projectId,
+          channelId: channel.id,
+          title: "Itens editáveis",
+          createdAt: new Date().toISOString(),
+          stages: Object.fromEntries(PROCESS_ORDER.map((process) => [process, "not_started"])),
+          currentStage: "script",
+          state: "not_started",
+          progress: 0,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const started = await (
+    await request.post("/api/commands", {
+      data: { id: randomUUID(), action: "start", projectId, processType: "script" },
+    })
+  ).json();
+  const execution = started.result as ProcessExecution;
+  const originalMedia: StoredFile[] = [
+    {
+      id: "generated-a",
+      name: "generated-a.png",
+      mimeType: "image/png",
+      size: 10,
+      url: "/api/files/generated-a.png",
+    },
+    {
+      id: "generated-b",
+      name: "generated-b.png",
+      mimeType: "image/png",
+      size: 10,
+      url: "/api/files/generated-b.png",
+    },
+  ];
+  const now = new Date().toISOString();
+  execution.status = "failed";
+  execution.error = "Falha simulada depois de materializar os itens.";
+  execution.updatedAt = now;
+  execution.blocks = [
+    {
+      blockId: textBlock.id,
+      status: "failed",
+      values: { parts: ["Parte A", "Parte B"] },
+      attempt: 1,
+      itemProgress: { total: 2, completed: 2, pending: 0 },
+      items: [
+        {
+          id: "text-item-a",
+          order: 0,
+          input: "Prompt A",
+          status: "completed",
+          attempt: 1,
+          output: "Parte A",
+          attempts: [{ attempt: 1, status: "completed", input: "Prompt A", output: "Parte A" }],
+        },
+        {
+          id: "text-item-b",
+          order: 1,
+          input: "Prompt B",
+          status: "completed",
+          attempt: 1,
+          output: "Parte B",
+          attempts: [{ attempt: 1, status: "completed", input: "Prompt B", output: "Parte B" }],
+        },
+      ],
+      error: execution.error,
+    },
+    {
+      blockId: mediaBlock.id,
+      status: "failed",
+      values: { files: originalMedia },
+      attempt: 1,
+      itemProgress: { total: 2, completed: 2, pending: 0 },
+      items: originalMedia.map((file, order) => ({
+        id: `media-item-${order + 1}`,
+        order,
+        input: `Prompt visual ${order + 1}`,
+        status: "completed" as const,
+        attempt: 1,
+        output: file,
+        attempts: [
+          {
+            attempt: 1,
+            status: "completed" as const,
+            input: `Prompt visual ${order + 1}`,
+            output: file,
+          },
+        ],
+      })),
+      error: execution.error,
+    },
+  ];
+  const saved = await request.put(`/api/executions/${execution.id}`, { data: execution });
+  expect(saved.ok()).toBeTruthy();
+  const savedExecution = (await saved.json()) as ProcessExecution;
+
+  const textEdit = await request.patch(
+    `/api/executions/${execution.id}/blocks/${textBlock.id}/items/text-item-a`,
+    {
+      data: { revision: savedExecution.revision, output: "Parte A corrigida manualmente" },
+    },
+  );
+  expect(textEdit.ok()).toBeTruthy();
+  const afterText = (await textEdit.json()).execution as ProcessExecution;
+  expect(afterText.blocks[0].items?.[0]).toMatchObject({
+    id: "text-item-a",
+    order: 0,
+    output: "Parte A corrigida manualmente",
+  });
+  expect(afterText.blocks[0].values.parts).toEqual(["Parte A corrigida manualmente", "Parte B"]);
+
+  const upload = await request.post("/api/uploads", {
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "X-File-Name": encodeURIComponent("manual.png"),
+      "X-File-Type": "image/png",
+    },
+    data: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  });
+  expect(upload.ok()).toBeTruthy();
+  const manualMedia = (await upload.json()) as StoredFile;
+  const mediaEdit = await request.patch(
+    `/api/executions/${execution.id}/blocks/${mediaBlock.id}/items/media-item-2`,
+    {
+      data: { revision: afterText.revision, output: manualMedia },
+    },
+  );
+  expect(mediaEdit.ok()).toBeTruthy();
+  const afterMedia = (await mediaEdit.json()).execution as ProcessExecution;
+  expect(afterMedia.blocks[1].items?.[1]).toMatchObject({
+    id: "media-item-2",
+    order: 1,
+  });
+  expect((afterMedia.blocks[1].values.files as StoredFile[])[1].id).toBe(manualMedia.id);
+
+  await page.goto(`/project/${projectId}/script`);
+  await expect(page.getByText("Itens da execução", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Editar item", exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Substituir arquivo", exact: true }).first(),
+  ).toBeVisible();
 });
 
 test("salva separadamente som e notificações do Windows", async ({ page, request }) => {

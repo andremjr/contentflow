@@ -2,6 +2,8 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+const PARTIAL_PREFIX = "CONTENTFLOW_PARTIAL\t";
+
 async function readStdin() {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
@@ -18,6 +20,7 @@ async function main() {
 
   const permissions = new Set(envelope.sandbox.permissions);
   const controller = new AbortController();
+  let partialSequence = 0;
   const response = await execute(envelope.request, {
     signal: controller.signal,
     getSecret: async (key) => envelope.secrets[key],
@@ -65,6 +68,14 @@ async function main() {
       if (permissions.has("filesystem:write") && resolved !== envelope.sandbox.workspaceDirectory)
         mkdirSync(path.dirname(resolved), { recursive: true });
       return resolved;
+    },
+    publishPartial: async (update) => {
+      if (!update || typeof update !== "object" || !update.values) {
+        throw new Error("A entrega parcial do plugin é inválida.");
+      }
+      process.stdout.write(
+        `${PARTIAL_PREFIX}${JSON.stringify({ sequence: ++partialSequence, update })}\n`,
+      );
     },
   });
   process.stdout.write(JSON.stringify(response));

@@ -68,6 +68,7 @@ As recomendações abaixo são sugestões, não decisões aplicadas automaticame
 | EXEC-16 | Um único projeto pode executar dois processos ao mesmo tempo? | Sim; não; apenas processos sem dependência. | Não por padrão, porque o Método é linear e outputs anteriores podem ser dependências. |
 | EXEC-17 | Usuário pode reordenar uma fila já iniciada? | Nunca; itens ainda não iniciados; qualquer item. | Permitir apenas itens ainda não iniciados, preservando o item atual e dependências. |
 | EXEC-18 | Usuário pode remover um item da fila? | Não; somente não iniciado; também o atual. | Remover somente não iniciado; o atual exige ação separada de cancelar/parar. |
+| EXEC-19 | Qual é a granularidade do modo em lote? | Tudo por Projeto; tudo por processo; primeiros processos agregados e restante por Projeto. | Usar lote híbrido: Tema, Título e Thumbnail como etapas agregadas de N itens; Roteiro–Postagem seguem o motor linear por Projeto. |
 
 ### P0 — controle de navegador e contas
 

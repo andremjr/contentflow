@@ -82,7 +82,8 @@ const executionResultsSource = processRunnerSource.slice(
   processRunnerSource.indexOf("function ExecutionResults"),
   processRunnerSource.indexOf("function ResultValue"),
 );
-assert.doesNotMatch(executionResultsSource, /<details[^>]*\sopen=/s);
+assert.match(executionResultsSource, /item\.status === "cancelled"/);
+assert.match(executionResultsSource, /open=\{blockExecution\.status !== "completed"\}/);
 assert.match(processRunnerSource, /w-full max-w-6xl border-t/);
 
 const rendererSource = readFileSync(

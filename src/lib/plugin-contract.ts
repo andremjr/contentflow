@@ -92,6 +92,9 @@ export type PluginExecutionPolicy = {
     inputPort: string;
     outputPort: string;
     mode: "sequential";
+    /** Optional text output rebuilt from the accumulated list after each item. */
+    combinedOutputPort?: string;
+    separator?: string;
   };
 };
 
@@ -275,6 +278,11 @@ export type PluginExecutionRequest = {
   /** Metadados paralelos aos valores, sem quebrar plugins v1 que leem apenas `inputs`. */
   inputDeliveries?: PluginInputDelivery[];
   outputContract: PluginFieldContract[];
+  /** Core-owned durable partial outputs available to a later retry of the same block. */
+  resume?: {
+    values: Record<string, RuntimeValue>;
+    artifacts: StoredFile[];
+  };
   validation?: BlockValidationConfig;
   retryFeedback?: Record<string, RuntimeValue>;
   /** Core-resolved block instruction. Updated plugins should prefer this over the raw template. */
@@ -345,12 +353,23 @@ export type PluginExecutionResponse =
       logs?: string[];
     };
 
+/** Incremental snapshot emitted while an immediate plugin invocation is still running. */
+export type PluginPartialUpdate = {
+  values: Record<string, RuntimeValue>;
+  artifacts?: PluginArtifact[];
+  progress?: number;
+  message?: string;
+  logs?: string[];
+};
+
 export type PluginExecutionServices = {
   signal: AbortSignal;
   getSecret: (key: string) => Promise<string | undefined>;
   resolveInputFile: (file: StoredFile) => Promise<string>;
   getOutputPath: (relativePath: string) => string;
   getWorkspacePath: (relativePath: string) => string;
+  /** Makes completed intermediate work durable before execute() returns. */
+  publishPartial: (update: PluginPartialUpdate) => Promise<void>;
 };
 
 export type PluginEntrypoint = {

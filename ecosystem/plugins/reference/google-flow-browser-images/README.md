@@ -1,8 +1,8 @@
 # Google Flow Browser Images — ContentFlow
 
-Versão **1.3.6**.
+Versão **1.3.7**.
 
-Plugin avançado de geração de imagens e vídeos no Google Flow através do Chrome dedicado com perfil persistente. A versão 1.3.6 mantém uma única fila por execução, persiste o progresso de cada prompt concluído para retomada sem duplicação e inclui produção visual completa em lote:
+Plugin avançado de geração de imagens e vídeos no Google Flow através do Chrome dedicado com perfil persistente. A versão 1.3.7 mantém uma única fila por execução, persiste o progresso de cada prompt concluído para retomada sem duplicação e inclui produção visual completa em lote:
 
 - **Geração de Imagens** com Nano Banana 2, Nano Banana Pro, modelos adicionais pelo rótulo visível do Flow e proporções (16:9, 4:3, 1:1, 3:4, 9:16).
 - **Animação de Imagens (Image-to-Video)** com Veo 3.1 (Quality, Fast, Lite) e Omni 1.1 Flash.

@@ -1759,6 +1759,14 @@ export async function execute(request, services) {
         }
       }
       if (lastError) throw lastError;
+      if (capabilityId === "generate-text-in-browser") {
+        const partialText = cleanCombinedResponses(responses);
+        await services.publishPartial?.({
+          values: { result: partialText, parts: responses.map((response) => response.text) },
+          progress: (index + 1) / parts.length,
+          message: `Resposta ${index + 1} de ${parts.length} capturada.`,
+        });
+      }
       if (index < parts.length - 1) await sleep(delayBetweenPartsMs, services.signal);
     }
 
@@ -1781,6 +1789,11 @@ export async function execute(request, services) {
             `repair:${repair}`,
           ),
         );
+        const repairedText = cleanCombinedResponses(responses);
+        await services.publishPartial?.({
+          values: { result: repairedText, parts: responses.map((response) => response.text) },
+          message: `Complemento ${repair + 1} capturado.`,
+        });
       }
     }
 
@@ -1819,6 +1832,12 @@ export async function execute(request, services) {
         values.document = generated.file;
         artifacts = [generated.artifact];
       }
+      await services.publishPartial?.({
+        values,
+        ...(artifacts ? { artifacts } : {}),
+        progress: 1,
+        message: artifacts ? "Texto e documento capturados." : "Texto capturado.",
+      });
     }
     const outputCharacters =
       capabilityId === "generate-text-in-browser"

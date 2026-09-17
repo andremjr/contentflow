@@ -1573,6 +1573,16 @@ export async function execute(request, services) {
         }
       }
       if (lastError) throw lastError;
+      if (capabilityId === "generate-text-in-browser") {
+        const partialText = cleanGeneratedText(
+          responses.map((response) => response.text).join("\n\n"),
+        );
+        await services.publishPartial?.({
+          values: { result: partialText, parts: responses.map((response) => response.text) },
+          progress: (index + 1) / parts.length,
+          message: `Resposta ${index + 1} de ${parts.length} capturada.`,
+        });
+      }
       if (index < parts.length - 1) await sleep(delayBetweenPartsMs, services.signal);
     }
     const combined = responses.map((response) => response.text).join("\n\n"),
@@ -1589,6 +1599,12 @@ export async function execute(request, services) {
         clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000,
         responses.at(-1)?.mediaSrc,
       );
+      await services.publishPartial?.({
+        values: { image: captured.file, description: combined.trim() },
+        artifacts: [captured.artifact],
+        progress: 1,
+        message: "Imagem capturada.",
+      });
       return {
         status: "success",
         values: { image: captured.file, description: combined.trim() },
@@ -1609,6 +1625,12 @@ export async function execute(request, services) {
         clampInteger(settings?.responseTimeoutSeconds, 900, 30, 3600) * 1000,
         responses.at(-1)?.mediaSrc,
       );
+      await services.publishPartial?.({
+        values: { video: captured.file, description: combined.trim() },
+        artifacts: [captured.artifact],
+        progress: 1,
+        message: "Vídeo capturado.",
+      });
       return {
         status: "success",
         values: { video: captured.file, description: combined.trim() },

@@ -5,15 +5,33 @@ export type ExecutionOrchestratorMode = "end_to_end" | "batch";
 export type ExecutionOrchestratorStatus =
   "running" | "awaiting_human" | "blocked" | "failed" | "completed" | "cancelled";
 
-export type ExecutionOrchestratorStep = {
+export const AGGREGATED_BATCH_PROCESSES = [
+  "theme",
+  "title",
+  "thumbnail",
+] as const satisfies readonly UniversalProcess[];
+
+export type ExecutionOrchestratorProjectStep = {
+  kind?: "project";
   projectId: string;
   processType: UniversalProcess;
 };
+
+export type ExecutionOrchestratorAggregateStep = {
+  kind: "aggregate";
+  projectIds: string[];
+  processType: (typeof AGGREGATED_BATCH_PROCESSES)[number];
+};
+
+export type ExecutionOrchestratorStep =
+  ExecutionOrchestratorProjectStep | ExecutionOrchestratorAggregateStep;
 
 export type ExecutionOrchestrator = {
   id: string;
   channelId: string;
   mode: ExecutionOrchestratorMode;
+  /** V1 preserva filas antigas; V2 ativa o planejamento híbrido dos três primeiros processos. */
+  strategyVersion?: 1 | 2;
   quantity: number;
   projectPrefix: string;
   projectIds: string[];
@@ -22,6 +40,9 @@ export type ExecutionOrchestrator = {
   status: ExecutionOrchestratorStatus;
   currentProjectId?: string;
   currentProcessType?: UniversalProcess;
+  /** Posição dentro de uma etapa agregada do lote híbrido. */
+  currentBatchItem?: number;
+  currentBatchTotal?: number;
   message?: string;
   createdAt: string;
   updatedAt: string;
@@ -43,7 +64,28 @@ export const STOPPABLE_ORCHESTRATOR_STATUSES = new Set<ExecutionOrchestratorStat
 export function buildOrchestratorSteps(
   projectIds: string[],
   mode: ExecutionOrchestratorMode,
+  strategyVersion: 1 | 2 = 2,
 ): ExecutionOrchestratorStep[] {
+  if (mode === "batch" && strategyVersion === 2) {
+    const aggregateSteps = AGGREGATED_BATCH_PROCESSES.map(
+      (processType) =>
+        ({
+          kind: "aggregate",
+          projectIds: [...projectIds],
+          processType,
+        }) satisfies ExecutionOrchestratorAggregateStep,
+    );
+    const individualProcesses = PROCESS_ORDER.filter(
+      (processType) => !AGGREGATED_BATCH_PROCESSES.includes(processType as never),
+    );
+    return [
+      ...aggregateSteps,
+      ...individualProcesses.flatMap((processType) =>
+        projectIds.map((projectId) => ({ projectId, processType })),
+      ),
+    ];
+  }
+
   if (mode === "batch") {
     return PROCESS_ORDER.flatMap((processType) =>
       projectIds.map((projectId) => ({ projectId, processType })),
@@ -53,6 +95,12 @@ export function buildOrchestratorSteps(
   return projectIds.flatMap((projectId) =>
     PROCESS_ORDER.map((processType) => ({ projectId, processType })),
   );
+}
+
+export function isAggregateOrchestratorStep(
+  step: ExecutionOrchestratorStep,
+): step is ExecutionOrchestratorAggregateStep {
+  return step.kind === "aggregate";
 }
 
 export function orchestratorProgress(orchestrator: ExecutionOrchestrator) {

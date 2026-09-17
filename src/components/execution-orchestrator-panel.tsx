@@ -17,6 +17,7 @@ import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { PROCESS_META } from "@/lib/domain";
+import { useAppPreferences } from "@/lib/app-preferences";
 import {
   ACTIVE_ORCHESTRATOR_STATUSES,
   STOPPABLE_ORCHESTRATOR_STATUSES,
@@ -48,6 +49,7 @@ export function ExecutionOrchestratorPanel({
   channelId: string;
   channelName: string;
 }) {
+  const { t } = useAppPreferences();
   const orchestrator = useChannelExecutionOrchestrator(channelId);
   const projects = useProjects(channelId);
   const [mode, setMode] = useState<ExecutionOrchestratorMode>("end_to_end");
@@ -191,9 +193,7 @@ export function ExecutionOrchestratorPanel({
           <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
             <div>
               <p className="font-medium">
-                {orchestrator.mode === "end_to_end"
-                  ? "Projetos ponta a ponta"
-                  : "Lote por processo"}
+                {orchestrator.mode === "end_to_end" ? "Projetos ponta a ponta" : t("Lote híbrido")}
               </p>
               <p className="mt-0.5 text-muted-foreground">
                 {orchestrator.quantity} {orchestrator.quantity === 1 ? "projeto" : "projetos"} ·{" "}
@@ -257,8 +257,10 @@ export function ExecutionOrchestratorPanel({
             <ModeButton
               active={mode === "batch"}
               icon={Layers3}
-              title="Em lote por processo"
-              description="Executa todos os temas, depois todos os títulos, thumbnails e demais processos."
+              title={t("Lote híbrido")}
+              description={t(
+                "Agrupa Tema, Título e Thumbnail no lote; do Roteiro em diante, mantém a fila por projeto.",
+              )}
               onClick={() => setMode("batch")}
             />
           </div>
