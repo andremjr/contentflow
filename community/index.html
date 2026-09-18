@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="community.css" />
     <link rel="stylesheet" href="shared-header.css" />
     <style>
-      .hero-proof{max-width:535px;margin:0 0 22px;color:#fff;font-size:13px;line-height:1.55;font-weight:700}.actions{flex-wrap:wrap;gap:11px}.cta.secondary{background:transparent;border:1px solid #a9b0e7;color:#fff;min-width:250px}.special-note{max-width:520px;margin:13px 0 0;color:#c9cfea;font-size:11px;line-height:1.5}.join-card .special-offer{width:100%;margin-top:10px;background:#f0efff;color:#4e47c5;border:1px solid #d8d5ff}
+      .hero-proof{max-width:535px;margin:0 0 22px;color:#fff;font-size:13px;line-height:1.55;font-weight:700}.actions{flex-wrap:wrap;gap:11px}.hero .actions .cta{width:min(100%,330px);min-width:0}.cta.secondary{background:transparent;border:1px solid #a9b0e7;color:#fff;min-width:250px}.special-note{max-width:520px;margin:13px 0 0;color:#c9cfea;font-size:11px;line-height:1.5}.join-card .special-offer{width:100%;margin-top:10px;background:#f0efff;color:#4e47c5;border:1px solid #d8d5ff}
     </style>
   </head>
   <body>
@@ -62,7 +62,7 @@
               href="https://pay.kiwify.com.br/IvrEfkB"
               target="_blank"
               rel="noreferrer"
-              ><span data-k="cta">Entrar na Comunidade VIP</span><b>→</b></a
+              ><span data-special="heroCta">Entrar na Comunidade VIP por R$ 49,90 por mês</span><b>→</b></a
             ><a class="cta secondary" href="https://wa.me/5516992821590" target="_blank" rel="noreferrer"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12.04 2a9.84 9.84 0 0 0-8.4 14.96L2 22l5.2-1.62A9.96 9.96 0 0 0 12.04 22 10 10 0 1 0 12.04 2Zm0 18.17a8.15 8.15 0 0 1-4.16-1.14l-.3-.18-3.08.96 1-3-.2-.31a8.08 8.08 0 0 1-1.25-4.33 8.17 8.17 0 1 1 7.99 8Zm4.48-6.12c-.24-.12-1.44-.71-1.67-.79-.22-.08-.38-.12-.54.12-.16.24-.63.79-.77.95-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.95-1.2a7.25 7.25 0 0 1-1.35-1.68c-.14-.24-.02-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.79-.2-.47-.4-.4-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.69 2.58 4.1 3.62.57.25 1.02.4 1.37.51.58.18 1.1.16 1.52.1.46-.07 1.44-.59 1.64-1.16.2-.57.2-1.06.14-1.16-.06-.1-.22-.16-.46-.28Z"/></svg><span data-special="cta">Condição especial no primeiro mês</span><b>↗</b></a>
           </div>
           <p class="special-note" data-special="note">Quer conhecer a comunidade no primeiro mês sem entrar em recorrência? Entre em contato no WhatsApp.</p>
@@ -235,7 +235,7 @@
       setLanguage(localStorage.getItem('contentflow-site-language') || 'pt');
     </script>
     <script>
-      const specialCopy={pt:{proof:'Entre para ter direção nas decisões do canal — com aulas, repertório e espaço para trazer o que você está vivendo agora.',cta:'20% de desconto no primeiro mês',note:'Quer conhecer a comunidade no primeiro mês sem entrar em recorrência? Entre em contato no WhatsApp.'},en:{proof:'Join to make clearer decisions for your channel — with classes, judgment, and room to bring what you are facing right now.',cta:'20% off your first month',note:'Want to explore the community in the first month without starting a recurring membership? Contact me on WhatsApp.'},es:{proof:'Entra para tomar decisiones más claras para tu canal — con clases, criterio y espacio para traer lo que estás viviendo ahora.',cta:'20% de descuento el primer mes',note:'¿Quieres conocer la comunidad el primer mes sin comenzar una suscripción recurrente? Ponte en contacto por WhatsApp.'}};
+      const specialCopy={pt:{proof:'Entre para ter direção nas decisões do canal — com aulas, repertório e espaço para trazer o que você está vivendo agora.',heroCta:'Entrar na Comunidade VIP por R$ 49,90 por mês',cta:'20% de desconto no primeiro mês',note:'Quer conhecer a comunidade no primeiro mês sem entrar em recorrência? Entre em contato no WhatsApp.'},en:{proof:'Join to make clearer decisions for your channel — with classes, judgment, and room to bring what you are facing right now.',heroCta:'Join the VIP Community for R$ 49.90/month',cta:'20% off your first month',note:'Want to explore the community in the first month without starting a recurring membership? Contact me on WhatsApp.'},es:{proof:'Entra para tomar decisiones más claras para tu canal — con clases, criterio y espacio para traer lo que estás viviendo ahora.',heroCta:'Entrar a la Comunidad VIP por R$ 49,90 al mes',cta:'20% de descuento el primer mes',note:'¿Quieres conocer la comunidad el primer mes sin comenzar una suscripción recurrente? Ponte en contacto por WhatsApp.'}};
       function setSpecialCopy(lang){document.querySelectorAll('[data-special]').forEach(el=>el.textContent=specialCopy[lang][el.dataset.special])};setSpecialCopy(localStorage.getItem('contentflow-site-language')||'pt');document.querySelectorAll('[data-lang]').forEach(btn=>btn.addEventListener('click',()=>setSpecialCopy(btn.dataset.lang)));
     </script>
   </body>
