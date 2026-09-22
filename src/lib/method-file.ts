@@ -9,6 +9,7 @@ import type {
   UniversalProcess,
 } from "@/lib/domain";
 import { normalizeFieldPresentation } from "@/lib/presentation";
+import { instructionCollectionKey, instructionVariables } from "@/lib/instruction-template";
 
 const universalProcessSchema = z.enum([
   "theme",
@@ -437,6 +438,25 @@ export function collectMethodRequirements(
 ): MethodRequirement[] {
   const requirements: MethodRequirement[] = [];
   for (const block of method.blocks) {
+    const referencedCollections = new Set(
+      instructionVariables(block.instructions ?? "")
+        .filter((variable) => variable.startsWith("collections."))
+        .map((variable) => variable.slice("collections.".length)),
+    );
+    for (const collection of collections) {
+      if (!referencedCollections.has(instructionCollectionKey(collection))) continue;
+      requirements.push({
+        kind: "collection",
+        name: collection.name,
+        blockName: block.name ?? block.type,
+        fields: collection.fields.map(({ id, label, type, required }) => ({
+          label,
+          key: id,
+          type,
+          required,
+        })),
+      });
+    }
     if (block.type === "ESCOLHER") {
       const collection = collections.find((item) => item.id === block.collectionId);
       requirements.push({

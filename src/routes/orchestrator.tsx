@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label";
 import { NumberInput } from "@/components/ui/number-input";
 import { useAppPreferences } from "@/lib/app-preferences";
 import {
-  ACTIVE_ORCHESTRATOR_STATUSES,
+  executionOrchestratorIsActive,
   type ExecutionOrchestratorMode,
   type ExecutionOrchestrator,
 } from "@/lib/execution-orchestrator";
@@ -65,20 +65,13 @@ function OrchestratorPage() {
     const result = new Map<string, ExecutionOrchestrator>();
     for (const channel of channels) {
       const candidates = orchestrators.filter((item) => item.channelId === channel.id);
-      result.set(
-        channel.id,
-        candidates.find((item) => ACTIVE_ORCHESTRATOR_STATUSES.has(item.status)) ?? candidates[0],
-      );
+      result.set(channel.id, candidates.find(executionOrchestratorIsActive) ?? candidates[0]);
     }
     return result;
   }, [channels, orchestrators]);
   const activeChannelIds = useMemo(
     () =>
-      new Set(
-        orchestrators
-          .filter((item) => ACTIVE_ORCHESTRATOR_STATUSES.has(item.status))
-          .map((item) => item.channelId),
-      ),
+      new Set(orchestrators.filter(executionOrchestratorIsActive).map((item) => item.channelId)),
     [orchestrators],
   );
   const attentionChannelIds = useMemo(

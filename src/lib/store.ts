@@ -27,7 +27,7 @@ import { normalizeExecutionDeliveries } from "@/lib/deliveries";
 import { effectiveProcessOrder } from "@/lib/process-order";
 import type { PortableCollectionV2, PortableLibraryItemV2 } from "@/lib/method-file";
 import {
-  ACTIVE_ORCHESTRATOR_STATUSES,
+  executionOrchestratorIsActive,
   type ExecutionOrchestrator,
   type ExecutionOrchestratorMode,
 } from "@/lib/execution-orchestrator";
@@ -233,9 +233,7 @@ export function useChannelExecutionOrchestrator(channelId: string) {
   const storeVersion = useClientStoreVersion();
   if (storeVersion < 0) return undefined;
   const orchestrators = db.orchestrators.filter((item) => item.channelId === channelId);
-  return (
-    orchestrators.find((item) => ACTIVE_ORCHESTRATOR_STATUSES.has(item.status)) ?? orchestrators[0]
-  );
+  return orchestrators.find(executionOrchestratorIsActive) ?? orchestrators[0];
 }
 
 export function useExecutionOrchestrators() {

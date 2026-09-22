@@ -14,6 +14,7 @@ export type InstructionTemplateContext = {
   block: { name: string; type: string };
   inputs: InstructionTemplateInput[];
   parameters: Record<string, unknown>;
+  collections?: Array<{ name: string; items: unknown[] }>;
 };
 
 const VARIABLE = /\{\{\s*([A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)+)\s*\}\}/g;
@@ -150,6 +151,10 @@ export function instructionInputLabel(input: InstructionInputIdentity) {
   return (semanticLabelKey && SEMANTIC_INPUT_LABELS[semanticLabelKey]) || input.label;
 }
 
+export function instructionCollectionKey(collection: { name: string }) {
+  return normalizeVariableKey(collection.name) || "colecao";
+}
+
 export function nextManualInputLabel(inputs: Array<Pick<InstructionInputIdentity, "label">>) {
   const used = new Set(inputs.map((input) => normalizeVariableKey(input.label)));
   let index = 1;
@@ -223,6 +228,9 @@ export function resolveInstructionTemplate(template: string, context: Instructio
 
   for (const [key, value] of Object.entries(context.parameters)) {
     values.set(`parameters.${normalizeVariableKey(key)}`, value);
+  }
+  for (const collection of context.collections ?? []) {
+    values.set(`collections.${instructionCollectionKey(collection)}`, collection.items);
   }
   const inputOwners = new Map<string, string>();
   for (const input of context.inputs) {

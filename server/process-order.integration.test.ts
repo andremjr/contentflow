@@ -153,7 +153,7 @@ test(
           "POST",
           { channelId: channel.id, mode: "end_to_end", quantity: 1 },
         );
-        assert.equal(created.orchestrator.strategyVersion, 3);
+        assert.equal(created.orchestrator.strategyVersion, 5);
         const id = created.orchestrator.id;
         for (const [index, processType] of order.entries()) {
           let state:
@@ -330,7 +330,7 @@ test(
         quantity: 2,
         projectPrefix: "Lote ordenado",
       });
-      assert.equal(created.orchestrator.strategyVersion, 4);
+      assert.equal(created.orchestrator.strategyVersion, 5);
       assert.deepEqual(created.orchestrator.processOrder, alternate);
       assert.equal(created.orchestrator.plannedSteps?.length, 13);
       const projectIds = created.projects.map((project) => project.id);
@@ -452,7 +452,7 @@ test(
             projects: Project[];
             executions: ProcessExecution[];
           }>(base, `/api/orchestrators/${created.orchestrator.id}/state`);
-          assert.equal(restarted.orchestrator.strategyVersion, 4);
+          assert.equal(restarted.orchestrator.strategyVersion, 5);
           assert.deepEqual(restarted.orchestrator.processOrder, alternate);
           assert.equal(restarted.orchestrator.plannedSteps?.length, 13);
         }

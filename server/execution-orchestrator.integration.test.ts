@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import net from "node:net";
@@ -134,7 +135,7 @@ test(
         }),
       });
       assert.equal(first.response.status, 201, first.body.error);
-      assert.equal(first.body.orchestrator.strategyVersion, 4);
+      assert.equal(first.body.orchestrator.strategyVersion, 5);
       assert.equal(first.body.orchestrator.status, "awaiting_human");
       assert.equal(first.body.executions.length, 1);
 
@@ -189,14 +190,22 @@ test(
       );
       assert.equal(repairedResponse.response.status, 200, repairedResponse.body.error);
 
-      const resumed = await jsonRequest<OrchestratorState>(
-        `${baseUrl}/api/orchestrators/${first.body.orchestrator.id}/resume`,
-        { method: "POST" },
+      let resumed: OrchestratorState | undefined;
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const state = await jsonRequest<OrchestratorState>(
+          `${baseUrl}/api/orchestrators/${first.body.orchestrator.id}/state`,
+        );
+        resumed = state.body;
+        if (resumed.orchestrator.currentStep === 1 && resumed.executions.length === 2) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.equal(resumed?.orchestrator.status, "awaiting_human");
+      assert.equal(resumed?.orchestrator.currentStep, 1);
+      assert.equal(
+        resumed?.executions.length,
+        2,
+        "a fila não retomou automaticamente após o reparo",
       );
-      assert.equal(resumed.response.status, 200, resumed.body.error);
-      assert.equal(resumed.body.orchestrator.status, "awaiting_human");
-      assert.equal(resumed.body.orchestrator.currentStep, 1);
-      assert.equal(resumed.body.executions.length, 2, "a retomada repetiu uma etapa concluída");
 
       const stoppedResumed = await jsonRequest<OrchestratorState>(
         `${baseUrl}/api/orchestrators/${first.body.orchestrator.id}/stop`,
@@ -216,10 +225,58 @@ test(
         }),
       });
       assert.equal(second.response.status, 201, second.body.error);
+      assert.equal(second.body.orchestrator.strategyVersion, 5);
       assert.equal(
         second.body.executions.length,
-        1,
-        "a fila abriu mais de uma execução em paralelo",
+        2,
+        "um item humano do lote híbrido bloqueou o próximo slot elegível",
+      );
+      assert.ok(second.body.executions.every((execution) => execution.processType === "theme"));
+
+      const firstTheme = second.body.executions.find(
+        (execution) => execution.projectId === second.body.projects[0].id,
+      )!;
+      const completedFirstTheme = await jsonRequest<{
+        result: { ok: boolean; completedProcess?: boolean };
+      }>(`${baseUrl}/api/commands`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: randomUUID(),
+          action: "completeHuman",
+          executionId: firstTheme.id,
+          blockId: firstTheme.blocks[0].blockId,
+          attempt: 1,
+          values: { theme: "Tema liberado no lote híbrido" },
+        }),
+      });
+      assert.equal(
+        completedFirstTheme.body.result.ok,
+        true,
+        JSON.stringify(completedFirstTheme.body),
+      );
+      let hybridAdvanced: OrchestratorState | undefined;
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const state = await jsonRequest<OrchestratorState>(
+          `${baseUrl}/api/orchestrators/${second.body.orchestrator.id}/state`,
+        );
+        hybridAdvanced = state.body;
+        if (
+          hybridAdvanced.executions.some(
+            (execution) =>
+              execution.projectId === second.body.projects[0].id &&
+              execution.processType === "title",
+          )
+        )
+          break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.ok(
+        hybridAdvanced?.executions.some(
+          (execution) =>
+            execution.projectId === second.body.projects[0].id && execution.processType === "title",
+        ),
+        "o lote híbrido manteve uma barreira global mesmo com o próximo slot elegível",
       );
 
       const protectedDelete = await jsonRequest<{ error: string }>(
@@ -267,18 +324,24 @@ test(
         }),
       });
       assert.equal(missingPlugin.response.status, 201, missingPlugin.body.error);
-      assert.equal(missingPlugin.body.orchestrator.strategyVersion, 4);
+      assert.equal(missingPlugin.body.orchestrator.strategyVersion, 5);
       assert.equal(missingPlugin.body.orchestrator.status, "blocked");
       assert.equal(missingPlugin.body.orchestrator.currentStep, 0);
       assert.equal(missingPlugin.body.orchestrator.currentBatchItem, 0);
-      assert.equal(missingPlugin.body.executions.length, 1);
-      assert.equal(missingPlugin.body.executions[0].status, "blocked_executor");
+      assert.equal(missingPlugin.body.executions.length, 2);
+      assert.ok(
+        missingPlugin.body.executions.every((execution) => execution.status === "blocked_executor"),
+      );
       await new Promise((resolve) => setTimeout(resolve, 100));
       const missingPluginState = await jsonRequest<OrchestratorState>(
         `${baseUrl}/api/orchestrators/${missingPlugin.body.orchestrator.id}/state`,
       );
       assert.equal(missingPluginState.body.orchestrator.status, "blocked");
-      assert.equal(missingPluginState.body.executions[0].status, "blocked_executor");
+      assert.ok(
+        missingPluginState.body.executions.every(
+          (execution) => execution.status === "blocked_executor",
+        ),
+      );
       const stoppedMissing = await jsonRequest<OrchestratorState>(
         `${baseUrl}/api/orchestrators/${missingPlugin.body.orchestrator.id}/stop`,
         { method: "POST" },
@@ -292,12 +355,63 @@ test(
         body: JSON.stringify({
           channelId: channel.id,
           mode: "end_to_end",
-          quantity: 1,
+          quantity: 2,
           projectPrefix: "Reinício",
         }),
       });
       assert.equal(third.response.status, 201, third.body.error);
+      assert.equal(third.body.orchestrator.strategyVersion, 5);
       assert.equal(third.body.orchestrator.status, "awaiting_human");
+      assert.equal(
+        third.body.executions.length,
+        2,
+        "o ponta a ponta não pulou para o próximo projeto enquanto aguardava humano",
+      );
+      const firstEndToEndTheme = third.body.executions.find(
+        (execution) => execution.projectId === third.body.projects[0].id,
+      )!;
+      const completedEndToEndTheme = await jsonRequest<{
+        result: { ok: boolean; completedProcess?: boolean };
+      }>(`${baseUrl}/api/commands`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: randomUUID(),
+          action: "completeHuman",
+          executionId: firstEndToEndTheme.id,
+          blockId: firstEndToEndTheme.blocks[0].blockId,
+          attempt: 1,
+          values: { theme: "Tema liberado no ponta a ponta" },
+        }),
+      });
+      assert.equal(
+        completedEndToEndTheme.body.result.ok,
+        true,
+        JSON.stringify(completedEndToEndTheme.body),
+      );
+      let endToEndReturned: OrchestratorState | undefined;
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const state = await jsonRequest<OrchestratorState>(
+          `${baseUrl}/api/orchestrators/${third.body.orchestrator.id}/state`,
+        );
+        endToEndReturned = state.body;
+        if (
+          endToEndReturned.executions.some(
+            (execution) =>
+              execution.projectId === third.body.projects[0].id &&
+              execution.processType === "title",
+          )
+        )
+          break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.ok(
+        endToEndReturned?.executions.some(
+          (execution) =>
+            execution.projectId === third.body.projects[0].id && execution.processType === "title",
+        ),
+        "o scheduler não voltou ao projeto anterior depois da intervenção humana",
+      );
 
       const stoppedThird = await jsonRequest<OrchestratorState>(
         `${baseUrl}/api/orchestrators/${third.body.orchestrator.id}/stop`,

@@ -90,9 +90,17 @@ test(
       const tools = await client.listTools();
       assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
         "apply_contentflow_methods",
+        "create_contentflow_strategic_collection",
+        "create_contentflow_strategic_item",
+        "delete_contentflow_strategic_collection",
+        "delete_contentflow_strategic_item",
         "get_contentflow_method_contract",
+        "get_contentflow_strategic_library",
         "inspect_contentflow_channel",
         "list_contentflow_channels",
+        "set_contentflow_process_order",
+        "update_contentflow_strategic_collection",
+        "update_contentflow_strategic_item",
         "validate_contentflow_methods",
       ]);
 
@@ -101,6 +109,100 @@ test(
         arguments: {},
       });
       assert.match(JSON.stringify(inspected.content), /Canal MCP/);
+
+      const processOrder = [
+        "title",
+        "theme",
+        "thumbnail",
+        "script",
+        "narration",
+        "assets",
+        "editing",
+        "publishing",
+      ];
+      const reordered = await client.callTool({
+        name: "set_contentflow_process_order",
+        arguments: { processOrder },
+      });
+      assert.equal(reordered.isError, undefined);
+      const reorderContent = reordered.content as Array<{ type: "text"; text: string }>;
+      assert.deepEqual(JSON.parse(reorderContent[0].text).processOrder, processOrder);
+
+      const createdCollection = await client.callTool({
+        name: "create_contentflow_strategic_collection",
+        arguments: {
+          name: "CTAs",
+          fields: [
+            { label: "Nome", type: "text", required: true },
+            { label: "Texto", type: "textarea", required: true },
+          ],
+        },
+      });
+      assert.equal(createdCollection.isError, undefined);
+      const collectionPayload = JSON.parse(
+        (createdCollection.content as Array<{ type: "text"; text: string }>)[0].text,
+      ) as { collection: { id: string; fields: Array<{ id: string; label: string }> } };
+      assert.equal(collectionPayload.collection.fields.length, 2);
+
+      const createdItem = await client.callTool({
+        name: "create_contentflow_strategic_item",
+        arguments: {
+          collectionId: collectionPayload.collection.id,
+          values: { Nome: "Inscrição", Texto: "Inscreva-se no canal." },
+        },
+      });
+      assert.equal(createdItem.isError, undefined);
+      const itemPayload = JSON.parse(
+        (createdItem.content as Array<{ type: "text"; text: string }>)[0].text,
+      ) as { item: { id: string } };
+
+      const library = await client.callTool({
+        name: "get_contentflow_strategic_library",
+        arguments: {},
+      });
+      assert.match(JSON.stringify(library.content), /Inscreva-se no canal/);
+
+      const updatedItem = await client.callTool({
+        name: "update_contentflow_strategic_item",
+        arguments: {
+          collectionId: collectionPayload.collection.id,
+          itemId: itemPayload.item.id,
+          values: { Nome: "Comentário", Texto: "Deixe sua opinião nos comentários." },
+        },
+      });
+      assert.equal(updatedItem.isError, undefined);
+      assert.match(JSON.stringify(updatedItem.content), /Deixe sua opinião/);
+
+      const updatedCollection = await client.callTool({
+        name: "update_contentflow_strategic_collection",
+        arguments: {
+          collectionId: collectionPayload.collection.id,
+          name: "Chamadas para ação",
+          fields: collectionPayload.collection.fields.map((field) => ({
+            id: field.id,
+            label: field.label,
+            type: field.label === "Nome" ? "text" : "textarea",
+            required: true,
+          })),
+        },
+      });
+      assert.equal(updatedCollection.isError, undefined);
+      assert.match(JSON.stringify(updatedCollection.content), /Chamadas para ação/);
+
+      const deletedItem = await client.callTool({
+        name: "delete_contentflow_strategic_item",
+        arguments: {
+          collectionId: collectionPayload.collection.id,
+          itemId: itemPayload.item.id,
+        },
+      });
+      assert.equal(deletedItem.isError, undefined);
+
+      const deletedCollection = await client.callTool({
+        name: "delete_contentflow_strategic_collection",
+        arguments: { collectionId: collectionPayload.collection.id },
+      });
+      assert.equal(deletedCollection.isError, undefined);
 
       const methods = {
         theme: {
@@ -150,9 +252,11 @@ test(
       assert.match(JSON.stringify(applyPayload.methods), /manual-theme/);
 
       const channels = (await (await fetch(`${apiUrl}/api/channels`)).json()) as Array<{
+        processOrder?: string[];
         methods: Record<string, { name: string }>;
       }>;
       assert.equal(channels[0].methods.theme.name, "Tema manual");
+      assert.deepEqual(channels[0].processOrder, processOrder);
     } finally {
       await client?.close().catch(() => undefined);
       apiProcess.kill();

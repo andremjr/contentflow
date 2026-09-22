@@ -26,6 +26,13 @@ export type ExecutionOrchestratorAggregateStep = {
 export type ExecutionOrchestratorStep =
   ExecutionOrchestratorProjectStep | ExecutionOrchestratorAggregateStep;
 
+export type ExecutionOrchestratorSlot = {
+  projectId: string;
+  processType: UniversalProcess;
+  batchItem?: number;
+  batchTotal?: number;
+};
+
 export type ExecutionOrchestrator = {
   id: string;
   channelId: string;
@@ -33,10 +40,10 @@ export type ExecutionOrchestrator = {
   globalBatchId?: string;
   globalChannelCount?: number;
   mode: ExecutionOrchestratorMode;
-  /** V1/V2 preserve historical queues; V3/V4 use a frozen project sequence. */
-  strategyVersion?: 1 | 2 | 3 | 4;
+  /** V1-V4 preserve historical queues; V5 schedules the next eligible frozen slot. */
+  strategyVersion?: 1 | 2 | 3 | 4 | 5;
   processOrder?: UniversalProcess[];
-  /** V4 persists the exact hybrid plan so restart never reinterprets the queue. */
+  /** V4/V5 persist the exact plan so restart never reinterprets the queue. */
   plannedSteps?: ExecutionOrchestratorStep[];
   quantity: number;
   projectPrefix: string;
@@ -67,13 +74,20 @@ export const STOPPABLE_ORCHESTRATOR_STATUSES = new Set<ExecutionOrchestratorStat
   "failed",
 ]);
 
+export function executionOrchestratorIsActive(orchestrator: ExecutionOrchestrator) {
+  return (
+    ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status) ||
+    (orchestrator.strategyVersion === 5 && orchestrator.status === "failed")
+  );
+}
+
 export function buildOrchestratorSteps(
   projectIds: string[],
   mode: ExecutionOrchestratorMode,
-  strategyVersion: 1 | 2 | 3 | 4 = 2,
+  strategyVersion: 1 | 2 | 3 | 4 | 5 = 2,
   order: readonly UniversalProcess[] = PROCESS_ORDER,
 ): ExecutionOrchestratorStep[] {
-  if (strategyVersion === 3 && mode === "end_to_end")
+  if ((strategyVersion === 3 || strategyVersion === 5) && mode === "end_to_end")
     return projectIds.flatMap((projectId) =>
       order.map((processType) => ({ projectId, processType })),
     );
@@ -96,7 +110,7 @@ export function buildOrchestratorSteps(
       ),
     ];
   }
-  if (mode === "batch" && strategyVersion === 4) {
+  if (mode === "batch" && (strategyVersion === 4 || strategyVersion === 5)) {
     const steps: ExecutionOrchestratorStep[] = [];
     for (const processType of order) {
       if (AGGREGATED_BATCH_PROCESSES.includes(processType as never)) {
@@ -121,6 +135,22 @@ export function buildOrchestratorSteps(
   return projectIds.flatMap((projectId) =>
     PROCESS_ORDER.map((processType) => ({ projectId, processType })),
   );
+}
+
+export function expandOrchestratorSlots(
+  steps: readonly ExecutionOrchestratorStep[],
+): ExecutionOrchestratorSlot[] {
+  return steps.flatMap((step) => {
+    if (!isAggregateOrchestratorStep(step)) {
+      return [{ projectId: step.projectId, processType: step.processType }];
+    }
+    return step.projectIds.map((projectId, index) => ({
+      projectId,
+      processType: step.processType,
+      batchItem: index,
+      batchTotal: step.projectIds.length,
+    }));
+  });
 }
 
 export function isAggregateOrchestratorStep(

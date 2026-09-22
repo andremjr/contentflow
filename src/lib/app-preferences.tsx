@@ -334,6 +334,7 @@ const PHRASES: Record<string, Translation> = {
   blocos: ["blocks", "bloques"],
   coleção: ["collection", "colección"],
   coleções: ["collections", "colecciones"],
+  Coleções: ["Collections", "Colecciones"],
   de: ["of", "de"],
   e: ["and", "y"],
   inscritos: ["subscribers", "suscriptores"],

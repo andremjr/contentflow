@@ -70,6 +70,8 @@ import {
 import {
   ACTIVE_ORCHESTRATOR_STATUSES,
   buildOrchestratorSteps,
+  executionOrchestratorIsActive,
+  expandOrchestratorSlots,
   isAggregateOrchestratorStep,
   type ExecutionOrchestrator,
   type ExecutionOrchestratorMode,
@@ -86,7 +88,11 @@ import type {
   PluginFieldContract,
   PluginProfileSetup,
 } from "../src/lib/plugin-contract";
-import { resolveInstructionTemplate } from "../src/lib/instruction-template";
+import {
+  instructionCollectionKey,
+  instructionVariables,
+  resolveInstructionTemplate,
+} from "../src/lib/instruction-template";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { attemptAfterRetryInvalidation } from "../src/lib/retry-attempt";
 import {
@@ -239,7 +245,8 @@ function builderMcpLaunch(channelId?: string) {
   const bundledEntry = path.join(applicationRoot, "desktop-dist", "mcp.mjs");
   const sourceEntry = path.join(applicationRoot, "server", "mcp.ts");
   const tsxEntry = path.join(applicationRoot, "node_modules", "tsx", "dist", "cli.mjs");
-  const bundled = existsSync(bundledEntry);
+  const sourceAvailable = existsSync(sourceEntry) && existsSync(tsxEntry);
+  const bundled = !sourceAvailable && existsSync(bundledEntry);
   const command = process.env.CONTENTFLOW_PLUGIN_NODE_EXECUTABLE ?? process.execPath;
   const args = bundled
     ? [bundledEntry, "--session", builderMcpSessionPath]
@@ -1101,7 +1108,7 @@ function prepareExecutionOrchestration(input: {
       : input.projectPrefix;
     return createOrchestratedProject(channel.id, `${prefix} ${index + 1}`, index);
   });
-  const strategyVersion = mode === "end_to_end" ? 3 : 4;
+  const strategyVersion = 5;
   const order = effectiveProcessOrder(channel);
   for (const project of projects) {
     captureProjectStrategy(project, channel, false);
@@ -1121,12 +1128,12 @@ function prepareExecutionOrchestration(input: {
     mode,
     strategyVersion,
     processOrder: order,
-    plannedSteps: strategyVersion === 4 ? steps : undefined,
+    plannedSteps: steps,
     quantity,
     projectPrefix: input.projectPrefix,
     projectIds: projects.map((project) => project.id),
     currentStep: 0,
-    totalSteps: steps.length,
+    totalSteps: expandOrchestratorSlots(steps).length,
     status: "running",
     message: "Preparando a primeira execução.",
     createdAt: now,
@@ -1232,18 +1239,205 @@ function orchestrationMessage(
   return `Executando ${processLabel} em ${project.title}.`;
 }
 
+function executionSlotState(execution: ProcessExecution) {
+  if (execution.status === "completed") return "completed" as const;
+  if (execution.status === "cancelled") return "cancelled" as const;
+  if (execution.status === "awaiting_human" || execution.status === "awaiting_output") {
+    return "awaiting_human" as const;
+  }
+  if (execution.status === "failed") return "failed" as const;
+  if (execution.status === "blocked_executor") {
+    const activeBlockExecution = execution.blocks.find((item) => item.status !== "completed");
+    const activeBlock = activeBlockExecution
+      ? execution.methodSnapshot.blocks.find((item) => item.id === activeBlockExecution.blockId)
+      : undefined;
+    return automaticPluginBlockReady(activeBlock) ? ("running" as const) : ("blocked" as const);
+  }
+  return "running" as const;
+}
+
+function executionSlotDependenciesReady(
+  orchestrator: ExecutionOrchestrator,
+  project: Project,
+  processType: UniversalProcess,
+) {
+  const order =
+    project.strategySnapshot?.processOrder ?? orchestrator.processOrder ?? PROCESS_ORDER;
+  const index = order.indexOf(processType);
+  if (index <= 0) return index === 0;
+  return order
+    .slice(0, index)
+    .every((previousProcess) => executionFor(project.id, previousProcess)?.status === "completed");
+}
+
+function reconcileEligibleSlotOrchestrator(orchestrator: ExecutionOrchestrator, channel: Channel) {
+  const steps =
+    orchestrator.plannedSteps ??
+    buildOrchestratorSteps(
+      orchestrator.projectIds,
+      orchestrator.mode,
+      5,
+      orchestrator.processOrder,
+    );
+  const slots = expandOrchestratorSlots(steps);
+  const completedCount = () =>
+    slots.filter((slot) => executionFor(slot.projectId, slot.processType)?.status === "completed")
+      .length;
+  const updateCurrent = (slot: (typeof slots)[number], patch: Partial<ExecutionOrchestrator>) =>
+    setExecutionOrchestratorState(orchestrator, {
+      currentStep: completedCount(),
+      totalSteps: slots.length,
+      currentProjectId: slot.projectId,
+      currentProcessType: slot.processType,
+      currentBatchItem: slot.batchItem,
+      currentBatchTotal: slot.batchTotal,
+      ...patch,
+    });
+
+  for (const slot of slots) {
+    const execution = executionFor(slot.projectId, slot.processType);
+    if (!execution) continue;
+    const state = executionSlotState(execution);
+    if (state === "cancelled") {
+      updateCurrent(slot, {
+        status: "cancelled",
+        message: "A execução atual foi cancelada.",
+      });
+      return;
+    }
+    if (state !== "running") continue;
+    if (execution.status === "blocked_executor") scheduleAutomaticPluginBlock(execution);
+    const project = readPayload<Project>("projects", slot.projectId);
+    updateCurrent(slot, {
+      status: "running",
+      message: project
+        ? (execution.error ?? orchestrationMessage("running", project, slot.processType))
+        : "Executando a próxima etapa elegível.",
+    });
+    return;
+  }
+
+  const parked: Array<{
+    slot: (typeof slots)[number];
+    status: "awaiting_human" | "blocked" | "failed";
+    message?: string;
+  }> = [];
+
+  for (const slot of slots) {
+    let execution = executionFor(slot.projectId, slot.processType);
+    if (execution?.status === "completed") continue;
+    if (execution) {
+      const state = executionSlotState(execution);
+      if (state === "awaiting_human" || state === "blocked" || state === "failed") {
+        const project = readPayload<Project>("projects", slot.projectId);
+        parked.push({
+          slot,
+          status: state,
+          message:
+            execution.error ??
+            (project ? orchestrationMessage(state, project, slot.processType) : undefined),
+        });
+      }
+      continue;
+    }
+
+    const project = readPayload<Project>("projects", slot.projectId);
+    if (!project) {
+      updateCurrent(slot, {
+        status: "failed",
+        message: "Um projeto da orquestração não existe mais.",
+      });
+      return;
+    }
+    if (!executionSlotDependenciesReady(orchestrator, project, slot.processType)) continue;
+
+    const started = startOrchestratedProcess(project, channel, slot.processType);
+    if (!started.execution) {
+      parked.push({
+        slot,
+        status: "blocked",
+        message: started.issue,
+      });
+      continue;
+    }
+    execution = started.execution;
+    const state = executionSlotState(execution);
+    if (state === "completed") continue;
+    if (state === "cancelled") {
+      updateCurrent(slot, {
+        status: "cancelled",
+        message: "A execução atual foi cancelada.",
+      });
+      return;
+    }
+    if (state === "awaiting_human" || state === "blocked" || state === "failed") {
+      parked.push({
+        slot,
+        status: state,
+        message: execution.error ?? orchestrationMessage(state, project, slot.processType),
+      });
+      continue;
+    }
+    updateCurrent(slot, {
+      status: "running",
+      message: execution.error ?? orchestrationMessage("running", project, slot.processType),
+    });
+    return;
+  }
+
+  const completed = completedCount();
+  if (completed === slots.length) {
+    setExecutionOrchestratorState(orchestrator, {
+      currentStep: completed,
+      totalSteps: slots.length,
+      status: "completed",
+      currentProjectId: undefined,
+      currentProcessType: undefined,
+      currentBatchItem: undefined,
+      currentBatchTotal: undefined,
+      message: "Todos os projetos da orquestração foram concluídos.",
+      completedAt: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const waiting = parked[0];
+  if (waiting) {
+    updateCurrent(waiting.slot, {
+      status: waiting.status,
+      message: waiting.message,
+    });
+    return;
+  }
+
+  setExecutionOrchestratorState(orchestrator, {
+    currentStep: completed,
+    totalSteps: slots.length,
+    status: "blocked",
+    currentProjectId: undefined,
+    currentProcessType: undefined,
+    currentBatchItem: undefined,
+    currentBatchTotal: undefined,
+    message: "Nenhum slot da fila está elegível para execução neste momento.",
+  });
+}
+
 function reconcileExecutionOrchestrator(id: string) {
   if (orchestratorReconciliationLocks.has(id)) return;
   orchestratorReconciliationLocks.add(id);
   try {
     const orchestrator = executionOrchestratorById(id);
-    if (!orchestrator || !ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status)) return;
+    if (!orchestrator || !executionOrchestratorIsActive(orchestrator)) return;
     const channel = readPayload<Channel>("channels", orchestrator.channelId);
     if (!channel) {
       setExecutionOrchestratorState(orchestrator, {
         status: "failed",
         message: "O canal desta orquestração não existe mais.",
       });
+      return;
+    }
+    if (orchestrator.strategyVersion === 5) {
+      reconcileEligibleSlotOrchestrator(orchestrator, channel);
       return;
     }
 
@@ -1411,7 +1605,7 @@ function queueOrchestratorReconciliation(id: string) {
 function queueOrchestratorReconciliationForProject(projectId: string) {
   for (const orchestrator of executionOrchestrators()) {
     if (
-      ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status) &&
+      executionOrchestratorIsActive(orchestrator) &&
       orchestrator.projectIds.includes(projectId)
     ) {
       queueOrchestratorReconciliation(orchestrator.id);
@@ -1446,7 +1640,7 @@ function cancelStoredProcessExecution(execution: ProcessExecution, project: Proj
 
 function resumeExecutionOrchestrators() {
   for (const orchestrator of executionOrchestrators()) {
-    if (ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status)) {
+    if (executionOrchestratorIsActive(orchestrator)) {
       reconcileExecutionOrchestrator(orchestrator.id);
     }
   }
@@ -3939,6 +4133,121 @@ function channelCollections(channelId: string) {
   ) as StrategicCollection[];
 }
 
+function channelLibraryItems(channelId: string) {
+  return parseRows(
+    database
+      .prepare("SELECT payload FROM library_items WHERE channel_id = ? ORDER BY created_at ASC")
+      .all(channelId) as { payload: string }[],
+  ) as ChannelLibraryItem[];
+}
+
+const builderCollectionFieldSchema = z.object({
+  id: z.string().min(1).max(200).optional(),
+  label: z.string().trim().min(1).max(200),
+  type: z.enum(["text", "textarea", "number", "image", "url", "thumbnail_layout"]),
+  required: z.boolean(),
+});
+
+function builderCollectionReferences(channel: Channel, collection: StrategicCollection) {
+  const instructionKey = instructionCollectionKey(collection);
+  const references: string[] = [];
+  for (const [processType, method] of Object.entries(channel.methods ?? {}) as [
+    UniversalProcess,
+    ProcessMethod | undefined,
+  ][]) {
+    for (const block of method?.blocks ?? []) {
+      if (block.collectionId === collection.id) {
+        references.push(`${processType}/${block.name ?? block.type}`);
+      }
+      if (
+        instructionVariables(block.instructions ?? "").some(
+          (variable) => variable.toLowerCase() === `collections.${instructionKey}`.toLowerCase(),
+        )
+      ) {
+        references.push(`${processType}/${block.name ?? block.type}`);
+      }
+    }
+  }
+  return [...new Set(references)];
+}
+
+function normalizeBuilderLibraryValues(
+  collection: StrategicCollection,
+  values: unknown,
+): { ok: true; values: ChannelLibraryItem["values"] } | { ok: false; error: string } {
+  if (!values || typeof values !== "object" || Array.isArray(values)) {
+    return { ok: false, error: "Informe values como um objeto." };
+  }
+  const normalized: ChannelLibraryItem["values"] = {};
+  for (const [key, value] of Object.entries(values as Record<string, unknown>)) {
+    const field = collection.fields.find(
+      (candidate) =>
+        candidate.id === key ||
+        candidate.label.trim().toLocaleLowerCase("pt-BR") === key.trim().toLocaleLowerCase("pt-BR"),
+    );
+    if (!field) return { ok: false, error: `Campo desconhecido na coleção: “${key}”.` };
+    if (field.type === "number") {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        return { ok: false, error: `O campo “${field.label}” exige um número.` };
+      }
+      normalized[field.id] = value;
+      continue;
+    }
+    if (["text", "textarea", "url"].includes(field.type)) {
+      if (typeof value !== "string") {
+        return { ok: false, error: `O campo “${field.label}” exige texto.` };
+      }
+      if (field.type === "url" && value.trim()) {
+        try {
+          const parsed = new URL(value);
+          if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("invalid");
+        } catch {
+          return { ok: false, error: `O campo “${field.label}” exige uma URL HTTP válida.` };
+        }
+      }
+      normalized[field.id] = value.trim();
+      continue;
+    }
+    if (!value || typeof value !== "object") {
+      return {
+        ok: false,
+        error: `O campo “${field.label}” exige um valor estruturado compatível com ${field.type}.`,
+      };
+    }
+    normalized[field.id] = value as StoredFile | ThumbnailLayout;
+  }
+  for (const field of collection.fields) {
+    const value = normalized[field.id];
+    const empty =
+      value === undefined || value === null || (typeof value === "string" && !value.trim());
+    if (field.required && empty) {
+      return { ok: false, error: `O campo obrigatório “${field.label}” está vazio.` };
+    }
+    if (!empty && field.type === "image") {
+      const file = value as StoredFile;
+      if (
+        typeof file.id !== "string" ||
+        typeof file.name !== "string" ||
+        typeof file.mimeType !== "string" ||
+        typeof file.size !== "number" ||
+        typeof file.url !== "string"
+      ) {
+        return { ok: false, error: `O campo “${field.label}” exige um arquivo de imagem válido.` };
+      }
+    }
+    if (!empty && field.type === "thumbnail_layout") {
+      const layout = value as ThumbnailLayout;
+      if (layout.aspectRatio !== "16:9" || !Array.isArray(layout.boxes)) {
+        return {
+          ok: false,
+          error: `O campo “${field.label}” exige um layout de thumbnail 16:9 válido.`,
+        };
+      }
+    }
+  }
+  return { ok: true, values: normalized };
+}
+
 app.get("/api/builder/mcp-info", (request, response) => {
   const channelId =
     typeof request.query.channelId === "string" ? request.query.channelId : undefined;
@@ -3972,6 +4281,8 @@ app.get("/api/builder/channels", requireBuilderMcp, (_request, response) => {
       handle: channel.handle,
       niche: channel.niche,
       language: channel.language,
+      processOrder: effectiveProcessOrder(channel),
+      definitionRevision: channel.definitionRevision ?? 0,
       configuredProcesses: PROCESS_ORDER.filter(
         (processType) => channel.methods?.[processType]?.blocks?.length,
       ),
@@ -4001,12 +4312,356 @@ app.get(
         niche: channel.niche,
         language: channel.language,
         description: channel.description,
+        processOrder: effectiveProcessOrder(channel),
+        definitionRevision: channel.definitionRevision ?? 0,
         methods: channel.methods,
       },
-      collections: channelCollections(channel.id),
+      collections: channelCollections(channel.id).map((collection) => ({
+        ...collection,
+        itemCount: channelLibraryItems(channel.id).filter(
+          (item) => item.collectionId === collection.id,
+        ).length,
+      })),
       plugins: plugins.map(publicBuilderPlugin),
       contract: BUILDER_METHOD_CONTRACT,
     });
+  },
+);
+
+app.get("/api/builder/channels/:channelId/library", requireBuilderMcp, (request, response) => {
+  const channel = readPayload<Channel>("channels", String(request.params.channelId));
+  if (!channel) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+  const collections = channelCollections(channel.id);
+  const items = channelLibraryItems(channel.id);
+  response.json({
+    channelId: channel.id,
+    collections: collections.map((collection) => ({
+      ...collection,
+      items: items.filter((item) => item.collectionId === collection.id),
+    })),
+  });
+});
+
+app.put(
+  "/api/builder/channels/:channelId/process-order",
+  requireBuilderMcp,
+  (request, response) => {
+    const channel = readPayload<Channel>("channels", String(request.params.channelId));
+    if (!channel) {
+      response.status(404).json({ error: "Canal não encontrado." });
+      return;
+    }
+    const order = request.body?.processOrder;
+    if (!isProcessOrder(order)) {
+      response.status(400).json({ error: "Ordem dos Processos inválida." });
+      return;
+    }
+    const errors = validateProcessDependencies(order, channel.methods);
+    if (errors.length) {
+      response.status(422).json({ ok: false, error: errors[0], errors });
+      return;
+    }
+    channel.processOrder = [...order];
+    channel.definitionRevision = (channel.definitionRevision ?? 0) + 1;
+    database
+      .prepare("UPDATE channels SET payload = ? WHERE id = ?")
+      .run(JSON.stringify(channel), channel.id);
+    response.json({
+      ok: true,
+      channelId: channel.id,
+      processOrder: effectiveProcessOrder(channel),
+      definitionRevision: channel.definitionRevision,
+    });
+  },
+);
+
+app.post("/api/builder/channels/:channelId/collections", requireBuilderMcp, (request, response) => {
+  const channel = readPayload<Channel>("channels", String(request.params.channelId));
+  if (!channel) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+  const parsed = z
+    .object({
+      name: z.string().trim().min(1).max(200),
+      fields: z.array(builderCollectionFieldSchema).min(1).max(100),
+    })
+    .safeParse(request.body);
+  if (!parsed.success) {
+    response
+      .status(400)
+      .json({ error: "Coleção estratégica inválida.", issues: parsed.error.issues });
+    return;
+  }
+  const key = instructionCollectionKey({ name: parsed.data.name });
+  if (
+    channelCollections(channel.id).some(
+      (collection) => instructionCollectionKey(collection) === key,
+    )
+  ) {
+    response.status(409).json({ error: "Já existe uma coleção com esse nome no canal." });
+    return;
+  }
+  const fieldIds = new Set<string>();
+  const fields: StrategicCollection["fields"] = [];
+  for (const field of parsed.data.fields) {
+    const id = field.id ?? `collection-field-${randomUUID()}`;
+    if (fieldIds.has(id)) {
+      response.status(400).json({ error: "Os IDs dos campos da coleção precisam ser únicos." });
+      return;
+    }
+    fieldIds.add(id);
+    fields.push({ ...field, id });
+  }
+  const collection: StrategicCollection = {
+    id: `collection-${randomUUID()}`,
+    channelId: channel.id,
+    name: parsed.data.name,
+    fields,
+    createdAt: new Date().toISOString(),
+  };
+  database
+    .prepare(
+      "INSERT INTO library_collections (id, channel_id, payload, created_at) VALUES (?, ?, ?, ?)",
+    )
+    .run(collection.id, collection.channelId, JSON.stringify(collection), collection.createdAt);
+  response.status(201).json({ ok: true, collection });
+});
+
+app.put(
+  "/api/builder/channels/:channelId/collections/:collectionId",
+  requireBuilderMcp,
+  (request, response) => {
+    const channel = readPayload<Channel>("channels", String(request.params.channelId));
+    if (!channel) {
+      response.status(404).json({ error: "Canal não encontrado." });
+      return;
+    }
+    const existing = channelCollections(channel.id).find(
+      (collection) => collection.id === String(request.params.collectionId),
+    );
+    if (!existing) {
+      response.status(404).json({ error: "Coleção não encontrada." });
+      return;
+    }
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(200),
+        fields: z.array(builderCollectionFieldSchema).min(1).max(100),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      response
+        .status(400)
+        .json({ error: "Coleção estratégica inválida.", issues: parsed.error.issues });
+      return;
+    }
+    const nextKey = instructionCollectionKey({ name: parsed.data.name });
+    if (
+      channelCollections(channel.id).some(
+        (collection) =>
+          collection.id !== existing.id && instructionCollectionKey(collection) === nextKey,
+      )
+    ) {
+      response.status(409).json({ error: "Já existe uma coleção com esse nome no canal." });
+      return;
+    }
+    const existingByLabel = new Map(
+      existing.fields.map((field) => [field.label.trim().toLocaleLowerCase("pt-BR"), field]),
+    );
+    const fields = parsed.data.fields.map((field) => ({
+      ...field,
+      id:
+        field.id ??
+        existingByLabel.get(field.label.trim().toLocaleLowerCase("pt-BR"))?.id ??
+        `collection-field-${randomUUID()}`,
+    }));
+    if (new Set(fields.map((field) => field.id)).size !== fields.length) {
+      response.status(400).json({ error: "Os IDs dos campos da coleção precisam ser únicos." });
+      return;
+    }
+    const references = builderCollectionReferences(channel, existing);
+    const removed = existing.fields.filter(
+      (field) => !fields.some((candidate) => candidate.id === field.id),
+    );
+    const changedTypes = existing.fields.filter((field) => {
+      const next = fields.find((candidate) => candidate.id === field.id);
+      return next && next.type !== field.type;
+    });
+    if (references.length && (removed.length || changedTypes.length)) {
+      response.status(422).json({
+        ok: false,
+        error:
+          "A coleção está em uso por Métodos. Preserve os campos existentes e seus tipos enquanto houver referências.",
+        references,
+      });
+      return;
+    }
+    const oldKey = instructionCollectionKey(existing);
+    const updated: StrategicCollection = {
+      ...existing,
+      name: parsed.data.name,
+      fields,
+    };
+    database
+      .prepare("UPDATE library_collections SET payload = ? WHERE id = ?")
+      .run(JSON.stringify(updated), updated.id);
+    if (oldKey !== nextKey) {
+      const matcher = new RegExp(`\\{\\{\\s*collections\\.${oldKey}\\s*\\}\\}`, "gi");
+      let changed = false;
+      for (const method of Object.values(channel.methods ?? {})) {
+        for (const block of method?.blocks ?? []) {
+          const current = block.instructions ?? "";
+          const next = current.replace(matcher, `{{collections.${nextKey}}}`);
+          if (next !== current) {
+            block.instructions = next;
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        channel.definitionRevision = (channel.definitionRevision ?? 0) + 1;
+        database
+          .prepare("UPDATE channels SET payload = ? WHERE id = ?")
+          .run(JSON.stringify(channel), channel.id);
+      }
+    }
+    response.json({ ok: true, collection: updated });
+  },
+);
+
+app.delete(
+  "/api/builder/channels/:channelId/collections/:collectionId",
+  requireBuilderMcp,
+  (request, response) => {
+    const channel = readPayload<Channel>("channels", String(request.params.channelId));
+    if (!channel) {
+      response.status(404).json({ error: "Canal não encontrado." });
+      return;
+    }
+    const collection = channelCollections(channel.id).find(
+      (candidate) => candidate.id === String(request.params.collectionId),
+    );
+    if (!collection) {
+      response.status(404).json({ error: "Coleção não encontrada." });
+      return;
+    }
+    const references = builderCollectionReferences(channel, collection);
+    if (references.length) {
+      response.status(422).json({
+        ok: false,
+        error: "A coleção está em uso por Métodos e não pode ser excluída.",
+        references,
+      });
+      return;
+    }
+    const remove = database.transaction(() => {
+      for (const item of channelLibraryItems(channel.id).filter(
+        (candidate) => candidate.collectionId === collection.id,
+      )) {
+        database.prepare("DELETE FROM library_items WHERE id = ?").run(item.id);
+      }
+      database.prepare("DELETE FROM library_collections WHERE id = ?").run(collection.id);
+    });
+    remove();
+    response.json({ ok: true, deletedCollectionId: collection.id });
+  },
+);
+
+app.post(
+  "/api/builder/channels/:channelId/collections/:collectionId/items",
+  requireBuilderMcp,
+  (request, response) => {
+    const channel = readPayload<Channel>("channels", String(request.params.channelId));
+    if (!channel) {
+      response.status(404).json({ error: "Canal não encontrado." });
+      return;
+    }
+    const collection = channelCollections(channel.id).find(
+      (candidate) => candidate.id === String(request.params.collectionId),
+    );
+    if (!collection) {
+      response.status(404).json({ error: "Coleção não encontrada." });
+      return;
+    }
+    const normalized = normalizeBuilderLibraryValues(collection, request.body?.values);
+    if (!normalized.ok) {
+      response.status(400).json({ error: normalized.error });
+      return;
+    }
+    const item: ChannelLibraryItem = {
+      id: `library-item-${randomUUID()}`,
+      channelId: channel.id,
+      collectionId: collection.id,
+      values: normalized.values,
+      createdAt: new Date().toISOString(),
+    };
+    database
+      .prepare(
+        "INSERT INTO library_items (id, channel_id, payload, created_at) VALUES (?, ?, ?, ?)",
+      )
+      .run(item.id, item.channelId, JSON.stringify(item), item.createdAt);
+    response.status(201).json({ ok: true, item });
+  },
+);
+
+app.put(
+  "/api/builder/channels/:channelId/collections/:collectionId/items/:itemId",
+  requireBuilderMcp,
+  (request, response) => {
+    const channel = readPayload<Channel>("channels", String(request.params.channelId));
+    if (!channel) {
+      response.status(404).json({ error: "Canal não encontrado." });
+      return;
+    }
+    const collection = channelCollections(channel.id).find(
+      (candidate) => candidate.id === String(request.params.collectionId),
+    );
+    const item = channelLibraryItems(channel.id).find(
+      (candidate) =>
+        candidate.id === String(request.params.itemId) &&
+        candidate.collectionId === String(request.params.collectionId),
+    );
+    if (!collection || !item) {
+      response.status(404).json({ error: "Coleção ou item não encontrado." });
+      return;
+    }
+    const normalized = normalizeBuilderLibraryValues(collection, request.body?.values);
+    if (!normalized.ok) {
+      response.status(400).json({ error: normalized.error });
+      return;
+    }
+    const updated: ChannelLibraryItem = { ...item, values: normalized.values };
+    database
+      .prepare("UPDATE library_items SET payload = ? WHERE id = ?")
+      .run(JSON.stringify(updated), updated.id);
+    response.json({ ok: true, item: updated });
+  },
+);
+
+app.delete(
+  "/api/builder/channels/:channelId/collections/:collectionId/items/:itemId",
+  requireBuilderMcp,
+  (request, response) => {
+    const channel = readPayload<Channel>("channels", String(request.params.channelId));
+    if (!channel) {
+      response.status(404).json({ error: "Canal não encontrado." });
+      return;
+    }
+    const item = channelLibraryItems(channel.id).find(
+      (candidate) =>
+        candidate.id === String(request.params.itemId) &&
+        candidate.collectionId === String(request.params.collectionId),
+    );
+    if (!item) {
+      response.status(404).json({ error: "Item não encontrado." });
+      return;
+    }
+    database.prepare("DELETE FROM library_items WHERE id = ?").run(item.id);
+    response.json({ ok: true, deletedItemId: item.id });
   },
 );
 
@@ -4387,6 +5042,12 @@ app.post("/api/execute-block", async (request, response) => {
       value: resolved.value ?? null,
     })),
     parameters: executionParameters,
+    collections: collections.map((collection) => ({
+      name: collection.name,
+      items: libraryItems
+        .filter((item) => item.collectionId === collection.id)
+        .map((item) => collectionItemValuesForPlugin(collection, item)),
+    })),
   });
   if (resolvedInstruction.unresolved.length) {
     response.status(422).json({
@@ -4876,8 +5537,7 @@ function reconcileStandaloneProcesses() {
     if (
       !project.runThrough ||
       orchestrators.some(
-        (item) =>
-          ACTIVE_ORCHESTRATOR_STATUSES.has(item.status) && item.projectIds.includes(project.id),
+        (item) => executionOrchestratorIsActive(item) && item.projectIds.includes(project.id),
       )
     )
       continue;
@@ -5633,7 +6293,7 @@ app.post("/api/orchestrators/:id/resume", (request, response) => {
     return;
   }
   const otherActive = executionOrchestrators(orchestrator.channelId).find(
-    (item) => item.id !== orchestrator.id && ACTIVE_ORCHESTRATOR_STATUSES.has(item.status),
+    (item) => item.id !== orchestrator.id && executionOrchestratorIsActive(item),
   );
   if (otherActive) {
     response.status(409).json({ error: "Este canal já possui outra orquestração em andamento." });
@@ -5687,7 +6347,19 @@ app.post("/api/orchestrators/:id/stop", (request, response) => {
     stoppedAt,
   });
 
-  if (orchestrator.currentProjectId && orchestrator.currentProcessType) {
+  if (orchestrator.strategyVersion === 5) {
+    for (const projectId of orchestrator.projectIds) {
+      const project = readPayload<Project>("projects", projectId);
+      if (!project) continue;
+      for (const row of database
+        .prepare("SELECT payload FROM process_executions WHERE project_id = ?")
+        .all(projectId) as { payload: string }[]) {
+        const execution = JSON.parse(row.payload) as ProcessExecution;
+        if (execution.status === "completed" || execution.status === "cancelled") continue;
+        cancelStoredProcessExecution(execution, project);
+      }
+    }
+  } else if (orchestrator.currentProjectId && orchestrator.currentProcessType) {
     const project = readPayload<Project>("projects", orchestrator.currentProjectId);
     const execution = project
       ? executionFor(orchestrator.currentProjectId, orchestrator.currentProcessType)
@@ -5727,7 +6399,7 @@ app.post("/api/orchestrators", (request, response) => {
     return;
   }
   const active = executionOrchestrators(channel.id).find((orchestrator) =>
-    ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status),
+    executionOrchestratorIsActive(orchestrator),
   );
   if (active) {
     response.status(409).json({
@@ -5795,7 +6467,7 @@ app.post("/api/orchestrators/global", (request, response) => {
   const typedChannels = channels as Channel[];
   const busyChannel = typedChannels.find((channel) =>
     executionOrchestrators(channel.id).some((orchestrator) =>
-      ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status),
+      executionOrchestratorIsActive(orchestrator),
     ),
   );
   if (busyChannel) {
@@ -5895,7 +6567,7 @@ app.put("/api/projects/:id", (request, response) => {
 app.delete("/api/projects/:id", (request, response) => {
   const activeOrchestrator = executionOrchestrators().find(
     (orchestrator) =>
-      ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status) &&
+      executionOrchestratorIsActive(orchestrator) &&
       orchestrator.projectIds.includes(request.params.id),
   );
   if (activeOrchestrator) {

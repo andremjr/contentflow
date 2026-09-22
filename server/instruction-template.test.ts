@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   addInstructionInputVariable,
+  instructionCollectionKey,
   instructionInputKey,
   instructionInputLabel,
   instructionReferencesInput,
@@ -39,6 +40,31 @@ test("resolve variáveis universais, parâmetros e entradas declaradas", () => {
   );
   assert.deepEqual(result.unresolved, []);
   assert.deepEqual(result.referencedInputIds, ["input-title"]);
+});
+
+test("resolve uma coleção estratégica inteira como variável do prompt", () => {
+  const result = resolveInstructionTemplate("{{collections.tipos_de_aberturas_ganchos}}", {
+    ...context,
+    collections: [
+      {
+        name: "Tipos de aberturas/ganchos",
+        items: [
+          { Nome: "Pergunta provocativa", Estrutura: "Comece com uma pergunta." },
+          { Nome: "Cena imediata", Estrutura: "Abra dentro da ação." },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(JSON.parse(result.instruction), [
+    { Nome: "Pergunta provocativa", Estrutura: "Comece com uma pergunta." },
+    { Nome: "Cena imediata", Estrutura: "Abra dentro da ação." },
+  ]);
+  assert.deepEqual(result.unresolved, []);
+  assert.equal(
+    instructionCollectionKey({ name: "Tipos de aberturas/ganchos" }),
+    "tipos_de_aberturas_ganchos",
+  );
 });
 
 test("preserva placeholders desconhecidos para compatibilidade e os reporta", () => {

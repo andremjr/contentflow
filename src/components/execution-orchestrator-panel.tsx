@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { PROCESS_META } from "@/lib/domain";
 import { useAppPreferences } from "@/lib/app-preferences";
 import {
-  ACTIVE_ORCHESTRATOR_STATUSES,
+  executionOrchestratorIsActive,
   STOPPABLE_ORCHESTRATOR_STATUSES,
   orchestratorProgress,
 } from "@/lib/execution-orchestrator";
@@ -34,7 +34,7 @@ export function ExecutionOrchestratorPanel({ channelId }: { channelId: string })
   const projects = useProjects(channelId);
   const [isStopping, setIsStopping] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
-  const isActive = !!orchestrator && ACTIVE_ORCHESTRATOR_STATUSES.has(orchestrator.status);
+  const isActive = !!orchestrator && executionOrchestratorIsActive(orchestrator);
   const canStop = !!orchestrator && STOPPABLE_ORCHESTRATOR_STATUSES.has(orchestrator.status);
   const canResume = orchestrator?.status === "failed";
   const currentProject = useMemo(

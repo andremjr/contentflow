@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PROCESS_ORDER } from "../src/lib/domain";
 import {
   ACTIVE_ORCHESTRATOR_STATUSES,
   buildOrchestratorSteps,
+  executionOrchestratorIsActive,
+  expandOrchestratorSlots,
   orchestratorProgress,
   STOPPABLE_ORCHESTRATOR_STATUSES,
   type ExecutionOrchestrator,
@@ -97,6 +100,27 @@ test("o lote V4 respeita a ordem congelada e só agrega processos elegíveis na 
     { projectId: "project-2", processType: "narration" },
   ]);
   assert.equal(steps.length, 13);
+});
+
+test("a V5 expande o lote híbrido em uma fita de slots sem perder os agrupamentos", () => {
+  const steps = buildOrchestratorSteps(["project-1", "project-2"], "batch", 5, PROCESS_ORDER);
+  const slots = expandOrchestratorSlots(steps);
+
+  assert.equal(steps.length, 13);
+  assert.equal(slots.length, 16);
+  assert.deepEqual(slots.slice(0, 4), [
+    { projectId: "project-1", processType: "theme", batchItem: 0, batchTotal: 2 },
+    { projectId: "project-2", processType: "theme", batchItem: 1, batchTotal: 2 },
+    { projectId: "project-1", processType: "title", batchItem: 0, batchTotal: 2 },
+    { projectId: "project-2", processType: "title", batchItem: 1, batchTotal: 2 },
+  ]);
+  assert.equal(
+    executionOrchestratorIsActive({
+      strategyVersion: 5,
+      status: "failed",
+    } as ExecutionOrchestrator),
+    true,
+  );
 });
 
 test("calcula o progresso apenas pelas etapas concluídas", () => {

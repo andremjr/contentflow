@@ -113,7 +113,7 @@ test("mostra a quantidade de validações pendentes no ícone da barra de tarefa
   });
 
   const channelId = randomUUID();
-  const projectId = randomUUID();
+  const projectIds = Array.from({ length: 15 }, () => randomUUID());
   const methods = createEmptyMethods();
   methods.theme.blocks = [
     {
@@ -153,10 +153,10 @@ test("mostra a quantidade de validações pendentes no ícone da barra de tarefa
     methods,
     createdAt: new Date().toISOString(),
   };
-  const project: Project = {
-    id: projectId,
+  const projects: Project[] = projectIds.map((id, index) => ({
+    id,
     channelId,
-    title: "Projeto aguardando validação",
+    title: `Projeto aguardando validação ${index + 1}`,
     currentStage: "theme",
     state: "not_started",
     progress: 0,
@@ -169,34 +169,52 @@ test("mostra a quantidade de validações pendentes no ícone da barra de tarefa
     assignee: { name: "Não atribuído", initials: "—" },
     thumbHue: 120,
     createdAt: new Date().toISOString(),
-  };
+  }));
   const started = await window.evaluate(
-    async ({ channel, project }) => {
+    async ({ channel, projects }) => {
       const channelResponse = await fetch("/api/channels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(channel),
       });
-      const projectResponse = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(project),
-      });
-      const commandResponse = await fetch("/api/commands", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: crypto.randomUUID(),
-          action: "start",
-          projectId: project.id,
-          processType: "theme",
-        }),
-      });
-      return channelResponse.ok && projectResponse.ok && commandResponse.ok;
+      const projectResponses = await Promise.all(
+        projects.map((project) =>
+          fetch("/api/projects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(project),
+          }),
+        ),
+      );
+      const commandResponses = await Promise.all(
+        projects.map((project) =>
+          fetch("/api/commands", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: crypto.randomUUID(),
+              action: "start",
+              projectId: project.id,
+              processType: "theme",
+            }),
+          }),
+        ),
+      );
+      return (
+        channelResponse.ok &&
+        projectResponses.every((response) => response.ok) &&
+        commandResponses.every((response) => response.ok)
+      );
     },
-    { channel, project },
+    { channel, projects },
   );
   expect(started).toBe(true);
+
+  await expect(
+    window.getByRole("button", {
+      name: "0 erros de execução e 15 tarefas humanas pendentes",
+    }),
+  ).toContainText("15");
 
   await expect
     .poll(() =>
@@ -207,5 +225,5 @@ test("mostra a quantidade de validações pendentes no ícone da barra de tarefa
         return testState.__contentflowBadgeCalls?.at(-1);
       }),
     )
-    .toEqual({ description: "1 tarefas humanas pendentes", hasIcon: true });
+    .toEqual({ description: "15 tarefas humanas pendentes", hasIcon: true });
 });

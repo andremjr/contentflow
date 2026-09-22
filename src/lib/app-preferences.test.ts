@@ -150,6 +150,8 @@ test("translates plugin credential management in English and Spanish", () => {
 });
 
 test("translates the unified block configuration labels", () => {
+  assert.equal(translate("Coleções", "en"), "Collections");
+  assert.equal(translate("Coleções", "es"), "Colecciones");
   assert.equal(translate("Iniciar minimizado", "en"), "Start minimized");
   assert.equal(translate("Iniciar minimizado", "es"), "Iniciar minimizado");
   assert.deepEqual(

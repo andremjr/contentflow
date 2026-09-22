@@ -123,6 +123,7 @@ import { getBlockSourceFields } from "@/lib/method-source-fields";
 import { renderPluginPromptPreview } from "@/lib/plugin-prompt-preview";
 import {
   addInstructionInputVariable,
+  instructionCollectionKey,
   instructionInputKey,
   instructionInputLabel,
   instructionReferencesInput,
@@ -2455,6 +2456,7 @@ function InstructionEditor({
   collections: StrategicCollection[];
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
+  const { t } = useAppPreferences();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const promptSessionRef = useRef<
     { instructions: string; inputs: BlockInputBinding[] } | undefined
@@ -2490,6 +2492,10 @@ function InstructionEditor({
   const parameterVariables = (block.parameters ?? []).map((parameter) => ({
     label: parameter.label,
     token: `{{parameters.${parameter.key}}}`,
+  }));
+  const collectionVariables = collections.map((collection) => ({
+    label: collection.name,
+    token: `{{collections.${instructionCollectionKey(collection)}}}`,
   }));
   const acceptsInputType = (type: HumanFieldType) =>
     !capability || capability.inputPorts.some((port) => port.acceptedTypes.includes(type));
@@ -2689,6 +2695,21 @@ function InstructionEditor({
                       onSelect={() => insertVariable(variable.token)}
                     >
                       <Braces /> {variable.label}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                </>
+              )}
+
+              {collectionVariables.length > 0 && (
+                <>
+                  <DropdownMenuLabel>{t("Coleções")}</DropdownMenuLabel>
+                  {collectionVariables.map((variable) => (
+                    <DropdownMenuItem
+                      key={variable.token}
+                      onSelect={() => insertVariable(variable.token)}
+                    >
+                      <Library /> {variable.label}
                     </DropdownMenuItem>
                   ))}
                   <DropdownMenuSeparator />
