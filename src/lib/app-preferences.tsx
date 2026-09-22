@@ -45,11 +45,78 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 type Translation = [english: string, spanish: string];
 
 const PHRASES: Record<string, Translation> = {
-  "Lote híbrido": ["Hybrid batch", "Lote híbrido"],
-  "Agrupa Tema, Título e Thumbnail no lote; do Roteiro em diante, mantém a fila por projeto.": [
-    "Groups Theme, Title, and Thumbnail in the batch; from Script onward, keeps the per-project queue.",
-    "Agrupa Tema, Título y Thumbnail en el lote; desde Guion en adelante, mantiene la cola por proyecto.",
+  Orquestrador: ["Orchestrator", "Orquestador"],
+  "Centralize as filas de produção dos seus canais em um só lugar.": [
+    "Manage your channels' production queues in one place.",
+    "Gestiona las colas de producción de tus canales en un solo lugar.",
   ],
+  "Canais monitorados": ["Channels monitored", "Canales supervisados"],
+  "Filas ativas": ["Active queues", "Colas activas"],
+  "Aguardando ação": ["Needs attention", "Requiere atención"],
+  "Filas por canal": ["Queues by channel", "Colas por canal"],
+  "Escolha um canal para criar, acompanhar ou retomar sua fila.": [
+    "Choose a channel to create, monitor, or resume its queue.",
+    "Elige un canal para crear, supervisar o reanudar su cola.",
+  ],
+  "Escolha um canal para acompanhar ou retomar sua fila.": [
+    "Choose a channel to monitor or resume its queue.",
+    "Elige un canal para supervisar o reanudar su cola.",
+  ],
+  "Acompanhe, interrompa ou retome a fila deste canal. Novas filas são criadas na produção global acima, com um ou vários canais selecionados.":
+    [
+      "Monitor, stop, or resume this channel's queue. New queues are created in the global production section above with one or more selected channels.",
+      "Supervisa, detén o reanuda la cola de este canal. Las nuevas colas se crean en la producción global de arriba con uno o varios canales seleccionados.",
+    ],
+  "Esta fila não está ativa no momento.": [
+    "This queue is not active right now.",
+    "Esta cola no está activa en este momento.",
+  ],
+  "Este canal ainda não possui histórico de orquestração.": [
+    "This channel does not have orchestration history yet.",
+    "Este canal aún no tiene historial de orquestación.",
+  ],
+  "Sem fila": ["No queue", "Sin cola"],
+  "Produção e fila deste canal": [
+    "Production and queue for this channel",
+    "Producción y cola de este canal",
+  ],
+  "Nenhum canal disponível": ["No channels available", "No hay canales disponibles"],
+  "Crie um canal para começar a organizar filas de produção.": [
+    "Create a channel to start organizing production queues.",
+    "Crea un canal para empezar a organizar colas de producción.",
+  ],
+  "Nova produção global": ["New global production", "Nueva producción global"],
+  "Escolha os canais e quantos vídeos deseja gerar em cada um deles.": [
+    "Choose the channels and how many videos you want to generate for each one.",
+    "Elige los canales y cuántos videos quieres generar en cada uno.",
+  ],
+  "Fila em andamento": ["Queue in progress", "Cola en curso"],
+  Disponível: ["Available", "Disponible"],
+  "Nome base dos projetos": ["Project base name", "Nombre base de los proyectos"],
+  "Vídeos por canal": ["Videos per channel", "Videos por canal"],
+  "Modo de execução": ["Execution mode", "Modo de ejecución"],
+  "Ponta a ponta": ["End to end", "De extremo a extremo"],
+  "Iniciando…": ["Starting…", "Iniciando…"],
+  "Iniciar produção global": ["Start global production", "Iniciar producción global"],
+  "canais selecionados": ["channels selected", "canales seleccionados"],
+  "vídeos por canal": ["videos per channel", "videos por canal"],
+  "projetos no total": ["projects total", "proyectos en total"],
+  "Produção global iniciada": ["Global production started", "Producción global iniciada"],
+  "Os projetos foram criados e as filas dos canais selecionados foram iniciadas.": [
+    "The projects were created and the selected channel queues were started.",
+    "Los proyectos fueron creados y se iniciaron las colas de los canales seleccionados.",
+  ],
+  "Não foi possível iniciar a produção global": [
+    "Could not start global production",
+    "No se pudo iniciar la producción global",
+  ],
+  "Com erro": ["Failed", "Con error"],
+  "Lote híbrido": ["Hybrid batch", "Lote híbrido"],
+  "Agrupa Tema, Título e Thumbnail quando forem a próxima etapa elegível; os demais processos seguem por projeto.":
+    [
+      "Groups Theme, Title, and Thumbnail when they are the next eligible stage; the other processes continue per project.",
+      "Agrupa Tema, Título y Thumbnail cuando sean la siguiente etapa elegible; los demás procesos continúan por proyecto.",
+    ],
   Concluídos: ["Completed", "Completados"],
   Pendentes: ["Pending", "Pendientes"],
   "Falhou no item": ["Failed on item", "Falló en el elemento"],
@@ -102,6 +169,15 @@ const PHRASES: Record<string, Translation> = {
     "Bloque preparado para un nuevo intento.",
   ],
   "Itens da execução": ["Execution items", "Elementos de la ejecución"],
+  "Edite, substitua ou arraste os itens para reorganizar a sequência.": [
+    "Edit, replace, or drag items to reorder the sequence.",
+    "Edita, sustituye o arrastra los elementos para reorganizar la secuencia.",
+  ],
+  "Ordem dos itens atualizada": ["Item order updated", "Orden de los elementos actualizada"],
+  "Não foi possível reorganizar os itens": [
+    "Could not reorder the items",
+    "No se pudieron reorganizar los elementos",
+  ],
   "Edite textos ou substitua mídias sem alterar a posição do item.": [
     "Edit text or replace media without changing the item's position.",
     "Edita textos o sustituye medios sin cambiar la posición del elemento.",
@@ -538,6 +614,12 @@ const PHRASES: Record<string, Translation> = {
   "Dados do projeto": ["Project data", "Datos del proyecto"],
   "Campos de cada registro": ["Fields for each record", "Campos de cada registro"],
   "Coleção estratégica": ["Strategic collection", "Colección estratégica"],
+  "Aplicar importação": ["Apply import", "Aplicar importación"],
+  "Base reutilizada no Canal": ["Base reused in the Channel", "Base reutilizada en el Canal"],
+  "Revise a estrutura e a prontidão local antes de aplicar o Método neste Canal.": [
+    "Review the structure and local readiness before applying the Method to this Channel.",
+    "Revisa la estructura y la preparación local antes de aplicar el Método en este Canal.",
+  ],
   "Coletar informações ou mídias externas.": [
     "Collect external information or media.",
     "Recopilar información o medios externos.",
@@ -810,9 +892,9 @@ const PHRASES: Record<string, Translation> = {
   "Criar projeto": ["Create project", "Crear proyecto"],
   "Nome*": ["Name*", "Nombre*"],
   Número: ["Number", "Número"],
-  "O projeto inicia na etapa de Tema.": [
-    "The project starts at the Topic stage.",
-    "El proyecto comienza en la etapa Tema.",
+  "O projeto inicia na primeira etapa configurada do Canal:": [
+    "The project starts at the first stage configured for the Channel:",
+    "El proyecto comienza en la primera etapa configurada del Canal:",
   ],
   Obrigatório: ["Required", "Obligatorio"],
   "Ocultar informações do canal": ["Hide channel information", "Ocultar información del canal"],
@@ -839,6 +921,99 @@ const PHRASES: Record<string, Translation> = {
   "Processos cobertos": ["Covered processes", "Procesos cubiertos"],
   "Processos do projeto": ["Project processes", "Procesos del proyecto"],
   "Processos universais": ["Universal processes", "Procesos universales"],
+  "Método principal": ["Primary Method", "Método primario"],
+  "Dependência incluída": ["Included dependency", "Dependencia incluida"],
+  "Conjunto do Canal": ["Channel set", "Conjunto del Canal"],
+  "Coleções incluídas como estrutura": [
+    "Collections included as structure",
+    "Colecciones incluidas como estructura",
+  ],
+  campos: ["fields", "campos de datos"],
+  vínculos: ["bindings", "enlaces"],
+  "Compartilhar itens": ["Share items", "Compartir elementos"],
+  "Compartilhar Método": ["Share Method", "Compartir Método"],
+  "Compartilhar pacote de Métodos": ["Share Methods package", "Compartir paquete de Métodos"],
+  "Revise o conteúdo e a preparação antes de baixar o pacote.": [
+    "Review the content and preparation before downloading the package.",
+    "Revisa el contenido y la preparación antes de descargar el paquete.",
+  ],
+  "Métodos incluídos no pacote": [
+    "Methods included in the package",
+    "Métodos incluidos en el paquete",
+  ],
+  "Baixar pacote": ["Download package", "Descargar paquete"],
+  "Itens incluídos no compartilhamento": [
+    "Items included in sharing",
+    "Elementos incluidos al compartir",
+  ],
+  "Este pacote declara itens incluídos.": [
+    "This package declares included items.",
+    "Este paquete declara elementos incluidos.",
+  ],
+  "Somente a estrutura das coleções está incluída.": [
+    "Only the collection structure is included.",
+    "Solo se incluye la estructura de las colecciones.",
+  ],
+  "Ordem resultante": ["Resulting order", "Orden resultante"],
+  "As dependências selecionadas não formam uma ordem válida.": [
+    "The selected dependencies do not form a valid order.",
+    "Las dependencias seleccionadas no forman un orden válido.",
+  ],
+  "Fonte incluída na importação": [
+    "Source included in the import",
+    "Fuente incluida en la importación",
+  ],
+  "Fonte já disponível no Canal de destino": [
+    "Source already available in the destination Channel",
+    "Fuente ya disponible en el Canal de destino",
+  ],
+  "Fonte ainda não disponível no Canal de destino": [
+    "Source not yet available in the destination Channel",
+    "Fuente aún no disponible en el Canal de destino",
+  ],
+  "Abrir editor do Método para corrigir": [
+    "Open the Method editor to fix it",
+    "Abrir el editor del Método para corregirlo",
+  ],
+  "Plugin ausente": ["Plugin missing", "Falta el plugin"],
+  "Capability ausente": ["Capability missing", "Falta la capability"],
+  "Plugin desativado ou indisponível": [
+    "Plugin disabled or unavailable",
+    "Plugin desactivado o no disponible",
+  ],
+  "Conexão local pendente": ["Local connection pending", "Conexión local pendiente"],
+  "Plugin pronto": ["Plugin ready", "Plugin listo"],
+  "Abrir Plugins para corrigir": ["Open Plugins to fix it", "Abrir Plugins para corregirlo"],
+  "Associe uma conexão local no editor do Método antes de executar.": [
+    "Associate a local connection in the Method editor before running it.",
+    "Asocia una conexión local en el editor del Método antes de ejecutarlo.",
+  ],
+  "O editor aceita somente um Método por vez.": [
+    "The editor accepts only one Method at a time.",
+    "El editor acepta solo un Método a la vez.",
+  ],
+  "O Método principal não foi identificado.": [
+    "The primary Method could not be identified.",
+    "No se pudo identificar el Método principal.",
+  ],
+  "Reordenar processo": ["Reorder process", "Reordenar proceso"],
+  "Salvando ordem...": ["Saving order...", "Guardando el orden..."],
+  "A nova ordem invalida uma dependência entre Métodos.": [
+    "The new order breaks a dependency between Methods.",
+    "El nuevo orden rompe una dependencia entre Métodos.",
+  ],
+  "Mova o processo que fornece a entrada para uma posição anterior ao processo que depende dele.": [
+    "Move the process that provides the input before the process that depends on it.",
+    "Mueve el proceso que proporciona la entrada antes del proceso que depende de ella.",
+  ],
+  "Não foi possível salvar a ordem dos processos. Recarregue e tente novamente.": [
+    "Could not save the process order. Reload and try again.",
+    "No se pudo guardar el orden de los procesos. Recarga e inténtalo de nuevo.",
+  ],
+  "O Método mudou em outra aba. Recarregue antes de salvar suas alterações.": [
+    "The Method changed in another tab. Reload before saving your changes.",
+    "El Método cambió en otra pestaña. Recarga antes de guardar tus cambios.",
+  ],
   Processos: ["Processes", "Procesos"],
   "Configurar bloco de ação": ["Configure action block", "Configurar bloque de acción"],
   "Edite operador, instruções, entradas, saídas e execução deste bloco.": [

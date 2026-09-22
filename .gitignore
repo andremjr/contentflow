@@ -19,6 +19,7 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
+.codex-*.png
 mini-curso-contentflow/
 app-screenshots-local/
 local-tools/
@@ -41,6 +42,7 @@ ecosystem/plugins/reference/google-flow-browser-images/scripts/rpc-analysis.json
 # Local plugin packaging and browser-extension signing artifacts
 plugins/distributable/
 ecosystem/plugins/reference/*/windows-enterprise-install/artifacts/
+ecosystem/plugins/reference/*.zip
 
 # Desktop build intermediates (the distributable V0 lives in compiled/)
 desktop-dist/

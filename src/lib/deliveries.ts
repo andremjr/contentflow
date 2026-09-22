@@ -60,18 +60,36 @@ export function materializeBlockDeliveries({
     const id = deliveryIdFor(execution, block.id, output.key, attempt);
     const previous = execution.deliveries?.find((item) => item.id === id);
     const rawItems = MANY_TYPES.has(output.type) && Array.isArray(value) ? value : [value];
+    const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
+    const executionItems =
+      MANY_TYPES.has(output.type) && blockExecution?.items?.length === rawItems.length
+        ? [...blockExecution.items].sort((left, right) => left.order - right.order)
+        : undefined;
     const usedIdentities = new Set<string>();
     const items = rawItems.map((item, order) => {
       const externalKey = externalItemKey(item);
-      const baseIdentity = externalKey ?? String(order + 1);
+      const sourceExecutionItemId = executionItems?.[order]?.id;
+      const baseIdentity = sourceExecutionItemId ?? externalKey ?? String(order + 1);
       let identity = baseIdentity;
       let duplicate = 2;
       while (usedIdentities.has(identity)) identity = `${baseIdentity}-${duplicate++}`;
       usedIdentities.add(identity);
-      const itemId = deliveryItemIdFor(id, identity);
-      const previousItem = previous?.items.find((candidate) => candidate.id === itemId);
+      const generatedItemId = deliveryItemIdFor(id, identity);
+      const previousItem =
+        previous?.items.find(
+          (candidate) =>
+            sourceExecutionItemId && candidate.sourceExecutionItemId === sourceExecutionItemId,
+        ) ??
+        previous?.items.find((candidate) => candidate.id === generatedItemId) ??
+        previous?.items.find(
+          (candidate) =>
+            candidate.order === order &&
+            candidate.sourceExecutionItemId === undefined &&
+            deepEqual(candidate.value, item),
+        );
       return {
-        id: itemId,
+        id: previousItem?.id ?? generatedItemId,
+        sourceExecutionItemId,
         order,
         value: structuredClone(item) as RuntimeValue | StructuredRecord,
         externalKey,

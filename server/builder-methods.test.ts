@@ -94,3 +94,69 @@ test("rejects a previous_block reference to a later block", () => {
   assert.equal(result.ok, false);
   assert.match(result.errors.join("\n"), /referência inválida/);
 });
+
+test("builder validates cross process references against the channel sequence", () => {
+  const script: ProcessMethod = {
+    ...manualThemeMethod(),
+    processType: "script",
+    blocks: [
+      {
+        ...manualThemeMethod().blocks[0],
+        id: "script-input",
+        outputs: [
+          {
+            id: "script-output",
+            label: "Roteiro",
+            key: "script",
+            type: "textarea",
+            required: true,
+          },
+        ],
+      },
+    ],
+  };
+  const thumbnail: ProcessMethod = {
+    ...manualThemeMethod(),
+    processType: "thumbnail",
+    blocks: [
+      {
+        ...manualThemeMethod().blocks[0],
+        id: "thumbnail-input",
+        inputs: [
+          {
+            id: "script-reference",
+            label: "Roteiro",
+            type: "textarea",
+            source: "previous_process",
+            sourceProcessType: "script",
+            blockId: "__process_output__",
+            sourceKey: "script",
+          },
+        ],
+      },
+    ],
+  };
+  const methods = { script, thumbnail };
+  const legacy = validateBuilderMethods({ channel, methods, plugins: [], collections: [] });
+  assert.equal(legacy.ok, false);
+  assert.match(legacy.errors.join("\n"), /processo anterior inválido/);
+  const reordered = validateBuilderMethods({
+    channel: {
+      ...channel,
+      processOrder: [
+        "theme",
+        "title",
+        "script",
+        "thumbnail",
+        "narration",
+        "assets",
+        "editing",
+        "publishing",
+      ],
+    },
+    methods,
+    plugins: [],
+    collections: [],
+  });
+  assert.equal(reordered.ok, true, reordered.errors.join("\n"));
+});

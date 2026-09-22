@@ -5,7 +5,7 @@ const COMMAND_CACHE_KEY = "contentflowCommandCacheV2";
 const CANCELLED_EXECUTIONS_KEY = "contentflowCancelledExecutionsV2";
 const MAX_COMMAND_CACHE = 500;
 const CDP_VERSION = "1.3";
-const COMMON_ACTIONS = new Set(["ping", "inspect", "setText", "click"]);
+const COMMON_ACTIONS = new Set(["ping", "inspect", "setText", "pressEnter", "click"]);
 const policy = (origins, tabPatterns, options = {}) =>
   Object.freeze({
     origins: new Set(origins),
@@ -571,6 +571,23 @@ async function replaceFocusedText(tabId, value) {
   }
 }
 
+async function pressEnter(tabId) {
+  await sendCdp(tabId, "Input.dispatchKeyEvent", {
+    type: "rawKeyDown",
+    key: "Enter",
+    code: "Enter",
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 13,
+  });
+  await sendCdp(tabId, "Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "Enter",
+    code: "Enter",
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 13,
+  });
+}
+
 async function dispatchCdpAction(tabId, command, policy) {
   if (await isExecutionCancelled(command.executionKey)) {
     return bridgeError("CANCELLED", "Execução cancelada.");
@@ -630,6 +647,18 @@ async function dispatchCdpAction(tabId, command, policy) {
     }
     return { ok: true, readbackLength: actual.length };
   }
+  if (command.action === "pressEnter") {
+    const target = await targetFor(tabId, payload, "editable", true);
+    if (!target?.found) {
+      return bridgeError("EDITOR_NOT_FOUND", "Editor não encontrado.");
+    }
+    if (await isExecutionCancelled(command.executionKey)) {
+      return bridgeError("CANCELLED", "Execução cancelada.");
+    }
+    await focusTargetAtPoint(tabId, target);
+    await pressEnter(tabId);
+    return { ok: true, mechanism: "cdp-keyboard-enter" };
+  }
   if (command.action === "click" || command.action === "clickGenerate") {
     const clickPayload =
       command.action === "clickGenerate" && !payload.textIncludes
@@ -641,6 +670,13 @@ async function dispatchCdpAction(tabId, command, policy) {
     }
     if (await isExecutionCancelled(command.executionKey)) {
       return bridgeError("CANCELLED", "Execução cancelada.");
+    }
+    if (clickPayload.preferDomActivation === true) {
+      const domResult = await clickWithDom(tabId, clickPayload);
+      if (domResult?.clicked) {
+        return { ok: true, text: domResult.text || target.text, mechanism: "dom" };
+      }
+      return bridgeError("CONTROL_NOT_FOUND", "Controle não encontrado ou desabilitado.");
     }
     try {
       await dispatchMouseClick(tabId, target);

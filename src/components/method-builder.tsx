@@ -20,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   Bot,
   Braces,
   CheckCircle2,
@@ -43,6 +44,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAppPreferences } from "@/lib/app-preferences";
+import { effectiveProcessOrder } from "@/lib/process-order";
+import { pluginRequirementReadiness } from "@/lib/method-transfer-readiness";
 import { pluginCapabilityLabel } from "@/lib/plugin-capability-label";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
@@ -83,13 +86,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   PROCESS_META,
-  PROCESS_ORDER,
   type ActionBlock,
   type BlockFieldDefinition,
   type BlockInputBinding,
   type BlockOperator,
   type BlockParameter,
   type BlockType,
+  type Channel,
   type FieldPresentation,
   type HumanFieldType,
   type PresentationRendererId,
@@ -107,10 +110,12 @@ import {
   normalizeActionBlock,
 } from "@/lib/human-workflow";
 import {
-  copyImportedBlocks,
-  parseMethodFile,
+  parseMethodImportFile,
+  planPortableMethodTransfer,
   serializeMethodFile,
-  type SharedMethodFile,
+  type MethodRequirement,
+  type PortableCollectionV2,
+  type PortableLibraryItemV2,
 } from "@/lib/method-file";
 import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
 import { createChannelHistoryRecordFields } from "@/lib/channel-history";
@@ -132,6 +137,8 @@ import type {
   PluginProfileSetup,
 } from "@/lib/plugin-contract";
 import {
+  applyMethodTransfer,
+  clearMethodDraft,
   readMethodDraft,
   rememberMethodDraft,
   setChannelMethod,
@@ -169,6 +176,19 @@ type ManagedPluginProfile = {
   alias: string;
   createdAt: string;
   updatedAt: string;
+};
+
+type MethodTransferPreview = {
+  name: string;
+  sourceChannelId?: string;
+  methods: ProcessMethod[];
+  collections: PortableCollectionV2[];
+  itemsIncluded: boolean;
+  items: PortableLibraryItemV2[];
+  requirements: MethodRequirement[];
+  preferredOrder: UniversalProcess[];
+  primaryProcess: UniversalProcess;
+  preserveLocalConnections: boolean;
 };
 
 const BLOCK_META: Record<
@@ -268,8 +288,10 @@ export function MethodBuilder({
   initialProcess?: UniversalProcess;
 }) {
   const channel = useChannel(channelId);
+  const { t } = useAppPreferences();
   const navigate = useNavigate();
   const channels = useChannels();
+  const allCollections = useLibraryCollections();
   const collections = useLibraryCollections(channelId);
   const [processType, setProcessType] = useState<UniversalProcess>(initialProcess ?? "theme");
   const [draftName, setDraftName] = useState("");
@@ -282,11 +304,14 @@ export function MethodBuilder({
     "idle",
   );
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [pendingFileImport, setPendingFileImport] = useState<SharedMethodFile | null>(null);
   const [availablePlugins, setAvailablePlugins] = useState<DiscoveredPlugin[]>([]);
+  const [readinessPlugins, setReadinessPlugins] = useState<DiscoveredPlugin[]>([]);
+  const [readinessConnections, setReadinessConnections] = useState<Record<string, string[]>>({});
+  const [transferPreview, setTransferPreview] = useState<MethodTransferPreview>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadedProcessRef = useRef<UniversalProcess | null>(null);
   const editVersionRef = useRef(0);
+  const definitionRevisionRef = useRef(0);
   const currentProcessRef = useRef(processType);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const method = channel?.methods[processType];
@@ -324,13 +349,42 @@ export function MethodBuilder({
       })
       .then((result) => {
         if (active) {
+          setReadinessPlugins(result.plugins);
           setAvailablePlugins(
             result.plugins.filter((plugin) => plugin.enabled && plugin.executable),
           );
+          void Promise.all(
+            result.plugins.map(async (plugin) => {
+              try {
+                const response = await fetch(
+                  `/api/plugins/${encodeURIComponent(plugin.id)}/connections`,
+                  { cache: "no-store" },
+                );
+                if (!response.ok) return [plugin.id, false] as const;
+                const payload = (await response.json()) as {
+                  connections?: Array<{ id?: string; connected?: boolean }>;
+                };
+                return [
+                  plugin.id,
+                  (payload.connections ?? []).flatMap((connection) =>
+                    connection.connected && connection.id ? [connection.id] : [],
+                  ),
+                ] as const;
+              } catch {
+                return [plugin.id, [] as string[]] as const;
+              }
+            }),
+          ).then((entries) => {
+            if (active) setReadinessConnections(Object.fromEntries(entries));
+          });
         }
       })
       .catch(() => {
-        if (active) setAvailablePlugins([]);
+        if (active) {
+          setAvailablePlugins([]);
+          setReadinessPlugins([]);
+          setReadinessConnections({});
+        }
       });
     return () => {
       active = false;
@@ -350,10 +404,11 @@ export function MethodBuilder({
         normalizeActionBlock(block, processType),
       ),
     );
+    definitionRevisionRef.current = channel?.definitionRevision ?? 0;
     loadedProcessRef.current = processType;
     setIsDirty(!!recovered);
     setSaveStatus(method?.blocks.length ? "saved" : "idle");
-  }, [channelId, isDirty, processType, method]);
+  }, [channelId, channel?.definitionRevision, isDirty, processType, method]);
 
   const persistMethod = useCallback(
     async (showConfirmation = false) => {
@@ -365,14 +420,20 @@ export function MethodBuilder({
 
       const queuedSave = saveQueueRef.current
         .catch(() => undefined)
-        .then(() =>
-          setChannelMethod(channel.id, savingProcess, {
-            name: draftName.trim() || `Método de ${PROCESS_META[savingProcess].label}`,
-            imageUrl: draftImageUrl,
-            processType: savingProcess,
-            blocks: savingBlocks,
-          }),
-        );
+        .then(async () => {
+          const nextRevision = await setChannelMethod(
+            channel.id,
+            savingProcess,
+            {
+              name: draftName.trim() || `Método de ${PROCESS_META[savingProcess].label}`,
+              imageUrl: draftImageUrl,
+              processType: savingProcess,
+              blocks: savingBlocks,
+            },
+            definitionRevisionRef.current,
+          );
+          if (typeof nextRevision === "number") definitionRevisionRef.current = nextRevision;
+        });
       saveQueueRef.current = queuedSave;
 
       try {
@@ -393,11 +454,18 @@ export function MethodBuilder({
           setIsDirty(true);
         }
         toast.error("Não foi possível salvar o método", {
-          description: error instanceof Error ? error.message : undefined,
+          description:
+            error instanceof Error &&
+            error.message ===
+              "A definição do Canal mudou em outra aba. Recarregue antes de salvar o Método."
+              ? t("O Método mudou em outra aba. Recarregue antes de salvar suas alterações.")
+              : error instanceof Error
+                ? error.message
+                : undefined,
         });
       }
     },
-    [blocks, channel, draftImageUrl, draftName, processType],
+    [blocks, channel, draftImageUrl, draftName, processType, t],
   );
 
   useEffect(() => {
@@ -416,59 +484,35 @@ export function MethodBuilder({
     return () => window.clearTimeout(timer);
   }, [isDirty, persistMethod]);
 
-  useEffect(() => {
-    if (!pendingFileImport || pendingFileImport.method.processType !== processType) return;
-    const importedBlocks = copyImportedBlocks(
-      processType,
-      pendingFileImport.method.blocks,
-      uid,
-    ).map((block) => normalizeActionBlock(block, processType));
-    const importedName = pendingFileImport.method.name || pendingFileImport.name;
-    setDraftName(importedName);
-    setDraftImageUrl(pendingFileImport.method.imageUrl);
-    setDraftBlocks(importedBlocks);
-    rememberMethodDraft(
-      channelId,
-      processType,
-      {
-        name: importedName,
-        imageUrl: pendingFileImport.method.imageUrl,
-        processType,
-        blocks: importedBlocks,
-      },
-      (error) => toast.error("Método não salvo", { description: error.message }),
-    );
-    setSelectedBlockId(importedBlocks[0]?.id ?? null);
-    setIsDirty(true);
-    setPendingFileImport(null);
-    toast.success(`${pendingFileImport.name} importado`, {
-      description: pendingFileImport.method.blocks.some((block) => block.plugin?.connectionRequired)
-        ? "Associe localmente as contas exigidas pelos blocos antes de executar. Nenhuma credencial foi importada."
-        : "Revise a cópia. As alterações serão salvas automaticamente.",
-    });
-  }, [channelId, pendingFileImport, processType]);
+  const saveOnUnmountRef = useRef({ isDirty, saveStatus, persistMethod });
+  saveOnUnmountRef.current = { isDirty, saveStatus, persistMethod };
+  useEffect(
+    () => () => {
+      const pending = saveOnUnmountRef.current;
+      if (pending.isDirty && pending.saveStatus !== "saving") void pending.persistMethod();
+    },
+    [],
+  );
 
   if (!channel || !method) return null;
 
   const saveBlocks = (nextBlocks: ActionBlock[]) => {
     editVersionRef.current += 1;
-    rememberMethodDraft(
-      channelId,
+    rememberMethodDraft(channelId, processType, {
+      name: draftName,
+      imageUrl: draftImageUrl,
       processType,
-      { name: draftName, imageUrl: draftImageUrl, processType, blocks: nextBlocks },
-      (error) =>
-        toast.error("Método não salvo; rascunho preservado", { description: error.message }),
-    );
+      blocks: nextBlocks,
+    });
     setDraftBlocks(nextBlocks.map((block, order) => ({ ...block, order })));
     setIsDirty(true);
     setSaveStatus("pending");
   };
 
-  const selectProcess = (nextProcess: UniversalProcess) => {
-    if (nextProcess === processType) return;
-    if (isDirty) void persistMethod();
+  const loadAppliedProcess = (nextProcess: UniversalProcess) => {
     loadedProcessRef.current = null;
     setSelectedBlockId(null);
+    setIsDirty(false);
     setProcessType(nextProcess);
     void navigate({
       to: "/channel/$channelId/methods",
@@ -478,18 +522,45 @@ export function MethodBuilder({
     });
   };
 
-  const importMethod = (sourceChannelName: string, sourceMethod: ProcessMethod) => {
-    const importedBlocks = copyImportedBlocks(processType, sourceMethod.blocks, uid, {
-      preserveLocalConnections: true,
-    }).map((block) => normalizeActionBlock(block, processType));
-    setDraftName(sourceMethod.name);
-    setDraftImageUrl(sourceMethod.imageUrl);
-    saveBlocks(importedBlocks);
-    setSelectedBlockId(importedBlocks[0]?.id ?? null);
-    setLibraryOpen(false);
-    toast.info(`Base importada de ${sourceChannelName}`, {
-      description: "Revise as configurações. A cópia será salva automaticamente.",
-    });
+  const importMethod = async (sourceChannel: Channel, sourceMethod: ProcessMethod) => {
+    if (!channel) return;
+    if (
+      isDirty &&
+      !window.confirm("Importar substituirá as alterações ainda não salvas. Continuar?")
+    ) {
+      return;
+    }
+    try {
+      const plan = planPortableMethodTransfer({
+        name: sourceMethod.name,
+        channelName: sourceChannel.name,
+        sourceMethods: effectiveProcessOrder(sourceChannel).map(
+          (sourceProcess) => sourceChannel.methods[sourceProcess],
+        ),
+        collections: allCollections.filter(
+          (collection) => collection.channelId === sourceChannel.id,
+        ),
+        processOrder: effectiveProcessOrder(sourceChannel),
+        primaryProcessTypes: [sourceMethod.processType],
+        preserveLocalConnections: true,
+      });
+      setTransferPreview({
+        name: sourceMethod.name,
+        sourceChannelId: sourceChannel.id,
+        methods: plan.methods.map((entry) => entry.method),
+        collections: plan.collections,
+        itemsIncluded: false,
+        items: [],
+        requirements: plan.methods.flatMap((entry) => entry.requirements),
+        preferredOrder: effectiveProcessOrder(channel),
+        primaryProcess: sourceMethod.processType,
+        preserveLocalConnections: true,
+      });
+    } catch (error) {
+      toast.error("Não foi possível importar o método", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
   };
 
   const shareMethod = async () => {
@@ -557,21 +628,72 @@ export function MethodBuilder({
       } else {
         contents = await file.text();
       }
-      const sharedMethod = parseMethodFile(contents);
+      const imported = parseMethodImportFile(contents);
+      if (imported.format !== "contentflow-method") {
+        throw new Error(t("O editor aceita somente um Método por vez."));
+      }
       if (
         isDirty &&
         !window.confirm("Importar substituirá as alterações ainda não salvas. Continuar?")
       ) {
         return;
       }
-      setPendingFileImport(sharedMethod);
-      selectProcess(sharedMethod.method.processType);
+      const isV2 = imported.version === 2;
+      const importedMethods = isV2
+        ? imported.methods.map((entry) => entry.method)
+        : [imported.method];
+      const primaryProcess = isV2 ? imported.primaryProcessType : imported.method.processType;
+      if (!primaryProcess) throw new Error(t("O Método principal não foi identificado."));
+      setTransferPreview({
+        name: imported.name,
+        methods: importedMethods,
+        collections: isV2 ? imported.collections : [],
+        itemsIncluded: isV2 ? imported.itemsIncluded : false,
+        items: isV2 ? (imported.items ?? []) : [],
+        requirements: isV2
+          ? imported.methods.flatMap((entry) => entry.requirements)
+          : (imported.requirements ?? []),
+        preferredOrder: effectiveProcessOrder(channel),
+        primaryProcess,
+        preserveLocalConnections: false,
+      });
     } catch (error) {
       toast.error("Não foi possível importar o método", {
         description: error instanceof Error ? error.message : "O arquivo é inválido.",
       });
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const applyTransferPreview = async () => {
+    if (!channel || !transferPreview) return;
+    try {
+      await applyMethodTransfer({
+        targetChannelId: channel.id,
+        sourceChannelId: transferPreview.sourceChannelId,
+        expectedDefinitionRevision: channel.definitionRevision ?? 0,
+        methods: transferPreview.methods,
+        collections: transferPreview.collections,
+        itemsIncluded: transferPreview.itemsIncluded,
+        items: transferPreview.items,
+        preferredOrder: transferPreview.preferredOrder,
+        selectedProcesses: transferPreview.methods.map((entry) => entry.processType),
+        preserveLocalConnections: transferPreview.preserveLocalConnections,
+      });
+      for (const entry of transferPreview.methods) clearMethodDraft(channelId, entry.processType);
+      const primaryProcess = transferPreview.primaryProcess;
+      const sourceChannelId = transferPreview.sourceChannelId;
+      setTransferPreview(undefined);
+      setLibraryOpen(false);
+      loadAppliedProcess(primaryProcess);
+      toast.success(
+        sourceChannelId ? t("Base reutilizada no Canal") : `${transferPreview.name} importado`,
+      );
+    } catch (error) {
+      toast.error("Não foi possível importar o método", {
+        description: error instanceof Error ? error.message : undefined,
+      });
     }
   };
 
@@ -644,15 +766,12 @@ export function MethodBuilder({
                   const name = event.target.value.slice(0, 200);
                   setDraftName(name);
                   editVersionRef.current += 1;
-                  rememberMethodDraft(
-                    channelId,
+                  rememberMethodDraft(channelId, processType, {
+                    name,
+                    imageUrl: draftImageUrl,
                     processType,
-                    { name, imageUrl: draftImageUrl, processType, blocks },
-                    (error) =>
-                      toast.error("Método não salvo; rascunho preservado", {
-                        description: error.message,
-                      }),
-                  );
+                    blocks,
+                  });
                   setIsDirty(true);
                   setSaveStatus("pending");
                 }}
@@ -721,7 +840,7 @@ export function MethodBuilder({
                         key={sourceChannel.id}
                         type="button"
                         onClick={() =>
-                          sourceMethod && importMethod(sourceChannel.name, sourceMethod)
+                          sourceMethod && void importMethod(sourceChannel, sourceMethod)
                         }
                         className="flex w-full items-center gap-3 rounded-xl border border-border/70 bg-card p-3 text-left transition hover:border-brand/50 hover:bg-brand/5"
                       >
@@ -755,6 +874,57 @@ export function MethodBuilder({
                       Quando outro canal tiver um método de {PROCESS_META[processType].label} salvo,
                       ele aparecerá aqui.
                     </p>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
+            <Dialog
+              open={Boolean(transferPreview)}
+              onOpenChange={(open) => {
+                if (!open) setTransferPreview(undefined);
+              }}
+            >
+              <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>{t("Preparação necessária")}</DialogTitle>
+                  <DialogDescription>
+                    {t(
+                      "Revise a estrutura e a prontidão local antes de aplicar o Método neste Canal.",
+                    )}
+                  </DialogDescription>
+                </DialogHeader>
+                {transferPreview && (
+                  <div className="space-y-4">
+                    <div className="rounded-lg border border-border p-3 text-xs">
+                      <p className="font-medium">{transferPreview.name}</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {transferPreview.methods
+                          .map((entry) => PROCESS_META[entry.processType].label)
+                          .join(" → ")}
+                      </p>
+                      {transferPreview.itemsIncluded && (
+                        <p className="mt-1 text-muted-foreground">
+                          {t("Itens incluídos no compartilhamento")}: {transferPreview.items.length}
+                          .
+                        </p>
+                      )}
+                    </div>
+                    <MethodBuilderTransferReadiness
+                      preview={transferPreview}
+                      target={channel}
+                      targetCollections={collections}
+                      plugins={readinessPlugins}
+                      connectedPlugins={readinessConnections}
+                      onOpenPlugins={() => void navigate({ to: "/plugins" })}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setTransferPreview(undefined)}>
+                        Cancelar
+                      </Button>
+                      <Button onClick={() => void applyTransferPreview()}>
+                        {t("Aplicar importação")}
+                      </Button>
+                    </div>
                   </div>
                 )}
               </DialogContent>
@@ -903,6 +1073,7 @@ export function MethodBuilder({
               collections={collections}
               processType={processType}
               channelMethods={channel.methods}
+              processOrder={effectiveProcessOrder(channel)}
               plugins={availablePlugins}
               index={blocks.indexOf(selectedBlock)}
               total={blocks.length}
@@ -912,6 +1083,125 @@ export function MethodBuilder({
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function MethodBuilderTransferReadiness({
+  preview,
+  target,
+  targetCollections,
+  plugins,
+  connectedPlugins,
+  onOpenPlugins,
+}: {
+  preview: MethodTransferPreview;
+  target: Channel;
+  targetCollections: StrategicCollection[];
+  plugins: DiscoveredPlugin[];
+  connectedPlugins: Record<string, string[]>;
+  onOpenPlugins: () => void;
+}) {
+  const { t } = useAppPreferences();
+  if (!preview.requirements.length) {
+    return (
+      <div className="flex gap-2 rounded-lg border border-success/30 bg-success/5 p-3 text-xs">
+        <CheckCircle2 className="size-4 shrink-0 text-success" />
+        {t("Nenhuma dependência externa foi declarada.")}
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-warning/35 bg-warning/5 p-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <AlertTriangle className="size-4 text-warning" /> {t("Preparação necessária")}
+      </div>
+      <div className="mt-3 space-y-3 text-xs">
+        {preview.requirements.map((requirement, index) => {
+          if (requirement.kind === "previous_process") {
+            const included = preview.methods.some(
+              (method) => method.processType === requirement.processType,
+            );
+            const available = Boolean(target.methods[requirement.processType]?.blocks.length);
+            return (
+              <p key={`${requirement.kind}-${index}`}>
+                <strong>{t("Processo anterior")}:</strong>{" "}
+                {PROCESS_META[requirement.processType].label}.{" "}
+                {included
+                  ? t("Fonte incluída na importação")
+                  : available
+                    ? t("Fonte já disponível no Canal de destino")
+                    : t("Fonte ainda não disponível no Canal de destino")}
+                .
+              </p>
+            );
+          }
+          if (requirement.kind === "collection") {
+            const included = preview.collections.some(
+              (collection) => collection.name === requirement.name,
+            );
+            const available = targetCollections.some(
+              (collection) => collection.name === requirement.name,
+            );
+            return (
+              <p key={`${requirement.kind}-${index}`}>
+                <strong>{t("Coleção estratégica")}:</strong> {requirement.name}.{" "}
+                {included
+                  ? t("Fonte incluída na importação")
+                  : available
+                    ? t("Fonte já disponível no Canal de destino")
+                    : t("Fonte ainda não disponível no Canal de destino")}
+                .
+              </p>
+            );
+          }
+          const plugin = plugins.find((candidate) => candidate.id === requirement.pluginId);
+          const boundConnectionId = preview.methods
+            .flatMap((method) => method.blocks)
+            .find(
+              (block) =>
+                block.plugin?.pluginId === requirement.pluginId &&
+                block.plugin.capabilityId === requirement.capabilityId &&
+                block.plugin.connectionId,
+            )?.plugin?.connectionId;
+          const readiness = pluginRequirementReadiness({
+            plugin,
+            capabilityId: requirement.capabilityId,
+            connectionRequired: requirement.connectionRequired,
+            hasBoundConnection: Boolean(
+              boundConnectionId &&
+              connectedPlugins[requirement.pluginId]?.includes(boundConnectionId),
+            ),
+          });
+          const status =
+            readiness === "missing_plugin"
+              ? t("Plugin ausente")
+              : readiness === "missing_capability"
+                ? t("Capability ausente")
+                : readiness === "unavailable_plugin"
+                  ? t("Plugin desativado ou indisponível")
+                  : readiness === "missing_connection"
+                    ? t("Conexão local pendente")
+                    : t("Plugin pronto");
+          return (
+            <div key={`${requirement.kind}-${index}`} className="space-y-1">
+              <p>
+                <strong>{t("Plugin")}:</strong> {plugin?.manifest.name ?? requirement.pluginId} /{" "}
+                {requirement.capabilityId}. {status}.
+              </p>
+              {readiness !== "ready" && (
+                <button
+                  type="button"
+                  onClick={onOpenPlugins}
+                  className="font-medium text-brand hover:underline"
+                >
+                  {t("Abrir Plugins para corrigir")}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1095,6 +1385,7 @@ function BlockEditor({
   collections,
   processType,
   channelMethods,
+  processOrder,
   plugins,
   index,
   total,
@@ -1107,6 +1398,7 @@ function BlockEditor({
   collections: StrategicCollection[];
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
+  processOrder: UniversalProcess[];
   plugins: DiscoveredPlugin[];
   index: number;
   total: number;
@@ -1173,9 +1465,9 @@ function BlockEditor({
   );
   const isCompactConfigurationField = ([, schema]: [string, JsonSchema]) =>
     schema.type === "integer" || schema.type === "number" || schema.type === "boolean";
-  const conversationSources = PROCESS_ORDER.flatMap((candidateProcess) => {
-    const processIndex = PROCESS_ORDER.indexOf(candidateProcess);
-    const currentProcessIndex = PROCESS_ORDER.indexOf(processType);
+  const conversationSources = processOrder.flatMap((candidateProcess) => {
+    const processIndex = processOrder.indexOf(candidateProcess);
+    const currentProcessIndex = processOrder.indexOf(processType);
     if (processIndex > currentProcessIndex) return [];
     return (channelMethods[candidateProcess]?.blocks ?? []).flatMap((candidate, candidateIndex) => {
       if (candidateProcess === processType && candidateIndex >= index) return [];
@@ -1296,6 +1588,7 @@ function BlockEditor({
           blockIndex={index}
           processType={processType}
           channelMethods={channelMethods}
+          processOrder={processOrder}
           collections={collections}
           onChange={onChange}
         />
@@ -1371,6 +1664,7 @@ function BlockEditor({
               blockIndex={index}
               processType={processType}
               channelMethods={channelMethods}
+              processOrder={processOrder}
               collections={collections}
               onChange={onChange}
             />
@@ -1391,6 +1685,7 @@ function BlockEditor({
               blockIndex={index}
               processType={processType}
               channelMethods={channelMethods}
+              processOrder={processOrder}
               collections={collections}
               onChange={onChange}
             />
@@ -1404,6 +1699,7 @@ function BlockEditor({
             blockIndex={index}
             processType={processType}
             channelMethods={channelMethods}
+            processOrder={processOrder}
             collections={collections}
             onChange={onChange}
           />
@@ -2145,6 +2441,7 @@ function InstructionEditor({
   blockIndex,
   processType,
   channelMethods,
+  processOrder,
   collections,
   onChange,
 }: {
@@ -2154,6 +2451,7 @@ function InstructionEditor({
   blockIndex: number;
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
+  processOrder: UniversalProcess[];
   collections: StrategicCollection[];
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
@@ -2231,8 +2529,9 @@ function InstructionEditor({
         ),
       ),
   );
-  const previousProcessInputs = PROCESS_ORDER.slice(0, PROCESS_ORDER.indexOf(processType)).flatMap(
-    (sourceProcessType) => {
+  const previousProcessInputs = processOrder
+    .slice(0, processOrder.indexOf(processType))
+    .flatMap((sourceProcessType) => {
       const officialOutput = createProcessOutputFields(sourceProcessType)[0];
       const sources = [
         {
@@ -2266,8 +2565,7 @@ function InstructionEditor({
             `${sourceProcessType}::${blockId}::${output.key}`,
           ),
         );
-    },
-  );
+    });
   const availableInputs = [...previousBlockInputs, ...previousProcessInputs].filter(
     ({ input }) => !isAlreadyConnected(input),
   );
@@ -3024,6 +3322,7 @@ function ContextInputsEditor({
   blockIndex,
   processType,
   channelMethods,
+  processOrder,
   collections,
   onChange,
 }: {
@@ -3032,6 +3331,7 @@ function ContextInputsEditor({
   blockIndex: number;
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
+  processOrder: UniversalProcess[];
   collections: StrategicCollection[];
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
@@ -3082,6 +3382,7 @@ function ContextInputsEditor({
             availableBlocks={methodBlocks.slice(0, blockIndex)}
             processType={processType}
             channelMethods={channelMethods}
+            processOrder={processOrder}
             collections={collections}
             onChange={(patch) => {
               const nextInput = { ...input, ...patch };
@@ -3124,6 +3425,7 @@ function DataContractEditor({
   blockIndex,
   processType,
   channelMethods,
+  processOrder,
   collections,
   onChange,
 }: {
@@ -3132,6 +3434,7 @@ function DataContractEditor({
   blockIndex: number;
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
+  processOrder: UniversalProcess[];
   collections: StrategicCollection[];
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
@@ -3191,6 +3494,7 @@ function DataContractEditor({
               availableBlocks={methodBlocks.slice(0, blockIndex)}
               processType={processType}
               channelMethods={channelMethods}
+              processOrder={processOrder}
               collections={collections}
               onChange={(patch) => {
                 const nextInput = { ...input, ...patch };
@@ -3283,6 +3587,7 @@ function InputBindingEditor({
   availableBlocks,
   processType,
   channelMethods,
+  processOrder,
   collections,
   onChange,
   onRemove,
@@ -3291,6 +3596,7 @@ function InputBindingEditor({
   availableBlocks: ActionBlock[];
   processType: UniversalProcess;
   channelMethods: Record<UniversalProcess, ProcessMethod>;
+  processOrder: UniversalProcess[];
   collections: StrategicCollection[];
   onChange: (patch: Partial<BlockInputBinding>) => void;
   onRemove: () => void;
@@ -3298,7 +3604,7 @@ function InputBindingEditor({
   const [expanded, setExpanded] = useState(false);
   const sourceBlock = availableBlocks.find((block) => block.id === input.blockId);
   const sourceFields = getBlockSourceFields(sourceBlock, collections);
-  const previousProcesses = PROCESS_ORDER.slice(0, PROCESS_ORDER.indexOf(processType));
+  const previousProcesses = processOrder.slice(0, processOrder.indexOf(processType));
   const previousDeliverySources = previousProcesses.flatMap((sourceProcessType) => {
     const method = channelMethods[sourceProcessType];
     const blockOutputs = (method?.blocks ?? []).flatMap((sourceBlock) =>

@@ -4,7 +4,7 @@
 
 O **ContentFlow** é um **Gerenciador Estratégico de Métodos** para produção de conteúdo. Diferente das ferramentas tradicionais "caixa-preta" (geradores de 1 clique que ocultam o processo e geram conteúdo repetitivo e vulnerável à desmonetização no YouTube), o ContentFlow desacopla a **Estratégia do Método** da **Execução Funcional**.
 
-A plataforma permite que criadores desenhem, personalizem e automatizem seus próprios fluxos de trabalho através de uma arquitetura modular baseada em **4 Blocos Essenciais de Ação**, **3 Operadores** e um **Ecossistema Aberto de Plugins**.
+A plataforma permite que criadores desenhem, personalizem e automatizem seus próprios fluxos de trabalho através de uma arquitetura modular baseada em **8 Processos Universais**, **4 Blocos Essenciais de Ação**, **3 Operadores** e um **ecossistema de plugins independentes**.
 
 ### 1.1. Invariante absoluta: núcleo e plugins são produtos separados
 
@@ -31,11 +31,44 @@ Sempre que uma necessidade recorrente surgir, a primeira pergunta arquitetural d
 
 Esse princípio vale também para UX: uma função universal pode aparecer de forma simples na execução, sem introduzir um novo Processo Universal, tipo de Bloco, Operador ou fluxo especializado. O produto cresce preferencialmente pela ampliação de primitivas reutilizáveis, não pelo acúmulo de modos de trabalho codificados.
 
+### 1.3. Leis do ContentFlow
+
+Estas invariantes orientam mudanças no Método, no motor de execução, nos plugins e na interface:
+
+1. **Os 8 Processos Universais são obrigatórios.** Cada Projeto percorre os oito; a ordem pode mudar, mas nenhum Processo desaparece da estratégia.
+2. **A ordem dos Processos pertence à estratégia do Canal.** Ela é composta pelos Métodos associados aos oito Processos, pode variar entre Canais e é congelada no snapshot de cada Projeto iniciado.
+3. **Todo passo estratégico pertence a um dos 4 Blocos Essenciais.** Um Método expressa suas ações com `BUSCAR`, `ESCOLHER`, `CRIAR` e `VALIDAR`.
+4. **Todo Bloco possui exatamente um dos 3 Operadores.** `Humano`, `IA` ou `Código` executa a ação definida pelo Bloco.
+5. **Entradas e saídas pertencem ao Bloco, nunca ao executor.** Trocar o executor não muda o contrato universal de dados da ação.
+6. **Plugins implementam capacidades; nunca definem a estratégia.** O Método especifica a intenção, os contratos e a composição; o plugin executa uma capacidade compatível.
+7. **Humano é sempre um executor nativo válido.** O núcleo continua funcional sem plugins instalados.
+8. **Item é identidade operacional transversal.** Ele identifica trabalho e entregas em qualquer escala compatível; não é um novo Bloco nem um Processo Universal.
+9. **O Método define a estratégia; o snapshot congela a estratégia utilizada pela execução.** Alterações posteriores no Canal ou no Método não reinterpretam um Projeto já iniciado.
+10. **Orquestradores agendam trabalho; não determinam estratégia.** Eles escolhem quando e qual Projeto avança; o próximo Processo elegível vem da ordem congelada e do estado desse Projeto.
+11. **O núcleo conhece contratos universais, nunca regras específicas de ferramentas.** Integrações, fornecedores e técnicas particulares vivem nos plugins e na composição do Método.
+12. **Uma nova necessidade só cria uma primitiva quando não puder ser expressa pela composição das existentes.** Antes de ampliar a gramática, testar a combinação de Processos, Blocos, Operadores, contratos e Itens.
+
+Evoluções dessas invariantes devem preservar a leitura e a continuidade segura dos snapshots e das filas existentes, com migração explícita quando necessária.
+
+### 1.4. Mapa do núcleo
+
+Para explicar ou evoluir o ContentFlow, o núcleo pode ser entendido em cinco responsabilidades, sem sobreposição:
+
+1. **Organização** — Canais e Projetos organizam o trabalho; os oito Processos Universais definem quais resultados um vídeo precisa produzir.
+2. **Estratégia** — cada Canal associa um Método a cada Processo e define sua ordem; cada Método combina Blocos, Operadores, contratos de entrada/saída, parâmetros e referências portáteis a capacidades.
+3. **Execução** — o motor materializa a estratégia em snapshots persistentes, estados, tentativas, entregas, itens, pausa humana, retry e retomada.
+4. **Orquestração** — filas decidem quando Projetos avançam, inclusive em múltiplos Canais, mas nunca alteram a estratégia congelada do Projeto.
+5. **Extensão** — plugins independentes implementam capacidades externas ou técnicas pelo protocolo público; o núcleo controla permissões, sandbox, persistência e contratos, sem incorporar a regra de negócio do fornecedor.
+
+Em termos simples: **Processos dizem o que precisa existir; Métodos dizem como chegar lá; Blocos dizem qual ação executar; Operadores dizem quem executa; plugins fornecem capacidades; o motor preserva estado e dados; o Orquestrador decide quando avançar.**
+
+Essa separação é a principal fronteira da V1. Funcionalidades futuras devem primeiro encontrar seu lugar nesse mapa antes de criarem novos conceitos, telas ou persistências.
+
 ---
 
-## 2. A Estrutura das 3 Interfaces da Aplicação (UX/UI)
+## 2. Interfaces e superfícies de controle da aplicação (UX/UI)
 
-A experiência do usuário no ContentFlow apoia-se em 3 camadas de interface claramente delimitadas:
+A experiência do usuário no ContentFlow apoia-se em três interfaces de domínio claramente delimitadas. O Orquestrador é uma superfície transversal de controle e não uma quarta camada conceitual do Método:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -68,11 +101,14 @@ A experiência do usuário no ContentFlow apoia-se em 3 camadas de interface cla
    - **Objetivo**: Gestão do ciclo de vida das ferramentas instaladas.
    - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, atualização, ativação, consentimento de permissões, inspeção de dependências e remoção de qualquer plugin pelo mesmo fluxo, sem distinção baseada no autor. Contas, perfis, secrets, sessões, workspaces e preferências técnicas são gerenciados nessa interface e continuam protegidos pelo núcleo fora do arquivo do Método. O Bloco apenas escolhe, entre os vínculos locais já cadastrados, qual será usado naquela ação.
 
-No nível global, a navegação principal possui três áreas:
+No nível global, a navegação principal possui quatro áreas, nesta ordem:
 
 - `/dashboard`: visão geral dos canais.
+- `/orchestrator`: criação e acompanhamento de produção para um ou vários Canais. O mesmo formulário atende tanto uma fila de um único Canal quanto uma produção multi-Canal.
 - `/methods`: Biblioteca de Métodos, derivada dos métodos salvos nos canais, com cards alternáveis por Método ou Canal, busca, capas opcionais, reutilização, importação e compartilhamento.
 - `/plugins`: Gerenciador de Plugins locais, responsável por descobrir e apresentar manifestos reais instalados no aplicativo.
+
+A lista e a grade de Projetos permanecem no Canal. A criação de novas filas não é duplicada nessa visão: ela acontece no Orquestrador global, selecionando um ou mais Canais.
 
 O Gerenciador de Plugins organiza o catálogo em cards quadrados, compactos e pesquisáveis. Em telas grandes, a galeria apresenta quatro cards por linha; cada card exibe somente o ícone local validado e o nome do plugin, além de uma sinalização mínima de erro ou desativação. Versão, origem, permissões, capacidades e ações de ciclo de vida aparecem nos detalhes abertos pelo card.
 
@@ -172,9 +208,9 @@ Blocos existentes sem `connectionId` podem usar transitoriamente a conexão padr
 
 ## 7. O Motor de Execução (Execution Engine)
 
-O orquestrador do sistema funciona em modelo de **Máquina de Estados Concorrente**:
+O motor de execução funciona como uma **máquina de estados persistente**:
 
-1. Lê o JSON do Método do Canal para o processo atual.
+1. Lê o Método congelado no snapshot do Projeto para o Processo atual, preservando a estratégia usada quando a execução começou.
 2. Executa os blocos sequencialmente injetando as saídas do bloco anterior no bloco seguinte.
 3. **Pausa e Retomada para Operador Humano**: Se um bloco for atribuído ao operador `Humano`, o motor pausa o estado da execução (`awaiting_human`), gera uma notificação e um cartão interativo no Projeto, e aguarda a entrega ou seleção do usuário para continuar a esteira.
 4. **Execução por plugin**: Blocos `IA` e `Código` disparam automaticamente o plugin compatível configurado assim que suas entradas ficam disponíveis. O servidor resolve as entradas, executa plugins instalados ou vinculados em um processo separado, valida a resposta, registra entregas e artifacts no snapshot e ativa a próxima etapa sem exigir um botão por bloco.
@@ -214,26 +250,30 @@ O plugin continua responsável apenas por executar a capability sobre o item rec
 
 ### 7.2. Orquestrador de execução entre Projetos
 
-Na visualização em lista do Canal, o Orquestrador de execução agenda vários Projetos sobre o mesmo motor linear. Ele não cria um novo Processo Universal, Bloco ou Operador e não altera o Método de cada Canal. Sua responsabilidade é somente criar a fila e iniciar a próxima combinação `Projeto / Processo Universal` quando a combinação atual terminar.
+Na página global `/orchestrator`, o usuário seleciona **um ou vários Canais**, informa quantos Projetos deseja criar por Canal e escolhe a política de execução. Uma solicitação multi-Canal recebe identidade global própria e cria uma fila persistente por Canal. Isso reutiliza o mesmo motor robusto de filas sem criar um segundo tipo de Projeto ou uma estratégia especial para produções globais.
 
-Existem dois modos de ordenação:
+Cada fila continua pertencendo a um Canal e agenda seus Projetos segundo a ordem congelada em cada snapshot. Dentro de uma fila, apenas um item avança por vez; filas de Canais diferentes podem progredir de forma independente. O agrupamento global serve para criação e acompanhamento coordenados, não para misturar estratégias, dados ou cursores entre Canais.
+
+O Orquestrador não cria um novo Processo Universal, Bloco ou Operador e não altera a estratégia de cada Projeto. Sua responsabilidade é escolher o próximo trabalho elegível e iniciar nele o próximo Processo previsto pela estratégia congelada.
+
+As filas anteriores à ordem configurável podem conservar dois modos históricos de agendamento:
 
 1. **Ponta a ponta**: executa os 8 Processos Universais de um Projeto antes de iniciar o Projeto seguinte.
 2. **Lote híbrido**: trata `Tema`, `Título` e `Thumbnail` como três etapas agregadas, cada uma contendo N itens de produção com identidade estável. Depois dessa fronteira, `Roteiro`, `Voz`, `Assets`, `Edição` e `Postagem` continuam usando o motor linear por Projeto e a ordenação do lote por processo.
 
-O ponto de transição é `Roteiro`. Até `Thumbnail`, o ganho principal vem de coalescer trabalhos pequenos de vários vídeos numa coleção administrável. A partir de `Roteiro`, cada vídeo passa a carregar contexto e produção interna suficientes para continuar como uma execução de Projeto independente, inclusive quando um Bloco do próprio Projeto expande N itens internos.
+No lote híbrido histórico, o ponto de transição é `Roteiro`. Até `Thumbnail`, o ganho principal vem de reunir trabalhos pequenos de vários vídeos numa coleção administrável. A partir de `Roteiro`, cada vídeo continua como uma execução de Projeto independente, inclusive quando um Bloco do próprio Projeto expande N itens internos. Esse agrupamento só é aplicável a Projetos cuja ordem congelada contém essa sequência; novas políticas de lote não podem impor `Tema → Título → Thumbnail` a um Projeto com outra ordem.
 
-Filas antigas persistidas com o planejamento sequencial anterior conservam sua estratégia original até terminarem. Novas filas em lote usam uma versão de estratégia persistida, de forma que uma atualização do aplicativo nunca reinterprete o significado do cursor de uma fila já iniciada.
+Filas antigas persistidas com o planejamento sequencial anterior conservam sua política original até terminarem. Toda nova fila persiste a versão da política de agendamento e respeita a estratégia congelada de cada Projeto, de forma que uma atualização do aplicativo nunca reinterprete o significado de um cursor já iniciado.
 
 A fila do Orquestrador nunca inicia dois itens em paralelo. Estados `awaiting_human` e `awaiting_output` pausam a fila no item atual e continuam alimentando a Central Global de Pendências Humanas. Um executor ausente mantém a fila bloqueada. Uma falha pausa a fila com erro: depois que o usuário corrige ou repete a etapa no Projeto, pode retomar a mesma fila no cursor preservado, sem recriar Projetos nem repetir etapas concluídas. Enquanto não for retomada, a falha também não impede que uma nova fila seja criada.
 
 O usuário pode parar uma fila em execução, aguardando humano, bloqueada ou com erro. O Stop cancela também a execução atual, impede o início dos itens restantes e preserva os Projetos já criados. Enquanto uma fila estiver ativa, seus Projetos não podem ser excluídos; primeiro é necessário pará-la. A fila, seu cursor, modo e Projetos pertencentes são persistidos localmente para permitir retomada após reiniciar o aplicativo.
 
-### 7.3. Execução agregada dos três primeiros processos
+### 7.3. Execução agregada no lote híbrido histórico
 
-O lote híbrido é uma estratégia do Orquestrador; não é um Método, Processo Universal, Bloco ou Operador novo. Um Método continua descrevendo a execução de um vídeo individual e o núcleo continua sem conhecer regras específicas de ChatGPT, Claude, Gemini, Flow ou qualquer outro fornecedor.
+O lote híbrido histórico é uma política de agendamento do Orquestrador; não é um Método, Processo Universal, Bloco ou Operador novo. Um Método continua descrevendo a execução de um vídeo individual e o núcleo continua sem conhecer regras específicas de ChatGPT, Claude, Gemini, Flow ou qualquer outro fornecedor.
 
-Nos três primeiros processos, o Orquestrador constrói uma coleção ordenada de itens de produção. Cada item possui uma identidade estável que atravessa `Tema → Título → Thumbnail`; qualquer protocolo agregado deve transportar essa identidade até o resultado. O núcleo rejeita uma resposta que não consiga associar deterministicamente cada resultado ao item correspondente. Índice ou posição podem ser usados como informação auxiliar, nunca como a única identidade.
+Nesse modo histórico, o Orquestrador constrói uma coleção ordenada de itens de produção para os três Processos iniciais da sequência legada. Cada item possui uma identidade estável que atravessa `Tema → Título → Thumbnail`; qualquer protocolo agregado deve transportar essa identidade até o resultado. O núcleo rejeita uma resposta que não consiga associar deterministicamente cada resultado ao item correspondente. Índice ou posição podem ser usados como informação auxiliar, nunca como a única identidade.
 
 O contrato alvo é `core entrega coleção → plugin escolhe estratégia`. Uma capability compatível pode executar a coleção numa única chamada de LLM, sequencialmente dentro da mesma sessão de navegador, em pequenos grupos ou com paralelismo próprio quando permitido. O plugin não escolhe a identidade, a ordem lógica, a política de retomada ou quais itens já estão aprovados; essas decisões pertencem ao núcleo.
 
@@ -361,7 +401,7 @@ Plugins de operador `Código` podem consumir esses layouts pelo contrato `thumbn
 
 ---
 
-## 14. Distribuição desktop V0
+## 14. Distribuição desktop
 
 A distribuição Windows empacota a interface em Electron e inicia a API como processo filho com uma cópia privada do Node 26. Usuários finais não precisam instalar Node, npm ou abrir terminal. O processo Electron hospeda apenas a janela e os arquivos da interface; o runtime privado preserva para a API e para plugins comunitários o modelo de permissões documentado em [`security.md`](../ecosystem/docs/security.md).
 

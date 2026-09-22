@@ -1,5 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  rectSortingStrategy,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   AlertTriangle,
   Bot,
@@ -10,6 +27,7 @@ import {
   LoaderCircle,
   Pencil,
   Play,
+  GripVertical,
   RotateCcw,
   Square,
   Upload,
@@ -25,7 +43,6 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
   PROCESS_META,
-  PROCESS_ORDER,
   type ActionBlock,
   type BlockExecution,
   type BlockExecutionItem,
@@ -42,6 +59,7 @@ import {
   type StructuredRecord,
   type ThumbnailLayout,
 } from "@/lib/domain";
+import { projectProcessOrder } from "@/lib/process-order";
 import {
   createProcessOutputFields,
   getMethodConfigurationIssue,
@@ -59,6 +77,7 @@ import {
   retryBlockExecution,
   saveHumanBlockDraft,
   readRuntimeDraft,
+  reorderBlockExecutionItems,
   saveProcessOutputDraft,
   startProcessExecution,
   updateBlockExecutionItemOutput,
@@ -100,13 +119,14 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
   const projectExecutions = useProjectExecutions(project?.id ?? "");
   const channelExecutions = useChannelExecutions(project?.channelId ?? "");
   const channelProjects = useProjects(project?.channelId);
-  const method = channel?.methods[processId];
+  const method = project?.strategySnapshot?.methods[processId] ?? channel?.methods[processId];
   const meta = PROCESS_META[processId];
   const completed = execution?.status === "completed";
   const canCancelExecution = Boolean(
     execution && !["completed", "failed", "cancelled"].includes(execution.status),
   );
-  const nextProcess = PROCESS_ORDER[PROCESS_ORDER.indexOf(processId) + 1];
+  const order = project ? projectProcessOrder(project, channel) : [];
+  const nextProcess = order[order.indexOf(processId) + 1];
   const nextNavigationTimer = useRef<number | undefined>(undefined);
   const previousExecutionStatus = useRef(execution?.status);
   const [isAdvancing, setIsAdvancing] = useState(false);
@@ -137,7 +157,12 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
 
   const scheduleNextProcess = useCallback(() => {
     if (!project || !channel || !nextProcess || nextNavigationTimer.current) return;
-    if (getMethodConfigurationIssue(channel.methods[nextProcess])) return;
+    if (
+      getMethodConfigurationIssue(
+        project.strategySnapshot?.methods[nextProcess] ?? channel.methods[nextProcess],
+      )
+    )
+      return;
     setIsAdvancing(true);
     nextNavigationTimer.current = window.setTimeout(() => {
       navigate({ to: `/project/${project.id}/${PROCESS_ROUTE_SEGMENT[nextProcess]}` });
@@ -744,6 +769,32 @@ function ExecutionItemsWorkspace({
   const [replacingItemId, setReplacingItemId] = useState<string>();
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const items = [...(blockExecution.items ?? [])].sort((a, b) => a.order - b.order);
+  const itemIds = items.map((item) => item.id);
+  const canReorder = blockExecution.status !== "in_progress" && items.length > 1;
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  async function reorderItems({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id || !canReorder) return;
+    const oldIndex = itemIds.indexOf(String(active.id));
+    const newIndex = itemIds.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    try {
+      await reorderBlockExecutionItems(
+        execution.id,
+        blockExecution.blockId,
+        execution.revision ?? 0,
+        arrayMove(itemIds, oldIndex, newIndex),
+      );
+      toast.success("Ordem dos itens atualizada");
+    } catch (error) {
+      toast.error("Não foi possível reorganizar os itens", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  }
 
   async function saveTextItem(item: BlockExecutionItem) {
     setSavingItemId(item.id);
@@ -801,175 +852,238 @@ function ExecutionItemsWorkspace({
         <div>
           <p className="text-xs font-semibold">Itens da execução</p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Edite textos ou substitua mídias sem alterar a posição do item.
+            Edite, substitua ou arraste os itens para reorganizar a sequência.
           </p>
         </div>
         {blockExecution.itemProgress ? (
           <ItemProgressSummary itemProgress={blockExecution.itemProgress} />
         ) : null}
       </div>
-      <div className="mx-auto mt-4 grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {items.map((item) => {
-          const output = singleItemOutput(item.output);
-          const kind = itemOutputKind(item.output);
-          const isEditing = editingItemId === item.id;
-          const busy = savingItemId === item.id || replacingItemId === item.id;
-          const canMutate = blockExecution.status !== "in_progress";
-          const media = isStoredFileValue(output) ? output : undefined;
-          return (
-            <article
-              key={item.id}
-              className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-background/60 shadow-sm"
-            >
-              <div className="flex min-h-10 items-center gap-2 border-b border-border/50 px-3 py-2">
-                <Badge variant="outline" className="shrink-0 text-[10px]">
-                  Item {item.order + 1}
-                </Badge>
-                <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground">
-                  {itemStatusLabel(item.status)}
-                </span>
-                <span className="shrink-0 text-[10px] text-muted-foreground">
-                  Tentativa {item.attempt}
-                </span>
-              </div>
-
-              {isEditing && kind === "text" ? (
-                <div className="flex min-h-56 flex-1 flex-col gap-2 p-3">
-                  <textarea
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    className="min-h-40 flex-1 resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => setEditingItemId(undefined)}>
-                      Cancelar
-                    </Button>
-                    <Button size="sm" disabled={busy} onClick={() => void saveTextItem(item)}>
-                      {busy ? <LoaderCircle className="mr-1.5 size-3.5 animate-spin" /> : null}
-                      Salvar item
-                    </Button>
-                  </div>
-                </div>
-              ) : kind === "image" && media ? (
-                <div className="flex aspect-[4/3] items-center justify-center bg-muted/20">
-                  <img
-                    src={media.url || undefined}
-                    alt={media.name}
-                    className="h-full w-full object-contain"
-                    loading="lazy"
-                  />
-                </div>
-              ) : kind === "video" && media ? (
-                <div className="flex aspect-video items-center justify-center bg-black">
-                  <video
-                    controls
-                    src={media.url || undefined}
-                    className="h-full w-full object-contain"
-                  />
-                </div>
-              ) : kind === "audio" && media ? (
-                <div className="flex min-h-36 flex-1 flex-col justify-center gap-3 bg-muted/15 p-4">
-                  <p className="truncate text-xs font-medium">{media.name}</p>
-                  <audio controls src={media.url || undefined} className="w-full" />
-                </div>
-              ) : kind === "text" && typeof output === "string" ? (
-                <div className="min-h-52 flex-1 overflow-auto p-3">
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                    {output}
-                  </p>
-                </div>
-              ) : output !== undefined ? (
-                <div className="min-h-40 flex-1 p-3">
-                  <RuntimeValueViewer
-                    type={kind ?? "text"}
-                    value={output as RuntimeValue}
-                    compact
-                  />
-                </div>
-              ) : (
-                <div className="flex min-h-40 flex-1 items-center justify-center p-3">
-                  <p className="text-xs text-muted-foreground">Sem resultado materializado.</p>
-                </div>
-              )}
-
-              {canMutate && !isEditing ? (
-                <div className="mt-auto flex items-center gap-1 border-t border-border/50 bg-card/70 p-1.5">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
-                    disabled={busy}
-                    onClick={() => onRetryItem(item.id)}
-                  >
-                    <RotateCcw className="size-3.5 shrink-0" />
-                    <span className="truncate">Regenerar item</span>
-                  </Button>
-                  {kind === "text" ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
-                      onClick={() => {
-                        setDraft(typeof output === "string" ? output : "");
-                        setEditingItemId(item.id);
-                      }}
-                    >
-                      <Pencil className="size-3.5 shrink-0" />
-                      <span className="truncate">Editar item</span>
-                    </Button>
-                  ) : kind ? (
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderItems}>
+        <SortableContext items={itemIds} strategy={rectSortingStrategy}>
+          <div className="mx-auto mt-4 grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {items.map((item) => {
+              const output = singleItemOutput(item.output);
+              const kind = itemOutputKind(item.output);
+              const isEditing = editingItemId === item.id;
+              const busy = savingItemId === item.id || replacingItemId === item.id;
+              const canMutate = blockExecution.status !== "in_progress";
+              const media = isStoredFileValue(output) ? output : undefined;
+              return (
+                <SortableExecutionItemCard
+                  key={item.id}
+                  itemId={item.id}
+                  disabled={!canReorder || busy || isEditing}
+                >
+                  {(dragHandle) => (
                     <>
-                      <input
-                        ref={(element) => {
-                          fileInputRefs.current[item.id] = element;
-                        }}
-                        type="file"
-                        accept={`${kind}/*`}
-                        className="hidden"
-                        onChange={(event) => void replaceMediaItem(item, event.target.files?.[0])}
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
-                        disabled={busy}
-                        onClick={() => fileInputRefs.current[item.id]?.click()}
-                      >
-                        {busy ? (
-                          <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
-                        ) : (
-                          <Upload className="size-3.5 shrink-0" />
-                        )}
-                        <span className="truncate">Substituir arquivo</span>
-                      </Button>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {item.attempts.length > 1 ? (
-                <details className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
-                  <summary className="cursor-pointer text-[10px]">
-                    Ver tentativas anteriores
-                  </summary>
-                  <div className="mt-2 space-y-1 text-[10px]">
-                    {item.attempts.map((attempt) => (
-                      <div
-                        key={attempt.attempt}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <span>Tentativa {attempt.attempt}</span>
-                        <span>{itemStatusLabel(attempt.status)}</span>
+                      <div className="flex min-h-10 items-center gap-2 border-b border-border/50 px-3 py-2">
+                        {dragHandle}
+                        <Badge variant="outline" className="shrink-0 text-[10px]">
+                          Item {item.order + 1}
+                        </Badge>
+                        <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground">
+                          {itemStatusLabel(item.status)}
+                        </span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          Tentativa {item.attempt}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </details>
-              ) : null}
-            </article>
-          );
-        })}
-      </div>
+
+                      {isEditing && kind === "text" ? (
+                        <div className="flex min-h-56 flex-1 flex-col gap-2 p-3">
+                          <textarea
+                            value={draft}
+                            onChange={(event) => setDraft(event.target.value)}
+                            className="min-h-40 flex-1 resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditingItemId(undefined)}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => void saveTextItem(item)}
+                            >
+                              {busy ? (
+                                <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />
+                              ) : null}
+                              Salvar item
+                            </Button>
+                          </div>
+                        </div>
+                      ) : kind === "image" && media ? (
+                        <div className="flex aspect-[4/3] items-center justify-center bg-muted/20">
+                          <img
+                            src={media.url || undefined}
+                            alt={media.name}
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                          />
+                        </div>
+                      ) : kind === "video" && media ? (
+                        <div className="flex aspect-video items-center justify-center bg-black">
+                          <video
+                            controls
+                            src={media.url || undefined}
+                            className="h-full w-full object-contain"
+                          />
+                        </div>
+                      ) : kind === "audio" && media ? (
+                        <div className="flex min-h-36 flex-1 flex-col justify-center gap-3 bg-muted/15 p-4">
+                          <p className="truncate text-xs font-medium">{media.name}</p>
+                          <audio controls src={media.url || undefined} className="w-full" />
+                        </div>
+                      ) : kind === "text" && typeof output === "string" ? (
+                        <div className="min-h-52 flex-1 overflow-auto p-3">
+                          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                            {output}
+                          </p>
+                        </div>
+                      ) : output !== undefined ? (
+                        <div className="min-h-40 flex-1 p-3">
+                          <RuntimeValueViewer
+                            type={kind ?? "text"}
+                            value={output as RuntimeValue}
+                            compact
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex min-h-40 flex-1 items-center justify-center p-3">
+                          <p className="text-xs text-muted-foreground">
+                            Sem resultado materializado.
+                          </p>
+                        </div>
+                      )}
+
+                      {canMutate && !isEditing ? (
+                        <div className="mt-auto flex items-center gap-1 border-t border-border/50 bg-card/70 p-1.5">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
+                            disabled={busy}
+                            onClick={() => onRetryItem(item.id)}
+                          >
+                            <RotateCcw className="size-3.5 shrink-0" />
+                            <span className="truncate">Regenerar item</span>
+                          </Button>
+                          {kind === "text" ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
+                              onClick={() => {
+                                setDraft(typeof output === "string" ? output : "");
+                                setEditingItemId(item.id);
+                              }}
+                            >
+                              <Pencil className="size-3.5 shrink-0" />
+                              <span className="truncate">Editar item</span>
+                            </Button>
+                          ) : kind ? (
+                            <>
+                              <input
+                                ref={(element) => {
+                                  fileInputRefs.current[item.id] = element;
+                                }}
+                                type="file"
+                                accept={`${kind}/*`}
+                                className="hidden"
+                                onChange={(event) =>
+                                  void replaceMediaItem(item, event.target.files?.[0])
+                                }
+                              />
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
+                                disabled={busy}
+                                onClick={() => fileInputRefs.current[item.id]?.click()}
+                              >
+                                {busy ? (
+                                  <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
+                                ) : (
+                                  <Upload className="size-3.5 shrink-0" />
+                                )}
+                                <span className="truncate">Substituir arquivo</span>
+                              </Button>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {item.attempts.length > 1 ? (
+                        <details className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
+                          <summary className="cursor-pointer text-[10px]">
+                            Ver tentativas anteriores
+                          </summary>
+                          <div className="mt-2 space-y-1 text-[10px]">
+                            {item.attempts.map((attempt) => (
+                              <div
+                                key={attempt.attempt}
+                                className="flex items-center justify-between gap-2"
+                              >
+                                <span>Tentativa {attempt.attempt}</span>
+                                <span>{itemStatusLabel(attempt.status)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
+                    </>
+                  )}
+                </SortableExecutionItemCard>
+              );
+            })}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
+  );
+}
+
+function SortableExecutionItemCard({
+  itemId,
+  disabled,
+  children,
+}: {
+  itemId: string;
+  disabled: boolean;
+  children: (dragHandle: ReactNode) => ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: itemId,
+    disabled,
+  });
+  return (
+    <article
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "flex min-w-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-background/60 shadow-sm",
+        isDragging && "z-10 opacity-70 shadow-lg",
+      )}
+    >
+      {children(
+        <button
+          type="button"
+          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-default disabled:opacity-40"
+          aria-label="Arraste para reorganizar"
+          title="Arraste para reorganizar"
+          disabled={disabled}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-3.5" />
+        </button>,
+      )}
+    </article>
   );
 }
 
@@ -1539,7 +1653,11 @@ function HumanBlockGate({
     .filter(
       (item) => item.processType !== execution.processType && item.outputStatus === "completed",
     )
-    .sort((a, b) => PROCESS_ORDER.indexOf(a.processType) - PROCESS_ORDER.indexOf(b.processType))) {
+    .sort(
+      (a, b) =>
+        projectProcessOrder(project).indexOf(a.processType) -
+        projectProcessOrder(project).indexOf(b.processType),
+    )) {
     for (const output of createProcessOutputFields(previousProcess.processType)) {
       const value = previousProcess.output?.values[output.key];
       if (!isEmptyDisplayValue(value)) {

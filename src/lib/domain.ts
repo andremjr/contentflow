@@ -24,6 +24,9 @@ export const PROCESS_ORDER = [
 export type UniversalProcess = (typeof PROCESS_ORDER)[number];
 export type ProcessId = UniversalProcess;
 
+export const BLOCK_OPERATORS = ["IA", "Humano", "Código"] as const;
+export const BLOCK_TYPES = ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"] as const;
+
 export type ProcessState =
   | "not_started"
   | "configuring"
@@ -35,8 +38,8 @@ export type ProcessState =
   | "error"
   | "blocked";
 
-export type BlockOperator = "IA" | "Humano" | "Código";
-export type BlockType = "BUSCAR" | "ESCOLHER" | "CRIAR" | "VALIDAR";
+export type BlockOperator = (typeof BLOCK_OPERATORS)[number];
+export type BlockType = (typeof BLOCK_TYPES)[number];
 export type BlockParameterType = "text" | "number" | "select" | "boolean" | "textarea";
 
 export type HumanFieldType =
@@ -207,6 +210,9 @@ export type ProcessMethod = {
 
 export type Channel = {
   id: string;
+  /** Absent in legacy channels; read through effectiveProcessOrder. */
+  processOrder?: UniversalProcess[];
+  definitionRevision?: number;
   youtubeChannelId?: string;
   name: string;
   handle: string;
@@ -232,6 +238,13 @@ export type Channel = {
 export type Project = {
   runThrough?: ProcessId;
   runFrom?: ProcessId;
+  /** Captured once at the first execution; absent on projects started before sequence snapshots. */
+  strategySnapshot?: {
+    processOrder: UniversalProcess[];
+    methods: Record<UniversalProcess, ProcessMethod>;
+    definitionRevision: number;
+    capturedAt: string;
+  };
   id: string;
   title: string;
   channelId: string;
@@ -267,6 +280,8 @@ export type DeliveryItemReference = {
 export type DeliveryItem = {
   /** Identidade universal gerada pelo núcleo para este item da entrega. */
   id: string;
+  /** Item operacional que originou esta posição, quando houver execução item a item. */
+  sourceExecutionItemId?: string;
   order: number;
   value: RuntimeValue | StructuredRecord;
   externalKey?: string;

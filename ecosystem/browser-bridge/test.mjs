@@ -372,7 +372,40 @@ export async function testExtensionBridge(source) {
         : { selectors: ['button[data-testid="send-button"]'] },
   });
   assert.equal((await bridge.dispatch(chatGptCommand(1, "setText"))).ok, true);
-  assert.equal((await bridge.dispatch(chatGptCommand(2, "click"))).ok, true);
+  const enterResult = await bridge.dispatch({
+    ...chatGptCommand(2, "pressEnter"),
+    payload: { selectors: ["#prompt-textarea"] },
+  });
+  assert.equal(enterResult.ok, true);
+  assert.equal(enterResult.mechanism, "cdp-keyboard-enter");
+  assert.ok(
+    debuggerCalls.some(
+      (entry) =>
+        entry.operation === "sendCommand" &&
+        entry.method === "Input.dispatchKeyEvent" &&
+        entry.params?.key === "Enter",
+    ),
+    "o envio por Enter deve usar o canal de teclado CDP",
+  );
+  const mouseEventsBeforeDomClick = debuggerCalls.filter(
+    (entry) => entry.operation === "sendCommand" && entry.method === "Input.dispatchMouseEvent",
+  ).length;
+  const domClickResult = await bridge.dispatch({
+    ...chatGptCommand(3, "click"),
+    payload: {
+      selectors: ['button[data-testid="send-button"]'],
+      preferDomActivation: true,
+    },
+  });
+  assert.equal(domClickResult.ok, true);
+  assert.equal(domClickResult.mechanism, "dom");
+  assert.equal(
+    debuggerCalls.filter(
+      (entry) => entry.operation === "sendCommand" && entry.method === "Input.dispatchMouseEvent",
+    ).length,
+    mouseEventsBeforeDomClick,
+    "a ativação DOM explícita não deve depender do mouse CDP",
+  );
   assert.equal(
     debuggerCalls.filter((entry) => entry.operation === "attach").length,
     debuggerAttachCount + 1,

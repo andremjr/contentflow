@@ -1,16 +1,16 @@
-# V0 compilada para Windows
+# Distribuição do ContentFlow para Windows
 
-A V0 transforma o ContentFlow em um aplicativo comum do Windows. Ela não exige Node, npm, Git ou terminal para uso normal.
+O aplicativo desktop transforma o ContentFlow em um programa comum do Windows. Ele não exige Node, npm, Git ou terminal para uso normal.
 
 ## Qual arquivo usar
 
 Os binários são publicados na página [Releases do projeto](https://github.com/andremjr/contentflow/releases):
 
-- `ContentFlow-V0-<versão>-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
-- `ContentFlow-V0-<versão>-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
-- `ContentFlow-V0-<versão>-SHA256.txt`: hashes para conferir a integridade dos dois executáveis.
+- `ContentFlow-V1-<versão>-x64-Setup.exe`: recomendado. Instala atalhos e abre rapidamente nas próximas vezes.
+- `ContentFlow-V1-<versão>-x64-Portable.exe`: alternativa sem instalação. Pode demorar mais para abrir porque descompacta o aplicativo a cada execução.
+- `ContentFlow-V1-<versão>-SHA256.txt`: hashes para conferir a integridade dos dois executáveis.
 
-O Windows pode mostrar um aviso porque esta V0 ainda não possui assinatura digital comercial. Confira se o arquivo veio do repositório oficial antes de executá-lo.
+O Windows pode mostrar um aviso enquanto a distribuição ainda não possuir assinatura digital comercial. Confira se o arquivo veio do repositório oficial antes de executá-lo.
 
 ## Atualizar o aplicativo
 
@@ -51,10 +51,10 @@ Desenvolvedores precisam de Windows x64, Node 26 e npm. Na raiz do repositório:
 ```powershell
 npm ci
 npm run check
-npm run desktop:v0
+npm run desktop:v1
 ```
 
-Os artefatos intermediários são gerados em `release/v0`. Os binários não entram no histórico Git, evitando dependência de Git LFS e mantendo o clone leve.
+Os artefatos intermediários são gerados em `release/v1`. Os binários não entram no histórico Git, evitando dependência de Git LFS e mantendo o clone leve.
 
 ### Publicação direta com a credencial de sessão
 
@@ -69,10 +69,10 @@ Depois do build, gere o manifesto de integridade no PowerShell:
 ```powershell
 $releaseVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
 Get-FileHash -Algorithm SHA256 `
-  "release/v0/ContentFlow-V0-$releaseVersion-x64-Setup.exe", `
-  "release/v0/ContentFlow-V0-$releaseVersion-x64-Portable.exe" |
+  "release/v1/ContentFlow-V1-$releaseVersion-x64-Setup.exe", `
+  "release/v1/ContentFlow-V1-$releaseVersion-x64-Portable.exe" |
   ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
-  Set-Content -Encoding ascii "release/v0/ContentFlow-V0-$releaseVersion-SHA256.txt"
+  Set-Content -Encoding ascii "release/v1/ContentFlow-V1-$releaseVersion-SHA256.txt"
 ```
 
 Antes de enviar a tag estável, atualize `package.json`, valide localmente, prepare as notas da versão e confirme que não existe workflow acionado pela tag. Depois do push, crie ou atualize a release diretamente pela API do GitHub com a credencial segura da sessão. Não reutilize uma versão ou tag já publicada. Builds beta devem usar outra política futura e não entram no canal `latest` da V1.

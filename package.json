@@ -1,6 +1,6 @@
 {
   "name": "contentflow",
-  "version": "0.7.2",
+  "version": "1.0.0",
   "productName": "ContentFlow",
   "description": "Gerenciador estratégico de métodos para produção de conteúdo e plugins independentes.",
   "author": "André Marinho Jr.",
@@ -30,7 +30,7 @@
     "desktop:run": "npm run desktop:prepare && electron .",
     "desktop:portable": "npm run desktop:prepare && electron-builder --win portable --x64",
     "desktop:installer": "npm run desktop:prepare && electron-builder --win nsis --x64",
-    "desktop:v0": "npm run desktop:prepare && electron-builder --win portable nsis --x64",
+    "desktop:v1": "npm run desktop:prepare && electron-builder --win portable nsis --x64 --publish never",
     "desktop:release": "npm run desktop:prepare && electron-builder --win portable nsis --x64 --publish never",
     "ecosystem:package": "node scripts/package-ecosystem.mjs",
     "ecosystem:catalog": "node scripts/prepare-official-catalog.mjs",
@@ -57,10 +57,14 @@
     "test:plugin-inputs": "tsx --test server/plugin-input-values.test.ts",
     "test:automatic-execution": "tsx --test server/automatic-plugin-execution.test.ts server/execution-retry.test.ts",
     "test:orchestrator": "tsx --test server/execution-orchestrator.test.ts server/execution-orchestrator.integration.test.ts",
+    "benchmark:orchestrator-v4": "node scripts/benchmark-orchestrator-v4.mjs",
+    "test:process-order": "tsx --test src/lib/process-order.test.ts server/process-order.integration.test.ts",
+    "test:architecture": "tsx --test src/lib/architecture-invariants.test.ts",
     "test:plugin-kit": "tsx server/plugin-kit.test.ts",
     "test:plugin-branding": "tsx --test server/plugin-branding.test.ts",
     "test:plugin-dependencies": "tsx --test server/plugin-dependencies.test.ts",
     "test:method-file": "tsx --test server/method-file.test.ts server/method-package.test.ts",
+    "test:method-transfer": "tsx --test src/lib/method-transfer-readiness.test.ts server/method-transfer.integration.test.ts",
     "test:builder-mcp": "tsx --test server/builder-methods.test.ts server/mcp.integration.test.ts",
     "test:plugin-connections": "tsx --test server/plugin-connections.test.ts",
     "test:plugin-profiles": "tsx --test server/plugin-profiles.test.ts server/plugin-profiles.integration.test.ts server/browser-profile-readiness.test.ts",
@@ -72,7 +76,7 @@
     "test:data-migration": "tsx --test server/data-directory-migration.test.ts",
     "test:i18n": "tsx --test src/lib/app-preferences.test.ts src/lib/channel-languages.test.ts",
     "plugin:kit": "tsx ecosystem/plugin-kit/cli.ts",
-    "check": "npm run lint && npm run typecheck && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:instructions && npm run test:method-sources && npm run test:project-title && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-partials && npm run test:plugin-concurrency && npm run test:plugin-fallback && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:orchestrator && npm run test:plugin-kit && npm run test:plugin-branding && npm run test:plugin-dependencies && npm run test:method-file && npm run test:builder-mcp && npm run test:plugin-connections && npm run test:plugin-profiles && npm run test:plugin-connection-runtime && npm run test:plugin-conversation && npm run test:plugin-package && npm run test:updater && npm run test:distribution-boundaries && npm run test:data-migration && npm run test:browser-bridge && npm run test:browser-plugins && npm run build",
+    "check": "npm run lint && npm run typecheck && npm run test:architecture && npm run test:presentation && npm run test:deliveries && npm run test:channel-history && npm run test:instructions && npm run test:method-sources && npm run test:project-title && npm run test:sandbox && npm run test:remote-artifacts && npm run test:plugin-jobs && npm run test:plugin-partials && npm run test:plugin-concurrency && npm run test:plugin-fallback && npm run test:plugin-inputs && npm run test:automatic-execution && npm run test:orchestrator && npm run test:process-order && npm run test:plugin-kit && npm run test:plugin-branding && npm run test:plugin-dependencies && npm run test:method-file && npm run test:method-transfer && npm run test:builder-mcp && npm run test:plugin-connections && npm run test:plugin-profiles && npm run test:plugin-connection-runtime && npm run test:plugin-conversation && npm run test:plugin-package && npm run test:updater && npm run test:distribution-boundaries && npm run test:data-migration && npm run test:browser-bridge && npm run test:browser-plugins && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {
@@ -144,7 +148,7 @@
     "asar": false,
     "npmRebuild": false,
     "directories": {
-      "output": "release/v0",
+      "output": "release/v1",
       "buildResources": "build"
     },
     "files": [
@@ -210,10 +214,10 @@
         "portable",
         "nsis"
       ],
-      "artifactName": "ContentFlow-V0-${version}-${arch}.${ext}"
+      "artifactName": "ContentFlow-V1-${version}-${arch}.${ext}"
     },
     "nsis": {
-      "artifactName": "ContentFlow-V0-${version}-${arch}-Setup.${ext}",
+      "artifactName": "ContentFlow-V1-${version}-${arch}-Setup.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
@@ -221,7 +225,7 @@
       "deleteAppDataOnUninstall": false
     },
     "portable": {
-      "artifactName": "ContentFlow-V0-${version}-${arch}-Portable.${ext}"
+      "artifactName": "ContentFlow-V1-${version}-${arch}-Portable.${ext}"
     }
   }
 }

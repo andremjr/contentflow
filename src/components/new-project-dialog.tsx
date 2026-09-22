@@ -13,8 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { createProject } from "@/lib/store";
-import type { Project } from "@/lib/domain";
+import { useAppPreferences } from "@/lib/app-preferences";
+import { PROCESS_META, type Project } from "@/lib/domain";
+import { effectiveProcessOrder } from "@/lib/process-order";
+import { createProject, useChannel } from "@/lib/store";
 
 export function NewProjectDialog({
   channelId,
@@ -29,12 +31,15 @@ export function NewProjectDialog({
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
   const [saving, setSaving] = useState(false);
+  const channel = useChannel(channelId);
+  const { t } = useAppPreferences();
   const savingRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const deadlineId = useId();
 
   const canSubmit = title.trim().length > 0 && !saving;
+  const firstProcess = effectiveProcessOrder(channel ?? {})[0];
 
   function reset() {
     setTitle("");
@@ -98,7 +103,10 @@ export function NewProjectDialog({
             </div>
             <div>
               <DialogTitle>Novo projeto</DialogTitle>
-              <DialogDescription>O projeto inicia na etapa de Tema.</DialogDescription>
+              <DialogDescription>
+                {t("O projeto inicia na primeira etapa configurada do Canal:")}{" "}
+                {t(PROCESS_META[firstProcess].label)}.
+              </DialogDescription>
             </div>
           </div>
         </DialogHeader>

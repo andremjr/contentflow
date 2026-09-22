@@ -1,6 +1,5 @@
 import {
   PROCESS_META,
-  PROCESS_ORDER,
   type ActionBlock,
   type BlockInputBinding,
   type ChannelLibraryItem,
@@ -11,6 +10,7 @@ import {
   type RuntimeValue,
   type StrategicCollection,
 } from "@/lib/domain";
+import { projectProcessOrder } from "@/lib/process-order";
 import { createProcessOutputFields, isEmptyRuntimeValue } from "@/lib/human-workflow";
 import { normalizeExecutionDeliveries } from "@/lib/deliveries";
 import { resolveChannelHistory } from "@/lib/channel-history";
@@ -71,6 +71,7 @@ export function resolveBlockInputs({
     block,
     execution,
     projectExecutions,
+    processOrder: projectProcessOrder(project),
     collections,
     libraryItems,
   });
@@ -119,12 +120,14 @@ function collectCandidates({
   block,
   execution,
   projectExecutions,
+  processOrder,
   collections,
   libraryItems,
 }: {
   block: ActionBlock;
   execution: ProcessExecution;
   projectExecutions: ProcessExecution[];
+  processOrder: ProcessExecution["processType"][];
   collections: StrategicCollection[];
   libraryItems: ChannelLibraryItem[];
 }) {
@@ -198,16 +201,16 @@ function collectCandidates({
     }
   }
 
-  const currentProcessIndex = PROCESS_ORDER.indexOf(execution.processType);
+  const currentProcessIndex = processOrder.indexOf(execution.processType);
   const completedProcesses = projectExecutions
     .filter(
       (item) =>
         item.outputStatus === "completed" &&
-        PROCESS_ORDER.indexOf(item.processType) < currentProcessIndex,
+        processOrder.indexOf(item.processType) < currentProcessIndex,
     )
     .sort(
       (left, right) =>
-        PROCESS_ORDER.indexOf(right.processType) - PROCESS_ORDER.indexOf(left.processType),
+        processOrder.indexOf(right.processType) - processOrder.indexOf(left.processType),
     );
   for (const rawProcessExecution of completedProcesses) {
     const processExecution = normalizeExecutionDeliveries(rawProcessExecution);

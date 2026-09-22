@@ -9,11 +9,13 @@ import {
   attachmentsAreReady,
   composerUploadState,
   collectGeneratedImages,
+  promptPageState,
   waitForAttachmentsReady,
   waitAndClickSend,
   execute,
   validateConversationUrl,
 } from "./handler.mjs";
+import { attachContentFlowBridge } from "./browser-bridge-client.mjs";
 
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
@@ -162,6 +164,139 @@ test("identifica cada aba de tarefa sem colisão entre tentativas", () => {
   assert.notEqual(first, retry);
 });
 
+test("não renavega uma aba nova do ChatGPT antes de usar o compositor", async () => {
+  const calls = [];
+  const client = {
+    async send(method, params = {}, sessionId) {
+      calls.push({ method, params, sessionId });
+      if (method === "Page.navigate") throw new Error("não deve navegar novamente");
+      if (method === "Runtime.evaluate") {
+        return {
+          result: {
+            value: {
+              host: "chatgpt.com",
+              prompt: true,
+              login: false,
+              captcha: false,
+              bodyHint: "",
+            },
+          },
+        };
+      }
+      throw new Error(`Comando inesperado: ${method}`);
+    },
+  };
+
+  const reused = await __test.prepareConversation(
+    client,
+    "page-session",
+    { mode: "new" },
+    1000,
+    undefined,
+    true,
+  );
+
+  assert.equal(reused, false);
+  assert.equal(
+    calls.some((call) => call.method === "Page.navigate"),
+    false,
+  );
+  assert.equal(
+    calls.some((call) => call.method === "Runtime.evaluate"),
+    true,
+  );
+});
+
+test("reconhece a raiz do ChatGPT como conversa nova sem Page.navigate redundante", async () => {
+  const calls = [];
+  let evaluations = 0;
+  const client = {
+    async send(method, params = {}, sessionId) {
+      calls.push({ method, params, sessionId });
+      if (method === "Page.navigate") throw new Error("não deve navegar para a mesma raiz");
+      if (method === "Runtime.evaluate") {
+        evaluations += 1;
+        if (evaluations === 1) return { result: { value: "https://chatgpt.com/" } };
+        return {
+          result: {
+            value: {
+              host: "chatgpt.com",
+              prompt: true,
+              login: false,
+              captcha: false,
+              bodyHint: "",
+            },
+          },
+        };
+      }
+      throw new Error(`Comando inesperado: ${method}`);
+    },
+  };
+
+  const reused = await __test.prepareConversation(
+    client,
+    "page-session",
+    { mode: "new" },
+    1000,
+    undefined,
+    false,
+  );
+
+  assert.equal(reused, false);
+  assert.equal(
+    calls.some((call) => call.method === "Page.navigate"),
+    false,
+  );
+});
+
+test("não confunde texto do conteúdo com controles reais de login", () => {
+  const prompt = {
+    innerText: "prompt",
+    textContent: "prompt",
+    getBoundingClientRect: () => ({ width: 500, height: 80, bottom: 100, right: 500 }),
+    getAttribute: () => null,
+  };
+  const unrelatedButton = {
+    innerText: "Enviar prompt",
+    textContent: "Enviar prompt",
+    getBoundingClientRect: () => ({ width: 100, height: 40, bottom: 50, right: 100 }),
+    getAttribute: () => null,
+  };
+  const doc = {
+    location: { hostname: "chatgpt.com" },
+    body: {
+      innerText: "O texto do usuário menciona criar conta, mas a sessão já está autenticada.",
+    },
+    defaultView: {
+      location: { hostname: "chatgpt.com" },
+      getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }),
+    },
+    querySelectorAll(selector) {
+      if (selector === "a,button") return [unrelatedButton];
+      return selector.includes("prompt-textarea") ? [prompt] : [];
+    },
+  };
+
+  assert.deepEqual(promptPageState(doc), {
+    host: "chatgpt.com",
+    prompt: true,
+    login: false,
+    captcha: false,
+    bodyHint: doc.body.innerText,
+  });
+
+  const loginButton = {
+    ...unrelatedButton,
+    innerText: "Entrar",
+    textContent: "Entrar",
+  };
+  doc.querySelectorAll = (selector) => {
+    if (selector === "a,button") return [loginButton];
+    return selector.includes("prompt-textarea") ? [prompt] : [];
+  };
+  assert.equal(promptPageState(doc).login, true);
+});
+
 test("isola contas por alias e porta", () => {
   assert.equal(__test.normalizeAccountProfile("canal-a"), "canal-a");
   assert.throws(() => __test.normalizeAccountProfile("../x"), /Perfil ChatGPT/);
@@ -188,6 +323,99 @@ test("só considera pronto o perfil marcado após login", async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("reconecta o service worker da Browser Bridge quando a sessão CDP desaparece", async () => {
+  let attachCount = 0;
+  let connectCount = 0;
+  let lostOnce = false;
+  const client = {
+    async send(method, params = {}, sessionId) {
+      if (method === "Target.getTargets")
+        return {
+          targetInfos: [
+            {
+              targetId: "bridge-worker",
+              type: "service_worker",
+              url: "chrome-extension://bridge/service-worker.js",
+            },
+          ],
+        };
+      if (method === "Target.attachToTarget") {
+        attachCount += 1;
+        return { sessionId: `worker-session-${attachCount}` };
+      }
+      if (method === "Target.detachFromTarget" || method === "Runtime.enable") return {};
+      if (method === "Runtime.evaluate") {
+        const expression = String(params.expression || "");
+        if (expression.includes("contentFlowBridge?.identity"))
+          return {
+            result: {
+              value: { bridgeId: "com.contentflow.browser-bridge", protocolVersion: 2 },
+            },
+          };
+        if (expression.includes("contentFlowBridge.connect")) {
+          connectCount += 1;
+          return { result: { value: { ok: true } } };
+        }
+        if (expression.includes("bridge.dispatch")) {
+          if (!lostOnce) {
+            lostOnce = true;
+            throw new Error("CDP Runtime.evaluate: Session with given id not found.");
+          }
+          return { result: { value: { ok: true, protocolVersion: 2 } } };
+        }
+        if (expression.includes("contentFlowBridge?.disconnect"))
+          return { result: { value: { ok: true } } };
+      }
+      if (method === "Target.getTargetInfo") return { targetInfo: { url: "https://chatgpt.com/" } };
+      throw new Error(`Comando inesperado: ${method} (${sessionId || "browser"})`);
+    },
+  };
+
+  const bridge = await attachContentFlowBridge({
+    client,
+    pageTargetId: "chatgpt-tab",
+    expectedUrl: "https://chatgpt.com/",
+    pluginId: "local.contentflow.chatgpt-browser-studio",
+    profileId: "conta2",
+    request: {
+      executionId: "execution",
+      blockId: "block",
+      capabilityId: "choose-library-item-in-browser",
+      attempt: 1,
+    },
+    allowedOrigins: ["https://chatgpt.com"],
+  });
+  await bridge.dispose();
+
+  assert.equal(lostOnce, true);
+  assert.equal(attachCount, 2);
+  assert.equal(connectCount, 2);
+});
+
+test("usa clique DOM compatível quando a Bridge antiga ainda não conhece pressEnter", async () => {
+  const calls = [];
+  const bridge = {
+    async dispatch(action, payload) {
+      calls.push({ action, payload });
+      if (action === "pressEnter") {
+        const error = new Error("Ação não suportada: pressEnter");
+        error.code = "UNKNOWN_ACTION";
+        throw error;
+      }
+      return { ok: true, mechanism: "dom" };
+    },
+  };
+
+  const result = await __test.clickSendWithBridge(bridge, undefined, "send");
+
+  assert.equal(result.mechanism, "dom");
+  assert.deepEqual(
+    calls.map((call) => call.action),
+    ["pressEnter", "click"],
+  );
+  assert.equal(calls[1].payload.preferDomActivation, true);
 });
 
 test("aguarda a Bridge antes de validar novamente a aba do ChatGPT", async () => {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -43,7 +43,6 @@ import {
 import {
   PROCESS_META,
   PROCESS_ORDER,
-  createEmptyMethods,
   type BlockOperator,
   type Channel,
   type ProcessMethod,
@@ -51,21 +50,25 @@ import {
   type UniversalProcess,
 } from "@/lib/domain";
 import { useAppPreferences } from "@/lib/app-preferences";
+import { effectiveProcessOrder, resolveProcessOrderForMethods } from "@/lib/process-order";
+import { pluginRequirementReadiness } from "@/lib/method-transfer-readiness";
 import {
-  collectMethodRequirements,
-  copyImportedMethods,
   parseMethodImportFile,
-  serializeMethodFile,
-  serializeMethodPackFile,
+  planPortableMethodTransfer,
+  serializePortableMethodTransfer,
   type MethodRequirement,
+  type PortableCollectionV2,
+  type PortableLibraryItemV2,
+  type PortableMethodRole,
 } from "@/lib/method-file";
 import {
-  createChannel,
+  applyMethodTransfer,
   setChannelMethods,
   updateChannel,
   uploadLocalFile,
   useChannels,
   useLibraryCollections,
+  useLibraryItems,
 } from "@/lib/store";
 
 export const Route = createFileRoute("/methods")({
@@ -79,12 +82,25 @@ export const Route = createFileRoute("/methods")({
 });
 
 type MethodEntry = { channel: Channel; processType: UniversalProcess; method: ProcessMethod };
+type ReadinessPlugin = {
+  id: string;
+  enabled: boolean;
+  executable: boolean;
+  manifest: { name: string; capabilities: Array<{ id: string }> };
+};
+
 type TransferDraft = {
+  mode: "share" | "reuse" | "import";
   name: string;
   channelName: string;
   channelImageUrl?: string;
   methods: ProcessMethod[];
   requirements: Partial<Record<UniversalProcess, MethodRequirement[]>>;
+  roles?: Partial<Record<UniversalProcess, PortableMethodRole>>;
+  portableCollections?: PortableCollectionV2[];
+  processOrder?: UniversalProcess[];
+  itemsIncluded?: boolean;
+  items?: PortableLibraryItemV2[];
   sourceChannelId?: string;
   isPack: boolean;
 };
@@ -98,6 +114,7 @@ const OPERATOR_ICON: Record<BlockOperator, typeof Bot> = {
 function MethodsLibraryPage() {
   const channels = useChannels();
   const collections = useLibraryCollections();
+  const libraryItems = useLibraryItems();
   const { methodsLibraryView: view, setMethodsLibraryView } = useAppPreferences();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -106,11 +123,59 @@ function MethodsLibraryPage() {
   const [targetChannelId, setTargetChannelId] = useState("");
   const [newChannelName, setNewChannelName] = useState("");
   const [selectedProcesses, setSelectedProcesses] = useState<UniversalProcess[]>([]);
+  const [readinessPlugins, setReadinessPlugins] = useState<ReadinessPlugin[]>([]);
+  const [readinessConnections, setReadinessConnections] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/plugins", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return { plugins: [] as ReadinessPlugin[] };
+        return (await response.json()) as { plugins?: ReadinessPlugin[] };
+      })
+      .then(async (result) => {
+        const plugins = result.plugins ?? [];
+        if (!active) return;
+        setReadinessPlugins(plugins);
+        const connectionEntries = await Promise.all(
+          plugins.map(async (plugin) => {
+            try {
+              const response = await fetch(
+                `/api/plugins/${encodeURIComponent(plugin.id)}/connections`,
+                { cache: "no-store" },
+              );
+              if (!response.ok) return [plugin.id, false] as const;
+              const payload = (await response.json()) as {
+                connections?: Array<{ id?: string; connected?: boolean }>;
+              };
+              return [
+                plugin.id,
+                (payload.connections ?? []).flatMap((connection) =>
+                  connection.connected && connection.id ? [connection.id] : [],
+                ),
+              ] as const;
+            } catch {
+              return [plugin.id, [] as string[]] as const;
+            }
+          }),
+        );
+        if (active) setReadinessConnections(Object.fromEntries(connectionEntries));
+      })
+      .catch(() => {
+        if (active) {
+          setReadinessPlugins([]);
+          setReadinessConnections({});
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const entries = useMemo(
     () =>
       channels.flatMap<MethodEntry>((channel) =>
-        PROCESS_ORDER.flatMap((processType) => {
+        effectiveProcessOrder(channel).flatMap((processType) => {
           const method = channel.methods[processType];
           return method.blocks.length ? [{ channel, processType, method }] : [];
         }),
@@ -144,70 +209,61 @@ function MethodsLibraryPage() {
 
   const channelCollections = (channelId: string) =>
     collections.filter((collection) => collection.channelId === channelId);
+  const channelItems = (channelId: string) =>
+    libraryItems.filter((item) => item.channelId === channelId);
 
-  function openTransfer(name: string, channel: Channel, methods: ProcessMethod[], isPack: boolean) {
-    const requirements = Object.fromEntries(
-      methods.map((method) => [
-        method.processType,
-        collectMethodRequirements(method, channelCollections(channel.id)),
-      ]),
-    );
-    const firstTarget = channels.find((candidate) => candidate.id !== channel.id);
-    setTransfer({
+  function openTransfer(
+    name: string,
+    channel: Channel,
+    methods: ProcessMethod[],
+    isPack: boolean,
+    mode: "share" | "reuse" = "reuse",
+  ) {
+    const plan = planPortableMethodTransfer({
       name,
       channelName: channel.name,
       channelImageUrl: channel.methodsImageUrl,
-      methods,
+      sourceMethods: methodsOf(channel),
+      collections: channelCollections(channel.id),
+      items: channelItems(channel.id),
+      processOrder: effectiveProcessOrder(channel),
+      primaryProcessTypes: isPack
+        ? methods.map((method) => method.processType)
+        : [methods[0].processType],
+      includeAllMethods: isPack,
+      preserveLocalConnections: mode === "reuse",
+    });
+    const plannedMethods = plan.methods.map((entry) => entry.method);
+    const requirements = Object.fromEntries(
+      plan.methods.map((entry) => [entry.method.processType, entry.requirements]),
+    );
+    const firstTarget = channels.find((candidate) => candidate.id !== channel.id);
+    setTransfer({
+      mode,
+      name,
+      channelName: channel.name,
+      channelImageUrl: channel.methodsImageUrl,
+      methods: plannedMethods,
       requirements,
+      roles: Object.fromEntries(
+        plan.methods.map((entry) => [entry.method.processType, entry.role]),
+      ),
+      portableCollections: plan.collections,
+      processOrder: plan.processOrder,
+      itemsIncluded: plan.itemsIncluded,
+      items: plan.items,
       sourceChannelId: channel.id,
       isPack,
     });
     setNewChannelName(channel.name);
     setTargetChannelId(firstTarget?.id ?? "__new__");
     setSelectedProcesses(
-      methods
-        .filter((method) => !firstTarget?.methods[method.processType]?.blocks.length)
-        .map((method) => method.processType),
+      mode === "share"
+        ? plannedMethods.map((method) => method.processType)
+        : plannedMethods
+            .filter((method) => !firstTarget?.methods[method.processType]?.blocks.length)
+            .map((method) => method.processType),
     );
-  }
-
-  async function downloadMethod(entry: MethodEntry) {
-    try {
-      await downloadMethodPackage(
-        serializeMethodFile(entry.method.name, entry.method, channelCollections(entry.channel.id)),
-        `${slug(entry.method.name)}.contentflow-method.zip`,
-      );
-      toast.success("Método exportado", {
-        description: "O pacote inclui manifest.json, capa e requisitos de configuração.",
-      });
-    } catch (error) {
-      toast.error("Não foi possível criar o pacote", {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    }
-  }
-
-  async function downloadPack(channel: Channel) {
-    const methods = methodsOf(channel);
-    try {
-      await downloadMethodPackage(
-        serializeMethodPackFile(
-          `Métodos de ${channel.name}`,
-          channel.name,
-          methods,
-          channelCollections(channel.id),
-          channel.methodsImageUrl,
-        ),
-        `metodos-${slug(channel.name)}.contentflow-method-pack.zip`,
-      );
-      toast.success("Pacote de Métodos exportado", {
-        description: `${methods.length} ${methods.length === 1 ? "Método incluído" : "Métodos incluídos"}, com suas capas.`,
-      });
-    } catch (error) {
-      toast.error("Não foi possível criar o pacote", {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    }
   }
 
   async function importFile(file: File) {
@@ -228,20 +284,48 @@ function MethodsLibraryPage() {
         contents = await file.text();
       }
       const imported = parseMethodImportFile(contents);
-      const methods =
-        imported.format === "contentflow-method" ? [imported.method] : imported.methods;
-      const channelName =
-        imported.format === "contentflow-method" ? imported.name : imported.channelName;
+      const isV2 = imported.version === 2;
+      const methods = isV2
+        ? imported.methods.map((entry) => entry.method)
+        : imported.format === "contentflow-method"
+          ? [imported.method]
+          : imported.methods;
+      const channelName = isV2
+        ? (imported.channelName ?? imported.name)
+        : imported.format === "contentflow-method"
+          ? imported.name
+          : imported.channelName;
+      const requirements = isV2
+        ? Object.fromEntries(
+            imported.methods.map((entry) => [entry.method.processType, entry.requirements]),
+          )
+        : imported.format === "contentflow-method"
+          ? { [imported.method.processType]: imported.requirements ?? [] }
+          : (imported.requirements ?? {});
       setTransfer({
+        mode: "import",
         name: imported.name,
         channelName,
         channelImageUrl:
-          imported.format === "contentflow-method-pack" ? imported.channelImageUrl : undefined,
+          imported.format === "contentflow-method-pack" || isV2
+            ? imported.channelImageUrl
+            : undefined,
         methods,
-        requirements:
-          imported.format === "contentflow-method"
-            ? { [imported.method.processType]: imported.requirements ?? [] }
-            : (imported.requirements ?? {}),
+        requirements,
+        roles: isV2
+          ? Object.fromEntries(
+              imported.methods.map((entry) => [entry.method.processType, entry.role]),
+            )
+          : Object.fromEntries(
+              methods.map((method) => [
+                method.processType,
+                imported.format === "contentflow-method" ? "primary" : "set",
+              ]),
+            ),
+        portableCollections: isV2 ? imported.collections : undefined,
+        processOrder: isV2 ? imported.processOrder : undefined,
+        itemsIncluded: isV2 ? imported.itemsIncluded : false,
+        items: isV2 ? imported.items : [],
         isPack: imported.format === "contentflow-method-pack",
       });
       setNewChannelName(channelName);
@@ -272,44 +356,104 @@ function MethodsLibraryPage() {
     );
   }
 
+  function setTransferItemsIncluded(includeItems: boolean) {
+    if (!transfer?.sourceChannelId) return;
+    const channel = channels.find((candidate) => candidate.id === transfer.sourceChannelId);
+    if (!channel) return;
+    const primaryProcessTypes = transfer.isPack
+      ? methodsOf(channel).map((method) => method.processType)
+      : transfer.methods
+          .filter((method) => transfer.roles?.[method.processType] === "primary")
+          .map((method) => method.processType);
+    const plan = planPortableMethodTransfer({
+      name: transfer.name,
+      channelName: channel.name,
+      channelImageUrl: channel.methodsImageUrl,
+      sourceMethods: methodsOf(channel),
+      collections: channelCollections(channel.id),
+      items: channelItems(channel.id),
+      includeItems,
+      preserveLocalConnections: transfer.mode === "reuse",
+      processOrder: effectiveProcessOrder(channel),
+      primaryProcessTypes,
+      includeAllMethods: transfer.isPack,
+    });
+    setTransfer((current) =>
+      current
+        ? {
+            ...current,
+            portableCollections: plan.collections,
+            itemsIncluded: plan.itemsIncluded,
+            items: plan.items,
+          }
+        : current,
+    );
+  }
+
   async function confirmTransfer() {
     if (!transfer || !selectedProcesses.length) return;
-    const selected = transfer.methods.filter((method) =>
-      selectedProcesses.includes(method.processType),
-    );
-    const copied = copyImportedMethods(selected, createId, {
-      preserveLocalConnections: Boolean(transfer.sourceChannelId),
-    });
     try {
-      if (targetChannelId === "__new__") {
-        const methods = createEmptyMethods();
-        for (const method of copied) methods[method.processType] = method;
-        await createChannel({
-          id: `ch-${crypto.randomUUID()}`,
-          name: newChannelName.trim(),
-          handle: "",
-          color: "#2563EB",
-          subscribers: "—",
-          description: "",
-          niche: "",
-          language: "PT-BR",
-          activeProjects: 0,
-          frequency: "1x / semana",
-          nextPublish: "",
-          currentProjectProgress: 0,
-          status: "healthy",
-          trend: [],
-          methodsImageUrl: transfer.channelImageUrl,
-          methods,
-        });
-      } else {
-        const target = channels.find((channel) => channel.id === targetChannelId);
-        if (!target) return;
-        await setChannelMethods(
-          target.id,
-          Object.fromEntries(copied.map((method) => [method.processType, method])),
+      if (transfer.mode === "share") {
+        const primaryProcessType = transfer.methods.find(
+          (method) => transfer.roles?.[method.processType] === "primary",
+        )?.processType;
+        const plan = {
+          format: transfer.isPack
+            ? ("contentflow-method-pack" as const)
+            : ("contentflow-method" as const),
+          name: transfer.name,
+          channelName: transfer.channelName,
+          channelImageUrl: transfer.channelImageUrl,
+          primaryProcessType: transfer.isPack ? undefined : primaryProcessType,
+          processOrder: transfer.processOrder ?? [...PROCESS_ORDER],
+          methods: transfer.methods.map((method) => ({
+            role:
+              transfer.roles?.[method.processType] ??
+              (transfer.isPack ? ("set" as const) : ("primary" as const)),
+            method,
+            requirements: transfer.requirements[method.processType] ?? [],
+          })),
+          collections: transfer.portableCollections ?? [],
+          itemsIncluded: transfer.itemsIncluded === true,
+          items: transfer.items ?? [],
+        };
+        await downloadMethodPackage(
+          serializePortableMethodTransfer(plan),
+          transfer.isPack
+            ? `metodos-${slug(transfer.channelName)}.contentflow-method-pack.zip`
+            : `${slug(transfer.name)}.contentflow-method.zip`,
         );
+        toast.success(transfer.isPack ? "Pacote de Métodos exportado" : "Método exportado");
+        setTransfer(undefined);
+        setSelectedProcesses([]);
+        return;
       }
+      const target = channels.find((channel) => channel.id === targetChannelId);
+      await applyMethodTransfer({
+        targetChannelId: target?.id,
+        sourceChannelId: transfer.sourceChannelId,
+        newChannel:
+          targetChannelId === "__new__"
+            ? {
+                id: `ch-${crypto.randomUUID()}`,
+                name: newChannelName.trim(),
+                methodsImageUrl: transfer.channelImageUrl,
+              }
+            : undefined,
+        expectedDefinitionRevision: target?.definitionRevision ?? 0,
+        methods: transfer.methods,
+        collections: transfer.portableCollections ?? [],
+        itemsIncluded: transfer.itemsIncluded === true,
+        items: transfer.items ?? [],
+        preferredOrder:
+          targetChannelId === "__new__" && transfer.isPack && transfer.processOrder
+            ? transfer.processOrder
+            : target
+              ? effectiveProcessOrder(target)
+              : [...PROCESS_ORDER],
+        selectedProcesses,
+        preserveLocalConnections: Boolean(transfer.sourceChannelId),
+      });
       toast.success(transfer.isPack ? "Pacote importado" : "Método importado", {
         description:
           "Revise os avisos e associe localmente coleções, plugins e contas antes de executar.",
@@ -451,7 +595,9 @@ function MethodsLibraryPage() {
                   key={`${entry.channel.id}-${entry.processType}`}
                   entry={entry}
                   canCopy={channels.some((channel) => channel.id !== entry.channel.id)}
-                  onDownload={() => void downloadMethod(entry)}
+                  onDownload={() =>
+                    openTransfer(entry.method.name, entry.channel, [entry.method], false, "share")
+                  }
                   onCopy={() =>
                     openTransfer(entry.method.name, entry.channel, [entry.method], false)
                   }
@@ -468,7 +614,15 @@ function MethodsLibraryPage() {
                   channel={channel}
                   methods={methodsOf(channel)}
                   canCopy={channels.some((candidate) => candidate.id !== channel.id)}
-                  onDownload={() => void downloadPack(channel)}
+                  onDownload={() =>
+                    openTransfer(
+                      `Métodos de ${channel.name}`,
+                      channel,
+                      methodsOf(channel),
+                      true,
+                      "share",
+                    )
+                  }
                   onCopy={() =>
                     openTransfer(`Métodos de ${channel.name}`, channel, methodsOf(channel), true)
                   }
@@ -485,12 +639,15 @@ function MethodsLibraryPage() {
         transfer={transfer}
         channels={channels}
         collections={collections}
+        readinessPlugins={readinessPlugins}
+        readinessConnections={readinessConnections}
         targetChannelId={targetChannelId}
         newChannelName={newChannelName}
         selectedProcesses={selectedProcesses}
         onTargetChange={selectTarget}
         onNewChannelNameChange={setNewChannelName}
         onSelectedProcessesChange={setSelectedProcesses}
+        onItemsIncludedChange={setTransferItemsIncluded}
         onClose={() => setTransfer(undefined)}
         onConfirm={() => void confirmTransfer()}
       />
@@ -502,59 +659,94 @@ function ImportDialog({
   transfer,
   channels,
   collections,
+  readinessPlugins,
+  readinessConnections,
   targetChannelId,
   newChannelName,
   selectedProcesses,
   onTargetChange,
   onNewChannelNameChange,
   onSelectedProcessesChange,
+  onItemsIncludedChange,
   onClose,
   onConfirm,
 }: {
   transfer?: TransferDraft;
   channels: Channel[];
   collections: StrategicCollection[];
+  readinessPlugins: ReadinessPlugin[];
+  readinessConnections: Record<string, string[]>;
   targetChannelId: string;
   newChannelName: string;
   selectedProcesses: UniversalProcess[];
   onTargetChange: (value: string) => void;
   onNewChannelNameChange: (value: string) => void;
   onSelectedProcessesChange: (value: UniversalProcess[]) => void;
+  onItemsIncludedChange: (value: boolean) => void;
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  const target = channels.find((channel) => channel.id === targetChannelId);
+  const isShare = transfer?.mode === "share";
+  const target = isShare ? undefined : channels.find((channel) => channel.id === targetChannelId);
+  const { t } = useAppPreferences();
+  const previewMethods = target ? structuredClone(target.methods) : undefined;
+  const selectedMethods = transfer?.methods.filter((method) =>
+    selectedProcesses.includes(method.processType),
+  );
+  const methodSet =
+    previewMethods ??
+    Object.fromEntries(
+      PROCESS_ORDER.map((processType) => [processType, { name: "", processType, blocks: [] }]),
+    );
+  for (const method of selectedMethods ?? []) methodSet[method.processType] = method;
+  const preferredOrder = target
+    ? effectiveProcessOrder(target)
+    : transfer?.isPack && transfer.processOrder
+      ? transfer.processOrder
+      : PROCESS_ORDER;
+  const resultOrder = resolveProcessOrderForMethods(preferredOrder, methodSet);
   return (
     <Dialog open={Boolean(transfer)} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {transfer?.isPack ? "Importar pacote de Métodos" : "Adicionar Método a um Canal"}
+            {isShare
+              ? transfer?.isPack
+                ? t("Compartilhar pacote de Métodos")
+                : t("Compartilhar Método")
+              : transfer?.isPack
+                ? "Importar pacote de Métodos"
+                : "Adicionar Método a um Canal"}
           </DialogTitle>
           <DialogDescription>
-            {transfer?.name}. Revise o destino, os conflitos e a preparação necessária.
+            {transfer?.name}.{" "}
+            {isShare
+              ? t("Revise o conteúdo e a preparação antes de baixar o pacote.")
+              : "Revise o destino, os conflitos e a preparação necessária."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium">Destino</label>
-            <Select value={targetChannelId} onValueChange={onTargetChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o destino" />
-              </SelectTrigger>
-              <SelectContent>
-                {channels
-                  .filter((channel) => channel.id !== transfer?.sourceChannelId)
-                  .map((channel) => (
-                    <SelectItem key={channel.id} value={channel.id}>
-                      {channel.name}
-                    </SelectItem>
-                  ))}
-                <SelectItem value="__new__">Criar um Canal novo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {targetChannelId === "__new__" && (
+          {!isShare && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">Destino</label>
+              <Select value={targetChannelId} onValueChange={onTargetChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o destino" />
+                </SelectTrigger>
+                <SelectContent>
+                  {channels
+                    .filter((channel) => channel.id !== transfer?.sourceChannelId)
+                    .map((channel) => (
+                      <SelectItem key={channel.id} value={channel.id}>
+                        {channel.name}
+                      </SelectItem>
+                    ))}
+                  <SelectItem value="__new__">Criar um Canal novo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {!isShare && targetChannelId === "__new__" && (
             <div className="space-y-1.5">
               <label className="text-xs font-medium">Nome do novo Canal</label>
               <Input
@@ -565,7 +757,9 @@ function ImportDialog({
             </div>
           )}
           <div className="space-y-2">
-            <p className="text-xs font-medium">Métodos que serão importados</p>
+            <p className="text-xs font-medium">
+              {isShare ? t("Métodos incluídos no pacote") : "Métodos que serão importados"}
+            </p>
             {transfer?.methods.map((method) => {
               const conflict = Boolean(target?.methods[method.processType]?.blocks.length);
               const checked = selectedProcesses.includes(method.processType);
@@ -576,6 +770,7 @@ function ImportDialog({
                 >
                   <Checkbox
                     checked={checked}
+                    disabled={isShare}
                     onCheckedChange={(value) =>
                       onSelectedProcessesChange(
                         value
@@ -585,12 +780,23 @@ function ImportDialog({
                     }
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">{method.name}</span>
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="block text-sm font-medium">{method.name}</span>
+                      {transfer.roles?.[method.processType] && (
+                        <Badge variant="outline" className="text-[9px]">
+                          {transfer.roles[method.processType] === "primary"
+                            ? t("Método principal")
+                            : transfer.roles[method.processType] === "dependency"
+                              ? t("Dependência incluída")
+                              : t("Conjunto do Canal")}
+                        </Badge>
+                      )}
+                    </span>
                     <span className="text-xs text-muted-foreground">
                       {PROCESS_META[method.processType].label} · {method.blocks.length}{" "}
                       {method.blocks.length === 1 ? "bloco" : "blocos"}
                     </span>
-                    {conflict && (
+                    {!isShare && conflict && (
                       <span className="mt-1 block text-[11px] text-warning">
                         Já existe um Método neste processo. Marque para substituí-lo.
                       </span>
@@ -600,10 +806,55 @@ function ImportDialog({
               );
             })}
           </div>
+          <div className="rounded-lg border border-border p-3 text-xs">
+            <p className="font-medium">{t("Ordem resultante")}</p>
+            {resultOrder ? (
+              <p className="mt-1 text-muted-foreground">
+                {resultOrder.map((processType) => PROCESS_META[processType].label).join(" → ")}
+              </p>
+            ) : (
+              <p className="mt-1 text-destructive">
+                {t("As dependências selecionadas não formam uma ordem válida.")}
+              </p>
+            )}
+          </div>
+          {Boolean(transfer?.portableCollections?.length) && (
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <p className="text-xs font-medium">{t("Coleções incluídas como estrutura")}</p>
+              <div className="space-y-2">
+                {transfer?.portableCollections?.map((collection) => (
+                  <div key={collection.key} className="text-xs">
+                    <p className="font-medium">{collection.name}</p>
+                    <p className="text-muted-foreground">
+                      {collection.fields.length} {t("campos")} · {collection.referencedBy.length}{" "}
+                      {t("vínculos")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex items-start gap-3 rounded-lg border border-border p-3">
+            <Checkbox
+              checked={transfer?.itemsIncluded === true}
+              disabled={!transfer?.sourceChannelId}
+              onCheckedChange={(value) => onItemsIncludedChange(value === true)}
+            />
+            <div>
+              <p className="text-xs font-medium">{t("Compartilhar itens")}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {transfer?.itemsIncluded
+                  ? `${t("Itens incluídos no compartilhamento")}: ${transfer.items?.length ?? 0}.`
+                  : t("Somente a estrutura das coleções está incluída.")}
+              </p>
+            </div>
+          </div>
           <DependencyWarnings
             transfer={transfer}
             selectedProcesses={selectedProcesses}
             target={target}
+            plugins={readinessPlugins}
+            connectedPlugins={readinessConnections}
             targetCollections={collections.filter(
               (collection) => collection.channelId === target?.id,
             )}
@@ -616,12 +867,17 @@ function ImportDialog({
           <Button
             disabled={
               !selectedProcesses.length ||
-              (targetChannelId === "__new__" && newChannelName.trim().length < 2)
+              !resultOrder ||
+              (!isShare && targetChannelId === "__new__" && newChannelName.trim().length < 2)
             }
             onClick={onConfirm}
           >
-            <Copy className="mr-1.5 size-4" />{" "}
-            {targetChannelId === "__new__" ? "Criar e importar" : "Importar selecionados"}
+            {isShare ? <Download className="mr-1.5 size-4" /> : <Copy className="mr-1.5 size-4" />}
+            {isShare
+              ? t("Baixar pacote")
+              : targetChannelId === "__new__"
+                ? "Criar e importar"
+                : "Importar selecionados"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -633,27 +889,32 @@ function DependencyWarnings({
   transfer,
   selectedProcesses,
   target,
+  plugins,
+  connectedPlugins,
   targetCollections,
 }: {
   transfer?: TransferDraft;
   selectedProcesses: UniversalProcess[];
   target?: Channel;
+  plugins: ReadinessPlugin[];
+  connectedPlugins: Record<string, string[]>;
   targetCollections: StrategicCollection[];
 }) {
+  const { t } = useAppPreferences();
   if (!transfer) return null;
   const requirements = selectedProcesses.flatMap((process) => transfer.requirements[process] ?? []);
   if (!requirements.length) {
     return (
       <div className="flex gap-2 rounded-lg border border-success/30 bg-success/5 p-3 text-xs">
-        <CheckCircle2 className="size-4 shrink-0 text-success" /> Nenhuma dependência externa foi
-        declarada.
+        <CheckCircle2 className="size-4 shrink-0 text-success" />
+        {t("Nenhuma dependência externa foi declarada.")}
       </div>
     );
   }
   return (
     <div className="rounded-lg border border-warning/35 bg-warning/5 p-3">
       <div className="flex items-center gap-2 text-sm font-semibold">
-        <AlertTriangle className="size-4 text-warning" /> Preparação necessária
+        <AlertTriangle className="size-4 text-warning" /> {t("Preparação necessária")}
       </div>
       <div className="mt-3 space-y-3 text-xs">
         {requirements.map((requirement, index) => {
@@ -661,25 +922,84 @@ function DependencyWarnings({
             const included = selectedProcesses.includes(requirement.processType);
             const available = Boolean(target?.methods[requirement.processType]?.blocks.length);
             return (
-              <p key={`${requirement.kind}-${index}`}>
-                <strong>Processo anterior:</strong> {PROCESS_META[requirement.processType].label}
-                {requirement.sourceKey ? `, entrega “${requirement.sourceKey}”` : ""}.{" "}
-                {included
-                  ? "Será importado junto."
-                  : available
-                    ? "Já existe no Canal de destino."
-                    : "Crie ou importe esse Método antes de executar."}
-              </p>
+              <div key={`${requirement.kind}-${index}`} className="space-y-1">
+                <p>
+                  <strong>{t("Processo anterior")}:</strong>{" "}
+                  {PROCESS_META[requirement.processType].label}
+                  {requirement.sourceKey
+                    ? `, ${t("entrega")} “${requirement.sourceKey}”`
+                    : ""}.{" "}
+                  {included
+                    ? t("Fonte incluída na importação")
+                    : available
+                      ? t("Fonte já disponível no Canal de destino")
+                      : t("Fonte ainda não disponível no Canal de destino")}
+                  .
+                </p>
+                {!included && !available && target && (
+                  <Link
+                    to="/channel/$channelId/methods"
+                    params={{ channelId: target.id }}
+                    search={{ process: requirement.processType }}
+                    className="font-medium text-brand hover:underline"
+                  >
+                    {t("Abrir editor do Método para corrigir")}
+                  </Link>
+                )}
+              </div>
             );
           }
           if (requirement.kind === "plugin") {
+            const plugin = plugins.find((candidate) => candidate.id === requirement.pluginId);
+            const boundConnectionId = transfer.methods
+              .flatMap((method) => method.blocks)
+              .find(
+                (block) =>
+                  block.plugin?.pluginId === requirement.pluginId &&
+                  block.plugin.capabilityId === requirement.capabilityId &&
+                  block.plugin.connectionId,
+              )?.plugin?.connectionId;
+            const readiness = pluginRequirementReadiness({
+              plugin,
+              capabilityId: requirement.capabilityId,
+              connectionRequired: requirement.connectionRequired,
+              hasBoundConnection: Boolean(
+                boundConnectionId &&
+                connectedPlugins[requirement.pluginId]?.includes(boundConnectionId),
+              ),
+            });
+            const status =
+              readiness === "missing_plugin"
+                ? t("Plugin ausente")
+                : readiness === "missing_capability"
+                  ? t("Capability ausente")
+                  : readiness === "unavailable_plugin"
+                    ? t("Plugin desativado ou indisponível")
+                    : readiness === "missing_connection"
+                      ? t("Conexão local pendente")
+                      : t("Plugin pronto");
             return (
-              <p key={`${requirement.kind}-${index}`}>
-                <strong>Plugin:</strong> {requirement.pluginId} / {requirement.capabilityId}.{" "}
-                {requirement.connectionRequired
-                  ? "Uma conta ou conexão local deverá ser associada."
-                  : "Verifique se está instalado e ativo."}
-              </p>
+              <div key={`${requirement.kind}-${index}`} className="space-y-1">
+                <p>
+                  <strong>{t("Plugin")}:</strong> {plugin?.manifest.name ?? requirement.pluginId} /{" "}
+                  {requirement.capabilityId}. {status}.
+                </p>
+                {readiness !== "ready" && readiness !== "missing_connection" && (
+                  <Link to="/plugins" className="font-medium text-brand hover:underline">
+                    {t("Abrir Plugins para corrigir")}
+                  </Link>
+                )}
+                {readiness === "missing_connection" && (
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">
+                      {t("Associe uma conexão local no editor do Método antes de executar.")}
+                    </p>
+                    <Link to="/plugins" className="font-medium text-brand hover:underline">
+                      {t("Abrir Plugins para corrigir")}
+                    </Link>
+                  </div>
+                )}
+              </div>
             );
           }
           const localCollection = targetCollections.find(
@@ -855,6 +1175,7 @@ function ChannelMethodsCard({
         {methods.map((method) => (
           <div
             key={method.processType}
+            data-process-type={method.processType}
             className="flex items-center justify-between gap-3 rounded-md bg-secondary/50 px-2.5 py-2 text-xs"
           >
             <span className="truncate">{method.name}</span>
@@ -912,12 +1233,9 @@ function Stat({ label, value, suffix }: { label: string; value: number; suffix?:
   );
 }
 function methodsOf(channel: Channel) {
-  return PROCESS_ORDER.map((process) => channel.methods[process]).filter(
-    (method) => method.blocks.length,
-  );
-}
-function createId(prefix: string) {
-  return `${prefix}-${crypto.randomUUID()}`;
+  return effectiveProcessOrder(channel)
+    .map((process) => channel.methods[process])
+    .filter((method) => method.blocks.length);
 }
 function slug(value: string) {
   return value

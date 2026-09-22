@@ -24,7 +24,7 @@ Você não precisa instalar Git, Node, npm nem abrir terminal.
 4. Crie um Canal, monte ou importe um Método e crie seu primeiro Projeto.
 5. Plugins são opcionais e baixados separadamente. O aplicativo funciona sem eles; quando quiser automação, abra **Plugins**, baixe o pacote, extraia-o e instale todos de uma vez informando a pasta raiz.
 
-Projetos, plugins e credenciais ficam na área de dados do usuário e são preservados nas atualizações. Por isso, quem atualiza continua vendo os plugins que já instalou. Em uma instalação realmente nova, com a área de dados vazia, a tela **Plugins** começa zerada: os plugins não estão no instalador nem no portátil e só aparecem depois que a pessoa baixa o ZIP separado e instala cada pacote pelo aplicativo. Veja o [guia completo para Windows](docs/DESKTOP_V0.md) e, se algo falhar, consulte primeiro as mensagens exibidas no próprio bloco ou plugin.
+Projetos, plugins e credenciais ficam na área de dados do usuário e são preservados nas atualizações. Por isso, quem atualiza continua vendo os plugins que já instalou. Em uma instalação realmente nova, com a área de dados vazia, a tela **Plugins** começa zerada: os plugins não estão no instalador nem no portátil e só aparecem depois que a pessoa baixa o ZIP separado e instala cada pacote pelo aplicativo. Veja o [guia completo para Windows](docs/DESKTOP.md) e, se algo falhar, consulte primeiro as mensagens exibidas no próprio bloco ou plugin.
 
 ## Estrutura do repositório
 

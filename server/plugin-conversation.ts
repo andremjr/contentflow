@@ -15,6 +15,7 @@ export function resolvePluginConversation(input: {
   blockExecution: BlockExecution;
   execution: ProcessExecution;
   projectExecutions: ProcessExecution[];
+  processOrder?: readonly UniversalProcess[];
   pluginId: string;
   supportsContinuation: boolean;
   profileSetup?: PluginManifest["profileSetup"];
@@ -79,6 +80,7 @@ export function resolvePluginConversation(input: {
         sourceExecution.methodSnapshot.blocks.findIndex((item) => item.id === sourceBlock?.id),
         input.execution.processType,
         input.execution.methodSnapshot.blocks.findIndex((item) => item.id === input.block.id),
+        input.processOrder ?? PROCESS_ORDER,
       )
     : false;
   if (
@@ -118,9 +120,10 @@ function precedes(
   sourceBlockIndex: number,
   targetProcess: UniversalProcess,
   targetBlockIndex: number,
+  order: readonly UniversalProcess[],
 ) {
-  const sourceProcessIndex = PROCESS_ORDER.indexOf(sourceProcess);
-  const targetProcessIndex = PROCESS_ORDER.indexOf(targetProcess);
+  const sourceProcessIndex = order.indexOf(sourceProcess);
+  const targetProcessIndex = order.indexOf(targetProcess);
   return (
     sourceProcessIndex < targetProcessIndex ||
     (sourceProcessIndex === targetProcessIndex &&

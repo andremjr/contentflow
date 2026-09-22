@@ -5,14 +5,16 @@ Esta pasta descreve o produto ContentFlow. A documentação de plugins, do Brows
 ## Leitura recomendada
 
 1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — visão normativa, domínio e fronteiras do produto.
-2. [`V1_ROADMAP.md`](V1_ROADMAP.md) — estado atual e próximos marcos.
-3. [`DESKTOP_V0.md`](DESKTOP_V0.md) — distribuição Windows e atualização.
+2. [`V1_ROADMAP.md`](V1_ROADMAP.md) — checklist de estabilização restante para a V1.
+3. [`DESKTOP.md`](DESKTOP.md) — distribuição Windows e atualização.
 4. [`LEGAL_AND_LICENSING.md`](LEGAL_AND_LICENSING.md) — mapa jurídico e licenciamento.
 
-## Planos futuros
+## Regra de leitura
 
-- [`CHANNEL_STRUCTURE_SHARING_PLAN.md`](CHANNEL_STRUCTURE_SHARING_PLAN.md) — proposta para compartilhar Métodos, Biblioteca Estratégica, plugins e assets como uma Estrutura de Canal completa. Não autoriza implementação.
+`ARCHITECTURE.md` é a fonte normativa do produto. Roadmaps antigos, validações pontuais e documentos de transição não devem competir com ela: decisões já incorporadas à arquitetura são removidas dos documentos de planejamento. Notas históricas de versões permanecem em [`releases`](releases/).
 
-## Materiais de Métodos
+## Desenvolvimento de Métodos e plugins
 
-Os documentos em [`gpt-method-translator`](gpt-method-translator/) preservam o formato de tradução de processos para Métodos. A versão portátil e operacional dessas instruções está na skill [`../ecosystem/skills/contentflow-method-development`](../ecosystem/skills/contentflow-method-development/).
+- Métodos: [`../ecosystem/skills/contentflow-method-development`](../ecosystem/skills/contentflow-method-development/).
+- Plugins: [`../ecosystem/skills/contentflow-plugin-development`](../ecosystem/skills/contentflow-plugin-development/).
+- Protocolo público: [`../ecosystem/docs/protocol.md`](../ecosystem/docs/protocol.md).

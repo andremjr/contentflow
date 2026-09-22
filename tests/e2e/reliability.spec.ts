@@ -4,11 +4,14 @@ import {
   createEmptyMethods,
   PROCESS_ORDER,
   type Channel,
+  type ChannelLibraryItem,
   type ProcessExecution,
   type Project,
   type StoredFile,
   type StrategicCollection,
 } from "../../src/lib/domain";
+import { planPortableMethodTransfer } from "../../src/lib/method-file";
+import { effectiveProcessOrder } from "../../src/lib/process-order";
 
 async function seed(request: APIRequestContext) {
   const id = randomUUID();
@@ -57,6 +60,748 @@ async function seed(request: APIRequestContext) {
   expect((await request.post("/api/channels", { data: channel })).ok()).toBeTruthy();
   return channel;
 }
+
+test("reordena Processos na barra lateral, persiste e rejeita dependência posterior", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  await page.goto(`/channel/${channel.id}/methods?process=script`);
+  const scriptHandle = page.getByRole("button", { name: "Reordenar processo Roteiro" });
+  const thumbnailHandle = page.getByRole("button", { name: "Reordenar processo Thumbnail" });
+  await expect(scriptHandle).toBeVisible();
+  await scriptHandle.dragTo(thumbnailHandle, { targetPosition: { x: 8, y: 2 }, steps: 12 });
+  await expect
+    .poll(async () => {
+      const channels = (await (await request.get("/api/channels")).json()) as Channel[];
+      return channels.find((item) => item.id === channel.id)?.processOrder?.slice(2, 4);
+    })
+    .toEqual(["script", "thumbnail"]);
+  await page.reload();
+  await expect(page.getByRole("button", { name: /^Reordenar processo / }).nth(2)).toHaveAttribute(
+    "aria-label",
+    "Reordenar processo Roteiro",
+  );
+  await page.getByRole("button", { name: "Reordenar processo Roteiro" }).focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Space");
+  await expect
+    .poll(async () => {
+      const channels = (await (await request.get("/api/channels")).json()) as Channel[];
+      return channels.find((item) => item.id === channel.id)?.processOrder?.slice(2, 4);
+    })
+    .toEqual(["thumbnail", "script"]);
+  await page.getByRole("button", { name: "Reordenar processo Roteiro" }).focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Space");
+  await expect
+    .poll(async () => {
+      const channels = (await (await request.get("/api/channels")).json()) as Channel[];
+      return channels.find((item) => item.id === channel.id)?.processOrder?.slice(2, 4);
+    })
+    .toEqual(["script", "thumbnail"]);
+  const updatedThumbnail = {
+    ...channel.methods.thumbnail,
+    blocks: channel.methods.thumbnail.blocks.map((block) => ({
+      ...block,
+      inputs: [
+        {
+          id: "script-reference",
+          label: "Roteiro",
+          type: "textarea",
+          source: "previous_process",
+          sourceProcessType: "script",
+          blockId: "__process_output__",
+          sourceKey: "script",
+        },
+      ],
+    })),
+  };
+  expect(
+    (
+      await request.put(`/api/channels/${channel.id}/methods/thumbnail`, { data: updatedThumbnail })
+    ).ok(),
+  ).toBeTruthy();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Reordenar processo Thumbnail" })
+    .dragTo(page.getByRole("button", { name: "Reordenar processo Roteiro" }), {
+      targetPosition: { x: 8, y: 2 },
+      steps: 12,
+    });
+  await expect(
+    page.getByText("A nova ordem invalida uma dependência entre Métodos."),
+  ).toBeVisible();
+  const saved = (await (await request.get("/api/channels")).json()) as Channel[];
+  expect(saved.find((item) => item.id === channel.id)?.processOrder?.slice(2, 4)).toEqual([
+    "script",
+    "thumbnail",
+  ]);
+});
+
+test("ordem do Canal governa novo Projeto, navegação e Biblioteca de Métodos", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  const channels = (await (await request.get("/api/channels")).json()) as Channel[];
+  const revision = channels.find((item) => item.id === channel.id)?.definitionRevision ?? 0;
+  const order = [
+    "title",
+    "theme",
+    "thumbnail",
+    "script",
+    "narration",
+    "assets",
+    "editing",
+    "publishing",
+  ] as const;
+  expect(
+    (
+      await request.put(`/api/channels/${channel.id}/process-order`, {
+        data: { processOrder: order, definitionRevision: revision },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  await page.goto(`/channel/${channel.id}`);
+  await page.getByRole("main").getByRole("button", { name: "Novo projeto" }).click();
+  await expect(
+    page.getByText("O projeto inicia na primeira etapa configurada do Canal: Título."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancelar" }).click();
+
+  const projectId = randomUUID();
+  const stages = Object.fromEntries(PROCESS_ORDER.map((process) => [process, "not_started"]));
+  expect(
+    (
+      await request.post("/api/projects", {
+        data: {
+          id: projectId,
+          title: "Projeto em ordem personalizada",
+          channelId: channel.id,
+          currentStage: "title",
+          state: "not_started",
+          progress: 0,
+          deadline: "Sem prazo",
+          duration: "—",
+          updatedAt: "Agora",
+          createdAt: new Date().toISOString(),
+          stages,
+          assignee: { name: "Não atribuído", initials: "—" },
+          thumbHue: 210,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  await page.goto(`/project/${projectId}`);
+  await expect(page).toHaveURL(new RegExp(`/project/${projectId}/title$`));
+  await expect(page.getByRole("navigation", { name: "Processos do projeto" })).toContainText(
+    "1Título",
+  );
+
+  await page.goto("/methods");
+  const card = page.locator("article").filter({ hasText: channel.name });
+  await expect(card).toBeVisible();
+  const processRows = card.locator("[data-process-type]");
+  await expect(processRows.nth(0)).toHaveAttribute("data-process-type", "title");
+  await expect(processRows.nth(1)).toHaveAttribute("data-process-type", "theme");
+  await expect(processRows.nth(2)).toHaveAttribute("data-process-type", "thumbnail");
+});
+
+test("prévia de reutilização inclui dependências transitivas e mantém itens desmarcados", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  await seed(request);
+  const channels = (await (await request.get("/api/channels")).json()) as Channel[];
+  const revision = channels.find((item) => item.id === channel.id)?.definitionRevision ?? 0;
+  const order = [
+    "theme",
+    "title",
+    "script",
+    "thumbnail",
+    "narration",
+    "assets",
+    "editing",
+    "publishing",
+  ] as const;
+  expect(
+    (
+      await request.put(`/api/channels/${channel.id}/process-order`, {
+        data: { processOrder: order, definitionRevision: revision },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  const script = {
+    ...channel.methods.script,
+    name: "Roteiro portátil E2E",
+    blocks: [
+      {
+        id: "script-local-e2e",
+        type: "CRIAR",
+        operator: "Humano",
+        name: "Criar roteiro",
+        instructions: "",
+        inputs: [],
+        parameters: [],
+        outputs: [
+          {
+            id: "script-output-local-e2e",
+            key: "script",
+            label: "Roteiro",
+            type: "textarea",
+            required: true,
+          },
+        ],
+        order: 0,
+      },
+    ],
+  };
+  expect(
+    (await request.put(`/api/channels/${channel.id}/methods/script`, { data: script })).ok(),
+  ).toBeTruthy();
+
+  const thumbnail = {
+    ...channel.methods.thumbnail,
+    name: "Thumbnail portátil E2E",
+    blocks: channel.methods.thumbnail.blocks.map((block) => ({
+      ...block,
+      inputs: [
+        {
+          id: "script-input-local-e2e",
+          label: "Roteiro",
+          type: "textarea",
+          source: "previous_process",
+          sourceProcessType: "script",
+          sourceKey: "script",
+          blockId: "script-local-e2e",
+        },
+      ],
+    })),
+  };
+  expect(
+    (await request.put(`/api/channels/${channel.id}/methods/thumbnail`, { data: thumbnail })).ok(),
+  ).toBeTruthy();
+
+  const preferences = (await (await request.get("/api/preferences")).json()) as Record<
+    string,
+    unknown
+  >;
+  expect(
+    (
+      await request.put("/api/preferences", {
+        data: { ...preferences, methodsLibraryView: "methods" },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await page.goto("/methods");
+  const card = page.locator("article").filter({ hasText: "Thumbnail portátil E2E" });
+  await card.getByRole("button", { name: "Reutilizar", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Thumbnail portátil E2E", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Roteiro portátil E2E", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Método principal", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Dependência incluída", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Compartilhar itens", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("checkbox").last()).toBeEnabled();
+  await expect(dialog.getByRole("checkbox").last()).not.toBeChecked();
+  await dialog.getByRole("checkbox").last().click();
+  await expect(dialog.getByRole("checkbox").last()).toBeChecked();
+});
+
+test("prévia de reutilização mostra plugin ausente com ação de correção", async ({
+  page,
+  request,
+}) => {
+  const source = await seed(request);
+  await seed(request);
+  const current = ((await (await request.get("/api/channels")).json()) as Channel[]).find(
+    (channel) => channel.id === source.id,
+  )!;
+  const theme = {
+    ...current.methods.theme,
+    name: "Tema com plugin ausente E2E",
+    blocks: current.methods.theme.blocks.map((block) => ({
+      ...block,
+      operator: "Código" as const,
+      plugin: {
+        pluginId: "com.contentflow.plugin-ausente-e2e",
+        pluginVersion: "1.0.0",
+        capabilityId: "gerar",
+        configuration: {},
+      },
+    })),
+  };
+  expect(
+    (await request.put(`/api/channels/${source.id}/methods/theme`, { data: theme })).ok(),
+  ).toBeTruthy();
+  const preferences = (await (await request.get("/api/preferences")).json()) as Record<
+    string,
+    unknown
+  >;
+  expect(
+    (
+      await request.put("/api/preferences", {
+        data: { ...preferences, methodsLibraryView: "methods" },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  await page.goto("/methods");
+  const card = page.locator("article").filter({ hasText: "Tema com plugin ausente E2E" });
+  await card.getByRole("button", { name: "Reutilizar", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("checkbox").first().click();
+  await expect(dialog.getByText(/Plugin ausente/)).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "Abrir Plugins para corrigir" })).toBeVisible();
+});
+
+test("compartilhamento exporta itens somente após marcar a opção", async ({ page, request }) => {
+  const source = await seed(request);
+  const collection: StrategicCollection = {
+    id: randomUUID(),
+    channelId: source.id,
+    name: "Fórmulas compartilháveis E2E",
+    fields: [{ id: "formula-e2e", label: "Fórmula", type: "textarea", required: true }],
+    createdAt: new Date().toISOString(),
+  };
+  expect((await request.post("/api/library/collections", { data: collection })).ok()).toBeTruthy();
+  expect(
+    (
+      await request.post("/api/library", {
+        data: {
+          id: randomUUID(),
+          channelId: source.id,
+          collectionId: collection.id,
+          values: { "formula-e2e": "Como X mudou Y" },
+          createdAt: new Date().toISOString(),
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const current = ((await (await request.get("/api/channels")).json()) as Channel[]).find(
+    (channel) => channel.id === source.id,
+  )!;
+  const title = {
+    ...current.methods.title,
+    name: "Título compartilhável E2E",
+    blocks: [
+      {
+        id: "choose-share-e2e",
+        type: "ESCOLHER" as const,
+        operator: "Humano" as const,
+        collectionId: collection.id,
+        parameters: [],
+        order: 0,
+      },
+    ],
+  };
+  expect(
+    (await request.put(`/api/channels/${source.id}/methods/title`, { data: title })).ok(),
+  ).toBeTruthy();
+  const preferences = (await (await request.get("/api/preferences")).json()) as Record<
+    string,
+    unknown
+  >;
+  expect(
+    (
+      await request.put("/api/preferences", {
+        data: { ...preferences, methodsLibraryView: "methods" },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  await page.goto("/methods");
+  const card = page.locator("article").filter({ hasText: "Título compartilhável E2E" });
+  await card.getByRole("button", { name: "Compartilhar", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Compartilhar Método" })).toBeVisible();
+  const itemsCheckbox = dialog.getByRole("checkbox").last();
+  await expect(itemsCheckbox).toBeEnabled();
+  await expect(itemsCheckbox).not.toBeChecked();
+  await itemsCheckbox.click();
+  await expect(
+    dialog.getByText("Itens incluídos no compartilhamento: 1.", { exact: true }),
+  ).toBeVisible();
+  const exportRequest = page.waitForRequest(
+    (candidate) =>
+      candidate.url().includes("/api/method-packages/export") && candidate.method() === "POST",
+  );
+  await dialog.getByRole("button", { name: "Baixar pacote" }).click();
+  const sent = (await exportRequest).postDataJSON() as { manifest: string };
+  const manifest = JSON.parse(sent.manifest) as { itemsIncluded: boolean; items: unknown[] };
+  expect(manifest.itemsIncluded).toBe(true);
+  expect(manifest.items).toHaveLength(1);
+});
+
+test("aplicação atômica remapeia coleções, preserva itens locais e rejeita revisão obsoleta", async ({
+  request,
+}) => {
+  const source = await seed(request);
+  const target = await seed(request);
+  const sourceCollection: StrategicCollection = {
+    id: randomUUID(),
+    channelId: source.id,
+    name: "Estruturas E2E",
+    fields: [
+      {
+        id: "source-formula",
+        label: "Fórmula",
+        type: "textarea",
+        required: true,
+      },
+    ],
+    createdAt: new Date().toISOString(),
+  };
+  expect(
+    (await request.post("/api/library/collections", { data: sourceCollection })).ok(),
+  ).toBeTruthy();
+
+  let channels = (await (await request.get("/api/channels")).json()) as Channel[];
+  let sourceCurrent = channels.find((item) => item.id === source.id)!;
+  expect(
+    (
+      await request.put(`/api/channels/${source.id}/process-order`, {
+        data: {
+          processOrder: [
+            "theme",
+            "title",
+            "script",
+            "thumbnail",
+            "narration",
+            "assets",
+            "editing",
+            "publishing",
+          ],
+          definitionRevision: sourceCurrent.definitionRevision ?? 0,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  sourceCurrent = ((await (await request.get("/api/channels")).json()) as Channel[]).find(
+    (item) => item.id === source.id,
+  )!;
+  const script = {
+    ...sourceCurrent.methods.script,
+    name: "Roteiro atômico E2E",
+    blocks: [
+      {
+        id: "source-script-block",
+        type: "CRIAR",
+        operator: "Humano",
+        parameters: [],
+        order: 0,
+        outputs: [
+          {
+            id: "source-script-output",
+            label: "Roteiro",
+            key: "script",
+            type: "textarea",
+            required: true,
+          },
+        ],
+      },
+    ],
+  };
+  expect(
+    (await request.put(`/api/channels/${source.id}/methods/script`, { data: script })).ok(),
+  ).toBeTruthy();
+
+  sourceCurrent = ((await (await request.get("/api/channels")).json()) as Channel[]).find(
+    (item) => item.id === source.id,
+  )!;
+  const thumbnail = {
+    ...sourceCurrent.methods.thumbnail,
+    name: "Thumbnail atômica E2E",
+    blocks: sourceCurrent.methods.thumbnail.blocks.map((block) => ({
+      ...block,
+      collectionId: sourceCollection.id,
+      inputs: [
+        {
+          id: "source-script-input",
+          label: "Roteiro",
+          type: "textarea",
+          source: "previous_process",
+          sourceProcessType: "script",
+          sourceKey: "script",
+          blockId: "source-script-block",
+        },
+      ],
+    })),
+  };
+  expect(
+    (await request.put(`/api/channels/${source.id}/methods/thumbnail`, { data: thumbnail })).ok(),
+  ).toBeTruthy();
+
+  const targetCollection: StrategicCollection = {
+    id: randomUUID(),
+    channelId: target.id,
+    name: "Estruturas E2E",
+    fields: [
+      {
+        id: "target-formula",
+        label: "Fórmula",
+        type: "textarea",
+        required: true,
+      },
+    ],
+    createdAt: new Date().toISOString(),
+  };
+  expect(
+    (await request.post("/api/library/collections", { data: targetCollection })).ok(),
+  ).toBeTruthy();
+  const localItemId = randomUUID();
+  expect(
+    (
+      await request.post("/api/library", {
+        data: {
+          id: localItemId,
+          channelId: target.id,
+          collectionId: targetCollection.id,
+          values: { "target-formula": "Item local preservado" },
+          createdAt: new Date().toISOString(),
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  channels = (await (await request.get("/api/channels")).json()) as Channel[];
+  sourceCurrent = channels.find((item) => item.id === source.id)!;
+  const targetCurrent = channels.find((item) => item.id === target.id)!;
+  const plan = planPortableMethodTransfer({
+    name: "Thumbnail atômica E2E",
+    channelName: sourceCurrent.name,
+    sourceMethods: effectiveProcessOrder(sourceCurrent).map(
+      (processType) => sourceCurrent.methods[processType],
+    ),
+    collections: [sourceCollection],
+    processOrder: effectiveProcessOrder(sourceCurrent),
+    primaryProcessTypes: ["thumbnail"],
+  });
+  const expectedRevision = targetCurrent.definitionRevision ?? 0;
+  const applyPayload = {
+    targetChannelId: target.id,
+    expectedDefinitionRevision: expectedRevision,
+    methods: plan.methods.map((entry) => entry.method),
+    collections: plan.collections,
+    preferredOrder: effectiveProcessOrder(targetCurrent),
+    selectedProcesses: plan.methods.map((entry) => entry.method.processType),
+    preserveLocalConnections: true,
+  };
+  const applied = await request.post("/api/method-transfers/apply", { data: applyPayload });
+  expect(applied.ok()).toBeTruthy();
+
+  const updatedChannels = (await (await request.get("/api/channels")).json()) as Channel[];
+  const updatedTarget = updatedChannels.find((item) => item.id === target.id)!;
+  expect(effectiveProcessOrder(updatedTarget).indexOf("script")).toBeLessThan(
+    effectiveProcessOrder(updatedTarget).indexOf("thumbnail"),
+  );
+  const targetCollections = (await (
+    await request.get(`/api/library/collections?channelId=${target.id}`)
+  ).json()) as StrategicCollection[];
+  expect(
+    targetCollections.filter((collection) => collection.name === "Estruturas E2E"),
+  ).toHaveLength(2);
+  const importedCollection = targetCollections.find(
+    (collection) => collection.id !== targetCollection.id,
+  )!;
+  expect(updatedTarget.methods.thumbnail.blocks[0].collectionId).toBe(importedCollection.id);
+  const targetItems = (await (await request.get(`/api/library?channelId=${target.id}`)).json()) as {
+    id: string;
+    collectionId: string;
+  }[];
+  expect(targetItems.some((item) => item.id === localItemId)).toBeTruthy();
+  expect(targetItems.some((item) => item.collectionId === importedCollection.id)).toBeFalsy();
+
+  const stale = await request.post("/api/method-transfers/apply", { data: applyPayload });
+  expect(stale.status()).toBe(409);
+  const afterConflict = (await (
+    await request.get(`/api/library/collections?channelId=${target.id}`)
+  ).json()) as StrategicCollection[];
+  expect(afterConflict).toHaveLength(targetCollections.length);
+});
+
+test("aplicação com itens copia asset local com novo vínculo e preserva conteúdo", async ({
+  request,
+}) => {
+  const source = await seed(request);
+  const target = await seed(request);
+  const sourceCollection: StrategicCollection = {
+    id: randomUUID(),
+    channelId: source.id,
+    name: "Referências visuais E2E",
+    fields: [{ id: "source-image", label: "Imagem", type: "image", required: true }],
+    createdAt: new Date().toISOString(),
+  };
+  expect(
+    (await request.post("/api/library/collections", { data: sourceCollection })).ok(),
+  ).toBeTruthy();
+  const assetBytes = Buffer.from("asset-portatil-e2e");
+  const upload = await request.post("/api/uploads", {
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "X-File-Name": encodeURIComponent("referencia.png"),
+      "X-File-Type": "image/png",
+    },
+    data: assetBytes,
+  });
+  expect(upload.ok()).toBeTruthy();
+  const sourceFile = (await upload.json()) as StoredFile;
+  expect(
+    (
+      await request.post("/api/library", {
+        data: {
+          id: randomUUID(),
+          channelId: source.id,
+          collectionId: sourceCollection.id,
+          values: { "source-image": sourceFile },
+          createdAt: new Date().toISOString(),
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  let channels = (await (await request.get("/api/channels")).json()) as Channel[];
+  let sourceCurrent = channels.find((item) => item.id === source.id)!;
+  const titleMethod = {
+    ...sourceCurrent.methods.title,
+    name: "Título com referência visual E2E",
+    blocks: [
+      {
+        id: "choose-reference-e2e",
+        type: "ESCOLHER" as const,
+        operator: "Humano" as const,
+        collectionId: sourceCollection.id,
+        parameters: [],
+        order: 0,
+      },
+    ],
+  };
+  expect(
+    (await request.put(`/api/channels/${source.id}/methods/title`, { data: titleMethod })).ok(),
+  ).toBeTruthy();
+  channels = (await (await request.get("/api/channels")).json()) as Channel[];
+  sourceCurrent = channels.find((item) => item.id === source.id)!;
+  const targetCurrent = channels.find((item) => item.id === target.id)!;
+  const sourceItems = (await (
+    await request.get(`/api/library?channelId=${source.id}`)
+  ).json()) as ChannelLibraryItem[];
+  const plan = planPortableMethodTransfer({
+    name: titleMethod.name,
+    sourceMethods: effectiveProcessOrder(sourceCurrent).map(
+      (processType) => sourceCurrent.methods[processType],
+    ),
+    collections: [sourceCollection],
+    items: sourceItems,
+    includeItems: true,
+    processOrder: effectiveProcessOrder(sourceCurrent),
+    primaryProcessTypes: ["title"],
+  });
+  const payload = {
+    targetChannelId: target.id,
+    sourceChannelId: source.id,
+    expectedDefinitionRevision: targetCurrent.definitionRevision ?? 0,
+    methods: plan.methods.map((entry) => entry.method),
+    collections: plan.collections,
+    itemsIncluded: true,
+    items: plan.items,
+    preferredOrder: effectiveProcessOrder(targetCurrent),
+    selectedProcesses: plan.methods.map((entry) => entry.method.processType),
+    preserveLocalConnections: true,
+  };
+  const applied = await request.post("/api/method-transfers/apply", { data: payload });
+  expect(applied.ok()).toBeTruthy();
+  const importedItems = (await (
+    await request.get(`/api/library?channelId=${target.id}`)
+  ).json()) as Array<{ values: Record<string, StoredFile> }>;
+  expect(importedItems).toHaveLength(1);
+  const importedFile = Object.values(importedItems[0].values)[0];
+  expect(importedFile.url).not.toBe(sourceFile.url);
+  expect(importedFile.sha256).toMatch(/^[a-f0-9]{64}$/);
+  const restored = await request.get(importedFile.url);
+  expect(restored.ok()).toBeTruthy();
+  expect(Buffer.from(await restored.body())).toEqual(assetBytes);
+
+  const stale = await request.post("/api/method-transfers/apply", { data: payload });
+  expect(stale.status()).toBe(409);
+  const afterStale = (await (
+    await request.get(`/api/library?channelId=${target.id}`)
+  ).json()) as unknown[];
+  expect(afterStale).toHaveLength(1);
+});
+
+test("editor reutiliza Método pela mesma aplicação atômica", async ({ page, request }) => {
+  const source = await seed(request);
+  const target = await seed(request);
+  const sourceTheme = {
+    ...source.methods.theme,
+    name: "Tema editor atômico E2E",
+  };
+  expect(
+    (await request.put(`/api/channels/${source.id}/methods/theme`, { data: sourceTheme })).ok(),
+  ).toBeTruthy();
+
+  await page.goto(`/channel/${target.id}/methods?process=theme`);
+  await page.getByRole("button", { name: "Usar da biblioteca", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const sourceCard = dialog.getByRole("button").filter({ hasText: "Tema editor atômico E2E" });
+  await expect(sourceCard).toBeVisible();
+  await sourceCard.click();
+  const preview = page.getByRole("dialog").filter({ hasText: "Tema editor atômico E2E" }).last();
+  await expect(preview.getByText("Tema editor atômico E2E", { exact: true })).toBeVisible();
+  const applied = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/method-transfers/apply") &&
+      response.request().method() === "POST",
+  );
+  await preview.getByRole("button", { name: "Aplicar importação", exact: true }).click();
+  expect((await applied).ok()).toBeTruthy();
+  await expect(page.getByLabel("Nome do método", { exact: true })).toHaveValue(
+    "Tema editor atômico E2E",
+  );
+
+  const channels = (await (await request.get("/api/channels")).json()) as Channel[];
+  expect(channels.find((item) => item.id === target.id)?.methods.theme.name).toBe(
+    "Tema editor atômico E2E",
+  );
+});
+
+test("autosave de Método detecta edição concorrente entre abas", async ({
+  page,
+  context,
+  request,
+}) => {
+  const channel = await seed(request);
+  const secondPage = await context.newPage();
+  await Promise.all([
+    page.goto(`/channel/${channel.id}/methods?process=theme`),
+    secondPage.goto(`/channel/${channel.id}/methods?process=theme`),
+  ]);
+  const firstName = page.getByLabel("Nome do método");
+  const secondName = secondPage.getByLabel("Nome do método");
+  await Promise.all([expect(firstName).toBeVisible(), expect(secondName).toBeVisible()]);
+  await Promise.all([firstName.fill("Tema aba A"), secondName.fill("Tema aba B")]);
+  await expect
+    .poll(async () => {
+      const message = "O Método mudou em outra aba. Recarregue antes de salvar suas alterações.";
+      return (
+        (await page.getByText(message).count()) + (await secondPage.getByText(message).count())
+      );
+    })
+    .toBeGreaterThan(0);
+  const channels = (await (await request.get("/api/channels")).json()) as Channel[];
+  expect(["Tema aba A", "Tema aba B"]).toContain(
+    channels.find((item) => item.id === channel.id)?.methods.theme.name,
+  );
+  await secondPage.close();
+});
 
 test("cria somente um projeto em clique duplo e não fecha o formulário em falha de gravação", async ({
   page,
@@ -365,6 +1110,7 @@ test("editor mantém entradas e variáveis do prompt sincronizadas", async ({ pa
         type: "textarea",
         source: "previous_process",
         sourceProcessType: "theme",
+        blockId: "__process_output__",
         sourceKey: "theme",
       },
     ],
@@ -379,13 +1125,10 @@ test("editor mantém entradas e variáveis do prompt sincronizadas", async ({ pa
     ],
     parameters: [],
   };
-  expect(
-    (
-      await request.put(`/api/channels/${channel.id}/methods/title`, {
-        data: { blocks: [block] },
-      })
-    ).ok(),
-  ).toBeTruthy();
+  const methodResponse = await request.put(`/api/channels/${channel.id}/methods/title`, {
+    data: { blocks: [block] },
+  });
+  expect(methodResponse.ok(), await methodResponse.text()).toBeTruthy();
 
   await page.goto(`/channel/${channel.id}/methods?process=title`);
   await page.getByText("Criar com contexto", { exact: true }).first().click();
@@ -1141,10 +1884,13 @@ test("salva separadamente som e notificações do Windows", async ({ page, reque
 
 test("persiste a visualização escolhida na Biblioteca de Métodos", async ({ page, request }) => {
   const preferences = await (await request.get("/api/preferences")).json();
-  expect(preferences.methodsLibraryView).toBe("channels");
-  await request.put("/api/preferences", {
-    data: { ...preferences, methodsLibraryView: "methods" },
-  });
+  expect(
+    (
+      await request.put("/api/preferences", {
+        data: { ...preferences, methodsLibraryView: "methods" },
+      })
+    ).ok(),
+  ).toBeTruthy();
 
   await page.goto("/methods");
   await expect(page.getByRole("button", { name: "Métodos", exact: true })).toHaveAttribute(

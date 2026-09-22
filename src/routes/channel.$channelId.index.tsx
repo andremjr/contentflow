@@ -19,7 +19,6 @@ import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { ProcessStatus } from "@/components/process-status";
-import { ExecutionOrchestratorPanel } from "@/components/execution-orchestrator-panel";
 import { NewProjectDialog } from "@/components/new-project-dialog";
 import { NewChannelDialog } from "@/components/new-channel-dialog";
 import { Button } from "@/components/ui/button";
@@ -50,6 +49,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PROCESS_META, type Channel, type Project } from "@/lib/domain";
+import { projectProcessOrder } from "@/lib/process-order";
 import { projectThumbnail } from "@/lib/project-thumbnail";
 import {
   removeProject,
@@ -317,19 +317,14 @@ function ChannelWorkspace() {
               onRequestRemoval={setProjectPendingRemoval}
             />
           )
+        ) : filtered.length === 0 ? (
+          <EmptyProjects channelId={channel.id} channelName={channel.name} />
         ) : (
-          <div className="space-y-4">
-            <ExecutionOrchestratorPanel channelId={channel.id} channelName={channel.name} />
-            {filtered.length === 0 ? (
-              <EmptyProjects channelId={channel.id} channelName={channel.name} />
-            ) : (
-              <ProjectTable
-                projects={filtered}
-                channel={channel}
-                onRequestRemoval={setProjectPendingRemoval}
-              />
-            )}
-          </div>
+          <ProjectTable
+            projects={filtered}
+            channel={channel}
+            onRequestRemoval={setProjectPendingRemoval}
+          />
         )}
       </main>
       <Dialog
@@ -394,6 +389,7 @@ function ProjectGrid({
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {projects.map((p) => {
         const stage = PROCESS_META[p.currentStage];
+        const stagePosition = projectProcessOrder(p, channel).indexOf(p.currentStage) + 1;
         const thumbnail = projectThumbnail(executions, p.id);
         return (
           <div
@@ -457,7 +453,9 @@ function ProjectGrid({
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-1.5 text-xs">
                     <stage.icon className="size-3.5 text-brand-soft" />
-                    <span className="truncate">{stage.label}</span>
+                    <span className="truncate">
+                      {String(stagePosition).padStart(2, "0")} · {stage.label}
+                    </span>
                   </div>
                   <ProcessStatus state={p.state} />
                 </div>
@@ -521,6 +519,7 @@ function ProjectTable({
         <TableBody>
           {projects.map((p) => {
             const stage = PROCESS_META[p.currentStage];
+            const stagePosition = projectProcessOrder(p, channel).indexOf(p.currentStage) + 1;
             return (
               <TableRow key={p.id} className="border-border/50">
                 <TableCell>
@@ -532,7 +531,7 @@ function ProjectTable({
                 <TableCell>
                   <div className="flex items-center gap-1.5 text-xs">
                     <stage.icon className="size-3.5 text-brand-soft" />
-                    {stage.label}
+                    {String(stagePosition).padStart(2, "0")} · {stage.label}
                   </div>
                 </TableCell>
                 <TableCell>

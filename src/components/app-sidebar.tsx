@@ -1,4 +1,21 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useState } from "react";
 import {
   Blocks,
@@ -8,16 +25,25 @@ import {
   ChevronRight,
   ExternalLink,
   FolderKanban,
+  GripVertical,
   HeartHandshake,
+  Layers3,
   LayoutDashboard,
   Plug,
   Workflow,
 } from "lucide-react";
+import { toast } from "sonner";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { AppPreferencesDialog } from "@/components/app-preferences-dialog";
+import { useAppPreferences } from "@/lib/app-preferences";
 import { useHiddenChannelIds } from "@/lib/channel-privacy";
-import { PROCESS_META, PROCESS_ORDER, type Channel, type UniversalProcess } from "@/lib/domain";
-import { useChannels, useProject } from "@/lib/store";
+import { PROCESS_META, type Channel, type UniversalProcess } from "@/lib/domain";
+import {
+  effectiveProcessOrder,
+  projectProcessOrder,
+  validateProcessDependencies,
+} from "@/lib/process-order";
+import { updateProcessOrder, useChannels, useProject } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const processSlug = (process: string) =>
@@ -64,6 +90,12 @@ export function AppSidebar() {
               label="Visão geral"
               to="/dashboard"
               active={pathname === "/dashboard" || pathname === "/"}
+            />
+            <NavItem
+              icon={Layers3}
+              label="Orquestrador"
+              to="/orchestrator"
+              active={pathname === "/orchestrator"}
             />
             <NavItem
               icon={Workflow}
@@ -123,7 +155,7 @@ export function AppSidebar() {
               <p className="mt-0.5 line-clamp-2 text-sm font-semibold">{project.title}</p>
             </div>
             <SectionLabel>Processos</SectionLabel>
-            {PROCESS_ORDER.map((process, index) => (
+            {projectProcessOrder(project, channel).map((process, index) => (
               <NavItem
                 key={process}
                 icon={PROCESS_META[process].icon}
@@ -184,10 +216,47 @@ function MethodsNavGroup({
   const methodsPath = `/channel/${channel.id}/methods`;
   const active = pathname === methodsPath;
   const [expanded, setExpanded] = useState(active);
+  const [order, setOrder] = useState(() => effectiveProcessOrder(channel));
+  const [saving, setSaving] = useState(false);
+  const { t } = useAppPreferences();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   useEffect(() => {
     if (active) setExpanded(true);
   }, [active]);
+
+  useEffect(() => {
+    if (!saving) setOrder(effectiveProcessOrder(channel));
+  }, [channel, saving]);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    if (saving || !event.over || event.active.id === event.over.id) return;
+    const from = order.indexOf(event.active.id as UniversalProcess);
+    const to = order.indexOf(event.over.id as UniversalProcess);
+    if (from < 0 || to < 0) return;
+    const next = arrayMove(order, from, to);
+    if (validateProcessDependencies(next, channel.methods).length) {
+      toast.error(t("A nova ordem invalida uma dependência entre Métodos."), {
+        description: t(
+          "Mova o processo que fornece a entrada para uma posição anterior ao processo que depende dele.",
+        ),
+      });
+      return;
+    }
+    setOrder(next);
+    setSaving(true);
+    void updateProcessOrder(channel, next)
+      .catch(() => {
+        setOrder(effectiveProcessOrder(channel));
+        toast.error(
+          t("Não foi possível salvar a ordem dos processos. Recarregue e tente novamente."),
+        );
+      })
+      .finally(() => setSaving(false));
+  };
 
   return (
     <div>
@@ -213,7 +282,9 @@ function MethodsNavGroup({
           className="mr-1 hidden size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-background/50 hover:text-foreground sm:grid"
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
-          aria-label={expanded ? "Recolher processos universais" : "Expandir processos universais"}
+          aria-label={
+            expanded ? t("Recolher processos universais") : t("Expandir processos universais")
+          }
         >
           {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </button>
@@ -222,38 +293,106 @@ function MethodsNavGroup({
       {expanded && (
         <div className="mt-1 border-l border-sidebar-border sm:ml-4 sm:pl-3">
           <p className="hidden px-2 py-1.5 text-[9px] font-medium uppercase text-muted-foreground/70 sm:block">
-            Processos universais
+            {t("Processos universais")}
           </p>
-          {PROCESS_ORDER.map((process, index) => {
-            const meta = PROCESS_META[process];
-            const ProcessIcon = meta.icon;
-            const processActive = active && (activeProcess ?? "theme") === process;
-            return (
-              <Link
-                key={process}
-                to="/channel/$channelId/methods"
-                params={{ channelId: channel.id }}
-                search={{ process }}
-                className={cn(
-                  "flex items-center justify-center gap-2 rounded-md px-1 py-1.5 text-xs transition sm:justify-start sm:px-2",
-                  processActive
-                    ? "bg-sidebar-accent text-foreground"
-                    : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground",
-                )}
-              >
-                <ProcessIcon className="size-3.5 shrink-0 sm:hidden" />
-                <span className="hidden w-4 font-mono text-[9px] opacity-60 sm:block">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <span className="hidden min-w-0 flex-1 truncate sm:block">{meta.label}</span>
-                <span className="hidden text-[9px] tabular-nums opacity-60 sm:block">
-                  {channel.methods[process].blocks.length}
-                </span>
-              </Link>
-            );
-          })}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={order} strategy={verticalListSortingStrategy}>
+              <div>
+                {order.map((process, index) => (
+                  <SortableProcessNavItem
+                    key={process}
+                    channel={channel}
+                    process={process}
+                    index={index}
+                    active={active && (activeProcess ?? "theme") === process}
+                    disabled={saving}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+          {saving && (
+            <p className="hidden px-2 py-1 text-[10px] text-muted-foreground sm:block">
+              {t("Salvando ordem...")}
+            </p>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function SortableProcessNavItem({
+  channel,
+  process,
+  index,
+  active,
+  disabled,
+}: {
+  channel: Channel;
+  process: UniversalProcess;
+  index: number;
+  active: boolean;
+  disabled: boolean;
+}) {
+  const { t } = useAppPreferences();
+  const {
+    attributes,
+    listeners,
+    isDragging,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: process, disabled });
+  const ProcessIcon = PROCESS_META[process].icon;
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex items-center rounded-md",
+        isDragging && "relative z-10 bg-sidebar-accent shadow-md",
+      )}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      <Link
+        to="/channel/$channelId/methods"
+        params={{ channelId: channel.id }}
+        search={{ process }}
+        className={cn(
+          "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md px-1 py-1.5 text-xs transition sm:justify-start sm:px-2",
+          active
+            ? "bg-sidebar-accent text-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground",
+        )}
+      >
+        <ProcessIcon className="size-3.5 shrink-0 sm:hidden" />
+        <span className="hidden w-4 font-mono text-[9px] opacity-60 sm:block">
+          {String(index + 1).padStart(2, "0")}
+        </span>
+        <span className="hidden min-w-0 flex-1 truncate sm:block">
+          {PROCESS_META[process].label}
+        </span>
+        <span className="hidden text-[9px] tabular-nums opacity-60 sm:block">
+          {channel.methods[process].blocks.length}
+        </span>
+      </Link>
+      <button
+        ref={setActivatorNodeRef}
+        type="button"
+        disabled={disabled}
+        className="mr-1 grid size-6 shrink-0 touch-none cursor-grab place-items-center rounded text-muted-foreground/60 hover:bg-sidebar-accent hover:text-foreground active:cursor-grabbing disabled:cursor-default disabled:opacity-50"
+        title={t("Clique, segure e arraste para reordenar")}
+        {...attributes}
+        {...listeners}
+        aria-label={`${t("Reordenar processo")} ${t(PROCESS_META[process].label)}`}
+      >
+        <GripVertical className="size-3.5" />
+      </button>
     </div>
   );
 }

@@ -29,9 +29,15 @@ export type ExecutionOrchestratorStep =
 export type ExecutionOrchestrator = {
   id: string;
   channelId: string;
+  /** Groups per-channel queues created by one global production request. */
+  globalBatchId?: string;
+  globalChannelCount?: number;
   mode: ExecutionOrchestratorMode;
-  /** V1 preserva filas antigas; V2 ativa o planejamento híbrido dos três primeiros processos. */
-  strategyVersion?: 1 | 2;
+  /** V1/V2 preserve historical queues; V3/V4 use a frozen project sequence. */
+  strategyVersion?: 1 | 2 | 3 | 4;
+  processOrder?: UniversalProcess[];
+  /** V4 persists the exact hybrid plan so restart never reinterprets the queue. */
+  plannedSteps?: ExecutionOrchestratorStep[];
   quantity: number;
   projectPrefix: string;
   projectIds: string[];
@@ -64,8 +70,13 @@ export const STOPPABLE_ORCHESTRATOR_STATUSES = new Set<ExecutionOrchestratorStat
 export function buildOrchestratorSteps(
   projectIds: string[],
   mode: ExecutionOrchestratorMode,
-  strategyVersion: 1 | 2 = 2,
+  strategyVersion: 1 | 2 | 3 | 4 = 2,
+  order: readonly UniversalProcess[] = PROCESS_ORDER,
 ): ExecutionOrchestratorStep[] {
+  if (strategyVersion === 3 && mode === "end_to_end")
+    return projectIds.flatMap((projectId) =>
+      order.map((processType) => ({ projectId, processType })),
+    );
   if (mode === "batch" && strategyVersion === 2) {
     const aggregateSteps = AGGREGATED_BATCH_PROCESSES.map(
       (processType) =>
@@ -84,6 +95,21 @@ export function buildOrchestratorSteps(
         projectIds.map((projectId) => ({ projectId, processType })),
       ),
     ];
+  }
+  if (mode === "batch" && strategyVersion === 4) {
+    const steps: ExecutionOrchestratorStep[] = [];
+    for (const processType of order) {
+      if (AGGREGATED_BATCH_PROCESSES.includes(processType as never)) {
+        steps.push({
+          kind: "aggregate",
+          projectIds: [...projectIds],
+          processType: processType as (typeof AGGREGATED_BATCH_PROCESSES)[number],
+        });
+        continue;
+      }
+      steps.push(...projectIds.map((projectId) => ({ projectId, processType })));
+    }
+    return steps;
   }
 
   if (mode === "batch") {

@@ -86,6 +86,78 @@ test("materializa uma entrega e um ID universal por item", () => {
   );
 });
 
+test("preserva a identidade da entrega quando itens operacionais mudam de posição", () => {
+  const block: ActionBlock = {
+    id: "generate-scenes",
+    type: "CRIAR",
+    operator: "IA",
+    name: "Gerar cenas",
+    inputs: [],
+    outputs: [
+      {
+        id: "scenes-output",
+        label: "Cenas",
+        key: "scenes",
+        type: "list",
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 0,
+  };
+  const execution = executionFor("assets", block);
+  execution.blocks[0].items = [
+    {
+      id: "work-a",
+      order: 0,
+      input: "A",
+      output: "A",
+      status: "completed",
+      attempt: 1,
+      attempts: [],
+    },
+    {
+      id: "work-b",
+      order: 1,
+      input: "B",
+      output: "B",
+      status: "completed",
+      attempt: 1,
+      attempts: [],
+    },
+    {
+      id: "work-c",
+      order: 2,
+      input: "C",
+      output: "C",
+      status: "completed",
+      attempt: 1,
+      attempts: [],
+    },
+  ];
+  execution.blocks[0].values = { scenes: ["A", "B", "C"] };
+  recordBlockDeliveries(execution, block, execution.blocks[0].values, "completed");
+  const idsBySource = new Map(
+    execution.deliveries?.[0].items.map((item) => [item.sourceExecutionItemId, item.id]),
+  );
+
+  execution.blocks[0].items = [
+    { ...execution.blocks[0].items[2], order: 0 },
+    { ...execution.blocks[0].items[0], order: 1 },
+    { ...execution.blocks[0].items[1], order: 2 },
+  ];
+  execution.blocks[0].values = { scenes: ["C", "A", "B"] };
+  recordBlockDeliveries(execution, block, execution.blocks[0].values, "completed");
+
+  assert.deepEqual(
+    execution.deliveries?.[0].items.map((item) => item.sourceExecutionItemId),
+    ["work-c", "work-a", "work-b"],
+  );
+  for (const item of execution.deliveries?.[0].items ?? []) {
+    assert.equal(item.id, idsBySource.get(item.sourceExecutionItemId));
+  }
+});
+
 test("usa a primeira imagem do output concluído como thumbnail do card", () => {
   const block: ActionBlock = {
     id: "create-thumbnails",

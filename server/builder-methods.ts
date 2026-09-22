@@ -9,6 +9,7 @@ import {
   type UniversalProcess,
 } from "../src/lib/domain";
 import { getMethodConfigurationIssue, normalizeMethodBlocks } from "../src/lib/human-workflow";
+import { effectiveProcessOrder, validateProcessDependencies } from "../src/lib/process-order";
 import type { RegisteredPlugin } from "./plugin-runner";
 
 const processSchema = z.enum(PROCESS_ORDER);
@@ -223,23 +224,6 @@ function compatibleType(source: HumanFieldType, target: HumanFieldType) {
   return source === target || (source === "text" && target === "textarea");
 }
 
-function methodOutput(
-  methods: Partial<Record<UniversalProcess, ProcessMethod>>,
-  processType: UniversalProcess,
-  blockId: string | undefined,
-  key: string | undefined,
-) {
-  if (!key) return undefined;
-  const method = methods[processType];
-  if (blockId === "__process_output__") {
-    const output = BUILDER_METHOD_CONTRACT.processOutputs[processType];
-    return output.key === key ? output : undefined;
-  }
-  return method?.blocks
-    .find((block) => block.id === blockId)
-    ?.outputs?.find((item) => item.key === key);
-}
-
 function validatePluginConfiguration(
   blockLabel: string,
   block: ProcessMethod["blocks"][number],
@@ -341,6 +325,7 @@ export function validateBuilderMethods(input: {
   const entries = Object.entries(record.data);
   if (!entries.length) return { ok: false, errors: ["Informe pelo menos um Método."], warnings };
   const methods: Partial<Record<UniversalProcess, ProcessMethod>> = {};
+  const order = effectiveProcessOrder(input.channel);
   for (const [key, rawMethod] of entries) {
     if (!PROCESS_ORDER.includes(key as UniversalProcess)) {
       errors.push(`Processo universal desconhecido: “${key}”.`);
@@ -380,26 +365,6 @@ export function validateBuilderMethods(input: {
           else if (!compatibleType(source.type, binding.type))
             errors.push(`${label}: tipo incompatível na entrada “${binding.label}”.`);
         }
-        if (binding.source === "previous_process") {
-          const sourceProcess = binding.sourceProcessType;
-          if (
-            !sourceProcess ||
-            PROCESS_ORDER.indexOf(sourceProcess) >= PROCESS_ORDER.indexOf(processType)
-          ) {
-            errors.push(`${label}: processo anterior inválido na entrada “${binding.label}”.`);
-          } else {
-            const source = methodOutput(
-              { ...input.channel.methods, ...methods },
-              sourceProcess,
-              binding.blockId,
-              binding.sourceKey,
-            );
-            if (!source)
-              errors.push(`${label}: saída anterior não encontrada para “${binding.label}”.`);
-            else if (!compatibleType(source.type, binding.type))
-              errors.push(`${label}: tipo incompatível na entrada “${binding.label}”.`);
-          }
-        }
       }
       validatePluginConfiguration(label, block, input.plugins, errors, warnings);
     }
@@ -418,6 +383,7 @@ export function validateBuilderMethods(input: {
       );
     }
   }
+  errors.push(...validateProcessDependencies(order, { ...input.channel.methods, ...methods }));
   return {
     ok: errors.length === 0,
     methods,

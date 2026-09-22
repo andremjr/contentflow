@@ -3,7 +3,8 @@ import { AlertTriangle, LockKeyhole, UserRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
-import { PROCESS_META, PROCESS_ORDER, type ProcessId } from "@/lib/domain";
+import { PROCESS_META, type ProcessId } from "@/lib/domain";
+import { projectProcessOrder } from "@/lib/process-order";
 import {
   useChannel,
   useDatabaseReady,
@@ -77,11 +78,13 @@ function ProjectLayout() {
       />
       <nav aria-label="Processos do projeto" className="border-b border-border/70 bg-background/60">
         <div className="scrollbar-thin flex gap-1 overflow-x-auto px-3 py-2 sm:px-4">
-          {PROCESS_ORDER.map((process, index) => {
+          {projectProcessOrder(project, channel).map((process, index) => {
             const meta = PROCESS_META[process];
             const Icon = meta.icon;
             const slug = SLUG[process];
-            const blocked = !channel.methods[process]?.blocks.length;
+            const blocked = !(
+              project.strategySnapshot?.methods[process] ?? channel.methods[process]
+            )?.blocks.length;
             const waitingHuman = humanTasks.some(
               (task) => task.project.id === project.id && task.execution.processType === process,
             );

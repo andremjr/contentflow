@@ -24,6 +24,8 @@ import {
   normalizeMethodBlocks,
 } from "@/lib/human-workflow";
 import { normalizeExecutionDeliveries } from "@/lib/deliveries";
+import { effectiveProcessOrder } from "@/lib/process-order";
+import type { PortableCollectionV2, PortableLibraryItemV2 } from "@/lib/method-file";
 import {
   ACTIVE_ORCHESTRATOR_STATUSES,
   type ExecutionOrchestrator,
@@ -236,6 +238,11 @@ export function useChannelExecutionOrchestrator(channelId: string) {
   );
 }
 
+export function useExecutionOrchestrators() {
+  const storeVersion = useClientStoreVersion();
+  return storeVersion >= 0 ? db.orchestrators : [];
+}
+
 type ExecutionOrchestratorState = {
   orchestrator: ExecutionOrchestrator;
   channel?: Channel;
@@ -260,6 +267,29 @@ export async function startExecutionOrchestrator(input: {
   }
   await refreshState(true);
   return body.orchestrator;
+}
+
+export async function startGlobalExecutionOrchestration(input: {
+  channelIds: string[];
+  mode: ExecutionOrchestratorMode;
+  quantity: number;
+  projectPrefix?: string;
+}) {
+  const response = await fetch("/api/orchestrators/global", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = (await response.json()) as {
+    orchestrators?: ExecutionOrchestrator[];
+    globalBatchId?: string;
+    error?: string;
+  };
+  if (!response.ok || !body.orchestrators?.length || !body.globalBatchId) {
+    throw new Error(body.error ?? "Não foi possível iniciar a produção global.");
+  }
+  await refreshState(true);
+  return body;
 }
 
 export async function refreshExecutionOrchestrator(orchestratorId: string) {
@@ -419,6 +449,14 @@ export async function updateChannel(channel: Channel) {
   return db.channels.find((item) => item.id === channel.id);
 }
 
+export async function updateProcessOrder(channel: Channel, processOrder: UniversalProcess[]) {
+  await request(`/api/channels/${encodeURIComponent(channel.id)}/process-order`, "PUT", {
+    processOrder,
+    definitionRevision: channel.definitionRevision ?? 0,
+  });
+  await refreshState(true);
+}
+
 export async function resolveYouTubeChannel(handle: string): Promise<YouTubeChannelProfile> {
   const response = await fetch(`/api/youtube/channel?handle=${encodeURIComponent(handle)}`);
   if (!response.ok) throw new Error(await readApiError(response));
@@ -439,8 +477,7 @@ export async function syncChannelFromYouTube(channelId: string) {
   return updated;
 }
 
-const methodQueues = new Map<string, Promise<void>>();
-const methodTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const methodQueues = new Map<string, Promise<number | undefined>>();
 const methodDraftKey = (channelId: string, processType: UniversalProcess) =>
   `contentflow:method-draft:${channelId}:${processType}`;
 export function readMethodDraft(
@@ -460,23 +497,18 @@ export function rememberMethodDraft(
   channelId: string,
   processType: UniversalProcess,
   method: ProcessMethod,
-  onError: (error: Error) => void,
 ) {
   const key = methodDraftKey(channelId, processType);
   localStorage.setItem(key, JSON.stringify(method));
-  clearTimeout(methodTimers.get(key));
-  methodTimers.set(
-    key,
-    setTimeout(() => {
-      methodTimers.delete(key);
-      void setChannelMethod(channelId, processType, method).catch(onError);
-    }, 700),
-  );
+}
+export function clearMethodDraft(channelId: string, processType: UniversalProcess) {
+  localStorage.removeItem(methodDraftKey(channelId, processType));
 }
 export async function setChannelMethod(
   channelId: string,
   processType: UniversalProcess,
   method: ProcessMethod,
+  definitionRevision?: number,
 ) {
   const key = methodDraftKey(channelId, processType);
   const snapshot = JSON.stringify(method);
@@ -487,13 +519,17 @@ export async function setChannelMethod(
         name: method.name,
         processType,
         blocks: normalizeMethodBlocks(method.blocks, processType),
+        definitionRevision,
       });
       if (localStorage.getItem(key) === snapshot) localStorage.removeItem(key);
       await refreshState(true);
+      return (
+        db.channels.find((item) => item.id === channelId)?.definitionRevision ?? definitionRevision
+      );
     });
   methodQueues.set(key, pending);
   try {
-    await pending;
+    return await pending;
   } finally {
     if (methodQueues.get(key) === pending) methodQueues.delete(key);
   }
@@ -505,6 +541,35 @@ export async function setChannelMethods(
 ) {
   await request(`/api/channels/${channelId}/methods`, "PUT", { methods });
   await refreshState(true);
+}
+
+export async function applyMethodTransfer(input: {
+  targetChannelId?: string;
+  sourceChannelId?: string;
+  newChannel?: { id: string; name: string; methodsImageUrl?: string };
+  expectedDefinitionRevision?: number;
+  methods: ProcessMethod[];
+  collections: PortableCollectionV2[];
+  itemsIncluded?: boolean;
+  items?: PortableLibraryItemV2[];
+  preferredOrder: UniversalProcess[];
+  selectedProcesses: UniversalProcess[];
+  preserveLocalConnections?: boolean;
+}) {
+  const response = await fetch("/api/method-transfers/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(await readApiError(response));
+  const result = (await response.json()) as {
+    channel: Channel;
+    processOrder: UniversalProcess[];
+    collections: StrategicCollection[];
+    items: ChannelLibraryItem[];
+  };
+  await refreshState(true);
+  return result;
 }
 
 export async function removeChannel(id: string) {
@@ -527,7 +592,9 @@ export async function createProject(input: NewProjectInput): Promise<Project> {
     id: crypto.randomUUID(),
     title: input.title.trim(),
     channelId: input.channelId,
-    currentStage: "theme",
+    currentStage: effectiveProcessOrder(
+      db.channels.find((channel) => channel.id === input.channelId) ?? {},
+    )[0],
     state: "not_started",
     progress: 0,
     deadline: input.deadline?.trim() || "Sem prazo",
@@ -723,6 +790,19 @@ export async function updateBlockExecutionItemOutput(
     "PATCH",
     { revision, output },
   );
+  await refreshState(true);
+}
+
+export async function reorderBlockExecutionItems(
+  executionId: string,
+  blockId: string,
+  revision: number,
+  itemIds: string[],
+) {
+  await request(`/api/executions/${executionId}/blocks/${blockId}/items-order`, "PATCH", {
+    revision,
+    itemIds,
+  });
   await refreshState(true);
 }
 

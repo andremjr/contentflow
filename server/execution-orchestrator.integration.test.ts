@@ -15,6 +15,11 @@ type OrchestratorState = {
   executions: ProcessExecution[];
 };
 
+type GlobalOrchestrationState = {
+  globalBatchId: string;
+  orchestrators: ExecutionOrchestrator[];
+};
+
 async function availablePort() {
   const server = net.createServer();
   server.listen(0, "127.0.0.1");
@@ -123,12 +128,13 @@ test(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           channelId: channel.id,
-          mode: "end_to_end",
+          mode: "batch",
           quantity: 1,
           projectPrefix: "Falha",
         }),
       });
       assert.equal(first.response.status, 201, first.body.error);
+      assert.equal(first.body.orchestrator.strategyVersion, 4);
       assert.equal(first.body.orchestrator.status, "awaiting_human");
       assert.equal(first.body.executions.length, 1);
 
@@ -233,6 +239,53 @@ test(
       assert.equal(stopped.body.projects.length, 2, "o Stop removeu projetos criados");
       assert.equal(stopped.body.executions[0].status, "cancelled");
 
+      const missingPluginChannel = testChannel();
+      missingPluginChannel.id = "channel-orchestrator-missing-plugin";
+      missingPluginChannel.methods.theme.blocks[0] = {
+        ...missingPluginChannel.methods.theme.blocks[0],
+        operator: "IA",
+        plugin: {
+          pluginId: "missing.contentflow.test",
+          capabilityId: "generate-theme",
+          configuration: {},
+        },
+      };
+      const missingChannelResponse = await jsonRequest<Channel>(`${baseUrl}/api/channels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(missingPluginChannel),
+      });
+      assert.equal(missingChannelResponse.response.status, 201, missingChannelResponse.body.error);
+      const missingPlugin = await jsonRequest<OrchestratorState>(`${baseUrl}/api/orchestrators`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelId: missingPluginChannel.id,
+          mode: "batch",
+          quantity: 2,
+          projectPrefix: "Plugin ausente",
+        }),
+      });
+      assert.equal(missingPlugin.response.status, 201, missingPlugin.body.error);
+      assert.equal(missingPlugin.body.orchestrator.strategyVersion, 4);
+      assert.equal(missingPlugin.body.orchestrator.status, "blocked");
+      assert.equal(missingPlugin.body.orchestrator.currentStep, 0);
+      assert.equal(missingPlugin.body.orchestrator.currentBatchItem, 0);
+      assert.equal(missingPlugin.body.executions.length, 1);
+      assert.equal(missingPlugin.body.executions[0].status, "blocked_executor");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const missingPluginState = await jsonRequest<OrchestratorState>(
+        `${baseUrl}/api/orchestrators/${missingPlugin.body.orchestrator.id}/state`,
+      );
+      assert.equal(missingPluginState.body.orchestrator.status, "blocked");
+      assert.equal(missingPluginState.body.executions[0].status, "blocked_executor");
+      const stoppedMissing = await jsonRequest<OrchestratorState>(
+        `${baseUrl}/api/orchestrators/${missingPlugin.body.orchestrator.id}/stop`,
+        { method: "POST" },
+      );
+      assert.equal(stoppedMissing.response.status, 200, stoppedMissing.body.error);
+      assert.equal(stoppedMissing.body.orchestrator.status, "cancelled");
+
       const third = await jsonRequest<OrchestratorState>(`${baseUrl}/api/orchestrators`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -245,6 +298,62 @@ test(
       });
       assert.equal(third.response.status, 201, third.body.error);
       assert.equal(third.body.orchestrator.status, "awaiting_human");
+
+      const stoppedThird = await jsonRequest<OrchestratorState>(
+        `${baseUrl}/api/orchestrators/${third.body.orchestrator.id}/stop`,
+        { method: "POST" },
+      );
+      assert.equal(stoppedThird.response.status, 200, stoppedThird.body.error);
+
+      const secondGlobalChannel = testChannel();
+      secondGlobalChannel.id = "channel-orchestrator-global-second";
+      secondGlobalChannel.name = "Segundo canal";
+      secondGlobalChannel.handle = "@orchestrator-global-second";
+      const secondGlobalChannelResponse = await jsonRequest<Channel>(`${baseUrl}/api/channels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(secondGlobalChannel),
+      });
+      assert.equal(
+        secondGlobalChannelResponse.response.status,
+        201,
+        secondGlobalChannelResponse.body.error,
+      );
+
+      const global = await jsonRequest<GlobalOrchestrationState>(
+        `${baseUrl}/api/orchestrators/global`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channelIds: [channel.id, secondGlobalChannel.id],
+            mode: "end_to_end",
+            quantity: 2,
+            projectPrefix: "Global",
+          }),
+        },
+      );
+      assert.equal(global.response.status, 201, global.body.error);
+      assert.ok(global.body.globalBatchId);
+      assert.equal(global.body.orchestrators.length, 2);
+      assert.ok(
+        global.body.orchestrators.every(
+          (item) =>
+            item.globalBatchId === global.body.globalBatchId &&
+            item.globalChannelCount === 2 &&
+            item.quantity === 2,
+        ),
+      );
+      const firstGlobalProjects = await jsonRequest<Array<{ id: string }>>(
+        `${baseUrl}/api/projects?channelId=${channel.id}`,
+      );
+      const secondGlobalProjects = await jsonRequest<Array<{ id: string }>>(
+        `${baseUrl}/api/projects?channelId=${secondGlobalChannel.id}`,
+      );
+      assert.equal(firstGlobalProjects.response.status, 200);
+      assert.equal(secondGlobalProjects.response.status, 200);
+      assert.equal(firstGlobalProjects.body.length >= 2, true);
+      assert.equal(secondGlobalProjects.body.length, 2);
     } catch (error) {
       throw new Error(`${error instanceof Error ? error.message : String(error)}\n${logs}`);
     } finally {

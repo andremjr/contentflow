@@ -50,6 +50,53 @@ test("preserva o planejamento legado para filas em lote já persistidas", () => 
     { projectId: "project-1", processType: "title" },
     { projectId: "project-2", processType: "title" },
   ]);
+
+  const customOrder = [
+    "theme",
+    "script",
+    "title",
+    "thumbnail",
+    "narration",
+    "assets",
+    "editing",
+    "publishing",
+  ] as const;
+  const v2 = buildOrchestratorSteps(["project-1", "project-2"], "batch", 2, customOrder);
+  assert.deepEqual(v2.slice(0, 4), [
+    { kind: "aggregate", projectIds: ["project-1", "project-2"], processType: "theme" },
+    { kind: "aggregate", projectIds: ["project-1", "project-2"], processType: "title" },
+    { kind: "aggregate", projectIds: ["project-1", "project-2"], processType: "thumbnail" },
+    { projectId: "project-1", processType: "script" },
+  ]);
+});
+
+test("o lote V4 respeita a ordem congelada e só agrega processos elegíveis na posição correta", () => {
+  const order = [
+    "theme",
+    "script",
+    "title",
+    "thumbnail",
+    "narration",
+    "assets",
+    "editing",
+    "publishing",
+  ] as const;
+  const steps = buildOrchestratorSteps(["project-1", "project-2"], "batch", 4, order);
+
+  assert.deepEqual(steps.slice(0, 7), [
+    { kind: "aggregate", projectIds: ["project-1", "project-2"], processType: "theme" },
+    { projectId: "project-1", processType: "script" },
+    { projectId: "project-2", processType: "script" },
+    { kind: "aggregate", projectIds: ["project-1", "project-2"], processType: "title" },
+    {
+      kind: "aggregate",
+      projectIds: ["project-1", "project-2"],
+      processType: "thumbnail",
+    },
+    { projectId: "project-1", processType: "narration" },
+    { projectId: "project-2", processType: "narration" },
+  ]);
+  assert.equal(steps.length, 13);
 });
 
 test("calcula o progresso apenas pelas etapas concluídas", () => {

@@ -162,7 +162,12 @@ test(
       });
       const resolvedTestDirectory = path.resolve(testDirectory);
       if (resolvedTestDirectory.startsWith(`${path.resolve(os.tmpdir())}${path.sep}`)) {
-        rmSync(resolvedTestDirectory, { recursive: true, force: true });
+        rmSync(resolvedTestDirectory, {
+          recursive: true,
+          force: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        });
       }
     }
   },

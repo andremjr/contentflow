@@ -2,7 +2,6 @@ import { deriveProcessOutput } from "../src/lib/process-output";
 import { applyGeneratedProjectTitle } from "../src/lib/project-title";
 import {
   PROCESS_META,
-  PROCESS_ORDER,
   type ActionBlock,
   type BlockItemRetryScope,
   type Channel,
@@ -14,6 +13,12 @@ import {
   type RuntimeValue,
   type StrategicCollection,
 } from "../src/lib/domain";
+import {
+  captureProjectStrategy,
+  completedProcessProgress,
+  nextExecutableProcess,
+  projectProcessOrder,
+} from "../src/lib/process-order";
 import {
   createProcessOutputFields,
   getMethodConfigurationIssue,
@@ -46,15 +51,11 @@ export function executionCommands(db: {
   };
   function completeProjectStage(project: Project, stage: ProcessId) {
     project.stages = { ...project.stages, [stage]: "done" };
-    const next = PROCESS_ORDER.find(
-      (process) => project.stages[process] !== "done" && project.stages[process] !== "approved",
-    );
-    project.currentStage = next ?? "publishing";
+    const order = projectProcessOrder(project);
+    const next = nextExecutableProcess(order, project.stages, project.runFrom, project.runThrough);
+    project.currentStage = next ?? stage;
     project.state = next ? project.stages[next] : "done";
-    const completed = PROCESS_ORDER.filter(
-      (process) => project.stages[process] === "done" || project.stages[process] === "approved",
-    ).length;
-    project.progress = Math.round((completed / PROCESS_ORDER.length) * 100);
+    project.progress = completedProcessProgress(project.stages);
   }
 
   function startProcessExecution(projectId: string, processType: ProcessId) {
@@ -64,7 +65,13 @@ export function executionCommands(db: {
     if (existing) return existing;
     const project = db.projects.find((item) => item.id === projectId);
     const channel = project ? db.channels.find((item) => item.id === project.channelId) : undefined;
-    const method = channel?.methods[processType];
+    if (project && channel)
+      captureProjectStrategy(
+        project,
+        channel,
+        db.executions.some((item) => item.projectId === projectId),
+      );
+    const method = project?.strategySnapshot?.methods[processType] ?? channel?.methods[processType];
     const normalizedMethod = method
       ? {
           name: method.name || `Método de ${PROCESS_META[processType].label}`,

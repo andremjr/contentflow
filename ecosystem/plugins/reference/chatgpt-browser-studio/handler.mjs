@@ -726,30 +726,55 @@ async function launchOrReuseChrome({
   }
   const failures = [];
   for (const executable of executables) {
-    let child;
-    try {
-      child = spawn(executable, args, {
-        detached: Boolean(keepBrowserOpen),
-        stdio: "ignore",
-        windowsHide: false,
-        shell: false,
-      });
-    } catch (error) {
-      failures.push(`${executable}: ${error?.message ?? error}`);
-      continue;
+    for (let launchAttempt = 1; launchAttempt <= 2; launchAttempt += 1) {
+      const delayedExisting = await fetchBrowserVersion(port);
+      if (delayedExisting) return { version: delayedExisting, child: null, reused: true };
+      let child;
+      let spawnError;
+      try {
+        child = spawn(executable, args, {
+          detached: Boolean(keepBrowserOpen),
+          stdio: "ignore",
+          windowsHide: false,
+          shell: false,
+        });
+        child.once("error", (error) => {
+          spawnError = error;
+        });
+      } catch (error) {
+        spawnError = error;
+      }
+      if (!child) {
+        failures.push(`${executable}: ${spawnError?.message ?? spawnError ?? "falha ao iniciar"}`);
+        break;
+      }
+      const deadline = Date.now() + (launchAttempt === 1 ? 15000 : 25000);
+      while (Date.now() < deadline) {
+        if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+        const version = await fetchBrowserVersion(port);
+        if (version) {
+          if (keepBrowserOpen) child.unref();
+          return { version, child, reused: false };
+        }
+        if (spawnError || child.exitCode !== null) break;
+        await sleep(350, signal);
+      }
+      const exitDetail = spawnError
+        ? spawnError.message
+        : child.exitCode !== null
+          ? `Chrome encerrou com código ${child.exitCode}`
+          : "CDP não respondeu";
+      failures.push(`${executable} (tentativa ${launchAttempt}/2): ${exitDetail}.`);
+      try {
+        child.kill();
+      } catch {}
+      if (launchAttempt < 2) {
+        // O Chrome pode fechar a última janela de um perfil alguns instantes
+        // depois de o job anterior terminar. Aguarde a liberação do singleton
+        // e cheque novamente a porta antes de relançar o mesmo perfil.
+        await sleep(1500, signal);
+      }
     }
-    if (keepBrowserOpen) child.unref();
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
-      if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-      const version = await fetchBrowserVersion(port);
-      if (version) return { version, child, reused: false };
-      await sleep(350, signal);
-    }
-    failures.push(`${executable}: CDP não respondeu.`);
-    try {
-      child.kill();
-    } catch {}
   }
   throw codedError(
     "PERMISSION_DENIED",
@@ -832,6 +857,7 @@ class CdpClient {
     const pending = this.pending.get(message.id);
     if (!pending) return;
     this.pending.delete(message.id);
+    clearTimeout(pending.timer);
     if (message.error)
       pending.reject(
         codedError("UPSTREAM_UNAVAILABLE", `CDP ${pending.method}: ${message.error.message}`),
@@ -839,10 +865,13 @@ class CdpClient {
     else pending.resolve(message.result ?? {});
   }
   rejectAll(error) {
-    for (const pending of this.pending.values()) pending.reject(error);
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
     this.pending.clear();
   }
-  send(method, params = {}, sessionId) {
+  send(method, params = {}, sessionId, timeoutMs = 15000) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN)
       return Promise.reject(codedError("UPSTREAM_UNAVAILABLE", "CDP não conectado."));
     const id = this.nextId++,
@@ -856,7 +885,21 @@ class CdpClient {
           .slice(0, 12)}`,
       );
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject, method });
+      const timer = setTimeout(
+        () => {
+          if (!this.pending.delete(id)) return;
+          reject(
+            codedError(
+              "UPSTREAM_UNAVAILABLE",
+              `CDP ${method}: o Chrome não respondeu no prazo.`,
+              true,
+            ),
+          );
+        },
+        Math.max(1000, timeoutMs),
+      );
+      timer.unref?.();
+      this.pending.set(id, { resolve, reject, method, timer });
       this.ws.send(JSON.stringify(payload));
     });
   }
@@ -936,12 +979,32 @@ async function attachChatGptPage(client, signal, activate = false, forceNew = fa
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     try {
-      const ready = await evaluate(client, sessionId, "document.readyState");
-      if (["interactive", "complete"].includes(ready)) break;
+      const ready = await evaluate(
+        client,
+        sessionId,
+        "({ readyState: document.readyState, host: location.hostname })",
+      );
+      if (ready?.host === CHATGPT_HOST && ["interactive", "complete"].includes(ready?.readyState))
+        break;
     } catch {}
     await sleep(300, signal);
   }
   return { sessionId, targetId: target.targetId, created };
+}
+
+export async function attachExistingChatGptPage(client, targetId) {
+  const { sessionId } = await client.send("Target.attachToTarget", {
+    targetId,
+    flatten: true,
+  });
+  await client.send("Page.enable", {}, sessionId);
+  await client.send("Runtime.enable", {}, sessionId);
+  return sessionId;
+}
+
+export async function detachChatGptPage(client, sessionId) {
+  if (!sessionId) return;
+  await client.send("Target.detachFromTarget", { sessionId }).catch(() => undefined);
 }
 
 function taskPageMarker(request) {
@@ -1102,8 +1165,28 @@ export function validateConversationUrl(id) {
   return url.href;
 }
 
-async function prepareConversation(client, sessionId, conversation, waitMs, signal) {
-  let reused = await openConversation(client, sessionId, conversation, signal);
+async function prepareConversation(
+  client,
+  sessionId,
+  conversation,
+  waitMs,
+  signal,
+  pageAlreadyNew = false,
+) {
+  let reused = false;
+  let alreadyOnNewConversation = pageAlreadyNew && conversation?.mode !== "reuse";
+  if (!alreadyOnNewConversation && conversation?.mode !== "reuse") {
+    try {
+      const currentUrl = new URL(await evaluate(client, sessionId, "location.href"));
+      alreadyOnNewConversation =
+        currentUrl.protocol === "https:" &&
+        currentUrl.hostname === CHATGPT_HOST &&
+        currentUrl.pathname === "/";
+    } catch {}
+  }
+  if (!alreadyOnNewConversation) {
+    reused = await openConversation(client, sessionId, conversation, signal);
+  }
   try {
     await waitForPrompt(client, sessionId, waitMs, signal);
     if (reused) validateConversationUrl(await evaluate(client, sessionId, "location.href"));
@@ -1131,16 +1214,59 @@ async function currentConversationUrl(client, sessionId) {
   return validateConversationUrl(await evaluate(client, sessionId, "location.href"));
 }
 
+export function promptPageState(doc) {
+  const win = doc.defaultView;
+  const visible = (element) => {
+    if (!element) return false;
+    const style = win?.getComputedStyle?.(element);
+    const rect = element.getBoundingClientRect?.();
+    return Boolean(
+      (!style ||
+        (style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          Number(style.opacity ?? 1) !== 0)) &&
+      (!rect || (rect.width > 8 && rect.height > 8 && rect.bottom > 0 && rect.right > 0)),
+    );
+  };
+  const promptSelectors = [
+    "#prompt-textarea",
+    '[contenteditable="true"][role="textbox"]',
+    '[role="textbox"][aria-label*="Chat" i]',
+  ];
+  const prompt = promptSelectors
+    .flatMap((selector) => [...doc.querySelectorAll(selector)])
+    .find(visible);
+  const login = [...doc.querySelectorAll("a,button")].some((element) => {
+    if (!visible(element)) return false;
+    const label = String(
+      element.getAttribute?.("aria-label") || element.innerText || element.textContent || "",
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+    return /^(?:log in|sign up|entrar|criar conta)$/i.test(label);
+  });
+  const body = doc.body?.innerText || "";
+  return {
+    host: doc.location?.hostname || win?.location?.hostname || "",
+    prompt: Boolean(prompt),
+    login,
+    captcha: /captcha|verify you are human/i.test(body),
+    bodyHint: body.slice(0, 4000),
+  };
+}
+
 async function waitForPrompt(client, sessionId, waitMs, signal) {
   const deadline = Date.now() + waitMs;
   let state;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    state = await evaluate(
-      client,
-      sessionId,
-      `(() => {${PAGE_HELPERS};const body=document.body?.innerText||'';return{host:location.hostname,prompt:!!cfPrompt(),login:/log in|sign up|entrar|criar conta/i.test(body),captcha:/captcha|verify you are human/i.test(body),bodyHint:body.slice(0,4000)}})()`,
-    );
+    try {
+      state = await evaluate(client, sessionId, `(${promptPageState.toString()})(document)`);
+    } catch (error) {
+      if (error?.code !== "UPSTREAM_UNAVAILABLE") throw error;
+      await sleep(350, signal);
+      continue;
+    }
     if (state?.host === CHATGPT_HOST && state?.prompt && !state?.login) return;
     await sleep(700, signal);
   }
@@ -1392,6 +1518,64 @@ export async function waitAndClickSend(readState, click, signal, timing = {}) {
   );
 }
 
+async function clickSendWithBridge(bridge, signal, operationKey, timing = {}) {
+  const now = timing.now || Date.now;
+  const pause = timing.pause || sleep;
+  const deadline = now() + (timing.timeoutMs ?? 120000);
+  let attempt = 0;
+  let lastError;
+  while (now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    try {
+      return await bridge.dispatch(
+        "pressEnter",
+        {
+          selectors: [
+            "#prompt-textarea",
+            '[contenteditable="true"][role="textbox"]',
+            '[role="textbox"][aria-label*="Chat" i]',
+          ],
+        },
+        `${operationKey}:${attempt++}`,
+      );
+    } catch (error) {
+      if (error?.code === "UNKNOWN_ACTION") {
+        return await bridge.dispatch(
+          "click",
+          {
+            selectors: CHATGPT_SEND_BUTTON_SELECTORS,
+            preferDomActivation: true,
+          },
+          `${operationKey}:compat-click:${attempt++}`,
+        );
+      }
+      lastError = error;
+      if (error?.code !== "OUTPUT_VALIDATION_FAILED") throw error;
+      await pause(500, signal);
+    }
+  }
+  throw codedError(
+    "TIMEOUT",
+    lastError?.message || "O ChatGPT não liberou o botão de envio no prazo.",
+    true,
+  );
+}
+
+async function confirmPromptSubmitted(client, sessionId, signal, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    const submitted = await evaluate(
+      client,
+      sessionId,
+      `(() => {${PAGE_HELPERS};const prompt=cfPrompt();const text=(prompt?.innerText||prompt?.textContent||'').trim();return !text||cfGenerating()})()`,
+    );
+    if (submitted) return true;
+    await sleep(150, signal);
+  }
+  return false;
+}
+
 async function clickSend(client, sessionId, bridge, signal, operationKey) {
   await waitAndClickSend(
     () => evaluate(client, sessionId, `(${composerUploadState.toString()})(document)`),
@@ -1405,20 +1589,7 @@ async function clickSend(client, sessionId, bridge, signal, operationKey) {
       ),
     signal,
   );
-  const sent = async (deadline) => {
-    while (Date.now() < deadline) {
-      if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-      const submitted = await evaluate(
-        client,
-        sessionId,
-        `(() => {${PAGE_HELPERS};const prompt=cfPrompt();const text=(prompt?.innerText||prompt?.textContent||'').trim();return !text||cfGenerating()})()`,
-      );
-      if (submitted) return true;
-      await sleep(150, signal);
-    }
-    return false;
-  };
-  if (await sent(Date.now() + 15_000)) return;
+  if (await confirmPromptSubmitted(client, sessionId, signal)) return;
   throw codedError("OUTPUT_VALIDATION_FAILED", "O ChatGPT não confirmou o envio do prompt.", true);
 }
 
@@ -1883,21 +2054,28 @@ export async function execute(request, services) {
       keepBrowserOpen,
       signal: services.signal,
     });
+    step(`Chrome ${launched.reused ? "reutilizado" : "iniciado"}; conectando ao CDP.`);
     child = launched.child;
     client = await new CdpClient(launched.version.webSocketDebuggerUrl, trace).connect(
       services.signal,
     );
+    step("CDP conectado; anexando a aba do ChatGPT.");
     const taskPage = await attachChatGptPage(client, services.signal, false, launched.reused);
-    const { sessionId } = taskPage;
+    let { sessionId } = taskPage;
     taskTargetId = taskPage.targetId;
     closeTaskTarget = taskPage.created || !launched.reused;
+    step(
+      `Aba do ChatGPT anexada (${taskPage.created ? "nova" : "existente"}); preparando conversa.`,
+    );
     const reusedConversation = await prepareConversation(
       client,
       sessionId,
       request.conversation,
       clampInteger(settings.interactiveWaitSeconds, 600, 30, 900) * 1000,
       services.signal,
+      taskPage.created,
     );
+    step(`Conversa preparada (${reusedConversation ? "reutilizada" : "nova"}).`);
     if (taskPage.created) await markTaskPage(client, sessionId, request, services.signal);
     parts = partsForConversation(parts, request.conversation, reusedConversation);
     const fallbackAttachments = reusedConversation
@@ -1909,20 +2087,22 @@ export async function execute(request, services) {
       reusedConversation,
       request.conversation?.continuationMessage,
     );
-    bridge = await attachContentFlowBridge({
-      client,
-      pageSessionId: sessionId,
-      pluginId: PLUGIN_ID,
-      profileId: profileName,
-      request,
-      signal: services.signal,
-      allowedOrigins: ["https://chatgpt.com"],
-    });
     if (attachments.length) {
       step(`Enviando ${attachments.length} anexo(s) autorizado(s).`);
       await attachFiles(client, sessionId, attachments, services.signal);
     }
-    await clickMode(bridge, mode);
+    if (capabilityId === "generate-image-in-browser") {
+      bridge = await attachContentFlowBridge({
+        client,
+        pageSessionId: sessionId,
+        pluginId: PLUGIN_ID,
+        profileId: profileName,
+        request,
+        signal: services.signal,
+        allowedOrigins: ["https://chatgpt.com"],
+      });
+      await clickMode(bridge, mode);
+    }
     const responses = [],
       retryAttempts = 0,
       delayBetweenPartsMs = 0;
@@ -1933,31 +2113,74 @@ export async function execute(request, services) {
           step(
             `Etapa ${index + 1}/${parts.length}, tentativa ${attempt + 1}/${retryAttempts + 1}.`,
           );
-          responses.push(
-            capabilityId === "generate-image-in-browser"
-              ? await generateImagePart(
-                  client,
-                  sessionId,
-                  bridge,
-                  parts[index],
-                  settings,
-                  services.signal,
-                  `${index}:${attempt}`,
-                )
-              : await generatePart(
-                  client,
-                  sessionId,
-                  bridge,
-                  parts[index],
-                  settings,
-                  services.signal,
-                  `${index}:${attempt}`,
-                ),
-          );
+          if (capabilityId === "generate-image-in-browser") {
+            responses.push(
+              await generateImagePart(
+                client,
+                sessionId,
+                bridge,
+                parts[index],
+                settings,
+                services.signal,
+                `${index}:${attempt}`,
+              ),
+            );
+          } else {
+            const before = await responseState(client, sessionId);
+            const baseline = before?.texts?.length ?? 0;
+            const baselineCompletedActionCount = before?.completedActionCount ?? 0;
+            const targetUrl = await evaluate(client, sessionId, "location.href");
+            await detachChatGptPage(client, sessionId);
+            sessionId = undefined;
+            await sleep(300, services.signal);
+            bridge = await attachContentFlowBridge({
+              client,
+              pageTargetId: taskTargetId,
+              expectedUrl: targetUrl,
+              pluginId: PLUGIN_ID,
+              profileId: profileName,
+              request,
+              signal: services.signal,
+              allowedOrigins: ["https://chatgpt.com"],
+            });
+            await clickMode(bridge, mode);
+            await setPrompt(bridge, parts[index], `prompt:${index}:${attempt}`);
+            await clickSendWithBridge(bridge, services.signal, `send:${index}:${attempt}`);
+            await bridge.dispose();
+            bridge = undefined;
+            await sleep(300, services.signal);
+            sessionId = await attachExistingChatGptPage(client, taskTargetId);
+            if (!(await confirmPromptSubmitted(client, sessionId, services.signal))) {
+              throw codedError(
+                "OUTPUT_VALIDATION_FAILED",
+                "O ChatGPT não confirmou o envio do prompt.",
+                true,
+              );
+            }
+            responses.push(
+              await waitForResponse(
+                client,
+                sessionId,
+                baseline,
+                baselineCompletedActionCount,
+                clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000,
+                services.signal,
+              ),
+            );
+          }
           lastError = undefined;
           break;
         } catch (error) {
           lastError = error;
+          if (bridge && capabilityId !== "generate-image-in-browser") {
+            await bridge.dispose().catch(() => undefined);
+            bridge = undefined;
+          }
+          if (!sessionId && taskTargetId && capabilityId !== "generate-image-in-browser") {
+            sessionId = await attachExistingChatGptPage(client, taskTargetId).catch(
+              () => undefined,
+            );
+          }
           if (
             !error?.retryable ||
             attempt >= retryAttempts ||
@@ -2080,6 +2303,7 @@ export const __test = {
   buildAnalysisPrompt,
   buildImagePrompt,
   clickMode,
+  clickSendWithBridge,
   cleanGeneratedText,
   collectStoredFiles,
   expandTemplate,
@@ -2095,6 +2319,7 @@ export const __test = {
   waitForChildExit,
   closeBrowserGracefully,
   taskPageMarker,
+  prepareConversation,
   prepareProfileSession,
   searchResponseValues,
   generationResponseValues,

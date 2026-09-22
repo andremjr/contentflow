@@ -55,6 +55,12 @@ async function evaluateWorker(client, sessionId, expression) {
   return evaluated.result?.value;
 }
 
+function isMissingCdpSession(error) {
+  return /Session with given id not found|No session with given id|Target session .*not found/i.test(
+    String(error?.message || error || ""),
+  );
+}
+
 export async function attachContentFlowBridge({
   client,
   pageSessionId,
@@ -67,74 +73,105 @@ export async function attachContentFlowBridge({
   allowedOrigins,
   waitMs = 10000,
 }) {
-  const deadline = Date.now() + waitMs;
-  const rejectedTargets = new Set();
   let workerTarget;
   let workerSessionId;
   let identity;
 
-  while (Date.now() < deadline && !workerSessionId) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    const { targetInfos = [] } = await client.send("Target.getTargets");
-    const candidates = targetInfos.filter(
-      (item) =>
-        item.type === "service_worker" &&
-        /^chrome-extension:\/\/[^/]+\/service-worker\.js$/i.test(String(item.url || "")) &&
-        !rejectedTargets.has(item.targetId),
-    );
-    for (const candidate of candidates) {
-      const attached = await client.send("Target.attachToTarget", {
-        targetId: candidate.targetId,
-        flatten: true,
-      });
-      await client.send("Runtime.enable", {}, attached.sessionId);
-      const candidateIdentity = await evaluateWorker(
-        client,
-        attached.sessionId,
-        "globalThis.contentFlowBridge?.identity",
+  const attachWorkerSession = async (timeoutMs = waitMs) => {
+    const deadline = Date.now() + timeoutMs;
+    const rejectedTargets = new Set();
+    while (Date.now() < deadline) {
+      if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+      const { targetInfos = [] } = await client.send("Target.getTargets");
+      const candidates = targetInfos.filter(
+        (item) =>
+          item.type === "service_worker" &&
+          /^chrome-extension:\/\/[^/]+\/service-worker\.js$/i.test(String(item.url || "")) &&
+          !rejectedTargets.has(item.targetId),
       );
-      if (
-        candidateIdentity?.bridgeId === BRIDGE_ID &&
-        candidateIdentity?.protocolVersion === PROTOCOL_VERSION
-      ) {
-        workerTarget = candidate;
-        workerSessionId = attached.sessionId;
-        identity = candidateIdentity;
-        break;
+      for (const candidate of candidates) {
+        let attached;
+        try {
+          attached = await client.send("Target.attachToTarget", {
+            targetId: candidate.targetId,
+            flatten: true,
+          });
+          await client.send("Runtime.enable", {}, attached.sessionId);
+          const candidateIdentity = await evaluateWorker(
+            client,
+            attached.sessionId,
+            "globalThis.contentFlowBridge?.identity",
+          );
+          if (
+            candidateIdentity?.bridgeId === BRIDGE_ID &&
+            candidateIdentity?.protocolVersion === PROTOCOL_VERSION
+          ) {
+            return {
+              target: candidate,
+              sessionId: attached.sessionId,
+              identity: candidateIdentity,
+            };
+          }
+        } catch (error) {
+          if (!isMissingCdpSession(error)) throw error;
+        }
+        rejectedTargets.add(candidate.targetId);
+        if (attached?.sessionId)
+          await client
+            .send("Target.detachFromTarget", { sessionId: attached.sessionId })
+            .catch(() => undefined);
       }
-      rejectedTargets.add(candidate.targetId);
-      await client
-        .send("Target.detachFromTarget", { sessionId: attached.sessionId })
-        .catch(() => undefined);
+      await delay(250, signal);
     }
-    if (!workerSessionId) await delay(250, signal);
-  }
-
-  if (!workerTarget?.targetId || !workerSessionId) {
     throw codedError(
       "INVALID_CONFIGURATION",
       "A ContentFlow Browser Bridge não está instalada neste perfil do Chrome. Abra chrome://extensions, ative o modo do desenvolvedor, use Carregar sem compactação na pasta contentflow-browser-bridge e recarregue a extensão. O plugin não continuará usando teclado ou mouse como alternativa.",
     );
-  }
+  };
+
+  ({ target: workerTarget, sessionId: workerSessionId, identity } = await attachWorkerSession());
 
   const sessionToken = randomUUID();
   const key = executionKey(request, profileId, pluginId);
-  const handshake = await evaluateWorker(
-    client,
-    workerSessionId,
+  const connectionExpression = () =>
     `globalThis.contentFlowBridge.connect(${JSON.stringify({
       pluginId,
       protocolVersion: PROTOCOL_VERSION,
       profileId,
       sessionToken,
-    })})`,
-  );
-  if (!handshake?.ok) {
-    throw codedError(
-      "INVALID_CONFIGURATION",
-      handshake?.message || "A extensão recusou a conexão efêmera do plugin.",
-    );
-  }
+    })})`;
+  const connectWorker = async () => {
+    const handshake = await evaluateWorker(client, workerSessionId, connectionExpression());
+    if (!handshake?.ok) {
+      throw codedError(
+        "INVALID_CONFIGURATION",
+        handshake?.message || "A extensão recusou a conexão efêmera do plugin.",
+      );
+    }
+  };
+  const recoverWorkerSession = async () => {
+    if (workerSessionId)
+      await client
+        .send("Target.detachFromTarget", { sessionId: workerSessionId })
+        .catch(() => undefined);
+    ({
+      target: workerTarget,
+      sessionId: workerSessionId,
+      identity,
+    } = await attachWorkerSession(5000));
+    await connectWorker();
+  };
+  const evaluateBridge = async (expression) => {
+    try {
+      return await evaluateWorker(client, workerSessionId, expression);
+    } catch (error) {
+      if (!isMissingCdpSession(error)) throw error;
+      await recoverWorkerSession();
+      return await evaluateWorker(client, workerSessionId, expression);
+    }
+  };
+
+  await connectWorker();
 
   const origins = new Set(allowedOrigins);
   const dispatch = async (action, payload = {}, operationKey = action, timeoutMs = 30000) => {
@@ -185,32 +222,30 @@ export async function attachContentFlowBridge({
       // chrome.debugger.attach on the same Playground tab. The session created
       // above remains alive while dispatch() updates its activity timestamp.
       `(() => { const bridge = globalThis.contentFlowBridge; return Promise.race([bridge.dispatch(${JSON.stringify(command)}),new Promise(resolve=>setTimeout(()=>resolve({ok:false,code:"COMMAND_TIMEOUT",message:"A extensão não respondeu no prazo."}),${commandTimeoutMs + 1000}))]); })()`;
-    let response = await evaluateWorker(client, workerSessionId, dispatchExpression);
+    let response = await evaluateBridge(dispatchExpression);
     if (response?.code === "SESSION_MISMATCH") {
       // A suspended/restarted worker has lost its in-memory session. Reconnect
       // once only after that explicit signal; ordinary commands keep the same
       // session and therefore do not race a debugger reattachment.
-      const reconnect = await evaluateWorker(
-        client,
-        workerSessionId,
-        `globalThis.contentFlowBridge.connect(${JSON.stringify({
-          pluginId,
-          protocolVersion: PROTOCOL_VERSION,
-          profileId,
-          sessionToken,
-        })})`,
-      );
+      const reconnect = await evaluateBridge(connectionExpression());
       if (!reconnect?.ok) {
         throw codedError(
           "INVALID_CONFIGURATION",
           reconnect?.message || "A extensão recusou a reconexão efêmera do plugin.",
         );
       }
-      response = await evaluateWorker(client, workerSessionId, dispatchExpression);
+      response = await evaluateBridge(dispatchExpression);
     }
     if (!response?.ok) {
       const code = String(response?.code || "");
       if (code === "CANCELLED") throw codedError("CANCELLED", "Execução cancelada.");
+      if (code === "UNKNOWN_ACTION") {
+        throw codedError(
+          "UNKNOWN_ACTION",
+          response?.message || `A extensão não conhece a ação ${action}.`,
+          true,
+        );
+      }
       if (["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code)) {
         throw codedError(
           "UPSTREAM_UNAVAILABLE",
