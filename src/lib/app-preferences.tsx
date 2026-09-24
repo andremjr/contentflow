@@ -1042,6 +1042,10 @@ const PHRASES: Record<string, Translation> = {
     "Want to help develop ContentFlow?",
     "¿Quieres participar en el desarrollo de ContentFlow?",
   ],
+  "Saiba mais sobre o projeto ContentFlow": [
+    "Learn more about the ContentFlow project",
+    "Conoce más sobre el proyecto ContentFlow",
+  ],
   "Regra de validação": ["Validation rule", "Regla de validación"],
   "Remover bloco": ["Remove block", "Eliminar bloque"],
   "Remover canal": ["Remove channel", "Eliminar canal"],

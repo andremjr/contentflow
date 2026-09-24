@@ -3,6 +3,22 @@ import test from "node:test";
 
 import { translate } from "./app-preferences";
 
+test("translates the sidebar project CTA", () => {
+  assert.equal(
+    translate("Saiba mais sobre o projeto ContentFlow", "en"),
+    "Learn more about the ContentFlow project",
+  );
+  assert.equal(
+    translate("Saiba mais sobre o projeto ContentFlow", "es"),
+    "Conoce más sobre el proyecto ContentFlow",
+  );
+  assert.equal(translate("Abrir página em uma nova aba", "en"), "Open page in a new tab");
+  assert.equal(
+    translate("Abrir página em uma nova aba", "es"),
+    "Abrir página en una pestaña nueva",
+  );
+});
+
 test("translates process reordering controls and feedback in all interface languages", () => {
   const phrases = [
     "Reordenar processo",

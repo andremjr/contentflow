@@ -50,6 +50,7 @@ const processSlug = (process: string) =>
   process === "editing" ? "edit" : process === "publishing" ? "publish" : process;
 
 export function AppSidebar() {
+  const { t } = useAppPreferences();
   const location = useRouterState({ select: (state) => state.location });
   const pathname = location.pathname;
   const channels = useChannels();
@@ -183,16 +184,16 @@ export function AppSidebar() {
       <div className="border-t border-sidebar-border p-2 sm:p-3">
         <AppPreferencesDialog />
         <a
-          href="https://contentflow-vip.netlify.app/"
+          href="https://andremjr.github.io/contentflow/"
           target="_blank"
           rel="noreferrer"
-          title="Quer participar do desenvolvimento do ContentFlow?"
-          aria-label="Quer participar do desenvolvimento do ContentFlow? Abrir página em uma nova aba"
+          title={t("Saiba mais sobre o projeto ContentFlow")}
+          aria-label={`${t("Saiba mais sobre o projeto ContentFlow")}. ${t("Abrir página em uma nova aba")}`}
           className="group flex items-center justify-center gap-2 rounded-md px-2 py-2.5 text-muted-foreground transition hover:bg-sidebar-accent hover:text-foreground sm:justify-start sm:px-3"
         >
           <HeartHandshake className="size-4 shrink-0" />
           <span className="hidden min-w-0 flex-1 text-xs font-medium leading-snug sm:block">
-            Quer participar do desenvolvimento do ContentFlow?
+            {t("Saiba mais sobre o projeto ContentFlow")}
           </span>
           <ExternalLink className="hidden size-3.5 shrink-0 opacity-60 transition group-hover:opacity-100 sm:block" />
         </a>

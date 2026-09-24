@@ -61,6 +61,15 @@ async function seed(request: APIRequestContext) {
   return channel;
 }
 
+test("CTA do projeto na barra lateral aponta para o site oficial", async ({ page }) => {
+  await page.goto("/dashboard");
+  const cta = page.getByRole("link", { name: /Saiba mais sobre o projeto ContentFlow/ });
+  await expect(cta).toBeVisible();
+  await expect(cta).toHaveText("Saiba mais sobre o projeto ContentFlow");
+  await expect(cta).toHaveAttribute("href", "https://andremjr.github.io/contentflow/");
+  await expect(cta).toHaveAttribute("target", "_blank");
+});
+
 test("reordena Processos na barra lateral, persiste e rejeita dependência posterior", async ({
   page,
   request,
