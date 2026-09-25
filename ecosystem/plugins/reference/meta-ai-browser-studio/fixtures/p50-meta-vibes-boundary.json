@@ -1,0 +1,33 @@
+{
+  "pluginId": "local.contentflow.meta-ai-browser-studio",
+  "capabilityIds": [
+    "generate-text-in-browser",
+    "generate-image-in-browser",
+    "generate-video-in-browser"
+  ],
+  "origins": ["https://meta.ai", "https://www.meta.ai"],
+  "routes": {
+    "generate-text-in-browser": "https://www.meta.ai/",
+    "generate-image-in-browser": "https://www.meta.ai/create",
+    "generate-video-in-browser": "https://www.meta.ai/vibes"
+  },
+  "standaloneVibesOrigin": "https://vibes.ai",
+  "networkHosts": ["meta.ai", "www.meta.ai", "facebook.com", "*.fbcdn.net"],
+  "capabilities": {
+    "generate-text-in-browser": {
+      "inputPorts": ["content", "attachments"],
+      "outputPorts": ["result", "parts"]
+    },
+    "generate-image-in-browser": {
+      "inputPorts": ["prompt", "references"],
+      "outputPorts": ["image", "description"]
+    },
+    "generate-video-in-browser": {
+      "inputPorts": ["prompt", "references"],
+      "outputPorts": ["video", "description"],
+      "requiredOutput": "video",
+      "acceptedReferenceTypes": ["image", "video", "file", "files"],
+      "producedTypes": ["video", "textarea"]
+    }
+  }
+}

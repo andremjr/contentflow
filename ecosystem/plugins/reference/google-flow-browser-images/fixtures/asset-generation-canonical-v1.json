@@ -1,0 +1,27 @@
+{
+  "fixtureId": "asset-generation-canonical-v1",
+  "slots": [
+    {
+      "expectedItemId": "asset-slot-image-city-dawn",
+      "kind": "generation_prompt",
+      "prompt": "Cinematic aerial view of a city at dawn, warm light, 16:9"
+    },
+    {
+      "expectedItemId": "asset-slot-image-forest-rain",
+      "kind": "generation_prompt",
+      "prompt": "Close-up of a rainforest trail in gentle rain, realistic documentary style, 16:9"
+    },
+    {
+      "expectedItemId": "asset-slot-stock-commute",
+      "kind": "stock_brief",
+      "brief": {
+        "brief_id": "asset-slot-stock-commute",
+        "start_seconds": 12,
+        "end_seconds": 18,
+        "primary_query": "urban commuters at sunrise",
+        "media_preference": "video",
+        "orientation": "landscape"
+      }
+    }
+  ]
+}

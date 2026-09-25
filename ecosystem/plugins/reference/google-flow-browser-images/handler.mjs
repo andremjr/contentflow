@@ -572,6 +572,8 @@ async function clickSubmit(client, sessionId, settings = {}, signal) {
 }
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 512 * 1024 * 1024;
+const FLOW_INTERNAL_CONTEXT = Symbol("flowInternalContext");
 const DEFAULT_PORT = 9333;
 const PROFILE_SETUP_WAIT_MS = Number.POSITIVE_INFINITY;
 const EXTENSION_BRIDGE_ID = "com.contentflow.browser-bridge";
@@ -607,6 +609,120 @@ const VIDEO_MODEL_LABELS = Object.freeze({
   veo_3_1_lite: "Veo 3.1 - Lite",
   omni_1_1_flash: "Omni 1.1 Flash",
 });
+const FLOW_MODEL_VALUE_PREFIX = "flow_label:";
+const FLOW_MEDIA_MESSAGES = Object.freeze({
+  "pt-BR": {
+    imageMime: (mime) => `MIME inesperado: ${mime}`,
+    imageTooLarge: "Imagem excede 25 MB.",
+    imageInvalidSize: "Imagem vazia ou maior que 25 MB.",
+    imageLengthMismatch: "O tamanho declarado da imagem não corresponde aos bytes recebidos.",
+    imageInvalidSignature:
+      "O download do Flow declarou imagem, mas os bytes não têm assinatura JPEG, PNG ou WebP válida.",
+    imageMimeMismatch: (mime) =>
+      `O MIME ${mime} não corresponde à assinatura binária do arquivo baixado.`,
+    videoMime: (mime) => `MIME inesperado: ${mime}`,
+    videoTooLarge: "Vídeo excede 512 MB.",
+    videoInvalidSize: "Vídeo vazio, truncado ou maior que 512 MB.",
+    videoLengthMismatch: "O tamanho declarado do vídeo não corresponde aos bytes recebidos.",
+    videoInvalidSignature:
+      "O download do Flow declarou vídeo MP4, mas os bytes não têm assinatura compatível.",
+    reconciled: (position) =>
+      `Prompt ${position}: efeito externo reconciliado no projeto sem novo envio.`,
+    generationNotConfirmed:
+      "O botão de geração recebeu o clique, mas o Flow manteve o prompt pronto para envio; nenhuma geração foi confirmada.",
+    videoModeNotConfirmed:
+      "O Flow não confirmou o modo e a duração do vídeo; o prompt não será enviado.",
+    videoModeConfirmed: ({ mode, duration }) =>
+      `Modo de vídeo confirmado: ${mode === "frames" ? "Frames" : "Elementos"}; duração ${duration}s.`,
+    browserVisible: "Janela do Chrome confirmada em modo visível (headless desativado).",
+  },
+  en: {
+    imageMime: (mime) => `Unexpected MIME type: ${mime}`,
+    imageTooLarge: "Image exceeds 25 MB.",
+    imageInvalidSize: "Image is empty or larger than 25 MB.",
+    imageLengthMismatch: "The declared image size does not match the received bytes.",
+    imageInvalidSignature:
+      "Flow declared an image, but the downloaded bytes do not have a valid JPEG, PNG, or WebP signature.",
+    imageMimeMismatch: (mime) => `MIME type ${mime} does not match the downloaded file signature.`,
+    videoMime: (mime) => `Unexpected MIME type: ${mime}`,
+    videoTooLarge: "Video exceeds 512 MB.",
+    videoInvalidSize: "Video is empty, truncated, or larger than 512 MB.",
+    videoLengthMismatch: "The declared video size does not match the received bytes.",
+    videoInvalidSignature:
+      "Flow declared an MP4 video, but the downloaded bytes do not have a compatible signature.",
+    reconciled: (position) =>
+      `Prompt ${position}: external effect reconciled in the project without resubmission.`,
+    generationNotConfirmed:
+      "The generation button was clicked, but Flow kept the prompt ready to submit; no generation was confirmed.",
+    videoModeNotConfirmed:
+      "Flow did not confirm the video mode and duration; the prompt will not be submitted.",
+    videoModeConfirmed: ({ mode, duration }) =>
+      `Video mode confirmed: ${mode === "frames" ? "Frames" : "Elements"}; duration ${duration}s.`,
+    browserVisible: "Chrome window confirmed in visible mode (headless disabled).",
+  },
+  es: {
+    imageMime: (mime) => `Tipo MIME inesperado: ${mime}`,
+    imageTooLarge: "La imagen supera los 25 MB.",
+    imageInvalidSize: "La imagen está vacía o supera los 25 MB.",
+    imageLengthMismatch: "El tamaño declarado de la imagen no coincide con los bytes recibidos.",
+    imageInvalidSignature:
+      "Flow declaró una imagen, pero los bytes descargados no tienen una firma JPEG, PNG o WebP válida.",
+    imageMimeMismatch: (mime) =>
+      `El tipo MIME ${mime} no coincide con la firma del archivo descargado.`,
+    videoMime: (mime) => `Tipo MIME inesperado: ${mime}`,
+    videoTooLarge: "El vídeo supera los 512 MB.",
+    videoInvalidSize: "El vídeo está vacío, truncado o supera los 512 MB.",
+    videoLengthMismatch: "El tamaño declarado del vídeo no coincide con los bytes recibidos.",
+    videoInvalidSignature:
+      "Flow declaró un vídeo MP4, pero los bytes descargados no tienen una firma compatible.",
+    reconciled: (position) =>
+      `Prompt ${position}: efecto externo reconciliado en el proyecto sin un nuevo envío.`,
+    generationNotConfirmed:
+      "Se hizo clic en el botón de generación, pero Flow mantuvo el prompt listo para enviar; no se confirmó ninguna generación.",
+    videoModeNotConfirmed:
+      "Flow no confirmó el modo ni la duración del vídeo; el prompt no se enviará.",
+    videoModeConfirmed: ({ mode, duration }) =>
+      `Modo de vídeo confirmado: ${mode === "frames" ? "Frames" : "Elementos"}; duración ${duration}s.`,
+    browserVisible: "Ventana de Chrome confirmada en modo visible (headless desactivado).",
+  },
+});
+
+function flowMediaMessage(locale, key, argument) {
+  const language = String(locale || "pt-BR").toLowerCase();
+  const catalog = language.startsWith("en")
+    ? FLOW_MEDIA_MESSAGES.en
+    : language.startsWith("es")
+      ? FLOW_MEDIA_MESSAGES.es
+      : FLOW_MEDIA_MESSAGES["pt-BR"];
+  const message = catalog[key];
+  return typeof message === "function" ? message(argument) : message;
+}
+
+function actionableOutputPort(capabilityId) {
+  if (capabilityId === "generate-images-in-browser") return "images";
+  if (["animate-image-in-browser", "generate-video-in-browser"].includes(capabilityId)) {
+    return "video";
+  }
+  return undefined;
+}
+
+function artifactNamespace(value, fallback = "media") {
+  const namespace = String(value || fallback)
+    .trim()
+    .toLowerCase();
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(namespace) ? namespace : fallback;
+}
+
+function mediaItemUpdate({ key, variantKey, outputPort, input, value }) {
+  return {
+    key,
+    ...(variantKey ? { variantKey } : {}),
+    outputPort,
+    state: "completed",
+    input,
+    value,
+  };
+}
 const VIDEO_RESOLUTIONS = Object.freeze({
   flow_current: null,
   res_720p: "720p",
@@ -629,6 +745,92 @@ function resultError(code, message, retryable = false, retryAfterMs) {
   const out = { status: "error", code, message, retryable };
   if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) out.retryAfterMs = retryAfterMs;
   return out;
+}
+
+function normalizeFlowModelLabel(value) {
+  const label = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!label || label.length > 120 || /[\u0000-\u001f\u007f]/.test(label)) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", "O Flow devolveu um rótulo de modelo inválido.");
+  }
+  return label;
+}
+
+function modelLabelMap(type) {
+  return type === "video" ? VIDEO_MODEL_LABELS : MODEL_LABELS;
+}
+
+function dynamicFlowModelValue(label, type) {
+  const normalizedLabel = normalizeFlowModelLabel(label);
+  const known = Object.entries(modelLabelMap(type)).find(
+    ([key, candidate]) =>
+      key !== "flow_auto" &&
+      String(candidate || "").localeCompare(normalizedLabel, undefined, {
+        sensitivity: "accent",
+      }) === 0,
+  );
+  return (
+    known?.[0] ??
+    `${FLOW_MODEL_VALUE_PREFIX}${Buffer.from(normalizedLabel, "utf8").toString("base64url")}`
+  );
+}
+
+function dynamicFlowModelLabel(value, type) {
+  const key = String(value ?? "");
+  if (Object.hasOwn(modelLabelMap(type), key)) return modelLabelMap(type)[key];
+  if (!key.startsWith(FLOW_MODEL_VALUE_PREFIX)) return null;
+  const encoded = key.slice(FLOW_MODEL_VALUE_PREFIX.length);
+  if (!/^[A-Za-z0-9_-]{2,180}$/.test(encoded)) return null;
+  try {
+    return normalizeFlowModelLabel(Buffer.from(encoded, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function flowAutoOption(locale) {
+  const language = String(locale || "pt-BR")
+    .toLowerCase()
+    .split("-")[0];
+  if (language === "en") {
+    return {
+      value: "flow_auto",
+      label: "Automatic: Pro → 2 → 2 Lite",
+      description: "Safe fallback between the image models known for this account.",
+    };
+  }
+  if (language === "es") {
+    return {
+      value: "flow_auto",
+      label: "Automático: Pro → 2 → 2 Lite",
+      description: "Fallback seguro entre los modelos de imagen conocidos de esta cuenta.",
+    };
+  }
+  return {
+    value: "flow_auto",
+    label: "Automático: Pro → 2 → 2 Lite",
+    description: "Fallback seguro entre os modelos de imagem conhecidos desta conta.",
+  };
+}
+
+function normalizeFlowModelOptions(labels, type, locale = "pt-BR") {
+  if (!Array.isArray(labels)) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", "O Flow não devolveu uma lista de modelos.");
+  }
+  const options = [];
+  const seen = new Set();
+  for (const rawLabel of labels) {
+    const label = normalizeFlowModelLabel(rawLabel);
+    const value = dynamicFlowModelValue(label, type);
+    if (seen.has(value)) continue;
+    seen.add(value);
+    options.push({ value, label });
+  }
+  if (type === "image" && options.length > 0) {
+    options.unshift(flowAutoOption(locale));
+  }
+  return options;
 }
 
 function codedError(code, message, retryable = false) {
@@ -780,7 +982,8 @@ async function readCaptchaRetryNavigation(request, services) {
     if (
       state?.executionId !== request.executionId ||
       state?.blockId !== request.blockId ||
-      state?.failedAttempt !== Number(request.attempt) - 1
+      state?.failedAttempt !== Number(request.attempt) - 1 ||
+      state?.accountProfile !== String(request?.configuration?.accountProfile || "").trim()
     ) {
       return undefined;
     }
@@ -814,6 +1017,7 @@ async function saveCaptchaRetryNavigation(
       executionId: request.executionId,
       blockId: request.blockId,
       failedAttempt: Number(request.attempt),
+      accountProfile: String(request?.configuration?.accountProfile || "").trim(),
       projectUrl: validateFlowUrl(projectUrl),
       referencesAttached,
     }),
@@ -939,6 +1143,18 @@ function promptIndexFromGeneratedFile(file, kind) {
   }
   const ordinal = Number(String(file?.name || "").match(/^(\d{3})_/)?.[1]);
   return Number.isInteger(ordinal) && ordinal > 0 ? ordinal - 1 : undefined;
+}
+
+function sortGeneratedOutputs(items, kind = "image") {
+  return items.sort((left, right) => {
+    const promptDifference =
+      (promptIndexFromGeneratedFile(left, kind) ?? Number.MAX_SAFE_INTEGER) -
+      (promptIndexFromGeneratedFile(right, kind) ?? Number.MAX_SAFE_INTEGER);
+    if (promptDifference !== 0) return promptDifference;
+    const leftVariant = Number(String(left?.id || left?.name || "").match(/-v(\d+)/i)?.[1] || 0);
+    const rightVariant = Number(String(right?.id || right?.name || "").match(/-v(\d+)/i)?.[1] || 0);
+    return leftVariant - rightVariant;
+  });
 }
 
 function generationPromptDigest(prompts) {
@@ -1086,19 +1302,28 @@ async function markProfilePrepared(path, name, extensionIdentity) {
 function resolveGenerationPreferences(configuration = {}) {
   const requestedModelKey = configuration.imageModel || "flow_auto";
   const aspectRatioKey = configuration.aspectRatio || "flow_current";
-  if (!Object.hasOwn(IMAGE_MODELS, requestedModelKey)) {
+  const discoveredModelLabel = Object.hasOwn(IMAGE_MODELS, requestedModelKey)
+    ? null
+    : dynamicFlowModelLabel(requestedModelKey, "image");
+  if (!Object.hasOwn(IMAGE_MODELS, requestedModelKey) && !discoveredModelLabel) {
     throw codedError("INVALID_CONFIGURATION", "imageModel não é reconhecido.");
   }
   if (!Object.hasOwn(ASPECT_RATIOS, aspectRatioKey)) {
     throw codedError("INVALID_CONFIGURATION", "aspectRatio não é reconhecido.");
   }
-  const modelKey = requestedModelKey === "flow_auto" ? "nano_banana_pro" : requestedModelKey;
+  const modelKey =
+    requestedModelKey === "flow_auto"
+      ? "nano_banana_pro"
+      : Object.hasOwn(IMAGE_MODELS, requestedModelKey)
+        ? requestedModelKey
+        : null;
   const customModelLabel = String(configuration.imageModelLabel || "").trim();
   return {
     requestedModelKey,
     modelKey,
-    imageModelName: IMAGE_MODELS[modelKey],
-    imageModelLabel: customModelLabel || MODEL_LABELS[requestedModelKey] || null,
+    imageModelName: modelKey ? IMAGE_MODELS[modelKey] : null,
+    imageModelLabel:
+      customModelLabel || discoveredModelLabel || MODEL_LABELS[requestedModelKey] || null,
     aspectRatioKey,
     imageAspectRatio: ASPECT_RATIOS[aspectRatioKey],
     // "flow_auto" is the automatic Pro -> 2 -> 2 Lite chain by definition.
@@ -1274,6 +1499,18 @@ function selectAnimationIndexes(total, configuration = {}) {
   return Array.from({ length: limit }, (_, index) => index);
 }
 
+function generatedArtifactInputPath(file, artifacts, services) {
+  const artifact = (artifacts ?? []).find(
+    (candidate) => candidate?.id && candidate.id === file?.id && candidate?.source?.kind === "path",
+  );
+  const relativePath = String(artifact?.source?.path || "").trim();
+  return relativePath ? services.getOutputPath(relativePath) : null;
+}
+
+function configurationForProjectContinuation(configuration, projectUrl) {
+  return projectUrl ? { ...configuration, projectMode: "auto", projectUrl: "" } : configuration;
+}
+
 async function executeVisualProductionBatch(request, services) {
   const prompts = normalizePrompts(request?.inputs?.prompts);
   if (prompts.length === 0)
@@ -1295,6 +1532,7 @@ async function executeVisualProductionBatch(request, services) {
       {
         ...request,
         capabilityId: "generate-video-in-browser",
+        [FLOW_INTERNAL_CONTEXT]: { artifactNamespace: "video" },
         inputs: {
           prompts,
           reference_images: request?.inputs?.reference_images,
@@ -1311,6 +1549,12 @@ async function executeVisualProductionBatch(request, services) {
               videos: normalizeReferenceImages(update.values?.video),
               ...(update.values?.project_url ? { project_url: update.values.project_url } : {}),
             },
+            itemUpdates: update.itemUpdates?.map((item) => ({
+              ...item,
+              key: `video:${item.key}`,
+              variantKey: item.variantKey ? `video:${item.variantKey}` : "video:0",
+              outputPort: item.outputPort === "video" ? "videos" : item.outputPort,
+            })),
           }),
       },
     );
@@ -1359,6 +1603,9 @@ async function executeVisualProductionBatch(request, services) {
       {
         ...request,
         capabilityId: "generate-images-in-browser",
+        configuration: configurationForProjectContinuation(configuration, activeProjectUrl),
+        settings: { ...request?.settings, keepBrowserOpen: true },
+        [FLOW_INTERNAL_CONTEXT]: { artifactNamespace: "character-reference" },
         inputs: {
           prompts: characterPrompts,
           reference_images: request?.inputs?.reference_images,
@@ -1375,6 +1622,12 @@ async function executeVisualProductionBatch(request, services) {
               character_references: normalizeReferenceImages(update.values?.images),
               ...(update.values?.project_url ? { project_url: update.values.project_url } : {}),
             },
+            itemUpdates: update.itemUpdates?.map((item) => ({
+              ...item,
+              key: `character:${item.key}`,
+              variantKey: item.variantKey ? `character:${item.variantKey}` : "character:image:0",
+              outputPort: item.outputPort === "images" ? "character_references" : item.outputPort,
+            })),
           }),
       },
     );
@@ -1416,6 +1669,12 @@ async function executeVisualProductionBatch(request, services) {
     const imageRequest = {
       ...request,
       capabilityId: "generate-images-in-browser",
+      configuration: configurationForProjectContinuation(configuration, activeProjectUrl),
+      settings: {
+        ...request?.settings,
+        keepBrowserOpen: productionMode !== "images_only" || request?.settings?.keepBrowserOpen,
+      },
+      [FLOW_INTERNAL_CONTEXT]: { artifactNamespace: "image" },
       inputs: {
         prompts,
         reference_images: [request?.inputs?.reference_images, characterReferences],
@@ -1483,6 +1742,16 @@ async function executeVisualProductionBatch(request, services) {
     const animationRequest = {
       ...request,
       capabilityId: "animate-image-in-browser",
+      configuration: configurationForProjectContinuation(configuration, activeProjectUrl),
+      settings: {
+        ...request?.settings,
+        keepBrowserOpen:
+          position < selectedIndexes.length - 1 || request?.settings?.keepBrowserOpen === true,
+      },
+      [FLOW_INTERNAL_CONTEXT]: {
+        artifactNamespace: "animation",
+        promptOrdinal: imageIndex + 1,
+      },
       inputs: {
         images: images[imageIndex],
         prompts:
@@ -1491,7 +1760,26 @@ async function executeVisualProductionBatch(request, services) {
       },
       outputContract: [{ portKey: "video", type: "files" }],
     };
-    const animationResult = await execute(animationRequest, services);
+    const animationResult = await execute(animationRequest, {
+      ...services,
+      resolveInputFile: async (file) => {
+        const generatedPath = generatedArtifactInputPath(file, imageArtifacts, services);
+        if (generatedPath) return generatedPath;
+        return await services.resolveInputFile(file);
+      },
+      publishPartial: async (update) =>
+        await services.publishPartial?.({
+          ...update,
+          itemUpdates: update.itemUpdates?.map((item) => ({
+            ...item,
+            key: `animation:${imageIndex}:${item.key}`,
+            variantKey: item.variantKey
+              ? `animation:${imageIndex}:${item.variantKey}`
+              : `animation:${imageIndex}:video:0`,
+            outputPort: item.outputPort === "video" ? "videos" : item.outputPort,
+          })),
+        }),
+    });
     logs.push(...(animationResult.logs ?? []));
     if (animationResult.status !== "success") {
       activeProjectUrl =
@@ -1596,12 +1884,16 @@ function resolveVideoPreferences(configuration = {}) {
   const videoModelKey = configuration.videoModel || "veo_3_1_fast";
   const videoResolutionKey = configuration.videoResolution || "flow_current";
   const aspectRatioKey = configuration.aspectRatio || "flow_current";
-  if (!Object.hasOwn(VIDEO_MODELS, videoModelKey)) {
+  const discoveredModelLabel = Object.hasOwn(VIDEO_MODELS, videoModelKey)
+    ? null
+    : dynamicFlowModelLabel(videoModelKey, "video");
+  if (!Object.hasOwn(VIDEO_MODELS, videoModelKey) && !discoveredModelLabel) {
     throw codedError("INVALID_CONFIGURATION", "videoModel não é reconhecido.");
   }
   return {
     videoModelKey,
-    videoModelName: configuration.videoModelLabel || VIDEO_MODELS[videoModelKey],
+    videoModelName:
+      configuration.videoModelLabel || discoveredModelLabel || VIDEO_MODELS[videoModelKey],
     videoResolutionKey,
     videoResolutionLabel: VIDEO_RESOLUTIONS[videoResolutionKey] || null,
     aspectRatioKey,
@@ -1788,7 +2080,17 @@ async function launchOrReuseChrome({
   signal,
 }) {
   const existing = await fetchBrowserVersion(port);
-  if (existing) return { version: existing, child: null, startedByPlugin: false };
+  if (existing) {
+    try {
+      const probe = await new CdpClient(existing.webSocketDebuggerUrl).connect(signal);
+      probe.close();
+      return { version: existing, child: null, startedByPlugin: false };
+    } catch {
+      // The version endpoint can outlive the browser websocket briefly while
+      // Chrome is shutting down between two phases of the composite capability.
+      await sleep(500, signal);
+    }
+  }
 
   const args = [
     `--remote-debugging-port=${port}`,
@@ -2819,13 +3121,8 @@ async function uploadReferenceImagesInPage(
       await bridge.dispatch(
         "click",
         {
-          selectors: ["button", '[role="button"]'],
-          textIncludes: [
-            "adicionar elementos à caixa de comando",
-            "add elements to prompt box",
-            "adicionar referência",
-            "add reference",
-          ],
+          selectors: ["flow-add-menu button"],
+          preferDomActivation: true,
         },
         `open-reference-menu:${clickAttempt}`,
       );
@@ -2848,6 +3145,7 @@ async function uploadReferenceImagesInPage(
         "click",
         {
           selectors: ["button", '[role="button"]', '[role="menuitem"]', '[role="option"]'],
+          preferDomActivation: true,
           textIncludes: ["enviar mídia", "upload media", "carregar mídia", "upload file"],
         },
         "choose-reference-upload",
@@ -3151,20 +3449,97 @@ async function clickGenerateWithExtension(bridge, settings, operationKey) {
   return await bridge.dispatch(
     "clickGenerate",
     {
+      selectors: [
+        "flow-generate-icon-button button",
+        'button[aria-label*="iniciar geração" i]',
+        'button[aria-label*="start generation" i]',
+        'button[aria-label*="iniciar generaci" i]',
+        'button[type="submit"]',
+        "button",
+      ],
       promptSelector: settings?.promptSelector || "",
       generateSelector: settings?.generateSelector || "",
       textIncludes: [
         "iniciar geração",
         "iniciar geracao",
         "start generation",
-        "criar",
-        "create",
-        "gerar",
-        "generate",
+        "iniciar generación",
+        "arrow_forward",
       ],
     },
     operationKey,
   );
+}
+
+async function clickGenerateAndConfirm(
+  client,
+  sessionId,
+  bridge,
+  settings,
+  operationKey,
+  signal,
+  locale,
+) {
+  const readState = () =>
+    evaluate(
+      client,
+      sessionId,
+      `(() => { ${DEEP_HELPERS}
+        const prompt = cfPromptCandidate(${JSON.stringify(settings?.promptSelector || "")});
+        const button = cfGenerateCandidate(prompt, ${JSON.stringify(settings?.generateSelector || "")}, true);
+        const promptText = (prompt?.innerText || prompt?.textContent || prompt?.value || '').replace(/\s+/g, ' ').trim();
+        const pending = cfAll('[aria-busy="true"], [role="progressbar"], [class*="loading" i], [class*="spinner" i]')
+          .filter(cfVisible).length;
+        return {
+          promptText,
+          disabled: Boolean(button && (button.disabled || button.getAttribute('aria-disabled') === 'true')),
+          pending,
+        };
+      })()`,
+    );
+  const before = await readState();
+  let click;
+  try {
+    click = await clickGenerateWithExtension(bridge, settings, operationKey);
+  } catch (cause) {
+    if (!/controle não encontrado|control not found/i.test(String(cause?.message || "")))
+      throw cause;
+    click = { ok: false, mechanism: "control-not-found" };
+  }
+  const waitForEffect = async (timeoutMs) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+      const after = await readState();
+      if (
+        after?.promptText !== before?.promptText ||
+        (!before?.disabled && after?.disabled) ||
+        Number(after?.pending || 0) > Number(before?.pending || 0)
+      ) {
+        return true;
+      }
+      await sleep(250, signal);
+    }
+    return false;
+  };
+  if (click.ok !== false && (await waitForEffect(5_000))) {
+    return { ...click, confirmed: true, mechanism: click.mechanism };
+  }
+  const enter = await bridge.dispatch(
+    "pressEnter",
+    {
+      selectors: [
+        '[data-slate-editor="true"]',
+        '[contenteditable="true"][role="textbox"]',
+        '[contenteditable="true"]',
+      ],
+    },
+    `${operationKey}:enter`,
+  );
+  if (await waitForEffect(5_000)) {
+    return { ...enter, confirmed: true, mechanism: enter.mechanism };
+  }
+  throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "generationNotConfirmed"));
 }
 
 async function getActiveFlowProjectUrl(client, sessionId) {
@@ -3187,10 +3562,13 @@ async function ensureFlowModelAndRatio(
     modelName,
     ratioLabel,
     resolutionLabel,
+    videoMode,
+    durationSeconds,
     outputCount,
     forceImageMode = false,
     settings = {},
     signal,
+    locale,
   },
   step,
 ) {
@@ -3204,6 +3582,31 @@ async function ensureFlowModelAndRatio(
           .some(el => /^(?:image|imagem|video|vídeo|frames|x[1-4]|\\d+:\\d+)$/i.test(cfText(el).replace(/^(?:image|videocam|crop_[^ ]+)\s+/i, '')));
       })()`,
     );
+  if (videoMode || durationSeconds) {
+    const configured = await evaluate(
+      client,
+      sessionId,
+      `(async () => window.FlowAuto?.adapter?.configureGeneration
+        ? await window.FlowAuto.adapter.configureGeneration({
+            type: "video",
+            videoMode: ${JSON.stringify(videoMode || null)},
+            duration: ${JSON.stringify(durationSeconds || null)}
+          })
+        : null)()`,
+    );
+    if (!configured?.ok) {
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        flowMediaMessage(locale, "videoModeNotConfirmed"),
+      );
+    }
+    step?.(
+      flowMediaMessage(locale, "videoModeConfirmed", {
+        mode: videoMode,
+        duration: durationSeconds,
+      }),
+    );
+  }
   if (modelName) {
     step?.(`Configurando modelo no Google Flow: ${modelName}...`);
     try {
@@ -3305,7 +3708,7 @@ async function ensureFlowModelAndRatio(
           setViaEngine = await evaluate(
             client,
             sessionId,
-            `Boolean(window.FlowAuto?.adapter?.setModel && await window.FlowAuto.adapter.setModel(${JSON.stringify(modelName)}))`,
+            `(async () => Boolean(window.FlowAuto?.adapter?.setModel && await window.FlowAuto.adapter.setModel(${JSON.stringify(modelName)})))()`,
           );
         } catch {}
 
@@ -3816,6 +4219,7 @@ async function runGenerationPlan({
   failFast = false,
   minDelayMs = 0,
   submit,
+  reconcile,
   onState,
   onItemCompleted,
   wait = sleep,
@@ -3824,6 +4228,22 @@ async function runGenerationPlan({
   const results = new Array(prompts.length);
   const errors = new Array(prompts.length);
   const controller = createAdaptiveConcurrencyController(maxInFlight, minDelayMs);
+  const reconcileFailure = async (task, error) => {
+    if (typeof reconcile !== "function") {
+      return error?.externalEffectUncertain === true
+        ? { status: "uncertain" }
+        : { status: "safe_to_retry" };
+    }
+    const outcome = await reconcile({ task, error });
+    if (
+      outcome?.status === "recovered" ||
+      outcome?.status === "safe_to_retry" ||
+      outcome?.status === "uncertain"
+    ) {
+      return outcome;
+    }
+    return { status: "uncertain" };
+  };
 
   if (maxInFlight === 1) {
     for (let index = 0; index < prompts.length; index += 1) {
@@ -3844,6 +4264,16 @@ async function runGenerationPlan({
           await onItemCompleted?.({ task, value: results[index] });
         } catch (error) {
           errors[index] = error;
+          const reconciliation = await reconcileFailure(task, error);
+          if (reconciliation.status === "recovered") {
+            results[index] = reconciliation.value;
+            errors[index] = undefined;
+            completed = true;
+            controller.success();
+            await onItemCompleted?.({ task, value: results[index], reconciled: true });
+            continue;
+          }
+          if (reconciliation.status === "uncertain") break;
           const isRate = error?.code === "RATE_LIMIT" || error?.isUnusualActivity === true;
           if (isRate && rateRetries < rateLimitRetryAttempts) {
             rateRetries += 1;
@@ -3880,6 +4310,7 @@ async function runGenerationPlan({
   }
 
   let tasks = prompts.map((prompt, index) => ({ index, prompt, attempt: 1 }));
+  const terminalFailures = [];
   for (let round = 0; round <= retryAttempts && tasks.length > 0; round += 1) {
     const outcome = await runSubmissionRound(tasks, controller.getLimit(), submit, onState, {
       minDelayMs: controller.getDelayMs(),
@@ -3897,9 +4328,27 @@ async function runGenerationPlan({
       controller.failure(failure.error);
     }
     if (failFast && outcome.failed.length > 0) throw outcome.failed[0].error;
-    tasks = outcome.failed
-      .sort((left, right) => left.task.index - right.task.index)
-      .map(({ task }) => ({ ...task, attempt: task.attempt + 1 }));
+    const retryableTasks = [];
+    for (const failure of outcome.failed.sort(
+      (left, right) => left.task.index - right.task.index,
+    )) {
+      const reconciliation = await reconcileFailure(failure.task, failure.error);
+      if (reconciliation.status === "recovered") {
+        results[failure.task.index] = reconciliation.value;
+        errors[failure.task.index] = undefined;
+        controller.success();
+        await onItemCompleted?.({
+          task: failure.task,
+          value: reconciliation.value,
+          reconciled: true,
+        });
+      } else if (reconciliation.status === "safe_to_retry") {
+        retryableTasks.push({ ...failure.task, attempt: failure.task.attempt + 1 });
+      } else {
+        terminalFailures.push(failure);
+      }
+    }
+    tasks = retryableTasks;
     if (tasks.length > 0 && round < retryAttempts) {
       onState?.({ type: "retry-round", attempt: round + 2, tasks: [...tasks] });
     }
@@ -3907,10 +4356,13 @@ async function runGenerationPlan({
 
   return {
     results,
-    failures: tasks.map((task) => ({
-      task: { ...task, attempt: task.attempt - 1 },
-      error: errors[task.index],
-    })),
+    failures: [
+      ...terminalFailures,
+      ...tasks.map((task) => ({
+        task: { ...task, attempt: task.attempt - 1 },
+        error: errors[task.index],
+      })),
+    ],
   };
 }
 
@@ -4294,7 +4746,62 @@ function extensionForMime(mimeType) {
   return ".img";
 }
 
-async function downloadGeneratedImage(item, prompt, promptOrdinal, variantOrdinal, services) {
+function validateImageArtifactBytes(bytes, mimeType, declaredSize, locale) {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "imageMime", mimeType));
+  }
+  if (Number.isFinite(declaredSize) && declaredSize > MAX_IMAGE_BYTES) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "imageTooLarge"));
+  }
+  if (bytes.byteLength < 1 || bytes.byteLength > MAX_IMAGE_BYTES) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "imageInvalidSize"));
+  }
+  if (Number.isFinite(declaredSize) && declaredSize >= 0 && declaredSize !== bytes.byteLength) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "imageLengthMismatch"));
+  }
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const isPng =
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a;
+  const isWebp =
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50;
+  if (!isJpeg && !isPng && !isWebp) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "imageInvalidSignature"));
+  }
+  if (
+    (mimeType === "image/jpeg" && !isJpeg) ||
+    (mimeType === "image/png" && !isPng) ||
+    (mimeType === "image/webp" && !isWebp)
+  ) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      flowMediaMessage(locale, "imageMimeMismatch", mimeType),
+    );
+  }
+}
+
+async function downloadGeneratedImage(
+  item,
+  prompt,
+  promptOrdinal,
+  variantOrdinal,
+  services,
+  namespace = "image",
+  locale,
+) {
   const generated = item?.image?.generatedImage;
   const mediaUrl = generated?.fifeUrl;
   const mediaId = generated?.mediaId || item?.name || `image-${promptOrdinal}-${variantOrdinal}`;
@@ -4337,60 +4844,22 @@ async function downloadGeneratedImage(item, prompt, promptOrdinal, variantOrdina
       response.status >= 500,
     );
 
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES)
-    throw codedError("OUTPUT_VALIDATION_FAILED", "Imagem excede 25 MB.");
+  const declaredHeader = response.headers.get("content-length");
+  const declared = declaredHeader === null ? Number.NaN : Number(declaredHeader);
   const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength < 1 || bytes.byteLength > MAX_IMAGE_BYTES)
-    throw codedError("OUTPUT_VALIDATION_FAILED", "Imagem vazia ou maior que 25 MB.");
-
   const mimeType = (response.headers.get("content-type") || "image/jpeg")
     .split(";")[0]
     .trim()
     .toLowerCase();
-  if (!mimeType.startsWith("image/"))
-    throw codedError("OUTPUT_VALIDATION_FAILED", `MIME inesperado: ${mimeType}`);
-  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-  const isPng =
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47 &&
-    bytes[4] === 0x0d &&
-    bytes[5] === 0x0a &&
-    bytes[6] === 0x1a &&
-    bytes[7] === 0x0a;
-  const isWebp =
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50;
-  if (!isJpeg && !isPng && !isWebp) {
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      "O download do Flow declarou imagem, mas os bytes não têm assinatura JPEG, PNG ou WebP válida.",
-    );
-  }
-  if (
-    (mimeType.includes("jpeg") && !isJpeg) ||
-    (mimeType.includes("png") && !isPng) ||
-    (mimeType.includes("webp") && !isWebp)
-  ) {
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      `O MIME ${mimeType} não corresponde à assinatura binária do arquivo baixado.`,
-    );
-  }
+  validateImageArtifactBytes(bytes, mimeType, declared, locale);
 
   const ext = extensionForMime(mimeType);
   const promptPart = String(promptOrdinal).padStart(3, "0");
   const variantPart = String(variantOrdinal).padStart(2, "0");
-  const filename = `${promptPart}_v${variantPart}_${safeFilename(prompt, String(mediaId))}${ext}`;
-  const artifactId = `google-flow-image-${promptPart}-v${variantPart}`;
+  const normalizedNamespace = artifactNamespace(namespace, "image");
+  const namespacePrefix = normalizedNamespace === "image" ? "" : `${normalizedNamespace}_`;
+  const filename = `${namespacePrefix}${promptPart}_v${variantPart}_${safeFilename(prompt, String(mediaId))}${ext}`;
+  const artifactId = `google-flow-${normalizedNamespace}-${promptPart}-v${variantPart}`;
   const outputPath =
     typeof services?.getOutputPath === "function"
       ? services.getOutputPath(filename)
@@ -4541,7 +5010,33 @@ async function waitForGeneratedVideosOnPage(
   );
 }
 
-async function downloadGeneratedVideo(item, prompt, promptOrdinal, services) {
+function validateVideoArtifactBytes(bytes, mimeType, declaredSize, locale) {
+  if (mimeType !== "video/mp4") {
+    throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "videoMime", mimeType));
+  }
+  if (Number.isFinite(declaredSize) && declaredSize > MAX_VIDEO_BYTES) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "videoTooLarge"));
+  }
+  if (bytes.byteLength < 12 || bytes.byteLength > MAX_VIDEO_BYTES) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "videoInvalidSize"));
+  }
+  if (Number.isFinite(declaredSize) && declaredSize >= 0 && declaredSize !== bytes.byteLength) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "videoLengthMismatch"));
+  }
+  const hasFtyp = bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70;
+  if (!hasFtyp) {
+    throw codedError("OUTPUT_VALIDATION_FAILED", flowMediaMessage(locale, "videoInvalidSignature"));
+  }
+}
+
+async function downloadGeneratedVideo(
+  item,
+  prompt,
+  promptOrdinal,
+  services,
+  namespace = "video",
+  locale,
+) {
   const mediaUrl = item?.video?.fifeUrl;
   const mediaId = item?.video?.mediaId || `video-${promptOrdinal}`;
   if (typeof mediaUrl !== "string" || !mediaUrl) {
@@ -4572,19 +5067,20 @@ async function downloadGeneratedVideo(item, prompt, promptOrdinal, services) {
     );
   }
 
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength < 1) {
-    throw codedError("OUTPUT_VALIDATION_FAILED", "Vídeo gerado está vazio.");
-  }
-
   const mimeType = (response.headers.get("content-type") || "video/mp4")
     .split(";")[0]
     .trim()
     .toLowerCase();
+  const declaredHeader = response.headers.get("content-length");
+  const declared = declaredHeader === null ? Number.NaN : Number(declaredHeader);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  validateVideoArtifactBytes(bytes, mimeType, declared, locale);
 
   const promptPart = String(promptOrdinal).padStart(3, "0");
-  const filename = `${promptPart}_video_${safeFilename(prompt, String(mediaId))}.mp4`;
-  const artifactId = `google-flow-video-${promptPart}`;
+  const normalizedNamespace = artifactNamespace(namespace, "video");
+  const namespacePrefix = normalizedNamespace === "video" ? "" : `${normalizedNamespace}_`;
+  const filename = `${namespacePrefix}${promptPart}_video_${safeFilename(prompt, String(mediaId))}.mp4`;
+  const artifactId = `google-flow-${normalizedNamespace}-${promptPart}`;
   const outputPath =
     typeof services?.getOutputPath === "function"
       ? services.getOutputPath(filename)
@@ -4690,8 +5186,210 @@ async function configureProfile(request, services) {
   }
 }
 
+const FLOW_CONFIGURATION_OPTION_PROVIDERS = Object.freeze({
+  "produce-visual-assets-in-browser": Object.freeze({
+    imageModel: Object.freeze({ providerId: "flow-image-models", type: "image" }),
+    videoModel: Object.freeze({ providerId: "flow-video-models", type: "video" }),
+  }),
+  "generate-images-in-browser": Object.freeze({
+    imageModel: Object.freeze({ providerId: "flow-image-models", type: "image" }),
+  }),
+  "animate-image-in-browser": Object.freeze({
+    videoModel: Object.freeze({ providerId: "flow-video-models", type: "video" }),
+  }),
+  "generate-video-in-browser": Object.freeze({
+    videoModel: Object.freeze({ providerId: "flow-video-models", type: "video" }),
+  }),
+});
+
+async function waitForExistingFlowProject(client, sessionId, settings, signal, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let last;
+  let navigated = false;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Consulta de modelos cancelada.");
+    last = await getPageState(client, sessionId, settings?.promptSelector || "");
+    if (!isFlowHost(last?.host)) {
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        "A aba de opções deixou a origem do Google Flow.",
+      );
+    }
+    if (last?.loginLike || last?.challenge) {
+      throw codedError(
+        "AUTHENTICATION_FAILED",
+        "O perfil precisa concluir login, reautenticação ou CAPTCHA antes de consultar modelos.",
+      );
+    }
+    if (last?.projectLike && last?.promptFound) return last;
+    const candidate =
+      !navigated && Array.isArray(last?.projectLinks) ? last.projectLinks[0]?.href : null;
+    if (typeof candidate === "string" && isFlowUrl(candidate, true)) {
+      await client.send("Page.navigate", { url: candidate }, sessionId);
+      navigated = true;
+    }
+    await sleep(500, signal);
+  }
+  throw codedError(
+    "OUTPUT_VALIDATION_FAILED",
+    "Abra ao menos um projeto existente do Google Flow neste perfil antes de atualizar os modelos.",
+  );
+}
+
+async function discoverFlowModelLabels(request, services, type) {
+  const settings = request?.settings ?? {};
+  const runtime = resolveProfileRuntime(request, services);
+  assertDedicatedProfilePath(runtime.profilePath);
+  if (!(await profileIsPrepared(runtime.profilePath, runtime.accountProfile))) {
+    throw codedError(
+      "AUTHENTICATION_FAILED",
+      `O perfil ${runtime.accountProfile} ainda não foi preparado para consultar modelos.`,
+    );
+  }
+
+  const configuredProjectUrl = String(request?.configuration?.projectUrl || "").trim();
+  const startUrl = configuredProjectUrl ? validateFlowUrl(configuredProjectUrl) : FLOW_LANDING_URL;
+  let launched;
+  let client;
+  let extensionBridge;
+  try {
+    launched = await launchOrReuseChrome({
+      executables: await resolveChromeExecutables(settings),
+      profilePath: runtime.profilePath,
+      port: runtime.port,
+      startMinimized: true,
+      keepBrowserOpen: false,
+      startUrl,
+      signal: services.signal,
+    });
+    client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
+    const page = await attachFlowPage(
+      client,
+      startUrl,
+      Boolean(configuredProjectUrl),
+      services.signal,
+      false,
+    );
+    extensionBridge = await attachExtensionBridge(client, page.sessionId, {
+      signal: services.signal,
+      request,
+      profileId: runtime.accountProfile,
+      waitMs: 10_000,
+    });
+    await waitForExistingFlowProject(client, page.sessionId, settings, services.signal);
+    const before = await evaluate(
+      client,
+      page.sessionId,
+      "({ url: location.href, origin: location.origin })",
+    );
+    if (!isFlowUrl(before?.url, true)) {
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        "A descoberta não está em um projeto do Google Flow.",
+      );
+    }
+    const labels = await evaluate(
+      client,
+      page.sessionId,
+      `(async () => window.FlowAuto?.adapter?.listModels ? await window.FlowAuto.adapter.listModels(${JSON.stringify(type)}) : null)()`,
+    );
+    const after = await evaluate(
+      client,
+      page.sessionId,
+      "({ url: location.href, origin: location.origin })",
+    );
+    if (!isFlowUrl(after?.url, true) || after.origin !== before.origin) {
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        "A origem mudou durante a descoberta de modelos.",
+      );
+    }
+    if (!Array.isArray(labels)) {
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        "A técnica protegida do Flow não disponibilizou a lista de modelos.",
+      );
+    }
+    return labels;
+  } finally {
+    await extensionBridge?.dispose();
+    if (launched?.startedByPlugin) await closeBrowserGracefully(client, launched.child);
+    else client?.close();
+  }
+}
+
+async function configureOptions(request, services, dependencies = {}) {
+  try {
+    const capabilityProviders = FLOW_CONFIGURATION_OPTION_PROVIDERS[request?.capabilityId];
+    const property = String(request?.invocation?.property || "");
+    const provider = capabilityProviders?.[property];
+    if (
+      request?.invocation?.action !== "options" ||
+      !provider ||
+      request?.invocation?.providerId !== provider.providerId
+    ) {
+      throw codedError("INVALID_CONFIGURATION", "Provider de opções do Google Flow inválido.");
+    }
+    normalizeAccountProfile(request?.configuration?.accountProfile);
+    const discover = dependencies.discoverModelLabels ?? discoverFlowModelLabels;
+    const labels = await discover(request, services, provider.type);
+    return {
+      status: "success",
+      values: {
+        options: normalizeFlowModelOptions(labels, provider.type, request?.context?.locale),
+      },
+    };
+  } catch (error) {
+    return resultError(
+      error?.code || "UPSTREAM_UNAVAILABLE",
+      error?.message || "Não foi possível consultar os modelos disponíveis no Google Flow.",
+      Boolean(error?.retryable),
+    );
+  }
+}
+
+function normalizeItemActionRequest(request) {
+  if (request?.invocation?.mode !== "item_action") return request;
+  if (request.invocation.action !== "regenerate") return null;
+  const itemInput = request?.itemAction?.input;
+  const capabilityId = String(request?.capabilityId ?? "");
+  const outputPort = actionableOutputPort(capabilityId);
+  if (!outputPort || request?.invocation?.outputPort !== outputPort) {
+    return null;
+  }
+  const inputs = { ...(request?.inputs ?? {}) };
+  if (["generate-images-in-browser", "generate-video-in-browser"].includes(capabilityId)) {
+    inputs.prompts = itemInput;
+  } else if (capabilityId === "animate-image-in-browser" && typeof itemInput === "string") {
+    inputs.prompts = itemInput;
+  }
+  return {
+    ...request,
+    invocation: { mode: "start" },
+    __flowItemAction: {
+      itemId: request?.invocation?.itemId,
+      outputPort,
+      key: request?.itemAction?.key,
+      variantKey: request?.itemAction?.variantKey,
+      attempt: request?.itemAction?.attempt,
+    },
+    inputs,
+    configuration:
+      capabilityId === "generate-images-in-browser"
+        ? { ...(request?.configuration ?? {}), maxImagesPerPrompt: 1 }
+        : request?.configuration,
+  };
+}
+
 export async function execute(request, services) {
-  if (request?.invocation?.mode === "configure") return await configureProfile(request, services);
+  if (request?.invocation?.mode === "configure") {
+    if (request?.invocation?.action === "options") return await configureOptions(request, services);
+    return await configureProfile(request, services);
+  }
+  request = normalizeItemActionRequest(request);
+  if (!request) {
+    return resultError("INVALID_CONFIGURATION", "A ação de item solicitada não é suportada.");
+  }
   if (request?.invocation?.mode !== "start") {
     return resultError(
       "INVALID_CONFIGURATION",
@@ -4700,6 +5398,11 @@ export async function execute(request, services) {
   }
 
   const capabilityId = String(request?.capabilityId ?? "generate-images-in-browser");
+  const internalContext = request?.[FLOW_INTERNAL_CONTEXT] ?? {};
+  const outputArtifactNamespace = artifactNamespace(
+    internalContext.artifactNamespace,
+    capabilityId === "generate-images-in-browser" ? "image" : "video",
+  );
   if (capabilityId === "produce-visual-assets-in-browser") {
     return executeVisualProductionBatch(request, services);
   }
@@ -4927,12 +5630,13 @@ export async function execute(request, services) {
         (artifact) => !durableGenerationArtifactIds.has(artifact?.id),
       )
     : [];
+  const launchMinimized = startMinimized && referencePaths.length === 0;
   try {
     browserInfo = await launchOrReuseChrome({
       executables: chromeExecutables,
       profilePath: profileRuntime.profilePath,
       port: profileRuntime.port,
-      startMinimized,
+      startMinimized: launchMinimized,
       keepBrowserOpen,
       startUrl: FLOW_LANDING_URL,
       signal: services.signal,
@@ -4975,9 +5679,9 @@ export async function execute(request, services) {
     const credentialsTracker = createCredentialsTracker(client, sessionId, services.signal);
     responseTracker = createBatchResponseTracker(client, sessionId, services.signal);
 
-    if (!startMinimized) {
+    if (!launchMinimized) {
       await showBrowserWindow(client, sessionId, page.targetId);
-      step("Janela do Chrome confirmada em modo visível (headless desativado).");
+      step(flowMediaMessage(request?.context?.locale, "browserVisible"));
     }
     const initialProjectState = await ensureFlowProjectReady(
       client,
@@ -4994,7 +5698,15 @@ export async function execute(request, services) {
     if (navigation.captureLabel) {
       await sleep(3_000, services.signal);
       const media = await recoverMediaByLabel(client, sessionId, navigation.captureLabel);
-      const recovered = await downloadGeneratedImage(media, prompts[0], 1, 1, services);
+      const recovered = await downloadGeneratedImage(
+        media,
+        prompts[0],
+        internalContext.promptOrdinal ?? 1,
+        1,
+        services,
+        outputArtifactNamespace,
+        request?.context?.locale,
+      );
       responseTracker?.close();
       responseTracker = null;
       await extensionBridge.dispose();
@@ -5046,6 +5758,9 @@ export async function execute(request, services) {
           {
             modelName: videoPreferences.videoModelName,
             resolutionLabel: videoPreferences.videoResolutionLabel,
+            videoMode: videoPreferences.videoReferenceMode,
+            durationSeconds: videoPreferences.durationSeconds,
+            locale: request?.context?.locale,
           },
           step,
         );
@@ -5075,24 +5790,40 @@ export async function execute(request, services) {
       const baselineMedia = await generatedVideosOnPage(client, sessionId);
       const baselineUrls = baselineMedia.map((item) => item.video.fifeUrl);
 
+      await clickGenerateAndConfirm(
+        client,
+        sessionId,
+        extensionBridge,
+        settings,
+        "animate:0:submit",
+        services.signal,
+        request?.context?.locale,
+      );
       generationSubmitted = true;
-      await clickSubmit(client, sessionId, settings, services.signal);
       step("Geração de animação confirmada. Aguardando conclusão do vídeo...");
 
       const responseTimeoutMs = requestTimeoutSeconds * 1000;
-      const videoResult = await waitForGeneratedVideosOnPage(
-        client,
-        sessionId,
-        baselineUrls,
-        services.signal,
-        responseTimeoutMs,
-      );
+      let videoResult;
+      try {
+        videoResult = await waitForGeneratedVideosOnPage(
+          client,
+          sessionId,
+          baselineUrls,
+          services.signal,
+          responseTimeoutMs,
+        );
+      } catch (cause) {
+        if (cause?.code === "TIMEOUT") cause.externalEffectUncertain = true;
+        throw cause;
+      }
       const selectedVideo = videoResult.media[0];
       const result = await downloadGeneratedVideo(
         selectedVideo,
         promptText || "animacao",
-        1,
+        internalContext.promptOrdinal ?? 1,
         services,
+        outputArtifactNamespace,
+        request?.context?.locale,
       );
       files.push(result.file);
       artifacts.push(result.artifact);
@@ -5103,6 +5834,15 @@ export async function execute(request, services) {
           ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
         },
         artifacts,
+        itemUpdates: [
+          mediaItemUpdate({
+            key: "animation:0",
+            variantKey: "video:0",
+            outputPort: "video",
+            input: promptText,
+            value: result.file,
+          }),
+        ],
         progress: 1,
         message: "Vídeo animado capturado.",
       });
@@ -5145,6 +5885,9 @@ export async function execute(request, services) {
             modelName: videoPreferences.videoModelName,
             ratioLabel: ASPECT_RATIO_LABELS[videoPreferences.aspectRatioKey] || null,
             resolutionLabel: videoPreferences.videoResolutionLabel,
+            videoMode: videoPreferences.videoReferenceMode,
+            durationSeconds: videoPreferences.durationSeconds,
+            locale: request?.context?.locale,
           },
           step,
         );
@@ -5177,24 +5920,40 @@ export async function execute(request, services) {
         const baselineMedia = await generatedVideosOnPage(client, sessionId);
         const baselineUrls = baselineMedia.map((item) => item.video.fifeUrl);
 
+        await clickGenerateAndConfirm(
+          client,
+          sessionId,
+          extensionBridge,
+          settings,
+          `video:${index}:submit`,
+          services.signal,
+          request?.context?.locale,
+        );
         generationSubmitted = true;
-        await clickSubmit(client, sessionId, settings, services.signal);
         step(`${label}: envio confirmado. Aguardando vídeo...`);
 
         const responseTimeoutMs = requestTimeoutSeconds * 1000;
-        const videoResult = await waitForGeneratedVideosOnPage(
-          client,
-          sessionId,
-          baselineUrls,
-          services.signal,
-          responseTimeoutMs,
-        );
+        let videoResult;
+        try {
+          videoResult = await waitForGeneratedVideosOnPage(
+            client,
+            sessionId,
+            baselineUrls,
+            services.signal,
+            responseTimeoutMs,
+          );
+        } catch (cause) {
+          if (cause?.code === "TIMEOUT") cause.externalEffectUncertain = true;
+          throw cause;
+        }
         const selectedVideo = videoResult.media[0];
         const result = await downloadGeneratedVideo(
           selectedVideo,
           currentPrompt,
-          index + 1,
+          internalContext.promptOrdinal ?? index + 1,
           services,
+          outputArtifactNamespace,
+          request?.context?.locale,
         );
         files.push(result.file);
         artifacts.push(result.artifact);
@@ -5205,6 +5964,15 @@ export async function execute(request, services) {
             ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
           },
           artifacts,
+          itemUpdates: [
+            mediaItemUpdate({
+              key: `prompt:${index}`,
+              variantKey: "video:0",
+              outputPort: "video",
+              input: currentPrompt,
+              value: result.file,
+            }),
+          ],
           progress: (index + 1) / prompts.length,
           message: `${label}: vídeo capturado.`,
         });
@@ -5256,6 +6024,7 @@ export async function execute(request, services) {
             forceImageMode: true,
             settings,
             signal: services.signal,
+            locale: request?.context?.locale,
           },
           step,
         );
@@ -5281,6 +6050,7 @@ export async function execute(request, services) {
                 forceImageMode: true,
                 settings,
                 signal: services.signal,
+                locale: request?.context?.locale,
               },
               step,
             );
@@ -5319,6 +6089,26 @@ export async function execute(request, services) {
       pendingPromptEntries[queueIndex]?.index ?? queueIndex;
     const maxConcurrentGenerations = Math.min(2, Math.max(1, requestedConcurrentGenerations));
     let submissionLock = Promise.resolve();
+    const submissionBaselines = new Map();
+    const materializeImageResults = async (task, selectedMedia) => {
+      const absolutePromptIndex = coreBatchIndex ?? task.index;
+      const label = `Prompt ${absolutePromptIndex + 1}/${coreBatchTotal ?? prompts.length}`;
+      const results = [];
+      for (let variantIndex = 0; variantIndex < selectedMedia.length; variantIndex += 1) {
+        const result = await downloadGeneratedImage(
+          selectedMedia[variantIndex],
+          task.prompt,
+          absolutePromptIndex + 1,
+          variantIndex + 1,
+          services,
+          outputArtifactNamespace,
+          request?.context?.locale,
+        );
+        results.push(result);
+        step(`${label}: artifact salvo (${result.file.name}).`);
+      }
+      return results;
+    };
     const submit = async (task) => {
       if (services.signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
       task = { ...task, index: originalPromptIndex(task.index) };
@@ -5363,6 +6153,7 @@ export async function execute(request, services) {
                 outputCount: maxImagesPerPrompt,
                 settings,
                 signal: services.signal,
+                locale: request?.context?.locale,
               },
               step,
             );
@@ -5381,6 +6172,11 @@ export async function execute(request, services) {
             ).catch(() => false);
             if (hasEngine && referencePaths.length === 0) {
               step(`${label}: gerando via FlowAuto adapter.`);
+              const baselineMedia = await generatedMediaOnPage(client, sessionId);
+              submissionBaselines.set(
+                task.index,
+                baselineMedia.map((item) => item.image.generatedImage.fifeUrl),
+              );
               generationSubmitted = true;
               let releaseLock;
               const lockWait = new Promise((resolve) => {
@@ -5391,26 +6187,69 @@ export async function execute(request, services) {
               let ticketInfo;
               await priorLock;
               try {
-                ticketInfo = await evaluate(
+                await waitForPromptEditorStable(
                   client,
                   sessionId,
-                  `window.FlowAuto.adapter.prepareAndSubmit({
-                    prompt: ${JSON.stringify(task.prompt)},
-                    expectedCount: ${JSON.stringify(maxImagesPerPrompt)}
-                  })`,
+                  settings.promptSelector || "",
+                  services.signal,
                 );
+                const promptResult = await setPromptWithExtension(
+                  extensionBridge,
+                  task.prompt,
+                  settings.promptSelector || "",
+                  `${task.index}:${task.attempt}:engine-prompt`,
+                  services.signal,
+                  client,
+                  sessionId,
+                );
+                step(
+                  `${label}: Slate preenchido pela Browser Bridge (${promptResult?.readbackLength || task.prompt.length} caracteres).`,
+                );
+                await waitGenerateEnabled(client, sessionId, settings, services.signal, 20_000);
+                ticketInfo = {
+                  bilhete: await evaluate(
+                    client,
+                    sessionId,
+                    `window.FlowAuto.media2.novoBilhete(
+                      ${JSON.stringify(task.prompt)},
+                      ${JSON.stringify(maxImagesPerPrompt)},
+                      "image"
+                    )`,
+                  ),
+                };
+                try {
+                  await clickGenerateWithExtension(
+                    extensionBridge,
+                    settings,
+                    `${task.index}:${task.attempt}:engine-submit`,
+                  );
+                  step(`${label}: envio real confirmado pela Browser Bridge.`);
+                } catch (cause) {
+                  await evaluate(
+                    client,
+                    sessionId,
+                    `window.FlowAuto?.media2?._bilhetes?.delete(${JSON.stringify(ticketInfo.bilhete)})`,
+                  ).catch(() => undefined);
+                  throw cause;
+                }
               } finally {
                 releaseLock();
               }
 
-              const engineRes = await evaluate(
-                client,
-                sessionId,
-                `window.FlowAuto.adapter.waitForResults({
-                  slots: ${JSON.stringify(maxImagesPerPrompt)},
-                  bilhete: ${JSON.stringify(ticketInfo?.bilhete)}
-                })`,
-              );
+              let engineRes;
+              try {
+                engineRes = await evaluate(
+                  client,
+                  sessionId,
+                  `window.FlowAuto.adapter.waitForResults({
+                    slots: ${JSON.stringify(maxImagesPerPrompt)},
+                    bilhete: ${JSON.stringify(ticketInfo?.bilhete)}
+                  })`,
+                );
+              } catch (cause) {
+                cause.externalEffectUncertain = true;
+                throw cause;
+              }
 
               if (engineRes?.results && Array.isArray(engineRes.results)) {
                 const okResults = engineRes.results.filter((r) => !r.failed && r.url);
@@ -5469,6 +6308,7 @@ export async function execute(request, services) {
                   forceImageMode: true,
                   settings,
                   signal: services.signal,
+                  locale: request?.context?.locale,
                 },
                 step,
               );
@@ -5524,14 +6364,19 @@ export async function execute(request, services) {
 
               const baselineMedia = await generatedMediaOnPage(client, sessionId);
               const baselineUrls = baselineMedia.map((item) => item.image.generatedImage.fifeUrl);
+              submissionBaselines.set(task.index, baselineUrls);
               const responseTimeoutMs = requestTimeoutSeconds * 1000;
               const reservation = responseTracker.reserve(responseTimeoutMs);
               let stopPageFallback = false;
               let pageFallback;
               try {
                 generationSubmitted = true;
-                const clickResult = await clickSubmit(client, sessionId, settings, services.signal);
-                step(`${label}: envio confirmado (${clickResult?.text || "Criar"}).`);
+                await clickGenerateWithExtension(
+                  extensionBridge,
+                  settings,
+                  `${task.index}:${task.attempt}:submit`,
+                );
+                step(`${label}: envio real confirmado pela Browser Bridge.`);
                 pageFallback = waitForGeneratedMediaOnPage(
                   client,
                   sessionId,
@@ -5547,13 +6392,21 @@ export async function execute(request, services) {
                 throw cause;
               }
 
-              const completed = await Promise.race([
-                reservation.promise.then((captured) => ({ source: "network", captured })),
-                pageFallback.then((body) => ({
-                  source: "page",
-                  captured: { status: 200, bodyText: JSON.stringify(body) },
-                })),
-              ]);
+              let completed;
+              try {
+                completed = await Promise.race([
+                  reservation.promise.then((captured) => ({ source: "network", captured })),
+                  pageFallback.then((body) => ({
+                    source: "page",
+                    captured: { status: 200, bodyText: JSON.stringify(body) },
+                  })),
+                ]);
+              } catch (cause) {
+                if (cause?.code === "TIMEOUT" || cause?.code === "UPSTREAM_UNAVAILABLE") {
+                  cause.externalEffectUncertain = true;
+                }
+                throw cause;
+              }
               stopPageFallback = true;
               if (completed.source === "page") {
                 reservation.cancel(codedError("CANCELLED", "Fallback visual concluiu primeiro."));
@@ -5582,19 +6435,7 @@ export async function execute(request, services) {
                 );
               }
             }
-            const results = [];
-            for (let variantIndex = 0; variantIndex < selectedMedia.length; variantIndex += 1) {
-              const result = await downloadGeneratedImage(
-                selectedMedia[variantIndex],
-                task.prompt,
-                absolutePromptIndex + 1,
-                variantIndex + 1,
-                services,
-              );
-              results.push(result);
-              step(`${label}: artifact salvo (${result.file.name}).`);
-            }
-            return results;
+            return materializeImageResults(task, selectedMedia);
           }
         })(),
       };
@@ -5611,6 +6452,32 @@ export async function execute(request, services) {
       minDelayMs: delayBetweenPromptsMs,
       signal: services.signal,
       failFast: false,
+      async reconcile({ task, error }) {
+        if (error?.externalEffectUncertain !== true) return { status: "safe_to_retry" };
+        if (maxConcurrentGenerations !== 1) return { status: "uncertain" };
+        const reconciledTask = { ...task, index: originalPromptIndex(task.index) };
+        const baselineUrls = submissionBaselines.get(reconciledTask.index);
+        if (!Array.isArray(baselineUrls)) return { status: "uncertain" };
+        const baseline = new Set(baselineUrls);
+        const recoveredMedia = (await generatedMediaOnPage(client, sessionId)).filter(
+          (item) => !baseline.has(item.image.generatedImage.fifeUrl),
+        );
+        if (recoveredMedia.length === 0) return { status: "uncertain" };
+        step(
+          flowMediaMessage(
+            request?.context?.locale,
+            "reconciled",
+            (coreBatchIndex ?? reconciledTask.index) + 1,
+          ),
+        );
+        return {
+          status: "recovered",
+          value: await materializeImageResults(
+            reconciledTask,
+            recoveredMedia.slice(0, maxImagesPerPrompt),
+          ),
+        };
+      },
       async onItemCompleted({ task, value }) {
         const index = originalPromptIndex(task.index);
         if (!Array.isArray(value) || value.length === 0)
@@ -5628,6 +6495,8 @@ export async function execute(request, services) {
           files.push(result.file);
           artifacts.push(result.artifact);
         }
+        sortGeneratedOutputs(files, "image");
+        sortGeneratedOutputs(artifacts, "image");
         completedPromptIndexes.add(index);
         await saveGenerationCheckpoint(request, services, prompts, {
           completedPromptIndexes: [...completedPromptIndexes],
@@ -5642,6 +6511,15 @@ export async function execute(request, services) {
             ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
           },
           artifacts,
+          itemUpdates: value.map((result, variantIndex) =>
+            mediaItemUpdate({
+              key: `prompt:${index}`,
+              variantKey: `image:${variantIndex}`,
+              outputPort: "images",
+              input: task.prompt,
+              value: result.file,
+            }),
+          ),
           progress: completedPromptIndexes.size / prompts.length,
           message: `Prompt ${index + 1} de ${prompts.length} capturado.`,
         });
@@ -5827,6 +6705,7 @@ export const __test = {
   durableResumeFiles,
   durableResumeOutputFiles,
   promptIndexFromGeneratedFile,
+  sortGeneratedOutputs,
   visualProductionCheckpointPath,
   readVisualProductionCheckpoint,
   saveVisualProductionCheckpoint,
@@ -5842,16 +6721,30 @@ export const __test = {
   waitForChildExit,
   closeBrowserGracefully,
   resolveGenerationPreferences,
+  dynamicFlowModelValue,
+  dynamicFlowModelLabel,
+  normalizeFlowModelOptions,
+  configureOptions,
+  actionableOutputPort,
+  normalizeItemActionRequest,
+  mediaItemUpdate,
+  artifactNamespace,
+  flowMediaMessage,
+  validateImageArtifactBytes,
+  validateVideoArtifactBytes,
   nextImageModelFallback,
   normalizeReferenceImages,
   requestsSingleImage,
   requestsSingleVideo,
   selectAnimationIndexes,
+  generatedArtifactInputPath,
+  configurationForProjectContinuation,
   mediaItemsFromImageUrls,
   mediaItemsFromImageCandidates,
   mediaItemsFromVideoUrls,
   parseGenerationResponse,
   waitForPromptEditorStable,
+  downloadGeneratedImage,
   downloadGeneratedVideo,
   resolveVideoPreferences,
   getActiveFlowProjectUrl,

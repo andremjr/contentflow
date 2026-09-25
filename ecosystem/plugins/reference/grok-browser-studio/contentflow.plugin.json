@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/ecosystem/docs/schemas/contentflow-plugin-v1.schema.json",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
   "id": "local.contentflow.grok-browser-studio",
   "name": "Grok Browser Studio",

@@ -166,6 +166,16 @@ test("translates plugin credential management in English and Spanish", () => {
 });
 
 test("translates the unified block configuration labels", () => {
+  for (const phrase of [
+    "Atualizar opções",
+    "Carregando opções…",
+    "Não foi possível carregar as opções.",
+    "Nenhuma opção disponível.",
+    "Opção salva indisponível",
+  ]) {
+    assert.notEqual(translate(phrase, "en"), phrase);
+    assert.notEqual(translate(phrase, "es"), phrase);
+  }
   assert.equal(translate("Coleções", "en"), "Collections");
   assert.equal(translate("Coleções", "es"), "Colecciones");
   assert.equal(translate("Iniciar minimizado", "en"), "Start minimized");
@@ -221,6 +231,17 @@ test("translates the simplified plugin capability presentation", () => {
   assert.equal(translate("O que este plugin faz", "en"), "What this plugin does");
   assert.equal(translate("Recursos disponíveis", "es"), "Funciones disponibles");
   assert.equal(translate("Detalhes técnicos", "en"), "Technical details");
+});
+
+test("translates core-owned runtime plugin inputs", () => {
+  assert.equal(translate("Fornecido na execução", "en"), "Provided at runtime");
+  assert.equal(translate("Fornecer na execução", "es"), "Proporcionar durante la ejecución");
+  assert.equal(translate("Arquivos e dados desta execução", "en"), "Files and data for this run");
+  assert.equal(translate("Enviar e executar", "es"), "Enviar y ejecutar");
+  assert.equal(
+    translate("Entradas enviadas. O plugin será iniciado.", "en"),
+    "Inputs sent. The plugin will start.",
+  );
 });
 
 test("translates execution attention and error notifications", () => {
@@ -342,6 +363,25 @@ test("translates the global orchestrator page in all supported languages", () =>
     "Nenhum canal disponível",
     "Crie um canal para começar a organizar filas de produção.",
     "Com erro",
+  ];
+  for (const phrase of phrases) {
+    assert.equal(translate(phrase, "pt-BR"), phrase);
+    assert.notEqual(translate(phrase, "en"), phrase);
+    assert.notEqual(translate(phrase, "es"), phrase);
+  }
+});
+
+test("translates declarative execution item actions in all supported languages", () => {
+  const phrases = [
+    "Regenerar item",
+    "Item regenerado",
+    "Selecionar item",
+    "Item selecionado",
+    "Selecionado",
+    "Baixar item",
+    "Não foi possível executar a ação no item",
+    "Use apenas as ações declaradas pelo plugin; arraste para reorganizar a sequência.",
+    "Selecione uma opção",
   ];
   for (const phrase of phrases) {
     assert.equal(translate(phrase, "pt-BR"), phrase);

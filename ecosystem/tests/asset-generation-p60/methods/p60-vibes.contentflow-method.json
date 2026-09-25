@@ -1,0 +1,87 @@
+{
+  "format": "contentflow-method",
+  "version": 1,
+  "name": "P60 — Vibes mínimo",
+  "exportedAt": "2026-09-25T12:00:00.000Z",
+  "method": {
+    "name": "P60 — Vibes → VALIDAR",
+    "processType": "assets",
+    "blocks": [
+      {
+        "id": "p60-vibes-generate",
+        "type": "CRIAR",
+        "operator": "IA",
+        "name": "Gerar imagens no Vibes",
+        "instructions": "Gere quatro variantes por prompt e preserve a identidade do item e da variante.",
+        "inputs": [
+          {
+            "id": "p60-vibes-prompts",
+            "label": "Prompts",
+            "type": "list",
+            "source": "static",
+            "staticValue": [
+              "Cinematic aerial view of a city at dawn, warm light, 16:9",
+              "Close-up of a rainforest trail in gentle rain, realistic documentary style, 16:9",
+              "Wide cinematic coastline before a storm, dramatic clouds, realistic documentary style, 16:9",
+              "Craft workshop at night with warm practical lights, cinematic documentary photography, 16:9",
+              "Morning commuter train crossing a misty valley, cinematic realism, 16:9"
+            ],
+            "portKey": "prompts"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "p60-vibes-images",
+            "label": "Imagens",
+            "key": "images",
+            "portKey": "images",
+            "type": "files",
+            "required": true,
+            "presentation": {
+              "renderer": "image-gallery",
+              "itemType": "image",
+              "acceptedMimeTypes": ["image/*"]
+            }
+          }
+        ],
+        "parameters": [],
+        "order": 0,
+        "plugin": {
+          "pluginId": "local.contentflow.vibes-browser-studio",
+          "pluginVersion": "0.1.0-dev.0",
+          "capabilityId": "generate-images-in-browser",
+          "configuration": {},
+          "connectionRequired": false
+        }
+      },
+      {
+        "id": "p60-vibes-validate",
+        "type": "VALIDAR",
+        "operator": "Humano",
+        "name": "Selecionar imagens do Vibes",
+        "instructions": "Selecione as variantes aprovadas para a edição sem trocar a associação com o prompt.",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "p60-vibes-selected",
+            "label": "Selecionadas",
+            "key": "selected_value",
+            "type": "files",
+            "required": true,
+            "optionsSourceBlockId": "p60-vibes-generate",
+            "optionsSourceKey": "images"
+          }
+        ],
+        "validation": {
+          "targetBlockId": "p60-vibes-generate",
+          "targetOutputKey": "images",
+          "mode": "select_many",
+          "onReject": "pause",
+          "maxAttempts": 2
+        },
+        "parameters": [],
+        "order": 1
+      }
+    ]
+  }
+}

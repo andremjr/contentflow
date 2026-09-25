@@ -61,9 +61,12 @@ export function materializeBlockDeliveries({
     const previous = execution.deliveries?.find((item) => item.id === id);
     const rawItems = MANY_TYPES.has(output.type) && Array.isArray(value) ? value : [value];
     const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
+    const outputExecutionItems = (blockExecution?.items ?? []).filter(
+      (item) => !item.pluginCorrelation || item.pluginCorrelation.outputKey === output.key,
+    );
     const executionItems =
-      MANY_TYPES.has(output.type) && blockExecution?.items?.length === rawItems.length
-        ? [...blockExecution.items].sort((left, right) => left.order - right.order)
+      MANY_TYPES.has(output.type) && outputExecutionItems.length === rawItems.length
+        ? [...outputExecutionItems].sort((left, right) => left.order - right.order)
         : undefined;
     const usedIdentities = new Set<string>();
     const items = rawItems.map((item, order) => {

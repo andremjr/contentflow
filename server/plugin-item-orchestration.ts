@@ -245,6 +245,19 @@ export function legacyItemOrchestration(
 }
 
 export function itemProgressForJob(job: PersistentPluginJob): BlockItemProgress | undefined {
+  if (job.incrementalItems?.length) {
+    const items = job.incrementalItems;
+    const completed = items.filter((item) => item.status === "completed").length;
+    const failedItem = items.find((item) => item.status === "failed");
+    const currentItem = items.find((item) => item.status === "in_progress");
+    return {
+      total: items.length,
+      completed,
+      pending: Math.max(0, items.length - completed),
+      currentIndex: (failedItem ?? currentItem)?.order,
+      failedIndex: failedItem?.order,
+    };
+  }
   const orchestration = job.itemOrchestration;
   if (!orchestration) return undefined;
   const total = orchestration.items.length;
@@ -280,6 +293,7 @@ export function itemProgressForJob(job: PersistentPluginJob): BlockItemProgress 
 }
 
 export function blockExecutionItemsForJob(job: PersistentPluginJob) {
+  if (job.incrementalItems?.length) return structuredClone(job.incrementalItems);
   return job.itemOrchestration?.workItems
     ? structuredClone(job.itemOrchestration.workItems)
     : undefined;
@@ -437,6 +451,63 @@ export function invocationRequestForJob(job: PersistentPluginJob, invocation: Pl
         }
       : undefined,
   } satisfies PluginExecutionRequest;
+}
+
+/** Builds the core-owned context for an isolated item regeneration. */
+export function itemActionRequestForJob(input: {
+  job: PersistentPluginJob;
+  item: BlockExecutionItem;
+  outputPort: string;
+  attempt: number;
+  traceId: string;
+}) {
+  const batchItem = input.item.pluginCorrelation?.batchItemId
+    ? input.job.itemOrchestration?.workItems?.find(
+        (candidate) => candidate.id === input.item.pluginCorrelation?.batchItemId,
+      )
+    : undefined;
+  return {
+    ...structuredClone(input.job.request),
+    traceId: input.traceId,
+    attempt: input.attempt,
+    invocation: {
+      mode: "item_action" as const,
+      action: "regenerate" as const,
+      itemId: input.item.id,
+      outputPort: input.outputPort,
+    },
+    batch: batchItem
+      ? {
+          itemId: batchItem.id,
+          index: batchItem.order,
+          total: input.job.itemOrchestration?.workItems?.length ?? 1,
+        }
+      : {
+          itemId: input.item.id,
+          index: input.item.order,
+          total: input.job.incrementalItems?.length ?? 1,
+        },
+    itemAction: {
+      key: input.item.pluginCorrelation?.key,
+      variantKey: input.item.pluginCorrelation?.variantKey,
+      input: structuredClone(input.item.input),
+      ...(input.item.output !== undefined ? { output: structuredClone(input.item.output) } : {}),
+      attempt: input.attempt,
+    },
+  } satisfies PluginExecutionRequest;
+}
+
+/** Selection is local to one output port and, for batch variants, one batch item. */
+export function belongsToSameItemActionGroup(
+  target: BlockExecutionItem,
+  candidate: BlockExecutionItem,
+) {
+  const outputPort = target.pluginCorrelation?.outputPort;
+  if (!outputPort) return true;
+  return (
+    candidate.pluginCorrelation?.outputPort === outputPort &&
+    candidate.pluginCorrelation?.batchItemId === target.pluginCorrelation?.batchItemId
+  );
 }
 
 export function nextPendingItemIndex(job: PersistentPluginJob) {

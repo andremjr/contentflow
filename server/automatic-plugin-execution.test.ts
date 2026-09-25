@@ -36,7 +36,7 @@ async function waitForServer() {
   throw new Error("A API isolada não iniciou no prazo.");
 }
 
-test("encadeia blocos de plugin automaticamente sem ação por etapa", async () => {
+test("coleta entradas da execução e depois encadeia blocos de plugin automaticamente", async () => {
   const dataDirectory = await mkdtemp(path.join(tmpdir(), "contentflow-auto-execution-"));
   const output: string[] = [];
   const server = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
@@ -96,8 +96,8 @@ test("encadeia blocos de plugin automaticamente sem ação por etapa", async () 
             id: "input-one",
             label: "Texto",
             type: "textarea",
-            source: "static",
-            staticValue: "hello",
+            source: "runtime",
+            portKey: "content",
           },
         ],
         outputs: [
@@ -224,6 +224,20 @@ test("encadeia blocos de plugin automaticamente sem ação por etapa", async () 
         outputStatus: "pending",
         createdAt: now,
         updatedAt: now,
+      }),
+    });
+
+    const waiting = (await request("/api/executions/test-execution/state")) as {
+      execution: AutomaticExecutionState & { revision?: number };
+    };
+    assert.equal(waiting.execution.status, "blocked_executor");
+    assert.equal(waiting.execution.blocks[0].status, "blocked_executor");
+    await request("/api/executions/test-execution/blocks/block-one/runtime-inputs", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        revision: waiting.execution.revision ?? 0,
+        values: { "input-one": "hello" },
       }),
     });
 

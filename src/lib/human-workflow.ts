@@ -28,6 +28,9 @@ export function getMethodConfigurationIssue(method?: ProcessMethod) {
       return `As chaves das entregas do bloco “${block.name ?? block.type}” precisam ser únicas.`;
     }
     for (const input of block.inputs ?? []) {
+      if (input.source === "runtime" && (!block.plugin || block.operator === "Humano")) {
+        return `A entrada “${input.label}” fornecida na execução exige um plugin de IA ou Código.`;
+      }
       if (
         input.source === "channel_history" &&
         block.type !== "ESCOLHER" &&

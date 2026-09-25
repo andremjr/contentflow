@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "conversationId": "https://chatgpt.com/c/12345678-1234-1234-1234-123456789abc",
+  "connectionId": "connection-images-primary",
+  "profile": "primary-images",
+  "batch": {
+    "itemId": "batch-image-city",
+    "index": 0,
+    "total": 3
+  },
+  "item": {
+    "id": "core-image-city-b",
+    "key": "generation",
+    "variantKey": "image:1",
+    "input": "Uma cidade costeira ao amanhecer",
+    "attempt": 2,
+    "feedback": "Mantenha a composição e aumente o contraste do céu.",
+    "previousArtifactId": "chatgpt-image-city-b-attempt-1",
+    "regeneratedArtifactId": "chatgpt-image-city-b-attempt-2"
+  },
+  "neighbor": {
+    "id": "core-image-city-a",
+    "variantKey": "image:0",
+    "artifactId": "chatgpt-image-city-a-attempt-1"
+  }
+}

@@ -10,7 +10,7 @@ O ContentFlow é um gerenciador estratégico de Métodos para produção de cont
 | ------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Núcleo       | Interface React, API local, execução de Métodos, persistência e desktop Electron | [`docs/README.md`](docs/README.md)                                                                     |
 | Ecossistema  | Protocolo público, plugins, exemplos, Browser Bridge, Plugin Kit e skills        | [`ecosystem/README.md`](ecosystem/README.md)                                                           |
-| Criar plugin | Guia rápido, templates, testes e contratos da Plugin API v1                      | [`ecosystem/docs/quickstart.md`](ecosystem/docs/quickstart.md)                                         |
+| Criar plugin | Guia rápido, templates, testes e contratos da Plugin API v1                      | [`docs/ecosystem/quickstart.md`](docs/ecosystem/quickstart.md)                                         |
 | Criar Método | Skill portátil para modelar e validar arquivos `.contentflow-method.json`        | [`ecosystem/skills/contentflow-method-development/`](ecosystem/skills/contentflow-method-development/) |
 | Releases     | Instaladores e versões portáteis para Windows                                    | [GitHub Releases](https://github.com/andremjr/contentflow/releases)                                    |
 
@@ -33,17 +33,18 @@ contentflow/
 ├── src/                 interface e domínio compartilhado do núcleo
 ├── server/              API local, persistência e motor de execução
 ├── desktop/             shell Electron, empacotamento e atualização
-├── docs/                arquitetura, produto, desktop e licenciamento
+├── docs/                documentação do núcleo e do ecossistema
+│   └── ecosystem/       Plugin API, segurança, guias e evidências
 ├── ecosystem/           tudo que é externo ao núcleo
 │   ├── plugins/         pacotes de referência e exemplos comunitários
 │   ├── browser-bridge/  extensão companheira para automação de navegador
 │   ├── plugin-kit/      CLI e templates para autores
 │   ├── skills/          skills de criação de plugins e Métodos
-│   └── docs/            protocolo, segurança e guias do ecossistema
+│   └── tests/           validações integradas do ecossistema
 └── .github/             automações e governança do repositório
 ```
 
-As pastas `src`, `server` e `desktop` compõem o produto ContentFlow. A pasta `ecosystem` contém ferramentas e pacotes interoperáveis, publicados no mesmo repositório apenas para facilitar descoberta, estudo e desenvolvimento.
+As pastas `src`, `server` e `desktop` compõem o produto ContentFlow. A pasta `docs` concentra toda a documentação, com o protocolo público isolado em `docs/ecosystem`. A pasta `ecosystem` contém apenas ferramentas, testes e pacotes interoperáveis, publicados no mesmo repositório para facilitar descoberta, estudo e desenvolvimento.
 
 ## Plugins
 
@@ -85,10 +86,10 @@ npm run plugin:kit -- check ./meu-plugin
 
 - [Arquitetura e visão de produto](docs/ARCHITECTURE.md)
 - [Roadmap do produto](docs/V1_ROADMAP.md)
-- [Plugin API v1](ecosystem/docs/protocol.md)
-- [Segurança de plugins](ecosystem/docs/security.md)
-- [Automação de navegador](ecosystem/docs/browser-automation.md)
-- [Distribuição e responsabilidades](ecosystem/docs/distribution.md)
+- [Plugin API v1](docs/ecosystem/protocol.md)
+- [Segurança de plugins](docs/ecosystem/security.md)
+- [Automação de navegador](docs/ecosystem/browser-automation.md)
+- [Distribuição e responsabilidades](docs/ecosystem/distribution.md)
 - [Licença e uso de IA](LICENSE)
 
 ## Licença

@@ -16,7 +16,7 @@ test("imports and forwards partial plugin snapshots before the final response", 
       await writeFile(services.getOutputPath("partial.txt"), "arquivo parcial", "utf8");
       const file = { id: "partial-file", name: "partial.txt", mimeType: "text/plain", size: 15, url: "artifact://partial-file" };
       const artifact = { ...file, source: { kind: "path", path: "partial.txt" } };
-      await services.publishPartial({ values: { result: "primeira", files: [file] }, artifacts: [artifact], progress: 0.5, message: "1/2" });
+      await services.publishPartial({ values: { result: "primeira", files: [file] }, artifacts: [artifact], itemUpdates: [{ key: "slot-1", outputPort: "files", state: "completed", value: file }], progress: 0.5, message: "1/2" });
       await services.publishPartial({ values: { result: "segunda" }, progress: 0.9, message: "2/2" });
       return { status: "success", values: { result: "final" } };
     }`,
@@ -39,6 +39,7 @@ test("imports and forwards partial plugin snapshots before the final response", 
   };
   const updates: string[] = [];
   let importedPartialUrl = "";
+  let importedItemUrl = "";
   try {
     const response = await executeRegisteredPlugin(
       plugin,
@@ -75,11 +76,22 @@ test("imports and forwards partial plugin snapshots before the final response", 
               importedPartialUrl = file.url;
             }
           }
+          const itemValue = update.itemUpdates?.[0]?.value;
+          if (
+            itemValue &&
+            typeof itemValue === "object" &&
+            !Array.isArray(itemValue) &&
+            "url" in itemValue &&
+            typeof itemValue.url === "string"
+          ) {
+            importedItemUrl = itemValue.url;
+          }
         },
       },
     );
     assert.deepEqual(updates, ["primeira", "segunda"]);
     assert.match(importedPartialUrl, /^\/api\/files\//);
+    assert.match(importedItemUrl, /^\/api\/files\//);
     assert.equal(response.status, "success");
     assert.equal(response.status === "success" ? response.values.result : undefined, "final");
   } finally {

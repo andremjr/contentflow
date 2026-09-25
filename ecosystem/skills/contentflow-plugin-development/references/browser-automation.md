@@ -40,4 +40,4 @@ Respeite `signal`, timeout, `maxConcurrency`, `retryAfterMs` e backoff. Para UI 
 
 Antes de concluir, verifique que o plugin não extrai sessão automaticamente, não abre origens não declaradas, não usa shell com conteúdo de página, valida conta/origem/resultado, implementa `configure/status/prepare` quando declarado, mantém confirmações explícitas, usa somente perfis de fallback preparados, cancela corretamente e não repete publicação ou compra após timeout sem reconciliação.
 
-Fonte: [browser-automation.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/browser-automation.md).
+Fonte: [browser-automation.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/browser-automation.md).

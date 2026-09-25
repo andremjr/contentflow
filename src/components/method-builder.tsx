@@ -47,6 +47,14 @@ import { useAppPreferences } from "@/lib/app-preferences";
 import { effectiveProcessOrder } from "@/lib/process-order";
 import { pluginRequirementReadiness } from "@/lib/method-transfer-readiness";
 import { pluginCapabilityLabel } from "@/lib/plugin-capability-label";
+import { localizePluginManifest } from "@/lib/plugin-localization";
+import {
+  encodePluginConfigurationOptionValue,
+  findPluginConfigurationOption,
+  pluginConfigurationDependencySignature,
+  toPluginConfigurationRequest,
+  withSavedPluginConfigurationOption,
+} from "@/lib/plugin-configuration-ui";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
 import { LineListTextarea } from "@/components/line-list-textarea";
@@ -134,9 +142,11 @@ import {
 import type {
   JsonSchema,
   PluginCapability,
+  PluginConfigurationOption,
   PluginManifest,
   PluginProfileSetup,
 } from "@/lib/plugin-contract";
+import { pluginConnectionRequired } from "@/lib/plugin-contract";
 import {
   applyMethodTransfer,
   clearMethodDraft,
@@ -269,6 +279,11 @@ const RECORD_FIELD_TYPES: { value: RecordFieldType; label: string }[] = [
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function preferredRuntimePortType(port: PluginCapability["inputPorts"][number]): HumanFieldType {
+  if (port.multiple && port.acceptedTypes.includes("files")) return "files";
+  return port.acceptedTypes[0] ?? "text";
 }
 
 function newRecordField(index: number): RecordFieldDefinition {
@@ -1406,11 +1421,13 @@ function BlockEditor({
   onChange: (patch: Partial<ActionBlock>) => void;
   onRemove: () => void;
 }) {
+  const { language } = useAppPreferences();
   const [pluginExpanded, setPluginExpanded] = useState(!block.plugin);
   const meta = BLOCK_META[block.type];
   const Icon = meta.icon;
-  const compatibleCapabilities = plugins.flatMap((plugin) =>
-    plugin.manifest.capabilities
+  const compatibleCapabilities = plugins.flatMap((plugin) => {
+    const manifest = localizePluginManifest(plugin.manifest, language);
+    return manifest.capabilities
       .filter(
         (capability) =>
           capability.operator === block.operator &&
@@ -1418,15 +1435,22 @@ function BlockEditor({
             (capability.blockTypes.includes(block.type) &&
               (!capability.processTypes || capability.processTypes.includes(processType)))),
       )
-      .map((capability) => ({ plugin, capability })),
-  );
+      .map((capability) => ({
+        plugin,
+        manifest,
+        capability,
+      }));
+  });
   const selectedPlugin = plugins.find((plugin) => plugin.id === block.plugin?.pluginId);
-  const selectedCapability = selectedPlugin?.manifest.capabilities.find(
+  const selectedManifest = selectedPlugin
+    ? localizePluginManifest(selectedPlugin.manifest, language)
+    : undefined;
+  const selectedCapability = selectedManifest?.capabilities.find(
     (capability) => capability.id === block.plugin?.capabilityId,
   );
   const isManualHumanTool = selectedCapability?.operator === "Humano";
   const configProperties = selectedCapability?.blockConfigSchema.properties ?? {};
-  const profileSetup = selectedPlugin?.manifest.profileSetup;
+  const profileSetup = selectedManifest?.profileSetup;
   const profileConfigurationKeys = [
     profileSetup?.configurationKey,
     profileSetup?.fallbackConfigurationKey,
@@ -1514,6 +1538,10 @@ function BlockEditor({
           (port) =>
             port.required && !inputPortState.some((item) => item.selected?.key === port.key),
         )) ?? [];
+  const unboundInputPorts =
+    selectedCapability?.inputPorts.filter(
+      (port) => !inputPortState.some((item) => item.selected?.key === port.key),
+    ) ?? [];
   const contractIssues =
     [
       ...inputPortState.filter((item) => !item.selected),
@@ -1522,6 +1550,14 @@ function BlockEditor({
 
   const renderConfigurationField = ([key, schema]: [string, JsonSchema]) => (
     <PluginConfigurationField
+      configurationOptionsProvider={selectedCapability?.configurationOptions?.find(
+        (provider) => provider.property === key,
+      )}
+      pluginId={block.plugin?.pluginId}
+      capabilityId={block.plugin?.capabilityId}
+      connectionId={block.plugin?.connectionId}
+      configuration={block.plugin?.configuration}
+      profileConfigurationKey={profileSetup?.configurationKey}
       key={key}
       propertyKey={key}
       schema={schema}
@@ -1718,7 +1754,7 @@ function BlockEditor({
             <p className="text-sm font-semibold">Plugin executor</p>
             <p className="truncate text-[11px] text-muted-foreground">
               {selectedPlugin && selectedCapability
-                ? `${selectedPlugin.manifest.name} · ${pluginCapabilityLabel(selectedCapability)}`
+                ? `${selectedManifest?.name ?? selectedPlugin.manifest.name} · ${pluginCapabilityLabel(selectedCapability)}`
                 : "Selecione quem executará esta ação"}
             </p>
           </div>
@@ -1801,7 +1837,9 @@ function BlockEditor({
                       pluginVersion: selection?.plugin.manifest.version,
                       capabilityId,
                       configuration,
-                      connectionRequired: Boolean(selection?.plugin.manifest.secretKeys?.length),
+                      connectionRequired: selection
+                        ? pluginConnectionRequired(selection.plugin.manifest)
+                        : false,
                     },
                     inputs: requestedInputs,
                     outputs: requestedOutputs,
@@ -1812,12 +1850,12 @@ function BlockEditor({
                   <SelectValue placeholder="Selecione um plugin compatível" />
                 </SelectTrigger>
                 <SelectContent>
-                  {compatibleCapabilities.map(({ plugin, capability }) => (
+                  {compatibleCapabilities.map(({ plugin, manifest, capability }) => (
                     <SelectItem
                       key={`${plugin.id}::${capability.id}`}
                       value={`${plugin.id}::${capability.id}`}
                     >
-                      {plugin.manifest.name} · {pluginCapabilityLabel(capability)}
+                      {manifest.name} · {pluginCapabilityLabel(capability)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1851,7 +1889,9 @@ function BlockEditor({
                 </p>
               </div>
 
-              {(inputPortState.length > 0 || outputPortState.length > 0) && (
+              {(inputPortState.length > 0 ||
+                outputPortState.length > 0 ||
+                unboundInputPorts.length > 0) && (
                 <details className="rounded-lg border border-border/70 bg-card/60 p-3">
                   <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
                     Dados usados pelo plugin
@@ -1947,6 +1987,40 @@ function BlockEditor({
                         Falta uma entrada para: {port.label}.
                       </p>
                     ))}
+                    {unboundInputPorts.map((port) => (
+                      <div
+                        key={`available-${port.key}`}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border p-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-[11px] font-medium">{port.label}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {port.required ? "Obrigatória" : "Opcional"} ·{" "}
+                            {port.acceptedTypes.join(", ")}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 shrink-0 text-[10px]"
+                          onClick={() => {
+                            const type = preferredRuntimePortType(port);
+                            const input: BlockInputBinding = {
+                              id: uid(`${block.id}-runtime-input`),
+                              label: port.label,
+                              type,
+                              source: "runtime",
+                              portKey: port.key,
+                              presentation: normalizeFieldPresentation(type, port.presentation),
+                            };
+                            onChange({ inputs: [...(block.inputs ?? []), input] });
+                          }}
+                        >
+                          <Plus className="mr-1 size-3" /> Fornecer na execução
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 </details>
               )}
@@ -1983,7 +2057,7 @@ function BlockEditor({
                   }
                 />
               )}
-              {profileSetup && block.plugin && (
+              {selectedPlugin && profileSetup && block.plugin && (
                 <ManagedProfileSelector
                   plugin={selectedPlugin}
                   profileSetup={profileSetup}
@@ -2942,12 +3016,28 @@ function ManagedProfileSelector({
 }
 
 function PluginConfigurationField({
+  configurationOptionsProvider,
+  pluginId,
+  capabilityId,
+  connectionId,
+  configuration,
+  profileConfigurationKey,
   propertyKey,
   schema,
   value,
   options,
   onChange,
 }: {
+  configurationOptionsProvider?: {
+    property: string;
+    providerId: string;
+    dependsOn?: string[];
+  };
+  pluginId?: string;
+  capabilityId?: string;
+  connectionId?: string;
+  configuration?: Record<string, unknown>;
+  profileConfigurationKey?: string;
   propertyKey: string;
   schema: JsonSchema;
   value: string | number | boolean | undefined;
@@ -2955,16 +3045,85 @@ function PluginConfigurationField({
   onChange: (value: string | number | boolean) => void;
 }) {
   const { t } = useAppPreferences();
+  const configurationRef = useRef(configuration);
+  configurationRef.current = configuration;
+  const optionsRequestIdRef = useRef(0);
+  const [dynamicOptions, setDynamicOptions] = useState<PluginConfigurationOption[] | undefined>();
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [optionsError, setOptionsError] = useState(false);
   const label =
     propertyKey === "startMinimized" ? t("Iniciar minimizado") : (schema.title ?? propertyKey);
-  const choices =
-    options ??
-    (schema.oneOf ?? []).flatMap((option) =>
-      typeof option.const === "string" || typeof option.const === "number"
-        ? [{ value: String(option.const), label: option.title ?? String(option.const) }]
-        : [],
-    );
-  if (schema.type === "boolean") {
+  const dependencySignature = configurationOptionsProvider
+    ? pluginConfigurationDependencySignature(configuration, [
+        ...(configurationOptionsProvider.dependsOn ?? []),
+        ...(profileConfigurationKey ? [profileConfigurationKey] : []),
+      ])
+    : "";
+  const loadDynamicOptions = useCallback(
+    async (refresh = false) => {
+      if (!configurationOptionsProvider || !pluginId || !capabilityId) return;
+      const requestId = ++optionsRequestIdRef.current;
+      setOptionsLoading(true);
+      setOptionsError(false);
+      try {
+        const response = await fetch(
+          `/api/plugins/${encodeURIComponent(pluginId)}/capabilities/${encodeURIComponent(capabilityId)}/configuration-options/${encodeURIComponent(propertyKey)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              configuration: toPluginConfigurationRequest(configurationRef.current),
+              ...(connectionId ? { connectionId } : {}),
+              ...(refresh ? { refresh: true } : {}),
+            }),
+          },
+        );
+        if (!response.ok)
+          throw new Error(`configuration options request failed: ${response.status}`);
+        const payload = (await response.json()) as { options?: PluginConfigurationOption[] };
+        if (requestId === optionsRequestIdRef.current) {
+          setDynamicOptions(Array.isArray(payload.options) ? payload.options : []);
+        }
+      } catch {
+        if (requestId === optionsRequestIdRef.current) setOptionsError(true);
+      } finally {
+        if (requestId === optionsRequestIdRef.current) setOptionsLoading(false);
+      }
+    },
+    [capabilityId, configurationOptionsProvider, connectionId, pluginId, propertyKey],
+  );
+
+  useEffect(() => {
+    if (!configurationOptionsProvider) {
+      optionsRequestIdRef.current += 1;
+      setDynamicOptions(undefined);
+      setOptionsError(false);
+      setOptionsLoading(false);
+      return;
+    }
+    void loadDynamicOptions();
+  }, [configurationOptionsProvider, dependencySignature, loadDynamicOptions]);
+
+  const staticChoices: PluginConfigurationOption[] = options
+    ? options.map((option) => ({ ...option }))
+    : (schema.oneOf ?? []).flatMap((option) =>
+        typeof option.const === "string" ||
+        typeof option.const === "number" ||
+        typeof option.const === "boolean"
+          ? [{ value: option.const, label: option.title ?? String(option.const) }]
+          : [],
+      );
+  if (!staticChoices.length && schema.enum?.length) {
+    staticChoices.push(...schema.enum.map((option) => ({ value: option, label: String(option) })));
+  }
+  const choices = dynamicOptions ?? staticChoices;
+  const renderedChoices = withSavedPluginConfigurationOption(
+    choices,
+    value,
+    t("Opção salva indisponível"),
+  );
+
+  if (!configurationOptionsProvider && !options && schema.type === "boolean") {
     return (
       <label className="flex items-center gap-2 text-xs">
         <Checkbox
@@ -2975,44 +3134,61 @@ function PluginConfigurationField({
       </label>
     );
   }
-  if (choices.length) {
+  if (renderedChoices.length || configurationOptionsProvider) {
+    const selectedValue = value === undefined ? "" : encodePluginConfigurationOptionValue(value);
     return (
       <div className="space-y-1.5">
-        <Label>{label}</Label>
-        <Select value={String(value ?? "")} onValueChange={onChange}>
+        <div className="flex items-center justify-between gap-2">
+          <Label>{label}</Label>
+          {configurationOptionsProvider && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              disabled={optionsLoading}
+              onClick={() => void loadDynamicOptions(true)}
+            >
+              {t("Atualizar opções")}
+            </Button>
+          )}
+        </div>
+        <Select
+          value={selectedValue}
+          onValueChange={(encodedValue) => {
+            const option = findPluginConfigurationOption(renderedChoices, encodedValue);
+            if (option) onChange(option.value);
+          }}
+        >
           <SelectTrigger>
-            <SelectValue placeholder={`Selecione ${label.toLowerCase()}`} />
+            <SelectValue placeholder={t("Selecione uma opção")} />
           </SelectTrigger>
           <SelectContent>
-            {choices.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
+            {renderedChoices.map((option) => (
+              <SelectItem
+                key={encodePluginConfigurationOptionValue(option.value)}
+                value={encodePluginConfigurationOptionValue(option.value)}
+                disabled={option.disabled}
+              >
                 {option.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {optionsLoading && (
+          <p className="text-[11px] text-muted-foreground">{t("Carregando opções…")}</p>
+        )}
+        {!optionsLoading && dynamicOptions?.length === 0 && (
+          <p className="text-[11px] text-muted-foreground">{t("Nenhuma opção disponível.")}</p>
+        )}
+        {optionsError && (
+          <p className="text-[11px] text-destructive">
+            {t("Não foi possível carregar as opções.")}
+          </p>
+        )}
         {schema.description && (
           <p className="text-[11px] text-muted-foreground">{schema.description}</p>
         )}
-      </div>
-    );
-  }
-  if (schema.enum?.length) {
-    return (
-      <div className="space-y-1.5">
-        <Label>{label}</Label>
-        <Select value={String(value ?? "")} onValueChange={onChange}>
-          <SelectTrigger>
-            <SelectValue placeholder={`Selecione ${label.toLowerCase()}`} />
-          </SelectTrigger>
-          <SelectContent>
-            {schema.enum.map((option) => (
-              <SelectItem key={String(option)} value={String(option)}>
-                {String(option)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
     );
   }
@@ -3405,6 +3581,7 @@ function ContextInputsEditor({
             channelMethods={channelMethods}
             processOrder={processOrder}
             collections={collections}
+            allowRuntime={Boolean(block.plugin && block.operator !== "Humano")}
             onChange={(patch) => {
               const nextInput = { ...input, ...patch };
               onChange({
@@ -3517,6 +3694,7 @@ function DataContractEditor({
               channelMethods={channelMethods}
               processOrder={processOrder}
               collections={collections}
+              allowRuntime={Boolean(block.plugin && block.operator !== "Humano")}
               onChange={(patch) => {
                 const nextInput = { ...input, ...patch };
                 onChange({
@@ -3610,6 +3788,7 @@ function InputBindingEditor({
   channelMethods,
   processOrder,
   collections,
+  allowRuntime,
   onChange,
   onRemove,
 }: {
@@ -3619,6 +3798,7 @@ function InputBindingEditor({
   channelMethods: Record<UniversalProcess, ProcessMethod>;
   processOrder: UniversalProcess[];
   collections: StrategicCollection[];
+  allowRuntime: boolean;
   onChange: (patch: Partial<BlockInputBinding>) => void;
   onRemove: () => void;
 }) {
@@ -3777,6 +3957,7 @@ function InputBindingEditor({
                     Entrega anterior
                   </SelectItem>
                   <SelectItem value="project">Dados do projeto</SelectItem>
+                  {allowRuntime && <SelectItem value="runtime">Fornecido na execução</SelectItem>}
                   <SelectItem value="static">Valor fixo</SelectItem>
                 </SelectContent>
               </Select>

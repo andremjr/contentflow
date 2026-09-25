@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { pluginConnectionRequired } from "../src/lib/plugin-contract";
 import type { PluginConnection } from "./plugin-connections";
 import {
   normalizeConnectionSecretPatch,
@@ -10,6 +11,17 @@ const plugin = {
   id: "example.plugin",
   manifest: { secretKeys: ["API_KEY"] },
 };
+
+test("optional secrets do not require a connection", () => {
+  assert.equal(
+    pluginConnectionRequired({
+      secretKeys: ["OPTIONAL_KEY"],
+      optionalSecretKeys: ["OPTIONAL_KEY"],
+    }),
+    false,
+  );
+  assert.equal(pluginConnectionRequired({ secretKeys: ["REQUIRED_KEY"] }), true);
+});
 
 function connection(id: string, revokedAt?: string): PluginConnection {
   return {

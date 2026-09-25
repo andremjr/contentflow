@@ -11,6 +11,7 @@ import {
 import { getMethodConfigurationIssue, normalizeMethodBlocks } from "../src/lib/human-workflow";
 import { effectiveProcessOrder, validateProcessDependencies } from "../src/lib/process-order";
 import type { RegisteredPlugin } from "./plugin-runner";
+import { pluginConnectionRequired } from "../src/lib/plugin-contract";
 
 const processSchema = z.enum(PROCESS_ORDER);
 const fieldTypeSchema = z.enum([
@@ -85,6 +86,7 @@ const inputSchema = z
       "previous_block",
       "channel_history",
       "channel_library",
+      "runtime",
       "static",
     ]),
     sourceKey: z.string().optional(),
@@ -254,12 +256,12 @@ function validatePluginConfiguration(
   ) {
     errors.push(`${blockLabel}: processo incompatível com o plugin.`);
   }
-  const requiresConnection = Boolean(entry.plugin.manifest.secretKeys?.length);
+  const requiresConnection = pluginConnectionRequired(entry.plugin.manifest);
+  block.plugin.connectionRequired = requiresConnection;
   if (requiresConnection) {
     const connection = entry.connections.find((item) => item.id === block.plugin?.connectionId);
     if (!connection?.connected)
       errors.push(`${blockLabel}: selecione uma conexão local ativa para o plugin.`);
-    block.plugin.connectionRequired = true;
   }
   if (!entry.enabled || !entry.plugin.executable)
     warnings.push(`${blockLabel}: plugin instalado, mas indisponível para execução no momento.`);

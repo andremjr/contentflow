@@ -60,4 +60,4 @@ Separe `start`, `resume` e `cancel`. Retorne `pending` rapidamente; persista o j
 
 Separe capabilities quando houver entregas que o usuário precise conectar, validar, substituir ou reutilizar. Mantenha internas as etapas que produzem uma única entrega observável.
 
-Fonte: [quickstart.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/quickstart.md) e [templates de referência](https://github.com/andremjr/contentflow/tree/main/ecosystem/plugin-kit/templates).
+Fonte: [quickstart.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/quickstart.md) e [templates de referência](https://github.com/andremjr/contentflow/tree/main/ecosystem/plugin-kit/templates).

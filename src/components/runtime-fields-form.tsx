@@ -36,6 +36,7 @@ import type {
   ThumbnailLayout,
 } from "@/lib/domain";
 import { uploadLocalFile } from "@/lib/store";
+import { useAppPreferences } from "@/lib/app-preferences";
 
 function isStoredFile(value: RuntimeValue | undefined): value is StoredFile {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && "url" in value);
@@ -106,6 +107,7 @@ export function RuntimeFieldsForm({
   showTextareaCharacterCount?: boolean;
   onChange: (values: Record<string, RuntimeValue>) => void;
 }) {
+  const { t } = useAppPreferences();
   const [uploadingKey, setUploadingKey] = useState<string>();
   const latestValues = useRef(values);
   latestValues.current = values;
@@ -119,8 +121,8 @@ export function RuntimeFieldsForm({
     if (!files?.length) return;
     const rejected = Array.from(files).find((file) => !acceptsFile(field, file));
     if (rejected) {
-      toast.error("Formato de arquivo incompatível", {
-        description: `${rejected.name} não atende às restrições MIME deste campo.`,
+      toast.error(t("Formato de arquivo incompatível"), {
+        description: `${rejected.name} ${t("não atende às restrições MIME deste campo.")}`,
       });
       return;
     }
@@ -129,7 +131,7 @@ export function RuntimeFieldsForm({
       const uploaded = await Promise.all(Array.from(files).map(uploadFile));
       update(field.key, field.type === "files" ? uploaded : uploaded[0]);
     } catch (error) {
-      toast.error("Não foi possível salvar o arquivo", {
+      toast.error(t("Não foi possível salvar o arquivo"), {
         description: error instanceof Error ? error.message : undefined,
       });
     } finally {
@@ -295,7 +297,14 @@ export function RuntimeFieldsForm({
                       size="icon"
                       variant="ghost"
                       className="size-7"
-                      onClick={() => update(field.key, null)}
+                      onClick={() =>
+                        update(
+                          field.key,
+                          field.type === "files"
+                            ? fileValues.filter((candidate) => candidate.id !== file.id)
+                            : null,
+                        )
+                      }
                     >
                       <X className="size-3" />
                     </Button>
@@ -308,10 +317,10 @@ export function RuntimeFieldsForm({
                     <Paperclip className="size-3.5" />
                   )}
                   {uploadingKey === field.key
-                    ? "Salvando..."
+                    ? t("Salvando...")
                     : field.type === "files"
-                      ? "Selecionar arquivos"
-                      : "Selecionar arquivo"}
+                      ? t("Selecionar arquivos")
+                      : t("Selecionar arquivo")}
                   <input
                     id={field.id}
                     type="file"

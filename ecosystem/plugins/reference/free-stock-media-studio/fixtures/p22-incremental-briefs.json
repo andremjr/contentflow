@@ -1,0 +1,44 @@
+{
+  "capabilityId": "search-stock-by-briefs",
+  "itemOrchestration": {
+    "inputPort": "asset_briefs",
+    "outputPort": "selected_assets",
+    "mode": "sequential"
+  },
+  "briefs": [
+    {
+      "brief_id": "scene-success",
+      "start_seconds": 0,
+      "end_seconds": 4,
+      "primary_query": "city sunrise",
+      "fallback_query_1": "urban dawn",
+      "media_preference": "image",
+      "expected": "candidate"
+    },
+    {
+      "brief_id": "scene-empty",
+      "start_seconds": 4,
+      "end_seconds": 8,
+      "primary_query": "abstract impossible match",
+      "fallback_query_1": "conceptual empty",
+      "media_preference": "image",
+      "expected": "no_acceptable_candidate"
+    },
+    {
+      "brief_id": "scene-failure",
+      "start_seconds": 8,
+      "end_seconds": 12,
+      "primary_query": "technical failure",
+      "media_preference": "image",
+      "expected": "UPSTREAM_UNAVAILABLE"
+    }
+  ],
+  "timeline": [
+    "scene-success:running",
+    "scene-success:completed",
+    "scene-empty:running",
+    "scene-empty:completed",
+    "scene-failure:running",
+    "scene-failure:failed"
+  ]
+}

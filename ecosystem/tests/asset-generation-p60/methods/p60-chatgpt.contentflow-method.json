@@ -1,0 +1,87 @@
+{
+  "format": "contentflow-method",
+  "version": 1,
+  "name": "P60 — ChatGPT Images mínimo",
+  "exportedAt": "2026-09-25T12:00:00.000Z",
+  "method": {
+    "name": "P60 — ChatGPT Images → VALIDAR",
+    "processType": "assets",
+    "blocks": [
+      {
+        "id": "p60-chatgpt-generate",
+        "type": "CRIAR",
+        "operator": "IA",
+        "name": "Gerar imagens no ChatGPT",
+        "instructions": "Gere imagens em sequência, mantendo uma conversa independente por item e preservando a identidade de cada prompt.",
+        "inputs": [
+          {
+            "id": "p60-chatgpt-prompts",
+            "label": "Prompts",
+            "type": "list",
+            "source": "static",
+            "staticValue": [
+              "Cinematic aerial view of a city at dawn, warm light, 16:9",
+              "Close-up of a rainforest trail in gentle rain, realistic documentary style, 16:9",
+              "Wide cinematic coastline before a storm, dramatic clouds, realistic documentary style, 16:9",
+              "Craft workshop at night with warm practical lights, cinematic documentary photography, 16:9",
+              "Morning commuter train crossing a misty valley, cinematic realism, 16:9"
+            ],
+            "portKey": "prompt"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "p60-chatgpt-images",
+            "label": "Imagens",
+            "key": "images",
+            "portKey": "images",
+            "type": "files",
+            "required": true,
+            "presentation": {
+              "renderer": "image-gallery",
+              "itemType": "image",
+              "acceptedMimeTypes": ["image/*"]
+            }
+          }
+        ],
+        "parameters": [],
+        "order": 0,
+        "plugin": {
+          "pluginId": "local.contentflow.chatgpt-browser-studio",
+          "pluginVersion": "1.0.14",
+          "capabilityId": "generate-image-in-browser",
+          "configuration": {},
+          "connectionRequired": false
+        }
+      },
+      {
+        "id": "p60-chatgpt-validate",
+        "type": "VALIDAR",
+        "operator": "Humano",
+        "name": "Selecionar imagens do ChatGPT",
+        "instructions": "Selecione as imagens aprovadas e mantenha a proveniência da conversa e da tentativa.",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "p60-chatgpt-selected",
+            "label": "Selecionadas",
+            "key": "selected_value",
+            "type": "files",
+            "required": true,
+            "optionsSourceBlockId": "p60-chatgpt-generate",
+            "optionsSourceKey": "images"
+          }
+        ],
+        "validation": {
+          "targetBlockId": "p60-chatgpt-generate",
+          "targetOutputKey": "images",
+          "mode": "select_many",
+          "onReject": "pause",
+          "maxAttempts": 2
+        },
+        "parameters": [],
+        "order": 1
+      }
+    ]
+  }
+}

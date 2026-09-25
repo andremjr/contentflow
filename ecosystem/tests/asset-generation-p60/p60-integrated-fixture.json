@@ -1,0 +1,110 @@
+{
+  "fixtureId": "asset-generation-p60-integrated-v1",
+  "derivedFromFixtureId": "asset-generation-canonical-v1",
+  "baseSlots": [
+    {
+      "expectedItemId": "asset-slot-image-city-dawn",
+      "kind": "generation_prompt",
+      "prompt": "Cinematic aerial view of a city at dawn, warm light, 16:9"
+    },
+    {
+      "expectedItemId": "asset-slot-image-forest-rain",
+      "kind": "generation_prompt",
+      "prompt": "Close-up of a rainforest trail in gentle rain, realistic documentary style, 16:9"
+    },
+    {
+      "expectedItemId": "asset-slot-stock-commute",
+      "kind": "stock_brief",
+      "brief": {
+        "brief_id": "asset-slot-stock-commute",
+        "start_seconds": 12,
+        "end_seconds": 18,
+        "primary_query": "urban commuters at sunrise",
+        "media_preference": "video",
+        "orientation": "landscape"
+      }
+    }
+  ],
+  "extraGenerationPrompts": [
+    {
+      "expectedItemId": "asset-slot-image-coast-storm",
+      "prompt": "Wide cinematic coastline before a storm, dramatic clouds, realistic documentary style, 16:9"
+    },
+    {
+      "expectedItemId": "asset-slot-image-workshop-night",
+      "prompt": "Craft workshop at night with warm practical lights, cinematic documentary photography, 16:9"
+    },
+    {
+      "expectedItemId": "asset-slot-image-train-morning",
+      "prompt": "Morning commuter train crossing a misty valley, cinematic realism, 16:9"
+    }
+  ],
+  "extraStockBriefs": [
+    {
+      "brief_id": "asset-slot-stock-rainforest",
+      "start_seconds": 31,
+      "end_seconds": 37,
+      "primary_query": "rainforest trail rain",
+      "media_preference": "video",
+      "orientation": "landscape"
+    },
+    {
+      "brief_id": "asset-slot-stock-city-aerial",
+      "start_seconds": 44,
+      "end_seconds": 50,
+      "primary_query": "city aerial dawn",
+      "media_preference": "image",
+      "orientation": "landscape"
+    }
+  ],
+  "providers": [
+    {
+      "source": "flow",
+      "pluginId": "local.contentflow.google-flow-batch-images",
+      "capabilityId": "generate-images-in-browser",
+      "methodFile": "methods/p60-flow.contentflow-method.json",
+      "inputPort": "prompts",
+      "outputPort": "images"
+    },
+    {
+      "source": "vibes",
+      "pluginId": "local.contentflow.vibes-browser-studio",
+      "capabilityId": "generate-images-in-browser",
+      "methodFile": "methods/p60-vibes.contentflow-method.json",
+      "inputPort": "prompts",
+      "outputPort": "images"
+    },
+    {
+      "source": "meta",
+      "pluginId": "local.contentflow.meta-ai-browser-studio",
+      "capabilityId": "generate-image-in-browser",
+      "methodFile": "methods/p60-meta.contentflow-method.json",
+      "inputPort": "prompt",
+      "outputPort": "images"
+    },
+    {
+      "source": "chatgpt",
+      "pluginId": "local.contentflow.chatgpt-browser-studio",
+      "capabilityId": "generate-image-in-browser",
+      "methodFile": "methods/p60-chatgpt.contentflow-method.json",
+      "inputPort": "prompt",
+      "outputPort": "images"
+    },
+    {
+      "source": "free-stock",
+      "pluginId": "local.contentflow.free-stock-media-studio",
+      "capabilityId": "search-stock-by-briefs",
+      "methodFile": "methods/p60-free-stock.contentflow-method.json",
+      "inputPort": "asset_briefs",
+      "outputPort": "selected_assets"
+    }
+  ],
+  "runPolicy": {
+    "projectTitle": "P60 Integrated Asset Pipeline",
+    "processType": "assets",
+    "handoffProcessType": "editing",
+    "intentionalFailureItemId": "p60-meta-asset-slot-image-forest-rain",
+    "resumeMustSkipCompleted": true,
+    "selectionMustPreserveProvenance": true
+  }
+}

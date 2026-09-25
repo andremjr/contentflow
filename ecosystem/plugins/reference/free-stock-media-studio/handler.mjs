@@ -1,5 +1,18 @@
 import { createHash } from "node:crypto";
-import { access, mkdir, open, readFile, unlink, writeFile } from "node:fs/promises";
+import { lookup } from "node:dns/promises";
+import { createReadStream } from "node:fs";
+import {
+  access,
+  copyFile,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { isIP } from "node:net";
 import { dirname } from "node:path";
 
 const PROVIDERS = Object.freeze({
@@ -14,6 +27,52 @@ const PROVIDERS = Object.freeze({
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_JSON_BYTES = 5 * 1024 * 1024;
 const MAX_OUTPUT_JSON_BYTES = 1_750_000;
+const MAX_IMAGE_BYTES = 100 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 512 * 1024 * 1024;
+const MAX_DOWNLOAD_REDIRECTS = 5;
+const DOWNLOAD_RECEIPT_VERSION = 1;
+const P23_MESSAGES = Object.freeze({
+  "pt-BR": Object.freeze({
+    dnsUnavailable: "Não foi possível resolver o host do provedor.",
+    privateNetwork: "O host do provedor resolveu para uma rede não permitida.",
+    incompleteProvenance:
+      "O candidato não possui proveniência e licença completas para materialização.",
+    lengthMismatch: "O tamanho recebido diverge do tamanho declarado.",
+    cancelled: "O download foi cancelado.",
+    artifactReused: "Artifact validado reutilizado.",
+    artifactMaterialized: "Download validado e materializado.",
+  }),
+  en: Object.freeze({
+    dnsUnavailable: "The provider host could not be resolved.",
+    privateNetwork: "The provider host resolved to a disallowed network.",
+    incompleteProvenance:
+      "The candidate does not include complete provenance and license data for materialization.",
+    lengthMismatch: "The received size differs from the declared size.",
+    cancelled: "The download was cancelled.",
+    artifactReused: "Validated artifact reused.",
+    artifactMaterialized: "Download validated and materialized.",
+  }),
+  es: Object.freeze({
+    dnsUnavailable: "No se pudo resolver el host del proveedor.",
+    privateNetwork: "El host del proveedor se resolvió a una red no permitida.",
+    incompleteProvenance:
+      "El candidato no incluye procedencia y licencia completas para la materialización.",
+    lengthMismatch: "El tamaño recibido difiere del tamaño declarado.",
+    cancelled: "La descarga fue cancelada.",
+    artifactReused: "Artefacto validado reutilizado.",
+    artifactMaterialized: "Descarga validada y materializada.",
+  }),
+});
+
+function p23Message(locale, key) {
+  const language = String(locale || "pt-BR").toLowerCase();
+  const catalog = language.startsWith("en")
+    ? P23_MESSAGES.en
+    : language.startsWith("es")
+      ? P23_MESSAGES.es
+      : P23_MESSAGES["pt-BR"];
+  return catalog[key];
+}
 const PROVIDER_PAGE_LIMITS = Object.freeze({
   image: Object.freeze({
     pexels: 80,
@@ -84,11 +143,59 @@ function normalizeConfiguration(request, mediaType) {
   return {
     provider,
     providers: provider === "all" ? allowed.slice(1) : [provider],
-    resultLimitMode: configuration.resultLimitMode === "custom" ? "custom" : "provider_max",
+    resultLimitMode: configuration.resultLimitMode === "provider_max" ? "provider_max" : "custom",
     resultsPerProvider: clamp(configuration.resultsPerProvider, 1, 500, 20),
     page: clamp(configuration.page, 1, 100, 1),
     orientation: cleanText(configuration.orientation || "any", 20),
     safeSearch: configuration.safeSearch !== false,
+  };
+}
+
+async function providerIsAvailable(provider, services) {
+  const secretKey = PROVIDERS[provider]?.secret;
+  if (!secretKey) return true;
+  try {
+    return Boolean(cleanText(await services.getSecret(secretKey), 1000));
+  } catch {
+    return false;
+  }
+}
+
+async function availableProviders(mediaType, services) {
+  const providers = PROVIDER_PRIORITY[mediaType] ?? [];
+  const availability = await Promise.all(
+    providers.map(async (provider) => ({
+      provider,
+      available: await providerIsAvailable(provider, services),
+    })),
+  );
+  return availability.filter((entry) => entry.available).map((entry) => entry.provider);
+}
+
+async function configurationOptions(request, services) {
+  if (
+    request.invocation?.action !== "options" ||
+    request.invocation?.providerId !== "available-stock-providers" ||
+    request.invocation?.property !== "provider"
+  ) {
+    throw new PluginFailure("INVALID_INPUT", "Consulta de opções de fonte inválida.");
+  }
+  const mediaType = request.capabilityId === "search-stock-videos" ? "video" : "image";
+  const providers = await availableProviders(mediaType, services);
+  return {
+    status: "success",
+    values: {
+      options: [
+        {
+          value: "all",
+          label: providers.map((provider) => PROVIDERS[provider].label).join(" + "),
+        },
+        ...providers.map((provider) => ({
+          value: provider,
+          label: PROVIDERS[provider].label,
+        })),
+      ],
+    },
   };
 }
 
@@ -151,12 +258,15 @@ function providerError(provider, response) {
 async function fetchJson(url, init, request, services, provider) {
   let response;
   try {
+    await assertPublicUrl(url, services, request.context?.locale);
     response = await fetch(url, {
       ...init,
+      redirect: "error",
       signal: combinedSignal(services.signal, requestTimeout(request)),
     });
   } catch (error) {
     if (services.signal?.aborted) throw new PluginFailure("CANCELLED", "A execução foi cancelada.");
+    if (error instanceof PluginFailure) throw error;
     throw new PluginFailure(
       "UPSTREAM_UNAVAILABLE",
       `${PROVIDERS[provider].label} não respondeu a tempo.`,
@@ -708,6 +818,15 @@ async function search(mediaType, request, services) {
       usage: { provider: "diagnostic", outputUnits: results.length, unit: "items" },
     };
   }
+  const usableProviders = await availableProviders(mediaType, services);
+  if (config.provider === "all") {
+    config.providers = config.providers.filter((provider) => usableProviders.includes(provider));
+  } else if (!usableProviders.includes(config.provider)) {
+    throw new PluginFailure(
+      "AUTHENTICATION_FAILED",
+      `A fonte ${PROVIDERS[config.provider].label} não está disponível nesta conexão.`,
+    );
+  }
   const tasks = config.providers.map((provider) =>
     searchProvider(provider, mediaType, query, config, request, services),
   );
@@ -924,6 +1043,55 @@ function providersForBrief(mediaType, config) {
   return available.includes(config.provider) ? [config.provider] : [];
 }
 
+function briefItemKey(request, brief) {
+  const namespace = cleanText(request.batch?.itemId || brief.briefId, 150) || "item";
+  return `brief-search:${namespace}`;
+}
+
+function briefProgress(request, completed) {
+  const total = Math.max(1, Number(request.batch?.total) || 1);
+  const index = Math.max(0, Number(request.batch?.index) || 0);
+  return Math.min(1, Math.max(0, (index + (completed ? 1 : 0)) / total));
+}
+
+function safeSearchDiagnostic(queries, warnings) {
+  const querySummary = queries
+    .map(
+      (query, index) => `${index === 0 ? "primary" : `fallback_${index}`}=${cleanText(query, 100)}`,
+    )
+    .join(" | ");
+  const warningSummary = warnings
+    .map((warning) => cleanText(warning, 160))
+    .filter(Boolean)
+    .join(" | ");
+  return cleanText(
+    `${querySummary || "queries=none"}${warningSummary ? `; warnings=${warningSummary}` : ""}`,
+    1000,
+  );
+}
+
+async function publishBriefUpdate(services, request, brief, state, options = {}) {
+  if (typeof services.publishPartial !== "function") return;
+  const value = options.value;
+  await services.publishPartial({
+    values: value === undefined ? {} : { selected_assets: [value] },
+    itemUpdates: [
+      {
+        key: briefItemKey(request, brief),
+        outputPort: "selected_assets",
+        state,
+        input: Array.isArray(request.inputs?.asset_briefs)
+          ? request.inputs.asset_briefs[0]
+          : request.inputs?.asset_briefs,
+        ...(value === undefined ? {} : { value }),
+        ...(options.errorCode ? { errorCode: cleanText(options.errorCode, 100) } : {}),
+        ...(options.retryable === undefined ? {} : { retryable: options.retryable }),
+      },
+    ],
+    progress: briefProgress(request, state === "completed"),
+  });
+}
+
 async function searchByBrief(request, services) {
   const brief = normalizeAssetBrief(request.inputs?.asset_briefs);
   const briefConfig = normalizeBriefConfiguration(request);
@@ -934,8 +1102,13 @@ async function searchByBrief(request, services) {
   const candidates = [];
   const warnings = [];
   const failures = [];
+  const attemptedQueries = [];
+  let successfulSearches = 0;
+  await publishBriefUpdate(services, request, brief, "running");
   for (let queryIndex = 0; queryIndex < queries.length; queryIndex += 1) {
+    if (services.signal?.aborted) throw new PluginFailure("CANCELLED", "A execução foi cancelada.");
     const query = queries[queryIndex];
+    attemptedQueries.push(query);
     for (const mediaType of briefMediaTypes(brief, briefConfig)) {
       if (
         briefConfig.strategy !== "all" &&
@@ -962,6 +1135,8 @@ async function searchByBrief(request, services) {
             searchProvider(provider, mediaType, query, config, request, services),
           ),
         );
+        if (services.signal?.aborted)
+          throw new PluginFailure("CANCELLED", "A execução foi cancelada.");
         settled.forEach((entry, providerIndex) => {
           const provider = providers[providerIndex];
           if (entry.status === "rejected") {
@@ -971,6 +1146,7 @@ async function searchByBrief(request, services) {
             warnings.push(`${PROVIDERS[provider].label}: ${code}`);
             return;
           }
+          successfulSearches += 1;
           candidates.push(
             ...entry.value
               .filter((item) => candidateAllowed(item, brief, briefConfig))
@@ -1001,10 +1177,13 @@ async function searchByBrief(request, services) {
                 .filter((item) => item.candidate_score >= briefConfig.minimumQualityScore),
             );
           } catch (error) {
+            if (error instanceof PluginFailure && error.code === "CANCELLED") throw error;
             failures.push(error);
             const code = error instanceof PluginFailure ? error.code : "UPSTREAM_ERROR";
             warnings.push(`${PROVIDERS[provider].label}: ${code}`);
+            continue;
           }
+          successfulSearches += 1;
           if (
             selectDiverseCandidates(candidates, briefConfig.maximumCandidates).length >=
             briefConfig.minimumCandidates
@@ -1020,27 +1199,55 @@ async function searchByBrief(request, services) {
       break;
   }
   const pool = selectDiverseCandidates(candidates, briefConfig.maximumCandidates);
-  if (!pool.length && failures.length === 1) throw failures[0];
-  if (!pool.length)
-    throw new PluginFailure(
-      "NOT_FOUND",
-      `Nenhum asset atingiu o piso de qualidade para o briefing ${brief.briefId}.`,
-    );
+  const searchDiagnostic = safeSearchDiagnostic(attemptedQueries, warnings);
+  if (!pool.length && successfulSearches === 0 && failures.length) {
+    const failure = failures[0];
+    await publishBriefUpdate(services, request, brief, "failed", {
+      errorCode: failure instanceof PluginFailure ? failure.code : "UPSTREAM_ERROR",
+      retryable: failure instanceof PluginFailure ? failure.retryable : false,
+    });
+    throw failure;
+  }
+  if (!pool.length) {
+    const emptyResult = {
+      brief_id: brief.briefId,
+      start_seconds: brief.startSeconds,
+      end_seconds: Math.max(brief.startSeconds, brief.endSeconds),
+      result_status: "no_acceptable_candidate",
+      candidate_pool_size: 0,
+      selection_mode: "none",
+      search_diagnostic: searchDiagnostic,
+    };
+    await publishBriefUpdate(services, request, brief, "completed", { value: emptyResult });
+    return {
+      status: "success",
+      values: { selected_assets: [emptyResult] },
+      usage: {
+        provider: "none",
+        inputUnits: attemptedQueries.length,
+        outputUnits: 0,
+        unit: "items",
+      },
+    };
+  }
   const selected = [
     {
       ...pool[0],
+      result_status: "candidate",
       candidate_rank: 1,
       candidate_pool_size: pool.length,
       selection_mode: "automatic_best",
       search_warnings: warnings.join("; ").slice(0, 1000),
+      search_diagnostic: searchDiagnostic,
     },
   ];
+  await publishBriefUpdate(services, request, brief, "completed", { value: selected[0] });
   return {
     status: "success",
     values: { selected_assets: selected },
     usage: {
       provider: [...new Set(selected.map((item) => item.provider))].join(",") || "none",
-      inputUnits: queries.length,
+      inputUnits: attemptedQueries.length,
       outputUnits: selected.length,
       unit: "items",
     },
@@ -1089,6 +1296,85 @@ function validateAssetUrl(value, provider, tracking = false) {
   return url;
 }
 
+function isPublicAddress(value) {
+  const address = String(value ?? "")
+    .toLowerCase()
+    .split("%")[0];
+  const version = isIP(address);
+  if (version === 4) {
+    const octets = address.split(".").map(Number);
+    const [a, b, c] = octets;
+    return !(
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 0 && c === 0) ||
+      (a === 192 && b === 0 && c === 2) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      (a === 198 && b === 51 && c === 100) ||
+      (a === 203 && b === 0 && c === 113) ||
+      a >= 224
+    );
+  }
+  if (version === 6) {
+    if (address.startsWith("::ffff:")) return isPublicAddress(address.slice(7));
+    return !(
+      address === "::" ||
+      address === "::1" ||
+      address.startsWith("fc") ||
+      address.startsWith("fd") ||
+      /^fe[89ab]/.test(address) ||
+      address.startsWith("ff") ||
+      address.startsWith("2001:db8:")
+    );
+  }
+  return false;
+}
+
+async function assertPublicUrl(url, services, locale) {
+  const hostname = url.hostname.toLowerCase();
+  const directAddress = isIP(hostname) ? [{ address: hostname }] : undefined;
+  let addresses;
+  try {
+    addresses =
+      directAddress ??
+      (typeof services.resolveHostname === "function"
+        ? await services.resolveHostname(hostname)
+        : await lookup(hostname, { all: true, verbatim: true }));
+  } catch {
+    throw new PluginFailure("UPSTREAM_UNAVAILABLE", p23Message(locale, "dnsUnavailable"), true);
+  }
+  if (
+    !Array.isArray(addresses) ||
+    !addresses.length ||
+    addresses.some((entry) => !isPublicAddress(entry?.address))
+  ) {
+    throw new PluginFailure("PERMISSION_DENIED", p23Message(locale, "privateNetwork"));
+  }
+}
+
+function requireAssetProvenance(asset, locale) {
+  const required = [
+    "asset_id",
+    "external_id",
+    "provider",
+    "provider_label",
+    "media_type",
+    "source_url",
+    "attribution",
+    "license_name",
+    "license_url",
+  ];
+  const missing = required.filter((field) => !cleanText(asset[field], 2000));
+  if (missing.length) {
+    throw new PluginFailure("INVALID_INPUT", p23Message(locale, "incompleteProvenance"));
+  }
+}
+
 function eventFingerprint(request, asset) {
   return createHash("sha256")
     .update(
@@ -1096,7 +1382,8 @@ function eventFingerprint(request, asset) {
         request.executionId,
         request.blockId,
         request.capabilityId,
-        request.invocation?.attempt || 1,
+        request.attempt || request.invocation?.attempt || 1,
+        request.invocation?.mode || "start",
         request.batch?.itemId || asset.brief_id || "single",
         asset.asset_id,
       ].join(":"),
@@ -1201,35 +1488,135 @@ function extensionFor(mimeType, mediaType) {
   return known[mimeType] || (mediaType === "image" ? ".img" : ".video");
 }
 
+function detectMime(bytes) {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
+    return "image/png";
+  if (bytes.subarray(0, 4).toString() === "RIFF" && bytes.subarray(8, 12).toString() === "WEBP")
+    return "image/webp";
+  if (bytes.subarray(0, 3).toString() === "GIF") return "image/gif";
+  if (bytes.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) return "video/webm";
+  if (bytes.subarray(0, 4).toString() === "OggS") return "video/ogg";
+  if (bytes.subarray(4, 8).toString() === "ftyp")
+    return bytes.subarray(8, 12).toString() === "qt  " ? "video/quicktime" : "video/mp4";
+  return "";
+}
+
 function validMagic(bytes, mimeType) {
-  if (mimeType === "image/jpeg") return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-  if (mimeType === "image/png")
-    return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-  if (mimeType === "image/webp")
-    return (
-      bytes.subarray(0, 4).toString() === "RIFF" && bytes.subarray(8, 12).toString() === "WEBP"
-    );
-  if (mimeType === "image/gif") return bytes.subarray(0, 3).toString() === "GIF";
-  if (mimeType === "video/webm")
-    return bytes.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
-  if (mimeType === "video/ogg") return bytes.subarray(0, 4).toString() === "OggS";
-  if (mimeType === "video/mp4" || mimeType === "video/quicktime")
-    return bytes.subarray(4, 8).toString() === "ftyp";
-  return false;
+  return detectMime(bytes) === mimeType;
+}
+
+function assetReceiptFingerprint(asset) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        asset_id: cleanText(asset.asset_id, 200),
+        external_id: cleanText(asset.external_id, 200),
+        provider: cleanText(asset.provider, 50),
+        media_type: cleanText(asset.media_type, 20),
+        download_url: cleanText(asset.download_url, 4000),
+        download_location: cleanText(asset.download_location, 4000),
+        source_url: cleanText(asset.source_url, 2000),
+        attribution: cleanText(asset.attribution, 500),
+        license_name: cleanText(asset.license_name, 200),
+        license_url: cleanText(asset.license_url, 2000),
+      }),
+    )
+    .digest("hex");
+}
+
+async function hashFile(path) {
+  const hash = createHash("sha256");
+  let head = Buffer.alloc(0);
+  for await (const chunkValue of createReadStream(path)) {
+    const chunk = Buffer.from(chunkValue);
+    hash.update(chunk);
+    if (head.length < 16) head = Buffer.concat([head, chunk]).subarray(0, 16);
+  }
+  return { sha256: hash.digest("hex"), head };
+}
+
+async function writeJsonAtomic(path, value) {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.${Date.now()}.partial`;
+  await writeFile(temporary, JSON.stringify(value), "utf8");
+  await unlink(path).catch(() => {});
+  await rename(temporary, path);
+}
+
+function materializationPaths(request, services, asset) {
+  const fingerprint = eventFingerprint(request, asset);
+  return {
+    fingerprint,
+    receiptPath: services.getWorkspacePath(`download-receipts/${fingerprint}.json`),
+    cachePath: services.getWorkspacePath(`download-cache/${fingerprint}.bin`),
+  };
+}
+
+async function reuseMaterializedArtifact(paths, asset, expectedType, maximumBytes, services) {
+  let receipt;
+  try {
+    receipt = JSON.parse(await readFile(paths.receiptPath, "utf8"));
+  } catch {
+    return undefined;
+  }
+  const artifact = receipt?.artifact;
+  const expectedId = `stock-${expectedType}-${paths.fingerprint.slice(0, 16)}`;
+  if (
+    receipt?.version !== DOWNLOAD_RECEIPT_VERSION ||
+    receipt?.assetFingerprint !== assetReceiptFingerprint(asset) ||
+    receipt?.state !== "succeeded" ||
+    !artifact ||
+    artifact.id !== expectedId ||
+    typeof artifact.name !== "string" ||
+    !artifact.name.startsWith(`${expectedId}.`) ||
+    artifact.name.includes("/") ||
+    artifact.name.includes("\\") ||
+    !artifact.mimeType?.startsWith(`${expectedType}/`) ||
+    !Number.isSafeInteger(artifact.size) ||
+    artifact.size <= 0 ||
+    artifact.size > maximumBytes ||
+    !/^[a-f0-9]{64}$/.test(artifact.sha256 ?? "")
+  ) {
+    return undefined;
+  }
+  try {
+    const metadata = await stat(paths.cachePath);
+    if (!metadata.isFile() || metadata.size !== artifact.size) return undefined;
+    const verified = await hashFile(paths.cachePath);
+    if (verified.sha256 !== artifact.sha256 || !validMagic(verified.head, artifact.mimeType))
+      return undefined;
+    const outputPath = services.getOutputPath(artifact.name);
+    await mkdir(dirname(outputPath), { recursive: true });
+    await copyFile(paths.cachePath, outputPath);
+    return { ...artifact, url: `artifact://${artifact.id}`, reused: true };
+  } catch {
+    return undefined;
+  }
 }
 
 async function downloadToArtifact(url, expectedType, maximumBytes, request, services, asset) {
+  const paths = materializationPaths(request, services, asset);
+  const reused = await reuseMaterializedArtifact(
+    paths,
+    asset,
+    expectedType,
+    maximumBytes,
+    services,
+  );
+  if (reused) return reused;
   let response;
   try {
     let currentUrl = url;
-    for (let redirect = 0; redirect <= 3; redirect += 1) {
+    for (let redirect = 0; redirect <= MAX_DOWNLOAD_REDIRECTS; redirect += 1) {
+      await assertPublicUrl(currentUrl, services, request.context?.locale);
       response = await fetch(currentUrl, {
         redirect: "manual",
         signal: combinedSignal(services.signal, requestTimeout(request)),
       });
       if (![301, 302, 303, 307, 308].includes(response.status)) break;
       const location = response.headers.get("location");
-      if (!location || redirect === 3)
+      if (!location || redirect === MAX_DOWNLOAD_REDIRECTS)
         throw new PluginFailure(
           "UPSTREAM_ERROR",
           "O provedor retornou redirecionamentos inválidos.",
@@ -1237,50 +1624,82 @@ async function downloadToArtifact(url, expectedType, maximumBytes, request, serv
       currentUrl = validateAssetUrl(new URL(location, currentUrl), asset.provider);
     }
   } catch (error) {
-    if (services.signal?.aborted) throw new PluginFailure("CANCELLED", "O download foi cancelado.");
+    if (services.signal?.aborted)
+      throw new PluginFailure("CANCELLED", p23Message(request.context?.locale, "cancelled"));
     if (error instanceof PluginFailure) throw error;
     throw new PluginFailure("UPSTREAM_UNAVAILABLE", "O arquivo não respondeu a tempo.", true);
   }
   if (!response.ok) throw providerError(asset.provider, response);
-  const mimeType = cleanText(
-    response.headers.get("content-type")?.split(";")[0],
-    100,
-  ).toLowerCase();
-  if (!mimeType.startsWith(`${expectedType}/`))
+  const declaredMime = cleanText(response.headers.get("content-type")?.split(";")[0], 100)
+    .toLowerCase()
+    .replace("image/jpg", "image/jpeg");
+  if (!declaredMime.startsWith(`${expectedType}/`))
     throw new PluginFailure("UPSTREAM_ERROR", "O provedor retornou um tipo de arquivo inesperado.");
   const declared = Number(response.headers.get("content-length") || 0);
   if (declared > maximumBytes)
     throw new PluginFailure("OUTPUT_TOO_LARGE", "O arquivo excede o limite configurado.");
   const id = `stock-${expectedType}-${eventFingerprint(request, asset).slice(0, 16)}`;
-  const name = `${id}${extensionFor(mimeType, expectedType)}`;
-  const path = services.getOutputPath(name);
-  await mkdir(dirname(path), { recursive: true });
-  const file = await open(path, "w");
+  const temporaryName = `${id}.partial`;
+  const temporaryPath = services.getOutputPath(temporaryName);
+  await mkdir(dirname(temporaryPath), { recursive: true });
+  const file = await open(temporaryPath, "w");
   let size = 0;
   let head = Buffer.alloc(0);
+  const hash = createHash("sha256");
   try {
     for await (const chunkValue of response.body) {
+      if (services.signal?.aborted)
+        throw new PluginFailure("CANCELLED", p23Message(request.context?.locale, "cancelled"));
       const chunk = Buffer.from(chunkValue);
       size += chunk.length;
       if (size > maximumBytes)
         throw new PluginFailure("OUTPUT_TOO_LARGE", "O arquivo excede o limite configurado.");
       if (head.length < 16) head = Buffer.concat([head, chunk]).subarray(0, 16);
+      hash.update(chunk);
       await file.write(chunk);
     }
   } catch (error) {
     await file.close();
-    await unlink(path).catch(() => {});
+    await unlink(temporaryPath).catch(() => {});
     throw error;
   }
   await file.close();
-  if (!size || !validMagic(head, mimeType)) {
-    await unlink(path).catch(() => {});
+  const mimeType = detectMime(head);
+  if (!size || !mimeType || mimeType !== declaredMime || !mimeType.startsWith(`${expectedType}/`)) {
+    await unlink(temporaryPath).catch(() => {});
     throw new PluginFailure(
       "UPSTREAM_ERROR",
       "O arquivo baixado não corresponde ao formato declarado.",
     );
   }
-  return { id, name, mimeType, size, url: `artifact://${id}` };
+  if (declared > 0 && declared !== size) {
+    await unlink(temporaryPath).catch(() => {});
+    throw new PluginFailure(
+      "UPSTREAM_ERROR",
+      p23Message(request.context?.locale, "lengthMismatch"),
+    );
+  }
+  const sha256 = hash.digest("hex");
+  const name = `${id}${extensionFor(mimeType, expectedType)}`;
+  const outputPath = services.getOutputPath(name);
+  await unlink(outputPath).catch(() => {});
+  await rename(temporaryPath, outputPath);
+  await mkdir(dirname(paths.cachePath), { recursive: true });
+  const cachePartial = `${paths.cachePath}.${process.pid}.${Date.now()}.partial`;
+  await copyFile(outputPath, cachePartial);
+  await unlink(paths.cachePath).catch(() => {});
+  await rename(cachePartial, paths.cachePath);
+  const artifact = { id, name, mimeType, size, sha256 };
+  await writeJsonAtomic(paths.receiptPath, {
+    version: DOWNLOAD_RECEIPT_VERSION,
+    state: "succeeded",
+    logicalKey: paths.fingerprint,
+    assetFingerprint: assetReceiptFingerprint(asset),
+    provider: asset.provider,
+    artifact,
+    completedAt: new Date().toISOString(),
+  });
+  return { ...artifact, url: `artifact://${id}`, reused: false };
 }
 
 function provenance(asset) {
@@ -1303,8 +1722,9 @@ function provenance(asset) {
   ];
 }
 
-async function download(mediaType, request, services) {
+async function download(mediaType, request, services, publishPartial = true) {
   const asset = assetFromInput(request.inputs?.asset);
+  requireAssetProvenance(asset, request.context?.locale);
   if (!Object.hasOwn(PROVIDERS, asset.provider) || asset.media_type !== mediaType) {
     throw new PluginFailure(
       "INVALID_INPUT",
@@ -1324,22 +1744,33 @@ async function download(mediaType, request, services) {
   if (mediaType === "image") await trackUnsplashDownload(request, services, asset);
   const maximumBytes =
     mediaType === "image"
-      ? clamp(request.settings?.maxImageBytes, 1048576, 104857600, 52428800)
-      : clamp(request.settings?.maxVideoBytes, 1048576, 1073741824, 536870912);
+      ? clamp(request.settings?.maxImageBytes, 1048576, MAX_IMAGE_BYTES, 52428800)
+      : clamp(request.settings?.maxVideoBytes, 1048576, MAX_VIDEO_BYTES, MAX_VIDEO_BYTES);
   const artifact = await downloadToArtifact(url, mediaType, maximumBytes, request, services, asset);
+  const value = { ...artifact };
+  delete value.reused;
+  const artifactDeclaration = {
+    id: value.id,
+    name: value.name,
+    mimeType: value.mimeType,
+    size: value.size,
+    source: { kind: "path", path: value.name },
+  };
+  if (publishPartial) {
+    await services.publishPartial?.({
+      values: { [mediaType]: value, provenance: provenance(asset) },
+      artifacts: [artifactDeclaration],
+      progress: 1,
+      message: artifact.reused
+        ? p23Message(request.context?.locale, "artifactReused")
+        : p23Message(request.context?.locale, "artifactMaterialized"),
+    });
+  }
   return {
     status: "success",
-    values: { [mediaType]: artifact, provenance: provenance(asset) },
-    artifacts: [
-      {
-        id: artifact.id,
-        name: artifact.name,
-        mimeType: artifact.mimeType,
-        size: artifact.size,
-        source: { kind: "path", path: artifact.name },
-      },
-    ],
-    usage: { provider: asset.provider, outputUnits: artifact.size, unit: "bytes" },
+    values: { [mediaType]: value, provenance: provenance(asset) },
+    artifacts: [artifactDeclaration],
+    usage: { provider: asset.provider, outputUnits: value.size, unit: "bytes" },
   };
 }
 
@@ -1350,29 +1781,84 @@ async function downloadSelected(request, services) {
       "INVALID_INPUT",
       "O asset selecionado deve ser uma imagem ou um vídeo.",
     );
-  const result = await download(
-    asset.media_type,
-    { ...request, inputs: { ...request.inputs, asset } },
-    services,
-  );
-  const artifact = result.values[asset.media_type];
-  return {
-    ...result,
-    values: {
-      assets: [
+  requireAssetProvenance(asset, request.context?.locale);
+  await services.publishPartial?.({
+    values: {},
+    itemUpdates: [
+      {
+        key: cleanText(request.batch?.itemId || asset.brief_id || asset.asset_id, 200),
+        outputPort: "assets",
+        state: "running",
+        input: asset,
+      },
+    ],
+    progress: request.batch?.total
+      ? Math.min(1, Number(request.batch.index || 0) / Number(request.batch.total))
+      : 0,
+  });
+  let result;
+  try {
+    result = await download(
+      asset.media_type,
+      { ...request, inputs: { ...request.inputs, asset } },
+      services,
+      false,
+    );
+  } catch (error) {
+    await services.publishPartial?.({
+      values: {},
+      itemUpdates: [
         {
-          ...artifact,
-          brief_id: cleanText(asset.brief_id, 120),
-          start_seconds: Number(asset.start_seconds) || 0,
-          end_seconds: Number(asset.end_seconds) || 0,
-          provider: cleanText(asset.provider, 50),
-          source_url: cleanText(asset.source_url, 2000),
-          attribution: cleanText(asset.attribution, 500),
-          license_name: cleanText(asset.license_name, 200),
-          license_url: cleanText(asset.license_url, 2000),
+          key: cleanText(request.batch?.itemId || asset.brief_id || asset.asset_id, 200),
+          outputPort: "assets",
+          state: "failed",
+          input: asset,
+          errorCode: cleanText(error?.code || "INTERNAL_ERROR", 100),
+          retryable: error?.retryable === true,
         },
       ],
-    },
+      progress: request.batch?.total
+        ? Math.min(1, Number(request.batch.index || 0) / Number(request.batch.total))
+        : 0,
+    });
+    throw error;
+  }
+  const artifact = result.values[asset.media_type];
+  const materialized = {
+    ...artifact,
+    asset_id: cleanText(asset.asset_id, 200),
+    external_id: cleanText(asset.external_id, 200),
+    brief_id: cleanText(asset.brief_id, 120),
+    start_seconds: Number(asset.start_seconds) || 0,
+    end_seconds: Number(asset.end_seconds) || 0,
+    provider: cleanText(asset.provider, 50),
+    provider_label: cleanText(asset.provider_label, 100),
+    source_url: cleanText(asset.source_url, 2000),
+    author: cleanText(asset.author, 300),
+    author_url: cleanText(asset.author_url, 2000),
+    attribution: cleanText(asset.attribution, 500),
+    license_name: cleanText(asset.license_name, 200),
+    license_url: cleanText(asset.license_url, 2000),
+  };
+  await services.publishPartial?.({
+    values: { assets: [materialized] },
+    artifacts: result.artifacts,
+    itemUpdates: [
+      {
+        key: cleanText(request.batch?.itemId || asset.brief_id || asset.asset_id, 200),
+        outputPort: "assets",
+        state: "completed",
+        input: asset,
+        value: materialized,
+      },
+    ],
+    progress: request.batch?.total
+      ? Math.min(1, (Number(request.batch.index || 0) + 1) / Number(request.batch.total))
+      : 1,
+  });
+  return {
+    ...result,
+    values: { assets: [materialized] },
   };
 }
 
@@ -1397,6 +1883,8 @@ function errorResponse(error) {
 export async function execute(request, services) {
   try {
     if (services.signal?.aborted) throw new PluginFailure("CANCELLED", "A execução foi cancelada.");
+    if (request.invocation?.mode === "configure")
+      return await configurationOptions(request, services);
     if (request.capabilityId === "search-stock-images")
       return await search("image", request, services);
     if (request.capabilityId === "search-stock-videos")
@@ -1417,6 +1905,7 @@ export async function execute(request, services) {
 
 export const __test = Object.freeze({
   normalizeQuery,
+  availableProviders,
   normalizeAssetBrief,
   normalizeBriefConfiguration,
   providerPageLimit,
@@ -1436,5 +1925,8 @@ export const __test = Object.freeze({
   nasaRecord,
   coverrVideo,
   validateAssetUrl,
+  isPublicAddress,
+  detectMime,
+  p23Message,
   validMagic,
 });

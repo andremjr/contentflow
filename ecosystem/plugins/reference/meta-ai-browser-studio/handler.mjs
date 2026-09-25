@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
-import { basename, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { attachContentFlowBridge } from "./browser-bridge-client.mjs";
 
 const PLUGIN_ID = "local.contentflow.meta-ai-browser-studio";
@@ -19,6 +19,7 @@ const MAX_ATTACHMENT_BYTES = 512 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".m4v"]);
 const PROFILE_SETUP_WAIT_MS = Number.POSITIVE_INFINITY;
+const META_RECEIPT_VERSION = 1;
 const DOCUMENT_EXTENSIONS = new Set([
   ".pdf",
   ".docx",
@@ -272,13 +273,180 @@ function buildAnalysisPrompt(request, _image) {
 function buildImagePrompt(request) {
   const prompt = buildInstructionPrompt(request);
   if (!prompt) throw codedError("INVALID_INPUT", "O prompt da imagem ficou vazio.");
-  return prompt;
+  const aspectRatio = ["16:9", "1:1", "9:16"].includes(request?.configuration?.aspectRatio)
+    ? request.configuration.aspectRatio
+    : "";
+  return aspectRatio ? `${prompt}\n\nPROPORÇÃO DA IMAGEM: ${aspectRatio}` : prompt;
+}
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalize(value[key])]),
+    );
+  }
+  return value;
+}
+
+function p53Message(request, key) {
+  const locale = String(request?.context?.locale || "pt-BR").toLowerCase();
+  const language = locale.startsWith("es") ? "es" : locale.startsWith("en") ? "en" : "pt-BR";
+  const messages = {
+    "pt-BR": {
+      mediaRefusal: "O Meta AI respondeu ao pedido sem produzir mídia.",
+      unsafeResume: "Há um envio anterior do Meta AI sem baseline suficiente para reenvio seguro.",
+    },
+    en: {
+      mediaRefusal: "Meta AI answered the request without producing media.",
+      unsafeResume:
+        "A previous Meta AI submission has no sufficient baseline for safe resubmission.",
+    },
+    es: {
+      mediaRefusal: "Meta AI respondió a la solicitud sin producir contenido multimedia.",
+      unsafeResume:
+        "Un envío anterior de Meta AI no tiene una referencia suficiente para reenviarlo de forma segura.",
+    },
+  };
+  return messages[language][key];
+}
+
+function receiptLogicalKey(request) {
+  return [
+    request?.executionId || "execution",
+    request?.blockId || "block",
+    request?.capabilityId || "capability",
+    request?.batch?.itemId || request?.batch?.index || "single",
+    request?.itemAction
+      ? `${request?.itemAction?.key || "item"}:${request?.itemAction?.variantKey || "variant"}:${request?.itemAction?.attempt || 1}`
+      : "start",
+  ].join(":");
+}
+
+function receiptInputFingerprint(request) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify(
+        canonicalize({
+          capabilityId: request?.capabilityId,
+          inputs: request?.inputs ?? {},
+          configuration: {
+            accountProfile: request?.configuration?.accountProfile,
+            aspectRatio: request?.configuration?.aspectRatio,
+            videoVariants: request?.configuration?.videoVariants,
+          },
+        }),
+      ),
+    )
+    .digest("hex");
+}
+
+function receiptPartHasExternalEffect(part) {
+  return ["submitting", "submitted", "unknown", "completed"].includes(part?.state);
+}
+
+function validMetaPageUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return (
+      url.protocol === "https:" && (url.hostname === "meta.ai" || url.hostname === "www.meta.ai")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function receiptWorkspacePath(request, services) {
+  const id = createHash("sha256").update(receiptLogicalKey(request)).digest("hex").slice(0, 32);
+  return services.getWorkspacePath(`generation-receipts/${id}.json`);
+}
+
+async function createReceiptController(request, services) {
+  const path = receiptWorkspacePath(request, services);
+  const logicalKey = receiptLogicalKey(request);
+  const inputFingerprint = receiptInputFingerprint(request);
+  let receipt;
+  try {
+    receipt = JSON.parse(await readFile(path, "utf8"));
+  } catch {}
+  if (
+    receipt?.version !== META_RECEIPT_VERSION ||
+    receipt?.logicalKey !== logicalKey ||
+    receipt?.inputFingerprint !== inputFingerprint
+  ) {
+    receipt = {
+      version: META_RECEIPT_VERSION,
+      logicalKey,
+      inputFingerprint,
+      capabilityId: request?.capabilityId,
+      parts: [],
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  const save = async () => {
+    receipt.updatedAt = new Date().toISOString();
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+  };
+  const part = (index) => receipt.parts?.[index];
+  const update = async (index, patch) => {
+    receipt.parts ??= [];
+    receipt.parts[index] = { ...(receipt.parts[index] ?? { index }), index, ...patch };
+    await save();
+    return receipt.parts[index];
+  };
+  return {
+    part,
+    resumeUrl() {
+      const candidate = [...(receipt.parts ?? [])]
+        .reverse()
+        .find((item) => receiptPartHasExternalEffect(item) && validMetaPageUrl(item.pageUrl));
+      return candidate?.pageUrl;
+    },
+    async beforeSubmit(index, baseline, pageUrl) {
+      return await update(index, { state: "submitting", baseline, pageUrl, response: undefined });
+    },
+    async submitted(index, pageUrl) {
+      return await update(index, { state: "submitted", pageUrl });
+    },
+    async completed(index, response, pageUrl) {
+      return await update(index, { state: "completed", response, pageUrl, errorCode: undefined });
+    },
+    async failed(index, error, pageUrl) {
+      const previous = part(index);
+      if (!receiptPartHasExternalEffect(previous)) return;
+      const definitive =
+        ["RATE_LIMIT", "PERMISSION_DENIED"].includes(error?.code) ||
+        (error?.code === "OUTPUT_VALIDATION_FAILED" && error?.retryable === false);
+      await update(index, {
+        state: definitive ? "rejected" : "unknown",
+        pageUrl,
+        errorCode: error?.code || "UPSTREAM_UNAVAILABLE",
+      });
+    },
+  };
+}
+
+async function currentPageUrl(client, sessionId) {
+  return String((await evaluate(client, sessionId, "location.href")) || "");
 }
 
 function buildVideoPrompt(request) {
   const prompt = buildInstructionPrompt(request);
   if (!prompt) throw codedError("INVALID_INPUT", "O prompt do vídeo ficou vazio.");
   return prompt;
+}
+
+function buildAnimationPrompt(request) {
+  const prompt = buildInstructionPrompt(request);
+  if (!prompt) throw codedError("INVALID_INPUT", "O prompt de movimento ficou vazio.");
+  return prompt;
+}
+
+function animationVariantCount(request) {
+  return request?.configuration?.videoVariants === 2 ? 2 : 1;
 }
 
 function stripCodeFence(text) {
@@ -421,6 +589,7 @@ function attachmentInput(request) {
   if (request?.capabilityId === "validate-content-in-browser") return request?.inputs?.content;
   if (request?.capabilityId === "generate-text-in-browser") return request?.inputs?.attachments;
   if (request?.capabilityId === "deep-research-in-browser") return request?.inputs?.context;
+  if (request?.capabilityId === "animate-image-in-browser") return request?.inputs?.image;
   if (["generate-image-in-browser", "generate-video-in-browser"].includes(request?.capabilityId))
     return request?.inputs?.references;
   return undefined;
@@ -439,6 +608,8 @@ async function resolveAttachments(request, services) {
     !unique.length
   )
     throw codedError("INVALID_INPUT", "Nenhum arquivo autorizado foi recebido.");
+  if (request?.capabilityId === "animate-image-in-browser" && unique.length !== 1)
+    throw codedError("INVALID_INPUT", "A animação exige exatamente uma imagem base.");
   const resolved = [];
   for (const file of unique) {
     const path = await services.resolveInputFile(file);
@@ -447,6 +618,8 @@ async function resolveAttachments(request, services) {
       throw codedError("INVALID_INPUT", `Formato não suportado: ${extension || "sem extensão"}.`);
     if (request?.capabilityId === "analyze-images-in-browser" && !IMAGE_EXTENSIONS.has(extension))
       throw codedError("INVALID_INPUT", `A visão não aceita ${file.name}.`);
+    if (request?.capabilityId === "animate-image-in-browser" && !IMAGE_EXTENSIONS.has(extension))
+      throw codedError("INVALID_INPUT", `A animação exige uma imagem base: ${file.name}.`);
     if (
       request?.capabilityId === "analyze-documents-in-browser" &&
       !DOCUMENT_EXTENSIONS.has(extension)
@@ -793,6 +966,28 @@ function responsePhase({ hasNewResponse, generating, stablePolls }) {
   return "completed";
 }
 
+function newImageCandidates(baseline, candidates) {
+  const before = new Set(Array.isArray(baseline) ? baseline.filter(Boolean) : []);
+  const seen = new Set();
+  return (Array.isArray(candidates) ? candidates : []).filter((item) => {
+    const src = typeof item?.src === "string" ? item.src : "";
+    if (!src || before.has(src) || seen.has(src)) return false;
+    seen.add(src);
+    return true;
+  });
+}
+
+function imageCollectionStability(candidates, previousSignature = "", stablePolls = 0) {
+  const signature = (Array.isArray(candidates) ? candidates : [])
+    .map((item) => item?.src)
+    .filter(Boolean)
+    .join("\n");
+  return {
+    signature,
+    stablePolls: signature && signature === previousSignature ? stablePolls + 1 : 0,
+  };
+}
+
 async function waitForDomMutation(client, sessionId, waitMs, signal) {
   if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
   const timeoutMs = clampInteger(waitMs, 1_000, 100, 5_000);
@@ -971,22 +1166,16 @@ async function attachFiles(client, sessionId, attachments, signal) {
       "Seletor de anexos do Meta AI não encontrado.",
       true,
     );
+  const described = await client.send("DOM.describeNode", { objectId }, sessionId);
+  const backendNodeId = described?.node?.backendNodeId;
+  if (!Number.isInteger(backendNodeId))
+    throw codedError("OUTPUT_VALIDATION_FAILED", "Input de anexo do Meta AI inválido.", true);
   await client.send(
     "DOM.setFileInputFiles",
-    { files: attachments.map((item) => item.path), objectId },
+    { files: attachments.map((item) => item.path), backendNodeId },
     sessionId,
   );
-  const expected = attachments.map((item) => item.name.toLowerCase()),
-    deadline = Date.now() + 120000;
-  while (Date.now() < deadline) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    const body = await evaluate(client, sessionId, "(document.body?.innerText||'').toLowerCase()");
-    if (expected.every((name) => body.includes(name))) return;
-    if (/upload failed|couldn't upload|arquivo.*grande/i.test(body))
-      throw codedError("INVALID_INPUT", "O Meta AI recusou um anexo.");
-    await sleep(500, signal);
-  }
-  throw codedError("TIMEOUT", "Anexos não ficaram prontos em 120 segundos.", true);
+  await sleep(1500, signal);
 }
 
 async function clickMode(bridge, mode) {
@@ -1103,11 +1292,24 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
   throw codedError("TIMEOUT", "O ChatGPT não concluiu a resposta no prazo.", true);
 }
 
-async function generatePart(client, sessionId, bridge, prompt, settings, signal, operationKey) {
+async function generatePart(
+  client,
+  sessionId,
+  bridge,
+  prompt,
+  settings,
+  signal,
+  operationKey,
+  lifecycle = {},
+) {
   const before = await responseState(client, sessionId),
-    baseline = before?.texts?.length ?? 0;
-  await setPrompt(bridge, prompt, `prompt:${operationKey}`);
-  await clickSend(client, sessionId, bridge, signal, `send:${operationKey}`);
+    baseline = lifecycle.resumeBaseline?.texts ?? before?.texts?.length ?? 0;
+  if (!lifecycle.resumeBaseline) {
+    await setPrompt(bridge, prompt, `prompt:${operationKey}`);
+    await lifecycle.beforeSubmit?.({ texts: baseline });
+    await clickSend(client, sessionId, bridge, signal, `send:${operationKey}`);
+    await lifecycle.submitted?.();
+  }
   return await waitForResponse(
     client,
     sessionId,
@@ -1125,31 +1327,61 @@ async function generateImagePart(
   settings,
   signal,
   operationKey,
+  lifecycle = {},
 ) {
-  const baseline = await evaluate(
-    client,
-    sessionId,
-    `(() => [...document.querySelectorAll('main img, img')].filter(img=>img.complete&&img.naturalWidth>=512&&img.naturalHeight>=512&&!/avatar|logo|profile/i.test(img.alt||'')).map(img=>img.currentSrc||img.src).filter(Boolean))()`,
-  );
-  await setPrompt(bridge, prompt, `image-prompt:${operationKey}`);
-  await clickSend(client, sessionId, bridge, signal, `image-send:${operationKey}`);
+  const baseline =
+    lifecycle.resumeBaseline?.images ??
+    (await evaluate(
+      client,
+      sessionId,
+      `(() => [...document.querySelectorAll('main img, img')].filter(img=>img.complete&&img.naturalWidth>=512&&img.naturalHeight>=512&&!/avatar|logo|profile/i.test(img.alt||'')).map(img=>img.currentSrc||img.src).filter(Boolean))()`,
+    ));
+  if (!lifecycle.resumeBaseline) {
+    await setPrompt(bridge, prompt, `image-prompt:${operationKey}`);
+    await lifecycle.beforeSubmit?.({ images: baseline });
+    await clickSend(client, sessionId, bridge, signal, `image-send:${operationKey}`);
+    await lifecycle.submitted?.();
+  }
   const deadline =
     Date.now() + clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000;
+  let previousSignature = "",
+    stablePolls = 0;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     const state = await evaluate(
       client,
       sessionId,
-      `(() => {${PAGE_HELPERS};const before=new Set(${JSON.stringify(baseline)});const images=[...document.querySelectorAll('main img, img')].filter(img=>img.complete&&img.naturalWidth>=512&&img.naturalHeight>=512&&!/avatar|logo|profile/i.test(img.alt||''));const img=images.findLast(item=>!before.has(item.currentSrc||item.src));const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&/stop|cancel generation|parar/i.test(cfText(el)));return{isNew:!!img,stop,alt:img?.alt||'Imagem gerada pelo Meta AI',src:img?.currentSrc||img?.src||''}})()`,
+      `(() => {${PAGE_HELPERS};const images=[...document.querySelectorAll('main img, img')].filter(img=>img.complete&&img.naturalWidth>=512&&img.naturalHeight>=512&&!/avatar|logo|profile/i.test(img.alt||'')).map(img=>({src:img.currentSrc||img.src||'',width:img.naturalWidth,height:img.naturalHeight,alt:img.alt||'Imagem gerada pelo Meta AI'}));const stop=[...document.querySelectorAll('button')].some(el=>cfVisible(el)&&/stop|cancel generation|parar/i.test(cfText(el)));return{images,stop}})()`,
     );
-    if (state.isNew && state.src && !state.stop)
-      return { text: state.alt, links: [], mediaSrc: state.src };
+    const candidates = newImageCandidates(baseline, state?.images);
+    const stability = imageCollectionStability(candidates, previousSignature, stablePolls);
+    stablePolls = stability.stablePolls;
+    previousSignature = stability.signature;
+    if (candidates.length && !state?.stop && stablePolls >= 2)
+      return {
+        text: candidates
+          .map((item) => item.alt)
+          .filter(Boolean)
+          .join("\n"),
+        links: [],
+        mediaCandidates: candidates,
+      };
     const body = await evaluate(client, sessionId, "(document.body?.innerText||'').slice(-4000)");
     if (/usage limit|rate limit|reached.*limit|limite de uso/i.test(body))
       throw codedError("RATE_LIMIT", "O Meta AI informou limite de geração de imagens.", true);
+    if (
+      /(?:can't|cannot|unable to|sorry.{0,80}(?:image|request)|não posso|não consigo|lo siento|no puedo).{0,160}/i.test(
+        String(body || ""),
+      )
+    )
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        lifecycle.refusalMessage || "O Meta AI respondeu ao pedido sem produzir mídia.",
+        false,
+      );
     await sleep(1200, signal);
   }
-  throw codedError("TIMEOUT", "O Meta AI não concluiu a imagem no prazo.", true);
+  throw codedError("TIMEOUT", "O Meta AI não estabilizou as imagens no prazo.", true);
 }
 
 async function downloadMedia(client, sessionId, url, fallbackMimeType) {
@@ -1183,65 +1415,84 @@ async function downloadMedia(client, sessionId, url, fallbackMimeType) {
   }
 }
 
-async function captureGeneratedImage(
+async function captureGeneratedImages(
   client,
   sessionId,
   services,
   request,
   timeoutMs,
-  preferredSrc,
+  preferredCandidates,
+  onCaptured,
 ) {
   const deadline = Date.now() + timeoutMs;
-  let imageData;
+  let imageData = [];
   while (Date.now() < deadline) {
     if (services.signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    imageData = await evaluate(
-      client,
-      sessionId,
-      `(() => {const images=[...document.querySelectorAll('main img, img')].filter(img=>img.complete&&img.naturalWidth>=512&&img.naturalHeight>=512&&!/avatar|logo|profile/i.test(img.alt||''));const img=images.at(-1);return img?{src:img.currentSrc||img.src,width:img.naturalWidth,height:img.naturalHeight,alt:img.alt||'Imagem gerada pelo Meta AI'}:null})()`,
-    );
-    if (preferredSrc) imageData = { ...(imageData || {}), src: preferredSrc };
-    if (imageData?.src) break;
+    imageData =
+      Array.isArray(preferredCandidates) && preferredCandidates.length
+        ? preferredCandidates
+        : await evaluate(
+            client,
+            sessionId,
+            `(() => {const seen=new Set();return [...document.querySelectorAll('main img, img')].filter(img=>img.complete&&img.naturalWidth>=512&&img.naturalHeight>=512&&!/avatar|logo|profile/i.test(img.alt||'')).map(img=>({src:img.currentSrc||img.src||'',width:img.naturalWidth,height:img.naturalHeight,alt:img.alt||'Imagem gerada pelo Meta AI'})).filter(item=>item.src&&!seen.has(item.src)&&(seen.add(item.src),true))})()`,
+          );
+    if (Array.isArray(imageData) && imageData.length) break;
     await sleep(1000, services.signal);
   }
-  if (!imageData?.src)
+  if (!Array.isArray(imageData) || !imageData.length)
     throw codedError(
       "OUTPUT_VALIDATION_FAILED",
-      "A resposta terminou sem uma imagem gerada capturável.",
+      "A resposta terminou sem imagens geradas capturáveis.",
       true,
     );
-  const payload = await downloadMedia(client, sessionId, imageData.src, "image/png");
-  const bytes = payload.bytes;
-  if (!bytes.length || bytes.length > 50 * 1024 * 1024)
-    throw codedError("OUTPUT_VALIDATION_FAILED", "Imagem gerada vazia ou acima de 50 MB.", true);
-  const extension =
-    payload.mimeType === "image/webp" ? "webp" : payload.mimeType === "image/jpeg" ? "jpg" : "png";
-  const artifactId = `meta-ai-image-${createHash("sha256")
-    .update(
-      `${request?.executionId || "execution"}:${request?.blockId || "block"}:${request?.attempt || 1}`,
-    )
-    .digest("hex")
-    .slice(0, 16)}`;
-  const name = `${artifactId}.${extension}`;
-  await writeFile(services.getOutputPath(name), bytes);
-  const file = {
-    id: artifactId,
-    name,
-    mimeType: payload.mimeType,
-    size: bytes.length,
-    url: `artifact://${artifactId}`,
-  };
-  return {
-    file,
-    artifact: {
+  const results = [];
+  for (let index = 0; index < imageData.length; index += 1) {
+    const candidate = imageData[index];
+    const payload = await downloadMedia(client, sessionId, candidate.src, "image/png");
+    const bytes = payload.bytes;
+    if (!bytes.length || bytes.length > 50 * 1024 * 1024)
+      throw codedError("OUTPUT_VALIDATION_FAILED", "Imagem gerada vazia ou acima de 50 MB.", true);
+    const extension =
+      payload.mimeType === "image/webp"
+        ? "webp"
+        : payload.mimeType === "image/jpeg"
+          ? "jpg"
+          : "png";
+    const artifactId = `meta-ai-image-${createHash("sha256")
+      .update(
+        [
+          request?.executionId || "execution",
+          request?.blockId || "block",
+          request?.attempt || 1,
+          request?.batch?.itemId || request?.batch?.index || "single",
+          index,
+        ].join(":"),
+      )
+      .digest("hex")
+      .slice(0, 16)}`;
+    const name = `${artifactId}.${extension}`;
+    await writeFile(services.getOutputPath(name), bytes);
+    const file = {
       id: artifactId,
       name,
       mimeType: payload.mimeType,
       size: bytes.length,
-      source: { kind: "path", path: name },
-    },
-    dimensions: imageData,
-  };
+      url: `artifact://${artifactId}`,
+    };
+    results.push({
+      file,
+      artifact: {
+        id: artifactId,
+        name,
+        mimeType: payload.mimeType,
+        size: bytes.length,
+        source: { kind: "path", path: name },
+      },
+      dimensions: candidate,
+    });
+    await onCaptured?.(results.at(-1), index, imageData.length, results);
+  }
+  return results;
 }
 
 async function generateVideoPart(
@@ -1252,14 +1503,21 @@ async function generateVideoPart(
   settings,
   signal,
   operationKey,
+  lifecycle = {},
 ) {
-  const baseline = await evaluate(
-    client,
-    sessionId,
-    `(() => [...document.querySelectorAll('main video, video')].map(v=>v.currentSrc||v.src||v.querySelector('source')?.src||'').filter(Boolean))()`,
-  );
-  await setPrompt(bridge, prompt, `video-prompt:${operationKey}`);
-  await clickSend(client, sessionId, bridge, signal, `video-send:${operationKey}`);
+  const baseline =
+    lifecycle.resumeBaseline?.videos ??
+    (await evaluate(
+      client,
+      sessionId,
+      `(() => [...document.querySelectorAll('main video, video')].map(v=>v.currentSrc||v.src||v.querySelector('source')?.src||'').filter(Boolean))()`,
+    ));
+  if (!lifecycle.resumeBaseline) {
+    await setPrompt(bridge, prompt, `video-prompt:${operationKey}`);
+    await lifecycle.beforeSubmit?.({ videos: baseline });
+    await clickSend(client, sessionId, bridge, signal, `video-send:${operationKey}`);
+    await lifecycle.submitted?.();
+  }
   const deadline =
     Date.now() + clampInteger(settings?.responseTimeoutSeconds, 900, 30, 3600) * 1000;
   while (Date.now() < deadline) {
@@ -1296,6 +1554,7 @@ async function captureGeneratedVideo(
   request,
   timeoutMs,
   preferredSrc,
+  variantIndex,
 ) {
   const deadline = Date.now() + timeoutMs;
   let videoData;
@@ -1321,10 +1580,9 @@ async function captureGeneratedVideo(
   if (!bytes.length || bytes.length > 200 * 1024 * 1024)
     throw codedError("OUTPUT_VALIDATION_FAILED", "Vídeo gerado vazio ou acima de 200 MB.", true);
   const extension = payload.mimeType === "video/webm" ? "webm" : "mp4";
+  const artifactIdentity = videoArtifactIdentity(request, variantIndex);
   const artifactId = `meta-ai-video-${createHash("sha256")
-    .update(
-      `${request?.executionId || "execution"}:${request?.blockId || "block"}:${request?.attempt || 1}`,
-    )
+    .update(artifactIdentity)
     .digest("hex")
     .slice(0, 16)}`;
   const name = `${artifactId}.${extension}`;
@@ -1442,11 +1700,75 @@ async function configureProfile(request, services) {
   }
 }
 
+function incrementalItemKey(request, key) {
+  const batchItemId = request?.batch?.itemId;
+  return typeof batchItemId === "string" && batchItemId ? `batch:${batchItemId}:${key}` : key;
+}
+
+function videoArtifactIdentity(request, variantIndex) {
+  const legacy = `${request?.executionId || "execution"}:${request?.blockId || "block"}:${request?.attempt || 1}`;
+  return variantIndex == null
+    ? legacy
+    : `${legacy}:${request?.batch?.itemId || request?.batch?.index || "single"}:animate:${variantIndex}`;
+}
+
+function imagePartialUpdate(request, current, index, total, completed, description = "") {
+  const images = completed.map((item) => item.file);
+  const firstImage = images[0];
+  return {
+    values: { image: firstImage, images, description },
+    artifacts: [current.artifact],
+    itemUpdates: [
+      ...(index === 0
+        ? [
+            {
+              key: incrementalItemKey(request, "result:0"),
+              variantKey: "image:0",
+              outputPort: "image",
+              state: "completed",
+              input: request?.inputs?.prompt ?? null,
+              value: firstImage,
+            },
+          ]
+        : []),
+      {
+        key: incrementalItemKey(request, "result"),
+        variantKey: `image:${index}`,
+        outputPort: "images",
+        state: "completed",
+        input: request?.inputs?.prompt ?? null,
+        value: current.file,
+      },
+    ],
+    progress: (index + 1) / total,
+    message: `Imagem ${index + 1} de ${total} capturada.`,
+  };
+}
+
 export async function execute(request, services) {
   if (request?.invocation?.mode === "configure") return await configureProfile(request, services);
+  if (request?.invocation?.mode === "item_action") {
+    if (
+      request.invocation.action !== "regenerate" ||
+      ![
+        "generate-image-in-browser",
+        "animate-image-in-browser",
+        "generate-video-in-browser",
+      ].includes(request.capabilityId)
+    ) {
+      return resultError("INVALID_CONFIGURATION", "A ação de item solicitada não é suportada.");
+    }
+    const itemInput = request?.itemAction?.input;
+    request = {
+      ...request,
+      invocation: { mode: "start" },
+      inputs: { ...(request?.inputs ?? {}), prompt: itemInput },
+    };
+  }
   const settings = request?.settings ?? {},
     capabilityId = String(request?.capabilityId ?? "generate-text-in-browser"),
     mock = String(settings.diagnosticMockResponse ?? "").trim();
+  const queueDelayMs = clampInteger(settings.queueDelayMs, 1500, 0, 60000);
   const startMinimized =
     typeof request?.configuration?.startMinimized === "boolean"
       ? request.configuration.startMinimized
@@ -1476,11 +1798,11 @@ export async function execute(request, services) {
         };
         return {
           status: "success",
-          values: { image, description: mock },
+          values: { image, images: [image], description: mock },
           artifacts: [{ ...image, source: { kind: "path", path: name } }],
         };
       }
-      if (capabilityId === "generate-video-in-browser")
+      if (["animate-image-in-browser", "generate-video-in-browser"].includes(capabilityId))
         return resultError("INVALID_CONFIGURATION", "O diagnóstico de vídeo exige execução real.");
       return {
         status: "success",
@@ -1516,6 +1838,11 @@ export async function execute(request, services) {
     } else if (capabilityId === "generate-image-in-browser") {
       parts = [buildImagePrompt(request)];
       mode = "image";
+    } else if (capabilityId === "animate-image-in-browser") {
+      const prompt = buildAnimationPrompt(request);
+      const variantCount = animationVariantCount(request);
+      parts = Array.from({ length: variantCount }, () => prompt);
+      mode = "video";
     } else if (capabilityId === "generate-video-in-browser") {
       parts = [buildVideoPrompt(request)];
       mode = "video";
@@ -1530,6 +1857,9 @@ export async function execute(request, services) {
   const configuration = request?.configuration ?? {};
   let client, child, bridge;
   try {
+    if (Number(request?.batch?.index) > 0 && queueDelayMs > 0) {
+      await sleep(queueDelayMs, services.signal);
+    }
     const profileName = normalizeAccountProfile(configuration.accountProfile),
       profilePath = runtimeProfilePath(settings, profileName, services),
       port = profilePort(
@@ -1537,6 +1867,15 @@ export async function execute(request, services) {
         profileName,
       );
     const attachments = await resolveAttachments(request, services);
+    const receiptController = [
+      "generate-text-in-browser",
+      "generate-image-in-browser",
+      "animate-image-in-browser",
+      "generate-video-in-browser",
+    ].includes(capabilityId)
+      ? await createReceiptController(request, services)
+      : undefined;
+    const resumeUrl = receiptController?.resumeUrl();
     assertDedicatedProfilePath(profilePath, settings.allowExistingChromeProfile === true);
     if (!(await profileIsPrepared(profilePath, profileName))) {
       throw codedError(
@@ -1568,11 +1907,12 @@ export async function execute(request, services) {
       client,
       sessionId,
       services.signal,
-      capabilityId === "generate-video-in-browser"
-        ? META_VIBES_URL
-        : capabilityId === "generate-image-in-browser"
-          ? CHATGPT_NEW_URL
-          : CHATGPT_CHAT_URL,
+      resumeUrl ||
+        (["animate-image-in-browser", "generate-video-in-browser"].includes(capabilityId)
+          ? META_VIBES_URL
+          : capabilityId === "generate-image-in-browser"
+            ? CHATGPT_NEW_URL
+            : CHATGPT_CHAT_URL),
     );
     sessionId = await waitForPrompt(
       client,
@@ -1589,11 +1929,12 @@ export async function execute(request, services) {
       signal: services.signal,
       allowedOrigins: ["https://meta.ai", "https://www.meta.ai"],
     });
-    if (attachments.length) {
+    if (!resumeUrl && attachments.length && capabilityId !== "animate-image-in-browser") {
       step(`Enviando ${attachments.length} anexo(s) autorizado(s).`);
       await attachFiles(client, sessionId, attachments, services.signal);
     }
-    await clickMode(bridge, mode);
+    let modeReady = !resumeUrl;
+    if (modeReady) await clickMode(bridge, mode);
     const responses = [],
       retryAttempts = 0,
       delayBetweenPartsMs = 0;
@@ -1601,10 +1942,40 @@ export async function execute(request, services) {
       let lastError;
       for (let attempt = 0; attempt <= retryAttempts; attempt += 1) {
         try {
+          const receiptPart = receiptController?.part(index);
+          const reconciling = receiptPartHasExternalEffect(receiptPart);
+          if (receiptPart?.state === "completed" && receiptPart.response) {
+            responses.push(receiptPart.response);
+            lastError = undefined;
+            break;
+          }
+          if (reconciling && !receiptPart?.baseline) {
+            throw codedError("TIMEOUT", p53Message(request, "unsafeResume"), true);
+          }
+          if (!reconciling && !modeReady) {
+            await clickMode(bridge, mode);
+            modeReady = true;
+          }
           step(
             `Etapa ${index + 1}/${parts.length}, tentativa ${attempt + 1}/${retryAttempts + 1}.`,
           );
-          responses.push(
+          if (capabilityId === "animate-image-in-browser" && !reconciling) {
+            step(`Enviando imagem base para a variante ${index + 1}/${parts.length}.`);
+            await attachFiles(client, sessionId, attachments, services.signal);
+          }
+          const lifecycle = {
+            refusalMessage: p53Message(request, "mediaRefusal"),
+            ...(reconciling ? { resumeBaseline: receiptPart.baseline } : {}),
+            beforeSubmit: async (baseline) =>
+              await receiptController?.beforeSubmit(
+                index,
+                baseline,
+                await currentPageUrl(client, sessionId),
+              ),
+            submitted: async () =>
+              await receiptController?.submitted(index, await currentPageUrl(client, sessionId)),
+          };
+          const response =
             capabilityId === "generate-image-in-browser"
               ? await generateImagePart(
                   client,
@@ -1614,8 +1985,9 @@ export async function execute(request, services) {
                   settings,
                   services.signal,
                   `${index}:${attempt}`,
+                  lifecycle,
                 )
-              : capabilityId === "generate-video-in-browser"
+              : ["animate-image-in-browser", "generate-video-in-browser"].includes(capabilityId)
                 ? await generateVideoPart(
                     client,
                     sessionId,
@@ -1624,6 +1996,7 @@ export async function execute(request, services) {
                     settings,
                     services.signal,
                     `${index}:${attempt}`,
+                    lifecycle,
                   )
                 : await generatePart(
                     client,
@@ -1633,11 +2006,22 @@ export async function execute(request, services) {
                     settings,
                     services.signal,
                     `${index}:${attempt}`,
-                  ),
+                    lifecycle,
+                  );
+          responses.push(response);
+          await receiptController?.completed(
+            index,
+            response,
+            await currentPageUrl(client, sessionId),
           );
           lastError = undefined;
           break;
         } catch (error) {
+          await receiptController?.failed(
+            index,
+            error,
+            client && sessionId ? await currentPageUrl(client, sessionId).catch(() => "") : "",
+          );
           lastError = error;
           if (
             !error?.retryable ||
@@ -1667,27 +2051,84 @@ export async function execute(request, services) {
       ].slice(0, 10);
     let values;
     if (capabilityId === "generate-image-in-browser") {
-      const captured = await captureGeneratedImage(
+      const captured = await captureGeneratedImages(
         client,
         sessionId,
         services,
         request,
         clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000,
-        responses.at(-1)?.mediaSrc,
+        responses.at(-1)?.mediaCandidates,
+        async (current, index, total, completed) => {
+          await services.publishPartial?.(
+            imagePartialUpdate(request, current, index, total, completed, combined.trim()),
+          );
+        },
       );
-      await services.publishPartial?.({
-        values: { image: captured.file, description: combined.trim() },
-        artifacts: [captured.artifact],
-        progress: 1,
-        message: "Imagem capturada.",
-      });
+      const images = captured.map((item) => item.file);
+      const artifacts = captured.map((item) => item.artifact);
+      const firstImage = images[0];
       return {
         status: "success",
-        values: { image: captured.file, description: combined.trim() },
-        artifacts: [captured.artifact],
+        values: { image: firstImage, images, description: combined.trim() },
+        artifacts,
         usage: {
           provider: "Meta AI / Muse Image",
-          outputUnits: captured.file.size,
+          outputUnits: images.reduce((total, file) => total + file.size, 0),
+          unit: "bytes",
+        },
+      };
+    }
+    if (capabilityId === "animate-image-in-browser") {
+      const captured = [];
+      for (let index = 0; index < responses.length; index += 1) {
+        const current = await captureGeneratedVideo(
+          client,
+          sessionId,
+          services,
+          request,
+          clampInteger(settings?.responseTimeoutSeconds, 900, 30, 3600) * 1000,
+          responses[index]?.mediaSrc,
+          index,
+        );
+        captured.push(current);
+        const videos = captured.map((item) => item.file);
+        await services.publishPartial?.({
+          values: { video: videos[0], videos, description: combined.trim() },
+          artifacts: [current.artifact],
+          itemUpdates: [
+            ...(index === 0
+              ? [
+                  {
+                    key: incrementalItemKey(request, "result:0"),
+                    variantKey: "video:0",
+                    outputPort: "video",
+                    state: "completed",
+                    input: request?.inputs?.prompt ?? null,
+                    value: videos[0],
+                  },
+                ]
+              : []),
+            {
+              key: incrementalItemKey(request, "result"),
+              variantKey: `video:${index}`,
+              outputPort: "videos",
+              state: "completed",
+              input: request?.inputs?.prompt ?? null,
+              value: current.file,
+            },
+          ],
+          progress: (index + 1) / responses.length,
+          message: `Vídeo ${index + 1} de ${responses.length} capturado.`,
+        });
+      }
+      const videos = captured.map((item) => item.file);
+      return {
+        status: "success",
+        values: { video: videos[0], videos, description: combined.trim() },
+        artifacts: captured.map((item) => item.artifact),
+        usage: {
+          provider: "Meta AI / Vibes",
+          outputUnits: videos.reduce((total, file) => total + file.size, 0),
           unit: "bytes",
         },
       };
@@ -1704,6 +2145,15 @@ export async function execute(request, services) {
       await services.publishPartial?.({
         values: { video: captured.file, description: combined.trim() },
         artifacts: [captured.artifact],
+        itemUpdates: [
+          {
+            key: incrementalItemKey(request, "result:0"),
+            outputPort: "video",
+            state: "completed",
+            input: request?.inputs?.prompt ?? null,
+            value: captured.file,
+          },
+        ],
         progress: 1,
         message: "Vídeo capturado.",
       });
@@ -1766,9 +2216,12 @@ export const __test = {
   buildValidationPrompt,
   buildAnalysisPrompt,
   buildImagePrompt,
+  buildAnimationPrompt,
+  animationVariantCount,
   buildVideoPrompt,
   cleanGeneratedText,
   collectStoredFiles,
+  attachmentInput,
   expandTemplate,
   normalizeAccountProfile,
   outlineItems,
@@ -1782,4 +2235,13 @@ export const __test = {
   generationResponseValues,
   summarizeBlock,
   responsePhase,
+  newImageCandidates,
+  imageCollectionStability,
+  imagePartialUpdate,
+  videoArtifactIdentity,
+  receiptLogicalKey,
+  receiptInputFingerprint,
+  receiptPartHasExternalEffect,
+  validMetaPageUrl,
+  p53Message,
 };

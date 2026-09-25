@@ -1,0 +1,117 @@
+{
+  "workflow": [
+    {
+      "stage": "discovery",
+      "blockType": "BUSCAR",
+      "capabilityIds": ["search-stock-images", "search-stock-videos", "search-stock-by-briefs"]
+    },
+    {
+      "stage": "runtime_selection",
+      "blockType": "VALIDAR",
+      "owner": "contentflow-core",
+      "note": "Selects candidates produced during this execution; it is not a plugin capability."
+    },
+    {
+      "stage": "materialization",
+      "blockType": "CRIAR",
+      "capabilityIds": [
+        "download-selected-stock-assets",
+        "download-stock-image",
+        "download-stock-video"
+      ]
+    }
+  ],
+  "forbiddenSelectionBlockType": "ESCOLHER",
+  "legacyPorts": {
+    "search-stock-images": { "input": "query", "output": "results" },
+    "search-stock-videos": { "input": "query", "output": "results" },
+    "search-stock-by-briefs": {
+      "input": "asset_briefs",
+      "output": "selected_assets",
+      "semantics": "ranked_discovery_suggestion_pending_validation"
+    },
+    "download-selected-stock-assets": { "input": "selected_assets", "output": "assets" },
+    "download-stock-image": { "input": "asset", "output": "image" },
+    "download-stock-video": { "input": "asset", "output": "video" }
+  },
+  "candidateRecord": {
+    "required": [
+      "asset_id",
+      "external_id",
+      "provider",
+      "provider_label",
+      "media_type",
+      "preview_url",
+      "source_url",
+      "attribution",
+      "license_name",
+      "license_url"
+    ],
+    "conditional": {
+      "download": ["download_url", "download_location"],
+      "briefSuggestion": [
+        "brief_id",
+        "start_seconds",
+        "end_seconds",
+        "query_used",
+        "candidate_score",
+        "selection_mode"
+      ]
+    },
+    "sample": {
+      "asset_id": "pexels:321",
+      "external_id": "321",
+      "provider": "pexels",
+      "provider_label": "Pexels",
+      "media_type": "image",
+      "preview_url": "https://images.pexels.com/photos/321/preview.jpeg",
+      "download_url": "https://images.pexels.com/photos/321/original.jpeg",
+      "download_location": "",
+      "source_url": "https://www.pexels.com/photo/321/",
+      "author": "Creator",
+      "author_url": "https://www.pexels.com/@creator/",
+      "attribution": "Photo by Creator on Pexels",
+      "license_name": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "width": 1920,
+      "height": 1080,
+      "duration": 0,
+      "mime_type": "image/jpeg",
+      "file_size": 1000,
+      "brief_id": "scene-03",
+      "start_seconds": 8,
+      "end_seconds": 12,
+      "query_used": "city sunrise",
+      "candidate_score": 95,
+      "selection_mode": "automatic_best"
+    }
+  },
+  "artifactRecord": {
+    "required": ["id", "name", "mimeType", "size", "url"],
+    "batchProvenance": [
+      "brief_id",
+      "start_seconds",
+      "end_seconds",
+      "provider",
+      "source_url",
+      "attribution",
+      "license_name",
+      "license_url"
+    ],
+    "sample": {
+      "id": "stock-image-0123456789abcdef",
+      "name": "stock-image-0123456789abcdef.jpg",
+      "mimeType": "image/jpeg",
+      "size": 1000,
+      "url": "artifact://stock-image-0123456789abcdef",
+      "brief_id": "scene-03",
+      "start_seconds": 8,
+      "end_seconds": 12,
+      "provider": "pexels",
+      "source_url": "https://www.pexels.com/photo/321/",
+      "attribution": "Photo by Creator on Pexels",
+      "license_name": "Pexels License",
+      "license_url": "https://www.pexels.com/license/"
+    }
+  }
+}

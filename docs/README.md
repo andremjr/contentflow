@@ -1,6 +1,6 @@
-# Documentação do núcleo
+# Documentação do ContentFlow
 
-Esta pasta descreve o produto ContentFlow. A documentação de plugins, do Browser Bridge, do Plugin Kit e das skills vive separadamente em [`../ecosystem`](../ecosystem/README.md).
+Esta pasta concentra a documentação do produto e do ecossistema. Os documentos normativos do núcleo ficam neste nível; a Plugin API, os guias para autores e as evidências técnicas ficam em [`ecosystem`](ecosystem/README.md). O código e os pacotes externos continuam separados em [`../ecosystem`](../ecosystem/README.md).
 
 ## Leitura recomendada
 
@@ -17,4 +17,4 @@ Esta pasta descreve o produto ContentFlow. A documentação de plugins, do Brows
 
 - Métodos: [`../ecosystem/skills/contentflow-method-development`](../ecosystem/skills/contentflow-method-development/).
 - Plugins: [`../ecosystem/skills/contentflow-plugin-development`](../ecosystem/skills/contentflow-plugin-development/).
-- Protocolo público: [`../ecosystem/docs/protocol.md`](../ecosystem/docs/protocol.md).
+- Protocolo público: [`ecosystem/protocol.md`](ecosystem/protocol.md).

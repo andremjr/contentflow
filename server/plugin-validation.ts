@@ -2,6 +2,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSyn
 import path from "node:path";
 import { z } from "zod";
 import type { PluginManifest } from "../src/lib/plugin-contract";
+import { isValidPluginLocale } from "../src/lib/plugin-localization";
 
 const semver =
   /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -107,6 +108,75 @@ const promptPreviewSchema = z
     templateConfigurationKey: z.string().min(1).max(100).regex(configurationKey).optional(),
   })
   .strict();
+const configurationOptionsProviderSchema = z
+  .object({
+    property: z.string().min(1).max(100).regex(configurationKey),
+    providerId: z.string().min(1).max(100).regex(identifier),
+    dependsOn: z
+      .array(z.string().min(1).max(100).regex(configurationKey))
+      .max(20)
+      .refine(unique, "não pode conter duplicatas")
+      .optional(),
+    cacheTtlMs: z.number().int().min(0).max(86_400_000).optional(),
+  })
+  .strict();
+const itemActionSchema = z
+  .object({
+    action: z.enum(["regenerate", "replace", "select", "download"]),
+    label: z.string().min(1).max(100).optional(),
+  })
+  .strict();
+const localizedTextSchema = z
+  .object({
+    label: z.string().min(1).max(100).optional(),
+    description: z.string().max(500).optional(),
+  })
+  .strict();
+const localizedSchemaPropertySchema = z
+  .object({
+    title: z.string().min(1).max(100).optional(),
+    description: z.string().max(500).optional(),
+    options: z
+      .array(
+        z
+          .object({
+            value: z.union([z.string(), z.number(), z.boolean()]),
+            label: z.string().min(1).max(100),
+          })
+          .strict(),
+      )
+      .max(100)
+      .optional(),
+  })
+  .strict();
+const capabilityLocalizationSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    description: z.string().max(500).optional(),
+    inputPorts: z.record(localizedTextSchema).optional(),
+    outputPorts: z.record(localizedTextSchema).optional(),
+    itemActions: z
+      .record(
+        z.enum(["regenerate", "replace", "select", "download"]),
+        z.object({ label: z.string().min(1).max(100).optional() }).strict(),
+      )
+      .optional(),
+    blockConfigSchema: z
+      .object({
+        properties: z.record(localizedSchemaPropertySchema).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+const manifestLocalizationSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    description: z.string().max(500).optional(),
+    profileSetup: localizedTextSchema.optional(),
+    capabilities: z.record(capabilityLocalizationSchema).optional(),
+  })
+  .strict();
 const capabilitySchema = z
   .object({
     id: z.string().min(1).max(100).regex(identifier),
@@ -200,6 +270,22 @@ const capabilitySchema = z
         }
       }),
     blockConfigSchema: jsonSchema,
+    configurationOptions: z
+      .array(configurationOptionsProviderSchema)
+      .max(50)
+      .refine(
+        (items) => unique(items.map((item) => item.property)),
+        "um campo só pode ter um provider",
+      )
+      .optional(),
+    itemActions: z
+      .array(itemActionSchema)
+      .max(20)
+      .refine(
+        (items) => unique(items.map((item) => item.action)),
+        "não pode conter ações duplicadas",
+      )
+      .optional(),
     outputSchema: jsonSchema,
   })
   .strict();
@@ -225,6 +311,13 @@ export const pluginManifestSchema = z
           .regex(/^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$)).+\.(?:png|webp)$/i),
       })
       .strict()
+      .optional(),
+    localizations: z
+      .record(manifestLocalizationSchema)
+      .refine(
+        (value) => Object.keys(value).every(isValidPluginLocale),
+        "contém locale BCP 47 inválido",
+      )
       .optional(),
     runtime: z
       .object({
@@ -258,6 +351,15 @@ export const pluginManifestSchema = z
       )
       .refine(unique, "não pode conter duplicatas")
       .optional(),
+    optionalSecretKeys: z
+      .array(
+        z
+          .string()
+          .max(100)
+          .regex(/^[A-Z][A-Z0-9_]*$/),
+      )
+      .refine(unique, "não pode conter duplicatas")
+      .optional(),
     deliveryTypes: z
       .array(z.enum(["text", "image", "audio", "video", "processing"]))
       .min(1)
@@ -270,6 +372,129 @@ export const pluginManifestSchema = z
   })
   .strict()
   .superRefine((manifest, context) => {
+    for (const [index, secretKey] of (manifest.optionalSecretKeys ?? []).entries()) {
+      if (!(manifest.secretKeys ?? []).includes(secretKey)) {
+        context.addIssue({
+          code: "custom",
+          path: ["optionalSecretKeys", index],
+          message: "precisa também estar declarado em secretKeys",
+        });
+      }
+    }
+    for (const [locale, localization] of Object.entries(manifest.localizations ?? {})) {
+      if (localization.profileSetup && !manifest.profileSetup) {
+        context.addIssue({
+          code: "custom",
+          path: ["localizations", locale, "profileSetup"],
+          message: "referencia profileSetup inexistente",
+        });
+      }
+      for (const [capabilityId, capabilityLocalization] of Object.entries(
+        localization.capabilities ?? {},
+      )) {
+        const capabilityIndex = manifest.capabilities.findIndex(
+          (candidate) => candidate.id === capabilityId,
+        );
+        if (capabilityIndex < 0) {
+          context.addIssue({
+            code: "custom",
+            path: ["localizations", locale, "capabilities", capabilityId],
+            message: "referencia capability inexistente",
+          });
+          continue;
+        }
+        const capability = manifest.capabilities[capabilityIndex]!;
+        for (const portKey of Object.keys(capabilityLocalization.inputPorts ?? {})) {
+          if (!capability.inputPorts.some((port) => port.key === portKey)) {
+            context.addIssue({
+              code: "custom",
+              path: ["localizations", locale, "capabilities", capabilityId, "inputPorts", portKey],
+              message: "referencia porta de entrada inexistente",
+            });
+          }
+        }
+        for (const portKey of Object.keys(capabilityLocalization.outputPorts ?? {})) {
+          if (!capability.outputPorts.some((port) => port.key === portKey)) {
+            context.addIssue({
+              code: "custom",
+              path: ["localizations", locale, "capabilities", capabilityId, "outputPorts", portKey],
+              message: "referencia porta de saída inexistente",
+            });
+          }
+        }
+        for (const action of Object.keys(capabilityLocalization.itemActions ?? {})) {
+          if (!capability.itemActions?.some((candidate) => candidate.action === action)) {
+            context.addIssue({
+              code: "custom",
+              path: ["localizations", locale, "capabilities", capabilityId, "itemActions", action],
+              message: "referencia ação de item inexistente",
+            });
+          }
+        }
+        const schemaProperties = (capability.blockConfigSchema.properties ?? {}) as Record<
+          string,
+          Record<string, unknown>
+        >;
+        for (const [propertyKey, propertyLocalization] of Object.entries(
+          capabilityLocalization.blockConfigSchema?.properties ?? {},
+        )) {
+          const propertySchema = schemaProperties[propertyKey];
+          if (!propertySchema) {
+            context.addIssue({
+              code: "custom",
+              path: [
+                "localizations",
+                locale,
+                "capabilities",
+                capabilityId,
+                "blockConfigSchema",
+                "properties",
+                propertyKey,
+              ],
+              message: "referencia propriedade de configuração inexistente",
+            });
+            continue;
+          }
+          const allowedValues = new Set(
+            [
+              ...(Array.isArray(propertySchema.enum) ? propertySchema.enum : []),
+              ...(Array.isArray(propertySchema.oneOf)
+                ? propertySchema.oneOf.flatMap((candidate) =>
+                    candidate &&
+                    typeof candidate === "object" &&
+                    "const" in candidate &&
+                    ["string", "number", "boolean"].includes(
+                      typeof (candidate as Record<string, unknown>).const,
+                    )
+                      ? [(candidate as Record<string, unknown>).const]
+                      : [],
+                  )
+                : []),
+            ].map((value) => JSON.stringify(value)),
+          );
+          for (const [optionIndex, option] of (propertyLocalization.options ?? []).entries()) {
+            if (!allowedValues.has(JSON.stringify(option.value))) {
+              context.addIssue({
+                code: "custom",
+                path: [
+                  "localizations",
+                  locale,
+                  "capabilities",
+                  capabilityId,
+                  "blockConfigSchema",
+                  "properties",
+                  propertyKey,
+                  "options",
+                  optionIndex,
+                  "value",
+                ],
+                message: "referencia opção inexistente",
+              });
+            }
+          }
+        }
+      }
+    }
     if (manifest.networkHosts && !manifest.permissions.includes("network")) {
       context.addIssue({
         code: "custom",
@@ -311,6 +536,27 @@ export const pluginManifestSchema = z
       }
     }
     for (const [index, capability] of manifest.capabilities.entries()) {
+      const configurationKeys = new Set(
+        Object.keys((capability.blockConfigSchema.properties ?? {}) as Record<string, unknown>),
+      );
+      for (const [providerIndex, provider] of (capability.configurationOptions ?? []).entries()) {
+        if (!configurationKeys.has(provider.property)) {
+          context.addIssue({
+            code: "custom",
+            path: ["capabilities", index, "configurationOptions", providerIndex, "property"],
+            message: `referencia a configuração inexistente ${provider.property}`,
+          });
+        }
+        for (const dependency of provider.dependsOn ?? []) {
+          if (!configurationKeys.has(dependency)) {
+            context.addIssue({
+              code: "custom",
+              path: ["capabilities", index, "configurationOptions", providerIndex, "dependsOn"],
+              message: `referencia a configuração inexistente ${dependency}`,
+            });
+          }
+        }
+      }
       const preview = capability.promptPreview;
       if (preview) {
         const inputKeys = new Set(capability.inputPorts.map((port) => port.key));
@@ -323,9 +569,6 @@ export const pluginManifestSchema = z
             });
           }
         }
-        const configurationKeys = new Set(
-          Object.keys((capability.blockConfigSchema.properties ?? {}) as Record<string, unknown>),
-        );
         const referencedConfigurationKeys = [
           ...(preview.templateConfigurationKey ? [preview.templateConfigurationKey] : []),
           ...[...preview.template.matchAll(/\{\{CONFIG:([A-Za-z][A-Za-z0-9_-]*)\}\}/g)].map(

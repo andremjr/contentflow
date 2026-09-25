@@ -106,4 +106,4 @@ Mudanças compatíveis incluem adicionar capability, ampliar processos/tipos, ad
 
 O Método salva `pluginId`, `pluginVersion`, `capabilityId`, configuração e bindings. O snapshot registra também hash do pacote e `apiVersion`. Não substitua silenciosamente uma versão ausente por outra.
 
-Fonte: [protocol.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/protocol.md).
+Fonte: [protocol.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/protocol.md).

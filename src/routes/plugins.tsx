@@ -53,6 +53,8 @@ import { PROCESS_META, type BlockType, type UniversalProcess } from "@/lib/domai
 import { ECOSYSTEM_DOWNLOADS } from "@/lib/ecosystem-downloads";
 import { pluginCapabilityDescription, pluginCapabilityLabel } from "@/lib/plugin-capability-label";
 import type { PluginDeliveryType, PluginManifest } from "@/lib/plugin-contract";
+import { localizePluginManifest } from "@/lib/plugin-localization";
+import { useAppPreferences } from "@/lib/app-preferences";
 
 export const Route = createFileRoute("/plugins")({
   head: () => ({
@@ -164,6 +166,7 @@ function deliveryTypes(plugin: DiscoveredPlugin) {
 }
 
 function PluginsPage() {
+  const { language } = useAppPreferences();
   const [data, setData] = useState<PluginResponse>({ plugins: [], issues: [] });
   const [loading, setLoading] = useState(true);
   const [updates, setUpdates] = useState<Record<string, PluginUpdate>>({});
@@ -227,12 +230,16 @@ function PluginsPage() {
 
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredPlugins = data.plugins.filter((plugin) => {
-    const capabilities = plugin.manifest.capabilities;
+    const localizedManifest = localizePluginManifest(plugin.manifest, language);
+    const capabilities = localizedManifest.capabilities;
     const matchesSearch =
       !normalizedSearch ||
-      [plugin.manifest.name, plugin.manifest.description, plugin.manifest.author, plugin.id].some(
-        (value) => value.toLocaleLowerCase().includes(normalizedSearch),
-      );
+      [
+        localizedManifest.name,
+        localizedManifest.description,
+        plugin.manifest.author,
+        plugin.id,
+      ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
     const matchesDelivery =
       deliveryFilter === "all" || deliveryTypes(plugin).includes(deliveryFilter);
     const matchesBlock =
@@ -582,7 +589,8 @@ function PluginCard({
   update?: PluginUpdate;
   onChanged: () => Promise<void>;
 }) {
-  const { manifest } = plugin;
+  const { language } = useAppPreferences();
+  const manifest = localizePluginManifest(plugin.manifest, language);
   const types = deliveryTypes(plugin);
   const [open, setOpen] = useState(false);
   const [iconFailed, setIconFailed] = useState(false);

@@ -1,0 +1,232 @@
+{
+  "format": "contentflow-method",
+  "version": 1,
+  "name": "P60 — Free Stock mínimo",
+  "exportedAt": "2026-09-25T12:00:00.000Z",
+  "method": {
+    "name": "P60 — Free Stock → VALIDAR → materializar",
+    "processType": "assets",
+    "blocks": [
+      {
+        "id": "p60-stock-search",
+        "type": "BUSCAR",
+        "operator": "Código",
+        "name": "Buscar por briefings",
+        "instructions": "Busque um candidato por briefing preservando licença, atribuição e identificador do briefing.",
+        "inputs": [
+          {
+            "id": "p60-stock-briefs",
+            "label": "Briefings",
+            "type": "records",
+            "source": "static",
+            "staticValue": [
+              {
+                "brief_id": "asset-slot-stock-commute",
+                "start_seconds": 12,
+                "end_seconds": 18,
+                "primary_query": "urban commuters at sunrise",
+                "media_preference": "video",
+                "orientation": "landscape"
+              },
+              {
+                "brief_id": "asset-slot-stock-rainforest",
+                "start_seconds": 31,
+                "end_seconds": 37,
+                "primary_query": "rainforest trail rain",
+                "media_preference": "video",
+                "orientation": "landscape"
+              },
+              {
+                "brief_id": "asset-slot-stock-city-aerial",
+                "start_seconds": 44,
+                "end_seconds": 50,
+                "primary_query": "city aerial dawn",
+                "media_preference": "image",
+                "orientation": "landscape"
+              }
+            ],
+            "portKey": "asset_briefs",
+            "recordFields": [
+              {
+                "id": "brief-id",
+                "label": "ID",
+                "key": "brief_id",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "primary-query",
+                "label": "Consulta",
+                "key": "primary_query",
+                "type": "text",
+                "required": true
+              }
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "p60-stock-candidates",
+            "label": "Selecionados pela busca",
+            "key": "selected_assets",
+            "portKey": "selected_assets",
+            "type": "records",
+            "required": true,
+            "recordFields": [
+              {
+                "id": "out-brief-id",
+                "label": "ID",
+                "key": "brief_id",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "out-provider",
+                "label": "Fonte",
+                "key": "provider",
+                "type": "text",
+                "required": false
+              },
+              {
+                "id": "out-license",
+                "label": "Licença",
+                "key": "license_name",
+                "type": "text",
+                "required": false
+              }
+            ]
+          }
+        ],
+        "parameters": [],
+        "order": 0,
+        "plugin": {
+          "pluginId": "local.contentflow.free-stock-media-studio",
+          "pluginVersion": "0.3.1",
+          "capabilityId": "search-stock-by-briefs",
+          "configuration": {
+            "providerStrategy": "balanced_fallback",
+            "licenseProfile": "commercial_safe",
+            "safeSearch": true
+          },
+          "connectionRequired": false
+        }
+      },
+      {
+        "id": "p60-stock-validate",
+        "type": "VALIDAR",
+        "operator": "Humano",
+        "name": "Validar stock",
+        "instructions": "Confirme licença, atribuição e adequação editorial antes do download.",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "p60-stock-selected",
+            "label": "Aprovados",
+            "key": "selected_value",
+            "type": "records",
+            "required": true,
+            "optionsSourceBlockId": "p60-stock-search",
+            "optionsSourceKey": "selected_assets",
+            "recordFields": [
+              {
+                "id": "selected-brief-id",
+                "label": "ID",
+                "key": "brief_id",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "selected-provider",
+                "label": "Fonte",
+                "key": "provider",
+                "type": "text",
+                "required": false
+              },
+              {
+                "id": "selected-license",
+                "label": "Licença",
+                "key": "license_name",
+                "type": "text",
+                "required": false
+              }
+            ]
+          }
+        ],
+        "validation": {
+          "targetBlockId": "p60-stock-search",
+          "targetOutputKey": "selected_assets",
+          "mode": "select_many",
+          "onReject": "pause",
+          "maxAttempts": 1
+        },
+        "parameters": [],
+        "order": 1
+      },
+      {
+        "id": "p60-stock-download",
+        "type": "CRIAR",
+        "operator": "Código",
+        "name": "Materializar stock aprovado",
+        "instructions": "Baixe somente os candidatos aprovados e preserve a proveniência completa.",
+        "inputs": [
+          {
+            "id": "p60-stock-approved",
+            "label": "Aprovados",
+            "type": "records",
+            "source": "previous_block",
+            "blockId": "p60-stock-validate",
+            "sourceKey": "selected_value",
+            "portKey": "selected_assets",
+            "recordFields": [
+              {
+                "id": "approved-brief-id",
+                "label": "ID",
+                "key": "brief_id",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "approved-provider",
+                "label": "Fonte",
+                "key": "provider",
+                "type": "text",
+                "required": false
+              },
+              {
+                "id": "approved-license",
+                "label": "Licença",
+                "key": "license_name",
+                "type": "text",
+                "required": false
+              }
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "p60-stock-assets",
+            "label": "Assets",
+            "key": "assets",
+            "portKey": "assets",
+            "type": "files",
+            "required": true,
+            "presentation": {
+              "renderer": "file-list",
+              "itemType": "file",
+              "acceptedMimeTypes": ["image/*", "video/*"]
+            }
+          }
+        ],
+        "parameters": [],
+        "order": 2,
+        "plugin": {
+          "pluginId": "local.contentflow.free-stock-media-studio",
+          "pluginVersion": "0.3.1",
+          "capabilityId": "download-selected-stock-assets",
+          "configuration": {},
+          "connectionRequired": false
+        }
+      }
+    ]
+  }
+}

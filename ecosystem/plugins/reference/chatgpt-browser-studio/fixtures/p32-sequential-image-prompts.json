@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "profiles": ["primary-images", "fallback-images"],
+  "fallbackAfterItemIndex": 1,
+  "items": [
+    {
+      "itemId": "batch-image-city",
+      "prompt": "Uma cidade costeira ao amanhecer",
+      "variants": ["city-a", "city-b"]
+    },
+    {
+      "itemId": "batch-image-forest",
+      "prompt": "Uma floresta bioluminescente à noite",
+      "variants": ["forest-a", "forest-b"]
+    },
+    {
+      "itemId": "batch-image-desert",
+      "prompt": "Um observatório no deserto sob as estrelas",
+      "variants": ["desert-a", "desert-b"]
+    }
+  ],
+  "flattenedVariants": [
+    "city-a",
+    "city-b",
+    "forest-a",
+    "forest-b",
+    "desert-a",
+    "desert-b"
+  ],
+  "resumeAfterCompleted": ["batch-image-city", "batch-image-forest"],
+  "expectedNextItemId": "batch-image-desert"
+}

@@ -91,9 +91,13 @@ test("reordena Processos na barra lateral, persiste e rejeita dependência poste
     "aria-label",
     "Reordenar processo Roteiro",
   );
-  await page.getByRole("button", { name: "Reordenar processo Roteiro" }).focus();
+  const dragStatus = page.getByRole("status").filter({ hasText: /draggable item/i });
+  const keyboardScriptHandle = page.getByRole("button", { name: "Reordenar processo Roteiro" });
+  await keyboardScriptHandle.focus();
   await page.keyboard.press("Space");
+  await expect(dragStatus).toContainText("moved over droppable area script");
   await page.keyboard.press("ArrowDown");
+  await expect(dragStatus).toContainText("moved over droppable area thumbnail");
   await page.keyboard.press("Space");
   await expect
     .poll(async () => {
@@ -101,9 +105,13 @@ test("reordena Processos na barra lateral, persiste e rejeita dependência poste
       return channels.find((item) => item.id === channel.id)?.processOrder?.slice(2, 4);
     })
     .toEqual(["thumbnail", "script"]);
-  await page.getByRole("button", { name: "Reordenar processo Roteiro" }).focus();
+  const reorderedScriptHandle = page.getByRole("button", { name: "Reordenar processo Roteiro" });
+  await expect(reorderedScriptHandle).toBeEnabled();
+  await reorderedScriptHandle.focus();
   await page.keyboard.press("Space");
+  await expect(dragStatus).toContainText("moved over droppable area script");
   await page.keyboard.press("ArrowUp");
+  await expect(dragStatus).toContainText("moved over droppable area thumbnail");
   await page.keyboard.press("Space");
   await expect
     .poll(async () => {

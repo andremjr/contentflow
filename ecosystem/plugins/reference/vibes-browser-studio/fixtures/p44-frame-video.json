@@ -1,0 +1,23 @@
+{
+  "capabilityId": "animate-frame-in-browser",
+  "resolution": "720p",
+  "batch": {
+    "itemId": "frame-operation-a",
+    "index": 0,
+    "total": 2,
+    "initialSourceItemId": "scene-a"
+  },
+  "deliveries": {
+    "initial_frames": ["scene-a", "scene-b"],
+    "final_frames": ["scene-b", "scene-a"],
+    "prompts": ["scene-b", "scene-a"]
+  },
+  "expected": {
+    "initialFrame": "frame-a",
+    "finalFrame": "final-a",
+    "prompt": "Move A",
+    "variantKeys": ["video:1", "video:2", "video:3", "video:4"],
+    "outputPort": "videos",
+    "reloadResubmits": false
+  }
+}

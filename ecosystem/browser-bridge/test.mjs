@@ -11,6 +11,11 @@ export async function testExtensionBridge(source) {
   let attachGate;
   let runtimeListener;
   let runtimePortListener;
+  let alarmListener;
+  let tabRemovedListener;
+  let tabUpdatedListener;
+  const powerCalls = [];
+  const tabUpdates = [];
   const chrome = {
     runtime: {
       getManifest: () => ({ version: "2.0.0" }),
@@ -49,8 +54,38 @@ export async function testExtensionBridge(source) {
         assert.equal(tabId, 7);
         return { id: 7, windowId: 70 };
       },
+      async update(tabId, updateInfo) {
+        tabUpdates.push({ tabId, updateInfo: structuredClone(updateInfo) });
+        return { id: tabId, ...updateInfo };
+      },
+      onRemoved: {
+        addListener(listener) {
+          tabRemovedListener = listener;
+        },
+      },
+      onUpdated: {
+        addListener(listener) {
+          tabUpdatedListener = listener;
+        },
+      },
       async sendMessage() {
         assert.fail("ações de UI não podem mais usar chrome.tabs.sendMessage");
+      },
+    },
+    alarms: {
+      create() {},
+      onAlarm: {
+        addListener(listener) {
+          alarmListener = listener;
+        },
+      },
+    },
+    power: {
+      requestKeepAwake(level) {
+        powerCalls.push({ operation: "request", level });
+      },
+      releaseKeepAwake() {
+        powerCalls.push({ operation: "release" });
       },
     },
     windows: {
@@ -75,6 +110,9 @@ export async function testExtensionBridge(source) {
           params: structuredClone(params),
         });
         if (method === "Runtime.evaluate") {
+          if (params.expression.includes("function resolveFileInput")) {
+            return { result: { objectId: "file-input-object" } };
+          }
           if (params.expression.includes("function resolvePageTarget")) {
             const clickable = params.expression.includes(',"clickable",');
             return {
@@ -103,6 +141,15 @@ export async function testExtensionBridge(source) {
                 origin: new URL(currentTabUrl).origin,
                 title: "Flow",
               },
+            },
+          };
+        }
+        if (method === "DOM.describeNode") {
+          return {
+            node: {
+              nodeName: "INPUT",
+              backendNodeId: 77,
+              attributes: ["type", "file", "accept", "image/png,image/jpeg,image/webp"],
             },
           };
         }
@@ -143,6 +190,9 @@ export async function testExtensionBridge(source) {
   assert.equal(bridge.identity.protocolVersion, 2);
   assert.equal(typeof runtimeListener, "function");
   assert.equal(typeof runtimePortListener, "function");
+  assert.equal(typeof alarmListener, "function");
+  assert.equal(typeof tabRemovedListener, "function");
+  assert.equal(typeof tabUpdatedListener, "function");
 
   const handshake = {
     pluginId: "local.contentflow.google-flow-batch-images",
@@ -306,7 +356,11 @@ export async function testExtensionBridge(source) {
     commandId: createHash("sha256").update("cancel").digest("hex"),
   });
   assert.equal(cancelResult.ok, true);
-  assert.ok(storage.contentflowCancelledExecutionsV2["execution-key-volume-test"] > Date.now());
+  assert.ok(
+    storage.contentflowCancelledExecutionsV2[
+      "local.contentflow.google-flow-batch-images:conta-principal:execution-key-volume-test"
+    ] > Date.now(),
+  );
   assert.equal(
     (
       await bridge.cancel({
@@ -342,6 +396,7 @@ export async function testExtensionBridge(source) {
     ["local.contentflow.grok-browser-studio", "https://grok.com/"],
     ["local.contentflow.meta-ai-browser-studio", "https://www.meta.ai/"],
     ["local.contentflow.mai-playground-browser", "https://playground.microsoft.ai/chat"],
+    ["local.contentflow.vibes-browser-studio", "https://vibes.ai/projects/project-1"],
   ]) {
     const result = bridge.connect({ ...handshake, pluginId: provider[0] });
     assert.equal(result.ok, true, `${provider[0]} deve estar na allowlist da ponte v2`);
@@ -383,9 +438,12 @@ export async function testExtensionBridge(source) {
       (entry) =>
         entry.operation === "sendCommand" &&
         entry.method === "Input.dispatchKeyEvent" &&
-        entry.params?.key === "Enter",
+        entry.params?.key === "Enter" &&
+        entry.params?.type === "keyDown" &&
+        entry.params?.text === "\r" &&
+        entry.params?.unmodifiedText === "\r",
     ),
-    "o envio por Enter deve usar o canal de teclado CDP",
+    "o envio por Enter deve usar um keyDown completo no canal de teclado CDP",
   );
   const mouseEventsBeforeDomClick = debuggerCalls.filter(
     (entry) => entry.operation === "sendCommand" && entry.method === "Input.dispatchMouseEvent",
@@ -431,6 +489,106 @@ export async function testExtensionBridge(source) {
     debuggerCalls.filter((entry) => entry.operation === "detach").length,
     3,
     "o depurador do ChatGPT deve ser removido ao encerrar a sessão",
+  );
+  currentTabUrl = "https://flow.google.com/project/project-1";
+
+  currentTabUrl = "https://vibes.ai/projects/project-1";
+  const vibesToken = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const vibesHandshake = {
+    ...handshake,
+    pluginId: "local.contentflow.vibes-browser-studio",
+    sessionToken: vibesToken,
+  };
+  assert.equal(bridge.connect(vibesHandshake).ok, true);
+  const vibesCommand = (ordinal, action, payload = {}) => ({
+    ...command(500 + ordinal),
+    ...vibesHandshake,
+    executionKey: "execution-key-vibes-authorized-job",
+    commandId: createHash("sha256").update(`vibes:${ordinal}`).digest("hex"),
+    expectedUrl: currentTabUrl,
+    action,
+    payload,
+  });
+  assert.equal((await bridge.dispatch(vibesCommand(1, "ping"))).ok, true);
+  assert.equal(
+    (
+      await bridge.dispatch({
+        ...vibesCommand(2, "ping"),
+        expectedUrl: "https://vibes.ai/explore",
+      })
+    ).code,
+    "ORIGIN_NOT_ALLOWED",
+    "Vibes deve aceitar somente rotas de projeto",
+  );
+
+  const acquired = await bridge.dispatch(vibesCommand(3, "leaseAcquire", { ttlMs: 60_000 }));
+  assert.equal(acquired.ok, true);
+  assert.ok(acquired.expiresAt > Date.now());
+  assert.equal(powerCalls.at(-1).operation, "request");
+  assert.deepEqual(tabUpdates.at(-1), { tabId: 7, updateInfo: { autoDiscardable: false } });
+  const replayedLease = await bridge.dispatch(vibesCommand(3, "leaseAcquire", { ttlMs: 60_000 }));
+  assert.equal(replayedLease.replayed, true);
+
+  const renewed = await bridge.dispatch(vibesCommand(4, "leaseRenew", { ttlMs: 60_000 }));
+  assert.equal(renewed.ok, true);
+  assert.ok(renewed.expiresAt >= acquired.expiresAt);
+
+  const upload = await bridge.dispatch(
+    vibesCommand(5, "setFiles", {
+      selectors: ['input[type="file"]'],
+      files: ["C:\\staging\\frame.png"],
+    }),
+  );
+  assert.equal(upload.ok, true);
+  assert.equal(upload.fileCount, 1);
+  assert.ok(
+    debuggerCalls.some(
+      (entry) =>
+        entry.method === "DOM.setFileInputFiles" &&
+        entry.params.backendNodeId === 77 &&
+        entry.params.files[0] === "C:\\staging\\frame.png",
+    ),
+  );
+  assert.equal(
+    (
+      await bridge.dispatch(
+        vibesCommand(6, "setFiles", {
+          selectors: ['input[type="file"]'],
+          files: ["..\\secrets.txt"],
+        }),
+      )
+    ).code,
+    "INVALID_COMMAND",
+  );
+
+  storage.contentflowLeasesV1[acquired.leaseId].expiresAt = Date.now() - 1;
+  alarmListener({ name: "contentflow-lease-cleanup" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(Object.keys(storage.contentflowLeasesV1).length, 0);
+  assert.deepEqual(tabUpdates.at(-1), { tabId: 7, updateInfo: { autoDiscardable: true } });
+  assert.equal(powerCalls.at(-1).operation, "release");
+
+  const reacquired = await bridge.dispatch(vibesCommand(7, "leaseAcquire", { ttlMs: 60_000 }));
+  assert.equal(reacquired.ok, true);
+  tabUpdatedListener(7, { url: "https://vibes.ai/explore" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(Object.keys(storage.contentflowLeasesV1).length, 0);
+
+  assert.equal((await bridge.dispatch(vibesCommand(8, "leaseAcquire"))).ok, true);
+  assert.equal(
+    (
+      await bridge.cancel({
+        ...vibesHandshake,
+        executionKey: "execution-key-vibes-authorized-job",
+      })
+    ).ok,
+    true,
+  );
+  assert.equal(Object.keys(storage.contentflowLeasesV1).length, 0);
+  assert.equal(
+    debuggerCalls.at(-1).operation,
+    "detach",
+    "cancelar Vibes deve liberar o depurador da sessão",
   );
   currentTabUrl = "https://flow.google.com/project/project-1";
 

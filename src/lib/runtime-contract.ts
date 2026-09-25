@@ -83,6 +83,7 @@ export function resolveBlockInputs({
     }
     const explicit = resolveExplicitInput(input, project, candidates, usedCandidateIds, {
       execution,
+      blockId: block.id,
       channelExecutions,
       channelProjects,
     });
@@ -269,6 +270,7 @@ function resolveExplicitInput(
   usedCandidateIds: ReadonlySet<string>,
   historyContext: {
     execution: ProcessExecution;
+    blockId: string;
     channelExecutions: ProcessExecution[];
     channelProjects: Project[];
   },
@@ -299,6 +301,20 @@ function resolveExplicitInput(
     return input.staticValue
       ? { result: { resolved: true, value: input.staticValue, sourceLabel: "Valor fixo" } }
       : { result: { resolved: false } };
+  }
+  if (input.source === "runtime") {
+    const resolvedValue = historyContext.execution.blocks.find(
+      (block) => block.blockId === historyContext.blockId,
+    )?.runtimeInputs?.[input.id];
+    return resolvedValue === undefined || isEmptyRuntimeValue(resolvedValue)
+      ? { result: { resolved: false } }
+      : {
+          result: {
+            resolved: true,
+            value: resolvedValue,
+            sourceLabel: "Fornecido na execução",
+          },
+        };
   }
   if (input.source === "project") {
     const value = input.sourceKey === "deadline" ? project.deadline : project.title;

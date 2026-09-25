@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "baselineIds": ["history-old"],
+  "before": [
+    {
+      "id": "history-old",
+      "owner": "assistant",
+      "alt": "Imagem gerada",
+      "complete": true
+    }
+  ],
+  "after": [
+    {
+      "id": "history-old",
+      "owner": "assistant",
+      "alt": "Imagem gerada",
+      "complete": true
+    },
+    {
+      "id": "reference-upload",
+      "owner": "user",
+      "alt": "Imagem gerada",
+      "complete": true
+    },
+    {
+      "id": "composer-preview",
+      "owner": "composer",
+      "alt": "Imagem gerada",
+      "complete": true
+    },
+    {
+      "id": "assistant-avatar",
+      "owner": "assistant",
+      "avatar": true,
+      "alt": "Imagem gerada",
+      "complete": true
+    },
+    {
+      "id": "generated-a",
+      "owner": "assistant",
+      "alt": "Imagem gerada",
+      "complete": true
+    },
+    {
+      "id": "generated-a",
+      "owner": "assistant",
+      "alt": "Imagem gerada",
+      "complete": true
+    },
+    {
+      "id": "generated-b",
+      "owner": "assistant",
+      "alt": "Generated image",
+      "complete": true
+    },
+    {
+      "id": "loading-image",
+      "owner": "assistant",
+      "alt": "Imagem gerada",
+      "complete": false
+    },
+    {
+      "id": "unowned-image",
+      "owner": "unknown",
+      "alt": "Imagem gerada",
+      "complete": true
+    }
+  ],
+  "acceptedIds": ["generated-a", "generated-b"],
+  "rejectedIds": [
+    "history-old",
+    "reference-upload",
+    "composer-preview",
+    "assistant-avatar",
+    "loading-image",
+    "unowned-image"
+  ]
+}

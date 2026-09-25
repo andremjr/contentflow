@@ -1,0 +1,91 @@
+{
+  "format": "contentflow-method",
+  "version": 1,
+  "name": "P60 — Flow mínimo",
+  "exportedAt": "2026-09-25T12:00:00.000Z",
+  "method": {
+    "name": "P60 — Flow → VALIDAR",
+    "processType": "assets",
+    "blocks": [
+      {
+        "id": "p60-flow-generate",
+        "type": "CRIAR",
+        "operator": "IA",
+        "name": "Gerar imagens no Flow",
+        "instructions": "Gere uma imagem por item preservando a ordem e a identidade de cada prompt.",
+        "inputs": [
+          {
+            "id": "p60-flow-prompts",
+            "label": "Prompts",
+            "type": "list",
+            "source": "static",
+            "staticValue": [
+              "Cinematic aerial view of a city at dawn, warm light, 16:9",
+              "Close-up of a rainforest trail in gentle rain, realistic documentary style, 16:9",
+              "Wide cinematic coastline before a storm, dramatic clouds, realistic documentary style, 16:9",
+              "Craft workshop at night with warm practical lights, cinematic documentary photography, 16:9",
+              "Morning commuter train crossing a misty valley, cinematic realism, 16:9"
+            ],
+            "portKey": "prompts"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "p60-flow-images",
+            "label": "Imagens",
+            "key": "images",
+            "portKey": "images",
+            "type": "files",
+            "required": true,
+            "presentation": {
+              "renderer": "image-gallery",
+              "itemType": "image",
+              "acceptedMimeTypes": ["image/*"]
+            }
+          }
+        ],
+        "parameters": [],
+        "order": 0,
+        "plugin": {
+          "pluginId": "local.contentflow.google-flow-batch-images",
+          "pluginVersion": "1.3.7",
+          "capabilityId": "generate-images-in-browser",
+          "configuration": {
+            "productionMode": "images_only",
+            "aspectRatio": "landscape",
+            "maxImagesPerPrompt": 1
+          },
+          "connectionRequired": false
+        }
+      },
+      {
+        "id": "p60-flow-validate",
+        "type": "VALIDAR",
+        "operator": "Humano",
+        "name": "Selecionar imagens do Flow",
+        "instructions": "Selecione somente as imagens aprovadas para a edição.",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "p60-flow-selected",
+            "label": "Selecionadas",
+            "key": "selected_value",
+            "type": "files",
+            "required": true,
+            "optionsSourceBlockId": "p60-flow-generate",
+            "optionsSourceKey": "images"
+          }
+        ],
+        "validation": {
+          "targetBlockId": "p60-flow-generate",
+          "targetOutputKey": "images",
+          "mode": "select_many",
+          "onReject": "pause",
+          "maxAttempts": 2
+        },
+        "parameters": [],
+        "order": 1
+      }
+    ]
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/ecosystem/docs/schemas/contentflow-plugin-v1.schema.json",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
   "id": "local.contentflow.meta-ai-browser-studio",
   "name": "Meta AI Browser Studio",
@@ -88,6 +88,144 @@
       "diagnosticMockResponse": {
         "type": "string",
         "default": ""
+      },
+      "queueDelayMs": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 60000,
+        "default": 1500
+      }
+    }
+  },
+  "localizations": {
+    "en": {
+      "capabilities": {
+        "generate-image-in-browser": {
+          "outputPorts": {
+            "image": { "label": "Generated image" },
+            "images": {
+              "label": "Generated images",
+              "description": "All new image variants materialized from this generation."
+            },
+            "description": { "label": "Description" }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerate" },
+            "replace": { "label": "Replace" },
+            "select": { "label": "Select" },
+            "download": { "label": "Download" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "aspectRatio": {
+                "title": "Aspect ratio",
+                "description": "Requested image aspect ratio.",
+                "options": [
+                  { "value": "16:9", "label": "Landscape (16:9)" },
+                  { "value": "1:1", "label": "Square (1:1)" },
+                  { "value": "9:16", "label": "Portrait (9:16)" }
+                ]
+              }
+            }
+          }
+        },
+        "animate-image-in-browser": {
+          "inputPorts": {
+            "image": { "label": "Base image" },
+            "prompt": { "label": "Motion prompt" }
+          },
+          "outputPorts": {
+            "video": { "label": "Generated video" },
+            "videos": {
+              "label": "Generated videos",
+              "description": "One or two video variants generated from the same base image."
+            },
+            "description": { "label": "Description" }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerate" },
+            "replace": { "label": "Replace" },
+            "select": { "label": "Select" },
+            "download": { "label": "Download" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "videoVariants": {
+                "title": "Video variants",
+                "description": "Generate one or two variants from the base image.",
+                "options": [
+                  { "value": 1, "label": "1 variant" },
+                  { "value": 2, "label": "2 variants" }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "es": {
+      "capabilities": {
+        "generate-image-in-browser": {
+          "outputPorts": {
+            "image": { "label": "Imagen generada" },
+            "images": {
+              "label": "Imágenes generadas",
+              "description": "Todas las variantes nuevas materializadas de esta generación."
+            },
+            "description": { "label": "Descripción" }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerar" },
+            "replace": { "label": "Reemplazar" },
+            "select": { "label": "Seleccionar" },
+            "download": { "label": "Descargar" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "aspectRatio": {
+                "title": "Proporción",
+                "description": "Proporción solicitada para la imagen.",
+                "options": [
+                  { "value": "16:9", "label": "Horizontal (16:9)" },
+                  { "value": "1:1", "label": "Cuadrada (1:1)" },
+                  { "value": "9:16", "label": "Vertical (9:16)" }
+                ]
+              }
+            }
+          }
+        },
+        "animate-image-in-browser": {
+          "inputPorts": {
+            "image": { "label": "Imagen base" },
+            "prompt": { "label": "Prompt de movimiento" }
+          },
+          "outputPorts": {
+            "video": { "label": "Vídeo generado" },
+            "videos": {
+              "label": "Vídeos generados",
+              "description": "Una o dos variantes de vídeo generadas desde la misma imagen base."
+            },
+            "description": { "label": "Descripción" }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerar" },
+            "replace": { "label": "Reemplazar" },
+            "select": { "label": "Seleccionar" },
+            "download": { "label": "Descargar" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "videoVariants": {
+                "title": "Variantes de vídeo",
+                "description": "Genera una o dos variantes desde la imagen base.",
+                "options": [
+                  { "value": 1, "label": "1 variante" },
+                  { "value": 2, "label": "2 variantes" }
+                ]
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -236,8 +374,17 @@
     {
       "id": "generate-image-in-browser",
       "operator": "IA",
+      "promptPreview": {
+        "template": "INSTRUÇÕES DO BLOCO:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO DAS ENTRADAS:\n{{CONTEXT_INPUTS}}\n\nPROPORÇÃO DA IMAGEM: {{CONFIG:aspectRatio}}"
+      },
       "blockTypes": ["CRIAR"],
       "processTypes": ["thumbnail", "assets"],
+      "itemActions": [
+        { "action": "regenerate" },
+        { "action": "replace" },
+        { "action": "select" },
+        { "action": "download" }
+      ],
       "inputPorts": [
         {
           "key": "prompt",
@@ -272,6 +419,18 @@
           }
         },
         {
+          "key": "images",
+          "label": "Imagens geradas",
+          "description": "Todas as variantes novas materializadas desta geração.",
+          "producedTypes": ["files"],
+          "required": false,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/*"]
+          }
+        },
+        {
           "key": "description",
           "label": "Descrição",
           "producedTypes": ["textarea"],
@@ -284,7 +443,12 @@
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,
         "supportsCancellation": true,
-        "maxConcurrency": 1
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "inputPort": "prompt",
+          "outputPort": "images",
+          "mode": "sequential"
+        }
       },
       "sideEffects": ["external_write", "local_artifact", "subprocess"],
       "cost": {
@@ -315,6 +479,17 @@
           "startMinimized": {
             "type": "boolean",
             "default": true
+          },
+          "aspectRatio": {
+            "type": "string",
+            "title": "Proporção",
+            "description": "Proporção solicitada para a imagem.",
+            "default": "1:1",
+            "oneOf": [
+              { "const": "16:9", "title": "Paisagem (16:9)" },
+              { "const": "1:1", "title": "Quadrada (1:1)" },
+              { "const": "9:16", "title": "Retrato (9:16)" }
+            ]
           }
         }
       },
@@ -325,6 +500,9 @@
           "image": {
             "type": "object"
           },
+          "images": {
+            "type": "array"
+          },
           "description": {
             "type": "string"
           }
@@ -334,10 +512,134 @@
       "instructionUsage": "required"
     },
     {
+      "id": "animate-image-in-browser",
+      "operator": "IA",
+      "promptPreview": {
+        "template": "INSTRUÇÕES DO BLOCO:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO DAS ENTRADAS:\n{{CONTEXT_INPUTS}}\n\nVARIANTES DE VÍDEO: {{CONFIG:videoVariants}}"
+      },
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["assets", "editing"],
+      "itemActions": [
+        { "action": "regenerate" },
+        { "action": "replace" },
+        { "action": "select" },
+        { "action": "download" }
+      ],
+      "inputPorts": [
+        {
+          "key": "image",
+          "label": "Imagem base",
+          "acceptedTypes": ["image", "file"],
+          "required": true,
+          "multiple": false,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/*"]
+          }
+        },
+        {
+          "key": "prompt",
+          "label": "Prompt de movimento",
+          "acceptedTypes": ["text", "textarea"],
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "video",
+          "label": "Vídeo gerado",
+          "producedTypes": ["video"],
+          "required": true
+        },
+        {
+          "key": "videos",
+          "label": "Vídeos gerados",
+          "description": "Uma ou duas variantes de vídeo geradas a partir da mesma imagem base.",
+          "producedTypes": ["files"],
+          "required": false
+        },
+        {
+          "key": "description",
+          "label": "Descrição",
+          "producedTypes": ["textarea"],
+          "required": false
+        }
+      ],
+      "acceptedInputTypes": ["text", "textarea", "image", "file"],
+      "producedOutputTypes": ["video", "files", "textarea"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 3600000,
+        "supportsCancellation": true,
+        "maxConcurrency": 1
+      },
+      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "cost": {
+        "model": "unknown",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": ["Meta AI / Vibes web"]
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente para o próximo perfil cadastrado sempre que houver qualquer erro na execução."
+          },
+          "accountProfile": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+            "default": "default"
+          },
+          "startMinimized": {
+            "type": "boolean",
+            "default": true
+          },
+          "videoVariants": {
+            "type": "integer",
+            "title": "Variantes de vídeo",
+            "description": "Gera uma ou duas variantes a partir da imagem base.",
+            "default": 1,
+            "oneOf": [
+              { "const": 1, "title": "1 variante" },
+              { "const": 2, "title": "2 variantes" }
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "video": { "type": "object" },
+          "videos": { "type": "array" },
+          "description": { "type": "string" }
+        },
+        "required": ["video"]
+      },
+      "instructionUsage": "required"
+    },
+    {
       "id": "generate-video-in-browser",
       "operator": "IA",
       "blockTypes": ["CRIAR"],
       "processTypes": ["assets", "editing"],
+      "itemActions": [
+        { "action": "regenerate" },
+        { "action": "replace" },
+        { "action": "select" },
+        { "action": "download" }
+      ],
       "inputPorts": [
         {
           "key": "prompt",

@@ -60,6 +60,34 @@ test("importação nunca materializa um identificador de conexão externo", () =
   assert.equal(copied.plugin?.connectionRequired, true);
 });
 
+test("preserva a declaração portátil de entrada fornecida na execução", () => {
+  const runtimeMethod: ProcessMethod = {
+    ...method,
+    blocks: [
+      {
+        ...method.blocks[0],
+        inputs: [
+          {
+            id: "reference-images",
+            label: "Referências visuais",
+            type: "files",
+            source: "runtime",
+            portKey: "reference_images",
+            presentation: {
+              renderer: "image-gallery",
+              itemType: "image",
+              acceptedMimeTypes: ["image/*"],
+            },
+          },
+        ],
+      },
+    ],
+  };
+  const parsed = parseMethodFile(serializeMethodFile("Roteiro", runtimeMethod));
+  assert.equal(parsed.method.blocks[0].inputs?.[0].source, "runtime");
+  assert.equal(parsed.method.blocks[0].inputs?.[0].portKey, "reference_images");
+});
+
 test("cópia interna pode preservar a referência local sem copiar secrets", () => {
   const [copied] = copyImportedBlocks("script", method.blocks, (prefix) => `${prefix}-new`, {
     preserveLocalConnections: true,

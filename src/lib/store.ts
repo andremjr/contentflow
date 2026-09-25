@@ -776,6 +776,19 @@ export async function updateBlockExecutionValues(
   await refreshState(true);
 }
 
+export async function submitBlockRuntimeInputs(
+  executionId: string,
+  blockId: string,
+  revision: number,
+  values: Record<string, RuntimeValue>,
+) {
+  await request(`/api/executions/${executionId}/blocks/${blockId}/runtime-inputs`, "PATCH", {
+    revision,
+    values,
+  });
+  await refreshState(true);
+}
+
 export async function updateBlockExecutionItemOutput(
   executionId: string,
   blockId: string,
@@ -801,6 +814,21 @@ export async function reorderBlockExecutionItems(
     revision,
     itemIds,
   });
+  await refreshState(true);
+}
+
+export async function runBlockExecutionItemAction(
+  executionId: string,
+  blockId: string,
+  itemId: string,
+  action: "regenerate" | "select",
+  revision: number,
+) {
+  await request(
+    `/api/executions/${executionId}/blocks/${blockId}/items/${encodeURIComponent(itemId)}/actions/${action}`,
+    "POST",
+    { revision },
+  );
   await refreshState(true);
 }
 

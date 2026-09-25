@@ -1,0 +1,1037 @@
+{
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
+  "apiVersion": "1",
+  "id": "local.contentflow.vibes-browser-studio",
+  "name": "Vibes Browser Studio",
+  "version": "0.1.0-dev.0",
+  "description": "Gera imagens verticais e vídeos por Frames ou Elementos no Vibes usando um perfil Chrome dedicado e a Browser Bridge.",
+  "author": "André Marinho Jr.",
+  "license": "LicenseRef-Vibes-Browser-Studio-Mixed-1.0",
+  "branding": { "iconPath": "assets/icon.png" },
+  "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
+  "minCoreVersion": "1.1.1",
+  "entrypoint": "handler.mjs",
+  "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
+  "networkHosts": ["vibes.ai", "*.fbcdn.net"],
+  "deliveryTypes": ["image", "video", "processing"],
+  "profileSetup": {
+    "configurationKey": "accountProfile",
+    "fallbackConfigurationKey": "fallbackAccountProfiles",
+    "label": "Preparar perfil do Vibes",
+    "description": "Abre o Chrome dedicado para instalar a Browser Bridge, entrar no Vibes e validar a conta.",
+    "prepareTimeoutMs": 900000
+  },
+  "settingsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "chromeExecutable": { "type": "string", "default": "" },
+      "remoteDebuggingPort": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 64000,
+        "default": 9860
+      },
+      "keepBrowserOpen": { "type": "boolean", "default": false },
+      "startMinimized": { "type": "boolean", "default": true },
+      "interactiveWaitSeconds": {
+        "type": "integer",
+        "minimum": 30,
+        "maximum": 900,
+        "default": 600
+      }
+    }
+  },
+  "localizations": {
+    "en": {
+      "description": "Generates portrait images and Frames or Elements videos in Vibes using a dedicated Chrome profile and Browser Bridge.",
+      "profileSetup": {
+        "label": "Prepare Vibes profile",
+        "description": "Opens dedicated Chrome so you can install Browser Bridge, sign in to Vibes, and validate the account."
+      },
+      "capabilities": {
+        "generate-images-in-browser": {
+          "name": "Generate images in Vibes",
+          "description": "Generates four 9:16 image variants for each prompt.",
+          "inputPorts": {
+            "prompts": {
+              "label": "Prompts",
+              "description": "One prompt or an ordered list of prompts."
+            },
+            "character_reference": {
+              "label": "Character reference",
+              "description": "Optional single character image."
+            },
+            "scene_reference": {
+              "label": "Scene reference",
+              "description": "Optional single scene image."
+            },
+            "style_references": {
+              "label": "Style references",
+              "description": "Optional style images grouped in one Vibes component."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "Optional existing Vibes project URL."
+            }
+          },
+          "outputPorts": {
+            "images": {
+              "label": "Generated images",
+              "description": "Four materialized images in stable variant order."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "URL of the Vibes project used by the generation."
+            }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerate" },
+            "replace": { "label": "Replace" },
+            "select": { "label": "Select" },
+            "download": { "label": "Download" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": {
+                "title": "Account profile",
+                "description": "Stable alias of the dedicated Vibes browser profile."
+              },
+              "fallbackAccountProfiles": {
+                "title": "Fallback profiles",
+                "description": "Ordered aliases of other prepared profiles."
+              },
+              "projectMode": {
+                "title": "Project mode",
+                "description": "Creates a new project or reuses a validated existing project.",
+                "options": [
+                  { "value": "auto", "label": "Automatic" },
+                  { "value": "new", "label": "New project" },
+                  { "value": "existing", "label": "Existing project" }
+                ]
+              },
+              "projectUrl": {
+                "title": "Project URL",
+                "description": "Required when project mode is Existing project."
+              },
+              "startMinimized": {
+                "title": "Start Chrome minimized",
+                "description": "Keeps routine automation in the background."
+              }
+            }
+          }
+        },
+        "animate-frame-in-browser": {
+          "name": "Animate frames in Vibes",
+          "description": "Generates four video variants from an initial frame and optional final frame.",
+          "inputPorts": {
+            "initial_frames": {
+              "label": "Initial frames",
+              "description": "One or more initial frames processed by delivery identity."
+            },
+            "final_frames": {
+              "label": "Final frames",
+              "description": "Optional final frames aligned by delivery identity."
+            },
+            "prompts": {
+              "label": "Motion prompts",
+              "description": "One prompt or prompts aligned by delivery identity."
+            },
+            "style_references": {
+              "label": "Style references",
+              "description": "Optional shared style images."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "Optional existing Vibes project URL."
+            }
+          },
+          "outputPorts": {
+            "videos": {
+              "label": "Generated videos",
+              "description": "Four materialized video variants in stable order."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "URL of the Vibes project used by the generation."
+            }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerate" },
+            "replace": { "label": "Replace" },
+            "select": { "label": "Select" },
+            "download": { "label": "Download" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": {
+                "title": "Account profile",
+                "description": "Stable alias of the dedicated Vibes browser profile."
+              },
+              "fallbackAccountProfiles": {
+                "title": "Fallback profiles",
+                "description": "Ordered aliases of other prepared profiles."
+              },
+              "projectMode": {
+                "title": "Project mode",
+                "description": "Creates a new project or reuses a validated existing project.",
+                "options": [
+                  { "value": "auto", "label": "Automatic" },
+                  { "value": "new", "label": "New project" },
+                  { "value": "existing", "label": "Existing project" }
+                ]
+              },
+              "projectUrl": {
+                "title": "Project URL",
+                "description": "Required when project mode is Existing project."
+              },
+              "resolution": {
+                "title": "Resolution",
+                "description": "Output resolution used by Vibes.",
+                "options": [
+                  { "value": "480p", "label": "480p" },
+                  { "value": "720p", "label": "720p" }
+                ]
+              },
+              "startMinimized": {
+                "title": "Start Chrome minimized",
+                "description": "Keeps routine automation in the background."
+              }
+            }
+          }
+        },
+        "generate-video-with-elements-in-browser": {
+          "name": "Generate video with Elements in Vibes",
+          "description": "Generates four video variants while preserving Character, Scene, and Style reference roles.",
+          "inputPorts": {
+            "prompts": {
+              "label": "Video prompts",
+              "description": "One prompt or an ordered list of prompts."
+            },
+            "character_reference": {
+              "label": "Character reference",
+              "description": "Optional single Character image. A second image is rejected."
+            },
+            "scene_reference": {
+              "label": "Scene reference",
+              "description": "Optional single Scene image. A second image is rejected."
+            },
+            "style_references": {
+              "label": "Style references",
+              "description": "Up to six optional Style images."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "Optional existing Vibes project URL."
+            }
+          },
+          "outputPorts": {
+            "videos": {
+              "label": "Generated videos",
+              "description": "Four materialized video variants in stable order."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "URL of the Vibes project used by the generation."
+            }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerate" },
+            "replace": { "label": "Replace" },
+            "select": { "label": "Select" },
+            "download": { "label": "Download" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": {
+                "title": "Account profile",
+                "description": "Stable alias of the dedicated Vibes browser profile."
+              },
+              "fallbackAccountProfiles": {
+                "title": "Fallback profiles",
+                "description": "Ordered aliases of other prepared profiles."
+              },
+              "projectMode": {
+                "title": "Project mode",
+                "description": "Creates a new project or reuses a validated existing project.",
+                "options": [
+                  { "value": "auto", "label": "Automatic" },
+                  { "value": "new", "label": "New project" },
+                  { "value": "existing", "label": "Existing project" }
+                ]
+              },
+              "projectUrl": {
+                "title": "Project URL",
+                "description": "Required when project mode is Existing project."
+              },
+              "resolution": {
+                "title": "Resolution",
+                "description": "Output resolution used by Vibes.",
+                "options": [
+                  { "value": "480p", "label": "480p" },
+                  { "value": "720p", "label": "720p" }
+                ]
+              },
+              "startMinimized": {
+                "title": "Start Chrome minimized",
+                "description": "Keeps routine automation in the background."
+              }
+            }
+          }
+        }
+      }
+    },
+    "es": {
+      "description": "Genera imágenes verticales y videos por Frames o Elementos en Vibes usando un perfil dedicado de Chrome y Browser Bridge.",
+      "profileSetup": {
+        "label": "Preparar perfil de Vibes",
+        "description": "Abre Chrome dedicado para instalar Browser Bridge, iniciar sesión en Vibes y validar la cuenta."
+      },
+      "capabilities": {
+        "generate-images-in-browser": {
+          "name": "Generar imágenes en Vibes",
+          "description": "Genera cuatro variantes de imagen 9:16 por cada prompt.",
+          "inputPorts": {
+            "prompts": {
+              "label": "Prompts",
+              "description": "Un prompt o una lista ordenada de prompts."
+            },
+            "character_reference": {
+              "label": "Referencia de personaje",
+              "description": "Una imagen opcional de personaje."
+            },
+            "scene_reference": {
+              "label": "Referencia de escena",
+              "description": "Una imagen opcional de escena."
+            },
+            "style_references": {
+              "label": "Referencias de estilo",
+              "description": "Imágenes opcionales agrupadas en un componente de estilo."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL opcional de un proyecto existente de Vibes."
+            }
+          },
+          "outputPorts": {
+            "images": {
+              "label": "Imágenes generadas",
+              "description": "Cuatro imágenes materializadas en orden estable de variante."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL del proyecto de Vibes utilizado."
+            }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerar" },
+            "replace": { "label": "Reemplazar" },
+            "select": { "label": "Seleccionar" },
+            "download": { "label": "Descargar" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": {
+                "title": "Perfil de cuenta",
+                "description": "Alias estable del perfil dedicado de Vibes."
+              },
+              "fallbackAccountProfiles": {
+                "title": "Perfiles alternativos",
+                "description": "Aliases ordenados de otros perfiles preparados."
+              },
+              "projectMode": {
+                "title": "Modo del proyecto",
+                "description": "Crea un proyecto nuevo o reutiliza uno existente validado.",
+                "options": [
+                  { "value": "auto", "label": "Automático" },
+                  { "value": "new", "label": "Proyecto nuevo" },
+                  { "value": "existing", "label": "Proyecto existente" }
+                ]
+              },
+              "projectUrl": {
+                "title": "URL del proyecto",
+                "description": "Obligatoria cuando el modo es Proyecto existente."
+              },
+              "startMinimized": {
+                "title": "Iniciar Chrome minimizado",
+                "description": "Mantiene la automatización rutinaria en segundo plano."
+              }
+            }
+          }
+        },
+        "animate-frame-in-browser": {
+          "name": "Animar fotogramas en Vibes",
+          "description": "Genera cuatro variantes de video desde un fotograma inicial y uno final opcional.",
+          "inputPorts": {
+            "initial_frames": {
+              "label": "Fotogramas iniciales",
+              "description": "Uno o más fotogramas iniciales procesados por identidad de entrega."
+            },
+            "final_frames": {
+              "label": "Fotogramas finales",
+              "description": "Fotogramas finales opcionales alineados por identidad de entrega."
+            },
+            "prompts": {
+              "label": "Prompts de movimiento",
+              "description": "Un prompt o prompts alineados por identidad de entrega."
+            },
+            "style_references": {
+              "label": "Referencias de estilo",
+              "description": "Imágenes de estilo compartidas opcionales."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL opcional de un proyecto existente de Vibes."
+            }
+          },
+          "outputPorts": {
+            "videos": {
+              "label": "Videos generados",
+              "description": "Cuatro variantes de video materializadas en orden estable."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL del proyecto de Vibes utilizado."
+            }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerar" },
+            "replace": { "label": "Reemplazar" },
+            "select": { "label": "Seleccionar" },
+            "download": { "label": "Descargar" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": {
+                "title": "Perfil de cuenta",
+                "description": "Alias estable del perfil dedicado de Vibes."
+              },
+              "fallbackAccountProfiles": {
+                "title": "Perfiles alternativos",
+                "description": "Aliases ordenados de otros perfiles preparados."
+              },
+              "projectMode": {
+                "title": "Modo del proyecto",
+                "description": "Crea un proyecto nuevo o reutiliza uno existente validado.",
+                "options": [
+                  { "value": "auto", "label": "Automático" },
+                  { "value": "new", "label": "Proyecto nuevo" },
+                  { "value": "existing", "label": "Proyecto existente" }
+                ]
+              },
+              "projectUrl": {
+                "title": "URL del proyecto",
+                "description": "Obligatoria cuando el modo es Proyecto existente."
+              },
+              "resolution": {
+                "title": "Resolución",
+                "description": "Resolución de salida utilizada por Vibes.",
+                "options": [
+                  { "value": "480p", "label": "480p" },
+                  { "value": "720p", "label": "720p" }
+                ]
+              },
+              "startMinimized": {
+                "title": "Iniciar Chrome minimizado",
+                "description": "Mantiene la automatización rutinaria en segundo plano."
+              }
+            }
+          }
+        },
+        "generate-video-with-elements-in-browser": {
+          "name": "Generar video con Elementos en Vibes",
+          "description": "Genera cuatro variantes de video preservando los roles Personaje, Escena y Estilo.",
+          "inputPorts": {
+            "prompts": {
+              "label": "Prompts de video",
+              "description": "Un prompt o una lista ordenada de prompts."
+            },
+            "character_reference": {
+              "label": "Referencia de personaje",
+              "description": "Una imagen opcional de Personaje. Se rechaza una segunda imagen."
+            },
+            "scene_reference": {
+              "label": "Referencia de escena",
+              "description": "Una imagen opcional de Escena. Se rechaza una segunda imagen."
+            },
+            "style_references": {
+              "label": "Referencias de estilo",
+              "description": "Hasta seis imágenes opcionales de Estilo."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL opcional de un proyecto existente de Vibes."
+            }
+          },
+          "outputPorts": {
+            "videos": {
+              "label": "Videos generados",
+              "description": "Cuatro variantes de video materializadas en orden estable."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL del proyecto de Vibes utilizado."
+            }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerar" },
+            "replace": { "label": "Reemplazar" },
+            "select": { "label": "Seleccionar" },
+            "download": { "label": "Descargar" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": {
+                "title": "Perfil de cuenta",
+                "description": "Alias estable del perfil dedicado de Vibes."
+              },
+              "fallbackAccountProfiles": {
+                "title": "Perfiles alternativos",
+                "description": "Aliases ordenados de otros perfiles preparados."
+              },
+              "projectMode": {
+                "title": "Modo del proyecto",
+                "description": "Crea un proyecto nuevo o reutiliza uno existente validado.",
+                "options": [
+                  { "value": "auto", "label": "Automático" },
+                  { "value": "new", "label": "Proyecto nuevo" },
+                  { "value": "existing", "label": "Proyecto existente" }
+                ]
+              },
+              "projectUrl": {
+                "title": "URL del proyecto",
+                "description": "Obligatoria cuando el modo es Proyecto existente."
+              },
+              "resolution": {
+                "title": "Resolución",
+                "description": "Resolución de salida utilizada por Vibes.",
+                "options": [
+                  { "value": "480p", "label": "480p" },
+                  { "value": "720p", "label": "720p" }
+                ]
+              },
+              "startMinimized": {
+                "title": "Iniciar Chrome minimizado",
+                "description": "Mantiene la automatización rutinaria en segundo plano."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "capabilities": [
+    {
+      "id": "generate-images-in-browser",
+      "name": "Gerar imagens no Vibes",
+      "description": "Gera quatro variantes de imagem 9:16 para cada prompt.",
+      "operator": "IA",
+      "instructionUsage": "optional",
+      "promptPreview": { "template": "{{BLOCK_INSTRUCTIONS}}\n\n{{INPUT:prompts}}" },
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["thumbnail", "assets"],
+      "itemActions": [
+        { "action": "regenerate" },
+        { "action": "replace" },
+        { "action": "select" },
+        { "action": "download" }
+      ],
+      "inputPorts": [
+        {
+          "key": "prompts",
+          "label": "Prompts",
+          "description": "Um prompt ou uma lista ordenada de prompts.",
+          "acceptedTypes": ["text", "textarea", "list"],
+          "required": true,
+          "multiple": true
+        },
+        {
+          "key": "character_reference",
+          "label": "Referência de personagem",
+          "description": "Uma imagem opcional de personagem.",
+          "acceptedTypes": ["image", "file"],
+          "required": false,
+          "multiple": false,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/png", "image/jpeg", "image/webp"]
+          }
+        },
+        {
+          "key": "scene_reference",
+          "label": "Referência de cena",
+          "description": "Uma imagem opcional de cena.",
+          "acceptedTypes": ["image", "file"],
+          "required": false,
+          "multiple": false,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/png", "image/jpeg", "image/webp"]
+          }
+        },
+        {
+          "key": "style_references",
+          "label": "Referências de estilo",
+          "description": "Imagens opcionais agrupadas em um componente de estilo.",
+          "acceptedTypes": ["image", "file", "files"],
+          "required": false,
+          "multiple": true,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/png", "image/jpeg", "image/webp"]
+          }
+        },
+        {
+          "key": "project_url",
+          "label": "URL do projeto",
+          "description": "URL opcional de um projeto existente do Vibes.",
+          "acceptedTypes": ["url"],
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "images",
+          "label": "Imagens geradas",
+          "description": "Quatro imagens materializadas em ordem estável de variante.",
+          "producedTypes": ["files"],
+          "required": true,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/png", "image/jpeg", "image/webp"]
+          }
+        },
+        {
+          "key": "project_url",
+          "label": "URL do projeto",
+          "description": "URL do projeto do Vibes utilizado.",
+          "producedTypes": ["url"],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": ["text", "textarea", "list", "image", "file", "files", "url"],
+      "producedOutputTypes": ["files", "url"],
+      "execution": {
+        "mode": "async",
+        "defaultTimeoutMs": 30000,
+        "supportsCancellation": true,
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "mode": "sequential",
+          "inputPort": "prompts",
+          "outputPort": "images"
+        }
+      },
+      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "cost": { "model": "unknown", "estimateSupported": false },
+      "dataPolicy": { "sendsDataToThirdParties": true, "providers": ["Vibes web"] },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "accountProfile": {
+            "type": "string",
+            "title": "Perfil da conta",
+            "description": "Alias estável do perfil dedicado do Vibes.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "default": "default"
+          },
+          "fallbackAccountProfiles": {
+            "type": "array",
+            "title": "Perfis alternativos",
+            "description": "Aliases ordenados de outros perfis preparados.",
+            "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+            "maxItems": 10,
+            "uniqueItems": true,
+            "default": []
+          },
+          "projectMode": {
+            "type": "string",
+            "title": "Modo do projeto",
+            "description": "Cria um projeto novo ou reutiliza um projeto existente validado.",
+            "default": "auto",
+            "oneOf": [
+              { "const": "auto", "title": "Automático" },
+              { "const": "new", "title": "Projeto novo" },
+              { "const": "existing", "title": "Projeto existente" }
+            ]
+          },
+          "projectUrl": {
+            "type": "string",
+            "title": "URL do projeto",
+            "description": "Obrigatória quando o modo é Projeto existente.",
+            "default": ""
+          },
+          "startMinimized": {
+            "type": "boolean",
+            "title": "Iniciar Chrome minimizado",
+            "description": "Mantém a automação rotineira em segundo plano.",
+            "default": true
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "images": { "type": "array", "minItems": 4, "maxItems": 4 },
+          "project_url": { "type": "string", "format": "uri" }
+        },
+        "required": ["images", "project_url"]
+      }
+    },
+    {
+      "id": "animate-frame-in-browser",
+      "name": "Animar quadros no Vibes",
+      "description": "Gera quatro variantes de vídeo a partir de um quadro inicial e um quadro final opcional.",
+      "operator": "IA",
+      "instructionUsage": "optional",
+      "promptPreview": { "template": "{{BLOCK_INSTRUCTIONS}}\n\n{{INPUT:prompts}}" },
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["assets"],
+      "itemActions": [
+        { "action": "regenerate" },
+        { "action": "replace" },
+        { "action": "select" },
+        { "action": "download" }
+      ],
+      "inputPorts": [
+        {
+          "key": "initial_frames",
+          "label": "Quadros iniciais",
+          "description": "Um ou vários quadros iniciais processados pela identidade da entrega.",
+          "acceptedTypes": ["image", "file", "files"],
+          "required": true,
+          "multiple": true,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/png", "image/jpeg", "image/webp"]
+          }
+        },
+        {
+          "key": "final_frames",
+          "label": "Quadros finais",
+          "description": "Quadros finais opcionais alinhados pela identidade da entrega.",
+          "acceptedTypes": ["image", "file", "files"],
+          "required": false,
+          "multiple": true,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/png", "image/jpeg", "image/webp"]
+          }
+        },
+        {
+          "key": "prompts",
+          "label": "Prompts de movimento",
+          "description": "Um prompt ou prompts alinhados pela identidade da entrega.",
+          "acceptedTypes": ["text", "textarea", "list"],
+          "required": true,
+          "multiple": true
+        },
+        {
+          "key": "style_references",
+          "label": "Referências de estilo",
+          "description": "Imagens de estilo compartilhadas opcionais.",
+          "acceptedTypes": ["image", "file", "files"],
+          "required": false,
+          "multiple": true,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/png", "image/jpeg", "image/webp"]
+          }
+        },
+        {
+          "key": "project_url",
+          "label": "URL do projeto",
+          "description": "URL opcional de um projeto existente do Vibes.",
+          "acceptedTypes": ["url"],
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "videos",
+          "label": "Vídeos gerados",
+          "description": "Quatro variantes de vídeo materializadas em ordem estável.",
+          "producedTypes": ["files"],
+          "required": true,
+          "presentation": {
+            "renderer": "video-player",
+            "itemType": "video",
+            "acceptedMimeTypes": ["video/mp4", "video/webm"]
+          }
+        },
+        {
+          "key": "project_url",
+          "label": "URL do projeto",
+          "description": "URL do projeto do Vibes utilizado.",
+          "producedTypes": ["url"],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": ["text", "textarea", "list", "image", "file", "files", "url"],
+      "producedOutputTypes": ["files", "url"],
+      "execution": {
+        "mode": "async",
+        "defaultTimeoutMs": 30000,
+        "supportsCancellation": true,
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "mode": "sequential",
+          "inputPort": "initial_frames",
+          "outputPort": "videos"
+        }
+      },
+      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "cost": { "model": "unknown", "estimateSupported": false },
+      "dataPolicy": { "sendsDataToThirdParties": true, "providers": ["Vibes web"] },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "accountProfile": {
+            "type": "string",
+            "title": "Perfil da conta",
+            "description": "Alias estável do perfil dedicado do Vibes.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "default": "default"
+          },
+          "fallbackAccountProfiles": {
+            "type": "array",
+            "title": "Perfis alternativos",
+            "description": "Aliases ordenados de outros perfis preparados.",
+            "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+            "maxItems": 10,
+            "uniqueItems": true,
+            "default": []
+          },
+          "projectMode": {
+            "type": "string",
+            "title": "Modo do projeto",
+            "description": "Cria um projeto novo ou reutiliza um projeto existente validado.",
+            "default": "auto",
+            "oneOf": [
+              { "const": "auto", "title": "Automático" },
+              { "const": "new", "title": "Projeto novo" },
+              { "const": "existing", "title": "Projeto existente" }
+            ]
+          },
+          "projectUrl": {
+            "type": "string",
+            "title": "URL do projeto",
+            "description": "Obrigatória quando o modo é Projeto existente.",
+            "default": ""
+          },
+          "resolution": {
+            "type": "string",
+            "title": "Resolução",
+            "description": "Resolução de saída usada pelo Vibes.",
+            "default": "720p",
+            "oneOf": [
+              { "const": "480p", "title": "480p" },
+              { "const": "720p", "title": "720p" }
+            ]
+          },
+          "startMinimized": {
+            "type": "boolean",
+            "title": "Iniciar Chrome minimizado",
+            "description": "Mantém a automação rotineira em segundo plano.",
+            "default": true
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "videos": { "type": "array", "minItems": 4, "maxItems": 4 },
+          "project_url": { "type": "string", "format": "uri" }
+        },
+        "required": ["videos", "project_url"]
+      }
+    },
+    {
+      "id": "generate-video-with-elements-in-browser",
+      "name": "Gerar vídeo com Elementos no Vibes",
+      "description": "Gera quatro variantes de vídeo preservando os papéis Personagem, Cena e Estilo.",
+      "operator": "IA",
+      "instructionUsage": "optional",
+      "promptPreview": { "template": "{{BLOCK_INSTRUCTIONS}}\n\n{{INPUT:prompts}}" },
+      "blockTypes": ["CRIAR"],
+      "processTypes": ["assets"],
+      "itemActions": [
+        { "action": "regenerate" },
+        { "action": "replace" },
+        { "action": "select" },
+        { "action": "download" }
+      ],
+      "inputPorts": [
+        {
+          "key": "prompts",
+          "label": "Prompts de vídeo",
+          "description": "Um prompt ou uma lista ordenada de prompts.",
+          "acceptedTypes": ["text", "textarea", "list"],
+          "required": true,
+          "multiple": true
+        },
+        {
+          "key": "character_reference",
+          "label": "Referência de personagem",
+          "description": "Uma imagem opcional de Personagem. Uma segunda imagem é rejeitada.",
+          "acceptedTypes": ["image", "file"],
+          "required": false,
+          "multiple": false,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/png", "image/jpeg", "image/webp"]
+          }
+        },
+        {
+          "key": "scene_reference",
+          "label": "Referência de cena",
+          "description": "Uma imagem opcional de Cena. Uma segunda imagem é rejeitada.",
+          "acceptedTypes": ["image", "file"],
+          "required": false,
+          "multiple": false,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/png", "image/jpeg", "image/webp"]
+          }
+        },
+        {
+          "key": "style_references",
+          "label": "Referências de estilo",
+          "description": "Até seis imagens opcionais de Estilo.",
+          "acceptedTypes": ["image", "file", "files"],
+          "required": false,
+          "multiple": true,
+          "presentation": {
+            "renderer": "image-gallery",
+            "itemType": "image",
+            "acceptedMimeTypes": ["image/png", "image/jpeg", "image/webp"]
+          }
+        },
+        {
+          "key": "project_url",
+          "label": "URL do projeto",
+          "description": "URL opcional de um projeto existente do Vibes.",
+          "acceptedTypes": ["url"],
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "videos",
+          "label": "Vídeos gerados",
+          "description": "Quatro variantes de vídeo materializadas em ordem estável.",
+          "producedTypes": ["files"],
+          "required": true,
+          "presentation": {
+            "renderer": "video-player",
+            "itemType": "video",
+            "acceptedMimeTypes": ["video/mp4", "video/webm"]
+          }
+        },
+        {
+          "key": "project_url",
+          "label": "URL do projeto",
+          "description": "URL do projeto do Vibes utilizado.",
+          "producedTypes": ["url"],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": ["text", "textarea", "list", "image", "file", "files", "url"],
+      "producedOutputTypes": ["files", "url"],
+      "execution": {
+        "mode": "async",
+        "defaultTimeoutMs": 30000,
+        "supportsCancellation": true,
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "mode": "sequential",
+          "inputPort": "prompts",
+          "outputPort": "videos"
+        }
+      },
+      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "cost": { "model": "unknown", "estimateSupported": false },
+      "dataPolicy": { "sendsDataToThirdParties": true, "providers": ["Vibes web"] },
+      "blockConfigSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "accountProfile": {
+            "type": "string",
+            "title": "Perfil da conta",
+            "description": "Alias estável do perfil dedicado do Vibes.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "default": "default"
+          },
+          "fallbackAccountProfiles": {
+            "type": "array",
+            "title": "Perfis alternativos",
+            "description": "Aliases ordenados de outros perfis preparados.",
+            "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+            "maxItems": 10,
+            "uniqueItems": true,
+            "default": []
+          },
+          "projectMode": {
+            "type": "string",
+            "title": "Modo do projeto",
+            "description": "Cria um projeto novo ou reutiliza um projeto existente validado.",
+            "default": "auto",
+            "oneOf": [
+              { "const": "auto", "title": "Automático" },
+              { "const": "new", "title": "Projeto novo" },
+              { "const": "existing", "title": "Projeto existente" }
+            ]
+          },
+          "projectUrl": {
+            "type": "string",
+            "title": "URL do projeto",
+            "description": "Obrigatória quando o modo é Projeto existente.",
+            "default": ""
+          },
+          "resolution": {
+            "type": "string",
+            "title": "Resolução",
+            "description": "Resolução de saída usada pelo Vibes.",
+            "default": "720p",
+            "oneOf": [
+              { "const": "480p", "title": "480p" },
+              { "const": "720p", "title": "720p" }
+            ]
+          },
+          "startMinimized": {
+            "type": "boolean",
+            "title": "Iniciar Chrome minimizado",
+            "description": "Mantém a automação rotineira em segundo plano.",
+            "default": true
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "videos": { "type": "array", "minItems": 4, "maxItems": 4 },
+          "project_url": { "type": "string", "format": "uri" }
+        },
+        "required": ["videos", "project_url"]
+      }
+    }
+  ]
+}

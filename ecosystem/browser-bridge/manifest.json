@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "ContentFlow Browser Bridge",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "description": "Ponte comum dos plugins de automação de navegador compatíveis com o ContentFlow.",
-  "permissions": ["tabs", "storage", "debugger"],
+  "permissions": ["tabs", "storage", "debugger", "alarms", "power"],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://claude.ai/*",
@@ -13,7 +13,8 @@
     "https://labs.google/*",
     "https://meta.ai/*",
     "https://www.meta.ai/*",
-    "https://playground.microsoft.ai/*"
+    "https://playground.microsoft.ai/*",
+    "https://vibes.ai/*"
   ],
   "background": {
     "service_worker": "service-worker.js"
@@ -29,7 +30,8 @@
         "https://labs.google/*",
         "https://meta.ai/*",
         "https://www.meta.ai/*",
-        "https://playground.microsoft.ai/*"
+        "https://playground.microsoft.ai/*",
+        "https://vibes.ai/*"
       ],
       "js": ["content-script.js"],
       "run_at": "document_idle",

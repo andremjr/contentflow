@@ -2,7 +2,7 @@
 
 Este é o menor exemplo funcional de um plugin independente. Ele recebe `inputs.content`, grava um arquivo na pasta concedida por `services.getOutputPath()` e devolve o artifact pelo contrato universal.
 
-Para criar outro plugin ou adaptar uma automação existente, veja [`docs/quickstart.md`](../../../docs/quickstart.md).
+Para criar outro plugin ou adaptar uma automação existente, veja [`docs/ecosystem/quickstart.md`](../../../../docs/ecosystem/quickstart.md).
 
 Para experimentar:
 

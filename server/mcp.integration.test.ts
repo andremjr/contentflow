@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import os from "node:os";
@@ -259,7 +259,14 @@ test(
       assert.deepEqual(channels[0].processOrder, processOrder);
     } finally {
       await client?.close().catch(() => undefined);
-      apiProcess.kill();
+      if (process.platform === "win32" && apiProcess.pid) {
+        spawnSync("taskkill", ["/PID", String(apiProcess.pid), "/T", "/F"], {
+          windowsHide: true,
+          stdio: "ignore",
+        });
+      } else {
+        apiProcess.kill();
+      }
       await new Promise<void>((resolve) => {
         if (apiProcess.exitCode !== null) resolve();
         else apiProcess.once("exit", () => resolve());
@@ -269,7 +276,7 @@ test(
         rmSync(resolvedTestDirectory, {
           recursive: true,
           force: true,
-          maxRetries: 5,
+          maxRetries: 30,
           retryDelay: 100,
         });
       }

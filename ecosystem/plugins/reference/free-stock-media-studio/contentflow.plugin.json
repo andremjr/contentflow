@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/ecosystem/docs/schemas/contentflow-plugin-v1.schema.json",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
   "id": "local.contentflow.free-stock-media-studio",
   "name": "Free Stock Media Studio",
@@ -8,9 +8,9 @@
   "author": "André Marinho Jr.",
   "license": "Proprietary",
   "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
-  "minCoreVersion": "0.5.7",
+  "minCoreVersion": "1.1.1",
   "entrypoint": "handler.mjs",
-  "permissions": ["network", "filesystem:write"],
+  "permissions": ["network", "filesystem:read", "filesystem:write"],
   "networkHosts": [
     "api.pexels.com",
     "images.pexels.com",
@@ -30,6 +30,12 @@
     "images-assets.nasa.gov"
   ],
   "secretKeys": ["PEXELS_API_KEY", "PIXABAY_API_KEY", "UNSPLASH_ACCESS_KEY", "COVERR_API_KEY"],
+  "optionalSecretKeys": [
+    "PEXELS_API_KEY",
+    "PIXABAY_API_KEY",
+    "UNSPLASH_ACCESS_KEY",
+    "COVERR_API_KEY"
+  ],
   "deliveryTypes": ["image", "video", "processing"],
   "settingsSchema": {
     "type": "object",
@@ -50,7 +56,7 @@
       "maxVideoBytes": {
         "type": "integer",
         "minimum": 1048576,
-        "maximum": 1073741824,
+        "maximum": 536870912,
         "default": 536870912
       },
       "diagnosticFixture": {
@@ -63,6 +69,8 @@
   "capabilities": [
     {
       "id": "search-stock-images",
+      "name": "Buscar imagens stock",
+      "description": "Pesquisa imagens nas fontes disponíveis nesta conexão e devolve candidatos estruturados para validação.",
       "operator": "Código",
       "blockTypes": ["BUSCAR"],
       "processTypes": ["thumbnail", "assets", "editing"],
@@ -105,6 +113,13 @@
         "sendsDataToThirdParties": true,
         "providers": ["Pexels", "Pixabay", "Unsplash", "Openverse", "Wikimedia Commons", "NASA"]
       },
+      "configurationOptions": [
+        {
+          "property": "provider",
+          "providerId": "available-stock-providers",
+          "cacheTtlMs": 0
+        }
+      ],
       "blockConfigSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -112,22 +127,39 @@
           "provider": {
             "type": "string",
             "default": "all",
-            "enum": ["all", "pexels", "pixabay", "unsplash", "openverse", "wikimedia", "nasa"]
+            "title": "Fonte",
+            "description": "Pexels, Pixabay e Unsplash exigem chave. Openverse, Wikimedia Commons e NASA funcionam sem chave."
+          },
+          "resultsPerProvider": {
+            "type": "integer",
+            "title": "Quantidade desejada",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 20
           },
           "resultLimitMode": {
             "type": "string",
-            "default": "provider_max",
             "enum": ["provider_max", "custom"],
-            "description": "provider_max usa o maior page size aceito por cada API; custom aplica o limite abaixo sem ultrapassar o teto do provedor."
+            "visibleWhen": { "property": "provider", "values": ["__legacy_pagination__"] }
           },
-          "resultsPerProvider": { "type": "integer", "minimum": 1, "maximum": 500, "default": 20 },
-          "page": { "type": "integer", "minimum": 1, "maximum": 100, "default": 1 },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "visibleWhen": { "property": "provider", "values": ["__legacy_pagination__"] }
+          },
           "orientation": {
             "type": "string",
+            "title": "Orientação",
             "default": "any",
-            "enum": ["any", "landscape", "portrait", "square"]
+            "oneOf": [
+              { "const": "any", "title": "Qualquer" },
+              { "const": "landscape", "title": "Paisagem" },
+              { "const": "portrait", "title": "Retrato" },
+              { "const": "square", "title": "Quadrada" }
+            ]
           },
-          "safeSearch": { "type": "boolean", "default": true }
+          "safeSearch": { "type": "boolean", "title": "Busca segura", "default": true }
         }
       },
       "outputSchema": {
@@ -138,6 +170,8 @@
     },
     {
       "id": "search-stock-videos",
+      "name": "Buscar vídeos stock",
+      "description": "Pesquisa vídeos nas fontes disponíveis nesta conexão e devolve candidatos estruturados para validação.",
       "operator": "Código",
       "blockTypes": ["BUSCAR"],
       "processTypes": ["assets", "editing"],
@@ -180,6 +214,13 @@
         "sendsDataToThirdParties": true,
         "providers": ["Pexels", "Pixabay", "Coverr", "Wikimedia Commons", "NASA"]
       },
+      "configurationOptions": [
+        {
+          "property": "provider",
+          "providerId": "available-stock-providers",
+          "cacheTtlMs": 0
+        }
+      ],
       "blockConfigSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -187,22 +228,38 @@
           "provider": {
             "type": "string",
             "default": "all",
-            "enum": ["all", "pexels", "pixabay", "coverr", "wikimedia", "nasa"]
+            "title": "Fonte",
+            "description": "Pexels, Pixabay e Coverr exigem chave. Wikimedia Commons e NASA funcionam sem chave."
+          },
+          "resultsPerProvider": {
+            "type": "integer",
+            "title": "Quantidade desejada",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 20
           },
           "resultLimitMode": {
             "type": "string",
-            "default": "provider_max",
             "enum": ["provider_max", "custom"],
-            "description": "provider_max usa o maior page size aceito por cada API; custom aplica o limite abaixo sem ultrapassar o teto do provedor."
+            "visibleWhen": { "property": "provider", "values": ["__legacy_pagination__"] }
           },
-          "resultsPerProvider": { "type": "integer", "minimum": 1, "maximum": 500, "default": 20 },
-          "page": { "type": "integer", "minimum": 1, "maximum": 100, "default": 1 },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "visibleWhen": { "property": "provider", "values": ["__legacy_pagination__"] }
+          },
           "orientation": {
             "type": "string",
+            "title": "Orientação",
             "default": "any",
-            "enum": ["any", "landscape", "portrait"]
+            "oneOf": [
+              { "const": "any", "title": "Qualquer" },
+              { "const": "landscape", "title": "Paisagem" },
+              { "const": "portrait", "title": "Retrato" }
+            ]
           },
-          "safeSearch": { "type": "boolean", "default": true }
+          "safeSearch": { "type": "boolean", "title": "Busca segura", "default": true }
         }
       },
       "outputSchema": {
@@ -232,7 +289,7 @@
         {
           "key": "selected_assets",
           "label": "Asset selecionado por trecho",
-          "description": "Um único asset escolhido automaticamente por briefing, com brief_id, timestamps, qualidade, consulta usada, licença e proveniência.",
+          "description": "Um candidato ranqueado ou um resultado vazio válido por briefing, sempre com brief_id, timestamps e diagnóstico seguro.",
           "producedTypes": ["records"],
           "required": true,
           "presentation": { "renderer": "cards", "itemType": "record" }
@@ -536,5 +593,161 @@
         "required": ["video", "provenance"]
       }
     }
-  ]
+  ],
+  "localizations": {
+    "en": {
+      "capabilities": {
+        "search-stock-images": {
+          "name": "Search stock images",
+          "description": "Searches the sources available for this connection and returns structured image candidates for validation.",
+          "inputPorts": {
+            "query": { "label": "Search terms" }
+          },
+          "outputPorts": {
+            "results": { "label": "Images found" },
+            "warnings": { "label": "Provider warnings" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "provider": {
+                "title": "Source",
+                "description": "Pexels, Pixabay, and Unsplash require an API key. Openverse, Wikimedia Commons, and NASA work without a key."
+              },
+              "resultsPerProvider": { "title": "Desired quantity" },
+              "orientation": {
+                "title": "Orientation",
+                "options": [
+                  { "value": "any", "label": "Any" },
+                  { "value": "landscape", "label": "Landscape" },
+                  { "value": "portrait", "label": "Portrait" },
+                  { "value": "square", "label": "Square" }
+                ]
+              },
+              "safeSearch": { "title": "Safe search" }
+            }
+          }
+        },
+        "search-stock-videos": {
+          "name": "Search stock videos",
+          "description": "Searches the sources available for this connection and returns structured video candidates for validation.",
+          "inputPorts": {
+            "query": { "label": "Search terms" }
+          },
+          "outputPorts": {
+            "results": { "label": "Videos found" },
+            "warnings": { "label": "Provider warnings" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "provider": {
+                "title": "Source",
+                "description": "Pexels, Pixabay, and Coverr require an API key. Wikimedia Commons and NASA work without a key."
+              },
+              "resultsPerProvider": { "title": "Desired quantity" },
+              "orientation": {
+                "title": "Orientation",
+                "options": [
+                  { "value": "any", "label": "Any" },
+                  { "value": "landscape", "label": "Landscape" },
+                  { "value": "portrait", "label": "Portrait" }
+                ]
+              },
+              "safeSearch": { "title": "Safe search" }
+            }
+          }
+        },
+        "search-stock-by-briefs": {
+          "inputPorts": {
+            "asset_briefs": {
+              "label": "Visual briefs by segment",
+              "description": "Records generated from the transcript. Each item must contain brief_id, timestamps, and primary_query; fallbacks, media preference, orientation, and negative terms are optional."
+            }
+          },
+          "outputPorts": {
+            "selected_assets": {
+              "label": "Selected asset by segment",
+              "description": "One ranked candidate or a valid empty result per brief, always including brief_id, timestamps, and a safe diagnostic."
+            }
+          }
+        }
+      }
+    },
+    "es": {
+      "capabilities": {
+        "search-stock-images": {
+          "name": "Buscar imágenes de stock",
+          "description": "Busca en las fuentes disponibles para esta conexión y devuelve candidatos de imagen estructurados para validación.",
+          "inputPorts": {
+            "query": { "label": "Términos de búsqueda" }
+          },
+          "outputPorts": {
+            "results": { "label": "Imágenes encontradas" },
+            "warnings": { "label": "Avisos de los proveedores" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "provider": {
+                "title": "Fuente",
+                "description": "Pexels, Pixabay y Unsplash requieren una clave de API. Openverse, Wikimedia Commons y NASA funcionan sin clave."
+              },
+              "resultsPerProvider": { "title": "Cantidad deseada" },
+              "orientation": {
+                "title": "Orientación",
+                "options": [
+                  { "value": "any", "label": "Cualquiera" },
+                  { "value": "landscape", "label": "Horizontal" },
+                  { "value": "portrait", "label": "Vertical" },
+                  { "value": "square", "label": "Cuadrada" }
+                ]
+              },
+              "safeSearch": { "title": "Búsqueda segura" }
+            }
+          }
+        },
+        "search-stock-videos": {
+          "name": "Buscar videos de stock",
+          "description": "Busca en las fuentes disponibles para esta conexión y devuelve candidatos de video estructurados para validación.",
+          "inputPorts": {
+            "query": { "label": "Términos de búsqueda" }
+          },
+          "outputPorts": {
+            "results": { "label": "Videos encontrados" },
+            "warnings": { "label": "Avisos de los proveedores" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "provider": {
+                "title": "Fuente",
+                "description": "Pexels, Pixabay y Coverr requieren una clave de API. Wikimedia Commons y NASA funcionan sin clave."
+              },
+              "resultsPerProvider": { "title": "Cantidad deseada" },
+              "orientation": {
+                "title": "Orientación",
+                "options": [
+                  { "value": "any", "label": "Cualquiera" },
+                  { "value": "landscape", "label": "Horizontal" },
+                  { "value": "portrait", "label": "Vertical" }
+                ]
+              },
+              "safeSearch": { "title": "Búsqueda segura" }
+            }
+          }
+        },
+        "search-stock-by-briefs": {
+          "inputPorts": {
+            "asset_briefs": {
+              "label": "Briefings visuales por segmento",
+              "description": "Registros generados a partir de la transcripción. Cada elemento debe contener brief_id, tiempos y primary_query; los fallbacks, la preferencia de medios, la orientación y los términos negativos son opcionales."
+            }
+          },
+          "outputPorts": {
+            "selected_assets": {
+              "label": "Asset seleccionado por segmento",
+              "description": "Un candidato clasificado o un resultado vacío válido por briefing, siempre con brief_id, tiempos y un diagnóstico seguro."
+            }
+          }
+        }
+      }
+    }
+  }
 }

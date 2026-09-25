@@ -6,10 +6,12 @@ import {
   appendOrchestratedOutput,
   blockExecutionItemsForJob,
   completeCurrentOrchestratedItem,
+  belongsToSameItemActionGroup,
   declaredItemOrchestration,
   failCurrentOrchestratedItem,
   invocationRequestForJob,
   itemProgressForJob,
+  itemActionRequestForJob,
   legacyItemOrchestration,
   resumedItemOrchestration,
   resumedItemOrchestrationFromItems,
@@ -281,4 +283,85 @@ test("troca continuação por contexto quando o fallback muda de perfil", () => 
     fallbackContext: "Resultado anterior",
     continuationMessage: "Ajuste somente o contraste.",
   });
+});
+
+test("regenera uma única variante por item_action, preservando o lote, a posição e a tentativa", () => {
+  const job = createPersistentPluginJob({
+    pluginId: "test.browser",
+    pluginVersion: "1.0.0",
+    request,
+    timeoutMs: 60_000,
+    itemOrchestration: declaredItemOrchestration(capability, request),
+  });
+  const batchItem = job.itemOrchestration!.workItems![1]!;
+  const variant = {
+    id: "core-variant-b",
+    order: 3,
+    input: "two",
+    output: "image-b",
+    status: "completed" as const,
+    attempt: 1,
+    attempts: [],
+    pluginCorrelation: {
+      key: "provider-generation",
+      variantKey: "candidate-b",
+      batchItemId: batchItem.id,
+      outputPort: "images",
+      outputKey: "images",
+    },
+  };
+  const action = itemActionRequestForJob({
+    job,
+    item: variant,
+    outputPort: "images",
+    attempt: 2,
+    traceId: "action-trace",
+  });
+
+  assert.deepEqual(action.invocation, {
+    mode: "item_action",
+    action: "regenerate",
+    itemId: "core-variant-b",
+    outputPort: "images",
+  });
+  assert.deepEqual(action.batch, { itemId: batchItem.id, index: 1, total: 3 });
+  assert.deepEqual(action.itemAction, {
+    key: "provider-generation",
+    variantKey: "candidate-b",
+    input: "two",
+    output: "image-b",
+    attempt: 2,
+  });
+  assert.equal(action.attempt, 2);
+});
+
+test("seleção local não desloca variantes de outro item de lote", () => {
+  const first = {
+    id: "variant-a1",
+    order: 0,
+    input: "cidade",
+    status: "completed" as const,
+    attempt: 1,
+    attempts: [],
+    pluginCorrelation: {
+      key: "provider",
+      variantKey: "a",
+      batchItemId: "batch-city",
+      outputPort: "images",
+      outputKey: "images",
+    },
+  };
+  const sibling = {
+    ...first,
+    id: "variant-b1",
+    pluginCorrelation: { ...first.pluginCorrelation, variantKey: "b" },
+  };
+  const otherBatch = {
+    ...first,
+    id: "variant-a2",
+    pluginCorrelation: { ...first.pluginCorrelation, batchItemId: "batch-forest" },
+  };
+
+  assert.equal(belongsToSameItemActionGroup(first, sibling), true);
+  assert.equal(belongsToSameItemActionGroup(first, otherBatch), false);
 });

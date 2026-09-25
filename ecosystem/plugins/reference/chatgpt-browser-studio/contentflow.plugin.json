@@ -1,10 +1,88 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/ecosystem/docs/schemas/contentflow-plugin-v1.schema.json",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
   "id": "local.contentflow.chatgpt-browser-studio",
   "name": "ChatGPT Browser Studio",
   "version": "1.0.14",
   "description": "Automação modular do ChatGPT web para criar, pesquisar, escolher, validar, analisar arquivos e gerar imagens.",
+  "localizations": {
+    "en": {
+      "description": "Modular ChatGPT web automation for creating, researching, choosing, validating, analyzing files, and generating images.",
+      "profileSetup": {
+        "label": "Save profile",
+        "description": "Opens ChatGPT for sign-in and closes Chrome after validating the chat area."
+      },
+      "capabilities": {
+        "generate-image-in-browser": {
+          "name": "Generate images",
+          "description": "Generates one or more images in ChatGPT and imports every new valid variant.",
+          "inputPorts": {
+            "prompt": { "label": "Image prompt" },
+            "references": { "label": "Reference images" }
+          },
+          "outputPorts": {
+            "image": { "label": "Generated image" },
+            "images": { "label": "Generated images" },
+            "description": { "label": "Generation description" }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerate" },
+            "replace": { "label": "Replace" },
+            "select": { "label": "Select" },
+            "download": { "label": "Download" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "fallbackAccountProfiles": {
+                "title": "Fallback profiles",
+                "description": "Additional aliases, one per line, in order. The system automatically advances to the next saved profile whenever execution fails."
+              },
+              "accountProfile": { "title": "Account profile" },
+              "startMinimized": { "title": "Start minimized" }
+            }
+          }
+        }
+      }
+    },
+    "es": {
+      "description": "Automatización modular de ChatGPT web para crear, investigar, elegir, validar, analizar archivos y generar imágenes.",
+      "profileSetup": {
+        "label": "Guardar perfil",
+        "description": "Abre ChatGPT para iniciar sesión y cierra Chrome después de validar el área del chat."
+      },
+      "capabilities": {
+        "generate-image-in-browser": {
+          "name": "Generar imágenes",
+          "description": "Genera una o más imágenes en ChatGPT e importa cada variante nueva válida.",
+          "inputPorts": {
+            "prompt": { "label": "Prompt de la imagen" },
+            "references": { "label": "Imágenes de referencia" }
+          },
+          "outputPorts": {
+            "image": { "label": "Imagen generada" },
+            "images": { "label": "Imágenes generadas" },
+            "description": { "label": "Descripción de la generación" }
+          },
+          "itemActions": {
+            "regenerate": { "label": "Regenerar" },
+            "replace": { "label": "Reemplazar" },
+            "select": { "label": "Seleccionar" },
+            "download": { "label": "Descargar" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "fallbackAccountProfiles": {
+                "title": "Perfiles alternativos",
+                "description": "Aliases adicionales, uno por línea y en orden. El sistema avanza automáticamente al siguiente perfil guardado cuando falla la ejecución."
+              },
+              "accountProfile": { "title": "Perfil de la cuenta" },
+              "startMinimized": { "title": "Iniciar minimizado" }
+            }
+          }
+        }
+      }
+    }
+  },
   "author": "André Marinho Jr.",
   "license": "Proprietary",
   "branding": {
@@ -20,6 +98,7 @@
   "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
   "networkHosts": ["chatgpt.com", "files.oaiusercontent.com"],
   "deliveryTypes": ["text", "image", "processing"],
+  "supportsConversationContinuation": true,
   "profileSetup": {
     "configurationKey": "accountProfile",
     "fallbackConfigurationKey": "fallbackAccountProfiles",
@@ -889,7 +968,12 @@
     },
     {
       "id": "generate-image-in-browser",
+      "name": "Gerar imagens",
+      "description": "Gera uma ou mais imagens no ChatGPT e importa cada variante nova válida.",
       "operator": "IA",
+      "promptPreview": {
+        "template": "INSTRUÇÕES DO BLOCO:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO DAS ENTRADAS:\n{{CONTEXT_INPUTS}}"
+      },
       "blockTypes": ["CRIAR"],
       "processTypes": ["thumbnail", "assets"],
       "inputPorts": [
@@ -965,11 +1049,22 @@
         "files"
       ],
       "producedOutputTypes": ["image", "files", "textarea"],
+      "itemActions": [
+        { "action": "regenerate", "label": "Regenerar" },
+        { "action": "replace", "label": "Substituir" },
+        { "action": "select", "label": "Selecionar" },
+        { "action": "download", "label": "Baixar" }
+      ],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,
         "supportsCancellation": true,
-        "maxConcurrency": 1
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "inputPort": "prompt",
+          "outputPort": "images",
+          "mode": "sequential"
+        }
       },
       "sideEffects": ["external_write", "subprocess"],
       "cost": {
@@ -994,11 +1089,13 @@
           },
           "accountProfile": {
             "type": "string",
+            "title": "Perfil da conta",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default"
           },
           "startMinimized": {
             "type": "boolean",
+            "title": "Iniciar minimizado",
             "default": true
           }
         }

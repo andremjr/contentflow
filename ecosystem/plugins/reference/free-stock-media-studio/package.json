@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test test.mjs",
-    "smoke:real": "node real-smoke.mjs"
+    "smoke:real": "node real-smoke.mjs",
+    "e2e:p24": "node scripts/p24-contentflow-e2e.mjs"
   }
 }

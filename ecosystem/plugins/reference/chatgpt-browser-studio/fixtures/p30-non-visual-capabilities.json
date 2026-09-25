@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "capabilities": [
+    {
+      "id": "generate-text-in-browser",
+      "promptBuilder": "text",
+      "resolvedInstruction": "Escreva uma abertura factual em dois parágrafos.",
+      "inputs": {
+        "content": "A missão Apollo 11",
+        "attachments": [
+          {
+            "id": "p30-text-reference",
+            "name": "cronologia.pdf",
+            "url": "staging://p30-text-reference"
+          }
+        ]
+      },
+      "attachmentPort": "attachments",
+      "expectedAttachmentIds": ["p30-text-reference"],
+      "expectedPromptIncludes": [
+        "Escreva uma abertura factual em dois parágrafos.",
+        "A missão Apollo 11",
+        "FORMATO OBRIGATÓRIO"
+      ],
+      "mockResponse": "Primeiro parágrafo.\n\nSegundo parágrafo.",
+      "outputContract": [{ "key": "parts", "type": "list" }],
+      "expectedValues": {
+        "result": "Primeiro parágrafo.\n\nSegundo parágrafo.",
+        "parts": ["Primeiro parágrafo.\n\nSegundo parágrafo."]
+      }
+    },
+    {
+      "id": "search-web-in-browser",
+      "promptBuilder": "search",
+      "resolvedInstruction": "Pesquise fontes primárias sobre o lançamento.",
+      "inputs": {
+        "query": "Apollo 11 lançamento",
+        "context": "Priorize arquivos da NASA."
+      },
+      "expectedPromptIncludes": [
+        "Pesquise fontes primárias sobre o lançamento.",
+        "Apollo 11 lançamento",
+        "Priorize arquivos da NASA."
+      ],
+      "mockResponse": "A missão foi lançada em julho de 1969.",
+      "expectedValues": {
+        "result": "A missão foi lançada em julho de 1969.",
+        "sources": []
+      },
+      "capturedSources": [
+        "https://www.nasa.gov/history/apollo-11-mission-overview/",
+        "https://history.nasa.gov/alsj/a11/a11.html"
+      ]
+    },
+    {
+      "id": "deep-research-in-browser",
+      "promptBuilder": "deep-research",
+      "resolvedInstruction": "Produza um relatório com cronologia e divergências entre fontes.",
+      "inputs": {
+        "query": "Decisões críticas da Apollo 11",
+        "context": [
+          "Compare registros técnicos e históricos.",
+          {
+            "id": "p30-research-brief",
+            "name": "briefing.txt",
+            "url": "staging://p30-research-brief"
+          }
+        ]
+      },
+      "attachmentPort": "context",
+      "expectedAttachmentIds": ["p30-research-brief"],
+      "expectedPromptIncludes": [
+        "Produza um relatório com cronologia e divergências entre fontes.",
+        "Decisões críticas da Apollo 11",
+        "Compare registros técnicos e históricos."
+      ],
+      "mockResponse": "Relatório aprofundado concluído.",
+      "expectedValues": {
+        "result": "Relatório aprofundado concluído.",
+        "sources": []
+      },
+      "capturedSources": ["https://history.nasa.gov/SP-4029/Apollo_11a_Summary.htm"]
+    },
+    {
+      "id": "choose-library-item-in-browser",
+      "promptBuilder": "choose",
+      "resolvedInstruction": "Escolha o enquadramento mais adequado ao tema.",
+      "inputs": {
+        "context": "O vídeo enfatiza risco técnico e tomada de decisão."
+      },
+      "selectedCollection": {
+        "items": [
+          { "id": "angle-risk", "name": "Risco calculado" },
+          { "id": "angle-triumph", "name": "Triunfo coletivo" }
+        ]
+      },
+      "expectedPromptIncludes": [
+        "Escolha o enquadramento mais adequado ao tema.",
+        "angle-risk",
+        "selectedItemId"
+      ],
+      "mockResponse": "{\"selectedItemId\":\"angle-risk\"}",
+      "expectedValues": { "result": "angle-risk" }
+    },
+    {
+      "id": "validate-content-in-browser",
+      "promptBuilder": "validate",
+      "resolvedInstruction": "Valide precisão, clareza e aderência às fontes.",
+      "inputs": {
+        "content": "A Apollo 11 pousou na Lua em julho de 1969.",
+        "criteria": ["datas corretas", "linguagem objetiva"]
+      },
+      "validation": { "mode": "approval" },
+      "expectedPromptIncludes": [
+        "Valide precisão, clareza e aderência às fontes.",
+        "A Apollo 11 pousou na Lua em julho de 1969.",
+        "approved",
+        "rejected"
+      ],
+      "mockResponse": "{\"decision\":\"approved\",\"feedback\":\"Datas e redação conferidas.\"}",
+      "expectedValues": {
+        "decision": "approved",
+        "feedback": "Datas e redação conferidas."
+      }
+    },
+    {
+      "id": "analyze-images-in-browser",
+      "promptBuilder": "analyze-images",
+      "resolvedInstruction": "Compare composição, contraste e legibilidade.",
+      "inputs": {
+        "images": [
+          {
+            "id": "p30-image-a",
+            "name": "thumbnail-a.png",
+            "url": "staging://p30-image-a"
+          },
+          {
+            "id": "p30-image-b",
+            "name": "thumbnail-b.webp",
+            "url": "staging://p30-image-b"
+          }
+        ],
+        "context": "Leitura em telas pequenas."
+      },
+      "attachmentPort": "images",
+      "expectedAttachmentIds": ["p30-image-a", "p30-image-b"],
+      "expectedPromptIncludes": [
+        "Compare composição, contraste e legibilidade.",
+        "Leitura em telas pequenas.",
+        "thumbnail-a.png"
+      ],
+      "mockResponse": "A opção A tem contraste mais forte.",
+      "expectedValues": { "result": "A opção A tem contraste mais forte." }
+    },
+    {
+      "id": "analyze-documents-in-browser",
+      "promptBuilder": "analyze-documents",
+      "resolvedInstruction": "Extraia eventos, datas e responsáveis.",
+      "inputs": {
+        "documents": [
+          {
+            "id": "p30-document-a",
+            "name": "mission-report.pdf",
+            "url": "staging://p30-document-a"
+          },
+          {
+            "id": "p30-document-b",
+            "name": "timeline.csv",
+            "url": "staging://p30-document-b"
+          }
+        ],
+        "context": "Preserve divergências entre os documentos."
+      },
+      "attachmentPort": "documents",
+      "expectedAttachmentIds": ["p30-document-a", "p30-document-b"],
+      "expectedPromptIncludes": [
+        "Extraia eventos, datas e responsáveis.",
+        "Preserve divergências entre os documentos.",
+        "mission-report.pdf"
+      ],
+      "mockResponse": "Eventos e responsáveis extraídos.",
+      "expectedValues": { "result": "Eventos e responsáveis extraídos." }
+    }
+  ],
+  "validationDecisions": [
+    {
+      "mode": "approval",
+      "content": "Texto final",
+      "response": "{\"decision\":\"rejected\",\"feedback\":\"A data precisa de fonte.\"}",
+      "expected": { "decision": "rejected", "feedback": "A data precisa de fonte." }
+    },
+    {
+      "mode": "select_one",
+      "content": ["Opção A", "Opção B", "Opção C"],
+      "response": "{\"selectedIndex\":2,\"feedback\":\"Mais clara.\"}",
+      "expected": { "selected_value": "Opção B", "feedback": "Mais clara." }
+    },
+    {
+      "mode": "select_many",
+      "content": ["Opção A", "Opção B", "Opção C"],
+      "response": "{\"selectedIndices\":[1,3,1],\"feedback\":\"Complementares.\"}",
+      "expected": {
+        "selected_values": ["Opção A", "Opção C"],
+        "feedback": "Complementares."
+      }
+    }
+  ],
+  "conversation": {
+    "id": "https://chatgpt.com/c/12345678-1234-1234-1234-123456789abc",
+    "continuationMessage": "Continue a análise usando o contexto já presente.",
+    "fallbackContext": "CONTEXTO RECUPERADO: resumo da conversa anterior.",
+    "primaryAttachment": {
+      "path": "C:/staging/current.pdf",
+      "name": "current.pdf"
+    },
+    "fallbackAttachment": {
+      "path": "C:/staging/previous.png",
+      "name": "previous.png"
+    }
+  }
+}

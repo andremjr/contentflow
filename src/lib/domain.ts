@@ -110,6 +110,7 @@ export type BlockInputSource =
   | "previous_block"
   | "channel_history"
   | "channel_library"
+  | "runtime"
   | "static";
 
 export type ChannelHistoryEligibility = "completed" | "published";
@@ -384,7 +385,19 @@ export type BlockExecutionItemAttempt = {
 export type BlockExecutionItem = {
   id: string;
   sourceItemId?: string;
+  /** Correlação declarada pelo plugin para um slot incremental desta tentativa. */
+  pluginCorrelation?: {
+    key: string;
+    /** Identidade do item de lote atribuída pelo núcleo, nunca pelo plugin. */
+    batchItemId?: string;
+    /** Chave local da variante dentro do item de lote. */
+    variantKey?: string;
+    outputPort: string;
+    outputKey: string;
+  };
   order: number;
+  /** Seleção editorial local; não altera a ordem nem o valor materializado do item. */
+  selected?: boolean;
   input: BlockExecutionItemValue;
   status: BlockExecutionItemStatus;
   attempt: number;
@@ -397,6 +410,8 @@ export type BlockExecution = {
   blockId: string;
   status: BlockExecutionStatus;
   values: Record<string, RuntimeValue>;
+  /** Valores fornecidos pela interface durante esta execução, sem contaminar o Método. */
+  runtimeInputs?: Record<string, RuntimeValue>;
   attempt?: number;
   retryFeedback?: Record<string, RuntimeValue>;
   error?: string;
@@ -405,7 +420,7 @@ export type BlockExecution = {
   traceId?: string;
   progress?: number;
   progressMessage?: string;
-  /** Resumo compacto do validador universal de uma entrada executada item a item. */
+  /** Resumo compacto dos itens persistidos durante a execução do bloco. */
   itemProgress?: BlockItemProgress;
   /** Itens operacionais persistentes quando o bloco executa uma coleção. */
   items?: BlockExecutionItem[];

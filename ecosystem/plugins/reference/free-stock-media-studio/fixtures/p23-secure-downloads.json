@@ -1,0 +1,38 @@
+{
+  "package": "P23",
+  "expectedPngSha256": "431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460",
+  "maximums": {
+    "redirects": 5,
+    "imageBytes": 104857600,
+    "videoBytes": 536870912
+  },
+  "acceptedRedirect": {
+    "provider": "pexels",
+    "from": "images.pexels.com",
+    "to": "images.pexels.com"
+  },
+  "rejectedRedirects": [
+    {
+      "reason": "provider_host_mismatch",
+      "to": "example.com",
+      "code": "PERMISSION_DENIED"
+    },
+    {
+      "reason": "private_dns_resolution",
+      "to": "images.pexels.com",
+      "resolvedAddress": "127.0.0.1",
+      "code": "PERMISSION_DENIED"
+    }
+  ],
+  "requiredProvenance": [
+    "asset_id",
+    "external_id",
+    "provider",
+    "provider_label",
+    "media_type",
+    "source_url",
+    "attribution",
+    "license_name",
+    "license_url"
+  ]
+}

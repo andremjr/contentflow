@@ -1,0 +1,57 @@
+{
+  "executionId": "p43-vibes-image-contract",
+  "traceId": "p43-vibes-image-contract-trace",
+  "blockId": "p43-generate-images",
+  "capabilityId": "generate-images-in-browser",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": {
+    "accountProfile": "default",
+    "fallbackAccountProfiles": [],
+    "projectMode": "auto",
+    "projectUrl": "",
+    "startMinimized": true
+  },
+  "settings": {},
+  "inputs": { "prompts": "" },
+  "inputContract": [
+    {
+      "id": "prompt",
+      "portKey": "prompts",
+      "label": "Prompts",
+      "type": "textarea"
+    }
+  ],
+  "outputContract": [
+    {
+      "portKey": "images",
+      "label": "Imagens geradas",
+      "key": "images",
+      "type": "files",
+      "required": true
+    },
+    {
+      "portKey": "project_url",
+      "label": "URL do projeto",
+      "key": "project_url",
+      "type": "url",
+      "required": true
+    }
+  ],
+  "batch": { "itemId": "p43-prompt-1", "index": 0, "total": 1 },
+  "context": {
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo",
+    "channel": {
+      "id": "p43-channel",
+      "name": "Canal de teste",
+      "language": "pt-BR",
+      "niche": "Testes"
+    },
+    "project": { "id": "p43-project", "title": "Projeto P43" },
+    "processType": "assets",
+    "block": { "type": "CRIAR", "name": "Gerar imagens no Vibes", "instructions": "" },
+    "previousProcessOutputs": [],
+    "previousBlockOutputs": []
+  }
+}

@@ -50,6 +50,44 @@ Plugin avançado de geração de imagens e vídeos no Google Flow através do Ch
 - **Modelos de Vídeo:** Veo 3.1 - Quality, Veo 3.1 - Fast, Veo 3.1 - Lite, Omni 1.1 Flash.
 - **Configuração:** modelo predefinido ou rótulo de modelo novo, referências como Frames/Elementos, duração de 4/6/8/10 s, proporções 16:9 e 9:16 e resoluções até 1080p.
 
+## Interface declarativa
+
+- A capability composta apresenta os campos nesta ordem: perfil e projeto, modo de produção, parâmetros de imagem, referências e consistência de personagem, parâmetros de vídeo, seleção parcial e retenção dos intermediários.
+- A URL do projeto só aparece ao escolher **Usar projeto específico**. Parâmetros exclusivos de imagem ou vídeo aparecem somente nos modos compatíveis, e os índices de animação aparecem somente na seleção manual.
+- Nome, descrição, perfil, capabilities, portas, campos e opções estáticas possuem textos em português do Brasil, inglês e espanhol. IDs, aliases, URLs, nomes de modelos e valores salvos não são traduzidos.
+- Preferências locais de instalação e diagnóstico permanecem em `settingsSchema`. Os controles técnicos já persistidos no bloco continuam declarados para que Métodos existentes mantenham seus valores e sua semântica.
+- Todas as capabilities declaram `promptPreview` sem incluir secrets ou dados reais no manifesto.
+- Os campos de modelo consultam as opções disponíveis no perfil selecionado por `configure/options`. O catálogo fica em cache por cinco minutos e o botão **Atualizar opções** força uma nova leitura sem reaproveitar o cache.
+- O cache é isolado por perfil e por capability. Lista vazia é aceita; erro de consulta preserva a seleção salva e faz a interface usar as opções estáticas do manifesto como fallback seguro. Se um modelo salvo desaparecer da conta, ele continua visível como indisponível até o usuário escolher outro.
+- A descoberta reutiliza `FlowAuto.adapter.listModels(type)`, valida o perfil preparado e a origem `flow.google.com`, não cria projetos e não envia prompts. Para consultar a lista, a conta precisa possuir ao menos um projeto existente ou informar uma URL de projeto válida.
+
+## Itens, variantes e ações
+
+- Cada prompt preserva a identidade de lote atribuída pelo ContentFlow; cada imagem usa uma `variantKey` própria e cada vídeo permanece na sua porta de saída.
+- `generate-images-in-browser` aplica `regenerate`, `replace`, `select` e `download` somente em `images`. `animate-image-in-browser` e `generate-video-in-browser` aplicam as mesmas ações somente em `video`.
+- `replace`, `select` e `download` são ações locais do ContentFlow. Somente `regenerate` chama novamente o plugin, validando a porta original antes de gerar.
+- A capability composta não declara ações globais porque mistura imagens finais, referências de personagem, vídeos e intermediários opcionais. Isso impede que referências ou mídias omitidas recebam ações falsas; use as capabilities atômicas quando precisar manipular itens individualmente.
+- Referências de personagem, imagens e animações usam namespaces de artifact distintos. Um timeout posterior ao envio é tratado como efeito externo incerto e não é reenviado automaticamente sem reconciliação.
+
+## Validação real P14
+
+O smoke ao vivo é opt-in e exige um perfil dedicado já preparado:
+
+```powershell
+$env:CONTENTFLOW_FLOW_P14_LIVE='1'
+$env:CONTENTFLOW_FLOW_P14_PROFILE='flow-e2e'
+node ecosystem/plugins/reference/google-flow-browser-images/scripts/p14-live.mjs 'Cinematic city at dawn'
+```
+
+- `CONTENTFLOW_FLOW_P14_CAPABILITY` seleciona `generate-images-in-browser`, `animate-image-in-browser`, `generate-video-in-browser` ou `produce-visual-assets-in-browser`.
+- `CONTENTFLOW_FLOW_P14_REFERENCE` fornece uma imagem local para geração referenciada ou animação.
+- `CONTENTFLOW_FLOW_P14_VARIANTS` e `CONTENTFLOW_FLOW_P14_CONCURRENCY` exercitam variantes e concorrência.
+- A capability composta aceita pelos envs do harness: `CONTENTFLOW_FLOW_P14_PRODUCTION_MODE`, `CONTENTFLOW_FLOW_P14_MAX_VIDEOS`, `CONTENTFLOW_FLOW_P14_ANIMATION_SELECTION`, `CONTENTFLOW_FLOW_P14_ANIMATION_INDEXES` e `CONTENTFLOW_FLOW_P14_IMAGE_RETENTION`.
+- Para testar retomada, repita `CONTENTFLOW_FLOW_P14_EXECUTION_ID` e `CONTENTFLOW_FLOW_P14_RUN_ROOT`. Artifacts concluídos são reutilizados e não são reenviados.
+- `p14-contentflow-live.mjs` executa o mesmo cenário através das APIs locais do ContentFlow e permite configurar `CONTENTFLOW_FLOW_P14_FALLBACK_PROFILE`.
+
+O fallback entre perfis nunca herda projeto ou estado de upload da conta anterior. Dentro da mesma conta, as fases de imagem e vídeo da capability composta continuam no projeto criado pela primeira fase. O relatório reproduzível e os hashes estão em `docs/ecosystem/asset-generation-evidence/P14.md`.
+
 ## Continuidade de Projeto e Chat (`project_url`)
 
 Para fluxos complexos em que um bloco cria os personagens ou elementos visuais e blocos seguintes precisam utilizá-los como referência consistente ou animá-los:

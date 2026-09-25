@@ -18,3 +18,11 @@ function connectContentFlowBridge() {
 }
 
 connectContentFlowBridge();
+
+addEventListener("pagehide", () => {
+  void chrome.runtime.sendMessage({
+    source: "contentflow-provider-page",
+    action: "pagehide",
+    url: location.href,
+  });
+});

@@ -9,7 +9,7 @@ Esta pasta reúne tudo que interoperabiliza com o ContentFlow sem fazer parte do
 | [`browser-bridge`](browser-bridge/)       | Extensão companheira Manifest V3 usada por plugins de navegador |
 | [`plugin-kit`](plugin-kit/)               | CLI, templates e fixtures para autores                          |
 | [`skills`](skills/)                       | Instruções portáteis para agentes criarem plugins e Métodos     |
-| [`docs`](docs/)                           | Plugin API v1, segurança, automação e distribuição              |
+| [`../docs/ecosystem`](../docs/ecosystem/) | Plugin API v1, segurança, automação e distribuição              |
 
 ## Fronteira de responsabilidade
 
@@ -27,4 +27,4 @@ O pacote de plugins é apenas uma coleção conveniente de pastas independentes.
 ao executável, não é instalado automaticamente e pode ser substituído por qualquer plugin compatível
 criado ou compartilhado pela comunidade.
 
-Para começar, leia [`docs/quickstart.md`](docs/quickstart.md) ou use uma das skills em [`skills`](skills/).
+Para começar, leia [`../docs/ecosystem/quickstart.md`](../docs/ecosystem/quickstart.md) ou use uma das skills em [`skills`](skills/).

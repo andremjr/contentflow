@@ -231,7 +231,7 @@ function buildManifest(answers: Answers, defaults: TemplateDefaults): PluginMani
   const sends = answers.sendsDataToThirdParties;
   return {
     $schema:
-      "https://raw.githubusercontent.com/andremjr/contentflow/main/ecosystem/docs/schemas/contentflow-plugin-v1.schema.json",
+      "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
     apiVersion: "1",
     id: answers.id,
     name: answers.name,

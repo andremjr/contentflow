@@ -1,0 +1,87 @@
+{
+  "format": "contentflow-method",
+  "version": 1,
+  "name": "P60 — Meta mínimo",
+  "exportedAt": "2026-09-25T12:00:00.000Z",
+  "method": {
+    "name": "P60 — Meta → VALIDAR",
+    "processType": "assets",
+    "blocks": [
+      {
+        "id": "p60-meta-generate",
+        "type": "CRIAR",
+        "operator": "IA",
+        "name": "Gerar imagens no Meta",
+        "instructions": "Gere imagens em lote e preserve cada item pelo identificador fornecido pelo runtime.",
+        "inputs": [
+          {
+            "id": "p60-meta-prompts",
+            "label": "Prompts",
+            "type": "list",
+            "source": "static",
+            "staticValue": [
+              "Cinematic aerial view of a city at dawn, warm light, 16:9",
+              "Close-up of a rainforest trail in gentle rain, realistic documentary style, 16:9",
+              "Wide cinematic coastline before a storm, dramatic clouds, realistic documentary style, 16:9",
+              "Craft workshop at night with warm practical lights, cinematic documentary photography, 16:9",
+              "Morning commuter train crossing a misty valley, cinematic realism, 16:9"
+            ],
+            "portKey": "prompt"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "p60-meta-images",
+            "label": "Imagens",
+            "key": "images",
+            "portKey": "images",
+            "type": "files",
+            "required": true,
+            "presentation": {
+              "renderer": "image-gallery",
+              "itemType": "image",
+              "acceptedMimeTypes": ["image/*"]
+            }
+          }
+        ],
+        "parameters": [],
+        "order": 0,
+        "plugin": {
+          "pluginId": "local.contentflow.meta-ai-browser-studio",
+          "pluginVersion": "1.0.5",
+          "capabilityId": "generate-image-in-browser",
+          "configuration": { "aspectRatio": "16:9" },
+          "connectionRequired": false
+        }
+      },
+      {
+        "id": "p60-meta-validate",
+        "type": "VALIDAR",
+        "operator": "Humano",
+        "name": "Selecionar imagens do Meta",
+        "instructions": "Selecione as variantes aprovadas e preserve sua tentativa e proveniência.",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "p60-meta-selected",
+            "label": "Selecionadas",
+            "key": "selected_value",
+            "type": "files",
+            "required": true,
+            "optionsSourceBlockId": "p60-meta-generate",
+            "optionsSourceKey": "images"
+          }
+        ],
+        "validation": {
+          "targetBlockId": "p60-meta-generate",
+          "targetOutputKey": "images",
+          "mode": "select_many",
+          "onReject": "pause",
+          "maxAttempts": 2
+        },
+        "parameters": [],
+        "order": 1
+      }
+    ]
+  }
+}

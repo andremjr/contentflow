@@ -1,0 +1,25 @@
+{
+  "capabilityId": "generate-video-with-elements-in-browser",
+  "resolution": "720p",
+  "batch": {
+    "itemId": "elements-operation-a",
+    "index": 0,
+    "total": 1
+  },
+  "references": [
+    { "id": "character-a", "role": "character" },
+    { "id": "scene-a", "role": "scene" },
+    { "id": "style-a", "role": "style" },
+    { "id": "style-b", "role": "style" }
+  ],
+  "expected": {
+    "mode": "elements",
+    "roles": ["character", "scene", "style", "style"],
+    "variantKeys": ["video:1", "video:2", "video:3", "video:4"],
+    "outputPort": "videos",
+    "reloadResubmits": false,
+    "maxCharacterReferences": 1,
+    "maxSceneReferences": 1,
+    "maxStyleReferences": 6
+  }
+}

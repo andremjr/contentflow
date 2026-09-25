@@ -1,16 +1,24 @@
 const BRIDGE_ID = "com.contentflow.browser-bridge";
 const FLOW_PLUGIN_ID = "local.contentflow.google-flow-batch-images";
+const VIBES_PLUGIN_ID = "local.contentflow.vibes-browser-studio";
 const PROTOCOL_VERSION = 2;
 const COMMAND_CACHE_KEY = "contentflowCommandCacheV2";
 const CANCELLED_EXECUTIONS_KEY = "contentflowCancelledExecutionsV2";
+const LEASES_KEY = "contentflowLeasesV1";
+const LEASE_ALARM = "contentflow-lease-cleanup";
 const MAX_COMMAND_CACHE = 500;
 const CDP_VERSION = "1.3";
+const DEFAULT_LEASE_TTL_MS = 60_000;
+const MAX_LEASE_TTL_MS = 5 * 60_000;
+const MAX_UPLOAD_FILES = 8;
+const MAX_UPLOAD_PATH_LENGTH = 1024;
 const COMMON_ACTIONS = new Set(["ping", "inspect", "setText", "pressEnter", "click"]);
 const policy = (origins, tabPatterns, options = {}) =>
   Object.freeze({
     origins: new Set(origins),
     tabPatterns,
     requiredPath: options.requiredPath || "",
+    pathPattern: options.pathPattern || null,
     actions: new Set([...(options.actions || []), ...COMMON_ACTIONS]),
   });
 const PLUGIN_POLICIES = Object.freeze({
@@ -40,6 +48,10 @@ const PLUGIN_POLICIES = Object.freeze({
     ["https://playground.microsoft.ai"],
     ["https://playground.microsoft.ai/*"],
   ),
+  [VIBES_PLUGIN_ID]: policy(["https://vibes.ai"], ["https://vibes.ai/*"], {
+    pathPattern: /^\/projects\/[A-Za-z0-9_-]+\/?$/,
+    actions: ["setFiles", "leaseAcquire", "leaseRenew", "leaseRelease"],
+  }),
 });
 const inFlight = new Map();
 const tabQueues = new Map();
@@ -64,13 +76,21 @@ function policyForPlugin(pluginId) {
   return PLUGIN_POLICIES[pluginId] || null;
 }
 
+function pathAllowed(url, pluginPolicy) {
+  return (
+    pluginPolicy.origins.has(url.origin) &&
+    url.pathname.includes(pluginPolicy.requiredPath) &&
+    (!pluginPolicy.pathPattern || pluginPolicy.pathPattern.test(url.pathname))
+  );
+}
+
 function selectPluginTab(tabs, expectedUrl, policy) {
   const expected = new URL(expectedUrl);
   if (!policy.origins.has(expected.origin)) return null;
   const candidates = tabs.filter((tab) => {
     try {
       const url = new URL(tab.url || "");
-      return policy.origins.has(url.origin) && url.pathname.includes(policy.requiredPath);
+      return pathAllowed(url, policy);
     } catch {
       return false;
     }
@@ -102,6 +122,8 @@ async function cacheResponse(command, response) {
     .sort((a, b) => Number(a[1]?.storedAt) - Number(b[1]?.storedAt));
   while (entries.length >= MAX_COMMAND_CACHE) entries.shift();
   const entry = {
+    pluginId: command.pluginId,
+    profileId: command.profileId,
     executionKey: command.executionKey,
     response,
     storedAt: now,
@@ -111,7 +133,11 @@ async function cacheResponse(command, response) {
   await chrome.storage.session.set({ [COMMAND_CACHE_KEY]: Object.fromEntries(entries) });
 }
 
-async function markExecutionCancelled(executionKey) {
+function cancellationKey(pluginId, profileId, executionKey) {
+  return `${pluginId}:${profileId}:${executionKey}`;
+}
+
+async function markExecutionCancelled(session, executionKey) {
   const stored = await chrome.storage.session.get(CANCELLED_EXECUTIONS_KEY);
   const now = Date.now();
   const cancellations = Object.fromEntries(
@@ -119,13 +145,146 @@ async function markExecutionCancelled(executionKey) {
       ([, expiresAt]) => Number(expiresAt) > now,
     ),
   );
-  cancellations[executionKey] = now + 12 * 60 * 60 * 1000;
+  cancellations[cancellationKey(session.pluginId, session.profileId, executionKey)] =
+    now + 12 * 60 * 60 * 1000;
   await chrome.storage.session.set({ [CANCELLED_EXECUTIONS_KEY]: cancellations });
 }
 
-async function isExecutionCancelled(executionKey) {
+async function isExecutionCancelled(command) {
   const stored = await chrome.storage.session.get(CANCELLED_EXECUTIONS_KEY);
-  return Number(stored?.[CANCELLED_EXECUTIONS_KEY]?.[executionKey]) > Date.now();
+  return (
+    Number(
+      stored?.[CANCELLED_EXECUTIONS_KEY]?.[
+        cancellationKey(command.pluginId, command.profileId, command.executionKey)
+      ],
+    ) > Date.now()
+  );
+}
+
+async function readLeases() {
+  const stored = await chrome.storage.session.get(LEASES_KEY);
+  const leases = stored?.[LEASES_KEY];
+  return leases && typeof leases === "object" ? leases : {};
+}
+
+async function writeLeases(leases) {
+  await chrome.storage.session.set({ [LEASES_KEY]: leases });
+}
+
+function leaseIdFor(session, executionKey) {
+  return `${session.pluginId}:${session.profileId}:${executionKey}`;
+}
+
+async function setTabDiscardable(tabId, autoDiscardable) {
+  try {
+    await chrome.tabs.update(tabId, { autoDiscardable });
+  } catch {
+    // A aba pode ter sido fechada durante a liberação.
+  }
+}
+
+async function releasePowerIfIdle(leases) {
+  if (Object.keys(leases).length === 0) chrome.power.releaseKeepAwake();
+}
+
+async function cleanupLeases({ tabId, sessionToken, executionKey, forceExpired = false } = {}) {
+  const leases = await readLeases();
+  const now = Date.now();
+  const releasedTabs = new Set();
+  let changed = false;
+  for (const [leaseId, lease] of Object.entries(leases)) {
+    const expired = Number(lease?.expiresAt) <= now;
+    const matches =
+      (Number.isInteger(tabId) && lease?.tabId === tabId) ||
+      (sessionToken && lease?.sessionToken === sessionToken) ||
+      (executionKey && lease?.executionKey === executionKey);
+    if ((forceExpired && expired) || matches) {
+      if (Number.isInteger(lease?.tabId)) releasedTabs.add(lease.tabId);
+      delete leases[leaseId];
+      changed = true;
+    }
+  }
+  if (!changed) return false;
+  await writeLeases(leases);
+  for (const releasedTabId of releasedTabs) {
+    const stillLeased = Object.values(leases).some((lease) => lease?.tabId === releasedTabId);
+    if (!stillLeased) await setTabDiscardable(releasedTabId, true);
+  }
+  await releasePowerIfIdle(leases);
+  return true;
+}
+
+async function manageLease(tab, command, pluginPolicy) {
+  const session = activeSessions.get(command.sessionToken);
+  if (!session) return bridgeError("SESSION_MISMATCH", "A sessão da lease não existe.");
+  const tabUrl = new URL(tab.url || "");
+  if (!pathAllowed(tabUrl, pluginPolicy)) {
+    await cleanupLeases({ sessionToken: session.sessionToken });
+    return bridgeError("ORIGIN_NOT_ALLOWED", "A aba deixou a origem autorizada.");
+  }
+  const leaseId = leaseIdFor(session, command.executionKey);
+  const leases = await readLeases();
+  if (command.action === "leaseRelease") {
+    const current = leases[leaseId];
+    if (current) {
+      delete leases[leaseId];
+      await writeLeases(leases);
+      if (!Object.values(leases).some((lease) => lease?.tabId === current.tabId)) {
+        await setTabDiscardable(current.tabId, true);
+      }
+      await releasePowerIfIdle(leases);
+    }
+    return { ok: true, released: Boolean(current) };
+  }
+
+  const ttlMs = Math.max(
+    20_000,
+    Math.min(MAX_LEASE_TTL_MS, Number(command.payload?.ttlMs) || DEFAULT_LEASE_TTL_MS),
+  );
+  const current = leases[leaseId];
+  if (command.action === "leaseRenew") {
+    if (
+      !current ||
+      current.sessionToken !== session.sessionToken ||
+      current.tabId !== tab.id ||
+      current.origin !== tabUrl.origin ||
+      Number(current.expiresAt) <= Date.now()
+    ) {
+      if (current) {
+        delete leases[leaseId];
+        await setTabDiscardable(current.tabId, true);
+      }
+      await writeLeases(leases);
+      await releasePowerIfIdle(leases);
+      return bridgeError("LEASE_NOT_FOUND", "A lease expirou ou não pertence a esta sessão.");
+    }
+  }
+
+  if (current && current.tabId !== tab.id) await setTabDiscardable(current.tabId, true);
+
+  try {
+    chrome.power.requestKeepAwake("display");
+    await chrome.tabs.update(tab.id, { autoDiscardable: false });
+  } catch {
+    delete leases[leaseId];
+    await writeLeases(leases);
+    await setTabDiscardable(tab.id, true);
+    await releasePowerIfIdle(leases);
+    return bridgeError("LEASE_UNAVAILABLE", "O Chrome não concedeu a lease solicitada.");
+  }
+  const expiresAt = Date.now() + ttlMs;
+  leases[leaseId] = {
+    pluginId: session.pluginId,
+    profileId: session.profileId,
+    sessionToken: session.sessionToken,
+    executionKey: command.executionKey,
+    tabId: tab.id,
+    origin: tabUrl.origin,
+    pathname: tabUrl.pathname,
+    expiresAt,
+  };
+  await writeLeases(leases);
+  return { ok: true, leaseId, expiresAt, ttlMs };
 }
 
 function validateSession(command) {
@@ -335,6 +494,94 @@ function readFocusedText() {
     return element.value;
   }
   return element?.innerText || element?.textContent || "";
+}
+
+function collapseFocusedSelectionToEnd() {
+  let element = document.activeElement;
+  while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    const end = element.value.length;
+    element.setSelectionRange(end, end);
+    return true;
+  }
+  if (!(element instanceof Element) || !element.isContentEditable) return false;
+  const selection = getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return true;
+}
+
+function resolveFileInput(payload) {
+  const selectors = (Array.isArray(payload?.selectors) ? payload.selectors : [payload?.selector])
+    .map((selector) => String(selector || "").trim())
+    .filter(Boolean)
+    .slice(0, 20);
+  const candidates = selectors.length ? selectors : ['input[type="file"]'];
+  const matches = [];
+  for (const selector of candidates) {
+    try {
+      for (const element of document.querySelectorAll(selector)) {
+        if (element instanceof HTMLInputElement && element.type === "file" && !element.disabled) {
+          matches.push(element);
+        }
+      }
+    } catch {
+      // Seletores inválidos falham fechados.
+    }
+  }
+  return [...new Set(matches)][0] || null;
+}
+
+function validateUploadFiles(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_UPLOAD_FILES) return null;
+  const output = [];
+  for (const entry of value) {
+    const filePath = String(entry || "");
+    if (
+      filePath.length < 3 ||
+      filePath.length > MAX_UPLOAD_PATH_LENGTH ||
+      filePath.includes("\0") ||
+      filePath.split(/[\\/]+/).includes("..") ||
+      !(/^[A-Za-z]:\\/.test(filePath) || filePath.startsWith("/"))
+    ) {
+      return null;
+    }
+    output.push(filePath);
+  }
+  return output;
+}
+
+async function setFileInputFiles(tabId, payload) {
+  const files = validateUploadFiles(payload?.files);
+  if (!files) return bridgeError("INVALID_COMMAND", "Lista de arquivos inválida.");
+  const resolved = await sendCdp(tabId, "Runtime.evaluate", {
+    expression: `(${resolveFileInput.toString()})(${JSON.stringify({
+      selectors: payload?.selectors,
+      selector: payload?.selector,
+    })})`,
+    returnByValue: false,
+    awaitPromise: true,
+    userGesture: true,
+  });
+  const objectId = resolved?.result?.objectId;
+  if (!objectId) return bridgeError("FILE_INPUT_NOT_FOUND", "Controle de arquivo não encontrado.");
+  const described = await sendCdp(tabId, "DOM.describeNode", { objectId });
+  const node = described?.node;
+  const attributes = Array.isArray(node?.attributes) ? node.attributes : [];
+  const typeIndex = attributes.findIndex((value) => String(value).toLowerCase() === "type");
+  if (
+    String(node?.nodeName || "").toUpperCase() !== "INPUT" ||
+    typeIndex < 0 ||
+    String(attributes[typeIndex + 1] || "").toLowerCase() !== "file" ||
+    !Number.isInteger(node?.backendNodeId)
+  ) {
+    return bridgeError("FILE_INPUT_NOT_FOUND", "O alvo não é um input de arquivo válido.");
+  }
+  await sendCdp(tabId, "DOM.setFileInputFiles", { files, backendNodeId: node.backendNodeId });
+  return { ok: true, fileCount: files.length };
 }
 
 async function sendCdp(tabId, method, params = {}) {
@@ -551,31 +798,35 @@ async function replaceFocusedText(tabId, value) {
     nativeVirtualKeyCode: 65,
     modifiers: 2,
   });
+  // Input.insertText não substitui de forma consistente a seleção controlada
+  // por editores React/contenteditable. Apague explicitamente antes de inserir
+  // para evitar concatenar o prompt anterior em novas tentativas.
+  await sendCdp(tabId, "Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Backspace",
+    code: "Backspace",
+    windowsVirtualKeyCode: 8,
+    nativeVirtualKeyCode: 8,
+  });
+  await sendCdp(tabId, "Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "Backspace",
+    code: "Backspace",
+    windowsVirtualKeyCode: 8,
+    nativeVirtualKeyCode: 8,
+  });
   if (value) {
     await sendCdp(tabId, "Input.insertText", { text: value });
-  } else {
-    await sendCdp(tabId, "Input.dispatchKeyEvent", {
-      type: "keyDown",
-      key: "Backspace",
-      code: "Backspace",
-      windowsVirtualKeyCode: 8,
-      nativeVirtualKeyCode: 8,
-    });
-    await sendCdp(tabId, "Input.dispatchKeyEvent", {
-      type: "keyUp",
-      key: "Backspace",
-      code: "Backspace",
-      windowsVirtualKeyCode: 8,
-      nativeVirtualKeyCode: 8,
-    });
   }
 }
 
 async function pressEnter(tabId) {
   await sendCdp(tabId, "Input.dispatchKeyEvent", {
-    type: "rawKeyDown",
+    type: "keyDown",
     key: "Enter",
     code: "Enter",
+    text: "\r",
+    unmodifiedText: "\r",
     windowsVirtualKeyCode: 13,
     nativeVirtualKeyCode: 13,
   });
@@ -589,7 +840,7 @@ async function pressEnter(tabId) {
 }
 
 async function dispatchCdpAction(tabId, command, policy) {
-  if (await isExecutionCancelled(command.executionKey)) {
+  if (await isExecutionCancelled(command)) {
     return bridgeError("CANCELLED", "Execução cancelada.");
   }
   const page = await evaluateValue(
@@ -602,7 +853,7 @@ async function dispatchCdpAction(tabId, command, policy) {
   } catch {
     return bridgeError("ORIGIN_NOT_ALLOWED", "A aba deixou a origem autorizada.");
   }
-  if (!policy.origins.has(pageUrl.origin) || !pageUrl.pathname.includes(policy.requiredPath)) {
+  if (!pathAllowed(pageUrl, policy)) {
     return bridgeError("ORIGIN_NOT_ALLOWED", "A aba deixou a origem autorizada.");
   }
 
@@ -629,7 +880,7 @@ async function dispatchCdpAction(tabId, command, policy) {
       if (!target?.found) {
         return bridgeError("EDITOR_NOT_FOUND", "Editor não encontrado.");
       }
-      if (await isExecutionCancelled(command.executionKey)) {
+      if (await isExecutionCancelled(command)) {
         return bridgeError("CANCELLED", "Execução cancelada.");
       }
       await focusTargetAtPoint(tabId, target);
@@ -652,12 +903,19 @@ async function dispatchCdpAction(tabId, command, policy) {
     if (!target?.found) {
       return bridgeError("EDITOR_NOT_FOUND", "Editor não encontrado.");
     }
-    if (await isExecutionCancelled(command.executionKey)) {
+    if (await isExecutionCancelled(command)) {
       return bridgeError("CANCELLED", "Execução cancelada.");
     }
     await focusTargetAtPoint(tabId, target);
+    await evaluateValue(tabId, `(${collapseFocusedSelectionToEnd.toString()})()`);
     await pressEnter(tabId);
     return { ok: true, mechanism: "cdp-keyboard-enter" };
+  }
+  if (command.action === "setFiles") {
+    if (await isExecutionCancelled(command)) {
+      return bridgeError("CANCELLED", "Execução cancelada.");
+    }
+    return await setFileInputFiles(tabId, payload);
   }
   if (command.action === "click" || command.action === "clickGenerate") {
     const clickPayload =
@@ -668,7 +926,7 @@ async function dispatchCdpAction(tabId, command, policy) {
     if (!target?.found) {
       return bridgeError("CONTROL_NOT_FOUND", "Controle não encontrado ou desabilitado.");
     }
-    if (await isExecutionCancelled(command.executionKey)) {
+    if (await isExecutionCancelled(command)) {
       return bridgeError("CANCELLED", "Execução cancelada.");
     }
     if (clickPayload.preferDomActivation === true) {
@@ -742,7 +1000,7 @@ async function dispatchToPage(command) {
   } catch {
     return bridgeError("INVALID_COMMAND", "expectedUrl inválida.");
   }
-  if (!policy || !policy.origins.has(expectedUrl.origin)) {
+  if (!policy || !pathAllowed(expectedUrl, policy)) {
     return bridgeError("ORIGIN_NOT_ALLOWED", "A origem não foi autorizada para este plugin.");
   }
 
@@ -750,6 +1008,8 @@ async function dispatchToPage(command) {
   const cached = cache[command.commandId];
   if (
     cached?.executionKey === command.executionKey &&
+    cached?.pluginId === command.pluginId &&
+    cached?.profileId === command.profileId &&
     Number(cached.expiresAt) > Date.now() &&
     cached.response
   ) {
@@ -763,6 +1023,19 @@ async function dispatchToPage(command) {
       "PLUGIN_TAB_NOT_FOUND",
       "A aba exata do provedor não foi encontrada no perfil dedicado.",
     );
+  }
+
+  if (["leaseAcquire", "leaseRenew", "leaseRelease"].includes(command.action)) {
+    if (command.action !== "leaseRelease" && (await isExecutionCancelled(command))) {
+      return bridgeError("CANCELLED", "Execução cancelada.");
+    }
+    const response = await enqueueTabCommand(tab.id, () =>
+      Date.now() >= command.expiresAt
+        ? bridgeError("COMMAND_EXPIRED", "O comando expirou antes de executar na aba.")
+        : manageLease(tab, command, policy),
+    );
+    await cacheResponse(command, response);
+    return response;
   }
 
   const timeoutMs = Math.max(1000, Math.min(30000, command.expiresAt - Date.now()));
@@ -806,6 +1079,7 @@ globalThis.contentFlowBridge = Object.freeze({
     for (const [token, session] of activeSessions) {
       if (now - session.lastSeenAt > SESSION_TTL_MS) {
         activeSessions.delete(token);
+        void cleanupLeases({ sessionToken: session.sessionToken });
         void detachSessionDebugger(session);
       }
     }
@@ -815,10 +1089,14 @@ globalThis.contentFlowBridge = Object.freeze({
       )[0];
       if (!oldest) break;
       activeSessions.delete(oldest[0]);
+      void cleanupLeases({ sessionToken: oldest[1].sessionToken });
       void detachSessionDebugger(oldest[1]);
     }
     const previous = activeSessions.get(handshake.sessionToken);
-    if (previous) void detachSessionDebugger(previous);
+    if (previous) {
+      void cleanupLeases({ sessionToken: previous.sessionToken });
+      void detachSessionDebugger(previous);
+    }
     activeSessions.set(handshake.sessionToken, {
       pluginId: handshake.pluginId,
       profileId: handshake.profileId,
@@ -831,9 +1109,10 @@ globalThis.contentFlowBridge = Object.freeze({
   async dispatch(command) {
     const invalid = validateSession(command);
     if (invalid) return invalid;
-    if (inFlight.has(command.commandId)) return await inFlight.get(command.commandId);
-    const operation = dispatchToPage(command).finally(() => inFlight.delete(command.commandId));
-    inFlight.set(command.commandId, operation);
+    const inFlightKey = `${command.pluginId}:${command.profileId}:${command.sessionToken}:${command.commandId}`;
+    if (inFlight.has(inFlightKey)) return await inFlight.get(inFlightKey);
+    const operation = dispatchToPage(command).finally(() => inFlight.delete(inFlightKey));
+    inFlight.set(inFlightKey, operation);
     return await operation;
   },
   async cancel(request) {
@@ -850,7 +1129,12 @@ globalThis.contentFlowBridge = Object.freeze({
       return bridgeError("SESSION_MISMATCH", "Cancelamento recusado pela extensão.");
     }
     session.lastSeenAt = Date.now();
-    await markExecutionCancelled(request.executionKey);
+    await markExecutionCancelled(session, request.executionKey);
+    await cleanupLeases({
+      sessionToken: session.sessionToken,
+      executionKey: request.executionKey,
+    });
+    await detachSessionDebugger(session);
     return { ok: true };
   },
   async disconnect(request) {
@@ -864,16 +1148,59 @@ globalThis.contentFlowBridge = Object.freeze({
       return bridgeError("SESSION_MISMATCH", "Desconexão recusada pela extensão.");
     }
     activeSessions.delete(request.sessionToken);
+    await cleanupLeases({ sessionToken: session.sessionToken });
     await detachSessionDebugger(session);
     return { ok: true };
   },
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.source === "contentflow-provider-page" && message?.action === "wake") {
     sendResponse({ ok: true, ...identity() });
   }
+  if (message?.source === "contentflow-provider-page" && message?.action === "pagehide") {
+    void cleanupLeases({ tabId: sender?.tab?.id });
+    sendResponse({ ok: true });
+  }
   return false;
+});
+
+chrome.alarms.create(LEASE_ALARM, { periodInMinutes: 0.5 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm?.name === LEASE_ALARM) void cleanupLeases({ forceExpired: true });
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  void cleanupLeases({ tabId });
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (!changeInfo?.url) return;
+  void (async () => {
+    const leases = await readLeases();
+    const tabLeases = Object.values(leases).filter((lease) => lease?.tabId === tabId);
+    if (!tabLeases.length) return;
+    let current;
+    try {
+      current = new URL(changeInfo.url);
+    } catch {
+      await cleanupLeases({ tabId });
+      return;
+    }
+    if (
+      tabLeases.some((lease) => {
+        const leasePolicy = policyForPlugin(lease.pluginId);
+        return (
+          !leasePolicy ||
+          !pathAllowed(current, leasePolicy) ||
+          current.origin !== lease.origin ||
+          current.pathname !== lease.pathname
+        );
+      })
+    ) {
+      await cleanupLeases({ tabId });
+    }
+  })();
 });
 
 chrome.runtime.onConnect.addListener((port) => {

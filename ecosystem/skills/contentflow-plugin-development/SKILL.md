@@ -22,7 +22,7 @@ Atue como um engenheiro de integração responsável por criar um pacote indepen
 
 ## Fluxo principal
 
-1. **Inspecionar o contexto.** Verifique a versão do ContentFlow, Node 26, a branch do repositório e os documentos normativos. No repositório oficial, a documentação vive em `ecosystem/docs` e os pacotes de referência em `ecosystem/plugins/reference`. Leia `references/protocol.md` antes de implementar contrato; leia `references/security.md` antes de usar rede, arquivos, secrets, subprocessos, navegador ou efeitos externos.
+1. **Inspecionar o contexto.** Verifique a versão do ContentFlow, Node 26, a branch do repositório e os documentos normativos. No repositório oficial, a documentação vive em `docs/ecosystem` e os pacotes de referência em `ecosystem/plugins/reference`. Leia `references/protocol.md` antes de implementar contrato; leia `references/security.md` antes de usar rede, arquivos, secrets, subprocessos, navegador ou efeitos externos.
 2. **Definir a entrega observável.** Especifique o que o usuário receberá: texto, lista, records, arquivo, mídia, decisão ou job. Escolha o operador, bloco e processo compatíveis.
 3. **Escolher a arquitetura.** Use `text-transform` para transformação local, `hosted-api` para HTTPS, `file-artifact` para arquivos, adapter Node para Python/FFmpeg e `start/resume/cancel` para jobs demorados. Para automação de navegador, leia `references/browser-automation.md`.
 4. **Inicializar o pacote.** Se o repositório do ContentFlow estiver disponível, prefira:
@@ -111,9 +111,9 @@ Execute testes de input ausente/incorreto, instrução resolvida/ausente, output
 ## Fontes normativas
 
 - [Repositório ContentFlow](https://github.com/andremjr/contentflow)
-- [quickstart.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/quickstart.md)
-- [protocol.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/protocol.md)
-- [development.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/development.md)
-- [security.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/security.md)
-- [browser-automation.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/browser-automation.md)
-- [distribution.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/distribution.md)
+- [quickstart.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/quickstart.md)
+- [protocol.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/protocol.md)
+- [development.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/development.md)
+- [security.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/security.md)
+- [browser-automation.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/browser-automation.md)
+- [distribution.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/distribution.md)

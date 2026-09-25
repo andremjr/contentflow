@@ -1,6 +1,7 @@
 import type {
   BlockFieldDefinition,
   BlockInputBinding,
+  BlockExecutionItemValue,
   BlockType,
   BlockValidationConfig,
   HumanFieldType,
@@ -98,6 +99,25 @@ export type PluginExecutionPolicy = {
   };
 };
 
+export type PluginConfigurationOptionsProvider = {
+  /** Campo de primeiro nível de blockConfigSchema.properties preenchido dinamicamente. */
+  property: string;
+  /** Identificador estável enviado ao plugin em invocation.mode=configure/action=options. */
+  providerId: string;
+  /** Campos de configuração cuja alteração invalida as opções em cache. */
+  dependsOn?: string[];
+  /** Tempo máximo sugerido para reutilizar opções já resolvidas. */
+  cacheTtlMs?: number;
+};
+
+export type PluginItemAction = "regenerate" | "replace" | "select" | "download";
+
+export type PluginItemActionDeclaration = {
+  action: PluginItemAction;
+  /** Rótulo opcional do plugin; quando ausente o núcleo usa seu texto padrão traduzido. */
+  label?: string;
+};
+
 /** Declares whether a capability consumes the Method block instruction. */
 export type PluginInstructionUsage = "required" | "optional" | "not_applicable";
 
@@ -153,6 +173,10 @@ export type PluginCapability = {
   cost: PluginCostPolicy;
   dataPolicy: PluginDataPolicy;
   blockConfigSchema: JsonSchema;
+  /** Campos cujas opções são resolvidas pelo plugin usando a configuração/perfil local atual. */
+  configurationOptions?: PluginConfigurationOptionsProvider[];
+  /** Ações que a interface pode oferecer para cada item produzido por esta capability. */
+  itemActions?: PluginItemActionDeclaration[];
   outputSchema: JsonSchema;
 };
 
@@ -172,6 +196,42 @@ export type PluginBranding = {
   iconPath: string;
 };
 
+export type PluginLocalizedText = {
+  name?: string;
+  description?: string;
+  label?: string;
+  title?: string;
+};
+
+export type PluginLocalizedOption = {
+  value: string | number | boolean;
+  label: string;
+};
+
+export type PluginLocalizedSchemaProperty = {
+  title?: string;
+  description?: string;
+  options?: PluginLocalizedOption[];
+};
+
+export type PluginCapabilityLocalization = {
+  name?: string;
+  description?: string;
+  inputPorts?: Record<string, { label?: string; description?: string }>;
+  outputPorts?: Record<string, { label?: string; description?: string }>;
+  itemActions?: Partial<Record<PluginItemAction, { label?: string }>>;
+  blockConfigSchema?: {
+    properties?: Record<string, PluginLocalizedSchemaProperty>;
+  };
+};
+
+export type PluginManifestLocalization = {
+  name?: string;
+  description?: string;
+  profileSetup?: { label?: string; description?: string };
+  capabilities?: Record<string, PluginCapabilityLocalization>;
+};
+
 export type PluginManifest = {
   $schema?: string;
   apiVersion: typeof CONTENTFLOW_PLUGIN_API_VERSION;
@@ -184,6 +244,8 @@ export type PluginManifest = {
   homepage?: string;
   repository?: string;
   branding?: PluginBranding;
+  /** Optional locale overlays for user-facing plugin text. Technical IDs and values are never translated. */
+  localizations?: Record<string, PluginManifestLocalization>;
   runtime: PluginRuntime;
   minCoreVersion?: string;
   entrypoint: string;
@@ -192,6 +254,8 @@ export type PluginManifest = {
   networkHosts?: string[];
   settingsSchema?: JsonSchema;
   secretKeys?: string[];
+  /** Declared secrets that unlock optional functionality but are not required to execute the plugin. */
+  optionalSecretKeys?: string[];
   deliveryTypes?: PluginDeliveryType[];
   /** Optional interactive preparation for a dedicated browser profile referenced by block configuration. */
   profileSetup?: PluginProfileSetup;
@@ -199,6 +263,13 @@ export type PluginManifest = {
   supportsConversationContinuation?: boolean;
   capabilities: PluginCapability[];
 };
+
+export function pluginConnectionRequired(
+  manifest: Pick<PluginManifest, "secretKeys" | "optionalSecretKeys">,
+) {
+  const optional = new Set(manifest.optionalSecretKeys ?? []);
+  return (manifest.secretKeys ?? []).some((secretKey) => !optional.has(secretKey));
+}
 
 export type PluginExecutionContext = {
   locale: string;
@@ -226,7 +297,19 @@ export type PluginInvocation =
   | { mode: "start" }
   | { mode: "resume"; jobId: string }
   | { mode: "cancel"; jobId: string }
-  | { mode: "configure"; action: "status" | "prepare" };
+  | { mode: "configure"; action: "status" | "prepare" }
+  | {
+      mode: "configure";
+      action: "options";
+      providerId: string;
+      property: string;
+    }
+  | {
+      mode: "item_action";
+      action: PluginItemAction;
+      itemId: string;
+      outputPort: string;
+    };
 
 export type PluginInputContract = Pick<
   BlockInputBinding,
@@ -310,6 +393,15 @@ export type PluginExecutionRequest = {
       };
   /** Core-owned position when a declared list input is executed item by item. */
   batch?: { itemId: string; index: number; total: number };
+  /** Contexto imutável do item quando invocation.mode=item_action. */
+  itemAction?: {
+    key?: string;
+    /** Variante local correlacionada ao item universal que o núcleo selecionou. */
+    variantKey?: string;
+    input: BlockExecutionItemValue;
+    output?: BlockExecutionItemValue;
+    attempt: number;
+  };
   context: PluginExecutionContext;
 };
 
@@ -353,10 +445,37 @@ export type PluginExecutionResponse =
       logs?: string[];
     };
 
+export type PluginConfigurationOption = {
+  value: string | number | boolean;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+};
+
+export type PluginIncrementalItemUpdate = {
+  /** Chave estável apenas dentro da tentativa; o núcleo continua dono do itemId universal. */
+  key: string;
+  /**
+   * Chave local da variante dentro do mesmo item de lote. Quando ausente,
+   * `key` preserva a identidade dos plugins API v1 existentes.
+   */
+  variantKey?: string;
+  outputPort: string;
+  state: "created" | "running" | "completed" | "failed";
+  /** Entrada editorial que originou o slot e será reutilizada em ações posteriores. */
+  input?: BlockExecutionItemValue;
+  value?: BlockExecutionItemValue;
+  message?: string;
+  errorCode?: string;
+  retryable?: boolean;
+};
+
 /** Incremental snapshot emitted while an immediate plugin invocation is still running. */
 export type PluginPartialUpdate = {
   values: Record<string, RuntimeValue>;
   artifacts?: PluginArtifact[];
+  /** Eventos incrementais de itens; o núcleo mapeia `key` para IDs universais persistentes. */
+  itemUpdates?: PluginIncrementalItemUpdate[];
   progress?: number;
   message?: string;
   logs?: string[];

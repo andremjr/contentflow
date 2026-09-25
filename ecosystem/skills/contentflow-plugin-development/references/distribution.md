@@ -39,4 +39,4 @@ O Método deve salvar `pluginId`, `pluginVersion`, `capabilityId`, configuraçã
 
 Plugins podem ser gratuitos, pagos, proprietários ou open source conforme sua licença própria, desde que sejam integrações independentes sobre o protocolo público. Não incorpore código protegido do núcleo nem apresente o pacote como clone, rebranding ou substituto do ContentFlow.
 
-Fonte: [distribution.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/distribution.md).
+Fonte: [distribution.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/distribution.md).

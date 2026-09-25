@@ -1,10 +1,974 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/ecosystem/docs/schemas/contentflow-plugin-v1.schema.json",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
   "apiVersion": "1",
   "id": "local.contentflow.google-flow-batch-images",
   "name": "Google Flow Browser Images",
   "version": "1.3.7",
   "description": "Gera imagens reais e vídeos no Google Flow com modelos Nano Banana e Veo, proporções configuráveis, animação de imagens, referências visuais, continuidade de projeto e produção visual em lote.",
+  "localizations": {
+    "en": {
+      "name": "Google Flow Browser Images",
+      "description": "Generates real images and videos in Google Flow with Nano Banana and Veo models, configurable aspect ratios, image animation, visual references, project continuity, and batch visual production.",
+      "profileSetup": {
+        "label": "Add account",
+        "description": "Opens the dedicated Chrome profile. Manually install the ContentFlow Browser Bridge in the profile and complete the Google Flow sign-in."
+      },
+      "capabilities": {
+        "produce-visual-assets-in-browser": {
+          "name": "Complete visual production",
+          "description": "Creates images, videos, or a combination of both from scene prompts.",
+          "inputPorts": {
+            "prompts": {
+              "label": "Scene prompts",
+              "description": "Ordered list of scene prompts. Each prompt generates an image before any animation."
+            },
+            "character_prompts": {
+              "label": "Character prompts",
+              "description": "Optional list used to create visual references before the scenes. Generated references are attached to the entire production to maintain consistency."
+            },
+            "animation_prompts": {
+              "label": "Animation prompts",
+              "description": "Optional list, in scene order, describing motion and camera. When omitted, the scene prompt itself is reused."
+            },
+            "reference_images": {
+              "label": "Character and style references",
+              "description": "Images reused across the queue to keep characters, products, settings, and art direction consistent."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "Optional Google Flow project used to preserve the room, references, and history."
+            }
+          },
+          "outputPorts": {
+            "images": {
+              "label": "Final images",
+              "description": "Images preserved by the configured retention policy."
+            },
+            "character_references": {
+              "label": "Character references",
+              "description": "References generated at the beginning of production when saving is enabled."
+            },
+            "videos": {
+              "label": "Final videos",
+              "description": "Videos animated from the selected images."
+            },
+            "project_url": { "label": "Project URL" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": { "title": "Account profile" },
+              "fallbackAccountProfiles": {
+                "title": "Fallback profiles",
+                "description": "Additional aliases, one per line, in usage order."
+              },
+              "projectMode": {
+                "title": "Project mode",
+                "options": [
+                  { "value": "auto", "label": "Automatic" },
+                  { "value": "new", "label": "Always create a new project" },
+                  { "value": "existing", "label": "Use a specific project" }
+                ]
+              },
+              "projectUrl": { "title": "Project URL" },
+              "productionMode": {
+                "title": "What should this block produce?",
+                "description": "Choose the visual workflow before adjusting its details.",
+                "options": [
+                  { "value": "images_only", "label": "Images only" },
+                  { "value": "text_to_video", "label": "Text directly to video" },
+                  {
+                    "value": "images_then_selected_videos",
+                    "label": "Images, then animate selected ones"
+                  },
+                  { "value": "images_to_video_all", "label": "Images, then animate all" }
+                ]
+              },
+              "imageModel": {
+                "title": "Image model",
+                "options": [
+                  { "value": "flow_auto", "label": "Automatic: Pro → 2 → 2 Lite" },
+                  { "value": "nano_banana_2", "label": "Nano Banana 2" },
+                  { "value": "nano_banana_pro", "label": "Nano Banana Pro" },
+                  { "value": "nano_banana_2_lite", "label": "Nano Banana 2 Lite" }
+                ]
+              },
+              "imageModelLabel": { "title": "Other image model" },
+              "fallbackOnModelLimit": { "title": "Use fallback when the image limit is reached" },
+              "aspectRatio": {
+                "title": "Aspect ratio",
+                "options": [
+                  { "value": "flow_current", "label": "Current Flow setting" },
+                  { "value": "landscape", "label": "Landscape (16:9)" },
+                  { "value": "portrait", "label": "Portrait (9:16)" },
+                  { "value": "square", "label": "Square (1:1)" }
+                ]
+              },
+              "maxImagesPerPrompt": { "title": "Images per prompt" },
+              "maxConcurrentGenerations": { "title": "Concurrent image generations" },
+              "enableCharacterConsistency": {
+                "title": "Keep characters consistent",
+                "description": "Generates visual references before the scenes and attaches them to the entire production."
+              },
+              "characterPrompts": {
+                "title": "Character prompts",
+                "description": "One prompt per line to create visual references before the scenes."
+              },
+              "maxReferenceImages": { "title": "Maximum references" },
+              "maxCharacterReferences": {
+                "title": "Character references to use",
+                "description": "Limits how many images generated from character prompts are used as scene references."
+              },
+              "saveCharacterReferences": {
+                "title": "Save character references in the final delivery"
+              },
+              "videoModel": {
+                "title": "Video model",
+                "options": [
+                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
+                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
+                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
+                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                ]
+              },
+              "videoModelLabel": { "title": "Other video model" },
+              "videoReferenceMode": {
+                "title": "Use image in video as",
+                "options": [
+                  { "value": "frames", "label": "Frame" },
+                  { "value": "elements", "label": "Reference element" }
+                ]
+              },
+              "videoDurationSeconds": {
+                "title": "Video duration",
+                "options": [
+                  { "value": 4, "label": "4 seconds" },
+                  { "value": 6, "label": "6 seconds" },
+                  { "value": 8, "label": "8 seconds" },
+                  { "value": 10, "label": "10 seconds" }
+                ]
+              },
+              "videoResolution": {
+                "title": "Video resolution",
+                "options": [
+                  { "value": "flow_current", "label": "Flow default" },
+                  { "value": "res_720p", "label": "720p" },
+                  { "value": "res_1080p", "label": "1080p" }
+                ]
+              },
+              "maxVideosToAnimate": {
+                "title": "How many images to animate",
+                "description": "Choose a limit that fits the account credits."
+              },
+              "animationSelection": {
+                "title": "Image selection rule",
+                "options": [
+                  { "value": "first", "label": "First in the queue" },
+                  { "value": "last", "label": "Last in the queue" },
+                  { "value": "evenly_spaced", "label": "Evenly distributed" },
+                  { "value": "manual_indexes", "label": "Manually entered indexes" }
+                ]
+              },
+              "animationIndexes": {
+                "title": "Indexes to animate",
+                "description": "Used for manual selection. Enter 1-based positions: 1, 7, 10-14."
+              },
+              "imageRetention": {
+                "title": "Save images in the final delivery",
+                "options": [
+                  { "value": "keep_all", "label": "All images" },
+                  { "value": "keep_animated_only", "label": "Animated images only" },
+                  { "value": "omit_from_final_delivery", "label": "Do not save final images" }
+                ]
+              },
+              "delayBetweenPromptsMs": { "title": "Delay between prompts (ms)" },
+              "retryAttempts": { "title": "Attempts per item" },
+              "startMinimized": { "title": "Start Chrome minimized" }
+            }
+          }
+        },
+        "generate-images-in-browser": {
+          "name": "Generate images",
+          "description": "Creates one or more images for each prompt in Google Flow.",
+          "inputPorts": {
+            "prompts": {
+              "label": "Prompts",
+              "description": "One prompt or a list of prompts. On first use, execution may wait for sign-in in the dedicated Chrome profile before generating."
+            },
+            "reference_images": {
+              "label": "Reference images",
+              "description": "Optional images shared by the execution to preserve a character, avatar, product, setting, or style."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "Optional Flow project URL used to continue in the same room or chat while preserving characters and history."
+            }
+          },
+          "outputPorts": {
+            "images": {
+              "label": "Generated images",
+              "description": "Images generated in the real Google Flow project and imported by ContentFlow."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "URL of the active Google Flow project for reuse in later Method blocks."
+            }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": {
+                "title": "Account profile",
+                "description": "Persistent dedicated Chrome profile used to isolate channels."
+              },
+              "fallbackAccountProfiles": {
+                "title": "Fallback profiles",
+                "description": "Additional aliases, one per line, in order. The system advances automatically after an error."
+              },
+              "projectMode": {
+                "title": "Project mode",
+                "description": "Defines whether the block creates a new Google Flow project or continues an existing one.",
+                "options": [
+                  { "value": "auto", "label": "Automatic (new project or entry point)" },
+                  { "value": "new", "label": "Always create a new project" },
+                  { "value": "existing", "label": "Use a specific project" }
+                ]
+              },
+              "projectUrl": {
+                "title": "Project URL (optional)",
+                "description": "URL of a project at https://flow.google.com/project/.... Used in specific-project mode or to pin a project manually."
+              },
+              "imageModel": {
+                "title": "Image model",
+                "description": "Image generation model selected in the Google Flow interface.",
+                "options": [
+                  { "value": "flow_auto", "label": "Automatic: Pro → 2 → 2 Lite (recommended)" },
+                  { "value": "nano_banana_2", "label": "Nano Banana 2" },
+                  { "value": "nano_banana_pro", "label": "Nano Banana Pro" },
+                  { "value": "nano_banana_2_lite", "label": "Nano Banana 2 Lite" }
+                ]
+              },
+              "imageModelLabel": {
+                "title": "Other image model (Flow label)",
+                "description": "Optional. Uses the exact visible label of a new Flow model and overrides the predefined selection."
+              },
+              "fallbackOnModelLimit": {
+                "title": "Model fallback",
+                "description": "If the model reaches a limit or becomes unavailable, follows Nano Banana Pro → Nano Banana 2 → Nano Banana 2 Lite on the same account."
+              },
+              "aspectRatio": {
+                "title": "Aspect ratio",
+                "options": [
+                  { "value": "flow_current", "label": "Current Flow setting" },
+                  { "value": "landscape", "label": "Landscape (16:9)" },
+                  { "value": "landscape_4_3", "label": "Landscape (4:3)" },
+                  { "value": "portrait", "label": "Portrait (9:16)" },
+                  { "value": "portrait_3_4", "label": "Portrait (3:4)" },
+                  { "value": "square", "label": "Square (1:1)" }
+                ]
+              },
+              "delayBetweenPromptsMs": {
+                "title": "Delay between prompts (ms)",
+                "description": "Base delay between submissions to avoid accidental consecutive requests."
+              },
+              "maxConcurrentGenerations": {
+                "title": "Concurrent image generations",
+                "description": "Maximum number of generations running at the same time."
+              },
+              "retryAttempts": {
+                "title": "Attempts per item",
+                "description": "New attempts for each prompt that fails."
+              },
+              "rateLimitRetryAttempts": {
+                "title": "Rate-limit attempts",
+                "description": "Resubmissions after a temporary rate limit, always observing the provider wait time."
+              },
+              "maxReferenceImages": {
+                "title": "Maximum references",
+                "description": "Maximum number of shared reference images."
+              },
+              "maxImagesPerPrompt": {
+                "title": "Images per prompt",
+                "description": "Amount requested from Flow per prompt: x1, x2, x3, or x4. The plugin confirms this option before generating."
+              },
+              "startMinimized": { "title": "Start Chrome minimized" }
+            }
+          }
+        },
+        "animate-image-in-browser": {
+          "name": "Animate images",
+          "description": "Turns a reference image into a video with configurable motion and camera.",
+          "inputPorts": {
+            "images": {
+              "label": "Image to animate",
+              "description": "Base image that will be animated in Google Flow with the selected Veo model."
+            },
+            "prompts": {
+              "label": "Motion instruction",
+              "description": "Optional prompt or instruction used to guide motion and camera."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "Optional Flow project or chat URL where the image already exists."
+            }
+          },
+          "outputPorts": {
+            "video": {
+              "label": "Animated video",
+              "description": "MP4 video generated in Google Flow from the animated image."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "URL of the active Google Flow project for chaining into later blocks."
+            }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": { "title": "Account profile" },
+              "fallbackAccountProfiles": { "title": "Fallback profiles" },
+              "projectMode": {
+                "title": "Project mode",
+                "description": "Defines whether the block creates a new Google Flow project or continues an existing one.",
+                "options": [
+                  { "value": "auto", "label": "Automatic (new project or entry point)" },
+                  { "value": "new", "label": "Always create a new project" },
+                  { "value": "existing", "label": "Use a specific project" }
+                ]
+              },
+              "projectUrl": {
+                "title": "Project URL (optional)",
+                "description": "URL of a project at https://flow.google.com/project/.... Used in specific-project mode or to pin a project manually."
+              },
+              "videoModel": {
+                "title": "Video model",
+                "description": "Video generation model used for the animation.",
+                "options": [
+                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
+                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
+                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
+                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                ]
+              },
+              "videoModelLabel": {
+                "title": "Other video model (Flow label)",
+                "description": "Optional. Uses the exact visible label of a new Flow model and overrides the predefined selection."
+              },
+              "aspectRatio": {
+                "title": "Video aspect ratio",
+                "options": [
+                  { "value": "flow_current", "label": "Current Flow setting" },
+                  { "value": "landscape", "label": "Landscape (16:9)" },
+                  { "value": "portrait", "label": "Portrait (9:16)" }
+                ]
+              },
+              "videoReferenceMode": {
+                "title": "Use image as",
+                "description": "Defines whether the animated image is used in the video as a frame or a reference element.",
+                "options": [
+                  { "value": "frames", "label": "Frame" },
+                  { "value": "elements", "label": "Reference element" }
+                ]
+              },
+              "videoDurationSeconds": {
+                "title": "Duration",
+                "options": [
+                  { "value": 4, "label": "4 seconds" },
+                  { "value": 6, "label": "6 seconds" },
+                  { "value": 8, "label": "8 seconds" },
+                  { "value": 10, "label": "10 seconds (compatible models only)" }
+                ]
+              },
+              "videoResolution": {
+                "title": "Video resolution",
+                "options": [
+                  { "value": "flow_current", "label": "Flow default" },
+                  { "value": "res_720p", "label": "720p" },
+                  { "value": "res_1080p", "label": "1080p" }
+                ]
+              },
+              "retryAttempts": { "title": "Attempts per item" },
+              "startMinimized": { "title": "Start Chrome minimized" }
+            }
+          }
+        },
+        "generate-video-in-browser": {
+          "name": "Generate video from text",
+          "description": "Creates videos directly from scene prompts in Google Flow.",
+          "inputPorts": {
+            "prompts": {
+              "label": "Video prompts",
+              "description": "One prompt or a list of prompts for video generation with Veo in Google Flow."
+            },
+            "reference_images": {
+              "label": "Reference images or elements",
+              "description": "Optional images used as reference elements in videos from the same project."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "Optional Flow project URL used to generate video in the same room."
+            }
+          },
+          "outputPorts": {
+            "video": {
+              "label": "Generated video",
+              "description": "MP4 video generated in Google Flow from the prompt."
+            },
+            "project_url": {
+              "label": "Project URL",
+              "description": "URL of the active Google Flow project."
+            }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": { "title": "Account profile" },
+              "fallbackAccountProfiles": { "title": "Fallback profiles" },
+              "projectMode": {
+                "title": "Project mode",
+                "description": "Defines whether the block creates a new Google Flow project or continues an existing one.",
+                "options": [
+                  { "value": "auto", "label": "Automatic (new project or entry point)" },
+                  { "value": "new", "label": "Always create a new project" },
+                  { "value": "existing", "label": "Use a specific project" }
+                ]
+              },
+              "projectUrl": {
+                "title": "Project URL (optional)",
+                "description": "URL of a project at https://flow.google.com/project/.... Used in specific-project mode or to pin a project manually."
+              },
+              "videoModel": {
+                "title": "Video model",
+                "options": [
+                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
+                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
+                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
+                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                ]
+              },
+              "videoModelLabel": {
+                "title": "Other video model (Flow label)",
+                "description": "Optional. Uses the exact visible label of a new Flow model and overrides the predefined selection."
+              },
+              "aspectRatio": {
+                "title": "Aspect ratio",
+                "options": [
+                  { "value": "flow_current", "label": "Current Flow setting" },
+                  { "value": "landscape", "label": "Landscape (16:9)" },
+                  { "value": "portrait", "label": "Portrait (9:16)" }
+                ]
+              },
+              "videoReferenceMode": {
+                "title": "Use references as",
+                "options": [
+                  { "value": "frames", "label": "Frames" },
+                  { "value": "elements", "label": "Reference elements" }
+                ]
+              },
+              "videoDurationSeconds": {
+                "title": "Duration",
+                "options": [
+                  { "value": 4, "label": "4 seconds" },
+                  { "value": 6, "label": "6 seconds" },
+                  { "value": 8, "label": "8 seconds" },
+                  { "value": 10, "label": "10 seconds (compatible models only)" }
+                ]
+              },
+              "videoResolution": {
+                "title": "Video resolution",
+                "options": [
+                  { "value": "flow_current", "label": "Flow default" },
+                  { "value": "res_720p", "label": "720p" },
+                  { "value": "res_1080p", "label": "1080p" }
+                ]
+              },
+              "delayBetweenPromptsMs": { "title": "Delay between prompts (ms)" },
+              "retryAttempts": { "title": "Attempts per item" },
+              "startMinimized": { "title": "Start Chrome minimized" }
+            }
+          }
+        }
+      }
+    },
+    "es": {
+      "name": "Google Flow Browser Images",
+      "description": "Genera imágenes y videos reales en Google Flow con modelos Nano Banana y Veo, proporciones configurables, animación de imágenes, referencias visuales, continuidad de proyecto y producción visual por lotes.",
+      "profileSetup": {
+        "label": "Añadir cuenta",
+        "description": "Abre el perfil dedicado de Chrome. Instala manualmente ContentFlow Browser Bridge en el perfil y completa el inicio de sesión de Google Flow."
+      },
+      "capabilities": {
+        "produce-visual-assets-in-browser": {
+          "name": "Producción visual completa",
+          "description": "Crea imágenes, videos o una combinación de ambos a partir de los prompts de las escenas.",
+          "inputPorts": {
+            "prompts": {
+              "label": "Prompts de las escenas",
+              "description": "Lista ordenada de prompts de las escenas. Cada prompt genera una imagen antes de cualquier animación."
+            },
+            "character_prompts": {
+              "label": "Prompts de personajes",
+              "description": "Lista opcional para crear referencias visuales antes de las escenas. Las referencias generadas se adjuntan a toda la producción para mantener la consistencia."
+            },
+            "animation_prompts": {
+              "label": "Prompts de animación",
+              "description": "Lista opcional, en el orden de las escenas, para describir el movimiento y la cámara. Si se omite, se reutiliza el prompt de la escena."
+            },
+            "reference_images": {
+              "label": "Referencias de personaje y estilo",
+              "description": "Imágenes reutilizadas en toda la cola para mantener consistentes los personajes, productos, escenarios y la dirección de arte."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "Proyecto opcional de Google Flow para conservar la sala, las referencias y el historial."
+            }
+          },
+          "outputPorts": {
+            "images": {
+              "label": "Imágenes finales",
+              "description": "Imágenes conservadas por la política de retención configurada."
+            },
+            "character_references": {
+              "label": "Referencias de personaje",
+              "description": "Referencias generadas al inicio de la producción cuando está activado el guardado."
+            },
+            "videos": {
+              "label": "Videos finales",
+              "description": "Videos animados a partir de las imágenes seleccionadas."
+            },
+            "project_url": { "label": "URL del proyecto" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": { "title": "Perfil de cuenta" },
+              "fallbackAccountProfiles": {
+                "title": "Perfiles alternativos",
+                "description": "Alias adicionales, uno por línea, en orden de uso."
+              },
+              "projectMode": {
+                "title": "Modo del proyecto",
+                "options": [
+                  { "value": "auto", "label": "Automático" },
+                  { "value": "new", "label": "Crear siempre un proyecto nuevo" },
+                  { "value": "existing", "label": "Usar un proyecto específico" }
+                ]
+              },
+              "projectUrl": { "title": "URL del proyecto" },
+              "productionMode": {
+                "title": "¿Qué debe producir este bloque?",
+                "description": "Elige el flujo visual antes de ajustar sus detalles.",
+                "options": [
+                  { "value": "images_only", "label": "Solo imágenes" },
+                  { "value": "text_to_video", "label": "Texto directamente a video" },
+                  {
+                    "value": "images_then_selected_videos",
+                    "label": "Imágenes y animar solo algunas"
+                  },
+                  { "value": "images_to_video_all", "label": "Imágenes y animar todas" }
+                ]
+              },
+              "imageModel": {
+                "title": "Modelo de imagen",
+                "options": [
+                  { "value": "flow_auto", "label": "Automático: Pro → 2 → 2 Lite" },
+                  { "value": "nano_banana_2", "label": "Nano Banana 2" },
+                  { "value": "nano_banana_pro", "label": "Nano Banana Pro" },
+                  { "value": "nano_banana_2_lite", "label": "Nano Banana 2 Lite" }
+                ]
+              },
+              "imageModelLabel": { "title": "Otro modelo de imagen" },
+              "fallbackOnModelLimit": {
+                "title": "Usar alternativa al alcanzar el límite de imágenes"
+              },
+              "aspectRatio": {
+                "title": "Proporción",
+                "options": [
+                  { "value": "flow_current", "label": "Actual de Flow" },
+                  { "value": "landscape", "label": "Horizontal (16:9)" },
+                  { "value": "portrait", "label": "Vertical (9:16)" },
+                  { "value": "square", "label": "Cuadrada (1:1)" }
+                ]
+              },
+              "maxImagesPerPrompt": { "title": "Imágenes por prompt" },
+              "maxConcurrentGenerations": { "title": "Generaciones de imagen simultáneas" },
+              "enableCharacterConsistency": {
+                "title": "Mantener el personaje consistente",
+                "description": "Genera referencias visuales antes de las escenas y las adjunta a toda la producción."
+              },
+              "characterPrompts": {
+                "title": "Prompts de personaje",
+                "description": "Un prompt por línea para crear referencias visuales antes de las escenas."
+              },
+              "maxReferenceImages": { "title": "Máximo de referencias" },
+              "maxCharacterReferences": {
+                "title": "Referencias de personaje que se usarán",
+                "description": "Limita cuántas imágenes generadas por los prompts de personaje se usan como referencia en las escenas."
+              },
+              "saveCharacterReferences": {
+                "title": "Guardar las referencias de personaje en la entrega final"
+              },
+              "videoModel": {
+                "title": "Modelo de video",
+                "options": [
+                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
+                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
+                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
+                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                ]
+              },
+              "videoModelLabel": { "title": "Otro modelo de video" },
+              "videoReferenceMode": {
+                "title": "Usar la imagen en el video como",
+                "options": [
+                  { "value": "frames", "label": "Fotograma" },
+                  { "value": "elements", "label": "Elemento de referencia" }
+                ]
+              },
+              "videoDurationSeconds": {
+                "title": "Duración del video",
+                "options": [
+                  { "value": 4, "label": "4 segundos" },
+                  { "value": 6, "label": "6 segundos" },
+                  { "value": 8, "label": "8 segundos" },
+                  { "value": 10, "label": "10 segundos" }
+                ]
+              },
+              "videoResolution": {
+                "title": "Resolución del video",
+                "options": [
+                  { "value": "flow_current", "label": "Predeterminada de Flow" },
+                  { "value": "res_720p", "label": "720p" },
+                  { "value": "res_1080p", "label": "1080p" }
+                ]
+              },
+              "maxVideosToAnimate": {
+                "title": "Cuántas imágenes animar",
+                "description": "Elige un límite compatible con los créditos de la cuenta."
+              },
+              "animationSelection": {
+                "title": "Criterio para elegir imágenes",
+                "options": [
+                  { "value": "first", "label": "Primeras de la cola" },
+                  { "value": "last", "label": "Últimas de la cola" },
+                  { "value": "evenly_spaced", "label": "Distribuidas en la cola" },
+                  { "value": "manual_indexes", "label": "Índices introducidos manualmente" }
+                ]
+              },
+              "animationIndexes": {
+                "title": "Índices para animar",
+                "description": "Se usa en la selección manual. Introduce posiciones basadas en 1: 1, 7, 10-14."
+              },
+              "imageRetention": {
+                "title": "Guardar imágenes en la entrega final",
+                "options": [
+                  { "value": "keep_all", "label": "Todas las imágenes" },
+                  { "value": "keep_animated_only", "label": "Solo las imágenes animadas" },
+                  { "value": "omit_from_final_delivery", "label": "No guardar imágenes finales" }
+                ]
+              },
+              "delayBetweenPromptsMs": { "title": "Pausa entre prompts (ms)" },
+              "retryAttempts": { "title": "Intentos por elemento" },
+              "startMinimized": { "title": "Iniciar Chrome minimizado" }
+            }
+          }
+        },
+        "generate-images-in-browser": {
+          "name": "Generar imágenes",
+          "description": "Crea una o más imágenes para cada prompt en Google Flow.",
+          "inputPorts": {
+            "prompts": {
+              "label": "Prompts",
+              "description": "Un prompt o una lista de prompts. En el primer uso, la ejecución puede esperar el inicio de sesión en el perfil dedicado de Chrome antes de generar."
+            },
+            "reference_images": {
+              "label": "Imágenes de referencia",
+              "description": "Imágenes opcionales compartidas por la ejecución para conservar un personaje, avatar, producto, escenario o estilo."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL opcional de un proyecto de Flow para continuar en la misma sala o chat conservando personajes e historial."
+            }
+          },
+          "outputPorts": {
+            "images": {
+              "label": "Imágenes generadas",
+              "description": "Imágenes generadas en el proyecto real de Google Flow e importadas por ContentFlow."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL del proyecto activo de Google Flow para reutilizarla en bloques posteriores del Método."
+            }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": {
+                "title": "Perfil de cuenta",
+                "description": "Perfil persistente y dedicado de Chrome usado para aislar canales."
+              },
+              "fallbackAccountProfiles": {
+                "title": "Perfiles alternativos",
+                "description": "Alias adicionales, uno por línea y en orden. El sistema avanza automáticamente después de un error."
+              },
+              "projectMode": {
+                "title": "Modo del proyecto",
+                "description": "Define si el bloque crea un proyecto nuevo de Google Flow o continúa uno existente.",
+                "options": [
+                  { "value": "auto", "label": "Automático (proyecto nuevo o punto de entrada)" },
+                  { "value": "new", "label": "Crear siempre un proyecto nuevo" },
+                  { "value": "existing", "label": "Usar un proyecto específico" }
+                ]
+              },
+              "projectUrl": {
+                "title": "URL del proyecto (opcional)",
+                "description": "URL de un proyecto en https://flow.google.com/project/.... Se usa en el modo de proyecto específico o para fijar un proyecto manualmente."
+              },
+              "imageModel": {
+                "title": "Modelo de imagen",
+                "description": "Modelo de generación de imagen seleccionado en la interfaz de Google Flow.",
+                "options": [
+                  { "value": "flow_auto", "label": "Automático: Pro → 2 → 2 Lite (recomendado)" },
+                  { "value": "nano_banana_2", "label": "Nano Banana 2" },
+                  { "value": "nano_banana_pro", "label": "Nano Banana Pro" },
+                  { "value": "nano_banana_2_lite", "label": "Nano Banana 2 Lite" }
+                ]
+              },
+              "imageModelLabel": {
+                "title": "Otro modelo de imagen (etiqueta de Flow)",
+                "description": "Opcional. Usa exactamente la etiqueta visible de un modelo nuevo de Flow y sustituye la selección predefinida."
+              },
+              "fallbackOnModelLimit": {
+                "title": "Alternativa de modelo",
+                "description": "Si el modelo alcanza un límite o no está disponible, sigue Nano Banana Pro → Nano Banana 2 → Nano Banana 2 Lite en la misma cuenta."
+              },
+              "aspectRatio": {
+                "title": "Proporción",
+                "options": [
+                  { "value": "flow_current", "label": "Actual de Flow" },
+                  { "value": "landscape", "label": "Horizontal (16:9)" },
+                  { "value": "landscape_4_3", "label": "Horizontal (4:3)" },
+                  { "value": "portrait", "label": "Vertical (9:16)" },
+                  { "value": "portrait_3_4", "label": "Vertical (3:4)" },
+                  { "value": "square", "label": "Cuadrada (1:1)" }
+                ]
+              },
+              "delayBetweenPromptsMs": {
+                "title": "Pausa entre prompts (ms)",
+                "description": "Pausa base entre envíos para evitar solicitudes consecutivas accidentales."
+              },
+              "maxConcurrentGenerations": {
+                "title": "Generaciones de imagen simultáneas",
+                "description": "Cantidad máxima de generaciones ejecutadas al mismo tiempo."
+              },
+              "retryAttempts": {
+                "title": "Intentos por elemento",
+                "description": "Nuevos intentos para cada prompt que falle."
+              },
+              "rateLimitRetryAttempts": {
+                "title": "Intentos por límite de solicitudes",
+                "description": "Reenvíos después de un límite temporal, respetando siempre la espera indicada por el proveedor."
+              },
+              "maxReferenceImages": {
+                "title": "Máximo de referencias",
+                "description": "Cantidad máxima de imágenes de referencia compartidas."
+              },
+              "maxImagesPerPrompt": {
+                "title": "Imágenes por prompt",
+                "description": "Cantidad solicitada a Flow por prompt: x1, x2, x3 o x4. El plugin confirma esta opción antes de generar."
+              },
+              "startMinimized": { "title": "Iniciar Chrome minimizado" }
+            }
+          }
+        },
+        "animate-image-in-browser": {
+          "name": "Animar imágenes",
+          "description": "Transforma una imagen de referencia en video con movimiento y cámara configurables.",
+          "inputPorts": {
+            "images": {
+              "label": "Imagen para animar",
+              "description": "Imagen base que se animará en Google Flow con el modelo Veo seleccionado."
+            },
+            "prompts": {
+              "label": "Instrucción de movimiento",
+              "description": "Prompt o instrucción opcional para guiar el movimiento y la cámara."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL opcional del proyecto o chat de Flow donde ya se encuentra la imagen."
+            }
+          },
+          "outputPorts": {
+            "video": {
+              "label": "Video animado",
+              "description": "Video MP4 generado en Google Flow a partir de la imagen animada."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL del proyecto activo de Google Flow para encadenarlo con bloques posteriores."
+            }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": { "title": "Perfil de cuenta" },
+              "fallbackAccountProfiles": { "title": "Perfiles alternativos" },
+              "projectMode": {
+                "title": "Modo del proyecto",
+                "description": "Define si el bloque crea un proyecto nuevo de Google Flow o continúa uno existente.",
+                "options": [
+                  { "value": "auto", "label": "Automático (proyecto nuevo o punto de entrada)" },
+                  { "value": "new", "label": "Crear siempre un proyecto nuevo" },
+                  { "value": "existing", "label": "Usar un proyecto específico" }
+                ]
+              },
+              "projectUrl": {
+                "title": "URL del proyecto (opcional)",
+                "description": "URL de un proyecto en https://flow.google.com/project/.... Se usa en el modo de proyecto específico o para fijar un proyecto manualmente."
+              },
+              "videoModel": {
+                "title": "Modelo de video",
+                "description": "Modelo de generación de video utilizado en la animación.",
+                "options": [
+                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
+                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
+                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
+                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                ]
+              },
+              "videoModelLabel": {
+                "title": "Otro modelo de video (etiqueta de Flow)",
+                "description": "Opcional. Usa exactamente la etiqueta visible de un modelo nuevo de Flow y sustituye la selección predefinida."
+              },
+              "aspectRatio": {
+                "title": "Proporción del video",
+                "options": [
+                  { "value": "flow_current", "label": "Actual de Flow" },
+                  { "value": "landscape", "label": "Horizontal (16:9)" },
+                  { "value": "portrait", "label": "Vertical (9:16)" }
+                ]
+              },
+              "videoReferenceMode": {
+                "title": "Usar la imagen como",
+                "description": "Define si la imagen animada se usa en el video como fotograma o elemento de referencia.",
+                "options": [
+                  { "value": "frames", "label": "Fotograma" },
+                  { "value": "elements", "label": "Elemento de referencia" }
+                ]
+              },
+              "videoDurationSeconds": {
+                "title": "Duración",
+                "options": [
+                  { "value": 4, "label": "4 segundos" },
+                  { "value": 6, "label": "6 segundos" },
+                  { "value": 8, "label": "8 segundos" },
+                  { "value": 10, "label": "10 segundos (solo modelos compatibles)" }
+                ]
+              },
+              "videoResolution": {
+                "title": "Resolución del video",
+                "options": [
+                  { "value": "flow_current", "label": "Predeterminada de Flow" },
+                  { "value": "res_720p", "label": "720p" },
+                  { "value": "res_1080p", "label": "1080p" }
+                ]
+              },
+              "retryAttempts": { "title": "Intentos por elemento" },
+              "startMinimized": { "title": "Iniciar Chrome minimizado" }
+            }
+          }
+        },
+        "generate-video-in-browser": {
+          "name": "Generar video por texto",
+          "description": "Crea videos directamente a partir de prompts de escena en Google Flow.",
+          "inputPorts": {
+            "prompts": {
+              "label": "Prompts de video",
+              "description": "Un prompt o una lista de prompts para generar video con Veo en Google Flow."
+            },
+            "reference_images": {
+              "label": "Imágenes o elementos de referencia",
+              "description": "Imágenes opcionales usadas como elementos de referencia en videos del mismo proyecto."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL opcional del proyecto de Flow para generar el video en la misma sala."
+            }
+          },
+          "outputPorts": {
+            "video": {
+              "label": "Video generado",
+              "description": "Video MP4 generado en Google Flow a partir del prompt."
+            },
+            "project_url": {
+              "label": "URL del proyecto",
+              "description": "URL del proyecto activo de Google Flow."
+            }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "accountProfile": { "title": "Perfil de cuenta" },
+              "fallbackAccountProfiles": { "title": "Perfiles alternativos" },
+              "projectMode": {
+                "title": "Modo del proyecto",
+                "description": "Define si el bloque crea un proyecto nuevo de Google Flow o continúa uno existente.",
+                "options": [
+                  { "value": "auto", "label": "Automático (proyecto nuevo o punto de entrada)" },
+                  { "value": "new", "label": "Crear siempre un proyecto nuevo" },
+                  { "value": "existing", "label": "Usar un proyecto específico" }
+                ]
+              },
+              "projectUrl": {
+                "title": "URL del proyecto (opcional)",
+                "description": "URL de un proyecto en https://flow.google.com/project/.... Se usa en el modo de proyecto específico o para fijar un proyecto manualmente."
+              },
+              "videoModel": {
+                "title": "Modelo de video",
+                "options": [
+                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
+                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
+                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
+                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                ]
+              },
+              "videoModelLabel": {
+                "title": "Otro modelo de video (etiqueta de Flow)",
+                "description": "Opcional. Usa exactamente la etiqueta visible de un modelo nuevo de Flow y sustituye la selección predefinida."
+              },
+              "aspectRatio": {
+                "title": "Proporción",
+                "options": [
+                  { "value": "flow_current", "label": "Actual de Flow" },
+                  { "value": "landscape", "label": "Horizontal (16:9)" },
+                  { "value": "portrait", "label": "Vertical (9:16)" }
+                ]
+              },
+              "videoReferenceMode": {
+                "title": "Usar las referencias como",
+                "options": [
+                  { "value": "frames", "label": "Fotogramas" },
+                  { "value": "elements", "label": "Elementos de referencia" }
+                ]
+              },
+              "videoDurationSeconds": {
+                "title": "Duración",
+                "options": [
+                  { "value": 4, "label": "4 segundos" },
+                  { "value": 6, "label": "6 segundos" },
+                  { "value": 8, "label": "8 segundos" },
+                  { "value": 10, "label": "10 segundos (solo modelos compatibles)" }
+                ]
+              },
+              "videoResolution": {
+                "title": "Resolución del video",
+                "options": [
+                  { "value": "flow_current", "label": "Predeterminada de Flow" },
+                  { "value": "res_720p", "label": "720p" },
+                  { "value": "res_1080p", "label": "1080p" }
+                ]
+              },
+              "delayBetweenPromptsMs": { "title": "Pausa entre prompts (ms)" },
+              "retryAttempts": { "title": "Intentos por elemento" },
+              "startMinimized": { "title": "Iniciar Chrome minimizado" }
+            }
+          }
+        }
+      }
+    }
+  },
   "author": "Local user",
   "license": "MIT",
   "branding": {
@@ -232,6 +1196,30 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default"
           },
+          "fallbackAccountProfiles": {
+            "type": "string",
+            "title": "Perfis de fallback",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 512,
+            "description": "Aliases adicionais, um por linha, em ordem de uso."
+          },
+          "projectMode": {
+            "type": "string",
+            "title": "Modo do projeto",
+            "default": "auto",
+            "oneOf": [
+              { "const": "auto", "title": "Automático" },
+              { "const": "new", "title": "Sempre criar novo projeto" },
+              { "const": "existing", "title": "Usar projeto específico" }
+            ]
+          },
+          "projectUrl": {
+            "type": "string",
+            "title": "URL do projeto",
+            "default": "",
+            "visibleWhen": { "property": "projectMode", "values": ["existing"] }
+          },
           "productionMode": {
             "type": "string",
             "title": "O que este bloco deve produzir?",
@@ -246,6 +1234,74 @@
               },
               { "const": "images_to_video_all", "title": "Imagens e animar todas" }
             ]
+          },
+          "imageModel": {
+            "type": "string",
+            "title": "Modelo de imagem",
+            "default": "flow_auto",
+            "oneOf": [
+              { "const": "flow_auto", "title": "Automático: Pro → 2 → 2 Lite" },
+              { "const": "nano_banana_2", "title": "Nano Banana 2" },
+              { "const": "nano_banana_pro", "title": "Nano Banana Pro" },
+              { "const": "nano_banana_2_lite", "title": "Nano Banana 2 Lite" },
+              { "type": "string", "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$" }
+            ],
+            "visibleWhen": {
+              "property": "productionMode",
+              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+            }
+          },
+          "imageModelLabel": {
+            "type": "string",
+            "title": "Outro modelo de imagem",
+            "default": "",
+            "maxLength": 120,
+            "visibleWhen": {
+              "property": "productionMode",
+              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+            }
+          },
+          "fallbackOnModelLimit": {
+            "type": "boolean",
+            "title": "Usar fallback ao atingir limite de imagem",
+            "default": true,
+            "visibleWhen": {
+              "property": "productionMode",
+              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+            }
+          },
+          "aspectRatio": {
+            "type": "string",
+            "title": "Proporção",
+            "default": "flow_current",
+            "oneOf": [
+              { "const": "flow_current", "title": "Atual do Flow" },
+              { "const": "landscape", "title": "Paisagem (16:9)" },
+              { "const": "portrait", "title": "Retrato (9:16)" },
+              { "const": "square", "title": "Quadrada (1:1)" }
+            ]
+          },
+          "maxImagesPerPrompt": {
+            "type": "integer",
+            "title": "Imagens por prompt",
+            "minimum": 1,
+            "maximum": 4,
+            "default": 1,
+            "visibleWhen": {
+              "property": "productionMode",
+              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+            }
+          },
+          "maxConcurrentGenerations": {
+            "type": "integer",
+            "title": "Gerações de imagem simultâneas",
+            "minimum": 1,
+            "maximum": 3,
+            "default": 1,
+            "visibleWhen": {
+              "property": "productionMode",
+              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+            }
           },
           "enableCharacterConsistency": {
             "type": "boolean",
@@ -266,78 +1322,16 @@
             "maxLength": 12000,
             "visibleWhen": { "property": "enableCharacterConsistency", "values": [true] }
           },
-          "fallbackAccountProfiles": {
-            "type": "string",
-            "title": "Perfis de fallback",
-            "format": "textarea",
-            "default": "",
-            "maxLength": 512,
-            "description": "Aliases adicionais, um por linha, em ordem de uso."
-          },
-          "projectMode": {
-            "type": "string",
-            "title": "Modo do projeto",
-            "default": "auto",
-            "oneOf": [
-              { "const": "auto", "title": "Automático" },
-              { "const": "new", "title": "Sempre criar novo projeto" },
-              { "const": "existing", "title": "Usar projeto específico" }
-            ]
-          },
-          "projectUrl": { "type": "string", "title": "URL do projeto", "default": "" },
-          "imageModel": {
-            "type": "string",
-            "title": "Modelo de imagem",
-            "default": "flow_auto",
-            "oneOf": [
-              { "const": "flow_auto", "title": "Automático: Pro → 2 → 2 Lite" },
-              { "const": "nano_banana_2", "title": "Nano Banana 2" },
-              { "const": "nano_banana_pro", "title": "Nano Banana Pro" },
-              { "const": "nano_banana_2_lite", "title": "Nano Banana 2 Lite" }
-            ]
-          },
-          "imageModelLabel": {
-            "type": "string",
-            "title": "Outro modelo de imagem",
-            "default": "",
-            "maxLength": 120
-          },
-          "fallbackOnModelLimit": {
-            "type": "boolean",
-            "title": "Usar fallback ao atingir limite de imagem",
-            "default": true
-          },
-          "aspectRatio": {
-            "type": "string",
-            "title": "Proporção",
-            "default": "flow_current",
-            "oneOf": [
-              { "const": "flow_current", "title": "Atual do Flow" },
-              { "const": "landscape", "title": "Paisagem (16:9)" },
-              { "const": "portrait", "title": "Retrato (9:16)" },
-              { "const": "square", "title": "Quadrada (1:1)" }
-            ]
-          },
-          "maxImagesPerPrompt": {
-            "type": "integer",
-            "title": "Imagens por prompt",
-            "minimum": 1,
-            "maximum": 4,
-            "default": 1
-          },
-          "maxConcurrentGenerations": {
-            "type": "integer",
-            "title": "Gerações de imagem simultâneas",
-            "minimum": 1,
-            "maximum": 3,
-            "default": 1
-          },
           "maxReferenceImages": {
             "type": "integer",
             "title": "Máximo de referências",
             "minimum": 0,
             "maximum": 10,
-            "default": 10
+            "default": 10,
+            "visibleWhen": {
+              "property": "productionMode",
+              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+            }
           },
           "maxCharacterReferences": {
             "type": "integer",
@@ -345,65 +1339,14 @@
             "description": "Limita quantas imagens geradas pelos prompts de personagem entram como referência nas cenas.",
             "minimum": 1,
             "maximum": 10,
-            "default": 1
+            "default": 1,
+            "visibleWhen": { "property": "enableCharacterConsistency", "values": [true] }
           },
           "saveCharacterReferences": {
             "type": "boolean",
             "title": "Salvar referências de personagem na entrega final",
-            "default": true
-          },
-          "maxVideosToAnimate": {
-            "type": "integer",
-            "title": "Quantas imagens animar",
-            "description": "Escolha um limite compatível com os créditos da conta.",
-            "minimum": 1,
-            "maximum": 300,
-            "default": 3,
-            "visibleWhen": {
-              "property": "productionMode",
-              "values": ["images_then_selected_videos"]
-            }
-          },
-          "animationSelection": {
-            "type": "string",
-            "title": "Critério para escolher imagens",
-            "default": "first",
-            "oneOf": [
-              { "const": "first", "title": "Primeiras da fila" },
-              { "const": "last", "title": "Últimas da fila" },
-              { "const": "evenly_spaced", "title": "Distribuídas pela fila" },
-              { "const": "manual_indexes", "title": "Índices informados manualmente" }
-            ],
-            "visibleWhen": {
-              "property": "productionMode",
-              "values": ["images_then_selected_videos"]
-            }
-          },
-          "animationIndexes": {
-            "type": "string",
-            "title": "Índices para animar",
-            "format": "textarea",
-            "default": "",
-            "maxLength": 2048,
-            "description": "Usado no critério manual. Informe posições 1-baseadas: 1, 7, 10-14.",
-            "visibleWhen": {
-              "property": "productionMode",
-              "values": ["images_then_selected_videos"]
-            }
-          },
-          "imageRetention": {
-            "type": "string",
-            "title": "Salvar imagens na entrega final",
-            "default": "keep_all",
-            "oneOf": [
-              { "const": "keep_all", "title": "Todas as imagens" },
-              { "const": "keep_animated_only", "title": "Somente as imagens animadas" },
-              { "const": "omit_from_final_delivery", "title": "Não salvar imagens finais" }
-            ],
-            "visibleWhen": {
-              "property": "productionMode",
-              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
-            }
+            "default": true,
+            "visibleWhen": { "property": "enableCharacterConsistency", "values": [true] }
           },
           "videoModel": {
             "type": "string",
@@ -413,7 +1356,8 @@
               { "const": "veo_3_1_quality", "title": "Veo 3.1 - Quality" },
               { "const": "veo_3_1_fast", "title": "Veo 3.1 - Fast" },
               { "const": "veo_3_1_lite", "title": "Veo 3.1 - Lite" },
-              { "const": "omni_1_1_flash", "title": "Omni 1.1 Flash" }
+              { "const": "omni_1_1_flash", "title": "Omni 1.1 Flash" },
+              { "type": "string", "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$" }
             ],
             "visibleWhen": {
               "property": "productionMode",
@@ -472,6 +1416,56 @@
               "values": ["text_to_video", "images_then_selected_videos", "images_to_video_all"]
             }
           },
+          "maxVideosToAnimate": {
+            "type": "integer",
+            "title": "Quantas imagens animar",
+            "description": "Escolha um limite compatível com os créditos da conta.",
+            "minimum": 1,
+            "maximum": 300,
+            "default": 3,
+            "visibleWhen": {
+              "property": "productionMode",
+              "values": ["images_then_selected_videos"]
+            }
+          },
+          "animationSelection": {
+            "type": "string",
+            "title": "Critério para escolher imagens",
+            "default": "first",
+            "oneOf": [
+              { "const": "first", "title": "Primeiras da fila" },
+              { "const": "last", "title": "Últimas da fila" },
+              { "const": "evenly_spaced", "title": "Distribuídas pela fila" },
+              { "const": "manual_indexes", "title": "Índices informados manualmente" }
+            ],
+            "visibleWhen": {
+              "property": "productionMode",
+              "values": ["images_then_selected_videos"]
+            }
+          },
+          "animationIndexes": {
+            "type": "string",
+            "title": "Índices para animar",
+            "format": "textarea",
+            "default": "",
+            "maxLength": 2048,
+            "description": "Usado no critério manual. Informe posições 1-baseadas: 1, 7, 10-14.",
+            "visibleWhen": { "property": "animationSelection", "values": ["manual_indexes"] }
+          },
+          "imageRetention": {
+            "type": "string",
+            "title": "Salvar imagens na entrega final",
+            "default": "keep_all",
+            "oneOf": [
+              { "const": "keep_all", "title": "Todas as imagens" },
+              { "const": "keep_animated_only", "title": "Somente as imagens animadas" },
+              { "const": "omit_from_final_delivery", "title": "Não salvar imagens finais" }
+            ],
+            "visibleWhen": {
+              "property": "productionMode",
+              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+            }
+          },
           "delayBetweenPromptsMs": {
             "type": "integer",
             "title": "Pausa entre prompts (ms)",
@@ -493,6 +1487,20 @@
           }
         }
       },
+      "configurationOptions": [
+        {
+          "property": "imageModel",
+          "providerId": "flow-image-models",
+          "dependsOn": ["accountProfile"],
+          "cacheTtlMs": 300000
+        },
+        {
+          "property": "videoModel",
+          "providerId": "flow-video-models",
+          "dependsOn": ["accountProfile"],
+          "cacheTtlMs": 300000
+        }
+      ],
       "outputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -514,6 +1522,12 @@
       },
       "blockTypes": ["CRIAR"],
       "processTypes": ["thumbnail", "assets"],
+      "itemActions": [
+        { "action": "regenerate" },
+        { "action": "replace" },
+        { "action": "select" },
+        { "action": "download" }
+      ],
       "inputPorts": [
         {
           "key": "prompts",
@@ -631,7 +1645,8 @@
             "type": "string",
             "title": "URL do projeto (opcional)",
             "default": "",
-            "description": "URL de um projeto em https://flow.google.com/project/... Usado quando o modo for 'Usar projeto específico' ou para fixar um projeto manual."
+            "description": "URL de um projeto em https://flow.google.com/project/... Usado quando o modo for 'Usar projeto específico' ou para fixar um projeto manual.",
+            "visibleWhen": { "property": "projectMode", "values": ["existing"] }
           },
           "imageModel": {
             "type": "string",
@@ -653,6 +1668,10 @@
               {
                 "const": "nano_banana_2_lite",
                 "title": "Nano Banana 2 Lite"
+              },
+              {
+                "type": "string",
+                "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$"
               }
             ],
             "description": "Modelo de geração de imagem selecionado na interface do Google Flow."
@@ -703,6 +1722,7 @@
           },
           "delayBetweenPromptsMs": {
             "type": "integer",
+            "title": "Pausa entre prompts (ms)",
             "minimum": 0,
             "maximum": 30000,
             "default": 6000,
@@ -710,6 +1730,7 @@
           },
           "maxConcurrentGenerations": {
             "type": "integer",
+            "title": "Gerações de imagem simultâneas",
             "minimum": 1,
             "maximum": 3,
             "default": 1,
@@ -717,6 +1738,7 @@
           },
           "retryAttempts": {
             "type": "integer",
+            "title": "Tentativas por item",
             "minimum": 0,
             "maximum": 2,
             "default": 1,
@@ -724,6 +1746,7 @@
           },
           "rateLimitRetryAttempts": {
             "type": "integer",
+            "title": "Tentativas após limite de requisições",
             "minimum": 0,
             "maximum": 8,
             "default": 8,
@@ -731,6 +1754,7 @@
           },
           "maxReferenceImages": {
             "type": "integer",
+            "title": "Máximo de referências",
             "minimum": 0,
             "maximum": 10,
             "default": 10,
@@ -738,6 +1762,7 @@
           },
           "maxImagesPerPrompt": {
             "type": "integer",
+            "title": "Imagens por prompt",
             "minimum": 1,
             "maximum": 4,
             "default": 1,
@@ -745,10 +1770,19 @@
           },
           "startMinimized": {
             "type": "boolean",
+            "title": "Iniciar Chrome minimizado",
             "default": true
           }
         }
       },
+      "configurationOptions": [
+        {
+          "property": "imageModel",
+          "providerId": "flow-image-models",
+          "dependsOn": ["accountProfile"],
+          "cacheTtlMs": 300000
+        }
+      ],
       "outputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -781,6 +1815,12 @@
       },
       "blockTypes": ["CRIAR"],
       "processTypes": ["assets", "editing"],
+      "itemActions": [
+        { "action": "regenerate" },
+        { "action": "replace" },
+        { "action": "select" },
+        { "action": "download" }
+      ],
       "inputPorts": [
         {
           "key": "images",
@@ -891,7 +1931,8 @@
             "type": "string",
             "title": "URL do projeto (opcional)",
             "default": "",
-            "description": "URL de um projeto em https://flow.google.com/project/... Usado quando o modo for 'Usar projeto específico' ou para fixar um projeto manual."
+            "description": "URL de um projeto em https://flow.google.com/project/... Usado quando o modo for 'Usar projeto específico' ou para fixar um projeto manual.",
+            "visibleWhen": { "property": "projectMode", "values": ["existing"] }
           },
           "videoModel": {
             "type": "string",
@@ -913,6 +1954,10 @@
               {
                 "const": "omni_1_1_flash",
                 "title": "Omni 1.1 Flash"
+              },
+              {
+                "type": "string",
+                "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$"
               }
             ],
             "description": "Modelo de geração de vídeo utilizado na animação."
@@ -1003,16 +2048,26 @@
           },
           "retryAttempts": {
             "type": "integer",
+            "title": "Tentativas por item",
             "minimum": 0,
             "maximum": 2,
             "default": 1
           },
           "startMinimized": {
             "type": "boolean",
+            "title": "Iniciar Chrome minimizado",
             "default": true
           }
         }
       },
+      "configurationOptions": [
+        {
+          "property": "videoModel",
+          "providerId": "flow-video-models",
+          "dependsOn": ["accountProfile"],
+          "cacheTtlMs": 300000
+        }
+      ],
       "outputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1045,6 +2100,12 @@
       },
       "blockTypes": ["CRIAR"],
       "processTypes": ["assets", "editing"],
+      "itemActions": [
+        { "action": "regenerate" },
+        { "action": "replace" },
+        { "action": "select" },
+        { "action": "download" }
+      ],
       "inputPorts": [
         {
           "key": "prompts",
@@ -1155,7 +2216,8 @@
             "type": "string",
             "title": "URL do projeto (opcional)",
             "default": "",
-            "description": "URL de um projeto em https://flow.google.com/project/... Usado quando o modo for 'Usar projeto específico' ou para fixar um projeto manual."
+            "description": "URL de um projeto em https://flow.google.com/project/... Usado quando o modo for 'Usar projeto específico' ou para fixar um projeto manual.",
+            "visibleWhen": { "property": "projectMode", "values": ["existing"] }
           },
           "videoModel": {
             "type": "string",
@@ -1177,6 +2239,10 @@
               {
                 "const": "omni_1_1_flash",
                 "title": "Omni 1.1 Flash"
+              },
+              {
+                "type": "string",
+                "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$"
               }
             ]
           },
@@ -1265,22 +2331,33 @@
           },
           "delayBetweenPromptsMs": {
             "type": "integer",
+            "title": "Pausa entre prompts (ms)",
             "minimum": 0,
             "maximum": 30000,
             "default": 8000
           },
           "retryAttempts": {
             "type": "integer",
+            "title": "Tentativas por item",
             "minimum": 0,
             "maximum": 2,
             "default": 1
           },
           "startMinimized": {
             "type": "boolean",
+            "title": "Iniciar Chrome minimizado",
             "default": true
           }
         }
       },
+      "configurationOptions": [
+        {
+          "property": "videoModel",
+          "providerId": "flow-video-models",
+          "dependsOn": ["accountProfile"],
+          "cacheTtlMs": 300000
+        }
+      ],
       "outputSchema": {
         "type": "object",
         "additionalProperties": false,

@@ -188,6 +188,8 @@ As chaves técnicas, a persistência e a conexão padrão com resultados anterio
 
 Cada entrada declarada é conectada automaticamente a uma saída compatível já produzida. O motor prioriza os blocos anteriores mais próximos, depois os outputs dos Processos Universais anteriores, considera a semelhança entre os nomes e não reutiliza a mesma saída em duas entradas do mesmo bloco. Conexões explícitas legadas continuam sendo respeitadas. Se uma entrada não puder ser resolvida, o bloco permanece pausado e informa claramente qual dado está ausente.
 
+Uma entrada também pode ter origem **Fornecido na execução**. Nesse caso, o Método guarda somente o contrato portátil — nome, tipo, apresentação e porta semântica — enquanto o valor real pertence ao `BlockExecution`. O núcleo pausa o bloco automático, renderiza o campo universal correspondente, armazena arquivos como referências gerenciadas, valida tipo/MIME e só então inicia o plugin. Isso vale igualmente para texto, documentos, imagens, áudio, vídeo e coleções de arquivos; o plugin nunca injeta componentes de interface.
+
 Todos os quatro tipos de bloco podem declarar zero ou mais entradas de contexto vindas de blocos anteriores ou Processos Universais anteriores. O editor começa sem campos opcionais e oferece somente a ação discreta **Adicionar entrada**; assim, um bloco simples permanece visualmente leve, mas `BUSCAR`, `ESCOLHER`, `CRIAR` e `VALIDAR` podem consumir qualquer entrega anterior compatível quando o Método exigir. No `ESCOLHER`, essas entradas apenas orientam a decisão e não substituem a coleção vinculada. No `VALIDAR`, elas complementam e não substituem o bloco-alvo obrigatório da validação.
 
 O operador `Humano` é o executor nativo desse mesmo contrato e não depende de plugin. Plugins de `IA` ou `Código` consomem as mesmas entradas e produzem as mesmas saídas; seus parâmetros particulares aparecem somente depois que o plugin é selecionado.
@@ -213,7 +215,7 @@ O motor de execução funciona como uma **máquina de estados persistente**:
 1. Lê o Método congelado no snapshot do Projeto para o Processo atual, preservando a estratégia usada quando a execução começou.
 2. Executa os blocos sequencialmente injetando as saídas do bloco anterior no bloco seguinte.
 3. **Pausa e Retomada para Operador Humano**: Se um bloco for atribuído ao operador `Humano`, o motor pausa o estado da execução (`awaiting_human`), gera uma notificação e um cartão interativo no Projeto, e aguarda a entrega ou seleção do usuário para continuar a esteira.
-4. **Execução por plugin**: Blocos `IA` e `Código` disparam automaticamente o plugin compatível configurado assim que suas entradas ficam disponíveis. O servidor resolve as entradas, executa plugins instalados ou vinculados em um processo separado, valida a resposta, registra entregas e artifacts no snapshot e ativa a próxima etapa sem exigir um botão por bloco.
+4. **Execução por plugin**: Blocos `IA` e `Código` disparam automaticamente o plugin compatível configurado assim que suas entradas ficam disponíveis. Entradas marcadas como fornecidas na execução produzem antes uma pausa explícita para coleta pela interface do núcleo. O servidor resolve as entradas, executa plugins instalados ou vinculados em um processo separado, valida a resposta, registra entregas e artifacts no snapshot e ativa a próxima etapa.
 5. **Bloqueio de executores ausentes**: Blocos sem plugin compatível permanecem em `blocked_executor`. Eles nunca são concluídos de forma fictícia.
 
 Os métodos permanecem lineares: não existem ramificações, junções, paralelismo ou loops genéricos no canvas. Uma entrada pode apontar explicitamente para a saída de qualquer bloco anterior ou processo universal anterior, e um bloco pode declarar várias entradas.
@@ -375,7 +377,7 @@ Quando o Processo `Thumbnail` é concluído com uma ou mais imagens, a primeira 
 
 ## 12. Protocolo de Plugins
 
-O contrato técnico está documentado em [`protocol.md`](../ecosystem/docs/protocol.md), o guia prático em [`development.md`](../ecosystem/docs/development.md), os requisitos do executor em [`security.md`](../ecosystem/docs/security.md), os requisitos para plugins que automatizam interfaces web em [`browser-automation.md`](../ecosystem/docs/browser-automation.md), a governança do catálogo em [`distribution.md`](../ecosystem/docs/distribution.md) e a ordem estratégica de implementação em [`roadmap.md`](../ecosystem/docs/roadmap.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Todos são externos, exigem consentimento local e executam na mesma sandbox de permissões em processo separado, inclusive os publicados pelo autor do ContentFlow.
+O contrato técnico está documentado em [`protocol.md`](ecosystem/protocol.md), o guia prático em [`development.md`](ecosystem/development.md), os requisitos do executor em [`security.md`](ecosystem/security.md), os requisitos para plugins que automatizam interfaces web em [`browser-automation.md`](ecosystem/browser-automation.md), a governança do catálogo em [`distribution.md`](ecosystem/distribution.md) e a ordem estratégica de implementação em [`roadmap.md`](ecosystem/roadmap.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Todos são externos, exigem consentimento local e executam na mesma sandbox de permissões em processo separado, inclusive os publicados pelo autor do ContentFlow.
 
 A arquitetura não possui aprovação central: qualquer pessoa pode criar e compartilhar um plugin, inclusive por arquivo ou repositório, e qualquer usuário pode instalá-lo e autorizá-lo localmente. O núcleo aplica validações automáticas e pede consentimento para permissões; revisão humana do mantenedor existe apenas para selo `verified` ou publicação em catálogo opcional.
 
@@ -403,7 +405,7 @@ Plugins de operador `Código` podem consumir esses layouts pelo contrato `thumbn
 
 ## 14. Distribuição desktop
 
-A distribuição Windows empacota a interface em Electron e inicia a API como processo filho com uma cópia privada do Node 26. Usuários finais não precisam instalar Node, npm ou abrir terminal. O processo Electron hospeda apenas a janela e os arquivos da interface; o runtime privado preserva para a API e para plugins comunitários o modelo de permissões documentado em [`security.md`](../ecosystem/docs/security.md).
+A distribuição Windows empacota a interface em Electron e inicia a API como processo filho com uma cópia privada do Node 26. Usuários finais não precisam instalar Node, npm ou abrir terminal. O processo Electron hospeda apenas a janela e os arquivos da interface; o runtime privado preserva para a API e para plugins comunitários o modelo de permissões documentado em [`security.md`](ecosystem/security.md).
 
 O programa instalado é substituível e os dados persistentes permanecem em `%APPDATA%\ContentFlow\data`. Plugins instalados e vínculos de desenvolvimento também vivem nessa área, mas são obtidos separadamente. O núcleo não inclui nem copia plugins ou exemplos na primeira abertura. Essa separação permite recompilar e reinstalar o núcleo sem apagar projetos, credenciais ou plugins externos instalados pelo usuário.
 

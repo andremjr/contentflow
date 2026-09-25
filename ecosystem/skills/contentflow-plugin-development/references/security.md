@@ -60,4 +60,4 @@ Declare `sideEffects`, `cost` e `dataPolicy`. Use idempotency keys, backoff, `re
 
 Logs devem ser curtos e redigidos. Nunca registre secrets, Authorization headers, prompts privados completos, arquivos integrais, caminhos privados, payloads completos ou dados de outros usuários. Telemetria não essencial exige declaração e consentimento separado; diagnósticos exportáveis devem mostrar previamente o que será compartilhado.
 
-Fonte: [security.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/security.md).
+Fonte: [security.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/security.md).

@@ -31,6 +31,7 @@ const referencePluginReleaseIgnore = googleFlowLocalFiles.map(
   (fileName) => `google-flow-browser-images/${fileName}`,
 );
 
+rmSync(outputDirectory, { recursive: true, force: true });
 mkdirSync(outputDirectory, { recursive: true });
 
 async function createArchive(fileName, addContents) {

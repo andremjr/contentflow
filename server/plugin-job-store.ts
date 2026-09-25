@@ -40,6 +40,8 @@ export type PersistentPluginJob = {
     activeIndex: number;
     history: Array<{ profile: string; code: string; message: string }>;
   };
+  /** Slots incrementais publicados pelo plugin durante esta tentativa. */
+  incrementalItems?: BlockExecutionItem[];
   itemOrchestration?: {
     inputPort: string;
     outputPort: string;

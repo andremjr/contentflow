@@ -22,7 +22,7 @@ import type {
   PluginManifest,
   PluginPartialUpdate,
 } from "../src/lib/plugin-contract";
-import type { RuntimeValue, StoredFile } from "../src/lib/domain";
+import type { BlockExecutionItemValue, RuntimeValue, StoredFile } from "../src/lib/domain";
 import {
   assertRemoteArtifactNetworkPermission,
   DEFAULT_REMOTE_ARTIFACT_MAX_BYTES,
@@ -327,8 +327,20 @@ export async function executeRegisteredPlugin(
           },
         );
         partialArtifacts = imported.storedArtifacts ?? partialArtifacts;
+        const itemUpdates = update.itemUpdates?.map((item) => ({
+          ...item,
+          ...(item.value !== undefined
+            ? {
+                value: replacePluginArtifactReferences(
+                  item.value,
+                  imported.storedArtifacts ?? partialArtifacts,
+                ) as BlockExecutionItemValue,
+              }
+            : {}),
+        }));
         await options.onPartial?.({
           ...update,
+          itemUpdates,
           values:
             imported.status === "pending"
               ? (imported.partialValues ?? update.values)
@@ -524,6 +536,17 @@ export async function importPluginArtifacts(
     await Promise.all(createdPaths.map((createdPath) => rm(createdPath, { force: true })));
     throw error;
   }
+}
+
+export function replacePluginArtifactReferences(value: unknown, artifacts: StoredFile[]) {
+  const replaced = replaceArtifactUrls(
+    value,
+    new Map(artifacts.map((file) => [file.id, file] as const)),
+  );
+  if (containsArtifactUrl(replaced)) {
+    throw new Error("O item incremental contém artifact:// sem arquivo correspondente.");
+  }
+  return replaced;
 }
 
 async function importLocalArtifact(

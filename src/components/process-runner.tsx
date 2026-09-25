@@ -24,10 +24,12 @@ import {
   CheckCircle2,
   ChevronDown,
   Code2,
+  Download,
   LoaderCircle,
   Pencil,
   Play,
   GripVertical,
+  MousePointer2,
   RotateCcw,
   Square,
   Upload,
@@ -78,8 +80,10 @@ import {
   saveHumanBlockDraft,
   readRuntimeDraft,
   reorderBlockExecutionItems,
+  runBlockExecutionItemAction,
   saveProcessOutputDraft,
   startProcessExecution,
+  submitBlockRuntimeInputs,
   updateBlockExecutionItemOutput,
   updateBlockExecutionValues,
   uploadLocalFile,
@@ -91,6 +95,14 @@ import {
   useProjectExecutions,
   useProjects,
 } from "@/lib/store";
+import { useAppPreferences } from "@/lib/app-preferences";
+import { localizePluginManifest } from "@/lib/plugin-localization";
+import { isLocalStoredFileUrl } from "@/lib/plugin-item-actions";
+import type {
+  PluginItemAction,
+  PluginItemActionDeclaration,
+  PluginManifest,
+} from "@/lib/plugin-contract";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<BlockExecution["status"], string> = {
@@ -130,6 +142,30 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
   const nextNavigationTimer = useRef<number | undefined>(undefined);
   const previousExecutionStatus = useRef(execution?.status);
   const [isAdvancing, setIsAdvancing] = useState(false);
+  const [pluginManifests, setPluginManifests] = useState<Record<string, PluginManifest>>({});
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/plugins", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return { plugins: [] };
+        return (await response.json()) as {
+          plugins?: Array<{ id: string; manifest: PluginManifest }>;
+        };
+      })
+      .then((payload) => {
+        if (!active) return;
+        setPluginManifests(
+          Object.fromEntries((payload.plugins ?? []).map((plugin) => [plugin.id, plugin.manifest])),
+        );
+      })
+      .catch(() => {
+        if (active) setPluginManifests({});
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const activeExecution = execution?.blocks.find((item) => item.status !== "completed");
   const activeBlock = activeExecution
     ? execution?.methodSnapshot.blocks.find((item) => item.id === activeExecution.blockId)
@@ -352,10 +388,7 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
             execution={execution}
             collections={collections}
             libraryItems={libraryItems}
-            onRetryItem={(blockId, itemId) => {
-              if (activeExecution?.blockId !== blockId) return;
-              void retry("selected", itemId);
-            }}
+            pluginManifests={pluginManifests}
           />
           {waitingForHumanChoice && activeBlock ? (
             <HumanChoiceGate
@@ -394,6 +427,8 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
               <PluginExecutionGate
                 key={`${execution.id}:${activeExecution.blockId}:${activeExecution.attempt ?? 1}`}
                 block={activeBlock}
+                execution={execution}
+                blockExecution={activeExecution}
               />
             ) : (
               <MissingPluginGate block={activeBlock} />
@@ -535,13 +570,14 @@ function ExecutionResults({
   execution,
   collections,
   libraryItems,
-  onRetryItem,
+  pluginManifests,
 }: {
   execution: ProcessExecution;
   collections: StrategicCollection[];
   libraryItems: ChannelLibraryItem[];
-  onRetryItem: (blockId: string, itemId: string) => void;
+  pluginManifests: Record<string, PluginManifest>;
 }) {
+  const { language } = useAppPreferences();
   const [editingBlockId, setEditingBlockId] = useState<string>();
   const [editValues, setEditValues] = useState<Record<string, RuntimeValue>>({});
   const [savingBlockId, setSavingBlockId] = useState<string>();
@@ -549,7 +585,8 @@ function ExecutionResults({
     (item) =>
       item.status === "completed" ||
       ((item.status === "in_progress" || item.status === "failed" || item.status === "cancelled") &&
-        Object.values(item.values).some((value) => !isEmptyDisplayValue(value))),
+        (item.items?.length ||
+          Object.values(item.values).some((value) => !isEmptyDisplayValue(value)))),
   );
   if (!visibleResults.length) return null;
 
@@ -576,6 +613,13 @@ function ExecutionResults({
             (output) => !isEmptyDisplayValue(blockExecution.values[output.key]),
           );
           const editing = editingBlockId === blockExecution.blockId;
+          const pluginManifest = block.plugin ? pluginManifests[block.plugin.pluginId] : undefined;
+          const itemActions =
+            block.plugin && pluginManifest
+              ? (localizePluginManifest(pluginManifest, language).capabilities.find(
+                  (capability) => capability.id === block.plugin?.capabilityId,
+                )?.itemActions ?? [])
+              : ([{ action: "replace" }] satisfies PluginItemActionDeclaration[]);
 
           async function saveEditedValues() {
             setSavingBlockId(blockExecution.blockId);
@@ -623,7 +667,7 @@ function ExecutionResults({
                   <ExecutionItemsWorkspace
                     execution={execution}
                     blockExecution={blockExecution}
-                    onRetryItem={(itemId) => onRetryItem(blockExecution.blockId, itemId)}
+                    itemActions={itemActions}
                   />
                 ) : null}
                 {!selectedItem &&
@@ -757,20 +801,25 @@ function ResultValue({
 function ExecutionItemsWorkspace({
   execution,
   blockExecution,
-  onRetryItem,
+  itemActions,
 }: {
   execution: ProcessExecution;
   blockExecution: BlockExecution;
-  onRetryItem: (itemId: string) => void;
+  itemActions: PluginItemActionDeclaration[];
 }) {
+  const { t } = useAppPreferences();
   const [editingItemId, setEditingItemId] = useState<string>();
   const [draft, setDraft] = useState("");
   const [savingItemId, setSavingItemId] = useState<string>();
   const [replacingItemId, setReplacingItemId] = useState<string>();
+  const [actingItemId, setActingItemId] = useState<string>();
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const items = [...(blockExecution.items ?? [])].sort((a, b) => a.order - b.order);
   const itemIds = items.map((item) => item.id);
   const canReorder = blockExecution.status !== "in_progress" && items.length > 1;
+  const declaredActions = new Map(
+    itemActions.map((declaration) => [declaration.action, declaration]),
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -846,13 +895,37 @@ function ExecutionItemsWorkspace({
     }
   }
 
+  async function runItemAction(item: BlockExecutionItem, action: "regenerate" | "select") {
+    setActingItemId(item.id);
+    try {
+      await runBlockExecutionItemAction(
+        execution.id,
+        blockExecution.blockId,
+        item.id,
+        action,
+        execution.revision ?? 0,
+      );
+      toast.success(action === "regenerate" ? t("Item regenerado") : t("Item selecionado"));
+    } catch (error) {
+      toast.error(t("Não foi possível executar a ação no item"), {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setActingItemId(undefined);
+    }
+  }
+
+  function actionLabel(action: PluginItemAction, fallback: string) {
+    return declaredActions.get(action)?.label ?? t(fallback);
+  }
+
   return (
     <div className="mb-4 rounded-lg border border-border/60 bg-card/40 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold">Itens da execução</p>
+          <p className="text-xs font-semibold">{t("Itens da execução")}</p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Edite, substitua ou arraste os itens para reorganizar a sequência.
+            {t("Use apenas as ações declaradas pelo plugin; arraste para reorganizar a sequência.")}
           </p>
         </div>
         {blockExecution.itemProgress ? (
@@ -866,7 +939,8 @@ function ExecutionItemsWorkspace({
               const output = singleItemOutput(item.output);
               const kind = itemOutputKind(item.output);
               const isEditing = editingItemId === item.id;
-              const busy = savingItemId === item.id || replacingItemId === item.id;
+              const busy =
+                savingItemId === item.id || replacingItemId === item.id || actingItemId === item.id;
               const canMutate = blockExecution.status !== "in_progress";
               const media = isStoredFileValue(output) ? output : undefined;
               return (
@@ -880,13 +954,18 @@ function ExecutionItemsWorkspace({
                       <div className="flex min-h-10 items-center gap-2 border-b border-border/50 px-3 py-2">
                         {dragHandle}
                         <Badge variant="outline" className="shrink-0 text-[10px]">
-                          Item {item.order + 1}
+                          {t("Item")} {item.order + 1}
                         </Badge>
+                        {item.selected ? (
+                          <Badge variant="secondary" className="shrink-0 text-[9px]">
+                            {t("Selecionado")}
+                          </Badge>
+                        ) : null}
                         <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground">
                           {itemStatusLabel(item.status)}
                         </span>
                         <span className="shrink-0 text-[10px] text-muted-foreground">
-                          Tentativa {item.attempt}
+                          {t("Tentativa")} {item.attempt}
                         </span>
                       </div>
 
@@ -903,7 +982,7 @@ function ExecutionItemsWorkspace({
                               variant="ghost"
                               onClick={() => setEditingItemId(undefined)}
                             >
-                              Cancelar
+                              {t("Cancelar")}
                             </Button>
                             <Button
                               size="sm"
@@ -913,7 +992,7 @@ function ExecutionItemsWorkspace({
                               {busy ? (
                                 <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />
                               ) : null}
-                              Salvar item
+                              {t("Salvar item")}
                             </Button>
                           </div>
                         </div>
@@ -956,24 +1035,32 @@ function ExecutionItemsWorkspace({
                       ) : (
                         <div className="flex min-h-40 flex-1 items-center justify-center p-3">
                           <p className="text-xs text-muted-foreground">
-                            Sem resultado materializado.
+                            {t("Sem resultado materializado.")}
                           </p>
                         </div>
                       )}
 
-                      {canMutate && !isEditing ? (
+                      {canMutate && !isEditing && declaredActions.size > 0 ? (
                         <div className="mt-auto flex items-center gap-1 border-t border-border/50 bg-card/70 p-1.5">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
-                            disabled={busy}
-                            onClick={() => onRetryItem(item.id)}
-                          >
-                            <RotateCcw className="size-3.5 shrink-0" />
-                            <span className="truncate">Regenerar item</span>
-                          </Button>
-                          {kind === "text" ? (
+                          {declaredActions.has("regenerate") ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
+                              disabled={busy}
+                              onClick={() => void runItemAction(item, "regenerate")}
+                            >
+                              {actingItemId === item.id ? (
+                                <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
+                              ) : (
+                                <RotateCcw className="size-3.5 shrink-0" />
+                              )}
+                              <span className="truncate">
+                                {actionLabel("regenerate", "Regenerar item")}
+                              </span>
+                            </Button>
+                          ) : null}
+                          {declaredActions.has("replace") && kind === "text" ? (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -984,9 +1071,11 @@ function ExecutionItemsWorkspace({
                               }}
                             >
                               <Pencil className="size-3.5 shrink-0" />
-                              <span className="truncate">Editar item</span>
+                              <span className="truncate">
+                                {actionLabel("replace", "Editar item")}
+                              </span>
                             </Button>
-                          ) : kind ? (
+                          ) : declaredActions.has("replace") && kind ? (
                             <>
                               <input
                                 ref={(element) => {
@@ -1011,9 +1100,40 @@ function ExecutionItemsWorkspace({
                                 ) : (
                                   <Upload className="size-3.5 shrink-0" />
                                 )}
-                                <span className="truncate">Substituir arquivo</span>
+                                <span className="truncate">
+                                  {actionLabel("replace", "Substituir arquivo")}
+                                </span>
                               </Button>
                             </>
+                          ) : null}
+                          {declaredActions.has("select") ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
+                              disabled={busy || item.selected}
+                              onClick={() => void runItemAction(item, "select")}
+                            >
+                              <MousePointer2 className="size-3.5 shrink-0" />
+                              <span className="truncate">
+                                {actionLabel("select", "Selecionar item")}
+                              </span>
+                            </Button>
+                          ) : null}
+                          {declaredActions.has("download") && isLocalStoredFileUrl(media?.url) ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-[11px]"
+                              asChild
+                            >
+                              <a href={media.url} download={media.name}>
+                                <Download className="size-3.5 shrink-0" />
+                                <span className="truncate">
+                                  {actionLabel("download", "Baixar item")}
+                                </span>
+                              </a>
+                            </Button>
                           ) : null}
                         </div>
                       ) : null}
@@ -1021,7 +1141,7 @@ function ExecutionItemsWorkspace({
                       {item.attempts.length > 1 ? (
                         <details className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
                           <summary className="cursor-pointer text-[10px]">
-                            Ver tentativas anteriores
+                            {t("Ver tentativas anteriores")}
                           </summary>
                           <div className="mt-2 space-y-1 text-[10px]">
                             {item.attempts.map((attempt) => (
@@ -1029,7 +1149,9 @@ function ExecutionItemsWorkspace({
                                 key={attempt.attempt}
                                 className="flex items-center justify-between gap-2"
                               >
-                                <span>Tentativa {attempt.attempt}</span>
+                                <span>
+                                  {t("Tentativa")} {attempt.attempt}
+                                </span>
                                 <span>{itemStatusLabel(attempt.status)}</span>
                               </div>
                             ))}
@@ -1976,8 +2098,46 @@ function MissingPluginGate({ block }: { block: ActionBlock }) {
   );
 }
 
-function PluginExecutionGate({ block }: { block: ActionBlock }) {
+function PluginExecutionGate({
+  block,
+  execution,
+  blockExecution,
+}: {
+  block: ActionBlock;
+  execution: ProcessExecution;
+  blockExecution: BlockExecution;
+}) {
+  const { t } = useAppPreferences();
   const plugin = block.plugin;
+  const runtimeFields = (block.inputs ?? [])
+    .filter((input) => input.source === "runtime")
+    .map((input) => ({
+      id: input.id,
+      key: input.id,
+      label: input.label,
+      type: input.type,
+      required: true,
+      recordFields: input.recordFields,
+      presentation: input.presentation,
+    }));
+  const [values, setValues] = useState<Record<string, RuntimeValue>>(
+    blockExecution.runtimeInputs ?? {},
+  );
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      await submitBlockRuntimeInputs(execution.id, block.id, execution.revision ?? 0, values);
+      toast.success(t("Entradas enviadas. O plugin será iniciado."));
+    } catch (error) {
+      toast.error(t("Não foi possível enviar as entradas"), {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <section className="rounded-xl border border-brand/35 bg-brand/5 p-5 sm:p-6">
@@ -1989,23 +2149,42 @@ function PluginExecutionGate({ block }: { block: ActionBlock }) {
             ) : (
               <Code2 className="mr-1 size-3" />
             )}
-            Execução automática
+            {t("Execução automática")}
           </Badge>
           <h3 className="mt-3 text-base font-semibold">{block.name ?? block.type}</h3>
           <p className="mt-1 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">
-            {block.instructions || "Este bloco será executado pelo plugin configurado no Método."}
+            {block.instructions ||
+              t("Este bloco será executado pelo plugin configurado no Método.")}
           </p>
         </div>
         <OperatorBadge block={block} />
       </header>
 
       <div className="mt-5 rounded-xl border border-border/70 bg-card p-4">
-        <p className="text-xs font-semibold">Plugin</p>
+        <p className="text-xs font-semibold">{t("Plugin")}</p>
         <p className="mt-1 font-mono text-xs text-muted-foreground">{plugin?.pluginId}</p>
-        <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-          <LoaderCircle className="size-3.5 animate-spin" />
-          Executando automaticamente...
-        </p>
+        {runtimeFields.length ? (
+          <div className="mt-4 space-y-4">
+            <div>
+              <p className="text-sm font-medium">{t("Arquivos e dados desta execução")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t(
+                  "O ContentFlow salva estes itens na execução e entrega ao plugin somente pelas portas declaradas.",
+                )}
+              </p>
+            </div>
+            <RuntimeFieldsForm fields={runtimeFields} values={values} onChange={setValues} />
+            <Button type="button" disabled={submitting} onClick={() => void submit()}>
+              {submitting && <LoaderCircle className="mr-2 size-4 animate-spin" />}
+              {t("Enviar e executar")}
+            </Button>
+          </div>
+        ) : (
+          <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <LoaderCircle className="size-3.5 animate-spin" />
+            {t("Executando automaticamente...")}
+          </p>
+        )}
       </div>
     </section>
   );

@@ -58,4 +58,4 @@ Em `pending`, `partialArtifacts` segue o mesmo contrato dos artifacts finais. O 
 
 Ao produzir coleção de arquivos ou records, preserve ordem e inclua campos explícitos de proveniência quando necessários, como URL, provider, assetId, licença, autor, hash e data. Não use posição do array como relacionamento durável; use IDs de domínio.
 
-Fonte: [protocol.md](https://github.com/andremjr/contentflow/blob/main/ecosystem/docs/protocol.md).
+Fonte: [protocol.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/protocol.md).

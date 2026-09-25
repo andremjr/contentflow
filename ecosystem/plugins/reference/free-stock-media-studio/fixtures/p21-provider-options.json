@@ -1,0 +1,19 @@
+{
+  "image": {
+    "withoutKeys": ["all", "openverse", "wikimedia", "nasa"],
+    "withPexelsKey": ["all", "pexels", "openverse", "wikimedia", "nasa"]
+  },
+  "video": {
+    "withoutKeys": ["all", "wikimedia", "nasa"],
+    "withCoverrKey": ["all", "coverr", "wikimedia", "nasa"]
+  },
+  "credentialRequirements": {
+    "pexels": "PEXELS_API_KEY",
+    "pixabay": "PIXABAY_API_KEY",
+    "unsplash": "UNSPLASH_ACCESS_KEY",
+    "coverr": "COVERR_API_KEY",
+    "openverse": null,
+    "wikimedia": null,
+    "nasa": null
+  }
+}

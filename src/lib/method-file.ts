@@ -103,6 +103,7 @@ const inputSchema = z
       "previous_block",
       "channel_history",
       "channel_library",
+      "runtime",
       "static",
     ]),
     sourceKey: z.string().max(200).optional(),
