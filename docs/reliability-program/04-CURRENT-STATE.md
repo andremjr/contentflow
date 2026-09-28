@@ -1,13 +1,13 @@
 # Current State
 
-Estado verificado em 28/09/2026 contra o checkout real, incluindo alterações ainda não commitadas.
+Última revisão semântica: 28/09/2026.
+
+Este documento representa o estado semântico e arquitetural conhecido do produto: capabilities presentes, gaps, blockers e posição no programa. Ele não é autoridade para o HEAD Git, a branch ativa nem a condição atual do worktree. Toda task deve descobrir esses dados diretamente do checkout no momento em que começa.
 
 | Campo | Estado atual |
 | --- | --- |
-| Baseline original observado | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
-| Commit atual | `4ba92a834daef05d8c57fa871530ba935c5c9422` em `main` |
+| Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão | `1.2.1` |
-| Working tree | Não limpa; o diagnóstico considera o conteúdo atual do checkout, não apenas o commit |
 | Task concluída | TASK-000 |
 | Task ativa | Nenhuma |
 | Próxima | TASK-001 (`ready`), ainda não iniciada |
@@ -52,7 +52,7 @@ As capacidades abaixo existem no checkout atual e constituem base a preservar, c
 - **recovery policy:** `decideExecutionRecovery()` distingue `cancel`, `reconcile`, `intervene`, `switch_profile`, `retry` e `fail`;
 - **migration journal:** schema versionado com journal, passos, estados `started/completed/failed` e recuperação de migração interrompida;
 - **Orchestrator V5:** elegibilidade por slots, ordem congelada e retomada de filas persistidas;
-- **testes extensos:** 117 arquivos de teste e 79 scripts `test*` no `package.json` no momento da inspeção.
+- **testes extensos:** suites para arquitetura, execução, plugins, perfis, Browser Bridge, persistência, migrações e distribuição.
 
 Existência não significa convergência completa com a arquitetura-alvo. Essas capacidades ainda passam por caminhos de aplicação diferentes e precisam de characterization tests antes de consolidação.
 
@@ -60,9 +60,7 @@ Existência não significa convergência completa com a arquitetura-alvo. Essas 
 
 ### Servidor concentrado
 
-`server/index.ts` possui atualmente 8.907 linhas e 102 declarações de rotas Express. O arquivo combina HTTP, persistência, lifecycle de plugins, criação e aplicação de execuções, recovery, Orchestrator, reconciliação e inicialização de storage.
-
-Os números são uma fotografia, não invariantes. O problema arquitetural é a concentração de responsabilidades, não atingir uma contagem específica de linhas.
+`server/index.ts` continua combinando HTTP, persistência, lifecycle de plugins, criação e aplicação de execuções, recovery, Orchestrator, reconciliação e inicialização de storage. O gap arquitetural é a concentração de responsabilidades, independentemente da contagem momentânea de linhas ou rotas.
 
 ### Autoridade de execução duplicada
 
@@ -123,4 +121,4 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 Não há blocker externo confirmado para preparar a especificação da TASK-001. Sua criação e implementação ainda exigem autorização explícita.
 
-O worktree não está limpo e o gate agregado `npm run check` não está verde. Isso é uma condição de baseline a ser registrada e tratada explicitamente, não permissão para resetar, sobrescrever ou formatar em massa trabalho existente.
+O gate agregado `npm run check` não está verde por problemas de lint já observados fora do escopo documental. Essa condição deve ser verificada novamente e congelada como evidência histórica pela TASK-001, sem autorizar formatação em massa ou alteração fora de escopo.

@@ -67,3 +67,9 @@ A auditoria final alinhou bindings determinísticos em `ARCHITECTURE.md`, esclar
 
 TASK-000 concluída. TASK-001 está `ready`, não possui especificação criada e não foi implementada. TASK-002–TASK-052 permanecem `pending`.
 
+## Nota de fechamento sobre estado Git
+
+A TASK-000 registrou o checkout observado durante sua execução. O commit do próprio trabalho naturalmente tornou aquele SHA anterior ao novo HEAD, revelando que HEAD, branch e condição do worktree não pertencem ao Current State persistente. Cada task passa a descobrir esse estado ao vivo e registra SHAs específicos somente como evidência histórica em seu próprio arquivo.
+
+O baseline `4ba92a834daef05d8c57fa871530ba935c5c9422` permanece um marco histórico do início do Reliability Program, não uma afirmação sobre o HEAD atual. Mudanças de implementação que já existiam no worktree e foram posteriormente incluídas no mesmo commit não passam, por isso, a ser autoria ou escopo da TASK-000.
+

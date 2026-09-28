@@ -11,7 +11,13 @@ Regras:
 - inspecionar o código atual antes de escrever `TASK-NNN.md`;
 - registrar escopo, invariantes, compatibilidade, testes, definição de pronto e decisões necessárias;
 - manter a especificação concluída como registro de objetivo, evidências e resultado;
-- atualizar fatos mutáveis em [`../04-CURRENT-STATE.md`](../04-CURRENT-STATE.md), sem reescrever a task histórica;
+- atualizar fatos semânticos mutáveis em [`../04-CURRENT-STATE.md`](../04-CURRENT-STATE.md), sem reescrever a task histórica;
 - usar [`../05-WORKING-PROTOCOL.md`](../05-WORKING-PROTOCOL.md) como regra de preparação, autonomia, fechamento e recalibração.
+
+## Evidência Git por task
+
+Cada `TASK-NNN.md` pode e deve registrar, quando útil, o SHA e a branch observados ao iniciar, a condição inicial do worktree, o SHA ou checkout usado na validação final e os comandos executados. Esses dados são evidência histórica daquela task: continuam corretos como registro mesmo depois que commits posteriores mudam o HEAD.
+
+O HEAD, a branch e o status operacional da sessão seguinte devem sempre ser descobertos ao vivo. Eles não são copiados para o Current State como verdade persistente.
 
 Esta pasta contém o registro de encerramento da [`TASK-000`](TASK-000.md), mas ainda não contém `TASK-001.md`. Criar a próxima especificação ou iniciar sua implementação exige autorização explícita.

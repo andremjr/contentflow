@@ -9,7 +9,7 @@ As fontes centrais do programa são:
 3. [`01-TARGET-ARCHITECTURE.md`](01-TARGET-ARCHITECTURE.md), direção arquitetural que deve emergir ao longo do programa;
 4. [`02-RELIABILITY-ROADMAP.md`](02-RELIABILITY-ROADMAP.md), missões e estados oficiais;
 5. [`03-ACCEPTANCE-SCENARIOS.md`](03-ACCEPTANCE-SCENARIOS.md), resultados observáveis que orientam as provas;
-6. [`04-CURRENT-STATE.md`](04-CURRENT-STATE.md), fotografia substituível do checkout e dos gaps atuais;
+6. [`04-CURRENT-STATE.md`](04-CURRENT-STATE.md), fotografia semântica atual da arquitetura, capabilities, gaps, blockers e posição no programa;
 7. [`05-WORKING-PROTOCOL.md`](05-WORKING-PROTOCOL.md), ordem de leitura e disciplina oficial para TASK-001–TASK-052.
 8. [`decisions/`](decisions/README.md), ADRs permanentes que complementam a arquitetura com escolhas explícitas de confiabilidade.
 

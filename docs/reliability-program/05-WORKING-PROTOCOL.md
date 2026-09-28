@@ -38,12 +38,41 @@ Não carregar automaticamente:
 
 Contexto adicional deve responder a uma dúvida concreta de compatibilidade, arquitetura, reprodução ou implementação da task atual.
 
+### 1.1. Descoberta operacional ao vivo
+
+Depois da documentação persistente e antes de preparar ou retomar uma task, descubra diretamente no checkout:
+
+```bash
+git rev-parse HEAD
+git status --short
+```
+
+Quando a branch for relevante, execute também `git branch --show-current` ou equivalente seguro. SHA, branch ou condição do worktree registrados em documentos anteriores são evidência histórica, nunca autoridade para a sessão atual.
+
+O fluxo obrigatório é:
+
+```text
+Documentação persistente
+        ↓
+descobrir HEAD/status ao vivo
+        ↓
+inspecionar código atual
+        ↓
+gerar TASK-NNN
+        ↓
+implementar
+        ↓
+validar
+        ↓
+registrar evidências históricas na task
+```
+
 ## 2. Geração just-in-time da próxima task
 
 Antes de implementar TASK-N:
 
 1. confirmar que a missão está `ready` e foi autorizada;
-2. inspecionar commit, versão, status do worktree, código e testes atuais;
+2. confirmar ao vivo HEAD, branch quando relevante, status do worktree, versão, código e testes atuais;
 3. comparar a missão do roadmap com a realidade encontrada;
 4. identificar mudanças desde o `CURRENT-STATE` e atualizar o diagnóstico quando necessário;
 5. criar `tasks/TASK-NNN.md` usando fatos do checkout atual;
@@ -137,11 +166,13 @@ Se uma correção posterior mudar o código depois da última validação, repet
 Ao fechar uma task:
 
 - substituir fatos que deixaram de ser verdadeiros;
-- atualizar commit, versão e condição do worktree quando aplicável;
+- atualizar versão e fatos semânticos quando aplicável;
 - remover gaps realmente fechados;
 - registrar novos gaps somente quando confirmados no código;
 - atualizar blockers e a próxima missão;
 - manter evidências detalhadas na task, no ADR ou no relatório apropriado.
+
+Não grave HEAD, branch ou condição do worktree como “estado atual” persistente em `04-CURRENT-STATE.md`. Registre esses dados, quando úteis, como evidência histórica em `tasks/TASK-NNN.md`.
 
 Não anexar uma seção cronológica a cada execução. `CURRENT-STATE` é uma fotografia substituível.
 
