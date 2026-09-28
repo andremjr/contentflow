@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-export function countTextCharacters(value: string) {
+function countTextCharacters(value: string) {
   return Array.from(value).length;
 }
 

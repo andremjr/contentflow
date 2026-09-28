@@ -1555,9 +1555,9 @@ function promptSubmissionConfirmed(
 ) {
   return Boolean(
     !String(promptText).trim() ||
-      generating ||
-      userTurnCount > baselineUserTurnCount ||
-      assistantTurnCount > baselineAssistantTurnCount,
+    generating ||
+    userTurnCount > baselineUserTurnCount ||
+    assistantTurnCount > baselineAssistantTurnCount,
   );
 }
 
@@ -1565,11 +1565,7 @@ async function confirmPromptSubmitted(
   client,
   sessionId,
   signal,
-  {
-    baselineUserTurnCount = 0,
-    baselineAssistantTurnCount = 0,
-    timeoutMs = 15000,
-  } = {},
+  { baselineUserTurnCount = 0, baselineAssistantTurnCount = 0, timeoutMs = 15000 } = {},
 ) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -1591,14 +1587,7 @@ async function confirmPromptSubmitted(
   return false;
 }
 
-async function clickSend(
-  client,
-  sessionId,
-  bridge,
-  signal,
-  operationKey,
-  submissionBaseline = {},
-) {
+async function clickSend(client, sessionId, bridge, signal, operationKey, submissionBaseline = {}) {
   // O compositor atual pode exibir a seta azul habilitada sem expor atributos
   // acessiveis suficientes para que a leitura DOM reconheca o botao. Enviar
   // Enter pelo editor focado usa a acao estruturada da Bridge e evita ficar
@@ -2315,12 +2304,10 @@ async function executeHandler(request, services) {
             await sleep(300, services.signal);
             sessionId = await attachExistingChatGptPage(client, taskTargetId);
             if (
-              !(
-                await confirmPromptSubmitted(client, sessionId, services.signal, {
-                  baselineUserTurnCount: before?.userTurnCount ?? 0,
-                  baselineAssistantTurnCount: baseline,
-                })
-              )
+              !(await confirmPromptSubmitted(client, sessionId, services.signal, {
+                baselineUserTurnCount: before?.userTurnCount ?? 0,
+                baselineAssistantTurnCount: baseline,
+              }))
             ) {
               throw codedError(
                 "OUTPUT_VALIDATION_FAILED",

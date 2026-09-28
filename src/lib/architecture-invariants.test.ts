@@ -71,6 +71,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "05-WORKING-PROTOCOL.md",
     "tasks/README.md",
     "tasks/TASK-000.md",
+    "tasks/TASK-001.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -101,8 +102,9 @@ test("keeps the Reliability Program connected and bounded", () => {
   const roadmapTaskIds = [...roadmap.matchAll(/\| (TASK-\d{3}) \|/g)].map((match) => match[1]);
   assert.deepEqual(roadmapTaskIds, expectedTaskIds);
   assert.match(roadmap, /Estado da TASK-000: `done`/);
-  assert.match(roadmap, /\| TASK-001 \|[^\n]+\| `ready` \|/);
-  for (const taskId of expectedTaskIds.slice(1)) {
+  assert.match(roadmap, /\| TASK-001 \|[^\n]+\| `done` \|/);
+  assert.match(roadmap, /\| TASK-002 \|[^\n]+\| `ready` \|/);
+  for (const taskId of expectedTaskIds.slice(2)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

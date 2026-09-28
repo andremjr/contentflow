@@ -160,10 +160,7 @@ test("translates the user-controlled profile preparation window lifecycle", () =
     "The window will remain open. Install or update the extension, sign in, and close the browser when you are finished.",
   );
   assert.equal(
-    translate(
-      "O perfil está pronto. Feche o navegador quando terminar a configuração.",
-      "es",
-    ),
+    translate("O perfil está pronto. Feche o navegador quando terminar a configuração.", "es"),
     "El perfil está listo. Cierra el navegador cuando termines de configurarlo.",
   );
   assert.equal(

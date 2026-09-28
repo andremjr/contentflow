@@ -1917,9 +1917,7 @@ test("aceita apenas sinais fortes associados a uma nova resposta concluída", ()
 
 test("não aceita mensagens operacionais de interrupção do ChatGPT como conteúdo final", () => {
   assert.deepEqual(
-    __test.classifyProviderResponseFailure(
-      "Conexão interrompida. Aguardando a resposta completa",
-    ),
+    __test.classifyProviderResponseFailure("Conexão interrompida. Aguardando a resposta completa"),
     {
       code: "UPSTREAM_UNAVAILABLE",
       message: "A resposta do ChatGPT foi interrompida antes de ser concluída.",

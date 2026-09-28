@@ -166,7 +166,8 @@ test("a rejected partial callback fails the plugin execution without becoming an
           artifactDirectory: path.join(root, "artifacts"),
           onPartial: async () => {
             calls += 1;
-            if (calls === 2) throw new Error("O item incremental prompt:1 mudou depois de concluído.");
+            if (calls === 2)
+              throw new Error("O item incremental prompt:1 mudou depois de concluído.");
           },
         },
       ),

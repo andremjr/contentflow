@@ -630,12 +630,12 @@ function ExecutionResults({
               : ([{ action: "replace" }] satisfies PluginItemActionDeclaration[]);
           const showExecutionItemsWorkspace = Boolean(
             (pluginCapability?.execution.itemOrchestration && blockExecution.itemProgress) ||
-              blockExecution.items?.some(
-                (item) =>
-                  item.output !== undefined ||
-                  item.parentItemId !== undefined ||
-                  item.pluginCorrelation !== undefined,
-              ),
+            blockExecution.items?.some(
+              (item) =>
+                item.output !== undefined ||
+                item.parentItemId !== undefined ||
+                item.pluginCorrelation !== undefined,
+            ),
           );
 
           async function saveEditedValues() {

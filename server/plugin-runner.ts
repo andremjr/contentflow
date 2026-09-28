@@ -476,53 +476,55 @@ export async function executeRegisteredPlugin(
         return;
       }
       const payload = line.slice(partialPrefix.length);
-      partialChain = partialChain.then(async () => {
-        const event = JSON.parse(payload) as { sequence: number; update: PluginPartialUpdate };
-        const update = event.update;
-        const imported = await importPluginArtifacts(
-          {
-            status: "pending",
-            jobId: `stream:${event.sequence}`,
-            pollAfterMs: 1_000,
-            progress: update.progress,
-            message: update.message,
-            partialValues: update.values,
-            partialArtifacts: update.artifacts,
-            logs: update.logs,
-          },
-          outputDirectory,
-          artifactDirectory,
-          plugin.manifest,
-          {
-            existingArtifacts: partialArtifacts,
-            urlPrefix: options.artifactUrlPrefix,
-          },
-        );
-        partialArtifacts = imported.storedArtifacts ?? partialArtifacts;
-        const itemUpdates = update.itemUpdates?.map((item) => ({
-          ...item,
-          ...(item.value !== undefined
-            ? {
-                value: replacePluginArtifactReferences(
-                  item.value,
-                  imported.storedArtifacts ?? partialArtifacts,
-                ) as BlockExecutionItemValue,
-              }
-            : {}),
-        }));
-        await options.onPartial?.({
-          ...update,
-          itemUpdates,
-          values:
-            imported.status === "pending"
-              ? (imported.partialValues ?? update.values)
-              : update.values,
-          storedArtifacts: imported.storedArtifacts,
+      partialChain = partialChain
+        .then(async () => {
+          const event = JSON.parse(payload) as { sequence: number; update: PluginPartialUpdate };
+          const update = event.update;
+          const imported = await importPluginArtifacts(
+            {
+              status: "pending",
+              jobId: `stream:${event.sequence}`,
+              pollAfterMs: 1_000,
+              progress: update.progress,
+              message: update.message,
+              partialValues: update.values,
+              partialArtifacts: update.artifacts,
+              logs: update.logs,
+            },
+            outputDirectory,
+            artifactDirectory,
+            plugin.manifest,
+            {
+              existingArtifacts: partialArtifacts,
+              urlPrefix: options.artifactUrlPrefix,
+            },
+          );
+          partialArtifacts = imported.storedArtifacts ?? partialArtifacts;
+          const itemUpdates = update.itemUpdates?.map((item) => ({
+            ...item,
+            ...(item.value !== undefined
+              ? {
+                  value: replacePluginArtifactReferences(
+                    item.value,
+                    imported.storedArtifacts ?? partialArtifacts,
+                  ) as BlockExecutionItemValue,
+                }
+              : {}),
+          }));
+          await options.onPartial?.({
+            ...update,
+            itemUpdates,
+            values:
+              imported.status === "pending"
+                ? (imported.partialValues ?? update.values)
+                : update.values,
+            storedArtifacts: imported.storedArtifacts,
+          });
+        })
+        .catch((error) => {
+          partialFailure ??= error;
+          child.kill();
         });
-      }).catch((error) => {
-        partialFailure ??= error;
-        child.kill();
-      });
     };
     child.stdout.on("data", (chunk: Buffer) => {
       stdoutBuffer += chunk.toString("utf8");

@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --- | --- |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão | `1.2.1` |
-| Task concluída | TASK-000 |
+| Task concluída | TASK-001 |
 | Task ativa | Nenhuma |
-| Próxima | TASK-001 (`ready`), ainda não iniciada |
+| Próxima | TASK-002 (`ready`), ainda não iniciada |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -75,9 +75,13 @@ O comportamento converge em vários pontos, mas ainda não existe um único mód
 
 `resolveBlockInputs()` em `src/lib/runtime-contract.ts` ainda seleciona candidatos compatíveis e os ordena por `labelScore()`. Isso permite que semelhança textual participe da escolha em runtime quando não existe binding explícito, em conflito com o estado alvo de bindings determinísticos.
 
+`selectPluginInputPort()` em `server/plugin-input-values.ts` respeita uma `portKey` explícita, mas, quando ela não existe, ainda escolhe a porta por compatibilidade, identidade semântica, apresentação e ordem. A boundary de plugin também infere portas de output por tipo ou pela primeira porta disponível.
+
 ### Mapeamento permissivo de outputs
 
 `valuesForPluginResponse()` em `server/index.ts` ainda tenta, nesta ordem, chave do campo, `portKey` do contrato e o fallback genérico `responseValues.result`. O caminho de `ESCOLHER` também aceita `selectedItemId ?? result`. Esse comportamento pode transformar resposta ambígua em aparente sucesso e precisa migrar para outputs explícitos com adapter legado delimitado.
+
+`VALIDAR` possui alvo persistido, mas a normalização de Método ainda pode inferir o último Bloco não-`VALIDAR` e uma saída compatível. Na boundary de plugin, a primeira saída do alvo e a primeira porta de input compatível ainda funcionam como fallback.
 
 ### Recovery decidido de forma mais rica do que é aplicado
 
@@ -86,6 +90,10 @@ O comportamento converge em vários pontos, mas ainda não existe um único mód
 Nos principais caminhos de falha de plugin em `server/index.ts`, somente `switch_profile` e `retry` recebem aplicação dedicada. As demais decisões terminam, em geral, no mesmo caminho `markPluginJobFailed()`, embora a mensagem de produto varie. `PluginJobStatus` ainda não possui estados duráveis próprios para `reconcile` e `intervene`.
 
 Assim, a política já reconhece efeito incerto e intervenção, mas sua aplicação e retomada não são ainda simétricas, universais e duráveis.
+
+### Recursos distribuídos em políticas locais
+
+O scheduler de plugin jobs possui limite global fixo de quatro workers. `maxConcurrency` possui default 1 e é aplicado por capability ou por perfil, conforme o manifesto; leases persistentes mantêm exclusividade por perfil físico e lanes paralelas usam perfis distintos. Essas proteções existem, mas ainda não formam o governador global e adaptável de recursos previsto para TASK-050.
 
 ### Compatibilidade histórica dentro dos caminhos normais
 
@@ -111,7 +119,7 @@ Existem suites importantes para arquitetura, ordem de Processos, jobs persistent
 
 Testes parciais de restart e efeito incerto existem, especialmente em jobs, Orchestrator e Browser Bridge. Eles não substituem o Reliability Gate integrado definido para TASK-052.
 
-O `npm run check` não está verde no worktree atual: a execução observada na TASK-000F parou no lint com 135 erros de Prettier e um warning de Fast Refresh em arquivos preexistentes ao escopo documental. TASK-001 deve congelar esse fato com evidência atualizada, sem misturar formatação ampla e não revisada ao baseline.
+O baseline da TASK-001 confirmou inicialmente 135 erros de Prettier e um warning de Fast Refresh. Em limpeza posterior explicitamente autorizada, esses 136 diagnósticos foram eliminados e `npm run lint` e `npm run typecheck` passaram. O `npm run check` agora avança até `test:shared-browser-v89`, onde falha porque a capability textual do ChatGPT não declara `incrementalStrategies: ["per_item"]`; a falha isolada reproduz 3 testes passando e 1 falhando. A evidência detalhada está em [`tasks/TASK-001.md`](tasks/TASK-001.md).
 
 ## Governing references
 
@@ -119,6 +127,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-001. Sua criação e implementação ainda exigem autorização explícita.
+Não há blocker externo confirmado para preparar a especificação da TASK-002. Sua criação e implementação ainda exigem autorização explícita.
 
-O gate agregado `npm run check` não está verde por problemas de lint já observados fora do escopo documental. Essa condição deve ser verificada novamente e congelada como evidência histórica pela TASK-001, sem autorizar formatação em massa ou alteração fora de escopo.
+O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

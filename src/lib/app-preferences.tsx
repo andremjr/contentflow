@@ -1417,18 +1417,20 @@ const PHRASES: Record<string, Translation> = {
     "Prepare the account in the browser window",
     "Prepara la cuenta en la ventana del navegador",
   ],
-  "A janela continuará aberta. Instale ou atualize a extensão, faça login e feche o navegador quando terminar.": [
-    "The window will remain open. Install or update the extension, sign in, and close the browser when you are finished.",
-    "La ventana permanecerá abierta. Instala o actualiza la extensión, inicia sesión y cierra el navegador cuando termines.",
-  ],
+  "A janela continuará aberta. Instale ou atualize a extensão, faça login e feche o navegador quando terminar.":
+    [
+      "The window will remain open. Install or update the extension, sign in, and close the browser when you are finished.",
+      "La ventana permanecerá abierta. Instala o actualiza la extensión, inicia sesión y cierra el navegador cuando termines.",
+    ],
   "O perfil está pronto. Feche o navegador quando terminar a configuração.": [
     "The profile is ready. Close the browser when you finish configuring it.",
     "El perfil está listo. Cierra el navegador cuando termines de configurarlo.",
   ],
-  "A janela permanecerá aberta para você corrigir a extensão ou o login. Feche o navegador quando terminar.": [
-    "The window will remain open so you can fix the extension or sign-in. Close the browser when you are finished.",
-    "La ventana permanecerá abierta para que puedas corregir la extensión o el inicio de sesión. Cierra el navegador cuando termines.",
-  ],
+  "A janela permanecerá aberta para você corrigir a extensão ou o login. Feche o navegador quando terminar.":
+    [
+      "The window will remain open so you can fix the extension or sign-in. Close the browser when you are finished.",
+      "La ventana permanecerá abierta para que puedas corregir la extensión o el inicio de sesión. Cierra el navegador cuando termines.",
+    ],
   "Agora prepare a conta para confirmar a sessão neste perfil.": [
     "Now prepare the account to confirm the session in this profile.",
     "Ahora prepara la cuenta para confirmar la sesión en este perfil.",

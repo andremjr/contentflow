@@ -36,8 +36,8 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 
 | Task | Missão | Estado |
 | --- | --- | --- |
-| TASK-001 | Congelar baseline de confiabilidade | `ready` |
-| TASK-002 | Characterization tests da máquina de estados atual | `pending` |
+| TASK-001 | Congelar baseline de confiabilidade | `done` |
+| TASK-002 | Characterization tests da máquina de estados atual | `ready` |
 | TASK-003 | Caracterizar `VALIDAR` e retry editorial | `pending` |
 | TASK-004 | Plugin determinístico de fault injection | `pending` |
 | TASK-005 | Fixture persistente representativa da 1.2.1 | `pending` |

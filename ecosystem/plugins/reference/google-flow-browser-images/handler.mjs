@@ -5931,9 +5931,7 @@ async function executeHandler(request, services) {
     return {
       status: "success",
       values:
-        request?.capabilityId === "generate-video-in-browser"
-          ? { video: [] }
-          : { images: [] },
+        request?.capabilityId === "generate-video-in-browser" ? { video: [] } : { images: [] },
       artifacts: [],
       usage: { provider: "Google Labs / Flow", outputUnits: 0, unit: "visual_asset" },
       logs: ["Nenhuma unidade pendente para esta sessão contínua."],
@@ -7247,69 +7245,71 @@ async function executeHandler(request, services) {
       async onItemCompleted({ task, value }) {
         const index = originalPromptIndex(task.index);
         if (completedPromptIndexes.has(index) || publishingPromptIndexes.has(index)) {
-          step(`Fila: conclusão duplicada do prompt ${index + 1} ignorada após a primeira entrega.`);
+          step(
+            `Fila: conclusão duplicada do prompt ${index + 1} ignorada após a primeira entrega.`,
+          );
           return;
         }
         publishingPromptIndexes.add(index);
         try {
-        if (!Array.isArray(value) || value.length === 0)
-          throw codedError(
-            "OUTPUT_VALIDATION_FAILED",
-            `A fila terminou sem resultado para o prompt ${index + 1}.`,
-          );
-        for (const result of value) {
-          if (!result?.file || !result?.artifact)
+          if (!Array.isArray(value) || value.length === 0)
             throw codedError(
               "OUTPUT_VALIDATION_FAILED",
-              `A fila terminou com um artifact inválido no prompt ${index + 1}.`,
+              `A fila terminou sem resultado para o prompt ${index + 1}.`,
             );
-          await cacheGenerationArtifact(request, services, result.artifact);
-          files.push(result.file);
-          artifacts.push(result.artifact);
-        }
-        await publishContinuousTaskState(task, "completed", {
-          outputPort: "images",
-          value: value.map((result) => result.file),
-          artifacts: value.map((result) => result.artifact),
-          message: flowMediaMessage(request?.context?.locale, "continuousCompleted", {
-            position: index + 1,
-            kind: "image",
-          }),
-        });
-        const completedClaim = continuousClaims?.[task.index];
-        if (completedClaim) {
-          await clearVisualBatchItemBaseline(request, services, completedClaim.itemId);
-        }
-        sortGeneratedOutputs(files, "image");
-        sortGeneratedOutputs(artifacts, "image");
-        completedPromptIndexes.add(index);
-        if (continuousClaims === undefined) {
-          await saveGenerationCheckpoint(request, services, prompts, {
-            completedPromptIndexes: [...completedPromptIndexes],
-            files,
-            projectUrl: activeProjectUrl,
-            accountProfile: profileRuntime.accountProfile,
-          });
-        }
-        step(`Fila: prompt ${index + 1} persistido localmente antes de avançar.`);
-        await services.publishPartial?.({
-          values: {
-            images: singleImageOutput ? files[0] : files,
-            ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
-          },
-          artifacts,
-          itemUpdates: value.map((result, variantIndex) =>
-            mediaItemUpdate({
-              key: `prompt:${index}`,
-              variantKey: `image:${variantIndex}`,
-              outputPort: "images",
-              input: task.prompt,
-              value: result.file,
+          for (const result of value) {
+            if (!result?.file || !result?.artifact)
+              throw codedError(
+                "OUTPUT_VALIDATION_FAILED",
+                `A fila terminou com um artifact inválido no prompt ${index + 1}.`,
+              );
+            await cacheGenerationArtifact(request, services, result.artifact);
+            files.push(result.file);
+            artifacts.push(result.artifact);
+          }
+          await publishContinuousTaskState(task, "completed", {
+            outputPort: "images",
+            value: value.map((result) => result.file),
+            artifacts: value.map((result) => result.artifact),
+            message: flowMediaMessage(request?.context?.locale, "continuousCompleted", {
+              position: index + 1,
+              kind: "image",
             }),
-          ),
-          progress: completedPromptIndexes.size / prompts.length,
-          message: `Prompt ${index + 1} de ${prompts.length} capturado.`,
-        });
+          });
+          const completedClaim = continuousClaims?.[task.index];
+          if (completedClaim) {
+            await clearVisualBatchItemBaseline(request, services, completedClaim.itemId);
+          }
+          sortGeneratedOutputs(files, "image");
+          sortGeneratedOutputs(artifacts, "image");
+          completedPromptIndexes.add(index);
+          if (continuousClaims === undefined) {
+            await saveGenerationCheckpoint(request, services, prompts, {
+              completedPromptIndexes: [...completedPromptIndexes],
+              files,
+              projectUrl: activeProjectUrl,
+              accountProfile: profileRuntime.accountProfile,
+            });
+          }
+          step(`Fila: prompt ${index + 1} persistido localmente antes de avançar.`);
+          await services.publishPartial?.({
+            values: {
+              images: singleImageOutput ? files[0] : files,
+              ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
+            },
+            artifacts,
+            itemUpdates: value.map((result, variantIndex) =>
+              mediaItemUpdate({
+                key: `prompt:${index}`,
+                variantKey: `image:${variantIndex}`,
+                outputPort: "images",
+                input: task.prompt,
+                value: result.file,
+              }),
+            ),
+            progress: completedPromptIndexes.size / prompts.length,
+            message: `Prompt ${index + 1} de ${prompts.length} capturado.`,
+          });
         } finally {
           publishingPromptIndexes.delete(index);
         }

@@ -1354,7 +1354,9 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
     toast.info("Prepare a conta na janela do navegador", {
       description: [
         plugin.manifest.profileSetup?.description,
-        t("A janela continuará aberta. Instale ou atualize a extensão, faça login e feche o navegador quando terminar."),
+        t(
+          "A janela continuará aberta. Instale ou atualize a extensão, faça login e feche o navegador quando terminar.",
+        ),
       ]
         .filter(Boolean)
         .join(" "),
@@ -1386,7 +1388,9 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
       toast.error("Não foi possível preparar o perfil", {
         description: [
           error instanceof Error ? error.message : undefined,
-          t("A janela permanecerá aberta para você corrigir a extensão ou o login. Feche o navegador quando terminar."),
+          t(
+            "A janela permanecerá aberta para você corrigir a extensão ou o login. Feche o navegador quando terminar.",
+          ),
         ]
           .filter(Boolean)
           .join(" "),
