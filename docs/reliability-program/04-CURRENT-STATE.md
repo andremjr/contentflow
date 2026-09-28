@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --- | --- |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão | `1.2.1` |
-| Task concluída | TASK-001 |
+| Task concluída | TASK-002 |
 | Task ativa | Nenhuma |
-| Próxima | TASK-002 (`ready`), ainda não iniciada |
+| Próxima | TASK-003 (`ready`), ainda não iniciada |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -52,6 +52,7 @@ As capacidades abaixo existem no checkout atual e constituem base a preservar, c
 - **recovery policy:** `decideExecutionRecovery()` distingue `cancel`, `reconcile`, `intervene`, `switch_profile`, `retry` e `fail`;
 - **migration journal:** schema versionado com journal, passos, estados `started/completed/failed` e recuperação de migração interrompida;
 - **Orchestrator V5:** elegibilidade por slots, ordem congelada e retomada de filas persistidas;
+- **characterization da execução básica:** suíte dedicada cobre start humano/automático, avanço sequencial, espera humana/de executor, outputs, drafts, rejeições sem mutação, snapshot congelado e sucesso simples de plugin;
 - **testes extensos:** suites para arquitetura, execução, plugins, perfis, Browser Bridge, persistência, migrações e distribuição.
 
 Existência não significa convergência completa com a arquitetura-alvo. Essas capacidades ainda passam por caminhos de aplicação diferentes e precisam de characterization tests antes de consolidação.
@@ -107,7 +108,7 @@ Esses caminhos preservam instalações existentes, mas parte da reconciliação 
 
 ## Known test gaps
 
-Existem suites importantes para arquitetura, ordem de Processos, jobs persistentes, restart de componentes, Browser Bridge, perfis, lanes, migrações, plugins e contratos. Ainda não existe um gate único que prove, em conjunto:
+Existem suites importantes para arquitetura, máquina básica de execução, ordem de Processos, jobs persistentes, restart de componentes, Browser Bridge, perfis, lanes, migrações, plugins e contratos. A TASK-002 passou a proteger explicitamente C01–C12 e o sucesso simples de plugin. Ainda não existe um gate único que prove, em conjunto:
 
 - jornada automática completa dos 8 Processos;
 - fault injection determinístico;
@@ -127,6 +128,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-002. Sua criação e implementação ainda exigem autorização explícita.
+Não há blocker externo confirmado para preparar a especificação da TASK-003. Sua criação e implementação ainda exigem autorização explícita.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.
