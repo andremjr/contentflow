@@ -9,7 +9,7 @@ import {
   type StoredFile,
   type StructuredRecord,
 } from "@/lib/domain";
-import { normalizeExecutionDeliveries } from "@/lib/deliveries";
+import { normalizeExecutionDeliveries, processOutputDeliveryFor } from "@/lib/deliveries";
 
 const HISTORY_VALUE_TYPES = new Set<HumanFieldType>([
   "text",
@@ -116,6 +116,7 @@ export function resolveChannelHistory({
   );
   const limit = Math.min(100, Math.max(1, input.historyLimit ?? 10));
   const eligibility = input.historyEligibility ?? "completed";
+  const sourceKey = input.sourceKey;
 
   return executions
     .filter(
@@ -123,12 +124,19 @@ export function resolveChannelHistory({
         execution.processType === input.sourceProcessType &&
         (eligibility !== "published" || publishedProjectIds.has(execution.projectId)),
     )
-    .flatMap((execution) =>
-      (normalizeExecutionDeliveries(execution).deliveries ?? [])
+    .flatMap((execution) => {
+      const normalized = normalizeExecutionDeliveries(execution);
+      const deliveries =
+        input.blockId === "__process_output__"
+          ? [processOutputDeliveryFor(normalized, sourceKey)].filter(
+              (delivery): delivery is NonNullable<typeof delivery> => Boolean(delivery),
+            )
+          : (normalized.deliveries ?? []);
+      return deliveries
         .filter(
           (delivery) =>
-            delivery.blockId === input.blockId &&
-            delivery.outputKey === input.sourceKey &&
+            (input.blockId === "__process_output__" || delivery.blockId === input.blockId) &&
+            (input.blockId === "__process_output__" || delivery.outputKey === sourceKey) &&
             delivery.status === "completed",
         )
         .flatMap((delivery) => {
@@ -145,8 +153,8 @@ export function resolveChannelHistory({
               } satisfies StructuredRecord,
             ];
           });
-        }),
-    )
+        });
+    })
     .sort((left, right) => String(right.recorded_at).localeCompare(String(left.recorded_at)))
     .slice(0, limit);
 }

@@ -69,6 +69,12 @@ export function browserBridgeProfileState(
 ): BrowserBridgeProfileState {
   const profileDirectory = findBrowserProfileDirectory(workspaceDirectory, alias);
   if (!profileDirectory) return "unknown";
+  return browserBridgeProfileDirectoryState(profileDirectory);
+}
+
+export function browserBridgeProfileDirectoryState(
+  profileDirectory: string,
+): BrowserBridgeProfileState {
   const securePreferencesPath = path.join(profileDirectory, "Default", "Secure Preferences");
   const securePreferences = jsonObject(securePreferencesPath);
   if (!securePreferences) return "unknown";

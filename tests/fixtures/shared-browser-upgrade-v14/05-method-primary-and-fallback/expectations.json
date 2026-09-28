@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "scenario": "05-method-primary-and-fallback",
+  "description": "Método legado persistindo aliases principal e fallback.",
+  "counts": {
+    "channels": 1,
+    "projects": 0,
+    "process_executions": 0,
+    "plugin_profiles": 2,
+    "plugin_workspaces": 0,
+    "plugin_jobs": 0
+  },
+  "payloadSha256": {
+    "channels:method": "d6563f73b88d173af55fd5cd38481ddd450e654606bb515f4b9a3e7bd5af3dec"
+  },
+  "resolvedFolders": {
+    "com.contentflow.fixture.browser:principal": "plugin-workspaces/profiles/com.contentflow.fixture.browser/principal",
+    "com.contentflow.fixture.browser:reserva": "plugin-workspaces/profiles/com.contentflow.fixture.browser/reserva"
+  },
+  "markers": []
+}

@@ -17,12 +17,12 @@ O ecossistema existe para ampliar a execução dos Métodos sem transformar cada
 
 ## 2. Origem e sinais de confiança
 
-| Categoria    | Responsabilidade                                                                   | Indicação visual   |
-| ------------ | ---------------------------------------------------------------------------------- | ------------------ |
-| `reference`  | Publicado como exemplo ou ponto de partida, sem promessa implícita de suporte contínuo. | Referência          |
-| `verified`   | Autor e pacote revisados contra requisitos publicados.                             | Verificado         |
-| `community`  | Distribuído pelo autor, sem revisão integral do projeto.                           | Comunidade         |
-| `private`    | Instalado localmente ou por organização, fora do catálogo público.                 | Privado            |
+| Categoria   | Responsabilidade                                                                        | Indicação visual |
+| ----------- | --------------------------------------------------------------------------------------- | ---------------- |
+| `reference` | Publicado como exemplo ou ponto de partida, sem promessa implícita de suporte contínuo. | Referência       |
+| `verified`  | Autor e pacote revisados contra requisitos publicados.                                  | Verificado       |
+| `community` | Distribuído pelo autor, sem revisão integral do projeto.                                | Comunidade       |
+| `private`   | Instalado localmente ou por organização, fora do catálogo público.                      | Privado          |
 
 Essas categorias comunicam origem e confiança; não formam níveis de permissão. “Verificado” confirma identidade/origem e uma revisão limitada, mas não garante disponibilidade do provedor, qualidade de outputs, adequação jurídica ou ausência absoluta de vulnerabilidades. `community` e `private` não significam “aguardando aprovação”.
 

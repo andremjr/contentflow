@@ -12,9 +12,10 @@ import {
 } from "@/lib/domain";
 import { projectProcessOrder } from "@/lib/process-order";
 import { createProcessOutputFields, isEmptyRuntimeValue } from "@/lib/human-workflow";
-import { normalizeExecutionDeliveries } from "@/lib/deliveries";
+import { normalizeExecutionDeliveries, processOutputDeliveryFor } from "@/lib/deliveries";
 import { resolveChannelHistory } from "@/lib/channel-history";
 import { collectionItemValuesForPlugin } from "@/lib/plugin-collection";
+import { areHumanFieldTypesCompatible } from "@/lib/data-shape";
 
 type RuntimeCandidate = {
   id: string;
@@ -42,10 +43,7 @@ export type ResolvedBlockInput = {
 };
 
 function areRuntimeTypesCompatible(output: HumanFieldType, input: HumanFieldType) {
-  if (output === input) return true;
-  if (["text", "textarea"].includes(output) && ["text", "textarea"].includes(input)) return true;
-  if (input === "file" && ["image", "audio", "video"].includes(output)) return true;
-  return false;
+  return areHumanFieldTypesCompatible(output, input);
 }
 
 export function resolveBlockInputs({
@@ -241,11 +239,7 @@ function collectCandidates({
     for (const output of createProcessOutputFields(processExecution.processType)) {
       const value = processExecution.output?.values[output.key];
       if (value === undefined || isEmptyRuntimeValue(value)) continue;
-      const delivery = activeDeliveryFor(
-        processExecution.deliveries,
-        "__process_output__",
-        output.key,
-      );
+      const delivery = processOutputDeliveryFor(processExecution, output.key);
       candidates.push({
         id: `process:${processExecution.processType}:${output.key}`,
         label: output.label,

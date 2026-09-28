@@ -102,6 +102,7 @@ const profileSetupSchema = z
     prepareTimeoutMs: z.number().int().min(30_000).max(900_000).optional(),
   })
   .strict();
+const browserRuntimeSchema = z.object({ lifecycle: z.literal("core") }).strict();
 const promptPreviewSchema = z
   .object({
     template: z.string().min(1).max(20_000),
@@ -229,6 +230,34 @@ const capabilitySchema = z
             mode: z.literal("sequential"),
             combinedOutputPort: z.string().min(1).max(100).regex(identifier).optional(),
             separator: z.string().max(20).optional(),
+            strategies: z
+              .array(z.enum(["continuous_session", "per_item"]))
+              .min(1)
+              .max(2)
+              .refine(unique, "não pode conter duplicatas")
+              .optional(),
+            preferredStrategy: z.enum(["continuous_session", "per_item"]).optional(),
+            profileParallelism: z
+              .object({
+                supported: z.boolean(),
+                maxProfiles: z.number().int().min(1).max(100).optional(),
+              })
+              .strict()
+              .optional(),
+            collectionAssociations: z
+              .array(
+                z
+                  .object({
+                    key: z.string().min(1).max(100).regex(identifier),
+                    inputPort: z.string().min(1).max(100).regex(identifier),
+                    outputPort: z.string().min(1).max(100).regex(identifier),
+                    combinedOutputPort: z.string().min(1).max(100).regex(identifier).optional(),
+                    separator: z.string().max(20).optional(),
+                  })
+                  .strict(),
+              )
+              .max(20)
+              .optional(),
           })
           .strict()
           .optional(),
@@ -366,6 +395,7 @@ export const pluginManifestSchema = z
       .refine(unique, "não pode conter duplicatas")
       .optional(),
     profileSetup: profileSetupSchema.optional(),
+    browserRuntime: browserRuntimeSchema.optional(),
     supportsConversationContinuation: z.boolean().optional(),
     settingsSchema: jsonSchema.optional(),
     capabilities: z.array(capabilitySchema).min(1),
@@ -587,6 +617,26 @@ export const pluginManifestSchema = z
       }
       const orchestration = capability.execution.itemOrchestration;
       if (!orchestration) continue;
+      if (
+        orchestration.preferredStrategy &&
+        !orchestration.strategies?.includes(orchestration.preferredStrategy)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["capabilities", index, "execution", "itemOrchestration", "preferredStrategy"],
+          message: "precisa estar presente em strategies",
+        });
+      }
+      if (
+        orchestration.profileParallelism?.maxProfiles !== undefined &&
+        orchestration.profileParallelism.supported !== true
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["capabilities", index, "execution", "itemOrchestration", "profileParallelism"],
+          message: "maxProfiles exige supported=true",
+        });
+      }
       if (!capability.inputPorts.some((port) => port.key === orchestration.inputPort)) {
         context.addIssue({
           code: "custom",
@@ -610,6 +660,51 @@ export const pluginManifestSchema = z
           path: ["capabilities", index, "execution", "itemOrchestration", "combinedOutputPort"],
           message: "precisa referenciar uma porta de saída existente",
         });
+      }
+      const associationKeys = new Set<string>();
+      for (const [associationIndex, association] of (
+        orchestration.collectionAssociations ?? []
+      ).entries()) {
+        const basePath = [
+          "capabilities",
+          index,
+          "execution",
+          "itemOrchestration",
+          "collectionAssociations",
+          associationIndex,
+        ];
+        if (associationKeys.has(association.key)) {
+          context.addIssue({
+            code: "custom",
+            path: [...basePath, "key"],
+            message: "precisa ser única dentro da capability",
+          });
+        }
+        associationKeys.add(association.key);
+        if (!capability.inputPorts.some((port) => port.key === association.inputPort)) {
+          context.addIssue({
+            code: "custom",
+            path: [...basePath, "inputPort"],
+            message: "precisa referenciar uma porta de entrada existente",
+          });
+        }
+        if (!capability.outputPorts.some((port) => port.key === association.outputPort)) {
+          context.addIssue({
+            code: "custom",
+            path: [...basePath, "outputPort"],
+            message: "precisa referenciar uma porta de saída existente",
+          });
+        }
+        if (
+          association.combinedOutputPort &&
+          !capability.outputPorts.some((port) => port.key === association.combinedOutputPort)
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: [...basePath, "combinedOutputPort"],
+            message: "precisa referenciar uma porta de saída existente",
+          });
+        }
       }
     }
   });

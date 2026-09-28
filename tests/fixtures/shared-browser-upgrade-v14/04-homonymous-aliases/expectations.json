@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "scenario": "04-homonymous-aliases",
+  "description": "Aliases iguais em plugins distintos sem fusão implícita.",
+  "counts": {
+    "channels": 1,
+    "projects": 0,
+    "process_executions": 0,
+    "plugin_profiles": 2,
+    "plugin_workspaces": 0,
+    "plugin_jobs": 0
+  },
+  "payloadSha256": {
+    "channels:homonyms": "37f320f1dc0b61c76c940001745c511dfca4230094b6032de5b10871ea891fcf"
+  },
+  "resolvedFolders": {
+    "com.contentflow.fixture.alpha:principal": "plugin-workspaces/profiles/com.contentflow.fixture.alpha/principal",
+    "com.contentflow.fixture.beta:principal": "plugin-workspaces/profiles/com.contentflow.fixture.beta/principal"
+  },
+  "markers": []
+}

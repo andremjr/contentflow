@@ -19,6 +19,7 @@ export function resolvePluginConversation(input: {
   pluginId: string;
   supportsContinuation: boolean;
   profileSetup?: PluginManifest["profileSetup"];
+  profileId?: string;
 }): PluginExecutionRequest["conversation"] {
   const continuationMessage =
     input.blockExecution.retryMode === "conversation_feedback"
@@ -36,12 +37,18 @@ export function resolvePluginConversation(input: {
         continuationMessage,
         ...(fallbackAttachments?.length ? { fallbackAttachments } : {}),
       };
+    if (
+      ownConversation.pluginId !== input.pluginId ||
+      ownConversation.connectionId !== input.block.plugin?.connectionId
+    )
+      throw new Error("A conversa escolhida pertence a outro plugin ou conta.");
     return conversationForProfile({
       block: input.block,
       profileSetup: input.profileSetup,
       conversation: ownConversation,
       fallbackContext,
       continuationMessage,
+      profileId: input.profileId,
       ...(fallbackAttachments?.length ? { fallbackAttachments } : {}),
     });
   }
@@ -101,6 +108,7 @@ export function resolvePluginConversation(input: {
     profileSetup: input.profileSetup,
     conversation: sourceConversation,
     fallbackContext,
+    profileId: input.profileId,
   });
 }
 
@@ -139,15 +147,19 @@ function conversationForProfile(input: {
   fallbackContext?: string;
   continuationMessage?: string;
   fallbackAttachments?: StoredFile[];
+  profileId?: string;
 }): PluginExecutionRequest["conversation"] {
   const configurationKey = input.profileSetup?.configurationKey;
   const requestedProfile = configurationKey
     ? String(input.block.plugin?.configuration[configurationKey] ?? "").trim()
     : "";
   if (
-    input.conversation.profile &&
-    requestedProfile &&
-    input.conversation.profile !== requestedProfile
+    (input.conversation.profileId &&
+      input.profileId &&
+      input.conversation.profileId !== input.profileId) ||
+    (input.conversation.profile &&
+      requestedProfile &&
+      input.conversation.profile !== requestedProfile)
   ) {
     return {
       mode: "new",

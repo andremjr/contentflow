@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -32,4 +33,29 @@ test("keeps every universal process represented by metadata and an empty Method 
   for (const processType of PROCESS_ORDER) {
     assert.equal(methods[processType].processType, processType);
   }
+});
+
+test("documents the domain identity hierarchy, shared profiles, and exactly three domain interfaces", () => {
+  const architecture = readFileSync(new URL("../../docs/ARCHITECTURE.md", import.meta.url), "utf8");
+
+  for (const term of [
+    "`BlockExecution`",
+    "Unidade de trabalho",
+    "Entrega",
+    "Item de entrega",
+    "Artifact",
+    "perfil de navegador",
+    "vínculo de plugin",
+    "readiness",
+    "`single`",
+    "`fallback`",
+    "`parallel`",
+  ]) {
+    assert.match(architecture, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  }
+
+  assert.match(architecture, /\*\*Escalar:\*\*/);
+  assert.match(architecture, /\*\*Lista de cenas:\*\*/);
+  assert.match(architecture, /\*\*Lista de assets:\*\*/);
+  assert.equal((architecture.match(/INTERFACE [123]:/g) ?? []).length, 3);
 });

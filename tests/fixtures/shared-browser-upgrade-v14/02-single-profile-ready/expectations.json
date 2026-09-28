@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "scenario": "02-single-profile-ready",
+  "description": "Um plugin com um perfil pronto e marker legado.",
+  "counts": {
+    "channels": 1,
+    "projects": 0,
+    "process_executions": 0,
+    "plugin_profiles": 1,
+    "plugin_workspaces": 0,
+    "plugin_jobs": 0
+  },
+  "payloadSha256": {
+    "channels:single": "44b0b3c7890672a57fcbba25fdb9d8ed3e776dad22570f8859ccf6f5133789d5"
+  },
+  "resolvedFolders": {
+    "com.contentflow.fixture.browser:principal": "plugin-workspaces/profiles/com.contentflow.fixture.browser/principal"
+  },
+  "markers": [
+    "plugin-workspaces/profiles/com.contentflow.fixture.browser/principal/.contentflow-profile-ready.json"
+  ]
+}

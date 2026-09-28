@@ -171,11 +171,19 @@ export type BlockValidationConfig = {
   retryMode?: "full" | "conversation_feedback";
 };
 
+export type ProfileExecutionPolicy = {
+  mode: "single" | "fallback" | "parallel";
+  profileIds: string[];
+  maxParallel?: number;
+};
+
 export type BlockPluginBinding = {
   pluginId: string;
   pluginVersion?: string;
   capabilityId: string;
   configuration: Record<string, string | number | boolean>;
+  /** Local browser-profile policy owned by the core. Never portable to plugins or Method exports. */
+  profileExecution?: ProfileExecutionPolicy;
   connectionId?: string;
   connectionRequired?: boolean;
   conversation?:
@@ -360,16 +368,73 @@ export type BlockItemProgress = {
   failedIndex?: number;
 };
 
+export type ProfileLaneExecutionCounts = {
+  total: number;
+  completed: number;
+  active: number;
+  pending: number;
+  failed: number;
+};
+
+export type ProfileLaneExecutionProgress = {
+  counts: ProfileLaneExecutionCounts;
+  complete: boolean;
+  lanes: Array<{
+    laneId: string;
+    /** ID local opaco; a interface não o usa como nome de conta. */
+    profileId: string;
+    state:
+      | "planned"
+      | "leased"
+      | "running"
+      | "completed"
+      | "failed"
+      | "cancelled"
+      | "reconciliation_required";
+    counts: ProfileLaneExecutionCounts;
+    reconciliationRequired: number;
+    reasonCode?: string;
+  }>;
+};
+
 export type BlockExecutionItemStatus =
   "pending" | "in_progress" | "completed" | "failed" | "cancelled";
 
+export type BlockExecutionItemDurableState =
+  | "planned"
+  | "pending"
+  | "leased"
+  | "submitted"
+  | "awaiting_result"
+  | "completed"
+  | "failed"
+  | "awaiting_human"
+  | "cancelled";
+
 export type BlockExecutionItemValue = RuntimeValue | StructuredRecord;
 
+export type BlockExecutionItemKind = "scalar" | "list_item" | "derived";
+
+export type BlockExecutionItemProvenance = {
+  /** Como esta unidade entrou no grafo persistente do núcleo. */
+  origin: "block_input" | "plugin_derived" | "legacy_job";
+  /** Porta de entrada que originou a unidade, quando conhecida. */
+  inputPort?: string;
+  /** Delivery de origem sem copiar a delivery para a unidade. */
+  sourceDeliveryId?: string;
+  /** Item da delivery de origem, quando a entrada veio de uma entrega anterior. */
+  sourceDeliveryItemId?: string;
+};
+
 export type BlockExecutionItemAttempt = {
+  /** Identidade estável atribuída pelo núcleo; ausente apenas em snapshots legados ainda não normalizados. */
+  id?: string;
   attempt: number;
   status: BlockExecutionItemStatus;
   input: BlockExecutionItemValue;
   output?: BlockExecutionItemValue;
+  artifacts?: StoredFile[];
+  externalReceipt?: string;
   error?: string;
   startedAt?: string;
   completedAt?: string;
@@ -384,7 +449,15 @@ export type BlockExecutionItemAttempt = {
  */
 export type BlockExecutionItem = {
   id: string;
+  /** Forma estrutural da unidade; snapshots antigos são normalizados na leitura/migração. */
+  kind?: BlockExecutionItemKind;
+  /** Relação hierárquica para unidades derivadas. */
+  parentItemId?: string;
+  /** Chave estável proposta pelo plugin para reencontrar o mesmo filho derivado na tentativa lógica. */
+  semanticKey?: string;
   sourceItemId?: string;
+  /** Proveniência persistida sem duplicar ProjectDelivery/DeliveryItem. */
+  provenance?: BlockExecutionItemProvenance;
   /** Correlação declarada pelo plugin para um slot incremental desta tentativa. */
   pluginCorrelation?: {
     key: string;
@@ -400,8 +473,14 @@ export type BlockExecutionItem = {
   selected?: boolean;
   input: BlockExecutionItemValue;
   status: BlockExecutionItemStatus;
+  /** Estado durável mais preciso da unidade durante uma sessão incremental. */
+  durableState?: BlockExecutionItemDurableState;
+  /** Revisão material incrementada pelo núcleo após cada publishItemUpdate confirmado. */
+  revision?: number;
   attempt: number;
   output?: BlockExecutionItemValue;
+  artifacts?: StoredFile[];
+  externalReceipt?: string;
   error?: string;
   attempts: BlockExecutionItemAttempt[];
 };
@@ -422,6 +501,8 @@ export type BlockExecution = {
   progressMessage?: string;
   /** Resumo compacto dos itens persistidos durante a execução do bloco. */
   itemProgress?: BlockItemProgress;
+  /** Progresso multiperfil derivado apenas das unidades persistidas pelo núcleo. */
+  profileLaneProgress?: ProfileLaneExecutionProgress;
   /** Itens operacionais persistentes quando o bloco executa uma coleção. */
   items?: BlockExecutionItem[];
   /** Política escolhida pelo usuário para a próxima tentativa manual do lote. */
@@ -435,6 +516,8 @@ export type BlockExecution = {
     pluginId: string;
     connectionId?: string;
     profile?: string;
+    /** Identidade física local opaca usada para validar continuidade sem expô-la ao plugin. */
+    profileId?: string;
     id: string;
     fallbackContext?: string;
   };

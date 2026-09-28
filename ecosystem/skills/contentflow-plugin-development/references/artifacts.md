@@ -31,16 +31,18 @@ return {
       name: "resultado.txt",
       mimeType: "text/plain",
       size: bytes,
-      url: "artifact://result-file"
-    }
+      url: "artifact://result-file",
+    },
   },
-  artifacts: [{
-    id: "result-file",
-    name: "resultado.txt",
-    mimeType: "text/plain",
-    size: bytes,
-    source: { kind: "path", path: "resultado.txt" }
-  }]
+  artifacts: [
+    {
+      id: "result-file",
+      name: "resultado.txt",
+      mimeType: "text/plain",
+      size: bytes,
+      source: { kind: "path", path: "resultado.txt" },
+    },
+  ],
 };
 ```
 

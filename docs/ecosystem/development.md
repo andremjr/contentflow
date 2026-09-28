@@ -389,7 +389,7 @@ Teste no mínimo:
 
 Fixtures de requisição e resposta podem seguir [`examples/plugin-request.example.json`](examples/plugin-request.example.json).
 
-Um plugin pode declarar uma chave, token ou token de sessão em `secretKeys` e pedir que o próprio usuário a conecte no cofre. Ele também pode pedir `network`, `filesystem:*`, `process` ou `native` quando sua função realmente exigir. A sandbox não extrai credenciais do navegador nem concede acesso silencioso a perfis. Cada plugin define seu navegador e sua autenticação; pode abrir login próprio ou pedir que o usuário escolha uma pasta de perfil. Automação direta baseada em `process` ou `native` é uma permissão avançada, executa sob responsabilidade explícita do usuário e deve documentar com clareza os dados, provedores, perfis e efeitos envolvidos. Veja [`browser-automation.md`](browser-automation.md).
+Um plugin pode declarar uma chave, token ou token de sessão em `secretKeys` e pedir que o próprio usuário a conecte no cofre. Ele também pode pedir `network`, `filesystem:*`, `process` ou `native` quando sua função realmente exigir. A sandbox não extrai credenciais do navegador nem concede acesso silencioso a perfis. Na Browser Bridge, perfis físicos e lifecycle do Chrome pertencem ao núcleo: o usuário vincula explicitamente um perfil global, o núcleo reserva e abre a sessão e o plugin conduz apenas autenticação e automação específicas do provedor dentro da sessão concedida. Permissões `process` ou `native` continuam avançadas quando necessárias para outras funções reais do plugin e devem documentar com clareza os dados, provedores, perfis e efeitos envolvidos. Veja [`browser-automation.md`](browser-automation.md).
 
 ## 13. Checklist de publicação
 

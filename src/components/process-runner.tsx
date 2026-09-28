@@ -49,6 +49,7 @@ import {
   type BlockExecution,
   type BlockExecutionItem,
   type BlockItemProgress,
+  type ProfileLaneExecutionProgress,
   type BlockItemRetryScope,
   type ChannelLibraryItem,
   type HumanFieldType,
@@ -1392,6 +1393,9 @@ function ActiveExecutionBlock({
       {blockExecution.itemProgress && (
         <ItemProgressSummary itemProgress={blockExecution.itemProgress} />
       )}
+      {blockExecution.profileLaneProgress && (
+        <ProfileLaneProgressSummary progress={blockExecution.profileLaneProgress} />
+      )}
       <div className="mt-4 flex justify-center">
         <OperatorBadge block={block} />
       </div>
@@ -2329,6 +2333,63 @@ function ItemProgressSummary({
           <span>Falhou no item</span>: {itemProgress.failedIndex + 1}
         </Badge>
       )}
+    </div>
+  );
+}
+
+function ProfileLaneProgressSummary({ progress }: { progress: ProfileLaneExecutionProgress }) {
+  const { t } = useAppPreferences();
+  return (
+    <div
+      className="mx-auto mt-4 max-w-2xl rounded-lg border border-border/70 bg-background/45 p-3 text-left"
+      role="status"
+      aria-live="polite"
+      aria-label={t("Progresso por perfil")}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold">{t("Progresso por perfil")}</p>
+        <span className="text-[10px] text-muted-foreground">
+          {t("Concluídos")}: {progress.counts.completed}/{progress.counts.total}
+          {" · "}
+          {t("Ativos")}: {progress.counts.active}
+          {" · "}
+          {t("Pendentes")}: {progress.counts.pending}
+          {progress.counts.failed > 0 ? " · " + t("Falhos") + ": " + progress.counts.failed : ""}
+        </span>
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        {progress.lanes.map((lane, index) => {
+          const lanePercent = lane.counts.total
+            ? Math.round((lane.counts.completed / lane.counts.total) * 100)
+            : 0;
+          return (
+            <div key={lane.laneId} className="rounded-md border border-border/60 p-2.5">
+              <div className="flex items-center justify-between gap-2 text-[10px]">
+                <span className="font-medium">
+                  {t("Perfil")} {index + 1}
+                </span>
+                <span className="text-muted-foreground">
+                  {lane.counts.completed}/{lane.counts.total}
+                </span>
+              </div>
+              <Progress
+                value={lanePercent}
+                className="mt-2 h-1"
+                aria-label={t("Progresso do perfil") + " " + (index + 1) + ": " + lanePercent + "%"}
+              />
+              <p className="mt-1.5 text-[10px] text-muted-foreground">
+                {t("Ativos")}: {lane.counts.active}
+                {" · "}
+                {t("Pendentes")}: {lane.counts.pending}
+                {lane.counts.failed > 0 ? " · " + t("Falhos") + ": " + lane.counts.failed : ""}
+                {lane.reconciliationRequired > 0
+                  ? " · " + t("Reconciliação necessária") + ": " + lane.reconciliationRequired
+                  : ""}
+              </p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

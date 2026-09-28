@@ -3,6 +3,7 @@ import {
   createReadStream,
   createWriteStream,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -19,8 +20,12 @@ import type {
   PluginExecutionRequest,
   PluginExecutionResponse,
   PluginArtifact,
+  PluginClaimedWorkItem,
   PluginManifest,
   PluginPartialUpdate,
+  PluginPlannedWorkItem,
+  PluginWorkItemUpdate,
+  PluginWorkItemUpdateReceipt,
 } from "../src/lib/plugin-contract";
 import type { BlockExecutionItemValue, RuntimeValue, StoredFile } from "../src/lib/domain";
 import {
@@ -29,6 +34,9 @@ import {
   downloadRemoteArtifact,
 } from "./remote-artifact-downloader";
 import { findPluginManifest, validatePluginDirectory } from "./plugin-validation";
+import { BrowserSessionManager } from "./browser-session-manager";
+
+const browserSessionManager = new BrowserSessionManager();
 
 export type PluginSource = "local" | "installed";
 
@@ -50,6 +58,8 @@ const maxArtifactBatchBytes = 4 * 1024 * 1024 * 1024;
 const maxRemoteArtifactBatchBytes = 2 * 1024 * 1024 * 1024;
 const maxArtifactsPerResponse = 100;
 const partialPrefix = "CONTENTFLOW_PARTIAL\t";
+const servicePrefix = "CONTENTFLOW_SERVICE\t";
+const serviceResultPrefix = "CONTENTFLOW_SERVICE_RESULT\t";
 const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
 const defaultDataRoot =
   process.platform === "win32" && process.env.APPDATA
@@ -65,6 +75,32 @@ const installedPluginsRoot = path.resolve(
 const developmentLinksRoot = path.resolve(
   process.env.CONTENTFLOW_DEVELOPMENT_LINKS_DIR ?? path.join(dataRoot, "plugins", "development"),
 );
+
+function pathIsInside(root: string, candidate: string) {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === "" ||
+    (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`))
+  );
+}
+
+function assertNoExternalLinks(root: string) {
+  const visit = (directory: string) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const candidate = path.join(directory, entry.name);
+      const stat = lstatSync(candidate);
+      if (stat.isSymbolicLink()) {
+        const resolved = realpathSync(candidate);
+        if (!pathIsInside(root, resolved)) {
+          throw new Error("A pasta autorizada contém link simbólico para fora da raiz permitida.");
+        }
+        continue;
+      }
+      if (stat.isDirectory()) visit(candidate);
+    }
+  };
+  visit(root);
+}
 
 export function windowsExecutableDiscoveryReadPaths(
   environment: NodeJS.ProcessEnv = process.env,
@@ -185,11 +221,21 @@ export async function executeRegisteredPlugin(
   secrets: Record<string, string> = {},
   options: {
     workspaceDirectory?: string;
+    profileDirectory?: string;
     existingArtifacts?: StoredFile[];
     artifactDirectory?: string;
     artifactUrlPrefix?: string;
     signal?: AbortSignal;
     onPartial?: (update: PluginPartialUpdate & { storedArtifacts?: StoredFile[] }) => Promise<void>;
+    onRegisterItems?: (
+      parentItemId: string,
+      plannedItems: PluginPlannedWorkItem[],
+    ) => Promise<PluginClaimedWorkItem[]>;
+    onClaimItems?: (limit: number) => Promise<PluginClaimedWorkItem[]>;
+    onPublishItemUpdate?: (
+      update: PluginWorkItemUpdate,
+      storedArtifacts: StoredFile[],
+    ) => Promise<PluginWorkItemUpdateReceipt>;
   } = {},
 ): Promise<PluginExecutionResponse> {
   if (!plugin.executable) {
@@ -212,6 +258,9 @@ export async function executeRegisteredPlugin(
         safeSegment(plugin.id),
       ),
   );
+  const profileDirectory = options.profileDirectory
+    ? path.resolve(options.profileDirectory)
+    : undefined;
   const outputDirectory = path.resolve(
     workspaceDirectory,
     ".contentflow-output",
@@ -221,9 +270,41 @@ export async function executeRegisteredPlugin(
   mkdirSync(uploadsDirectory, { recursive: true });
   mkdirSync(artifactDirectory, { recursive: true });
   mkdirSync(workspaceDirectory, { recursive: true });
+  if (profileDirectory) mkdirSync(profileDirectory, { recursive: true });
   mkdirSync(outputDirectory, { recursive: true });
   const realWorkspaceDirectory = realpathSync(workspaceDirectory);
+  const realProfileDirectory = profileDirectory ? realpathSync(profileDirectory) : undefined;
+  const shouldOpenCoreBrowser = Boolean(
+    realProfileDirectory &&
+    plugin.manifest.browserRuntime?.lifecycle === "core" &&
+    !(request.invocation.mode === "configure" && request.invocation.action === "status"),
+  );
+  const coreBrowserSession = shouldOpenCoreBrowser
+    ? await browserSessionManager.open({
+        profileDirectory: realProfileDirectory!,
+        chromeExecutable: request.settings.chromeExecutable,
+        visible:
+          request.invocation.mode === "configure" || request.settings.startMinimized !== true,
+        signal: options.signal,
+      })
+    : undefined;
+  const workerRequest: PluginExecutionRequest = coreBrowserSession
+    ? {
+        ...request,
+        settings: {
+          ...request.settings,
+          __contentFlowBrowserSession: {
+            port: coreBrowserSession.port,
+            webSocketDebuggerUrl: coreBrowserSession.webSocketDebuggerUrl,
+          },
+        },
+      }
+    : request;
   const permissions = new Set(plugin.manifest.permissions);
+  if (permissions.has("filesystem:write") && !permissions.has("filesystem:read")) {
+    assertNoExternalLinks(realWorkspaceDirectory);
+    if (realProfileDirectory) assertNoExternalLinks(realProfileDirectory);
+  }
   const nodeMajor = Number(
     process.env.CONTENTFLOW_PLUGIN_NODE_MAJOR ?? process.versions.node.split(".")[0],
   );
@@ -233,9 +314,11 @@ export async function executeRegisteredPlugin(
   }
   if (permissions.has("filesystem:read")) {
     args.push(`--allow-fs-read=${uploadsDirectory}`, `--allow-fs-read=${realWorkspaceDirectory}`);
+    if (realProfileDirectory) args.push(`--allow-fs-read=${realProfileDirectory}`);
   }
   if (permissions.has("filesystem:write")) {
     args.push(`--allow-fs-write=${realWorkspaceDirectory}`);
+    if (realProfileDirectory) args.push(`--allow-fs-write=${realProfileDirectory}`);
   }
   if (permissions.has("process")) {
     args.push("--allow-child-process");
@@ -264,7 +347,7 @@ export async function executeRegisteredPlugin(
     windowsHide: true,
   });
 
-  return new Promise((resolve, reject) => {
+  const execution = new Promise<PluginExecutionResponse>((resolve, reject) => {
     let stdout = "";
     let stdoutBuffer = "";
     let stderr = "";
@@ -299,6 +382,91 @@ export async function executeRegisteredPlugin(
     }
 
     const consumeStdoutLine = (line: string) => {
+      if (line.startsWith(servicePrefix)) {
+        const payload = line.slice(servicePrefix.length);
+        partialChain = partialChain.then(async () => {
+          const event = JSON.parse(payload) as {
+            requestId: string;
+            method: "registerItems" | "claimItems" | "publishItemUpdate";
+            parentItemId?: string;
+            plannedItems?: PluginPlannedWorkItem[];
+            limit?: number;
+            update?: PluginWorkItemUpdate;
+          };
+          try {
+            let value: PluginClaimedWorkItem[] | PluginWorkItemUpdateReceipt;
+            if (event.method === "registerItems" && options.onRegisterItems) {
+              value = await options.onRegisterItems(
+                event.parentItemId ?? "",
+                event.plannedItems ?? [],
+              );
+            } else if (event.method === "claimItems" && options.onClaimItems) {
+              value = await options.onClaimItems(event.limit ?? 1);
+            } else if (
+              event.method === "publishItemUpdate" &&
+              event.update &&
+              options.onPublishItemUpdate
+            ) {
+              const imported = await importPluginArtifacts(
+                {
+                  status: "pending",
+                  jobId: "item-update",
+                  pollAfterMs: 1_000,
+                  partialValues: {
+                    __item:
+                      event.update.value === undefined
+                        ? null
+                        : (event.update.value as unknown as RuntimeValue),
+                  },
+                  partialArtifacts: event.update.artifacts,
+                },
+                outputDirectory,
+                artifactDirectory,
+                plugin.manifest,
+                {
+                  existingArtifacts: partialArtifacts,
+                  urlPrefix: options.artifactUrlPrefix,
+                },
+              );
+              partialArtifacts = imported.storedArtifacts ?? partialArtifacts;
+              const importedValue =
+                event.update.value === undefined
+                  ? undefined
+                  : imported.status === "pending"
+                    ? imported.partialValues?.__item
+                    : undefined;
+              value = await options.onPublishItemUpdate(
+                {
+                  ...event.update,
+                  ...(importedValue !== undefined
+                    ? { value: importedValue as BlockExecutionItemValue }
+                    : {}),
+                },
+                imported.storedArtifacts ?? partialArtifacts,
+              );
+            } else {
+              throw new Error("O runtime não habilitou o serviço solicitado para esta invocação.");
+            }
+            child.stdin.write(
+              `${serviceResultPrefix}${JSON.stringify({
+                requestId: event.requestId,
+                ok: true,
+                value,
+              })}\n`,
+            );
+          } catch (error) {
+            child.stdin.write(
+              `${serviceResultPrefix}${JSON.stringify({
+                requestId: event.requestId,
+                ok: false,
+                error:
+                  error instanceof Error ? error.message : "Falha ao registrar itens derivados.",
+              })}\n`,
+            );
+          }
+        });
+        return;
+      }
       if (!line.startsWith(partialPrefix)) {
         stdout += `${line}\n`;
         return;
@@ -396,21 +564,27 @@ export async function executeRegisteredPlugin(
     const authorizedSecrets = Object.fromEntries(
       Object.entries(secrets).filter(([key]) => declaredSecrets.has(key)),
     );
-    child.stdin.end(
-      JSON.stringify({
+    child.stdin.write(
+      `${JSON.stringify({
         entrypoint: plugin.entrypoint,
-        request,
+        request: workerRequest,
         secrets: authorizedSecrets,
         sandbox: {
           permissions: [...permissions],
           uploadsDirectory,
           workspaceDirectory: realWorkspaceDirectory,
+          ...(realProfileDirectory ? { profileDirectory: realProfileDirectory } : {}),
           outputDirectory,
           networkEnforced: nodeMajor >= 26,
         },
-      }),
+      })}\n`,
     );
   });
+  try {
+    return await execution;
+  } finally {
+    if (coreBrowserSession) await browserSessionManager.close(coreBrowserSession);
+  }
 }
 
 function safeSegment(value: string) {

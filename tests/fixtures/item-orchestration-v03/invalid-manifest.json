@@ -1,0 +1,48 @@
+{
+  "apiVersion": "1",
+  "id": "com.example.invalid-continuous-items",
+  "name": "Invalid Continuous Items Fixture",
+  "version": "1.0.0",
+  "description": "Fixture inválida do contrato aditivo de itens do pacote 0.3.",
+  "author": "ContentFlow Tests",
+  "license": "MIT",
+  "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
+  "entrypoint": "handler.mjs",
+  "permissions": [],
+  "capabilities": [
+    {
+      "id": "process-items",
+      "operator": "Código",
+      "blockTypes": ["CRIAR"],
+      "inputPorts": [
+        { "key": "prompts", "label": "Prompts", "acceptedTypes": ["list"], "required": true }
+      ],
+      "outputPorts": [
+        { "key": "images", "label": "Images", "producedTypes": ["files"], "required": true }
+      ],
+      "execution": {
+        "mode": "immediate",
+        "itemOrchestration": {
+          "inputPort": "prompts",
+          "outputPort": "images",
+          "mode": "sequential",
+          "strategies": ["per_item"],
+          "preferredStrategy": "continuous_session",
+          "profileParallelism": { "supported": false, "maxProfiles": 2 },
+          "collectionAssociations": [
+            {
+              "key": "missing-pair",
+              "inputPort": "missing-input",
+              "outputPort": "missing-output"
+            }
+          ]
+        }
+      },
+      "sideEffects": [],
+      "cost": { "model": "free", "estimateSupported": false },
+      "dataPolicy": { "sendsDataToThirdParties": false },
+      "blockConfigSchema": { "type": "object", "additionalProperties": false },
+      "outputSchema": { "type": "object" }
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "profileSetup": {
+    "configurationKey": "profileAlias",
+    "fallbackConfigurationKey": "fallbackAliases"
+  },
+  "configuration": {
+    "model": "fixture-model",
+    "profileAlias": "main",
+    "fallbackAliases": "backup",
+    "generationMode": "sequence",
+    "productionMode": "advanced",
+    "temperature": 0.4,
+    "hiddenUnlessSimple": "preserved"
+  },
+  "capability": {
+    "id": "fixture-capability",
+    "operator": "IA",
+    "blockTypes": ["CRIAR"],
+    "inputPorts": [],
+    "outputPorts": [],
+    "execution": {},
+    "blockConfigSchema": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "title": "Modelo"
+        },
+        "profileAlias": {
+          "type": "string",
+          "title": "Perfil"
+        },
+        "fallbackAliases": {
+          "type": "string",
+          "title": "Fallback"
+        },
+        "generationMode": {
+          "type": "string",
+          "default": "single",
+          "enum": ["single", "auto", "sequence"]
+        },
+        "productionMode": {
+          "type": "string",
+          "title": "Modo de produção"
+        },
+        "temperature": {
+          "type": "number",
+          "title": "Temperatura",
+          "visibleWhen": {
+            "property": "productionMode",
+            "values": ["advanced"]
+          }
+        },
+        "hiddenUnlessSimple": {
+          "type": "string",
+          "title": "Oculto",
+          "visibleWhen": {
+            "property": "productionMode",
+            "values": ["simple"]
+          }
+        }
+      }
+    }
+  }
+}

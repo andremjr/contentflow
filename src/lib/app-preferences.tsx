@@ -279,9 +279,67 @@ const PHRASES: Record<string, Translation> = {
     "Registra, prepara y consulta dónde se utiliza cada perfil.",
   ],
   "Nome do novo perfil": ["New profile name", "Nombre del nuevo perfil"],
+  "Usar perfil existente": ["Use existing profile", "Usar perfil existente"],
+  "Nenhum perfil existente disponível": [
+    "No existing profile available",
+    "No hay perfiles existentes disponibles",
+  ],
   "Adicionar perfil": ["Add profile", "Añadir perfil"],
   "Carregando perfis…": ["Loading profiles…", "Cargando perfiles…"],
   "Identificador local:": ["Local identifier:", "Identificador local:"],
+  "Não foi possível carregar os perfis.": [
+    "Could not load the profiles.",
+    "No se pudieron cargar los perfiles.",
+  ],
+  "Nenhum perfil vinculado a este plugin.": [
+    "No profile is linked to this plugin.",
+    "No hay ningún perfil vinculado a este plugin.",
+  ],
+  "Perfis disponíveis para vincular": [
+    "Profiles available to link",
+    "Perfiles disponibles para vincular",
+  ],
+  "Use um perfil global já existente. O vínculo exige confirmação porque a sessão local pode ser compartilhada com outro plugin.":
+    [
+      "Use an existing global profile. Linking requires confirmation because the local session may be shared with another plugin.",
+      "Usa un perfil global existente. El vínculo requiere confirmación porque la sesión local puede compartirse con otro plugin.",
+    ],
+  "Não há outros perfis globais disponíveis para vincular.": [
+    "There are no other global profiles available to link.",
+    "No hay otros perfiles globales disponibles para vincular.",
+  ],
+  "Vincular perfil": ["Link profile", "Vincular perfil"],
+  "Perfil vinculado": ["Profile linked", "Perfil vinculado"],
+  "A preparação deste plugin continua separada dos outros plugins.": [
+    "Preparation for this plugin remains separate from other plugins.",
+    "La preparación de este plugin permanece separada de los demás plugins.",
+  ],
+  "Perfil desvinculado": ["Profile unlinked", "Perfil desvinculado"],
+  "O perfil global e a sessão local foram preservados.": [
+    "The global profile and local session were preserved.",
+    "Se conservaron el perfil global y la sesión local.",
+  ],
+  "Não foi possível vincular o perfil": [
+    "Could not link the profile",
+    "No se pudo vincular el perfil",
+  ],
+  "Não foi possível desvincular o perfil": [
+    "Could not unlink the profile",
+    "No se pudo desvincular el perfil",
+  ],
+  "Troque as referências antes de desvincular": [
+    "Change the references before unlinking",
+    "Cambia las referencias antes de desvincular",
+  ],
+  "Desvincular deste plugin": ["Unlink from this plugin", "Desvincular de este plugin"],
+  "Preparação registrada para este plugin.": [
+    "Preparation is recorded for this plugin.",
+    "La preparación está registrada para este plugin.",
+  ],
+  "Ainda não vinculado a outro plugin.": [
+    "Not linked to another plugin yet.",
+    "Todavía no está vinculado a otro plugin.",
+  ],
   "Ative o plugin": ["Enable the plugin", "Activa el plugin"],
   "Este perfil ainda não é utilizado por nenhum Método.": [
     "This profile is not used by any Method yet.",
@@ -292,6 +350,11 @@ const PHRASES: Record<string, Translation> = {
     "No hay perfiles registrados para este plugin.",
   ],
   "Perfil da conta": ["Account profile", "Perfil de la cuenta"],
+  "Interface do plugin": ["Plugin interface", "Interfaz del plugin"],
+  "Defina como esta capacidade deve trabalhar neste bloco.": [
+    "Define how this capability should work in this block.",
+    "Define cómo debe funcionar esta capacidad en este bloque.",
+  ],
   "Selecione um perfil já cadastrado. A preparação e o gerenciamento ficam em Plugins.": [
     "Select an existing profile. Preparation and management are handled in Plugins.",
     "Selecciona un perfil existente. La preparación y la gestión se realizan en Plugins.",
@@ -303,6 +366,58 @@ const PHRASES: Record<string, Translation> = {
     "If it fails, they will be tried in the order below.",
     "Si falla, se probarán en el orden indicado abajo.",
   ],
+  "Modo de execução dos perfis": ["Profile execution mode", "Modo de ejecución de perfiles"],
+  "Um perfil": ["Single profile", "Un perfil"],
+  "Fallback ordenado": ["Ordered fallback", "Respaldo ordenado"],
+  "Executar perfis simultaneamente": [
+    "Run profiles simultaneously",
+    "Ejecutar perfiles simultáneamente",
+  ],
+  "Perfis simultâneos": ["Simultaneous profiles", "Perfiles simultáneos"],
+  "Selecione e ordene os perfis que poderão receber itens desta execução.": [
+    "Select and order the profiles that may receive items from this run.",
+    "Selecciona y ordena los perfiles que podrán recibir elementos de esta ejecución.",
+  ],
+  "Máximo de workers": ["Maximum workers", "Máximo de workers"],
+  "Workers efetivos": ["Effective workers", "Workers efectivos"],
+  "Resumo antes de salvar": ["Summary before saving", "Resumen antes de guardar"],
+  "Perfis selecionados": ["Selected profiles", "Perfiles seleccionados"],
+  "Ordem dos perfis": ["Profile order", "Orden de los perfiles"],
+  "Progresso por perfil": ["Progress by profile", "Progreso por perfil"],
+  Perfil: ["Profile", "Perfil"],
+  "Progresso do perfil": ["Profile progress", "Progreso del perfil"],
+  Ativos: ["Active", "Activos"],
+  Falhos: ["Failed", "Fallidos"],
+  "Reconciliação necessária": ["Reconciliation required", "Reconciliación necesaria"],
+  "Não preparado": ["Not prepared", "No preparado"],
+  Ocupado: ["Busy", "Ocupado"],
+  "O modo simultâneo exige sessão contínua com correlação incremental compatível.": [
+    "Parallel mode requires a continuous session with compatible incremental correlation.",
+    "El modo simultáneo requiere una sesión continua con correlación incremental compatible.",
+  ],
+  "O modo simultâneo só inicia quando a coleção estiver materializada em itens independentes pelo núcleo.":
+    [
+      "Parallel mode only starts after the core materializes the collection into independent items.",
+      "El modo simultáneo solo comienza cuando el núcleo materializa la colección en elementos independientes.",
+    ],
+  "Um perfil selecionado foi desvinculado deste plugin. Escolha outro perfil antes de executar.": [
+    "A selected profile was unlinked from this plugin. Choose another profile before running.",
+    "Un perfil seleccionado fue desvinculado de este plugin. Elige otro perfil antes de ejecutar.",
+  ],
+  "Há perfil selecionado ainda não preparado para este plugin. Prepare-o na Central de Plugins antes de executar.":
+    [
+      "A selected profile is not prepared for this plugin yet. Prepare it in the Plugin Center before running.",
+      "Hay un perfil seleccionado que aún no está preparado para este plugin. Prepáralo en la Central de Plugins antes de ejecutar.",
+    ],
+  "Há perfil selecionado ocupado por outra execução. Ele ficará indisponível até o lease atual ser liberado.":
+    [
+      "A selected profile is busy with another run. It will remain unavailable until the current lease is released.",
+      "Hay un perfil seleccionado ocupado por otra ejecución. Permanecerá no disponible hasta que se libere el lease actual.",
+    ],
+  "Coleção distribuída": ["Distributed collection", "Colección distribuida"],
+  "Entrega agregada": ["Aggregated output", "Salida agregada"],
+  Subir: ["Move up", "Subir"],
+  Descer: ["Move down", "Bajar"],
   "Nenhum perfil cadastrado para este plugin. Abra Plugins para adicionar o primeiro.": [
     "No profiles registered for this plugin. Open Plugins to add the first one.",
     "No hay perfiles registrados para este plugin. Abre Plugins para añadir el primero.",
@@ -415,6 +530,7 @@ const PHRASES: Record<string, Translation> = {
   "Aparência e idioma": ["Appearance and language", "Apariencia e idioma"],
   Aparência: ["Appearance", "Apariencia"],
   Aprovado: ["Approved", "Aprobado"],
+  Aplicar: ["Apply", "Aplicar cambios"],
   "Arquivar canal": ["Archive channel", "Archivar canal"],
   "Arraste para reorganizar": ["Drag to reorder", "Arrastra para reordenar"],
   "Assets Visuais": ["Visual Assets", "Recursos visuales"],
@@ -467,6 +583,10 @@ const PHRASES: Record<string, Translation> = {
   "Criar coleção": ["Create collection", "Crear colección"],
   "Criar ou consultar chave da API": ["Create or view API key", "Crear o consultar clave de API"],
   Criar: ["Create", "Crear"],
+  "Revise os campos inválidos antes de aplicar.": [
+    "Review the invalid fields before applying.",
+    "Revisa los campos no válidos antes de aplicar.",
+  ],
   "Dados de entrada": ["Input data", "Datos de entrada"],
   "Dados de saída": ["Output data", "Datos de salida"],
   "Dados locais deste dispositivo": [
@@ -1308,6 +1428,15 @@ const PHRASES: Record<string, Translation> = {
     "Profile removed from management",
     "Perfil eliminado de la gestión",
   ],
+  "Este perfil ainda está vinculado a processos. Ao removê-lo deste plugin, será necessário configurar outro perfil nesses processos antes de executar. O perfil global e a sessão local serão preservados.":
+    [
+      "This profile is still linked to processes. After removing it from this plugin, you will need to configure another profile in those processes before running them. The global profile and local session will be preserved.",
+      "Este perfil todavía está vinculado a procesos. Después de eliminarlo de este plugin, tendrás que configurar otro perfil en esos procesos antes de ejecutarlos. Se conservarán el perfil global y la sesión local.",
+    ],
+  "Remover este perfil deste plugin? O perfil global e a sessão local serão preservados.": [
+    "Remove this profile from this plugin? The global profile and local session will be preserved.",
+    "¿Eliminar este perfil de este plugin? Se conservarán el perfil global y la sesión local.",
+  ],
   "Troque as referências antes de remover": [
     "Change the references before removing",
     "Cambia las referencias antes de eliminar",
@@ -1608,6 +1737,30 @@ const PHRASES: Record<string, Translation> = {
     "Select who will perform this action",
     "Selecciona quién ejecutará esta acción",
   ],
+  "Configuração salva": ["Saved configuration", "Configuración guardada"],
+  Perfis: ["Profiles", "Perfiles"],
+  "Configurar plugin executor": ["Configure runner plugin", "Configurar plugin ejecutor"],
+  "Fechar configuração do plugin": [
+    "Close plugin configuration",
+    "Cerrar configuración del plugin",
+  ],
+  "Voltar ao bloco": ["Back to block", "Volver al bloque"],
+  "Revise o executor, o contrato e as configurações locais desta ação.": [
+    "Review the runner, contract, and local settings for this action.",
+    "Revisa el ejecutor, el contrato y la configuración local de esta acción.",
+  ],
+  "A configuração histórica foi preservada, mas o plugin não está instalado.": [
+    "The saved historical configuration was preserved, but the plugin is not installed.",
+    "La configuración histórica guardada se conservó, pero el plugin no está instalado.",
+  ],
+  "A configuração histórica foi preservada, mas o plugin está desativado ou indisponível.": [
+    "The saved historical configuration was preserved, but the plugin is disabled or unavailable.",
+    "La configuración histórica guardada se conservó, pero el plugin está desactivado o no disponible.",
+  ],
+  "Escape fecha a janela e descarta alterações não aplicadas.": [
+    "Escape closes the window and discards unapplied changes.",
+    "Escape cierra la ventana y descarta los cambios no aplicados.",
+  ],
   "Requer ajustes": ["Needs attention", "Requiere ajustes"],
   "Pronto para executar": ["Ready to run", "Listo para ejecutar"],
   "Revise o contrato antes de executar": [
@@ -1903,6 +2056,25 @@ function translateDynamic(source: string, language: AppLanguage): string {
     return language === "en"
       ? `View ${match[1]} ${match[1] === "1" ? "usage" : "usages"}`
       : `Ver ${match[1]} ${match[1] === "1" ? "uso" : "usos"}`;
+  match = source.match(/^Já vinculado a (\d+) plugins?\.$/);
+  if (match)
+    return language === "en"
+      ? `Already linked to ${match[1]} ${match[1] === "1" ? "plugin" : "plugins"}.`
+      : `Ya está vinculado a ${match[1]} ${match[1] === "1" ? "plugin" : "plugins"}.`;
+  match = source.match(
+    /^Vincular (.+) a (.+)\? Este plugin poderá usar a sessão local já existente neste perfil\.$/,
+  );
+  if (match)
+    return language === "en"
+      ? `Link ${match[1]} to ${match[2]}? This plugin will be able to use the local session already stored in this profile.`
+      : `¿Vincular ${match[1]} a ${match[2]}? Este plugin podrá usar la sesión local ya guardada en este perfil.`;
+  match = source.match(
+    /^Desvincular (.+) deste plugin\? O perfil e sua sessão local serão preservados\.$/,
+  );
+  if (match)
+    return language === "en"
+      ? `Unlink ${match[1]} from this plugin? The profile and its local session will be preserved.`
+      : `¿Desvincular ${match[1]} de este plugin? Se conservarán el perfil y su sesión local.`;
   return source;
 }
 

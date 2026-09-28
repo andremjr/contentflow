@@ -106,7 +106,7 @@ Dependências podem ser usadas, mas devem estar compiladas ou incluídas no paco
 
 ## Navegador e autenticação
 
-O núcleo não fornece um navegador. Cada plugin decide se abre uma janela, usa OAuth, solicita um secret de sessão ou pede que o usuário escolha uma pasta de perfil. O núcleo apenas apresenta as permissões, guarda secrets declarados e executa o adapter autorizado.
+Para automação pela Browser Bridge, o núcleo controla o lifecycle do Chrome e a identidade física do perfil. O usuário cria ou vincula explicitamente um perfil global ao plugin; depois de validar vínculo, readiness e lease, o núcleo abre a sessão e entrega ao adapter somente o endpoint efêmero autorizado. O plugin continua responsável por autenticação do provedor, seletores, estados e validação da página. OAuth e secrets declarados continuam sendo usados quando a integração não depende de sessão de navegador.
 
 Prefira perfil dedicado. Nunca procure silenciosamente cookies, tokens ou outros perfis. CAPTCHA, reautenticação, compra, publicação e bloqueios do provedor devem pausar ou pedir intervenção, não ser contornados. O guia específico está em [`browser-automation.md`](browser-automation.md).
 

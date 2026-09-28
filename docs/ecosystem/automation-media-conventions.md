@@ -49,22 +49,22 @@ Timeout de transporte não prova falha da operação. Troca de perfil também n�
 
 `success` significa que todas as saídas obrigatórias foram validadas. `pending` significa que o mesmo job continua vivo e pode ser retomado sem nova submissão. `error` encerra a tentativa no perfil atual. Uma recusa editorial produzida por um bloco `VALIDAR` continua sendo `success`; uma recusa do provedor em executar a operação não é resultado editorial válido.
 
-| Estado observado | Comportamento no perfil atual | Resposta/código ao encerrar a tentativa |
-| --- | --- | --- |
-| Login expirado | manter no perfil para login visível quando a sessão puder ser retomada | `AUTHENTICATION_FAILED`, não repetível, se a tentativa precisar terminar |
-| CAPTCHA ou verificação humana | pausar no mesmo perfil; nunca contornar ou trocar identidade durante a intervenção | `AUTHENTICATION_FAILED`, não repetível, somente se não for possível manter/retomar |
-| Cota esgotada | pausar se uma ação humana ou renovação conhecida puder preservar o job | `QUOTA_EXCEEDED`, não repetível, ao encerrar |
-| Rate limit temporário | continuar `pending` quando houver `retryAfterMs` conhecido dentro do deadline | `RATE_LIMIT`, repetível, com `retryAfterMs`, se a tentativa terminar |
-| Upgrade necessário | pausar para decisão humana, sem compra automática | `UPGRADE_REQUIRED`, não repetível, ao encerrar |
-| Conta ou projeto bloqueado | pausar para diagnóstico/ação humana, sem evasão | `ACCOUNT_BLOCKED`, não repetível, ao encerrar |
-| Recusa do provedor | reconciliar e confirmar que não existe saída válida | `CONTENT_REFUSED`, normalmente não repetível |
-| Resposta concluída sem mídia obrigatória | fazer uma última reconciliação da mesma submissão | `OUTPUT_VALIDATION_FAILED`; repetível somente quando houver evidência de resultado ainda em propagação |
-| DOM incompatível | parar sem clicar em alvo aproximado | `DOM_INCOMPATIBLE`, não repetível naquela implementação |
-| Cancelamento | interromper trabalho e fechar recursos | `CANCELLED`, não repetível |
+| Estado observado                         | Comportamento no perfil atual                                                      | Resposta/código ao encerrar a tentativa                                                                |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Login expirado                           | manter no perfil para login visível quando a sessão puder ser retomada             | `AUTHENTICATION_FAILED`, não repetível, se a tentativa precisar terminar                               |
+| CAPTCHA ou verificação humana            | pausar no mesmo perfil; nunca contornar ou trocar identidade durante a intervenção | `AUTHENTICATION_FAILED`, não repetível, somente se não for possível manter/retomar                     |
+| Cota esgotada                            | pausar se uma ação humana ou renovação conhecida puder preservar o job             | `QUOTA_EXCEEDED`, não repetível, ao encerrar                                                           |
+| Rate limit temporário                    | continuar `pending` quando houver `retryAfterMs` conhecido dentro do deadline      | `RATE_LIMIT`, repetível, com `retryAfterMs`, se a tentativa terminar                                   |
+| Upgrade necessário                       | pausar para decisão humana, sem compra automática                                  | `UPGRADE_REQUIRED`, não repetível, ao encerrar                                                         |
+| Conta ou projeto bloqueado               | pausar para diagnóstico/ação humana, sem evasão                                    | `ACCOUNT_BLOCKED`, não repetível, ao encerrar                                                          |
+| Recusa do provedor                       | reconciliar e confirmar que não existe saída válida                                | `CONTENT_REFUSED`, normalmente não repetível                                                           |
+| Resposta concluída sem mídia obrigatória | fazer uma última reconciliação da mesma submissão                                  | `OUTPUT_VALIDATION_FAILED`; repetível somente quando houver evidência de resultado ainda em propagação |
+| DOM incompatível                         | parar sem clicar em alvo aproximado                                                | `DOM_INCOMPATIBLE`, não repetível naquela implementação                                                |
+| Cancelamento                             | interromper trabalho e fechar recursos                                             | `CANCELLED`, não repetível                                                                             |
 
 Capabilities assíncronas expressam a pausa com resposta `pending`. Uma capability imediata pode manter a própria invocação aberta, dentro do timeout, enquanto a intervenção visível ocorre; ela não devolve `pending` porque o contrato imediato aceita apenas `success` ou `error`.
 
-O núcleo avança para o próximo perfil preparado quando recebe qualquer `error`, exceto `CANCELLED`, cancelamento já solicitado ou lista esgotada. Portanto, uma condição que ainda exige intervenção no perfil atual não pode ser convertida prematuramente em `error`: ela permanece pendente/ativa nesse perfil. Código de erro e `retryable` descrevem a falha; não substituem essa fronteira de ciclo de vida.
+O núcleo decide fallback, retry, reconciliação e intervenção por uma política central. Um `error` só avança para outro perfil quando a falha é segura para redistribuição e ligada ao perfil. Efeito externo possível/submetido exige reconciliação antes de qualquer repetição; condições que exigem ação humana permanecem pendentes ou terminam em intervenção explícita. Código de erro, `retryable` e fatos de recuperação descrevem a falha, mas não comandam a decisão operacional.
 
 ## 3. Política comum de artifacts e mídia
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type {
   ActionBlock,
   ChannelLibraryItem,
+  ProfileExecutionPolicy,
   ProcessMethod,
   StoredFile,
   StrategicCollection,
@@ -577,6 +578,9 @@ function createPortableMethodV2(
               connectionId: options.preserveLocalConnections
                 ? block.plugin.connectionId
                 : undefined,
+              profileExecution: options.preserveLocalConnections
+                ? structuredClone(block.plugin.profileExecution)
+                : undefined,
               connectionRequired:
                 block.plugin.connectionRequired ?? Boolean(block.plugin.connectionId),
               conversation:
@@ -971,7 +975,13 @@ export function copyImportedBlocks(
   processType: UniversalProcess,
   sourceBlocks: ActionBlock[],
   createId: (prefix: string) => string,
-  options: { preserveLocalConnections?: boolean } = {},
+  options: {
+    preserveLocalConnections?: boolean;
+    remapLocalProfileExecution?: (
+      pluginId: string,
+      policy: ProfileExecutionPolicy,
+    ) => ProfileExecutionPolicy | undefined;
+  } = {},
 ) {
   const copied = structuredClone(sourceBlocks);
   const blockIds = new Map(
@@ -988,6 +998,10 @@ function copyBlocksWithIds(
   options: {
     preserveLocalConnections?: boolean;
     collectionIds?: ReadonlyMap<string, string>;
+    remapLocalProfileExecution?: (
+      pluginId: string,
+      policy: ProfileExecutionPolicy,
+    ) => ProfileExecutionPolicy | undefined;
   },
 ) {
   return copied.map((block, order) => ({
@@ -999,6 +1013,13 @@ function copyBlocksWithIds(
       ? {
           ...block.plugin,
           connectionId: options.preserveLocalConnections ? block.plugin.connectionId : undefined,
+          profileExecution:
+            block.plugin.profileExecution && options.remapLocalProfileExecution
+              ? options.remapLocalProfileExecution(
+                  block.plugin.pluginId,
+                  block.plugin.profileExecution,
+                )
+              : undefined,
           conversation:
             block.plugin.conversation?.mode === "reuse"
               ? {
@@ -1054,6 +1075,10 @@ export function copyImportedMethods(
   options: {
     preserveLocalConnections?: boolean;
     collectionIds?: ReadonlyMap<string, string>;
+    remapLocalProfileExecution?: (
+      pluginId: string,
+      policy: ProfileExecutionPolicy,
+    ) => ProfileExecutionPolicy | undefined;
   } = {},
 ) {
   const copied = structuredClone(sourceMethods);

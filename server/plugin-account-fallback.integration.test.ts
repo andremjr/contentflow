@@ -137,6 +137,13 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: true }),
     });
+    for (const name of ["Primary", "Backup"]) {
+      await request("/api/plugins/test.contentflow.browser-fallback/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+    }
 
     const now = new Date().toISOString();
     await request("/api/channels", {

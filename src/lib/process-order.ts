@@ -8,6 +8,7 @@ import {
   type UniversalProcess,
 } from "./domain";
 import { createProcessOutputFields } from "./human-workflow";
+import { areHumanFieldTypesCompatible } from "./data-shape";
 
 export function isProcessOrder(value: unknown): value is UniversalProcess[] {
   return (
@@ -71,7 +72,7 @@ export function captureProjectStrategy(project: Project, channel: Channel, hasEx
 }
 
 function compatible(source: HumanFieldType, target: HumanFieldType) {
-  return source === target || (source === "text" && target === "textarea");
+  return areHumanFieldTypesCompatible(source, target);
 }
 
 /** Inspect only the final channel definition; never mutate an old reference. */

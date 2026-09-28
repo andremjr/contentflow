@@ -1,5 +1,6 @@
 import type { BlockInputBinding, RuntimeValue } from "../src/lib/domain";
 import type { PluginInputPort } from "../src/lib/plugin-contract";
+import { legacyTypeListAccepts } from "../src/lib/data-shape";
 
 type AssignedPluginInput = {
   label: string;
@@ -72,7 +73,7 @@ export function selectPluginInputPort(
     const explicitPort = ports.find((port) => port.key === input.portKey);
     if (
       !explicitPort ||
-      !explicitPort.acceptedTypes.includes(input.type) ||
+      !legacyTypeListAccepts(explicitPort.acceptedTypes, input.type) ||
       (!explicitPort.multiple && usedInputPorts.has(explicitPort.key))
     ) {
       return undefined;
@@ -83,7 +84,8 @@ export function selectPluginInputPort(
     .map((port, index) => ({ port, index }))
     .filter(
       ({ port }) =>
-        port.acceptedTypes.includes(input.type) && (port.multiple || !usedInputPorts.has(port.key)),
+        legacyTypeListAccepts(port.acceptedTypes, input.type) &&
+        (port.multiple || !usedInputPorts.has(port.key)),
     )
     .sort((left, right) => {
       const scoreDifference =

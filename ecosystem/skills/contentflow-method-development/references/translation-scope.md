@@ -2,12 +2,12 @@
 
 O ContentFlow usa Métodos para executar a produção de um vídeo individual. Antes de criar blocos, classifique cada trecho em quatro categorias.
 
-| Categoria | Entra no JSON? | Exemplos |
-| --- | --- | --- |
-| Estratégia do canal | Não | Nicho, público, posicionamento, monetização, mercado e audiência geral. |
+| Categoria              | Entra no JSON?  | Exemplos                                                                |
+| ---------------------- | --------------- | ----------------------------------------------------------------------- |
+| Estratégia do canal    | Não             | Nicho, público, posicionamento, monetização, mercado e audiência geral. |
 | Biblioteca Estratégica | Não diretamente | Banco permanente de temas, estruturas, layouts e modelos reutilizáveis. |
-| Execução do vídeo | Sim | Pesquisar tema atual, criar roteiro, gerar thumbnail e publicar. |
-| Fora do aplicativo | Não | Depoimentos, promoção comercial e opinião sem ação operacional. |
+| Execução do vídeo      | Sim             | Pesquisar tema atual, criar roteiro, gerar thumbnail e publicar.        |
+| Fora do aplicativo     | Não             | Depoimentos, promoção comercial e opinião sem ação operacional.         |
 
 Uma coleção estratégica só é válida se existir antes da execução, for reutilizada em vários vídeos, for consultada/aplicada por um bloco e tiver formato de itens definível. Descreva a proposta na prévia, mas não inclua `collectionId` em JSON portátil.
 

@@ -24,12 +24,12 @@ Bloquear novas seleções, mas preservar outputs já produzidos. Informar Métod
 
 ## Categorias de confiança
 
-| Categoria | Significado |
-| --- | --- |
+| Categoria   | Significado                                                                             |
+| ----------- | --------------------------------------------------------------------------------------- |
 | `reference` | Publicado como exemplo ou ponto de partida, sem promessa implícita de suporte contínuo. |
-| `verified` | Identidade, pacote e requisitos mínimos revisados. |
-| `community` | Distribuído pelo autor sem revisão integral do projeto. |
-| `private` | Instalado pelo usuário/organização fora do catálogo público. |
+| `verified`  | Identidade, pacote e requisitos mínimos revisados.                                      |
+| `community` | Distribuído pelo autor sem revisão integral do projeto.                                 |
+| `private`   | Instalado pelo usuário/organização fora do catálogo público.                            |
 
 Categorias não são níveis de permissão. `verified` não garante ausência absoluta de falhas, qualidade de outputs, disponibilidade do provider ou adequação jurídica.
 

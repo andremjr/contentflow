@@ -131,6 +131,26 @@ test("translates recently added Methods and plugin profile UI in Spanish", () =>
   assert.equal(translate(", entrega “theme”", "es"), ", salida “theme”");
 });
 
+test("translates shared browser profile linking UI from package 7.4", () => {
+  assert.equal(translate("Usar perfil existente", "en"), "Use existing profile");
+  assert.equal(translate("Usar perfil existente", "es"), "Usar perfil existente");
+  assert.equal(
+    translate("Nenhum perfil existente disponível", "en"),
+    "No existing profile available",
+  );
+  assert.equal(
+    translate("Nenhum perfil existente disponível", "es"),
+    "No hay perfiles existentes disponibles",
+  );
+  assert.equal(
+    translate(
+      "Vincular Perfil Família a Plugin Exemplo? Este plugin poderá usar a sessão local já existente neste perfil.",
+      "es",
+    ),
+    "¿Vincular Perfil Família a Plugin Exemplo? Este plugin podrá usar la sesión local ya guardada en este perfil.",
+  );
+});
+
 test("translates the MCP Method builder connection UI", () => {
   assert.equal(translate("Conectar agente via MCP", "en"), "Connect agent via MCP");
   assert.equal(translate("Conectar agente via MCP", "es"), "Conectar agente mediante MCP");
@@ -172,6 +192,8 @@ test("translates the unified block configuration labels", () => {
     "Não foi possível carregar as opções.",
     "Nenhuma opção disponível.",
     "Opção salva indisponível",
+    "Aplicar",
+    "Revise os campos inválidos antes de aplicar.",
   ]) {
     assert.notEqual(translate(phrase, "en"), phrase);
     assert.notEqual(translate(phrase, "es"), phrase);
@@ -220,6 +242,8 @@ test("preserves user-created and plugin-authored content", () => {
 
 test("translates the compact plugin contract validator", () => {
   assert.equal(translate("Plugin executor", "en"), "Runner plugin");
+  assert.equal(translate("Fechar configuração do plugin", "en"), "Close plugin configuration");
+  assert.equal(translate("Voltar ao bloco", "es"), "Volver al bloque");
   assert.equal(translate("Requer ajustes", "es"), "Requiere ajustes");
   assert.equal(translate("Entrada · Sequência de prompts", "en"), "Input · Sequência de prompts");
   assert.equal(translate("Parâmetros do prompt (2)", "es"), "Parámetros del prompt (2)");

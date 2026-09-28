@@ -2,17 +2,53 @@ const BRIDGE_ID = "com.contentflow.browser-bridge";
 const FLOW_PLUGIN_ID = "local.contentflow.google-flow-batch-images";
 const VIBES_PLUGIN_ID = "local.contentflow.vibes-browser-studio";
 const PROTOCOL_VERSION = 2;
+const PROTOCOL_RANGE = Object.freeze({ min: 2, max: 2 });
+const BRIDGE_CAPABILITIES = Object.freeze([
+  "idempotent-replay.v1",
+  "lifecycle-events.v1",
+  "snapshot.v1",
+  "condition-observer.v1",
+  "reload.v1",
+]);
 const COMMAND_CACHE_KEY = "contentflowCommandCacheV2";
 const CANCELLED_EXECUTIONS_KEY = "contentflowCancelledExecutionsV2";
 const LEASES_KEY = "contentflowLeasesV1";
+const LIFECYCLE_KEY = "contentflowLifecycleV1";
 const LEASE_ALARM = "contentflow-lease-cleanup";
 const MAX_COMMAND_CACHE = 500;
+const COMMAND_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const COMMAND_IN_FLIGHT_TTL_MS = 10 * 60 * 1000;
+const DURABLE_IN_FLIGHT_ACTIONS = new Set([
+  "click",
+  "clickGenerate",
+  "pressEnter",
+  "setFiles",
+  "reload",
+]);
+const MAX_LIFECYCLE_EVENTS = 128;
 const CDP_VERSION = "1.3";
 const DEFAULT_LEASE_TTL_MS = 60_000;
 const MAX_LEASE_TTL_MS = 5 * 60_000;
 const MAX_UPLOAD_FILES = 8;
 const MAX_UPLOAD_PATH_LENGTH = 1024;
-const COMMON_ACTIONS = new Set(["ping", "inspect", "setText", "pressEnter", "click"]);
+const MAX_CONDITION_OBSERVERS_PER_SESSION = 4;
+const MAX_CONDITION_OBSERVERS_PER_TAB = 1;
+const MAX_CONDITION_SELECTORS = 8;
+const MAX_CONDITION_SELECTOR_LENGTH = 256;
+const MAX_CONDITION_PAYLOAD_BYTES = 4096;
+const MIN_CONDITION_TIMEOUT_MS = 250;
+const MAX_CONDITION_TIMEOUT_MS = 30_000;
+const MIN_CONDITION_DEBOUNCE_MS = 25;
+const MAX_CONDITION_DEBOUNCE_MS = 1000;
+const COMMON_ACTIONS = new Set([
+  "ping",
+  "inspect",
+  "setText",
+  "pressEnter",
+  "click",
+  "observeCondition",
+  "reload",
+]);
 const policy = (origins, tabPatterns, options = {}) =>
   Object.freeze({
     origins: new Set(origins),
@@ -56,7 +92,21 @@ const PLUGIN_POLICIES = Object.freeze({
 const inFlight = new Map();
 const tabQueues = new Map();
 const activeSessions = new Map();
+const providerPorts = new Set();
+function announceJobActivity() {
+  const selected = activeSessions.size ? providerPorts.values().next().value : undefined;
+  for (const port of providerPorts) {
+    try {
+      port.postMessage({ action: port === selected ? "job-active" : "job-idle" });
+    } catch {
+      providerPorts.delete(port);
+    }
+  }
+}
 const debuggerSessionsByTab = new Map();
+const lifecycleQueues = new Map();
+const activeConditionObservers = new Map();
+const intentionalDebuggerDetaches = new Set();
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const MAX_ACTIVE_SESSIONS = 128;
 
@@ -64,11 +114,158 @@ function bridgeError(code, message) {
   return { ok: false, code, message };
 }
 
+function safeLocation(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return { origin: url.origin, pathname: url.pathname };
+  } catch {
+    return undefined;
+  }
+}
+
+async function readLifecycleStore() {
+  const stored = await chrome.storage.session.get(LIFECYCLE_KEY);
+  const value = stored?.[LIFECYCLE_KEY];
+  return value && typeof value === "object" ? value : {};
+}
+
+async function mutateLifecycle(session, mutate) {
+  const token = session.sessionToken;
+  const previous = lifecycleQueues.get(token) || Promise.resolve();
+  const operation = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const store = await readLifecycleStore();
+      const current = store[token];
+      const state =
+        current?.pluginId === session.pluginId && current?.profileId === session.profileId
+          ? current
+          : {
+              pluginId: session.pluginId,
+              profileId: session.profileId,
+              sequence: 0,
+              events: [],
+              snapshot: {
+                state: "connected",
+                location: null,
+                debuggerAttached: false,
+                leaseActive: false,
+              },
+            };
+      const result = await mutate(state, Boolean(current));
+      state.updatedAt = Date.now();
+      store[token] = state;
+      await chrome.storage.session.set({ [LIFECYCLE_KEY]: store });
+      return result;
+    });
+  lifecycleQueues.set(token, operation);
+  try {
+    return await operation;
+  } finally {
+    if (lifecycleQueues.get(token) === operation) lifecycleQueues.delete(token);
+  }
+}
+
+async function emitLifecycleEvent(session, type, details = {}, snapshotPatch = {}) {
+  return mutateLifecycle(session, (state) => {
+    state.sequence = Number(state.sequence || 0) + 1;
+    const event = {
+      sequence: state.sequence,
+      type,
+      at: Date.now(),
+      ...details,
+    };
+    state.events = [...(Array.isArray(state.events) ? state.events : []), event].slice(
+      -MAX_LIFECYCLE_EVENTS,
+    );
+    state.snapshot = { ...(state.snapshot || {}), ...snapshotPatch };
+    return event;
+  });
+}
+
+async function initializeLifecycle(session) {
+  return mutateLifecycle(session, (state, existed) => {
+    if (!existed) return { lastSequence: Number(state.sequence || 0), reconnected: false };
+    state.sequence = Number(state.sequence || 0) + 1;
+    const event = {
+      sequence: state.sequence,
+      type: "worker_reconnected",
+      diagnosticCode: "BRIDGE_WORKER_RESTART",
+      at: Date.now(),
+    };
+    state.events = [...(Array.isArray(state.events) ? state.events : []), event].slice(
+      -MAX_LIFECYCLE_EVENTS,
+    );
+    state.snapshot = {
+      ...(state.snapshot || {}),
+      state: "reconnected",
+      debuggerAttached: false,
+    };
+    return { lastSequence: state.sequence, reconnected: true };
+  });
+}
+
+function validateLifecycleRequest(request) {
+  const session = activeSessions.get(request?.sessionToken);
+  if (
+    !session ||
+    request?.pluginId !== session.pluginId ||
+    request?.profileId !== session.profileId ||
+    request?.protocolVersion !== session.protocolVersion
+  ) {
+    return { error: bridgeError("SESSION_MISMATCH", "Sessão de lifecycle inválida.") };
+  }
+  session.lastSeenAt = Date.now();
+  return { session };
+}
+
 function identity() {
+  const bridgeVersion = chrome.runtime.getManifest().version;
   return {
     bridgeId: BRIDGE_ID,
     protocolVersion: PROTOCOL_VERSION,
-    extensionVersion: chrome.runtime.getManifest().version,
+    protocol: { ...PROTOCOL_RANGE },
+    bridgeVersion,
+    extensionVersion: bridgeVersion,
+    capabilities: [...BRIDGE_CAPABILITIES],
+  };
+}
+
+function negotiateHandshake(handshake) {
+  const legacyVersion = Number(handshake?.protocolVersion);
+  const requestedRange = handshake?.protocol;
+  const clientMin = Number(requestedRange?.min);
+  const clientMax = Number(requestedRange?.max);
+  const isRangeHandshake =
+    Number.isInteger(clientMin) && Number.isInteger(clientMax) && clientMin <= clientMax;
+  const negotiatedVersion = isRangeHandshake
+    ? Math.min(PROTOCOL_RANGE.max, clientMax)
+    : legacyVersion;
+  const compatible = isRangeHandshake
+    ? negotiatedVersion >= Math.max(PROTOCOL_RANGE.min, clientMin)
+    : legacyVersion === PROTOCOL_VERSION;
+  if (!compatible) {
+    return bridgeError(
+      "PROTOCOL_MISMATCH",
+      `Nenhuma versão compatível da Browser Bridge foi encontrada (extensão ${PROTOCOL_RANGE.min}-${PROTOCOL_RANGE.max}).`,
+    );
+  }
+  const requestedCapabilities = Array.isArray(handshake?.requestedCapabilities)
+    ? handshake.requestedCapabilities
+    : [];
+  const missingCapabilities = requestedCapabilities.filter(
+    (capability) => !BRIDGE_CAPABILITIES.includes(capability),
+  );
+  if (missingCapabilities.length > 0) {
+    return bridgeError(
+      "CAPABILITY_MISMATCH",
+      `A Browser Bridge não oferece as capabilities requeridas: ${missingCapabilities.join(", ")}.`,
+    );
+  }
+  return {
+    ok: true,
+    protocolVersion: negotiatedVersion,
+    capabilities: [...BRIDGE_CAPABILITIES],
   };
 }
 
@@ -111,26 +308,64 @@ function selectPluginTab(tabs, expectedUrl, policy) {
 async function readCommandCache() {
   const stored = await chrome.storage.session.get(COMMAND_CACHE_KEY);
   const cache = stored?.[COMMAND_CACHE_KEY];
-  return cache && typeof cache === "object" ? cache : {};
+  const now = Date.now();
+  const current = cache && typeof cache === "object" ? cache : {};
+  const entries = Object.entries(current)
+    .filter(([, value]) => Number(value?.expiresAt) > now)
+    .sort((left, right) => {
+      const storedAt = Number(left[1]?.storedAt) - Number(right[1]?.storedAt);
+      return storedAt || left[0].localeCompare(right[0]);
+    });
+  while (entries.length > MAX_COMMAND_CACHE) entries.shift();
+  const pruned = Object.fromEntries(entries);
+  if (Object.keys(pruned).length !== Object.keys(current).length) {
+    await chrome.storage.session.set({ [COMMAND_CACHE_KEY]: pruned });
+  }
+  return pruned;
 }
 
-async function cacheResponse(command, response) {
+async function writeCommandCacheEntry(command, entry) {
   const cache = await readCommandCache();
-  const now = Date.now();
-  const entries = Object.entries(cache)
-    .filter(([, value]) => Number(value?.expiresAt) > now)
-    .sort((a, b) => Number(a[1]?.storedAt) - Number(b[1]?.storedAt));
+  const entries = Object.entries(cache).filter(([commandId]) => commandId !== command.commandId);
   while (entries.length >= MAX_COMMAND_CACHE) entries.shift();
-  const entry = {
+  entries.push([command.commandId, entry]);
+  await chrome.storage.session.set({ [COMMAND_CACHE_KEY]: Object.fromEntries(entries) });
+}
+
+function commandCacheMatches(entry, command) {
+  return (
+    entry?.executionKey === command.executionKey &&
+    entry?.pluginId === command.pluginId &&
+    entry?.profileId === command.profileId &&
+    (!entry?.action || entry.action === command.action)
+  );
+}
+
+async function markCommandInFlight(command) {
+  const now = Date.now();
+  await writeCommandCacheEntry(command, {
     pluginId: command.pluginId,
     profileId: command.profileId,
     executionKey: command.executionKey,
+    action: command.action,
+    status: "in_flight",
+    storedAt: now,
+    expiresAt: now + COMMAND_IN_FLIGHT_TTL_MS,
+  });
+}
+
+async function cacheResponse(command, response) {
+  const now = Date.now();
+  await writeCommandCacheEntry(command, {
+    pluginId: command.pluginId,
+    profileId: command.profileId,
+    executionKey: command.executionKey,
+    action: command.action,
+    status: "completed",
     response,
     storedAt: now,
-    expiresAt: now + 12 * 60 * 60 * 1000,
-  };
-  entries.push([command.commandId, entry]);
-  await chrome.storage.session.set({ [COMMAND_CACHE_KEY]: Object.fromEntries(entries) });
+    expiresAt: now + COMMAND_CACHE_TTL_MS,
+  });
 }
 
 function cancellationKey(pluginId, profileId, executionKey) {
@@ -191,6 +426,7 @@ async function cleanupLeases({ tabId, sessionToken, executionKey, forceExpired =
   const leases = await readLeases();
   const now = Date.now();
   const releasedTabs = new Set();
+  const expiredLeases = [];
   let changed = false;
   for (const [leaseId, lease] of Object.entries(leases)) {
     const expired = Number(lease?.expiresAt) <= now;
@@ -200,6 +436,7 @@ async function cleanupLeases({ tabId, sessionToken, executionKey, forceExpired =
       (executionKey && lease?.executionKey === executionKey);
     if ((forceExpired && expired) || matches) {
       if (Number.isInteger(lease?.tabId)) releasedTabs.add(lease.tabId);
+      if (forceExpired && expired) expiredLeases.push(lease);
       delete leases[leaseId];
       changed = true;
     }
@@ -211,6 +448,18 @@ async function cleanupLeases({ tabId, sessionToken, executionKey, forceExpired =
     if (!stillLeased) await setTabDiscardable(releasedTabId, true);
   }
   await releasePowerIfIdle(leases);
+  for (const lease of expiredLeases) {
+    await emitLifecycleEvent(
+      {
+        pluginId: lease.pluginId,
+        profileId: lease.profileId,
+        sessionToken: lease.sessionToken,
+      },
+      "lease_expired",
+      { executionKey: lease.executionKey },
+      { leaseActive: false },
+    );
+  }
   return true;
 }
 
@@ -284,6 +533,9 @@ async function manageLease(tab, command, pluginPolicy) {
     expiresAt,
   };
   await writeLeases(leases);
+  await mutateLifecycle(session, (state) => {
+    state.snapshot = { ...(state.snapshot || {}), leaseActive: true };
+  });
   return { ok: true, leaseId, expiresAt, ttlMs };
 }
 
@@ -291,7 +543,10 @@ function validateSession(command) {
   const session = activeSessions.get(command?.sessionToken);
   const now = Date.now();
   if (!session || now - session.lastSeenAt > SESSION_TTL_MS) {
-    if (session) activeSessions.delete(command.sessionToken);
+    if (session) {
+      activeSessions.delete(command.sessionToken);
+      announceJobActivity();
+    }
     return bridgeError(
       "SESSION_MISMATCH",
       "A sessão efêmera da extensão não corresponde à execução.",
@@ -347,6 +602,10 @@ function withTimeout(promise, timeoutMs) {
       },
     );
   });
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function enqueueTabCommand(tabId, operation) {
@@ -552,6 +811,258 @@ function validateUploadFiles(value) {
     output.push(filePath);
   }
   return output;
+}
+
+function normalizeConditionPayload(payload, expiresAt) {
+  let encoded;
+  try {
+    encoded = JSON.stringify(payload || {});
+  } catch {
+    return null;
+  }
+  if (encoded.length > MAX_CONDITION_PAYLOAD_BYTES) return null;
+  const selectors = (Array.isArray(payload?.selectors) ? payload.selectors : [payload?.selector])
+    .map((selector) => String(selector || "").trim())
+    .filter(Boolean);
+  if (
+    selectors.length < 1 ||
+    selectors.length > MAX_CONDITION_SELECTORS ||
+    selectors.some((selector) => selector.length > MAX_CONDITION_SELECTOR_LENGTH)
+  ) {
+    return null;
+  }
+  const state = String(payload?.state || "");
+  if (!["exists", "absent", "visible", "hidden", "enabled", "disabled"].includes(state)) {
+    return null;
+  }
+  const remainingMs = Number(expiresAt) - Date.now() - 500;
+  if (remainingMs < MIN_CONDITION_TIMEOUT_MS) return null;
+  const timeoutMs = Math.max(
+    MIN_CONDITION_TIMEOUT_MS,
+    Math.min(
+      MAX_CONDITION_TIMEOUT_MS,
+      remainingMs,
+      Number(payload?.timeoutMs) || Math.min(10_000, remainingMs),
+    ),
+  );
+  const debounceMs = Math.max(
+    MIN_CONDITION_DEBOUNCE_MS,
+    Math.min(MAX_CONDITION_DEBOUNCE_MS, Number(payload?.debounceMs) || 100),
+  );
+  return { selectors, state, timeoutMs, debounceMs };
+}
+
+function observePageCondition(payload, observerKey) {
+  const registryName = "__contentFlowConditionObserversV1";
+  const registry = globalThis[registryName] instanceof Map ? globalThis[registryName] : new Map();
+  globalThis[registryName] = registry;
+  const isVisible = (element) => {
+    if (!(element instanceof Element)) return false;
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return (
+      !element.hidden &&
+      element.getAttribute("aria-hidden") !== "true" &&
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      Number(style.opacity) !== 0 &&
+      rect.width > 0 &&
+      rect.height > 0
+    );
+  };
+  const allDeep = (selector, root = document) => {
+    const output = [];
+    const visit = (node) => {
+      if (!node?.querySelectorAll) return;
+      for (const element of node.querySelectorAll(selector)) output.push(element);
+      for (const element of node.querySelectorAll("*")) {
+        if (element.shadowRoot) visit(element.shadowRoot);
+      }
+    };
+    try {
+      visit(root);
+    } catch {
+      return [];
+    }
+    return [...new Set(output)];
+  };
+  const evaluate = () => {
+    for (let index = 0; index < payload.selectors.length; index += 1) {
+      const elements = allDeep(payload.selectors[index]);
+      if (payload.state === "absent" && elements.length === 0) return index;
+      if (payload.state === "exists" && elements.length > 0) return index;
+      if (payload.state === "visible" && elements.some(isVisible)) return index;
+      if (
+        payload.state === "hidden" &&
+        elements.length > 0 &&
+        elements.every((item) => !isVisible(item))
+      ) {
+        return index;
+      }
+      if (
+        payload.state === "enabled" &&
+        elements.some(
+          (item) =>
+            !item.disabled && item.getAttribute("aria-disabled") !== "true" && isVisible(item),
+        )
+      ) {
+        return index;
+      }
+      if (
+        payload.state === "disabled" &&
+        elements.some(
+          (item) =>
+            (item.disabled || item.getAttribute("aria-disabled") === "true") && isVisible(item),
+        )
+      ) {
+        return index;
+      }
+    }
+    return -1;
+  };
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let debounceTimer;
+    let sampleTimer;
+    let timeoutTimer;
+    let observer;
+    const cleanup = () => {
+      observer?.disconnect();
+      clearTimeout(debounceTimer);
+      clearTimeout(sampleTimer);
+      clearTimeout(timeoutTimer);
+      registry.delete(observerKey);
+    };
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+    const sample = () => {
+      sampleTimer = undefined;
+      const selectorIndex = evaluate();
+      if (selectorIndex < 0) {
+        clearTimeout(debounceTimer);
+        debounceTimer = undefined;
+        return;
+      }
+      if (debounceTimer) return;
+      debounceTimer = setTimeout(() => {
+        debounceTimer = undefined;
+        const confirmedIndex = evaluate();
+        if (confirmedIndex < 0) return;
+        finish({
+          ok: true,
+          matched: true,
+          state: payload.state,
+          selectorIndex: confirmedIndex,
+        });
+      }, payload.debounceMs);
+    };
+    const scheduleSample = () => {
+      if (settled || sampleTimer) return;
+      sampleTimer = setTimeout(sample, 50);
+    };
+    registry.set(observerKey, () =>
+      finish({ ok: false, code: "CANCELLED", message: "Observação cancelada." }),
+    );
+    observer = new MutationObserver(scheduleSample);
+    const root = document.documentElement || document;
+    observer.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+    });
+    timeoutTimer = setTimeout(
+      () =>
+        finish({ ok: false, code: "COMMAND_TIMEOUT", message: "Condição não atingida no prazo." }),
+      payload.timeoutMs,
+    );
+    sample();
+  });
+}
+
+function conditionObserverMatches(entry, filters = {}) {
+  return (
+    (!filters.sessionToken || entry.sessionToken === filters.sessionToken) &&
+    (!filters.executionKey || entry.executionKey === filters.executionKey) &&
+    (!Number.isInteger(filters.tabId) || entry.tabId === filters.tabId)
+  );
+}
+
+async function cancelConditionObservers(filters = {}) {
+  const matches = [...activeConditionObservers.entries()].filter(([, entry]) =>
+    conditionObserverMatches(entry, filters),
+  );
+  await Promise.all(
+    matches.map(async ([observerKey, entry]) => {
+      activeConditionObservers.delete(observerKey);
+      try {
+        await sendCdp(entry.tabId, "Runtime.evaluate", {
+          expression: `globalThis.__contentFlowConditionObserversV1?.get(${JSON.stringify(
+            observerKey,
+          )})?.()`,
+          returnByValue: true,
+          awaitPromise: false,
+        });
+      } catch {
+        // Navegação, fechamento da aba ou perda do debugger também encerram a observação.
+      }
+    }),
+  );
+}
+
+function forgetConditionObservers(filters = {}) {
+  for (const [observerKey, entry] of activeConditionObservers) {
+    if (conditionObserverMatches(entry, filters)) activeConditionObservers.delete(observerKey);
+  }
+}
+
+async function runConditionObserver(tabId, command) {
+  const payload = normalizeConditionPayload(command.payload, command.expiresAt);
+  if (!payload) return bridgeError("INVALID_COMMAND", "Condição declarativa inválida.");
+  const session = activeSessions.get(command.sessionToken);
+  if (!session) return bridgeError("SESSION_MISMATCH", "Sessão do observador não encontrada.");
+  const sessionCount = [...activeConditionObservers.values()].filter(
+    (entry) => entry.sessionToken === session.sessionToken,
+  ).length;
+  const tabCount = [...activeConditionObservers.values()].filter(
+    (entry) => entry.tabId === tabId,
+  ).length;
+  if (
+    sessionCount >= MAX_CONDITION_OBSERVERS_PER_SESSION ||
+    tabCount >= MAX_CONDITION_OBSERVERS_PER_TAB
+  ) {
+    return bridgeError("OBSERVER_LIMIT", "Limite de observadores temporários atingido.");
+  }
+  const observerKey = `${session.sessionToken}:${command.commandId}`;
+  activeConditionObservers.set(observerKey, {
+    sessionToken: session.sessionToken,
+    executionKey: command.executionKey,
+    tabId,
+  });
+  try {
+    const response = await evaluateValue(
+      tabId,
+      `(${observePageCondition.toString()})(${JSON.stringify(payload)},${JSON.stringify(
+        observerKey,
+      )})`,
+    );
+    if (response?.ok) {
+      await emitLifecycleEvent(session, "condition_reached", {
+        executionKey: command.executionKey,
+        commandId: command.commandId,
+        state: payload.state,
+      });
+    }
+    return response && typeof response === "object"
+      ? response
+      : bridgeError("INVALID_RESPONSE", "O observador retornou uma resposta inválida.");
+  } finally {
+    activeConditionObservers.delete(observerKey);
+  }
 }
 
 async function setFileInputFiles(tabId, payload) {
@@ -871,6 +1382,9 @@ async function dispatchCdpAction(tabId, command, policy) {
       editableReady: Boolean(editable?.found),
     };
   }
+  if (command.action === "observeCondition") {
+    return await runConditionObserver(tabId, command);
+  }
   if (command.action === "setText" || command.action === "setPrompt") {
     const text = String(payload.text || "");
     const expected = text.replace(/\s+/g, " ").trim();
@@ -949,14 +1463,104 @@ async function dispatchCdpAction(tabId, command, policy) {
   return bridgeError("UNKNOWN_ACTION", `Ação não suportada: ${String(command.action)}`);
 }
 
+async function controlledReload(tab, command, policy) {
+  const session = activeSessions.get(command.sessionToken);
+  if (!session) return bridgeError("SESSION_MISMATCH", "A sessão da recarga não existe.");
+  const reconciliationState = String(command.payload?.reconciliationState || "");
+  if (reconciliationState === "uncertain") {
+    return bridgeError(
+      "RELOAD_BLOCKED_UNCERTAIN_EFFECT",
+      "A recarga foi bloqueada enquanto o efeito externo permanece incerto.",
+    );
+  }
+  if (!["safe", "reconciled"].includes(reconciliationState)) {
+    return bridgeError(
+      "INVALID_COMMAND",
+      "A recarga exige reconciliationState safe ou reconciled.",
+    );
+  }
+  if (await isExecutionCancelled(command)) {
+    return bridgeError("CANCELLED", "Execução cancelada.");
+  }
+
+  await detachSessionDebugger(session);
+  try {
+    await chrome.tabs.reload(tab.id, {
+      bypassCache: command.payload?.bypassCache === true,
+    });
+  } catch (error) {
+    return bridgeError(
+      "TAB_CLOSED",
+      `A aba não pôde ser recarregada: ${error?.message || String(error)}`,
+    );
+  }
+
+  const deadline = Math.min(command.expiresAt, Date.now() + 30_000);
+  let currentTab;
+  while (Date.now() < deadline) {
+    try {
+      currentTab = await chrome.tabs.get(tab.id);
+    } catch {
+      return bridgeError("TAB_CLOSED", "A aba foi fechada durante a recarga.");
+    }
+    let currentUrl;
+    try {
+      currentUrl = new URL(currentTab?.url || tab.url || "");
+    } catch {
+      return bridgeError("ORIGIN_NOT_ALLOWED", "A aba recarregada não possui URL válida.");
+    }
+    if (!pathAllowed(currentUrl, policy)) {
+      return bridgeError("ORIGIN_NOT_ALLOWED", "A aba recarregada deixou a origem autorizada.");
+    }
+    if (!currentTab?.status || currentTab.status === "complete") {
+      const location = safeLocation(currentUrl.toString());
+      session.lastKnownLocation = location;
+      await emitLifecycleEvent(
+        session,
+        "reload",
+        {
+          executionKey: command.executionKey,
+          commandId: command.commandId,
+          diagnosticCode: "BRIDGE_CONTROLLED_RELOAD",
+          reasonCode:
+            typeof command.payload?.reasonCode === "string" &&
+            /^[A-Z0-9_]{1,96}$/.test(command.payload.reasonCode)
+              ? command.payload.reasonCode
+              : "CONTROLLED_RECOVERY",
+          controlled: true,
+          location,
+        },
+        {
+          state: "reload",
+          location,
+          debuggerAttached: false,
+        },
+      );
+      return {
+        ok: true,
+        reloaded: true,
+        reconciliationState,
+        location,
+      };
+    }
+    await delay(50);
+  }
+  return bridgeError(
+    "COMMAND_TIMEOUT",
+    "A aba não concluiu a recarga dentro da validade do comando.",
+  );
+}
+
 async function detachSessionDebugger(session) {
   if (!Number.isInteger(session?.attachedTabId)) return;
   const tabId = session.attachedTabId;
   session.attachedTabId = undefined;
+  session.lastKnownLocation = undefined;
   const owners = debuggerSessionsByTab.get(tabId);
   owners?.delete(session.sessionToken);
   if (owners?.size) return;
   debuggerSessionsByTab.delete(tabId);
+  intentionalDebuggerDetaches.add(tabId);
   try {
     await chrome.debugger.detach({ tabId });
   } catch {
@@ -971,6 +1575,7 @@ async function withJobDebugger(tabId, command, operation) {
     await detachSessionDebugger(session);
     let owners = debuggerSessionsByTab.get(tabId);
     if (!owners) {
+      intentionalDebuggerDetaches.delete(tabId);
       try {
         await chrome.debugger.attach({ tabId }, CDP_VERSION);
       } catch (error) {
@@ -988,6 +1593,19 @@ async function withJobDebugger(tabId, command, operation) {
     }
     owners.add(session.sessionToken);
     session.attachedTabId = tabId;
+    const tabs = await chrome.tabs.query({
+      url: policyForPlugin(session.pluginId)?.tabPatterns || [],
+    });
+    const attachedTab = tabs.find((item) => item.id === tabId);
+    session.lastKnownLocation = safeLocation(attachedTab?.url);
+    await mutateLifecycle(session, (state) => {
+      state.snapshot = {
+        ...(state.snapshot || {}),
+        state: "active",
+        location: session.lastKnownLocation,
+        debuggerAttached: true,
+      };
+    });
   }
   return await operation();
 }
@@ -1006,14 +1624,17 @@ async function dispatchToPage(command) {
 
   const cache = await readCommandCache();
   const cached = cache[command.commandId];
-  if (
-    cached?.executionKey === command.executionKey &&
-    cached?.pluginId === command.pluginId &&
-    cached?.profileId === command.profileId &&
-    Number(cached.expiresAt) > Date.now() &&
-    cached.response
-  ) {
+  if (commandCacheMatches(cached, command) && cached?.response) {
     return { ...cached.response, replayed: true };
+  }
+  if (commandCacheMatches(cached, command) && cached?.status === "in_flight") {
+    return {
+      ...bridgeError(
+        "COMMAND_OUTCOME_UNKNOWN",
+        "O worker reiniciou ou perdeu a resposta durante um comando com efeito potencial. Reconcile o estado externo antes de decidir por nova tentativa.",
+      ),
+      reconciliationRequired: true,
+    };
   }
 
   const tabs = await chrome.tabs.query({ url: policy.tabPatterns });
@@ -1038,8 +1659,20 @@ async function dispatchToPage(command) {
     return response;
   }
 
+  if (command.action === "reload") {
+    await markCommandInFlight(command);
+    const response = await enqueueTabCommand(tab.id, () =>
+      Date.now() >= command.expiresAt
+        ? bridgeError("COMMAND_EXPIRED", "O comando expirou antes de executar na aba.")
+        : controlledReload(tab, command, policy),
+    );
+    if (response?.code !== "COMMAND_TIMEOUT") await cacheResponse(command, response);
+    return response;
+  }
+
   const timeoutMs = Math.max(1000, Math.min(30000, command.expiresAt - Date.now()));
   try {
+    if (DURABLE_IN_FLIGHT_ACTIONS.has(command.action)) await markCommandInFlight(command);
     const response = await withTimeout(
       enqueueTabCommand(tab.id, () =>
         Date.now() >= command.expiresAt
@@ -1064,10 +1697,9 @@ async function dispatchToPage(command) {
 
 globalThis.contentFlowBridge = Object.freeze({
   identity: identity(),
-  connect(handshake) {
+  async connect(handshake) {
     if (
       !policyForPlugin(handshake?.pluginId) ||
-      handshake?.protocolVersion !== PROTOCOL_VERSION ||
       typeof handshake?.profileId !== "string" ||
       handshake.profileId.length < 1 ||
       handshake.profileId.length > 128 ||
@@ -1075,10 +1707,14 @@ globalThis.contentFlowBridge = Object.freeze({
     ) {
       return bridgeError("HANDSHAKE_REJECTED", "Handshake da extensão inválido.");
     }
+    const negotiation = negotiateHandshake(handshake);
+    if (!negotiation.ok) return negotiation;
     const now = Date.now();
     for (const [token, session] of activeSessions) {
       if (now - session.lastSeenAt > SESSION_TTL_MS) {
         activeSessions.delete(token);
+        announceJobActivity();
+        void cancelConditionObservers({ sessionToken: session.sessionToken });
         void cleanupLeases({ sessionToken: session.sessionToken });
         void detachSessionDebugger(session);
       }
@@ -1089,22 +1725,69 @@ globalThis.contentFlowBridge = Object.freeze({
       )[0];
       if (!oldest) break;
       activeSessions.delete(oldest[0]);
+      announceJobActivity();
+      void cancelConditionObservers({ sessionToken: oldest[1].sessionToken });
       void cleanupLeases({ sessionToken: oldest[1].sessionToken });
       void detachSessionDebugger(oldest[1]);
     }
     const previous = activeSessions.get(handshake.sessionToken);
     if (previous) {
+      void cancelConditionObservers({ sessionToken: previous.sessionToken });
       void cleanupLeases({ sessionToken: previous.sessionToken });
       void detachSessionDebugger(previous);
     }
-    activeSessions.set(handshake.sessionToken, {
+    const session = {
       pluginId: handshake.pluginId,
       profileId: handshake.profileId,
       sessionToken: handshake.sessionToken,
+      protocolVersion: negotiation.protocolVersion,
       connectedAt: now,
       lastSeenAt: now,
-    });
-    return { ok: true, pluginId: handshake.pluginId, ...identity() };
+    };
+    activeSessions.set(handshake.sessionToken, session);
+    announceJobActivity();
+    const lifecycle = await initializeLifecycle(session);
+    return {
+      ok: true,
+      pluginId: handshake.pluginId,
+      ...identity(),
+      protocolVersion: negotiation.protocolVersion,
+      capabilities: negotiation.capabilities,
+      lastSequence: lifecycle.lastSequence,
+    };
+  },
+  async events(request) {
+    const validated = validateLifecycleRequest(request);
+    if (validated.error) return validated.error;
+    const afterSequence = Math.max(0, Number(request?.afterSequence) || 0);
+    const store = await readLifecycleStore();
+    const state = store[validated.session.sessionToken];
+    const events = (Array.isArray(state?.events) ? state.events : []).filter(
+      (event) => Number(event?.sequence) > afterSequence,
+    );
+    const earliestSequence = Number(state?.events?.[0]?.sequence || state?.sequence || 0);
+    return {
+      ok: true,
+      events,
+      lastSequence: Number(state?.sequence || 0),
+      snapshotRequired: earliestSequence > afterSequence + 1,
+    };
+  },
+  async snapshot(request) {
+    const validated = validateLifecycleRequest(request);
+    if (validated.error) return validated.error;
+    const store = await readLifecycleStore();
+    const state = store[validated.session.sessionToken];
+    return {
+      ok: true,
+      sequence: Number(state?.sequence || 0),
+      snapshot: {
+        state: state?.snapshot?.state || "connected",
+        location: state?.snapshot?.location ?? null,
+        debuggerAttached: Boolean(state?.snapshot?.debuggerAttached),
+        leaseActive: Boolean(state?.snapshot?.leaseActive),
+      },
+    };
   },
   async dispatch(command) {
     const invalid = validateSession(command);
@@ -1130,8 +1813,15 @@ globalThis.contentFlowBridge = Object.freeze({
     }
     session.lastSeenAt = Date.now();
     await markExecutionCancelled(session, request.executionKey);
+    await cancelConditionObservers({
+      sessionToken: session.sessionToken,
+      executionKey: request.executionKey,
+    });
     await cleanupLeases({
       sessionToken: session.sessionToken,
+      executionKey: request.executionKey,
+    });
+    await emitLifecycleEvent(session, "session_cancelled", {
       executionKey: request.executionKey,
     });
     await detachSessionDebugger(session);
@@ -1148,8 +1838,18 @@ globalThis.contentFlowBridge = Object.freeze({
       return bridgeError("SESSION_MISMATCH", "Desconexão recusada pela extensão.");
     }
     activeSessions.delete(request.sessionToken);
+    announceJobActivity();
+    await cancelConditionObservers({ sessionToken: session.sessionToken });
     await cleanupLeases({ sessionToken: session.sessionToken });
     await detachSessionDebugger(session);
+    await mutateLifecycle(session, (state) => {
+      state.snapshot = {
+        ...(state.snapshot || {}),
+        state: "disconnected",
+        debuggerAttached: false,
+        leaseActive: false,
+      };
+    });
     return { ok: true };
   },
 });
@@ -1167,14 +1867,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.alarms.create(LEASE_ALARM, { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm?.name === LEASE_ALARM) void cleanupLeases({ forceExpired: true });
+  if (alarm?.name === LEASE_ALARM) {
+    void cleanupLeases({ forceExpired: true });
+    void readCommandCache();
+  }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  forgetConditionObservers({ tabId });
+  for (const session of activeSessions.values()) {
+    if (session.attachedTabId !== tabId) continue;
+    session.attachedTabId = undefined;
+    session.lastKnownLocation = undefined;
+    void emitLifecycleEvent(
+      session,
+      "tab_closed",
+      {},
+      { state: "tab_closed", location: null, debuggerAttached: false, leaseActive: false },
+    );
+  }
   void cleanupLeases({ tabId });
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo?.url || changeInfo?.status === "loading") {
+    void cancelConditionObservers({ tabId });
+  }
+  for (const session of activeSessions.values()) {
+    if (session.attachedTabId !== tabId) continue;
+    const nextLocation = changeInfo?.url ? safeLocation(changeInfo.url) : session.lastKnownLocation;
+    const previousLocation = session.lastKnownLocation;
+    const sameLocation =
+      nextLocation &&
+      previousLocation &&
+      nextLocation.origin === previousLocation.origin &&
+      nextLocation.pathname === previousLocation.pathname;
+    const isReload = changeInfo?.status === "loading" && (!changeInfo.url || sameLocation);
+    if (changeInfo?.url || isReload) {
+      const type = isReload ? "reload" : "navigation";
+      session.lastKnownLocation = nextLocation;
+      void emitLifecycleEvent(session, type, nextLocation ? { location: nextLocation } : {}, {
+        state: type,
+        location: nextLocation,
+      });
+    }
+  }
   if (!changeInfo?.url) return;
   void (async () => {
     const leases = await readLeases();
@@ -1203,8 +1940,35 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   })();
 });
 
+chrome.debugger.onDetach.addListener((source, reason) => {
+  const tabId = source?.tabId;
+  if (!Number.isInteger(tabId)) return;
+  forgetConditionObservers({ tabId });
+  if (intentionalDebuggerDetaches.delete(tabId)) return;
+  const owners = debuggerSessionsByTab.get(tabId);
+  debuggerSessionsByTab.delete(tabId);
+  if (!owners) return;
+  for (const sessionToken of owners) {
+    const session = activeSessions.get(sessionToken);
+    if (!session) continue;
+    session.attachedTabId = undefined;
+    void emitLifecycleEvent(
+      session,
+      "debugger_lost",
+      { reason: String(reason || "detached") },
+      { state: "debugger_lost", debuggerAttached: false },
+    );
+  }
+});
+
 chrome.runtime.onConnect.addListener((port) => {
   if (port?.name !== "contentflow-provider-page") return;
+  providerPorts.add(port);
+  port.onDisconnect.addListener(() => {
+    providerPorts.delete(port);
+    announceJobActivity();
+  });
+  announceJobActivity();
   port.onMessage.addListener(() => {
     // Receber o heartbeat renova a vida do service worker durante o job.
   });

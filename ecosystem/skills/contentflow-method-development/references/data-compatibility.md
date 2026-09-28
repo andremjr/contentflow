@@ -24,28 +24,28 @@ A conexão só é válida se o tipo técnico e a forma do valor forem compatíve
 
 ## Matriz de compatibilidade padrão
 
-| Output → Input | Status | Observação |
-| --- | --- | --- |
-| mesmo tipo universal | Compatível | Ainda valide schema, cardinalidade e options. |
-| `text` → `textarea` | Compatível com promoção | Texto curto pode ser consumido como texto longo. |
-| `textarea` → `text` | Condicional | Só se houver limite explícito e validação de tamanho; prefira não conectar. |
-| `list` → `list` | Compatível | Valide item type/schema; lista não é record automaticamente. |
-| `records` → `records` | Compatível condicional | Keys, tipos e required dos `recordFields` devem ser compatíveis. |
-| `select` → `select` | Compatível condicional | Options devem coincidir ou a entrada deve aceitar subset explicitamente. |
-| `multiselect` → `multiselect` | Compatível condicional | Valide options e cardinalidade múltipla. |
-| `list` → `multiselect` | Não conectar diretamente | Use bloco/conversão explícita que produza seleção tipada. |
-| `select` → `text` | Não conectar diretamente | Use output textual explícito ou conversão declarada. |
-| singular → coleção | Não conectar diretamente | Produza `list`, `files` ou `records` conforme o contrato. |
-| coleção → singular | Não conectar diretamente | Use `VALIDAR/select_one` ou transformação explícita. |
-| `file` → `image` | Condicional | Só se MIME e semântica garantirem que o arquivo é imagem. |
-| `image` → `file` | Compatível condicional | Não perder tipo; prefira input `image` se a operação exige imagem. |
-| `files` → `file` | Não conectar diretamente | Selecione um arquivo antes, ou mude o input para `files`. |
-| `audio` → `video` | Incompatível | Não confundir mídia com container. |
-| `video` → `image` | Incompatível sem extração | Exija bloco Código que extraia frame. |
-| `thumbnail_layout` → `image` | Incompatível sem renderização | Use `CRIAR/Código` para renderizar layout. |
-| `url` → `file` | Incompatível | URL pode ser referência; faça download controlado em bloco próprio. |
-| `datetime` → `text` | Condicional | Só com formatação explícita e output text. |
-| qualquer → `approval` | Não conectar como valor | `approval` é decisão de VALIDAR, não um recipiente genérico. |
+| Output → Input                | Status                        | Observação                                                                  |
+| ----------------------------- | ----------------------------- | --------------------------------------------------------------------------- |
+| mesmo tipo universal          | Compatível                    | Ainda valide schema, cardinalidade e options.                               |
+| `text` → `textarea`           | Compatível com promoção       | Texto curto pode ser consumido como texto longo.                            |
+| `textarea` → `text`           | Condicional                   | Só se houver limite explícito e validação de tamanho; prefira não conectar. |
+| `list` → `list`               | Compatível                    | Valide item type/schema; lista não é record automaticamente.                |
+| `records` → `records`         | Compatível condicional        | Keys, tipos e required dos `recordFields` devem ser compatíveis.            |
+| `select` → `select`           | Compatível condicional        | Options devem coincidir ou a entrada deve aceitar subset explicitamente.    |
+| `multiselect` → `multiselect` | Compatível condicional        | Valide options e cardinalidade múltipla.                                    |
+| `list` → `multiselect`        | Não conectar diretamente      | Use bloco/conversão explícita que produza seleção tipada.                   |
+| `select` → `text`             | Não conectar diretamente      | Use output textual explícito ou conversão declarada.                        |
+| singular → coleção            | Não conectar diretamente      | Produza `list`, `files` ou `records` conforme o contrato.                   |
+| coleção → singular            | Não conectar diretamente      | Use `VALIDAR/select_one` ou transformação explícita.                        |
+| `file` → `image`              | Condicional                   | Só se MIME e semântica garantirem que o arquivo é imagem.                   |
+| `image` → `file`              | Compatível condicional        | Não perder tipo; prefira input `image` se a operação exige imagem.          |
+| `files` → `file`              | Não conectar diretamente      | Selecione um arquivo antes, ou mude o input para `files`.                   |
+| `audio` → `video`             | Incompatível                  | Não confundir mídia com container.                                          |
+| `video` → `image`             | Incompatível sem extração     | Exija bloco Código que extraia frame.                                       |
+| `thumbnail_layout` → `image`  | Incompatível sem renderização | Use `CRIAR/Código` para renderizar layout.                                  |
+| `url` → `file`                | Incompatível                  | URL pode ser referência; faça download controlado em bloco próprio.         |
+| `datetime` → `text`           | Condicional                   | Só com formatação explícita e output text.                                  |
+| qualquer → `approval`         | Não conectar como valor       | `approval` é decisão de VALIDAR, não um recipiente genérico.                |
 
 A tabela é uma política de segurança de schema, não uma lista de coerções automáticas. Se uma conversão não estiver claramente prevista, crie um bloco intermediário com output no tipo esperado e explique a transformação.
 
@@ -75,16 +75,16 @@ Valide o tipo semântico e o MIME. `file` é genérico; `image`, `audio` e `vide
 
 O output final oficial deve ser produzido no tipo esperado:
 
-| Processo | Tipo esperado |
-| --- | --- |
-| `theme` | `textarea` |
-| `title` | `text` |
-| `thumbnail` | `image` |
-| `script` | `textarea` |
-| `narration` | `audio` |
-| `assets` | `files` |
-| `editing` | `video` |
-| `publishing` | `url` |
+| Processo     | Tipo esperado |
+| ------------ | ------------- |
+| `theme`      | `textarea`    |
+| `title`      | `text`        |
+| `thumbnail`  | `image`       |
+| `script`     | `textarea`    |
+| `narration`  | `audio`       |
+| `assets`     | `files`       |
+| `editing`    | `video`       |
+| `publishing` | `url`         |
 
 ## Política de falha
 

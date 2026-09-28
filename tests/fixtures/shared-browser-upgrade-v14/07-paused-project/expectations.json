@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "scenario": "07-paused-project",
+  "description": "Projeto pausado com execução em andamento.",
+  "counts": {
+    "channels": 1,
+    "projects": 1,
+    "process_executions": 1,
+    "plugin_profiles": 1,
+    "plugin_workspaces": 0,
+    "plugin_jobs": 0
+  },
+  "payloadSha256": {
+    "channels:paused": "3b5c4b0b4b83b9a3a1d227a807d5c352e37d8fead7515e0b0c01b3e80f0b6568",
+    "projects:project-paused": "6289f9c6d68c0c4e878eaf4126944cb0fdc7a47a2a0a638601acd907fc62e911",
+    "process_executions:execution-paused": "0da5611324acca3964f31b3aa178521cbd59387f188f9e06ca69241b1e74df21"
+  },
+  "resolvedFolders": {},
+  "markers": []
+}

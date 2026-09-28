@@ -11,6 +11,11 @@ export async function execute(request, services) {
     if (request.invocation.action === "prepare") {
       await mkdir(path.dirname(marker), { recursive: true });
       await writeFile(marker, "installed", "utf8");
+      if (typeof services.getProfilePath === "function") {
+        const profileMarker = services.getProfilePath("v73-profile-used.txt");
+        await mkdir(path.dirname(profileMarker), { recursive: true });
+        await writeFile(profileMarker, request.configuration.accountProfile, "utf8");
+      }
     }
     const ready = await readFile(marker, "utf8").then(
       (value) => value === "installed",

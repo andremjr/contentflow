@@ -108,6 +108,68 @@ test("plano local v2 preserva conexão em memória e a serialização portátil 
   assert.doesNotMatch(serializePortableMethodTransfer(plan), /local-account-id/);
 });
 
+test("cópia local só preserva política de perfil quando o chamador remapeia explicitamente", () => {
+  const localProfileMethod = structuredClone(method);
+  localProfileMethod.blocks[0].plugin!.profileExecution = {
+    mode: "fallback",
+    profileIds: ["profile-local-primary", "profile-local-backup"],
+  };
+  const plan = planPortableMethodTransfer({
+    name: "Roteiro",
+    sourceMethods: [localProfileMethod],
+    processOrder: [...PROCESS_ORDER],
+    primaryProcessTypes: ["script"],
+    preserveLocalConnections: true,
+  });
+  assert.deepEqual(plan.methods[0].method.blocks[0].plugin?.profileExecution, {
+    mode: "fallback",
+    profileIds: ["profile-local-primary", "profile-local-backup"],
+  });
+
+  const withoutRemap = copyImportedMethods(
+    plan.methods.map((entry) => entry.method),
+    (prefix) => `${prefix}-copy`,
+    { preserveLocalConnections: true },
+  );
+  assert.equal(withoutRemap[0].blocks[0].plugin?.profileExecution, undefined);
+
+  const remapped = copyImportedMethods(
+    plan.methods.map((entry) => entry.method),
+    (prefix) => `${prefix}-copy`,
+    {
+      preserveLocalConnections: true,
+      remapLocalProfileExecution: (_pluginId, policy) => structuredClone(policy),
+    },
+  );
+  assert.deepEqual(remapped[0].blocks[0].plugin?.profileExecution, {
+    mode: "fallback",
+    profileIds: ["profile-local-primary", "profile-local-backup"],
+  });
+  assert.doesNotMatch(
+    serializePortableMethodTransfer(plan),
+    /profile-local-primary|profile-local-backup|profileExecution/,
+  );
+});
+
+test("política local de perfis nunca entra na exportação portátil", () => {
+  const localProfileMethod = structuredClone(method);
+  localProfileMethod.blocks[0].plugin!.profileExecution = {
+    mode: "fallback",
+    profileIds: ["profile-local-primary", "profile-local-backup"],
+  };
+  const v1 = serializeMethodFile("Roteiro", localProfileMethod);
+  assert.doesNotMatch(v1, /profile-local-primary|profile-local-backup|profileExecution/);
+
+  const plan = planPortableMethodTransfer({
+    name: "Roteiro",
+    sourceMethods: [localProfileMethod],
+    processOrder: [...PROCESS_ORDER],
+    primaryProcessTypes: ["script"],
+  });
+  const v2 = serializePortableMethodTransfer(plan);
+  assert.doesNotMatch(v2, /profile-local-primary|profile-local-backup|profileExecution/);
+});
+
 test("exporta e remapeia continuidade de conversa sem expor a conta local", () => {
   const continued: ProcessMethod = {
     name: "Roteiro contínuo",

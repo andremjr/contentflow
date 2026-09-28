@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowLeft,
   Bot,
   Braces,
   CheckCircle2,
@@ -47,15 +48,14 @@ import { useAppPreferences } from "@/lib/app-preferences";
 import { effectiveProcessOrder } from "@/lib/process-order";
 import { pluginRequirementReadiness } from "@/lib/method-transfer-readiness";
 import { pluginCapabilityLabel } from "@/lib/plugin-capability-label";
-import { localizePluginManifest } from "@/lib/plugin-localization";
 import {
-  encodePluginConfigurationOptionValue,
-  findPluginConfigurationOption,
-  pluginConfigurationDependencySignature,
-  toPluginConfigurationRequest,
-  withSavedPluginConfigurationOption,
-} from "@/lib/plugin-configuration-ui";
+  clonePluginConfigurationDraft,
+  preparePluginConfigurationCommit,
+} from "@/lib/plugin-configuration-draft";
+import { localizePluginManifest } from "@/lib/plugin-localization";
+import { legacyTypeListAccepts } from "@/lib/data-shape";
 import { ChannelAvatar } from "@/components/channel-avatar";
+import { PluginConfigurationRenderer } from "@/components/plugin-configuration-renderer";
 import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
 import { LineListTextarea } from "@/components/line-list-textarea";
 import {
@@ -95,6 +95,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   PROCESS_META,
   type ActionBlock,
+  type BlockPluginBinding,
   type BlockFieldDefinition,
   type BlockInputBinding,
   type BlockOperator,
@@ -104,6 +105,7 @@ import {
   type FieldPresentation,
   type HumanFieldType,
   type PresentationRendererId,
+  type ProfileExecutionPolicy,
   type ProcessMethod,
   type RecordFieldDefinition,
   type RecordFieldType,
@@ -139,13 +141,7 @@ import {
   removeInstructionInputVariables,
   replaceInstructionInputVariable,
 } from "@/lib/instruction-template";
-import type {
-  JsonSchema,
-  PluginCapability,
-  PluginConfigurationOption,
-  PluginManifest,
-  PluginProfileSetup,
-} from "@/lib/plugin-contract";
+import type { PluginCapability, PluginManifest, PluginProfileSetup } from "@/lib/plugin-contract";
 import { pluginConnectionRequired } from "@/lib/plugin-contract";
 import {
   applyMethodTransfer,
@@ -187,6 +183,8 @@ type ManagedPluginProfile = {
   alias: string;
   createdAt: string;
   updatedAt: string;
+  readinessState?: string;
+  occupied?: boolean;
 };
 
 type MethodTransferPreview = {
@@ -313,6 +311,7 @@ export function MethodBuilder({
   const [draftName, setDraftName] = useState("");
   const [draftImageUrl, setDraftImageUrl] = useState<string>();
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [pluginPanelBlockId, setPluginPanelBlockId] = useState<string | null>(null);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [draftBlocks, setDraftBlocks] = useState<ActionBlock[]>([]);
   const [isDirty, setIsDirty] = useState(false);
@@ -320,7 +319,6 @@ export function MethodBuilder({
     "idle",
   );
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [availablePlugins, setAvailablePlugins] = useState<DiscoveredPlugin[]>([]);
   const [readinessPlugins, setReadinessPlugins] = useState<DiscoveredPlugin[]>([]);
   const [readinessConnections, setReadinessConnections] = useState<Record<string, string[]>>({});
   const [transferPreview, setTransferPreview] = useState<MethodTransferPreview>();
@@ -357,6 +355,12 @@ export function MethodBuilder({
   }, [blocks, selectedBlockId]);
 
   useEffect(() => {
+    if (pluginPanelBlockId && pluginPanelBlockId !== selectedBlockId) {
+      setPluginPanelBlockId(null);
+    }
+  }, [pluginPanelBlockId, selectedBlockId]);
+
+  useEffect(() => {
     let active = true;
     void fetch("/api/plugins", { cache: "no-store" })
       .then(async (response) => {
@@ -366,9 +370,6 @@ export function MethodBuilder({
       .then((result) => {
         if (active) {
           setReadinessPlugins(result.plugins);
-          setAvailablePlugins(
-            result.plugins.filter((plugin) => plugin.enabled && plugin.executable),
-          );
           void Promise.all(
             result.plugins.map(async (plugin) => {
               try {
@@ -397,7 +398,6 @@ export function MethodBuilder({
       })
       .catch(() => {
         if (active) {
-          setAvailablePlugins([]);
           setReadinessPlugins([]);
           setReadinessConnections({});
         }
@@ -1071,10 +1071,30 @@ export function MethodBuilder({
       <Dialog
         open={Boolean(selectedBlock)}
         onOpenChange={(open) => {
-          if (!open) setSelectedBlockId(null);
+          if (!open) {
+            if (pluginPanelBlockId === selectedBlock?.id) {
+              setPluginPanelBlockId(null);
+              return;
+            }
+            setPluginPanelBlockId(null);
+            setSelectedBlockId(null);
+          }
         }}
       >
-        <DialogContent className="sm:max-w-3xl lg:max-w-4xl">
+        <DialogContent
+          className={cn(
+            "p-0 transition-[width,max-width,height] duration-200",
+            pluginPanelBlockId === selectedBlock?.id
+              ? "h-[min(92vh,56rem)] w-[calc(100vw-1rem)] overflow-hidden sm:w-[calc(100vw-2rem)] sm:max-w-[80rem] [&>button:last-child]:hidden lg:[&>button:last-child]:grid"
+              : "max-h-[90vh] overflow-y-auto sm:max-w-3xl lg:max-w-4xl",
+          )}
+          onEscapeKeyDown={(event) => {
+            if (pluginPanelBlockId === selectedBlock?.id) {
+              event.preventDefault();
+              setPluginPanelBlockId(null);
+            }
+          }}
+        >
           <DialogHeader className="sr-only">
             <DialogTitle>Configurar bloco de ação</DialogTitle>
             <DialogDescription>
@@ -1090,9 +1110,13 @@ export function MethodBuilder({
               processType={processType}
               channelMethods={channel.methods}
               processOrder={effectiveProcessOrder(channel)}
-              plugins={availablePlugins}
+              plugins={readinessPlugins}
               index={blocks.indexOf(selectedBlock)}
               total={blocks.length}
+              pluginConfigurationOpen={pluginPanelBlockId === selectedBlock.id}
+              onPluginConfigurationOpenChange={(open) =>
+                setPluginPanelBlockId(open ? selectedBlock.id : null)
+              }
               onChange={(patch) => updateBlock(selectedBlock.id, patch)}
               onRemove={() => removeBlock(selectedBlock.id)}
             />
@@ -1405,6 +1429,8 @@ function BlockEditor({
   plugins,
   index,
   total,
+  pluginConfigurationOpen,
+  onPluginConfigurationOpenChange,
   onChange,
   onRemove,
 }: {
@@ -1418,14 +1444,29 @@ function BlockEditor({
   plugins: DiscoveredPlugin[];
   index: number;
   total: number;
+  pluginConfigurationOpen: boolean;
+  onPluginConfigurationOpenChange: (open: boolean) => void;
   onChange: (patch: Partial<ActionBlock>) => void;
   onRemove: () => void;
 }) {
-  const { language } = useAppPreferences();
-  const [pluginExpanded, setPluginExpanded] = useState(!block.plugin);
+  const { language, t } = useAppPreferences();
+  const [pluginDraft, setPluginDraft] = useState<BlockPluginBinding | undefined>(() =>
+    block.plugin ? clonePluginConfigurationDraft(block.plugin) : undefined,
+  );
+  const [pluginDraftInvalid, setPluginDraftInvalid] = useState(false);
+  useEffect(() => {
+    setPluginDraft(block.plugin ? clonePluginConfigurationDraft(block.plugin) : undefined);
+    setPluginDraftInvalid(false);
+  }, [block.id, block.plugin]);
+  const setPluginConfigurationVisibility = (open: boolean) => {
+    onPluginConfigurationOpenChange(open);
+    setPluginDraftInvalid(false);
+    setPluginDraft(open && block.plugin ? clonePluginConfigurationDraft(block.plugin) : undefined);
+  };
   const meta = BLOCK_META[block.type];
   const Icon = meta.icon;
   const compatibleCapabilities = plugins.flatMap((plugin) => {
+    if (!plugin.enabled || !plugin.executable) return [];
     const manifest = localizePluginManifest(plugin.manifest, language);
     return manifest.capabilities
       .filter(
@@ -1448,48 +1489,17 @@ function BlockEditor({
   const selectedCapability = selectedManifest?.capabilities.find(
     (capability) => capability.id === block.plugin?.capabilityId,
   );
-  const isManualHumanTool = selectedCapability?.operator === "Humano";
-  const configProperties = selectedCapability?.blockConfigSchema.properties ?? {};
+  const selectedPluginUnavailable = Boolean(
+    selectedPlugin && (!selectedPlugin.enabled || !selectedPlugin.executable),
+  );
+  const selectedPluginMissing = Boolean(block.plugin && !selectedPlugin);
+  const savedPluginLabel = block.plugin
+    ? `${selectedManifest?.name ?? block.plugin.pluginId} · ${
+        selectedCapability ? pluginCapabilityLabel(selectedCapability) : block.plugin.capabilityId
+      }`
+    : t("Selecione quem executará esta ação");
   const profileSetup = selectedManifest?.profileSetup;
-  const profileConfigurationKeys = [
-    profileSetup?.configurationKey,
-    profileSetup?.fallbackConfigurationKey,
-  ].filter((key): key is string => Boolean(key));
-  const generationModeSchema = configProperties.generationMode;
-  const generationModeOptions = [
-    ...(generationModeSchema?.enum ?? []),
-    ...(generationModeSchema?.oneOf?.map((option) => option.const) ?? []),
-  ];
-  const sequenceModeValue = generationModeOptions.includes("sequence")
-    ? "sequence"
-    : generationModeOptions.includes("outline_sequence")
-      ? "outline_sequence"
-      : undefined;
-  const supportsItemSequence =
-    generationModeOptions.includes("single") && Boolean(sequenceModeValue);
-  const generationMode = block.plugin?.configuration.generationMode;
-  const simpleGenerationMode = generationModeOptions.includes(
-    generationMode as string | number | boolean,
-  )
-    ? String(generationMode)
-    : String(generationModeSchema?.default ?? "single");
-  const isConfigurationVisible = (schema: JsonSchema) => {
-    const rule = schema.visibleWhen;
-    return !rule || rule.values.includes(block.plugin?.configuration[rule.property] as never);
-  };
-  const primaryConfigurationEntries = Object.entries(configProperties).filter(
-    ([key, schema]) =>
-      ["model", "voice_id", "productionMode"].includes(key) && isConfigurationVisible(schema),
-  );
-  const advancedConfigurationEntries = Object.entries(configProperties).filter(
-    ([key, schema]) =>
-      isConfigurationVisible(schema) &&
-      !(supportsItemSequence && key === "generationMode") &&
-      !profileConfigurationKeys.includes(key) &&
-      !primaryConfigurationEntries.some(([primaryKey]) => primaryKey === key),
-  );
-  const isCompactConfigurationField = ([, schema]: [string, JsonSchema]) =>
-    schema.type === "integer" || schema.type === "number" || schema.type === "boolean";
+  const isManualHumanTool = selectedCapability?.operator === "Humano";
   const conversationSources = processOrder.flatMap((candidateProcess) => {
     const processIndex = processOrder.indexOf(candidateProcess);
     const currentProcessIndex = processOrder.indexOf(processType);
@@ -1506,7 +1516,9 @@ function BlockEditor({
     const used = new Set<string>();
     return (block.inputs ?? []).map((input) => {
       const compatible = selectedCapability.inputPorts.filter(
-        (port) => port.acceptedTypes.includes(input.type) && (port.multiple || !used.has(port.key)),
+        (port) =>
+          legacyTypeListAccepts(port.acceptedTypes, input.type) &&
+          (port.multiple || !used.has(port.key)),
       );
       const selected = input.portKey
         ? compatible.find((port) => port.key === input.portKey)
@@ -1522,7 +1534,7 @@ function BlockEditor({
     : (block.outputs ?? []).map((field) => {
         const compatible =
           selectedCapability?.outputPorts.filter((port) =>
-            port.producedTypes.includes(field.type),
+            legacyTypeListAccepts(port.producedTypes, field.type),
           ) ?? [];
         const selected = field.portKey
           ? compatible.find((port) => port.key === field.portKey)
@@ -1548,190 +1560,63 @@ function BlockEditor({
       ...outputPortState.filter((item) => !item.selected),
     ].length + requiredPortsMissing.length;
 
-  const renderConfigurationField = ([key, schema]: [string, JsonSchema]) => (
-    <PluginConfigurationField
-      configurationOptionsProvider={selectedCapability?.configurationOptions?.find(
-        (provider) => provider.property === key,
-      )}
-      pluginId={block.plugin?.pluginId}
-      capabilityId={block.plugin?.capabilityId}
-      connectionId={block.plugin?.connectionId}
-      configuration={block.plugin?.configuration}
-      profileConfigurationKey={profileSetup?.configurationKey}
-      key={key}
-      propertyKey={key}
-      schema={schema}
-      value={
-        block.plugin?.configuration[key] ??
-        (typeof schema.default === "string" ||
-        typeof schema.default === "number" ||
-        typeof schema.default === "boolean"
-          ? schema.default
-          : undefined)
-      }
-      onChange={(value) =>
-        onChange({
-          plugin: {
-            ...block.plugin!,
-            configuration: { ...block.plugin!.configuration, [key]: value },
-          },
-        })
-      }
-    />
-  );
-
   return (
-    <div className="min-w-0">
-      <div className="flex items-start justify-between gap-3 pr-8">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <span className={cn("grid size-10 place-items-center rounded-md border", meta.className)}>
-            <Icon className="size-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium uppercase text-muted-foreground">{meta.label}</p>
-            <Label htmlFor={`${block.id}-name`} className="sr-only">
-              Nome da ação
-            </Label>
-            <Input
-              id={`${block.id}-name`}
-              value={block.name ?? meta.label}
-              onChange={(event) => onChange({ name: event.target.value })}
-              placeholder={meta.label}
-              className="h-auto border-0 bg-transparent p-0 text-xl font-semibold shadow-none focus-visible:ring-1 focus-visible:ring-brand"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Bloco {index + 1} de {total}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 text-muted-foreground hover:text-destructive"
-            onClick={onRemove}
-            aria-label="Remover bloco"
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="mt-6 space-y-5 rounded-xl border border-brand/30 bg-card/35 p-4 sm:p-5">
-        <InstructionEditor
-          block={block}
-          capability={selectedCapability}
-          methodBlocks={methodBlocks}
-          blockIndex={index}
-          processType={processType}
-          channelMethods={channelMethods}
-          processOrder={processOrder}
-          collections={collections}
-          onChange={onChange}
-        />
-
-        <div className="space-y-1.5 border-t border-border/60 pt-4">
-          <Label>Operador responsável</Label>
-          <Select
-            value={block.operator}
-            onValueChange={(value) =>
-              onChange({ operator: value as BlockOperator, plugin: undefined })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(OPERATOR_META) as BlockOperator[]).map((operator) => {
-                const item = OPERATOR_META[operator];
-                const OperatorIcon = item.icon;
-                return (
-                  <SelectItem key={operator} value={operator}>
-                    <span className="flex items-center gap-2">
-                      <OperatorIcon className="size-3.5" /> {item.label}
-                    </span>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {block.type === "ESCOLHER" && (
-          <div className="space-y-4 border-t border-border/60 pt-4">
-            <div className="space-y-1.5">
-              <Label>Coleção estratégica</Label>
-              {collections.length ? (
-                <Select
-                  value={block.collectionId}
-                  onValueChange={(collectionId) => onChange({ collectionId })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a coleção deste bloco" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {collections.map((collection) => (
-                      <SelectItem key={collection.id} value={collection.id}>
-                        {collection.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-                  Nenhuma coleção criada. Acesse a{" "}
-                  <a
-                    href={`/channel/${channelId}/library`}
-                    className="font-medium text-brand-soft hover:underline"
-                  >
-                    Biblioteca Estratégica
-                  </a>{" "}
-                  para criar a primeira.
-                </div>
-              )}
+    <div
+      className={cn(
+        "min-w-0",
+        pluginConfigurationOpen &&
+          "grid h-full min-h-0 lg:grid-cols-[minmax(22rem,0.82fr)_minmax(32rem,1.18fr)]",
+      )}
+      data-plugin-workspace={pluginConfigurationOpen ? "open" : "closed"}
+    >
+      <div
+        className={cn(
+          "min-w-0 p-6",
+          pluginConfigurationOpen &&
+            "hidden min-h-0 overflow-y-auto lg:block lg:border-r lg:border-border/70",
+        )}
+      >
+        <div className="flex items-start justify-between gap-3 pr-8">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <span
+              className={cn("grid size-10 place-items-center rounded-md border", meta.className)}
+            >
+              <Icon className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium uppercase text-muted-foreground">{meta.label}</p>
+              <Label htmlFor={`${block.id}-name`} className="sr-only">
+                Nome da ação
+              </Label>
+              <Input
+                id={`${block.id}-name`}
+                value={block.name ?? meta.label}
+                onChange={(event) => onChange({ name: event.target.value })}
+                placeholder={meta.label}
+                className="h-auto border-0 bg-transparent p-0 text-xl font-semibold shadow-none focus-visible:ring-1 focus-visible:ring-brand"
+              />
               <p className="text-[11px] text-muted-foreground">
-                Obrigatório: Escolher sempre seleciona entre itens preexistentes desta coleção. Para
-                decidir entre resultados produzidos durante o método, use um bloco Validar.
+                Bloco {index + 1} de {total}
               </p>
             </div>
-
-            <ContextInputsEditor
-              block={block}
-              methodBlocks={methodBlocks}
-              blockIndex={index}
-              processType={processType}
-              channelMethods={channelMethods}
-              processOrder={processOrder}
-              collections={collections}
-              onChange={onChange}
-            />
           </div>
-        )}
-
-        {block.type === "VALIDAR" && (
-          <div className="space-y-4 border-t border-border/60 pt-4">
-            <ValidationEditor
-              block={block}
-              methodBlocks={methodBlocks}
-              index={index}
-              onChange={onChange}
-            />
-            <ContextInputsEditor
-              block={block}
-              methodBlocks={methodBlocks}
-              blockIndex={index}
-              processType={processType}
-              channelMethods={channelMethods}
-              processOrder={processOrder}
-              collections={collections}
-              onChange={onChange}
-            />
+          <div className="flex shrink-0 gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground hover:text-destructive"
+              onClick={onRemove}
+              aria-label="Remover bloco"
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
           </div>
-        )}
+        </div>
 
-        {block.type !== "ESCOLHER" && block.type !== "VALIDAR" && (
-          <DataContractEditor
+        <div className="mt-6 space-y-5 rounded-xl border border-brand/30 bg-card/35 p-4 sm:p-5">
+          <InstructionEditor
             block={block}
+            capability={selectedCapability}
             methodBlocks={methodBlocks}
             blockIndex={index}
             processType={processType}
@@ -1740,25 +1625,149 @@ function BlockEditor({
             collections={collections}
             onChange={onChange}
           />
-        )}
-      </div>
 
-      <details
-        className="group mt-4 rounded-xl border border-brand/30 bg-brand/5"
-        open={pluginExpanded}
-        onToggle={(event) => setPluginExpanded(event.currentTarget.open)}
-      >
-        <summary className="flex cursor-pointer list-none items-center gap-3 p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Plugin executor</p>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {selectedPlugin && selectedCapability
-                ? `${selectedManifest?.name ?? selectedPlugin.manifest.name} · ${pluginCapabilityLabel(selectedCapability)}`
-                : "Selecione quem executará esta ação"}
-            </p>
+          <div className="space-y-1.5 border-t border-border/60 pt-4">
+            <Label>Operador responsável</Label>
+            <Select
+              value={block.operator}
+              onValueChange={(value) =>
+                onChange({ operator: value as BlockOperator, plugin: undefined })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(OPERATOR_META) as BlockOperator[]).map((operator) => {
+                  const item = OPERATOR_META[operator];
+                  const OperatorIcon = item.icon;
+                  return (
+                    <SelectItem key={operator} value={operator}>
+                      <span className="flex items-center gap-2">
+                        <OperatorIcon className="size-3.5" /> {item.label}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
           </div>
-          {selectedCapability && (
+
+          {block.type === "ESCOLHER" && (
+            <div className="space-y-4 border-t border-border/60 pt-4">
+              <div className="space-y-1.5">
+                <Label>Coleção estratégica</Label>
+                {collections.length ? (
+                  <Select
+                    value={block.collectionId}
+                    onValueChange={(collectionId) => onChange({ collectionId })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a coleção deste bloco" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {collections.map((collection) => (
+                        <SelectItem key={collection.id} value={collection.id}>
+                          {collection.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                    Nenhuma coleção criada. Acesse a{" "}
+                    <a
+                      href={`/channel/${channelId}/library`}
+                      className="font-medium text-brand-soft hover:underline"
+                    >
+                      Biblioteca Estratégica
+                    </a>{" "}
+                    para criar a primeira.
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  Obrigatório: Escolher sempre seleciona entre itens preexistentes desta coleção.
+                  Para decidir entre resultados produzidos durante o método, use um bloco Validar.
+                </p>
+              </div>
+
+              <ContextInputsEditor
+                block={block}
+                methodBlocks={methodBlocks}
+                blockIndex={index}
+                processType={processType}
+                channelMethods={channelMethods}
+                processOrder={processOrder}
+                collections={collections}
+                onChange={onChange}
+              />
+            </div>
+          )}
+
+          {block.type === "VALIDAR" && (
+            <div className="space-y-4 border-t border-border/60 pt-4">
+              <ValidationEditor
+                block={block}
+                methodBlocks={methodBlocks}
+                index={index}
+                onChange={onChange}
+              />
+              <ContextInputsEditor
+                block={block}
+                methodBlocks={methodBlocks}
+                blockIndex={index}
+                processType={processType}
+                channelMethods={channelMethods}
+                processOrder={processOrder}
+                collections={collections}
+                onChange={onChange}
+              />
+            </div>
+          )}
+
+          {block.type !== "ESCOLHER" && block.type !== "VALIDAR" && (
+            <DataContractEditor
+              block={block}
+              methodBlocks={methodBlocks}
+              blockIndex={index}
+              processType={processType}
+              channelMethods={channelMethods}
+              processOrder={processOrder}
+              collections={collections}
+              onChange={onChange}
+            />
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="mt-4 flex w-full items-center gap-3 rounded-xl border border-brand/30 bg-brand/5 p-4 text-left transition hover:border-brand/50 hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:p-5"
+          onClick={(event) => {
+            event.stopPropagation();
+            setPluginConfigurationVisibility(true);
+          }}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">{t("Plugin executor")}</p>
+            <p className="truncate text-[11px] text-muted-foreground">{savedPluginLabel}</p>
+            {block.plugin && (
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {t("Configuração salva")} · {Object.keys(block.plugin.configuration ?? {}).length}{" "}
+                {t("campos")}
+                {block.plugin.profileExecution
+                  ? ` · ${t("Perfis")}: ${block.plugin.profileExecution.profileIds.length}`
+                  : ""}
+              </p>
+            )}
+          </div>
+          {selectedPluginMissing || selectedPluginUnavailable ? (
+            <Badge
+              variant="outline"
+              className="shrink-0 border-amber-500/50 text-[9px] font-normal text-amber-700 dark:text-amber-300"
+            >
+              {selectedPluginMissing ? t("Plugin ausente") : t("Plugin desativado ou indisponível")}
+            </Badge>
+          ) : selectedCapability ? (
             <Badge
               variant="outline"
               className={cn(
@@ -1768,71 +1777,128 @@ function BlockEditor({
                   : "border-emerald-500/50 text-emerald-700 dark:text-emerald-300",
               )}
             >
-              {contractIssues ? "Requer ajustes" : "Pronto para executar"}
+              {contractIssues ? t("Requer ajustes") : t("Pronto para executar")}
             </Badge>
-          )}
-        </summary>
-        <div className="space-y-4 border-t border-brand/20 p-4 sm:p-5">
-          <div className="space-y-1.5">
-            <Label>Plugin e capacidade</Label>
-            <p className="text-[11px] text-muted-foreground">
-              Escolha a ferramenta que realizará esta ação com o contrato definido acima.
-            </p>
-            {compatibleCapabilities.length ? (
-              <Select
-                value={block.plugin ? `${block.plugin.pluginId}::${block.plugin.capabilityId}` : ""}
-                onValueChange={(value) => {
-                  const [pluginId, capabilityId] = value.split("::");
-                  const selection = compatibleCapabilities.find(
-                    (item) => item.plugin.id === pluginId && item.capability.id === capabilityId,
-                  );
-                  const properties = selection?.capability.blockConfigSchema.properties ?? {};
-                  const managedProfileKeys = [
-                    selection?.plugin.manifest.profileSetup?.configurationKey,
-                    selection?.plugin.manifest.profileSetup?.fallbackConfigurationKey,
-                  ].filter((key): key is string => Boolean(key));
-                  const configuration = Object.fromEntries(
-                    Object.entries(properties)
-                      .filter(
-                        ([key, schema]) =>
-                          schema.default !== undefined && !managedProfileKeys.includes(key),
-                      )
-                      .map(([key, schema]) => [key, schema.default as string | number | boolean]),
-                  );
-                  const requestedInputs = block.inputs?.map((input) => {
-                    const compatiblePorts =
-                      selection?.capability.inputPorts.filter((candidate) =>
-                        candidate.acceptedTypes.includes(input.type),
-                      ) ?? [];
-                    const port = compatiblePorts[0];
-                    const current = normalizeFieldPresentation(input.type, input.presentation);
-                    return {
-                      ...input,
-                      portKey: compatiblePorts.length === 1 ? port?.key : undefined,
-                      presentation: normalizeFieldPresentation(
-                        input.type,
-                        current.renderer === "auto" ? (port?.presentation ?? current) : current,
-                      ),
-                    };
-                  });
-                  const requestedOutputs = block.outputs?.map((output) => {
-                    const compatiblePorts =
-                      selection?.capability.outputPorts.filter((candidate) =>
-                        candidate.producedTypes.includes(output.type),
-                      ) ?? [];
-                    const port = compatiblePorts[0];
-                    const current = normalizeFieldPresentation(output.type, output.presentation);
-                    return {
-                      ...output,
-                      portKey: compatiblePorts.length === 1 ? port?.key : undefined,
-                      presentation: normalizeFieldPresentation(
-                        output.type,
-                        current.renderer === "auto" ? (port?.presentation ?? current) : current,
-                      ),
-                    };
-                  });
-                  onChange({
-                    plugin: {
+          ) : null}
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+        </button>
+      </div>
+
+      {pluginConfigurationOpen && (
+        <section
+          className="flex min-h-0 min-w-0 flex-col bg-popover"
+          aria-labelledby={`${block.id}-plugin-panel-title`}
+          data-testid="plugin-configuration-panel"
+        >
+          <header className="flex shrink-0 items-start gap-3 border-b border-border px-5 py-4 sm:px-6">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("Bloco")} · <span className="normal-case">{block.name ?? meta.label}</span>
+              </p>
+              <h2 id={`${block.id}-plugin-panel-title`} className="mt-1 text-xl font-semibold">
+                {t("Configurar plugin executor")}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("Revise o executor, o contrato e as configurações locais desta ação.")}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="shrink-0 gap-1.5 lg:hidden"
+              aria-label={t("Fechar configuração do plugin")}
+              onClick={(event) => {
+                event.stopPropagation();
+                setPluginConfigurationVisibility(false);
+              }}
+            >
+              <ArrowLeft className="size-4" />
+              <span>{t("Voltar ao bloco")}</span>
+            </Button>
+          </header>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
+            {(selectedPluginMissing || selectedPluginUnavailable) && block.plugin && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-900 dark:text-amber-100">
+                <p className="font-medium">
+                  {selectedPluginMissing
+                    ? t("A configuração histórica foi preservada, mas o plugin não está instalado.")
+                    : t(
+                        "A configuração histórica foi preservada, mas o plugin está desativado ou indisponível.",
+                      )}
+                </p>
+                <p className="mt-1 break-all text-[11px] opacity-80">
+                  {block.plugin.pluginId} · {block.plugin.capabilityId}
+                </p>
+                {Object.keys(block.plugin.configuration ?? {}).length > 0 && (
+                  <dl className="mt-3 grid gap-2 rounded-md border border-amber-500/20 bg-background/40 p-3 sm:grid-cols-2">
+                    {Object.entries(block.plugin.configuration).map(([key, value]) => (
+                      <div key={key} className="min-w-0">
+                        <dt className="text-[10px] font-medium opacity-70">{key}</dt>
+                        <dd className="truncate text-[11px]" title={String(value)}>
+                          {String(value)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>Plugin e capacidade</Label>
+              <p className="text-[11px] text-muted-foreground">
+                Escolha a ferramenta que realizará esta ação com o contrato definido acima.
+              </p>
+              {compatibleCapabilities.length ? (
+                <Select
+                  value={
+                    block.plugin ? `${block.plugin.pluginId}::${block.plugin.capabilityId}` : ""
+                  }
+                  onValueChange={(value) => {
+                    const [pluginId, capabilityId] = value.split("::");
+                    const selection = compatibleCapabilities.find(
+                      (item) => item.plugin.id === pluginId && item.capability.id === capabilityId,
+                    );
+                    const properties = selection?.capability.blockConfigSchema.properties ?? {};
+                    const managedProfileKeys = [
+                      selection?.plugin.manifest.profileSetup?.configurationKey,
+                      selection?.plugin.manifest.profileSetup?.fallbackConfigurationKey,
+                    ].filter((key): key is string => Boolean(key));
+                    const configuration = Object.fromEntries(
+                      Object.entries(properties)
+                        .filter(
+                          ([key, schema]) =>
+                            schema.default !== undefined && !managedProfileKeys.includes(key),
+                        )
+                        .map(([key, schema]) => [key, schema.default as string | number | boolean]),
+                    );
+                    const requestedInputs = block.inputs?.map((input) => {
+                      const compatiblePorts =
+                        selection?.capability.inputPorts.filter((candidate) =>
+                          legacyTypeListAccepts(candidate.acceptedTypes, input.type),
+                        ) ?? [];
+                      const port = compatiblePorts[0];
+                      const current = normalizeFieldPresentation(input.type, input.presentation);
+                      return {
+                        ...input,
+                        portKey: compatiblePorts.length === 1 ? port?.key : undefined,
+                        presentation: current,
+                      };
+                    });
+                    const requestedOutputs = block.outputs?.map((output) => {
+                      const compatiblePorts =
+                        selection?.capability.outputPorts.filter((candidate) =>
+                          legacyTypeListAccepts(candidate.producedTypes, output.type),
+                        ) ?? [];
+                      const port = compatiblePorts[0];
+                      const current = normalizeFieldPresentation(output.type, output.presentation);
+                      return {
+                        ...output,
+                        portKey: compatiblePorts.length === 1 ? port?.key : undefined,
+                        presentation: current,
+                      };
+                    });
+                    const nextPlugin: BlockPluginBinding = {
                       pluginId,
                       pluginVersion: selection?.plugin.manifest.version,
                       capabilityId,
@@ -1840,346 +1906,369 @@ function BlockEditor({
                       connectionRequired: selection
                         ? pluginConnectionRequired(selection.plugin.manifest)
                         : false,
-                    },
-                    inputs: requestedInputs,
-                    outputs: requestedOutputs,
-                  });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um plugin compatível" />
-                </SelectTrigger>
-                <SelectContent>
-                  {compatibleCapabilities.map(({ plugin, manifest, capability }) => (
-                    <SelectItem
-                      key={`${plugin.id}::${capability.id}`}
-                      value={`${plugin.id}::${capability.id}`}
-                    >
-                      {manifest.name} · {pluginCapabilityLabel(capability)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-                Nenhum plugin instalado é compatível com este bloco, processo e contrato de saída.
-              </p>
-            )}
-          </div>
-
-          {selectedCapability && (
-            <div className="space-y-3">
-              <div
-                className={cn(
-                  "rounded-lg border p-3 text-[11px]",
-                  contractIssues
-                    ? "border-amber-500/40 bg-amber-500/5 text-amber-800 dark:text-amber-200"
-                    : "border-emerald-500/40 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200",
-                )}
-              >
-                <p className="font-medium">
-                  {contractIssues
-                    ? "Revise o contrato antes de executar"
-                    : "O plugin está recebendo tudo o que precisa"}
-                </p>
-                <p className="mt-0.5 opacity-80">
-                  {contractIssues
-                    ? "Escolha como as entradas e entregas ambíguas serão usadas pelo plugin."
-                    : "Entradas, entregas e formatos são compatíveis com esta capacidade."}
-                </p>
-              </div>
-
-              {(inputPortState.length > 0 ||
-                outputPortState.length > 0 ||
-                unboundInputPorts.length > 0) && (
-                <details className="rounded-lg border border-border/70 bg-card/60 p-3">
-                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                    Dados usados pelo plugin
-                  </summary>
-                  <div className="mt-3 space-y-3">
-                    {inputPortState.map(({ input, compatible, selected, ambiguous }) => (
-                      <div key={input.id} className="space-y-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <Label className="text-[10px] text-muted-foreground">
-                            Entrada · {instructionInputLabel(input)}
-                          </Label>
-                          {ambiguous && (
-                            <span className="text-[9px] font-medium text-amber-700 dark:text-amber-300">
-                              Escolha necessária
-                            </span>
-                          )}
-                        </div>
-                        <Select
-                          value={input.portKey ?? (selected ? selected.key : "")}
-                          onValueChange={(portKey) =>
-                            onChange({
-                              inputs: (block.inputs ?? []).map((item) =>
-                                item.id === input.id ? { ...item, portKey } : item,
-                              ),
-                            })
-                          }
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Como o plugin usará este dado?" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {compatible.map((port) => (
-                              <SelectItem key={port.key} value={port.key}>
-                                {port.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {selected?.description && (
-                          <p className="text-[10px] text-muted-foreground">
-                            {selected.description}
-                          </p>
-                        )}
-                        {!compatible.length && (
-                          <p className="text-[10px] text-destructive">
-                            Nenhuma porta aceita o formato {input.type}.
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                    {outputPortState.map(({ field, compatible, selected, ambiguous }) => (
-                      <div key={field.id} className="space-y-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <Label className="text-[10px] text-muted-foreground">
-                            Entrega · {instructionInputLabel(field)}
-                          </Label>
-                          {ambiguous && (
-                            <span className="text-[9px] font-medium text-amber-700 dark:text-amber-300">
-                              Escolha necessária
-                            </span>
-                          )}
-                        </div>
-                        <Select
-                          value={field.portKey ?? (selected ? selected.key : "")}
-                          onValueChange={(portKey) =>
-                            onChange({
-                              outputs: (block.outputs ?? []).map((item) =>
-                                item.id === field.id ? { ...item, portKey } : item,
-                              ),
-                            })
-                          }
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="O que o plugin entregará aqui?" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {compatible.map((port) => (
-                              <SelectItem key={port.key} value={port.key}>
-                                {port.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {selected?.description && (
-                          <p className="text-[10px] text-muted-foreground">
-                            {selected.description}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                    {requiredPortsMissing.map((port) => (
-                      <p key={port.key} className="text-[10px] text-destructive">
-                        Falta uma entrada para: {port.label}.
-                      </p>
-                    ))}
-                    {unboundInputPorts.map((port) => (
-                      <div
-                        key={`available-${port.key}`}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border p-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-[11px] font-medium">{port.label}</p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {port.required ? "Obrigatória" : "Opcional"} ·{" "}
-                            {port.acceptedTypes.join(", ")}
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 shrink-0 text-[10px]"
-                          onClick={() => {
-                            const type = preferredRuntimePortType(port);
-                            const input: BlockInputBinding = {
-                              id: uid(`${block.id}-runtime-input`),
-                              label: port.label,
-                              type,
-                              source: "runtime",
-                              portKey: port.key,
-                              presentation: normalizeFieldPresentation(type, port.presentation),
-                            };
-                            onChange({ inputs: [...(block.inputs ?? []), input] });
-                          }}
-                        >
-                          <Plus className="mr-1 size-3" /> Fornecer na execução
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
-              <PluginPromptPreview
-                block={block}
-                capability={selectedCapability}
-                inputs={inputPortState.map(({ input, selected }) => ({
-                  input,
-                  portKey: selected?.key,
-                }))}
-              />
-              <MethodParametersEditor
-                block={block}
-                onChange={(parameters) => onChange({ parameters })}
-              />
-              {selectedCapability.instructionUsage !== "not_applicable" && (
-                <p className="rounded-lg border border-brand/20 bg-brand/5 p-3 text-[11px] text-muted-foreground">
-                  A instrução do bloco define o que deve ser feito. Os templates editáveis do plugin
-                  definem como essa instrução e o contexto são montados e enviados ao provedor.
-                </p>
-              )}
-              {selectedPlugin?.manifest.secretKeys?.length && block.plugin && (
-                <PluginConnectionSelector
-                  plugin={selectedPlugin}
-                  value={block.plugin.connectionId}
-                  onChange={(connectionId) =>
+                    };
+                    setPluginDraft(clonePluginConfigurationDraft(nextPlugin));
+                    setPluginDraftInvalid(false);
                     onChange({
-                      plugin: {
-                        ...block.plugin!,
-                        connectionId,
-                        connectionRequired: true,
-                      },
-                    })
-                  }
-                />
-              )}
-              {selectedPlugin && profileSetup && block.plugin && (
-                <ManagedProfileSelector
-                  plugin={selectedPlugin}
-                  profileSetup={profileSetup}
-                  configuration={block.plugin.configuration}
-                  onChange={(configuration) =>
-                    onChange({ plugin: { ...block.plugin!, configuration } })
-                  }
-                />
-              )}
-              {selectedPlugin?.manifest.supportsConversationContinuation && block.plugin && (
-                <div className="space-y-1.5">
-                  <Label>Conversa</Label>
-                  <Select
-                    value={
-                      block.plugin.conversation?.mode === "reuse"
-                        ? `${block.plugin.conversation.sourceProcessType}::${block.plugin.conversation.sourceBlockId}`
-                        : "new"
-                    }
-                    onValueChange={(value) => {
-                      const [sourceProcessType, sourceBlockId] = value.split("::");
-                      onChange({
-                        plugin: {
-                          ...block.plugin!,
-                          conversation:
-                            value === "new"
-                              ? { mode: "new" }
-                              : {
-                                  mode: "reuse",
-                                  sourceProcessType: sourceProcessType as UniversalProcess,
-                                  sourceBlockId,
-                                },
-                        },
-                      });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="new">Iniciar uma conversa nova</SelectItem>
-                      {conversationSources.map((source) => (
-                        <SelectItem
-                          key={`${source.processType}::${source.block.id}`}
-                          value={`${source.processType}::${source.block.id}`}
-                        >
-                          Continuar: {PROCESS_META[source.processType].label} ·{" "}
-                          {source.block.name ?? source.block.type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    Use a mesma conversa para preservar o contexto do provedor. Se o perfil mudar ou
-                    a conversa não abrir, o plugin inicia outra e recebe o contexto do bloco de
-                    origem.
-                  </p>
-                </div>
-              )}
-              {primaryConfigurationEntries.map(renderConfigurationField)}
-              {supportsItemSequence && block.plugin && (
-                <div className="space-y-1.5">
-                  <Label>Como executar</Label>
-                  <Select
-                    value={simpleGenerationMode}
-                    onValueChange={(value) => {
-                      if (!generationModeOptions.includes(value)) return;
-                      onChange({
-                        plugin: {
-                          ...block.plugin!,
-                          configuration: {
-                            ...block.plugin!.configuration,
-                            generationMode: value,
-                          },
-                        },
-                      });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="single">Uma vez</SelectItem>
-                      {generationModeOptions.includes("auto") && (
-                        <SelectItem value="auto">Automático conforme a entrada</SelectItem>
-                      )}
-                      {sequenceModeValue && (
-                        <SelectItem value={sequenceModeValue}>
-                          Uma vez por item, na mesma conversa
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    {simpleGenerationMode === sequenceModeValue
-                      ? "Envia cada item em ordem e mantém todos na mesma conversa do provedor."
-                      : simpleGenerationMode === "auto"
-                        ? "Usa sequência quando a porta de estrutura recebe vários itens; caso contrário, envia uma vez."
-                        : "Executa este bloco uma única vez com todo o contexto recebido."}
-                  </p>
-                </div>
-              )}
-              {advancedConfigurationEntries.length > 0 && (
-                <details className="rounded-lg border border-border/70 bg-card/60 p-3">
-                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                    Configurações avançadas do executor ({advancedConfigurationEntries.length})
-                  </summary>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    {advancedConfigurationEntries.map((entry) => (
-                      <div
-                        key={entry[0]}
-                        className={isCompactConfigurationField(entry) ? undefined : "md:col-span-2"}
+                      plugin: nextPlugin,
+                      inputs: requestedInputs,
+                      outputs: requestedOutputs,
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um plugin compatível" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {compatibleCapabilities.map(({ plugin, manifest, capability }) => (
+                      <SelectItem
+                        key={`${plugin.id}::${capability.id}`}
+                        value={`${plugin.id}::${capability.id}`}
                       >
-                        {renderConfigurationField(entry)}
-                      </div>
+                        {manifest.name} · {pluginCapabilityLabel(capability)}
+                      </SelectItem>
                     ))}
-                  </div>
-                </details>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                  Nenhum plugin instalado é compatível com este bloco, processo e contrato de saída.
+                </p>
               )}
             </div>
-          )}
-        </div>
-      </details>
+
+            {selectedPlugin &&
+              selectedCapability &&
+              !selectedPluginUnavailable &&
+              block.plugin &&
+              pluginDraft && (
+                <PluginConfigurationRenderer
+                  pluginId={selectedPlugin.id}
+                  capability={selectedCapability}
+                  connectionId={pluginDraft.connectionId}
+                  configuration={pluginDraft.configuration}
+                  profileSetup={profileSetup}
+                  onConfigurationChange={(configuration) => {
+                    setPluginDraftInvalid(false);
+                    setPluginDraft({ ...pluginDraft, configuration });
+                  }}
+                  connectionSection={
+                    selectedPlugin.manifest.secretKeys?.length ? (
+                      <PluginConnectionSelector
+                        plugin={selectedPlugin}
+                        value={pluginDraft.connectionId}
+                        onChange={(connectionId) => {
+                          setPluginDraftInvalid(false);
+                          setPluginDraft({
+                            ...pluginDraft,
+                            connectionId,
+                            connectionRequired: true,
+                          });
+                        }}
+                      />
+                    ) : undefined
+                  }
+                  profileSection={
+                    profileSetup ? (
+                      <ManagedProfileSelector
+                        plugin={selectedPlugin}
+                        capability={selectedCapability}
+                        profileSetup={profileSetup}
+                        configuration={pluginDraft.configuration}
+                        profileExecution={pluginDraft.profileExecution}
+                        onProfileExecutionChange={(profileExecution, configuration) => {
+                          setPluginDraftInvalid(false);
+                          setPluginDraft({
+                            ...pluginDraft,
+                            ...(configuration ? { configuration } : {}),
+                            profileExecution,
+                          });
+                        }}
+                      />
+                    ) : undefined
+                  }
+                  conversationSection={
+                    selectedPlugin.manifest.supportsConversationContinuation ? (
+                      <div className="space-y-1.5">
+                        <Label>Conversa</Label>
+                        <Select
+                          value={
+                            pluginDraft.conversation?.mode === "reuse"
+                              ? `${pluginDraft.conversation.sourceProcessType}::${pluginDraft.conversation.sourceBlockId}`
+                              : "new"
+                          }
+                          onValueChange={(value) => {
+                            const [sourceProcessType, sourceBlockId] = value.split("::");
+                            setPluginDraftInvalid(false);
+                            setPluginDraft({
+                              ...pluginDraft,
+                              conversation:
+                                value === "new"
+                                  ? { mode: "new" }
+                                  : {
+                                      mode: "reuse",
+                                      sourceProcessType: sourceProcessType as UniversalProcess,
+                                      sourceBlockId,
+                                    },
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="new">Iniciar uma conversa nova</SelectItem>
+                            {conversationSources.map((source) => (
+                              <SelectItem
+                                key={`${source.processType}::${source.block.id}`}
+                                value={`${source.processType}::${source.block.id}`}
+                              >
+                                Continuar: {PROCESS_META[source.processType].label} ·{" "}
+                                {source.block.name ?? source.block.type}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[11px] text-muted-foreground">
+                          Use a mesma conversa para preservar o contexto do provedor. Se o perfil
+                          mudar ou a conversa não abrir, o plugin inicia outra e recebe o contexto
+                          do bloco de origem.
+                        </p>
+                      </div>
+                    ) : undefined
+                  }
+                />
+              )}
+
+            {selectedCapability && (
+              <div className="space-y-3">
+                <div
+                  className={cn(
+                    "rounded-lg border p-3 text-[11px]",
+                    contractIssues
+                      ? "border-amber-500/40 bg-amber-500/5 text-amber-800 dark:text-amber-200"
+                      : "border-emerald-500/40 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200",
+                  )}
+                >
+                  <p className="font-medium">
+                    {contractIssues
+                      ? "Revise o contrato antes de executar"
+                      : "O plugin está recebendo tudo o que precisa"}
+                  </p>
+                  <p className="mt-0.5 opacity-80">
+                    {contractIssues
+                      ? "Escolha como as entradas e entregas ambíguas serão usadas pelo plugin."
+                      : "Entradas, entregas e formatos são compatíveis com esta capacidade."}
+                  </p>
+                </div>
+
+                {contractIssues > 0 && (
+                  <details className="rounded-lg border border-border/70 bg-card/60 p-3">
+                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                      Dados usados pelo plugin
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      {inputPortState.map(({ input, compatible, selected, ambiguous }) => (
+                        <div key={input.id} className="space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-[10px] text-muted-foreground">
+                              Entrada · {instructionInputLabel(input)}
+                            </Label>
+                            {ambiguous && (
+                              <span className="text-[9px] font-medium text-amber-700 dark:text-amber-300">
+                                Escolha necessária
+                              </span>
+                            )}
+                          </div>
+                          <Select
+                            value={input.portKey ?? (selected ? selected.key : "")}
+                            onValueChange={(portKey) =>
+                              onChange({
+                                inputs: (block.inputs ?? []).map((item) =>
+                                  item.id === input.id ? { ...item, portKey } : item,
+                                ),
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Como o plugin usará este dado?" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {compatible.map((port) => (
+                                <SelectItem key={port.key} value={port.key}>
+                                  {port.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selected?.description && (
+                            <p className="text-[10px] text-muted-foreground">
+                              {selected.description}
+                            </p>
+                          )}
+                          {!compatible.length && (
+                            <p className="text-[10px] text-destructive">
+                              Nenhuma porta aceita o formato {input.type}.
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                      {outputPortState.map(({ field, compatible, selected, ambiguous }) => (
+                        <div key={field.id} className="space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-[10px] text-muted-foreground">
+                              Entrega · {instructionInputLabel(field)}
+                            </Label>
+                            {ambiguous && (
+                              <span className="text-[9px] font-medium text-amber-700 dark:text-amber-300">
+                                Escolha necessária
+                              </span>
+                            )}
+                          </div>
+                          <Select
+                            value={field.portKey ?? (selected ? selected.key : "")}
+                            onValueChange={(portKey) =>
+                              onChange({
+                                outputs: (block.outputs ?? []).map((item) =>
+                                  item.id === field.id ? { ...item, portKey } : item,
+                                ),
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="O que o plugin entregará aqui?" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {compatible.map((port) => (
+                                <SelectItem key={port.key} value={port.key}>
+                                  {port.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selected?.description && (
+                            <p className="text-[10px] text-muted-foreground">
+                              {selected.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                      {requiredPortsMissing.map((port) => (
+                        <p key={port.key} className="text-[10px] text-destructive">
+                          Falta uma entrada para: {port.label}.
+                        </p>
+                      ))}
+                      {unboundInputPorts
+                        .filter((port) => port.required)
+                        .map((port) => (
+                          <div
+                            key={`available-${port.key}`}
+                            className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border p-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-[11px] font-medium">{port.label}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {port.required ? "Obrigatória" : "Opcional"} ·{" "}
+                                {port.acceptedTypes.join(", ")}
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 shrink-0 text-[10px]"
+                              onClick={() => {
+                                const type = preferredRuntimePortType(port);
+                                const input: BlockInputBinding = {
+                                  id: uid(`${block.id}-runtime-input`),
+                                  label: port.label,
+                                  type,
+                                  source: "runtime",
+                                  portKey: port.key,
+                                  presentation: normalizeFieldPresentation(type, port.presentation),
+                                };
+                                onChange({ inputs: [...(block.inputs ?? []), input] });
+                              }}
+                            >
+                              <Plus className="mr-1 size-3" /> Fornecer na execução
+                            </Button>
+                          </div>
+                        ))}
+                    </div>
+                  </details>
+                )}
+                <PluginPromptPreview
+                  block={block}
+                  capability={selectedCapability}
+                  inputs={inputPortState.map(({ input, selected }) => ({
+                    input,
+                    portKey: selected?.key,
+                  }))}
+                />
+                <MethodParametersEditor
+                  block={block}
+                  onChange={(parameters) => onChange({ parameters })}
+                />
+                {selectedCapability.instructionUsage !== "not_applicable" && (
+                  <p className="rounded-lg border border-brand/20 bg-brand/5 p-3 text-[11px] text-muted-foreground">
+                    A instrução do bloco define o que deve ser feito. Os templates editáveis do
+                    plugin definem como essa instrução e o contexto são montados e enviados ao
+                    provedor.
+                  </p>
+                )}
+                {selectedPlugin && !selectedPluginUnavailable && block.plugin && pluginDraft && (
+                  <div className="space-y-2 border-t border-border/60 pt-3">
+                    {pluginDraftInvalid && (
+                      <p className="text-[11px] text-destructive" role="alert">
+                        {t("Revise os campos inválidos antes de aplicar.")}
+                      </p>
+                    )}
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setPluginDraft(clonePluginConfigurationDraft(block.plugin!));
+                          setPluginDraftInvalid(false);
+                          setPluginConfigurationVisibility(false);
+                        }}
+                      >
+                        {t("Cancelar")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          const commit = preparePluginConfigurationCommit(
+                            selectedCapability,
+                            pluginDraft,
+                          );
+                          if (!commit.ok) {
+                            setPluginDraftInvalid(true);
+                            return;
+                          }
+                          setPluginDraft(commit.value);
+                          setPluginDraftInvalid(false);
+                          onChange({ plugin: commit.value });
+                          setPluginConfigurationVisibility(false);
+                        }}
+                      >
+                        {t("Aplicar")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <footer className="flex shrink-0 border-t border-border px-4 py-3 sm:px-6">
+            <p className="mr-auto self-center text-[10px] text-muted-foreground">
+              {t("Escape fecha a janela e descarta alterações não aplicadas.")}
+            </p>
+          </footer>
+        </section>
+      )}
     </div>
   );
 }
@@ -2572,7 +2661,8 @@ function InstructionEditor({
     token: `{{collections.${instructionCollectionKey(collection)}}}`,
   }));
   const acceptsInputType = (type: HumanFieldType) =>
-    !capability || capability.inputPorts.some((port) => port.acceptedTypes.includes(type));
+    !capability ||
+    capability.inputPorts.some((port) => legacyTypeListAccepts(port.acceptedTypes, type));
   const isAlreadyConnected = (candidate: BlockInputBinding) =>
     (block.inputs ?? []).some(
       (input) =>
@@ -2818,15 +2908,23 @@ function InstructionEditor({
 
 function ManagedProfileSelector({
   plugin,
+  capability,
   profileSetup,
   configuration,
-  onChange,
+  profileExecution,
+  onProfileExecutionChange,
 }: {
   plugin: DiscoveredPlugin;
+  capability: PluginCapability;
   profileSetup: PluginProfileSetup;
   configuration: Record<string, string | number | boolean>;
-  onChange: (configuration: Record<string, string | number | boolean>) => void;
+  profileExecution?: ProfileExecutionPolicy;
+  onProfileExecutionChange: (
+    profileExecution: ProfileExecutionPolicy | undefined,
+    configuration?: Record<string, string | number | boolean>,
+  ) => void;
 }) {
+  const { t } = useAppPreferences();
   const [profiles, setProfiles] = useState<ManagedPluginProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const primaryAlias = String(configuration[profileSetup.configurationKey] ?? "").trim();
@@ -2836,24 +2934,84 @@ function ManagedProfileSelector({
         .map((value) => value.trim())
         .filter((value, index, values) => value && values.indexOf(value) === index)
     : [];
+  const orchestration = capability.execution.itemOrchestration;
+  const parallelDeclaration = orchestration?.profileParallelism;
+  const supportsParallel =
+    parallelDeclaration?.supported === true &&
+    orchestration?.strategies?.includes("continuous_session") === true &&
+    (orchestration.preferredStrategy === "continuous_session" ||
+      (!orchestration.preferredStrategy && orchestration.strategies.length === 1));
+  const legacyProfileIds = [primaryAlias, ...fallbackAliases]
+    .map((alias) => profiles.find((profile) => profile.alias === alias)?.id)
+    .filter((profileId): profileId is string => Boolean(profileId));
+  const selectedProfileIds = (
+    profileExecution?.profileIds.length ? profileExecution.profileIds : legacyProfileIds
+  ).filter((profileId, index, all) => all.indexOf(profileId) === index);
+  const selectedMode = profileExecution?.mode === "parallel" ? "parallel" : "fallback";
+  const revokedProfileIds = loading
+    ? []
+    : selectedProfileIds.filter(
+        (profileId) => !profiles.some((profile) => profile.id === profileId),
+      );
+  const selectedProfiles = selectedProfileIds
+    .map((profileId) => profiles.find((profile) => profile.id === profileId))
+    .filter((profile): profile is ManagedPluginProfile => Boolean(profile));
+  const unpreparedProfiles = selectedProfiles.filter(
+    (profile) => profile.readinessState !== "ready",
+  );
+  const occupiedProfiles = selectedProfiles.filter((profile) => profile.occupied);
+  const parallelLimit = Math.max(
+    1,
+    Math.min(
+      selectedProfileIds.length || 1,
+      profileExecution?.mode === "parallel"
+        ? (profileExecution.maxParallel ?? selectedProfileIds.length)
+        : selectedProfileIds.length || 1,
+      parallelDeclaration?.maxProfiles ?? Number.POSITIVE_INFINITY,
+      capability.execution.maxConcurrency ?? Number.POSITIVE_INFINITY,
+    ),
+  );
+  const distributedInput = orchestration
+    ? (capability.inputPorts.find((port) => port.key === orchestration.inputPort)?.label ??
+      orchestration.inputPort)
+    : undefined;
+  const aggregateOutput = orchestration?.combinedOutputPort
+    ? (capability.outputPorts.find((port) => port.key === orchestration.combinedOutputPort)
+        ?.label ?? orchestration.combinedOutputPort)
+    : orchestration
+      ? (capability.outputPorts.find((port) => port.key === orchestration.outputPort)?.label ??
+        orchestration.outputPort)
+      : undefined;
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    void fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/profiles`, {
+    void fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/profile-inventory`, {
       signal: controller.signal,
     })
       .then(async (response) => {
         const result = (await response.json()) as {
-          profiles?: ManagedPluginProfile[];
+          linked?: Array<{
+            profile: Omit<ManagedPluginProfile, "pluginId" | "readinessState" | "occupied">;
+            readiness?: { state: string };
+            occupied?: boolean;
+          }>;
           error?: string;
         };
-        if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar os perfis.");
-        setProfiles(result.profiles ?? []);
+        if (!response.ok)
+          throw new Error(result.error ?? t("Não foi possível carregar os perfis."));
+        setProfiles(
+          (result.linked ?? []).map((entry) => ({
+            ...entry.profile,
+            pluginId: plugin.id,
+            readinessState: entry.readiness?.state,
+            occupied: entry.occupied === true,
+          })),
+        );
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
-        toast.error("Não foi possível carregar os perfis", {
+        toast.error(t("Não foi possível carregar os perfis"), {
           description: error instanceof Error ? error.message : undefined,
         });
       })
@@ -2863,29 +3021,82 @@ function ManagedProfileSelector({
     return () => {
       controller.abort();
     };
-  }, [plugin.id]);
+  }, [plugin.id, t]);
 
-  function updateFallbacks(nextAliases: string[]) {
-    if (!profileSetup.fallbackConfigurationKey) return;
-    onChange({
-      ...configuration,
-      [profileSetup.fallbackConfigurationKey]: nextAliases.join("\n"),
-    });
+  function aliasesForProfileIds(profileIds: string[]) {
+    return profileIds
+      .map((profileId) => profiles.find((profile) => profile.id === profileId)?.alias)
+      .filter((alias): alias is string => Boolean(alias));
   }
 
-  function toggleFallback(alias: string, checked: boolean) {
-    updateFallbacks(
-      checked
-        ? [...fallbackAliases.filter((value) => value !== alias), alias]
-        : fallbackAliases.filter((value) => value !== alias),
+  function persistPolicy(
+    mode: ProfileExecutionPolicy["mode"],
+    profileIds: string[],
+    maxParallel?: number,
+  ) {
+    const uniqueProfileIds = profileIds.filter(
+      (profileId, index, all) => profileId && all.indexOf(profileId) === index,
+    );
+    if (!uniqueProfileIds.length) {
+      onProfileExecutionChange(undefined);
+      return;
+    }
+    const normalizedMode = mode === "parallel" ? "parallel" : "fallback";
+    const nextPolicy: ProfileExecutionPolicy =
+      normalizedMode === "parallel"
+        ? {
+            mode: "parallel",
+            profileIds: uniqueProfileIds,
+            maxParallel: Math.max(
+              1,
+              Math.min(maxParallel ?? uniqueProfileIds.length, uniqueProfileIds.length),
+            ),
+          }
+        : {
+            mode: normalizedMode,
+            profileIds: uniqueProfileIds,
+          };
+    const aliases = aliasesForProfileIds(nextPolicy.profileIds);
+    onProfileExecutionChange(
+      nextPolicy,
+      aliases.length
+        ? {
+            ...configuration,
+            [profileSetup.configurationKey]: aliases[0],
+            ...(profileSetup.fallbackConfigurationKey
+              ? { [profileSetup.fallbackConfigurationKey]: aliases.slice(1).join("\n") }
+              : {}),
+          }
+        : undefined,
     );
   }
 
-  function moveFallback(alias: string, direction: -1 | 1) {
-    const index = fallbackAliases.indexOf(alias);
+  function setMode(mode: ProfileExecutionPolicy["mode"]) {
+    const ordered = [...selectedProfileIds];
+    const minimum = mode === "parallel" ? 2 : 1;
+    for (const profile of profiles) {
+      if (ordered.length >= minimum) break;
+      if (!ordered.includes(profile.id)) ordered.push(profile.id);
+    }
+    persistPolicy(mode, ordered, profileExecution?.maxParallel);
+  }
+
+  function toggleSelectedProfile(profileId: string, checked: boolean) {
+    const next = checked
+      ? [...selectedProfileIds.filter((value) => value !== profileId), profileId]
+      : selectedProfileIds.filter((value) => value !== profileId);
+    persistPolicy(selectedMode, next, profileExecution?.maxParallel);
+  }
+
+  function moveSelectedProfile(profileId: string, direction: -1 | 1) {
+    const index = selectedProfileIds.indexOf(profileId);
     const target = index + direction;
-    if (index < 0 || target < 0 || target >= fallbackAliases.length) return;
-    updateFallbacks(arrayMove(fallbackAliases, index, target));
+    if (index < 0 || target < 0 || target >= selectedProfileIds.length) return;
+    persistPolicy(
+      selectedMode,
+      arrayMove(selectedProfileIds, index, target),
+      profileExecution?.maxParallel,
+    );
   }
 
   return (
@@ -2902,23 +3113,76 @@ function ManagedProfileSelector({
         </Button>
       </div>
 
-      {profiles.length ? (
+      {profiles.length || revokedProfileIds.length ? (
         <>
+          <div className="space-y-1.5">
+            <Label>{t("Modo de execução dos perfis")}</Label>
+            <Select
+              value={selectedMode}
+              onValueChange={(value) => setMode(value as ProfileExecutionPolicy["mode"])}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fallback">{t("Fallback ordenado")}</SelectItem>
+                {supportsParallel && (
+                  <SelectItem value="parallel">{t("Executar perfis simultaneamente")}</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            {!supportsParallel && parallelDeclaration?.supported === true && (
+              <p className="text-[10px] text-muted-foreground">
+                {t(
+                  "O modo simultâneo exige sessão contínua com correlação incremental compatível.",
+                )}
+              </p>
+            )}
+            {supportsParallel && (
+              <p className="text-[10px] text-muted-foreground">
+                {t(
+                  "O modo simultâneo só inicia quando a coleção estiver materializada em itens independentes pelo núcleo.",
+                )}
+              </p>
+            )}
+          </div>
+
+          {(revokedProfileIds.length > 0 ||
+            unpreparedProfiles.length > 0 ||
+            occupiedProfiles.length > 0) && (
+            <div className="space-y-1 rounded-md border border-border/70 bg-muted/30 p-2.5 text-[10px] text-muted-foreground">
+              {revokedProfileIds.length > 0 && (
+                <p>
+                  {t(
+                    "Um perfil selecionado foi desvinculado deste plugin. Escolha outro perfil antes de executar.",
+                  )}
+                </p>
+              )}
+              {unpreparedProfiles.length > 0 && (
+                <p>
+                  {t(
+                    "Há perfil selecionado ainda não preparado para este plugin. Prepare-o na Central de Plugins antes de executar.",
+                  )}
+                </p>
+              )}
+              {occupiedProfiles.length > 0 && (
+                <p>
+                  {t(
+                    "Há perfil selecionado ocupado por outra execução. Ele ficará indisponível até o lease atual ser liberado.",
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+
           <Select
             value={primaryAlias}
-            onValueChange={(alias) =>
-              onChange({
-                ...configuration,
-                [profileSetup.configurationKey]: alias,
-                ...(profileSetup.fallbackConfigurationKey
-                  ? {
-                      [profileSetup.fallbackConfigurationKey]: fallbackAliases
-                        .filter((value) => value !== alias)
-                        .join("\n"),
-                    }
-                  : {}),
-              })
-            }
+            onValueChange={(alias) => {
+              const profile = profiles.find((candidate) => candidate.alias === alias);
+              if (!profile) return;
+              const rest = selectedProfileIds.filter((profileId) => profileId !== profile.id);
+              persistPolicy(selectedMode, [profile.id, ...rest], profileExecution?.maxParallel);
+            }}
           >
             <SelectTrigger>
               <SelectValue
@@ -2929,80 +3193,168 @@ function ManagedProfileSelector({
               {profiles.map((profile) => (
                 <SelectItem key={profile.id} value={profile.alias}>
                   {profile.name}
+                  {profile.readinessState !== "ready" ? ` · ${t("Não preparado")}` : ""}
+                  {profile.occupied ? ` · ${t("Ocupado")}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          {profileSetup.fallbackConfigurationKey && (
-            <div className="space-y-2">
-              <div>
-                <p className="text-[11px] font-medium">Perfis alternativos</p>
-                <p className="text-[10px] text-muted-foreground">
-                  Em caso de falha, serão tentados na ordem abaixo.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                {profiles
-                  .filter((profile) => profile.alias !== primaryAlias)
-                  .map((profile) => {
-                    const fallbackIndex = fallbackAliases.indexOf(profile.alias);
-                    const selected = fallbackIndex >= 0;
-                    return (
-                      <div
-                        key={profile.id}
-                        className="flex items-center gap-2 rounded-md border border-border/70 px-2.5 py-2"
-                      >
-                        <Checkbox
-                          id={`${plugin.id}-${profile.id}-fallback`}
-                          checked={selected}
-                          onCheckedChange={(checked) =>
-                            toggleFallback(profile.alias, checked === true)
-                          }
-                        />
-                        <Label
-                          htmlFor={`${plugin.id}-${profile.id}-fallback`}
-                          className="min-w-0 flex-1 cursor-pointer text-xs font-normal"
+          <div className="space-y-2">
+            <div>
+              <p className="text-[11px] font-medium">
+                {selectedMode === "parallel" ? t("Perfis simultâneos") : t("Perfis alternativos")}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {selectedMode === "parallel"
+                  ? t("Selecione e ordene os perfis que poderão receber itens desta execução.")
+                  : t("Em caso de falha, serão tentados na ordem abaixo.")}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              {profiles.map((profile) => {
+                const fallbackIndex = selectedProfileIds.indexOf(profile.id);
+                const selected = fallbackIndex >= 0;
+                const isPrimary = fallbackIndex === 0;
+                return (
+                  <div
+                    key={profile.id}
+                    className="flex items-center gap-2 rounded-md border border-border/70 px-2.5 py-2"
+                  >
+                    <Checkbox
+                      id={`${plugin.id}-${profile.id}-fallback`}
+                      checked={selected}
+                      disabled={isPrimary}
+                      onCheckedChange={(checked) =>
+                        toggleSelectedProfile(profile.id, checked === true)
+                      }
+                    />
+                    <Label
+                      htmlFor={`${plugin.id}-${profile.id}-fallback`}
+                      className="min-w-0 flex-1 cursor-pointer text-xs font-normal"
+                    >
+                      {selected && (
+                        <span className="mr-1.5 text-[10px] text-muted-foreground">
+                          {fallbackIndex + 1}.
+                        </span>
+                      )}
+                      {profile.name}
+                      {profile.readinessState !== "ready" && (
+                        <span className="ml-1.5 text-[10px] text-muted-foreground">
+                          · {t("Não preparado")}
+                        </span>
+                      )}
+                      {profile.occupied && (
+                        <span className="ml-1.5 text-[10px] text-muted-foreground">
+                          · {t("Ocupado")}
+                        </span>
+                      )}
+                    </Label>
+                    {selected && (
+                      <div className="flex gap-0.5">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-7"
+                          disabled={fallbackIndex === 0}
+                          aria-label={`${t("Subir")} ${profile.name}`}
+                          onClick={() => moveSelectedProfile(profile.id, -1)}
                         >
-                          {selected && (
-                            <span className="mr-1.5 text-[10px] text-muted-foreground">
-                              {fallbackIndex + 1}.
-                            </span>
-                          )}
-                          {profile.name}
-                        </Label>
-                        {selected && (
-                          <div className="flex gap-0.5">
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              className="size-7"
-                              disabled={fallbackIndex === 0}
-                              aria-label={`Subir ${profile.name}`}
-                              onClick={() => moveFallback(profile.alias, -1)}
-                            >
-                              <ChevronUp className="size-3.5" />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              className="size-7"
-                              disabled={fallbackIndex === fallbackAliases.length - 1}
-                              aria-label={`Descer ${profile.name}`}
-                              onClick={() => moveFallback(profile.alias, 1)}
-                            >
-                              <ChevronDown className="size-3.5" />
-                            </Button>
-                          </div>
-                        )}
+                          <ChevronUp className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-7"
+                          disabled={fallbackIndex === selectedProfileIds.length - 1}
+                          aria-label={`${t("Descer")} ${profile.name}`}
+                          onClick={() => moveSelectedProfile(profile.id, 1)}
+                        >
+                          <ChevronDown className="size-3.5" />
+                        </Button>
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedMode === "parallel" && supportsParallel && (
+            <div className="space-y-3 rounded-md border border-border/70 bg-background/50 p-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>{t("Máximo de workers")}</Label>
+                  <NumberInput
+                    integer
+                    min={1}
+                    max={Math.max(1, selectedProfileIds.length)}
+                    value={
+                      profileExecution?.mode === "parallel"
+                        ? (profileExecution.maxParallel ?? selectedProfileIds.length)
+                        : selectedProfileIds.length
+                    }
+                    onValueChange={(value) =>
+                      persistPolicy(
+                        "parallel",
+                        selectedProfileIds,
+                        value ?? selectedProfileIds.length,
+                      )
+                    }
+                  />
+                </div>
+                <div className="rounded-md bg-muted/50 p-2.5">
+                  <p className="text-[10px] text-muted-foreground">{t("Workers efetivos")}</p>
+                  <p className="text-sm font-semibold">{parallelLimit}</p>
+                </div>
               </div>
+              {distributedInput && (
+                <p className="text-[10px] text-muted-foreground">
+                  {t("Coleção distribuída")}:{" "}
+                  <span className="font-medium text-foreground">{distributedInput}</span>
+                  {aggregateOutput ? (
+                    <>
+                      {" "}
+                      · {t("Entrega agregada")}:{" "}
+                      <span className="font-medium text-foreground">{aggregateOutput}</span>
+                    </>
+                  ) : null}
+                </p>
+              )}
             </div>
           )}
+
+          <div
+            className="rounded-md border border-border/70 bg-muted/20 p-3 text-[10px]"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="font-medium text-foreground">{t("Resumo antes de salvar")}</p>
+            <p className="mt-1 text-muted-foreground">
+              {t("Modo")}:{" "}
+              {t(
+                selectedMode === "fallback"
+                  ? "Fallback ordenado"
+                  : "Executar perfis simultaneamente",
+              )}
+              {" · "}
+              {t("Perfis selecionados")}: {selectedProfileIds.length}
+              {selectedMode === "parallel" ? (
+                <>
+                  {" · "}
+                  {t("Workers efetivos")}: {parallelLimit}
+                </>
+              ) : null}
+            </p>
+            {selectedProfiles.length > 0 && (
+              <p className="mt-1 text-muted-foreground">
+                {t("Ordem dos perfis")}:{" "}
+                {selectedProfiles.map((profile) => profile.name).join(" → ")}
+              </p>
+            )}
+          </div>
         </>
       ) : (
         <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
@@ -3012,219 +3364,6 @@ function ManagedProfileSelector({
         </p>
       )}
     </section>
-  );
-}
-
-function PluginConfigurationField({
-  configurationOptionsProvider,
-  pluginId,
-  capabilityId,
-  connectionId,
-  configuration,
-  profileConfigurationKey,
-  propertyKey,
-  schema,
-  value,
-  options,
-  onChange,
-}: {
-  configurationOptionsProvider?: {
-    property: string;
-    providerId: string;
-    dependsOn?: string[];
-  };
-  pluginId?: string;
-  capabilityId?: string;
-  connectionId?: string;
-  configuration?: Record<string, unknown>;
-  profileConfigurationKey?: string;
-  propertyKey: string;
-  schema: JsonSchema;
-  value: string | number | boolean | undefined;
-  options?: Array<{ value: string; label: string }>;
-  onChange: (value: string | number | boolean) => void;
-}) {
-  const { t } = useAppPreferences();
-  const configurationRef = useRef(configuration);
-  configurationRef.current = configuration;
-  const optionsRequestIdRef = useRef(0);
-  const [dynamicOptions, setDynamicOptions] = useState<PluginConfigurationOption[] | undefined>();
-  const [optionsLoading, setOptionsLoading] = useState(false);
-  const [optionsError, setOptionsError] = useState(false);
-  const label =
-    propertyKey === "startMinimized" ? t("Iniciar minimizado") : (schema.title ?? propertyKey);
-  const dependencySignature = configurationOptionsProvider
-    ? pluginConfigurationDependencySignature(configuration, [
-        ...(configurationOptionsProvider.dependsOn ?? []),
-        ...(profileConfigurationKey ? [profileConfigurationKey] : []),
-      ])
-    : "";
-  const loadDynamicOptions = useCallback(
-    async (refresh = false) => {
-      if (!configurationOptionsProvider || !pluginId || !capabilityId) return;
-      const requestId = ++optionsRequestIdRef.current;
-      setOptionsLoading(true);
-      setOptionsError(false);
-      try {
-        const response = await fetch(
-          `/api/plugins/${encodeURIComponent(pluginId)}/capabilities/${encodeURIComponent(capabilityId)}/configuration-options/${encodeURIComponent(propertyKey)}`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              configuration: toPluginConfigurationRequest(configurationRef.current),
-              ...(connectionId ? { connectionId } : {}),
-              ...(refresh ? { refresh: true } : {}),
-            }),
-          },
-        );
-        if (!response.ok)
-          throw new Error(`configuration options request failed: ${response.status}`);
-        const payload = (await response.json()) as { options?: PluginConfigurationOption[] };
-        if (requestId === optionsRequestIdRef.current) {
-          setDynamicOptions(Array.isArray(payload.options) ? payload.options : []);
-        }
-      } catch {
-        if (requestId === optionsRequestIdRef.current) setOptionsError(true);
-      } finally {
-        if (requestId === optionsRequestIdRef.current) setOptionsLoading(false);
-      }
-    },
-    [capabilityId, configurationOptionsProvider, connectionId, pluginId, propertyKey],
-  );
-
-  useEffect(() => {
-    if (!configurationOptionsProvider) {
-      optionsRequestIdRef.current += 1;
-      setDynamicOptions(undefined);
-      setOptionsError(false);
-      setOptionsLoading(false);
-      return;
-    }
-    void loadDynamicOptions();
-  }, [configurationOptionsProvider, dependencySignature, loadDynamicOptions]);
-
-  const staticChoices: PluginConfigurationOption[] = options
-    ? options.map((option) => ({ ...option }))
-    : (schema.oneOf ?? []).flatMap((option) =>
-        typeof option.const === "string" ||
-        typeof option.const === "number" ||
-        typeof option.const === "boolean"
-          ? [{ value: option.const, label: option.title ?? String(option.const) }]
-          : [],
-      );
-  if (!staticChoices.length && schema.enum?.length) {
-    staticChoices.push(...schema.enum.map((option) => ({ value: option, label: String(option) })));
-  }
-  const choices = dynamicOptions ?? staticChoices;
-  const renderedChoices = withSavedPluginConfigurationOption(
-    choices,
-    value,
-    t("Opção salva indisponível"),
-  );
-
-  if (!configurationOptionsProvider && !options && schema.type === "boolean") {
-    return (
-      <label className="flex items-center gap-2 text-xs">
-        <Checkbox
-          checked={Boolean(value)}
-          onCheckedChange={(checked) => onChange(checked === true)}
-        />
-        {label}
-      </label>
-    );
-  }
-  if (renderedChoices.length || configurationOptionsProvider) {
-    const selectedValue = value === undefined ? "" : encodePluginConfigurationOptionValue(value);
-    return (
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <Label>{label}</Label>
-          {configurationOptionsProvider && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              disabled={optionsLoading}
-              onClick={() => void loadDynamicOptions(true)}
-            >
-              {t("Atualizar opções")}
-            </Button>
-          )}
-        </div>
-        <Select
-          value={selectedValue}
-          onValueChange={(encodedValue) => {
-            const option = findPluginConfigurationOption(renderedChoices, encodedValue);
-            if (option) onChange(option.value);
-          }}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder={t("Selecione uma opção")} />
-          </SelectTrigger>
-          <SelectContent>
-            {renderedChoices.map((option) => (
-              <SelectItem
-                key={encodePluginConfigurationOptionValue(option.value)}
-                value={encodePluginConfigurationOptionValue(option.value)}
-                disabled={option.disabled}
-              >
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {optionsLoading && (
-          <p className="text-[11px] text-muted-foreground">{t("Carregando opções…")}</p>
-        )}
-        {!optionsLoading && dynamicOptions?.length === 0 && (
-          <p className="text-[11px] text-muted-foreground">{t("Nenhuma opção disponível.")}</p>
-        )}
-        {optionsError && (
-          <p className="text-[11px] text-destructive">
-            {t("Não foi possível carregar as opções.")}
-          </p>
-        )}
-        {schema.description && (
-          <p className="text-[11px] text-muted-foreground">{schema.description}</p>
-        )}
-      </div>
-    );
-  }
-  if (schema.format === "textarea") {
-    return (
-      <div className="space-y-1.5">
-        <Label>{label}</Label>
-        <Textarea
-          value={String(value ?? "")}
-          rows={4}
-          onChange={(event) => onChange(event.target.value)}
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      {schema.type === "number" || schema.type === "integer" ? (
-        <NumberInput
-          value={typeof value === "number" ? value : null}
-          integer={schema.type === "integer"}
-          min={schema.minimum}
-          max={schema.maximum}
-          step={schema.type === "number" ? "0.1" : undefined}
-          onValueChange={(nextValue) => {
-            if (nextValue !== null) onChange(nextValue);
-          }}
-        />
-      ) : (
-        <Input value={String(value ?? "")} onChange={(event) => onChange(event.target.value)} />
-      )}
-      {schema.description && (
-        <p className="text-[11px] text-muted-foreground">{schema.description}</p>
-      )}
-    </div>
   );
 }
 

@@ -18,7 +18,15 @@ O padrão correto é pesquisa em lista, seguida de validação singular:
         "type": "BUSCAR",
         "operator": "IA",
         "instructions": "Pesquise candidatos e retorne uma lista com tema, ângulo e fonte.",
-        "outputs": [{"id":"candidates","label":"Candidatos","key":"candidates","type":"list","required":true}],
+        "outputs": [
+          {
+            "id": "candidates",
+            "label": "Candidatos",
+            "key": "candidates",
+            "type": "list",
+            "required": true
+          }
+        ],
         "parameters": [],
         "order": 0
       },
@@ -27,8 +35,24 @@ O padrão correto é pesquisa em lista, seguida de validação singular:
         "type": "VALIDAR",
         "operator": "Humano",
         "instructions": "Selecione um candidato para o vídeo atual.",
-        "outputs": [{"id":"selected","label":"Tema escolhido","key":"selected_value","type":"text","required":true,"optionsSourceBlockId":"theme-search","optionsSourceKey":"candidates"}],
-        "validation":{"targetBlockId":"theme-search","targetOutputKey":"candidates","mode":"select_one","onReject":"retry_target","maxAttempts":2},
+        "outputs": [
+          {
+            "id": "selected",
+            "label": "Tema escolhido",
+            "key": "selected_value",
+            "type": "text",
+            "required": true,
+            "optionsSourceBlockId": "theme-search",
+            "optionsSourceKey": "candidates"
+          }
+        ],
+        "validation": {
+          "targetBlockId": "theme-search",
+          "targetOutputKey": "candidates",
+          "mode": "select_one",
+          "onReject": "retry_target",
+          "maxAttempts": 2
+        },
         "parameters": [],
         "order": 1
       }
@@ -55,7 +79,16 @@ Um bloco que produz `records` com `scene_id`, `voiceover`, `visual_description` 
 
 ```json
 {
-  "inputs": [{"id":"input-assets","label":"Asset","type":"file","source":"previous_block","blockId":"asset-search","sourceKey":"assets"}]
+  "inputs": [
+    {
+      "id": "input-assets",
+      "label": "Asset",
+      "type": "file",
+      "source": "previous_block",
+      "blockId": "asset-search",
+      "sourceKey": "assets"
+    }
+  ]
 }
 ```
 

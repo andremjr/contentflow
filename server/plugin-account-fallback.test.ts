@@ -65,9 +65,8 @@ for (const code of [
   "PERMISSION_DENIED",
   "QUOTA_EXCEEDED",
   "OUTPUT_VALIDATION_FAILED",
-  "UNEXPECTED_ERROR",
 ]) {
-  test(`avança perfil em qualquer erro ${code}`, () => {
+  test(`avança perfil em erro seguro associado ao perfil ${code}`, () => {
     assert.equal(
       canAdvanceProfileFallback(jobWithFallback(), {
         status: "error",
@@ -79,6 +78,18 @@ for (const code of [
     );
   });
 }
+
+test("não troca de identidade por erro desconhecido sem fatos de segurança", () => {
+  assert.equal(
+    canAdvanceProfileFallback(jobWithFallback(), {
+      status: "error",
+      code: "UNEXPECTED_ERROR",
+      message: "Falha desconhecida.",
+      retryable: true,
+    }),
+    false,
+  );
+});
 
 test("não avança perfil em cancelamento explícito CANCELLED", () => {
   assert.equal(

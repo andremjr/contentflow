@@ -1,11 +1,6 @@
 import type { PluginExecutionResponse, PluginManifest } from "../src/lib/plugin-contract";
 import type { PersistentPluginJob } from "./plugin-job-store";
-
-export const AUTOMATIC_PROFILE_FALLBACK_CODES = new Set([
-  "UPSTREAM_UNAVAILABLE",
-  "TIMEOUT",
-  "JOB_FAILED",
-]);
+import { decideExecutionRecovery } from "./execution-recovery-policy";
 
 const PROFILE_ALIAS = /^[A-Za-z0-9][A-Za-z0-9_.\s-]{0,63}$/;
 
@@ -36,8 +31,5 @@ export function canAdvanceProfileFallback(
     | Extract<PluginExecutionResponse, { status: "error" }>
     | { code?: string; message?: string; status?: string; retryable?: boolean },
 ) {
-  const fallback = job.profileFallback;
-  if (!fallback) return false;
-  if (response.code === "CANCELLED" || job.cancelRequested) return false;
-  return fallback.activeIndex + 1 < fallback.candidates.length;
+  return decideExecutionRecovery({ job, failure: response }).action === "switch_profile";
 }

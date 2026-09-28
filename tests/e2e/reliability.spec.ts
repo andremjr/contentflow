@@ -907,14 +907,15 @@ test("expõe e persiste o contrato ambíguo do plugin no editor do Método", asy
   await page.goto(`/channel/${channel.id}/methods?process=script`);
   await page.getByRole("button", { name: /01 Criar Roteiro em sequência/ }).click();
   await expect(page.getByText("Requer ajustes", { exact: true })).toBeVisible();
-  await page.getByText("Plugin executor", { exact: true }).click();
+  const pluginTrigger = page.getByRole("button").filter({ hasText: "Plugin executor" });
+  await pluginTrigger.click();
   await expect(page.getByText("Parâmetros do prompt (0)", { exact: true })).toBeVisible();
   await page.getByText("Dados usados pelo plugin", { exact: true }).click();
 
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox").nth(2).click();
+  const dialog = page.getByRole("dialog", { name: "Configurar plugin executor" });
+  await dialog.getByRole("combobox").nth(1).click();
   await page.getByRole("option", { name: "Outline / estrutura", exact: true }).click();
-  await dialog.getByRole("combobox").nth(3).click();
+  await dialog.getByRole("combobox").nth(2).click();
   await page.getByRole("option", { name: "Quantidade de blocos", exact: true }).click();
 
   await expect(page.getByText("Pronto para executar", { exact: true })).toBeVisible();
@@ -925,6 +926,9 @@ test("expõe e persiste o contrato ambíguo do plugin no editor do Método", asy
       return saved?.inputs?.map((input) => input.portKey);
     })
     .toEqual(["outline", "sections"]);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(pluginTrigger).toBeFocused();
 });
 
 test("lista o plugin do processo antes de o contrato do bloco estar compatível", async ({
@@ -968,11 +972,9 @@ test("lista o plugin do processo antes de o contrato do bloco estar compatível"
 
   await page.goto(`/channel/${channel.id}/methods?process=script`);
   await page.getByRole("button", { name: /01 Criar Imagem ainda sem contrato/ }).click();
-  const pluginDetails = page.locator("details").filter({ hasText: "Plugin executor" });
-  await pluginDetails.evaluate((element: HTMLDetailsElement) => {
-    element.open = true;
-  });
-  await pluginDetails.getByRole("combobox").click();
+  await page.getByText("Plugin executor", { exact: true }).click();
+  const pluginDialog = page.getByRole("dialog", { name: "Configurar plugin executor" });
+  await pluginDialog.getByRole("combobox").click();
   await expect(
     page.getByRole("option", { name: "Plugin de Contrato E2E · Resultado", exact: true }),
   ).toBeVisible();
@@ -1096,9 +1098,10 @@ test("centraliza perfis no plugin e deixa o Método apenas selecionar perfis exi
   await expect(profileSection).toBeVisible();
   await expect(profileSection.getByRole("textbox")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Preparar perfil" })).toHaveCount(0);
-  await profileSection.getByRole("combobox").click();
-  await page.getByRole("option", { name: "Perfil novo com acento", exact: true }).click();
-  await profileSection.getByLabel("principal-legado", { exact: true }).check();
+  await profileSection.getByRole("combobox").last().click();
+  await page.getByRole("option", { name: /^Perfil novo com acento/ }).click();
+  await profileSection.getByRole("checkbox", { name: /principal-legado/ }).check();
+  await page.getByRole("button", { name: "Aplicar", exact: true }).click();
 
   await expect
     .poll(async () => {
@@ -1108,7 +1111,7 @@ test("centraliza perfis no plugin e deixa o Método apenas selecionar perfis exi
     })
     .toEqual({
       accountProfile: "Perfil-novo-com-acento",
-      fallbackAccountProfiles: "reserva-legado\nprincipal-legado",
+      fallbackAccountProfiles: "principal-legado\nreserva-legado",
     });
 });
 

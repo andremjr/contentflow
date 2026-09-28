@@ -4,7 +4,9 @@ import {
   invalidateBlockDeliveries,
   normalizeExecutionDeliveries,
   recordBlockDeliveries,
+  recordProcessOutputDelivery,
 } from "../src/lib/deliveries";
+import { deriveProcessOutput } from "../src/lib/process-output";
 import type { ActionBlock, ProcessExecution, Project } from "../src/lib/domain";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { projectThumbnail } from "../src/lib/project-thumbnail";
@@ -83,6 +85,44 @@ test("materializa uma entrega e um ID universal por item", () => {
   assert.deepEqual(
     normalized.deliveries?.[0].items.map((item) => item.id),
     execution.deliveries?.[0].items.map((item) => item.id),
+  );
+});
+
+test("promove a entrega existente quando ela já é o resultado oficial do processo", () => {
+  const block: ActionBlock = {
+    id: "create-script",
+    type: "CRIAR",
+    operator: "IA",
+    name: "Criar roteiro",
+    inputs: [],
+    outputs: [
+      { id: "script-output", label: "Roteiro", key: "script", type: "textarea", required: true },
+    ],
+    parameters: [],
+    order: 0,
+  };
+  const execution = executionFor("script", block);
+  execution.blocks[0].values = { script: "Roteiro final" };
+  recordBlockDeliveries(execution, block, execution.blocks[0].values, "completed");
+  execution.output = deriveProcessOutput(execution);
+  assert.ok(execution.output);
+
+  const [promoted] = recordProcessOutputDelivery(
+    execution,
+    execution.output.values,
+    execution.output.createdAt,
+  );
+
+  assert.equal(promoted.id, execution.deliveries?.[0].id);
+  assert.equal(
+    execution.deliveries?.filter((delivery) => delivery.status !== "invalidated").length,
+    1,
+  );
+  assert.equal(
+    execution.deliveries?.some(
+      (delivery) => delivery.blockId === "__process_output__" && delivery.status === "completed",
+    ),
+    false,
   );
 });
 

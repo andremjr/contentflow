@@ -7,6 +7,7 @@ import type {
 } from "../src/lib/domain";
 import type { PluginFieldContract, PluginIncrementalItemUpdate } from "../src/lib/plugin-contract";
 import type { PersistentPluginJob } from "./plugin-job-store";
+import { workUnitAttemptIdFor } from "../src/lib/work-units";
 
 const MANY_TYPES = new Set<HumanFieldType>(["list", "multiselect", "records", "files"]);
 const TERMINAL_STATUSES = new Set<BlockExecutionItemStatus>(["completed", "failed", "cancelled"]);
@@ -73,7 +74,9 @@ export function applyPluginIncrementalItemUpdates(input: {
         : undefined;
     if (!existing) {
       const itemInput = structuredClone(update.input ?? null);
+      const itemId = `item:${createId()}`;
       const attempt = {
+        id: workUnitAttemptIdFor(itemId, input.job.attempt),
         attempt: input.job.attempt,
         status,
         input: itemInput,
@@ -83,7 +86,10 @@ export function applyPluginIncrementalItemUpdates(input: {
         ...(TERMINAL_STATUSES.has(status) ? { completedAt: now } : {}),
       };
       items.push({
-        id: `item:${createId()}`,
+        id: itemId,
+        kind: "derived",
+        ...(batchItemId ? { parentItemId: batchItemId } : {}),
+        provenance: { origin: "plugin_derived" },
         pluginCorrelation: {
           key: update.key,
           ...(batchItemId ? { batchItemId } : {}),
@@ -115,6 +121,7 @@ export function applyPluginIncrementalItemUpdates(input: {
     );
     if (!attempts.some((attempt) => attempt.attempt === input.job.attempt)) {
       attempts.push({
+        id: workUnitAttemptIdFor(existing.id, input.job.attempt),
         attempt: input.job.attempt,
         status,
         input: structuredClone(update.input ?? existing.input),

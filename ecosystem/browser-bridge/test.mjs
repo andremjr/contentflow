@@ -8,14 +8,24 @@ export async function testExtensionBridge(source) {
   let focusedText = "";
   let currentTabUrl = "https://flow.google.com/project/project-1";
   let failNextMousePress = false;
+  let conditionObserverResult = {
+    ok: true,
+    matched: true,
+    state: "visible",
+    selectorIndex: 0,
+  };
+  let conditionObserverResolve;
   let attachGate;
+  let mousePressGate;
   let runtimeListener;
   let runtimePortListener;
   let alarmListener;
   let tabRemovedListener;
   let tabUpdatedListener;
+  let debuggerDetachListener;
   const powerCalls = [];
   const tabUpdates = [];
+  const tabReloads = [];
   const chrome = {
     runtime: {
       getManifest: () => ({ version: "2.0.0" }),
@@ -52,7 +62,11 @@ export async function testExtensionBridge(source) {
       },
       async get(tabId) {
         assert.equal(tabId, 7);
-        return { id: 7, windowId: 70 };
+        return { id: 7, windowId: 70, url: currentTabUrl, status: "complete" };
+      },
+      async reload(tabId, reloadProperties) {
+        assert.equal(tabId, 7);
+        tabReloads.push({ tabId, reloadProperties: structuredClone(reloadProperties) });
       },
       async update(tabId, updateInfo) {
         tabUpdates.push({ tabId, updateInfo: structuredClone(updateInfo) });
@@ -95,6 +109,11 @@ export async function testExtensionBridge(source) {
       },
     },
     debugger: {
+      onDetach: {
+        addListener(listener) {
+          debuggerDetachListener = listener;
+        },
+      },
       async attach(target, version) {
         debuggerCalls.push({ operation: "attach", target: structuredClone(target), version });
         if (attachGate) await attachGate;
@@ -110,6 +129,30 @@ export async function testExtensionBridge(source) {
           params: structuredClone(params),
         });
         if (method === "Runtime.evaluate") {
+          if (
+            params.expression.includes("__contentFlowConditionObserversV1?.get") &&
+            !params.expression.includes("function observePageCondition")
+          ) {
+            conditionObserverResolve?.({
+              ok: false,
+              code: "CANCELLED",
+              message: "Observação cancelada.",
+            });
+            conditionObserverResolve = undefined;
+            return { result: { value: true } };
+          }
+          if (params.expression.includes("function observePageCondition")) {
+            if (conditionObserverResult === "pending") {
+              return {
+                result: {
+                  value: await new Promise((resolve) => {
+                    conditionObserverResolve = resolve;
+                  }),
+                },
+              };
+            }
+            return { result: { value: structuredClone(conditionObserverResult) } };
+          }
           if (params.expression.includes("function resolveFileInput")) {
             return { result: { objectId: "file-input-object" } };
           }
@@ -161,6 +204,13 @@ export async function testExtensionBridge(source) {
           failNextMousePress = false;
           throw new Error("CDP input unavailable");
         }
+        if (
+          method === "Input.dispatchMouseEvent" &&
+          params.type === "mousePressed" &&
+          mousePressGate
+        ) {
+          await mousePressGate;
+        }
         if (method === "Input.insertText") focusedText = params.text;
         if (method === "Input.dispatchKeyEvent" && params.key === "Backspace") focusedText = "";
         return {};
@@ -188,11 +238,22 @@ export async function testExtensionBridge(source) {
   assert.ok(bridge);
   assert.equal(bridge.identity.bridgeId, "com.contentflow.browser-bridge");
   assert.equal(bridge.identity.protocolVersion, 2);
+  assert.equal(bridge.identity.protocol.min, 2);
+  assert.equal(bridge.identity.protocol.max, 2);
+  assert.equal(bridge.identity.bridgeVersion, "2.0.0");
+  assert.deepEqual(Array.from(bridge.identity.capabilities), [
+    "idempotent-replay.v1",
+    "lifecycle-events.v1",
+    "snapshot.v1",
+    "condition-observer.v1",
+    "reload.v1",
+  ]);
   assert.equal(typeof runtimeListener, "function");
   assert.equal(typeof runtimePortListener, "function");
   assert.equal(typeof alarmListener, "function");
   assert.equal(typeof tabRemovedListener, "function");
   assert.equal(typeof tabUpdatedListener, "function");
+  assert.equal(typeof debuggerDetachListener, "function");
 
   const handshake = {
     pluginId: "local.contentflow.google-flow-batch-images",
@@ -200,12 +261,51 @@ export async function testExtensionBridge(source) {
     profileId: "conta-principal",
     sessionToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   };
-  assert.equal(bridge.connect(handshake).ok, true);
+  assert.equal((await bridge.connect(handshake)).ok, true);
+  const negotiated = await bridge.connect({
+    ...handshake,
+    protocol: { min: 1, max: 2 },
+    requestedCapabilities: ["idempotent-replay.v1"],
+    sessionToken: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  });
+  assert.equal(negotiated.ok, true);
+  assert.equal(negotiated.protocolVersion, 2);
+  assert.deepEqual(Array.from(negotiated.capabilities), [
+    "idempotent-replay.v1",
+    "lifecycle-events.v1",
+    "snapshot.v1",
+    "condition-observer.v1",
+    "reload.v1",
+  ]);
+  assert.equal(negotiated.bridgeVersion, "2.0.0");
   assert.equal(
-    bridge.connect({
-      ...handshake,
-      sessionToken: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    }).ok,
+    (
+      await bridge.connect({
+        ...handshake,
+        protocol: { min: 3, max: 4 },
+        sessionToken: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      })
+    ).code,
+    "PROTOCOL_MISMATCH",
+  );
+  assert.equal(
+    (
+      await bridge.connect({
+        ...handshake,
+        protocol: { min: 2, max: 2 },
+        requestedCapabilities: ["missing-capability.v1"],
+        sessionToken: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      })
+    ).code,
+    "CAPABILITY_MISMATCH",
+  );
+  assert.equal(
+    (
+      await bridge.connect({
+        ...handshake,
+        sessionToken: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      })
+    ).ok,
     true,
   );
 
@@ -227,14 +327,156 @@ export async function testExtensionBridge(source) {
     };
   };
 
+  const observed = await bridge.dispatch(
+    command(2, {
+      executionKey: "execution-key-condition-observer",
+      action: "observeCondition",
+      payload: {
+        selectors: ["[data-testid='ready']"],
+        state: "visible",
+        timeoutMs: 5000,
+        debounceMs: 100,
+      },
+    }),
+  );
+  assert.deepEqual(observed, {
+    ok: true,
+    matched: true,
+    state: "visible",
+    selectorIndex: 0,
+  });
+  const observerEvents = await bridge.events({ ...handshake, afterSequence: 0 });
+  const reached = observerEvents.events.find((event) => event.type === "condition_reached");
+  assert.equal(reached?.state, "visible");
+  assert.equal(
+    JSON.stringify(reached).includes("data-testid"),
+    false,
+    "evento de condição não deve carregar selector ou conteúdo da página",
+  );
+
+  const reloadCommand = command(20, {
+    executionKey: "execution-key-controlled-reload",
+    action: "reload",
+    payload: { reconciliationState: "safe", bypassCache: true },
+  });
+  const reloaded = await bridge.dispatch(reloadCommand);
+  assert.equal(reloaded.ok, true);
+  assert.equal(reloaded.reconciliationState, "safe");
+  assert.equal(reloaded.location.origin, "https://flow.google.com");
+  assert.equal(reloaded.location.pathname, "/project/project-1");
+  assert.equal(tabReloads.length, 1);
+  assert.equal(tabReloads[0].reloadProperties.bypassCache, true);
+  const replayedReload = await bridge.dispatch(reloadCommand);
+  assert.equal(replayedReload.replayed, true);
+  assert.equal(tabReloads.length, 1, "replay não pode disparar uma segunda recarga");
+  const blockedReload = await bridge.dispatch(
+    command(21, {
+      executionKey: "execution-key-uncertain-reload",
+      action: "reload",
+      payload: { reconciliationState: "uncertain" },
+    }),
+  );
+  assert.equal(blockedReload.code, "RELOAD_BLOCKED_UNCERTAIN_EFFECT");
+  assert.equal(tabReloads.length, 1, "efeito incerto deve bloquear recarga");
+  const reloadEvents = await bridge.events({ ...handshake, afterSequence: 0 });
+  const controlledReloadEvent = reloadEvents.events.find(
+    (event) => event.type === "reload" && event.controlled === true,
+  );
+  assert.equal(controlledReloadEvent.commandId, reloadCommand.commandId);
+  assert.equal(controlledReloadEvent.diagnosticCode, "BRIDGE_CONTROLLED_RELOAD");
+  assert.equal(JSON.stringify(controlledReloadEvent).includes("prompt"), false);
+  assert.equal(
+    (
+      await bridge.dispatch(
+        command(3, {
+          executionKey: "execution-key-condition-invalid",
+          action: "observeCondition",
+          payload: {
+            selectors: ["x".repeat(300)],
+            state: "visible",
+            timeoutMs: 5000,
+            debounceMs: 100,
+          },
+        }),
+      )
+    ).code,
+    "INVALID_COMMAND",
+  );
+
+  conditionObserverResult = "pending";
+  const cancelledObservation = bridge.dispatch(
+    command(4, {
+      executionKey: "execution-key-condition-cancel",
+      action: "observeCondition",
+      payload: {
+        selectors: ["#long-running-condition"],
+        state: "visible",
+        timeoutMs: 5000,
+        debounceMs: 100,
+      },
+    }),
+  );
+  while (!conditionObserverResolve) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.equal(
+    (
+      await bridge.cancel({
+        ...handshake,
+        executionKey: "execution-key-condition-cancel",
+      })
+    ).ok,
+    true,
+  );
+  assert.equal((await cancelledObservation).code, "CANCELLED");
+  const cancelledEvents = await bridge.events({ ...handshake, afterSequence: 0 });
+  assert.ok(cancelledEvents.events.some((event) => event.type === "session_cancelled"));
+
+  const disconnectToken = "abababab-abab-4bab-8bab-abababababab";
+  const disconnectHandshake = { ...handshake, sessionToken: disconnectToken };
+  assert.equal((await bridge.connect(disconnectHandshake)).ok, true);
+  const disconnectedObservation = bridge.dispatch(
+    command(5, {
+      sessionToken: disconnectToken,
+      executionKey: "execution-key-condition-disconnect",
+      action: "observeCondition",
+      payload: {
+        selectors: ["#disconnect-condition"],
+        state: "visible",
+        timeoutMs: 5000,
+        debounceMs: 100,
+      },
+    }),
+  );
+  while (!conditionObserverResolve) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.equal((await bridge.disconnect(disconnectHandshake)).ok, true);
+  assert.equal((await disconnectedObservation).code, "CANCELLED");
+  conditionObserverResult = {
+    ok: true,
+    matched: true,
+    state: "visible",
+    selectorIndex: 0,
+  };
+
+  const attachCountBeforeVolume = debuggerCalls.filter(
+    (entry) => entry.operation === "attach",
+  ).length;
+  const detachCountBeforeVolume = debuggerCalls.filter(
+    (entry) => entry.operation === "detach",
+  ).length;
   const first = command(1);
   assert.equal((await bridge.dispatch(first)).ok, true);
+  const attachCountAfterFirst = debuggerCalls.filter(
+    (entry) => entry.operation === "attach",
+  ).length;
   const replay = await bridge.dispatch(first);
   assert.equal(replay.ok, true);
   assert.equal(replay.replayed, true);
   assert.equal(
     debuggerCalls.filter((entry) => entry.operation === "attach").length,
-    1,
+    attachCountAfterFirst,
     "comando repetido não pode repetir o efeito na página",
   );
   assert.ok(
@@ -275,12 +517,12 @@ export async function testExtensionBridge(source) {
   assert.equal(Object.keys(storage.contentflowCommandCacheV2).length, 301);
   assert.equal(
     debuggerCalls.filter((entry) => entry.operation === "attach").length,
-    1,
+    attachCountBeforeVolume + 1,
     "o depurador do Flow deve permanecer anexado durante o job inteiro",
   );
   assert.equal(
     debuggerCalls.filter((entry) => entry.operation === "detach").length,
-    0,
+    detachCountBeforeVolume,
     "o depurador do Flow não deve ser removido entre ações do mesmo job",
   );
   assert.ok(
@@ -331,7 +573,7 @@ export async function testExtensionBridge(source) {
     ).ok,
     true,
   );
-  assert.equal(bridge.connect(handshake).ok, true);
+  assert.equal((await bridge.connect(handshake)).ok, true);
   let releaseAttach;
   attachGate = new Promise((resolve) => {
     releaseAttach = resolve;
@@ -384,7 +626,7 @@ export async function testExtensionBridge(source) {
   assert.equal(disconnected.ok, true);
   assert.equal(
     debuggerCalls.filter((entry) => entry.operation === "detach").length,
-    2,
+    detachCountBeforeVolume + 2,
     "o depurador do Flow deve ser removido somente no encerramento do job",
   );
   assert.equal((await bridge.dispatch(command(302))).code, "SESSION_MISMATCH");
@@ -398,21 +640,24 @@ export async function testExtensionBridge(source) {
     ["local.contentflow.mai-playground-browser", "https://playground.microsoft.ai/chat"],
     ["local.contentflow.vibes-browser-studio", "https://vibes.ai/projects/project-1"],
   ]) {
-    const result = bridge.connect({ ...handshake, pluginId: provider[0] });
+    const result = await bridge.connect({ ...handshake, pluginId: provider[0] });
     assert.equal(result.ok, true, `${provider[0]} deve estar na allowlist da ponte v2`);
   }
 
   currentTabUrl = "https://chatgpt.com/";
   const chatGptSessionToken = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
   assert.equal(
-    bridge.connect({
-      ...handshake,
-      pluginId: "local.contentflow.chatgpt-browser-studio",
-      sessionToken: chatGptSessionToken,
-    }).ok,
+    (
+      await bridge.connect({
+        ...handshake,
+        pluginId: "local.contentflow.chatgpt-browser-studio",
+        sessionToken: chatGptSessionToken,
+      })
+    ).ok,
     true,
   );
   const debuggerAttachCount = debuggerCalls.filter((entry) => entry.operation === "attach").length;
+  const debuggerDetachCount = debuggerCalls.filter((entry) => entry.operation === "detach").length;
   const chatGptCommand = (ordinal, action) => ({
     ...command(400 + ordinal),
     pluginId: "local.contentflow.chatgpt-browser-studio",
@@ -471,7 +716,7 @@ export async function testExtensionBridge(source) {
   );
   assert.equal(
     debuggerCalls.filter((entry) => entry.operation === "detach").length,
-    2,
+    debuggerDetachCount,
     "o ChatGPT não deve remover o depurador entre preencher e enviar",
   );
   assert.equal(
@@ -487,7 +732,7 @@ export async function testExtensionBridge(source) {
   );
   assert.equal(
     debuggerCalls.filter((entry) => entry.operation === "detach").length,
-    3,
+    debuggerDetachCount + 1,
     "o depurador do ChatGPT deve ser removido ao encerrar a sessão",
   );
   currentTabUrl = "https://flow.google.com/project/project-1";
@@ -499,7 +744,7 @@ export async function testExtensionBridge(source) {
     pluginId: "local.contentflow.vibes-browser-studio",
     sessionToken: vibesToken,
   };
-  assert.equal(bridge.connect(vibesHandshake).ok, true);
+  assert.equal((await bridge.connect(vibesHandshake)).ok, true);
   const vibesCommand = (ordinal, action, payload = {}) => ({
     ...command(500 + ordinal),
     ...vibesHandshake,
@@ -565,6 +810,11 @@ export async function testExtensionBridge(source) {
   alarmListener({ name: "contentflow-lease-cleanup" });
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(Object.keys(storage.contentflowLeasesV1).length, 0);
+  const leaseEvents = await bridge.events({
+    ...vibesHandshake,
+    afterSequence: 0,
+  });
+  assert.ok(leaseEvents.events.some((event) => event.type === "lease_expired"));
   assert.deepEqual(tabUpdates.at(-1), { tabId: 7, updateInfo: { autoDiscardable: true } });
   assert.equal(powerCalls.at(-1).operation, "release");
 
@@ -592,15 +842,69 @@ export async function testExtensionBridge(source) {
   );
   currentTabUrl = "https://flow.google.com/project/project-1";
 
+  const lifecycleConnect = await bridge.connect(handshake);
+  assert.ok(lifecycleConnect.lastSequence > 0);
+  const lifecycleCommand = command(900, {
+    executionKey: "execution-key-lifecycle-events",
+  });
+  assert.equal((await bridge.dispatch(lifecycleCommand)).ok, true);
+  const initialSnapshot = await bridge.snapshot(handshake);
+  assert.equal(initialSnapshot.ok, true);
+  assert.equal(initialSnapshot.snapshot.state, "active");
+  assert.deepEqual(initialSnapshot.snapshot.location, {
+    origin: "https://flow.google.com",
+    pathname: "/project/project-1",
+  });
+
+  tabUpdatedListener(7, { status: "loading" });
+  tabUpdatedListener(7, { url: "https://flow.google.com/project/project-2?secret=never#fragment" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  debuggerDetachListener({ tabId: 7 }, "target_closed");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const lifecycleEvents = await bridge.events({ ...handshake, afterSequence: 0 });
+  assert.equal(lifecycleEvents.ok, true);
+  assert.ok(lifecycleEvents.events.some((event) => event.type === "worker_reconnected"));
+  assert.ok(lifecycleEvents.events.some((event) => event.type === "reload"));
+  assert.ok(
+    lifecycleEvents.events.some(
+      (event) =>
+        event.type === "worker_reconnected" && event.diagnosticCode === "BRIDGE_WORKER_RESTART",
+    ),
+  );
+  assert.ok(lifecycleEvents.events.some((event) => event.type === "navigation"));
+  assert.ok(lifecycleEvents.events.some((event) => event.type === "debugger_lost"));
+  assert.ok(
+    !JSON.stringify(lifecycleEvents.events).includes("secret=never"),
+    "eventos não podem carregar query, hash ou conteúdo privado da página",
+  );
+  assert.ok(lifecycleEvents.lastSequence >= lifecycleConnect.lastSequence);
+
+  assert.equal(
+    (await bridge.dispatch(command(901, { executionKey: "execution-key-tab-close" }))).ok,
+    true,
+  );
+  tabRemovedListener(7);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const afterClose = await bridge.events({
+    ...handshake,
+    afterSequence: lifecycleEvents.lastSequence,
+  });
+  assert.ok(afterClose.events.some((event) => event.type === "tab_closed"));
+  const closedSnapshot = await bridge.snapshot(handshake);
+  assert.equal(closedSnapshot.snapshot.state, "tab_closed");
+  assert.equal(closedSnapshot.snapshot.debuggerAttached, false);
+
   const anchorToken = "ffffffff-ffff-4fff-8fff-ffffffffffff";
-  assert.equal(bridge.connect({ ...handshake, sessionToken: anchorToken }).ok, true);
+  assert.equal((await bridge.connect({ ...handshake, sessionToken: anchorToken })).ok, true);
   for (let index = 0; index < 128; index += 1) {
     const suffix = String(index).padStart(12, "0");
     assert.equal(
-      bridge.connect({
-        ...handshake,
-        sessionToken: `00000000-0000-4000-8000-${suffix}`,
-      }).ok,
+      (
+        await bridge.connect({
+          ...handshake,
+          sessionToken: `00000000-0000-4000-8000-${suffix}`,
+        })
+      ).ok,
       true,
     );
   }
@@ -615,5 +919,116 @@ export async function testExtensionBridge(source) {
     ).code,
     "SESSION_MISMATCH",
     "a ponte precisa limitar sessões abandonadas sem crescer indefinidamente",
+  );
+
+  const reconnectToken = "abababab-abab-4bab-8bab-abababababab";
+  const reconnectHandshake = { ...handshake, sessionToken: reconnectToken };
+  assert.equal((await bridge.connect(reconnectHandshake)).ok, true);
+  let releaseReconnectClick;
+  mousePressGate = new Promise((resolve) => {
+    releaseReconnectClick = resolve;
+  });
+  const reconnectCommand = command(999, {
+    sessionToken: reconnectToken,
+    executionKey: "execution-key-worker-reconnect",
+    action: "click",
+    payload: { selectors: ["button"], textIncludes: ["generate"] },
+  });
+  const firstReconnectAttempt = bridge.dispatch(reconnectCommand);
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (storage.contentflowCommandCacheV2?.[reconnectCommand.commandId]?.status === "in_flight") {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.equal(
+    storage.contentflowCommandCacheV2?.[reconnectCommand.commandId]?.status,
+    "in_flight",
+    "efeito potencial precisa ser marcado antes da ação sair para a página",
+  );
+
+  const restartedContext = {
+    chrome,
+    URL,
+    Promise,
+    Date,
+    Set,
+    Map,
+    Object,
+    String,
+    Number,
+    JSON,
+    setTimeout,
+    clearTimeout,
+  };
+  restartedContext.globalThis = restartedContext;
+  runInNewContext(source, restartedContext, { filename: "service-worker-restarted.js" });
+  const restartedBridge = restartedContext.contentFlowBridge;
+  assert.equal((await restartedBridge.connect(reconnectHandshake)).ok, true);
+  const mousePressesBeforeReplay = debuggerCalls.filter(
+    (entry) => entry.method === "Input.dispatchMouseEvent" && entry.params?.type === "mousePressed",
+  ).length;
+  const uncertainReplay = await restartedBridge.dispatch(reconnectCommand);
+  assert.equal(uncertainReplay.code, "COMMAND_OUTCOME_UNKNOWN");
+  assert.equal(uncertainReplay.reconciliationRequired, true);
+  assert.equal(
+    debuggerCalls.filter(
+      (entry) =>
+        entry.method === "Input.dispatchMouseEvent" && entry.params?.type === "mousePressed",
+    ).length,
+    mousePressesBeforeReplay,
+    "worker reiniciado não pode repetir clique cujo resultado ficou incerto",
+  );
+
+  mousePressGate = undefined;
+  releaseReconnectClick();
+  assert.equal((await firstReconnectAttempt).ok, true);
+  const completedReplay = await restartedBridge.dispatch(reconnectCommand);
+  assert.equal(completedReplay.ok, true);
+  assert.equal(completedReplay.replayed, true);
+  assert.equal(
+    debuggerCalls.filter(
+      (entry) =>
+        entry.method === "Input.dispatchMouseEvent" && entry.params?.type === "mousePressed",
+    ).length,
+    mousePressesBeforeReplay,
+    "resposta perdida deve ser recuperada do recibo sem repetir o efeito",
+  );
+
+  const now = Date.now();
+  storage.contentflowCommandCacheV2 = Object.fromEntries(
+    Array.from({ length: 520 }, (_, index) => {
+      const commandId = index.toString(16).padStart(64, "0");
+      return [
+        commandId,
+        {
+          pluginId: handshake.pluginId,
+          profileId: handshake.profileId,
+          executionKey: "execution-key-cache-bound",
+          action: "ping",
+          status: "completed",
+          response: { ok: true },
+          storedAt: now + index,
+          expiresAt: now + 60_000,
+        },
+      ];
+    }),
+  );
+  const cacheBoundCommand = command(1000, {
+    sessionToken: reconnectToken,
+    executionKey: "execution-key-cache-bound",
+    action: "ping",
+    payload: {},
+  });
+  assert.equal((await restartedBridge.dispatch(cacheBoundCommand)).ok, true);
+  assert.equal(
+    Object.keys(storage.contentflowCommandCacheV2).length,
+    500,
+    "cache deve permanecer limitado mesmo depois de restart/replay",
+  );
+  assert.equal(
+    storage.contentflowCommandCacheV2["0".repeat(64)],
+    undefined,
+    "limpeza determinística deve remover primeiro a entrada mais antiga",
   );
 }

@@ -8,7 +8,12 @@ Use quando a capability só precisa transformar texto/dados em memória. Não de
 export async function execute(request) {
   const text = request.inputs.content;
   if (typeof text !== "string") {
-    return { status: "error", code: "INVALID_INPUT", message: "content deve ser texto", retryable: false };
+    return {
+      status: "error",
+      code: "INVALID_INPUT",
+      message: "content deve ser texto",
+      retryable: false,
+    };
   }
   return { status: "success", values: { result: text.trim() } };
 }
@@ -21,15 +26,28 @@ Use para SaaS, API pública ou webhook HTTPS. Declare `network`, `networkHosts` 
 ```js
 export async function execute(request, services) {
   const key = await services.getSecret("PROVIDER_API_KEY");
-  if (!key) return { status: "error", code: "AUTHENTICATION_FAILED", message: "Credencial não configurada", retryable: false };
+  if (!key)
+    return {
+      status: "error",
+      code: "AUTHENTICATION_FAILED",
+      message: "Credencial não configurada",
+      retryable: false,
+    };
   const response = await fetch("https://api.example.com/v1/run", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
     body: JSON.stringify({ input: request.inputs.prompt }),
     signal: services.signal,
   });
-  if (response.status === 429) return { status: "error", code: "RATE_LIMIT", message: "Limite temporário", retryable: true };
-  if (!response.ok) return { status: "error", code: "UPSTREAM_UNAVAILABLE", message: "Falha no provedor", retryable: true };
+  if (response.status === 429)
+    return { status: "error", code: "RATE_LIMIT", message: "Limite temporário", retryable: true };
+  if (!response.ok)
+    return {
+      status: "error",
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "Falha no provedor",
+      retryable: true,
+    };
   const data = await response.json();
   return { status: "success", values: { result: data.result } };
 }
@@ -51,12 +69,12 @@ Separe `start`, `resume` e `cancel`. Retorne `pending` rapidamente; persista o j
 
 ## Conversão de automações
 
-| Automação | Adaptação |
-| --- | --- |
-| JavaScript | Mover lógica para handler e substituir caminhos/estado global por portas e services. |
-| n8n/Make/FastAPI | Chamar endpoint HTTPS estável; documentar dados e efeitos. |
-| Playwright/Puppeteer/Selenium | Empacotar runtime; autenticação e perfil explícitos; confirmação visível. |
-| Fila/renderização | Mapear provider job para `jobId`; implementar reconciliação e idempotência. |
+| Automação                     | Adaptação                                                                            |
+| ----------------------------- | ------------------------------------------------------------------------------------ |
+| JavaScript                    | Mover lógica para handler e substituir caminhos/estado global por portas e services. |
+| n8n/Make/FastAPI              | Chamar endpoint HTTPS estável; documentar dados e efeitos.                           |
+| Playwright/Puppeteer/Selenium | Empacotar runtime; autenticação e perfil explícitos; confirmação visível.            |
+| Fila/renderização             | Mapear provider job para `jobId`; implementar reconciliação e idempotência.          |
 
 Separe capabilities quando houver entregas que o usuário precise conectar, validar, substituir ou reutilizar. Mantenha internas as etapas que produzem uma única entrega observável.
 

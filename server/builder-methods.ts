@@ -9,9 +9,11 @@ import {
   type UniversalProcess,
 } from "../src/lib/domain";
 import { getMethodConfigurationIssue, normalizeMethodBlocks } from "../src/lib/human-workflow";
+import { legacyTypeListAccepts } from "../src/lib/data-shape";
 import { effectiveProcessOrder, validateProcessDependencies } from "../src/lib/process-order";
 import type { RegisteredPlugin } from "./plugin-runner";
 import { pluginConnectionRequired } from "../src/lib/plugin-contract";
+import { validateLocalProfileExecution } from "./profile-execution-policy";
 
 const processSchema = z.enum(PROCESS_ORDER);
 const fieldTypeSchema = z.enum([
@@ -266,9 +268,17 @@ function validatePluginConfiguration(
   if (!entry.enabled || !entry.plugin.executable)
     warnings.push(`${blockLabel}: plugin instalado, mas indisponível para execução no momento.`);
 
+  const profileValidation = validateLocalProfileExecution({
+    policy: block.plugin.profileExecution,
+    profileSetup: entry.plugin.manifest.profileSetup,
+    isBoundProfile: (profileId) => entry.profiles.some((profile) => profile.id === profileId),
+  });
+  if (profileValidation.error) errors.push(`${blockLabel}: ${profileValidation.error}`);
+  else if (profileValidation.policy) block.plugin.profileExecution = profileValidation.policy;
+
   for (const input of block.inputs ?? []) {
     const candidates = capability.inputPorts.filter((port) =>
-      port.acceptedTypes.includes(input.type),
+      legacyTypeListAccepts(port.acceptedTypes, input.type),
     );
     if (input.portKey) {
       if (!candidates.some((port) => port.key === input.portKey))
@@ -280,7 +290,7 @@ function validatePluginConfiguration(
   }
   for (const output of block.outputs ?? []) {
     const candidates = capability.outputPorts.filter((port) =>
-      port.producedTypes.includes(output.type),
+      legacyTypeListAccepts(port.producedTypes, output.type),
     );
     if (output.portKey) {
       if (!candidates.some((port) => port.key === output.portKey))

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "scenario": "03-multiple-profiles-fallbacks",
+  "description": "Vários perfis com principal e fallbacks ordenados.",
+  "counts": {
+    "channels": 1,
+    "projects": 0,
+    "process_executions": 0,
+    "plugin_profiles": 3,
+    "plugin_workspaces": 0,
+    "plugin_jobs": 0
+  },
+  "payloadSha256": {
+    "channels:fallbacks": "bd37d973bb30476ddef656b18b36620e2b868a576a912a4f35084354a0d90f24"
+  },
+  "resolvedFolders": {
+    "com.contentflow.fixture.browser:principal": "plugin-workspaces/profiles/com.contentflow.fixture.browser/principal",
+    "com.contentflow.fixture.browser:reserva-a": "plugin-workspaces/profiles/com.contentflow.fixture.browser/reserva-a",
+    "com.contentflow.fixture.browser:reserva-b": "plugin-workspaces/profiles/com.contentflow.fixture.browser/reserva-b"
+  },
+  "markers": []
+}

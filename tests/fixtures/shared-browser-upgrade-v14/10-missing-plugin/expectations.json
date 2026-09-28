@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "scenario": "10-missing-plugin",
+  "description": "Método referencia plugin ausente/desinstalado sem apagar a configuração.",
+  "counts": {
+    "channels": 1,
+    "projects": 0,
+    "process_executions": 0,
+    "plugin_profiles": 1,
+    "plugin_workspaces": 0,
+    "plugin_jobs": 0
+  },
+  "payloadSha256": {
+    "channels:missing-plugin": "e2c9dba2dfef59890aef4b57df9bc7fe3865e659ce95d20518e4d41c2a54584e"
+  },
+  "resolvedFolders": {},
+  "markers": []
+}

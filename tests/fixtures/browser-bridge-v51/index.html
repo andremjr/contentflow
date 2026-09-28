@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ContentFlow Browser Bridge 5.1 fixture</title>
+  </head>
+  <body>
+    <main>
+      <label for="prompt">Prompt</label>
+      <textarea id="prompt" aria-label="Prompt de teste"></textarea>
+      <button id="submit" type="button">Enviar</button>
+      <output id="result"></output>
+      <div id="condition-target" hidden>ready</div>
+    </main>
+    <script>
+      document.querySelector("#submit").addEventListener("click", () => {
+        document.querySelector("#result").textContent = document.querySelector("#prompt").value;
+      });
+      setTimeout(() => {
+        document.querySelector("#condition-target").hidden = false;
+      }, 250);
+    </script>
+  </body>
+</html>

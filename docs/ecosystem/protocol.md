@@ -132,6 +132,7 @@ type PluginExecutionServices = {
   resolveInputFile(file: StoredFile): Promise<string>;
   getOutputPath(relativePath: string): string;
   getWorkspacePath(relativePath: string): string;
+  getProfilePath?(relativePath: string): string;
   publishPartial(update: {
     values: Record<string, RuntimeValue>;
     artifacts?: PluginArtifact[];
@@ -150,10 +151,29 @@ type PluginExecutionServices = {
     message?: string;
     logs?: string[];
   }): Promise<void>;
+  registerItems?(
+    parentItemId: string,
+    plannedItems: Array<{
+      key: string;
+      order: number;
+      input: RuntimeValue | StructuredRecord;
+    }>,
+  ): Promise<PluginClaimedWorkItem[]>;
+  claimItems?(limit: number): Promise<PluginClaimedWorkItem[]>;
+  publishItemUpdate?(update: PluginWorkItemUpdate): Promise<{
+    itemId: string;
+    revision: number;
+  }>;
 };
 ```
 
-O plugin encaminha `signal` a operações abortáveis. `getSecret` aceita apenas chaves declaradas pelo próprio manifesto. `resolveInputFile` abre uma entrada, `getOutputPath` cria um artifact temporário e `getWorkspacePath` aponta para arquivos/checkpoints persistentes na pasta escolhida pelo usuário ou na pasta interna padrão. `publishPartial` importa artifacts e persiste um snapshot intermediário enquanto uma invocação `immediate` ainda está rodando; o plugin deve chamá-lo depois de cada item concluído, antes de iniciar o seguinte. Os serviços retornam caminhos dentro das raízes concedidas, nunca um caminho arbitrário escolhido pelo código do plugin.
+O plugin encaminha `signal` a operações abortáveis. `getSecret` aceita apenas chaves declaradas pelo próprio manifesto. `resolveInputFile` abre uma entrada, `getOutputPath` cria um artifact temporário e `getWorkspacePath` aponta para arquivos/checkpoints privados do plugin. `getProfilePath` é o nome reservado para a raiz do perfil global de navegador selecionado pelo núcleo; ele só existe numa invocação com vínculo explícito e válido entre aquele plugin e o perfil. O handler não recebe a raiz de outros perfis e não pode enumerá-los. `publishPartial` continua sendo o serviço de compatibilidade para snapshots agregados e eventos incrementais do modelo atual. Os serviços retornam caminhos dentro das raízes concedidas, nunca um caminho arbitrário escolhido pelo código do plugin.
+
+O identificador canônico local do perfil é `profileId`; a política local do Bloco usa `profileExecution` com os modos canônicos `fallback` ou `parallel`, `profileIds: string[]` e `maxParallel?: number`. Fallback ordenado é o padrão mesmo com um único perfil; a ausência de um segundo perfil apenas significa que não há próximo candidato. O valor histórico `single` continua aceito na leitura e é normalizado para `fallback`. Esses IDs são opacos, pertencem à instalação local e nunca são enviados ao plugin em `request`. O núcleo resolve o `profileId`, valida vínculo/readiness/revogação e então concede somente `getProfilePath` e o alias ativo exigido pelo contrato legado do plugin. `profileExecution` não faz parte do manifesto e sua persistência no Método pertence a uma fase posterior do núcleo.
+
+`registerItems`, `claimItems` e `publishItemUpdate` são extensões aditivas da API v1 para o contrato de coleção contínua. Elas permanecem opcionais no tipo porque o runtime negocia cada serviço conforme a estratégia ativa. Em jobs de Projeto compatíveis, `registerItems` recebe um plano de filhos sem IDs universais, valida `parentItemId`, ordem, entrada e chave semântica, persiste as identidades no núcleo e só então devolve os descritores. Repetir o mesmo `parent + key` com a mesma ordem e entrada dentro da mesma tentativa lógica devolve o mesmo `itemId`; tentar alterar esse plano é rejeitado. Quando `continuous_session` é a estratégia preferida, `claimItems` concede unidades já persistidas à mesma invocação, com `itemId`, índice, total e tentativa, e o núcleo mantém a concessão associada àquela invocação e ao perfil físico selecionado até conclusão, erro, cancelamento ou expiração. O request inicial preserva a coleção materializada inteira e não usa `batch` unitário. `publishItemUpdate` permanece reservado para a persistência incremental por item e só deve resolver depois que a transição material for persistida. O plugin nunca escolhe `itemId`.
+
+O descritor concedido contém `itemId`, índice, total, ordem, tentativa, revisão, input e proveniência opcional (`sourceDeliveryId`, `sourceItemId`, `parentItemId`). O ciclo durável aceita os estados `planned`, `pending`, `leased`, `submitted`, `awaiting_result`, `completed`, `failed`, `awaiting_human` e `cancelled`. `submitted` significa que um efeito externo pode ter ocorrido e, portanto, impede retry cego. Uma atualização material usa `expectedRevision`; uma revisão obsoleta ou um `itemId` não concedido àquela invocação é rejeitado.
 
 Webhooks e runtimes adicionais podem ser oferecidos depois por adapters oficiais, sem tornar a API v1 genérica demais.
 
@@ -339,11 +359,11 @@ No nível do manifesto, `deliveryTypes` classifica o plugin para descoberta na g
 - O plugin apenas declara tipos, multiplicidade, apresentação e restrições MIME. Quando o Método vincula uma porta à origem `runtime`, o ContentFlow renderiza o campo, persiste o valor no snapshot da execução e só chama o plugin depois da validação. Nenhum componente visual vem do pacote do plugin.
 - `execution` declara comportamento imediato ou assíncrono.
 - `execution.maxConcurrency` informa o teto seguro declarado pelo autor; o núcleo pode impor um valor menor.
-- `execution.itemOrchestration`, quando presente, permite que o núcleo expanda uma entrada em lista em chamadas atômicas sequenciais, acumule a saída correspondente e materialize entregas parciais com IDs estáveis.
+- `execution.itemOrchestration`, quando presente, declara a correlação entre uma coleção de entrada e sua saída acumulada. O contrato legado `mode: "sequential"` continua válido; `strategies` pode declarar `per_item`, `continuous_session` ou ambas, e a ausência de `strategies` preserva o comportamento legado por item.
 - `sideEffects` declara todos os efeitos observáveis fora da resposta do bloco.
 - `cost` informa se a capacidade é gratuita, tarifada ou de custo desconhecido e se consegue estimar o uso antes da confirmação.
 - `dataPolicy` informa se dados deixam a máquina, para quais provedores e onde consultar retenção e uso para treinamento.
-- `blockConfigSchema` descreve parâmetros salvos no bloco.
+- `blockConfigSchema` declara a interface funcional da capability no Bloco. Cada propriedade visível aparece na área principal da interface do plugin, na ordem declarada, usando somente componentes e estilos permitidos pelo núcleo. `title`, `description`, tipo, opções, default, limites e `visibleWhen` permitem ao autor decidir o que o usuário configura sem injetar React, HTML ou CSS. Chaves gerenciadas pelo núcleo, como aliases de perfil, não são renderizadas como campos genéricos.
 - `configurationOptions` declara campos do `blockConfigSchema` cujas opções são descobertas dinamicamente pelo próprio plugin. Cada entrada aponta para um `property`, um `providerId` estável, dependências opcionais de outros campos e um TTL de cache. O núcleo nunca conhece catálogo de modelos, vozes, resoluções ou qualquer lista específica de fornecedor.
 - `itemActions` declara quais ações padronizadas podem aparecer sobre cada item produzido pela capability: `regenerate`, `replace`, `select` e `download`. A declaração informa capacidade da interface; identidade, persistência e histórico do item continuam pertencendo ao núcleo.
 - `profileSetup`, quando presente, identifica uma chave de configuração de perfil dedicado e permite que o Gerenciador de Plugins cadastre e prepare perfis antes da execução. O Bloco seleciona um perfil já cadastrado; `fallbackConfigurationKey` pode preservar internamente uma lista textual ordenada de aliases adicionais escolhidos no inventário. O plugin continua responsável pelo navegador, pela validação da sessão e pelo estado local de cada perfil.
@@ -420,7 +440,7 @@ Regras:
 - O mesmo plugin pode possuir várias conexões, e blocos diferentes podem selecionar conexões diferentes.
 - O Método persistido localmente pode referenciar `connectionId`; uma exportação substitui essa referência por um requisito de conexão. A importação exige associação explícita a uma conexão local antes da execução.
 - O núcleo nunca escolhe entre várias conexões elegíveis por nome, ordem de criação ou conteúdo secreto. Ambiguidade gera bloqueio, não fallback silencioso.
-- Fallback entre perfis ou conexões só ocorre quando declarado. Qualquer resposta de erro pode avançar para o próximo perfil preparado, inclusive autenticação, rate limit, cota, permissão, upgrade, bloqueio e validação de output; cancelamento solicitado e lista esgotada encerram a tentativa.
+- Fallback entre perfis ou conexões só ocorre quando declarado e a política central comprova que a falha pode ser redistribuída sem repetir efeito externo. Erros associados ao perfil podem avançar para outro perfil preparado; intervenção humana e efeito externo incerto permanecem bloqueados até ação ou reconciliação. Cancelamento solicitado e lista esgotada encerram a tentativa.
 - Configurações exportadas não podem conter secrets.
 - Secrets são disponibilizados apenas à execução que declarou a chave, por `services.getSecret()`.
 - O plugin não pode enumerar secrets de outros plugins.
@@ -480,11 +500,25 @@ Capabilities com `configurationOptions` podem receber `invocation.mode = "config
 
 Quando uma capability declara `itemActions`, uma ação que exigir nova execução chega como `invocation.mode = "item_action"` com `action`, `itemId` e `outputPort`. O núcleo só envia IDs que já possui, valida que a ação foi declarada e inclui `request.itemAction` com a chave de correlação opcional, a `variantKey` opcional, a entrada original, a saída atual e o número da nova tentativa. Uma regeneração deve concluir na própria chamada e devolver o novo valor na mesma `outputPort`; o núcleo preserva o ID e a posição, acrescenta a tentativa ao histórico e substitui apenas o valor materializado. `replace` é validado pelo núcleo e ações puramente locais como `select` ou `download` não invocam o plugin.
 
-Quando `fallbackConfigurationKey` estiver declarado, o usuário prepara explicitamente cada alias. O núcleo preserva a ordem configurada e avança para o próximo perfil quando a tentativa terminar com qualquer resposta de erro, independentemente de `code` ou `retryable`, inclusive `AUTHENTICATION_FAILED`, `RATE_LIMIT`, cota, permissão, bloqueio, upgrade e validação de output. `CANCELLED`, cancelamento já solicitado e esgotamento da lista nunca avançam o cursor. Respostas pendentes continuam no perfil atual.
+Quando `fallbackConfigurationKey` estiver declarado, o usuário prepara explicitamente cada alias. O núcleo preserva a ordem configurada e consulta a política central antes de avançar. Falhas seguras e associadas ao perfil podem trocar de perfil; autenticação/CAPTCHA/permissão/cota/upgrade/bloqueio sem alternativa segura viram intervenção; submissão ou efeito externo possível exige reconciliação. `retryable` legado sozinho não autoriza repetição. `CANCELLED`, cancelamento já solicitado e esgotamento da lista nunca avançam o cursor. Respostas pendentes continuam no perfil atual.
 
-`execution.itemOrchestration` aceita `inputPort`, `outputPort` e `mode: "sequential"`. Se a entrada indicada for uma lista com mais de um item, o núcleo chama o plugin uma vez por item, inclui `request.batch` com ID, índice e total, acumula a saída indicada e persiste cada resultado antes de iniciar o seguinte. Para texto, `combinedOutputPort` pode apontar para a saída consolidada e `separator` define como os itens acumulados são unidos. O núcleo mantém um resumo universal com total, quantidade concluída, quantidade pendente e índice atual/falho, independente do tipo de mídia ou do provedor.
+Para compatibilidade com Métodos API v1 já existentes, aliases gravados em `profileSetup.configurationKey` e `fallbackConfigurationKey` continuam sendo resolvidos por `pluginId + alias`. Depois da migração, essa chave localiza o vínculo criado para o perfil legado correspondente; aliases iguais em plugins diferentes não são fundidos. Um Método novo usa a política local `profileExecution` como autoridade de seleção, e o núcleo injeta na configuração do handler apenas o alias ativo esperado pelo plugin. Salvar ou executar um Método antigo não exige reescrever snapshots históricos.
 
-Depois de uma falha com entregas parciais, uma nova tentativa pode recomeçar todo o lote ou continuar somente os itens pendentes. A retomada só reutiliza o cursor, os valores e os artifacts anteriores quando o núcleo confirma que a entrada é a mesma, preferencialmente pela identidade universal da entrega e dos seus itens; caso contrário, a tentativa recomeça integralmente. O plugin não decide quais itens estão concluídos e não precisa implementar essa reconciliação: ele continua recebendo um item por chamada e o núcleo controla identidade, cursor, persistência e prevenção de duplicação.
+Vincular um perfil global a outro plugin exige consentimento explícito do usuário. Revogar o vínculo impede novas invocações desse plugin naquele perfil e remove seu readiness específico, sem apagar automaticamente a pasta física nem vínculos de outros plugins. Desinstalar um plugin revoga somente seus vínculos/readiness. A sandbox concede no máximo a raiz física do perfil selecionado para a invocação atual; `getWorkspacePath` continua separado para estado privado do plugin.
+
+Cookies, storage de sessão, tokens, secrets, caminho absoluto, `storage_key`, `profileId`, IDs de vínculo/readiness/lease e o objeto `profileExecution` nunca entram em `request`, configuração funcional entregue ao plugin, snapshot portátil ou exportação de Método. Snapshots locais de execução podem registrar somente identidade operacional não secreta necessária à auditoria e retomada, sem serializar a pasta física ou material autenticado.
+
+`execution.itemOrchestration` conserva `inputPort`, `outputPort` e `mode: "sequential"` para compatibilidade com manifestos API v1 existentes. `mode` é o marcador do executor legado atual; ele não limita a declaração futura de estratégias. O campo opcional `strategies` aceita `per_item` e `continuous_session`, `preferredStrategy` precisa estar contido nessa lista e a ausência dos dois equivale ao comportamento legado `per_item`.
+
+Em `per_item`, o núcleo chama o plugin uma vez por unidade, inclui `request.batch` com `itemId`, índice e total, acumula a saída indicada e confirma a persistência antes da próxima unidade. Em `continuous_session`, uma única invocação pode manter navegador, conexão ou processo aberto, reivindicar várias unidades com `claimItems` e publicar cada transição por `publishItemUpdate`. A invocação não conclui o Bloco por simplesmente retornar: o núcleo conclui pela situação durável de todas as unidades obrigatórias.
+
+`profileParallelism` declara apenas elegibilidade técnica futura. `supported: true` informa que a capability aceita que o núcleo execute sessões contínuas independentes em perfis físicos distintos; `maxProfiles` limita o número declarado pelo plugin. Esta declaração não cria perfis, não seleciona contas e não habilita paralelismo por si só.
+
+O par principal `inputPort`/`outputPort` continua sendo a associação padrão. Quando houver mais de uma coleção estruturalmente válida, `collectionAssociations` pode declarar pares adicionais com `key`, porta de entrada, porta de saída e, opcionalmente, `combinedOutputPort`/`separator`. A configuração do Método escolhe uma associação declarada; o núcleo nunca infere pareamento apenas por posição. A escolha persistida pertence ao Método, não ao estado privado do plugin.
+
+Para texto, `combinedOutputPort` pode apontar para a saída consolidada e `separator` define como os itens acumulados são unidos. Em qualquer estratégia, ordem e identidade vêm do núcleo. Cada atualização correlaciona o `itemId` concedido, a tentativa e a revisão. O plugin pode registrar filhos derivados com `registerItems`, mas só começa efeitos externos depois de receber os IDs criados pelo núcleo.
+
+Depois de uma falha com entregas parciais, uma nova tentativa pode recomeçar todo o lote ou continuar somente os itens pendentes. A retomada reutiliza valores e artifacts apenas quando o núcleo confirma a mesma identidade de entrada. Unidades `completed` não são repetidas silenciosamente; unidades `submitted` exigem reconciliação antes de redistribuição; uma nova tentativa acrescenta histórico e preserva o mesmo ID lógico. Handlers agregados legados, sem `itemOrchestration`, continuam recebendo a coleção inteira como hoje e não ganham correlação incremental automaticamente. Quando a resposta final permite um pareamento unívoco entre uma única coleção de entrada e uma única coleção de saída de mesma cardinalidade, o núcleo pode materializar as unidades somente depois da conclusão para histórico e ações editoriais. Esse modo é marcado como compatibilidade agregada e não habilita updates tardios, atualização em tempo real nem paralelismo por perfil.
 
 ### 9.3 Execução assíncrona
 
@@ -816,23 +850,23 @@ Durante uma invocação imediata, `services.publishPartial()` também pode trans
 
 Códigos recomendados:
 
-| Código                     | Repetível normalmente? | Uso                                  |
-| -------------------------- | ---------------------- | ------------------------------------ |
-| `INVALID_INPUT`            | Não                    | Valor incompatível com a porta.      |
-| `INVALID_CONFIGURATION`    | Não                    | Parâmetro ausente ou inválido.       |
-| `AUTHENTICATION_FAILED`    | Não                    | Credencial inválida ou expirada.     |
-| `PERMISSION_DENIED`        | Não                    | Permissão não concedida.             |
-| `NOT_FOUND`                | Não                    | Recurso solicitado não existe.       |
-| `RATE_LIMIT`               | Sim                    | Limite temporário do provedor.       |
-| `UPSTREAM_UNAVAILABLE`     | Sim                    | Provedor indisponível.               |
-| `TIMEOUT`                  | Sim                    | Prazo excedido.                      |
-| `OUTPUT_VALIDATION_FAILED` | Depende                | Provedor devolveu formato incorreto. |
-| `JOB_FAILED`               | Depende                | Job assíncrono terminou com falha.   |
-| `CANCELLED`                | Não                    | Execução cancelada.                  |
-| `QUOTA_EXCEEDED`           | Não                    | Cota disponível foi esgotada.        |
-| `UPGRADE_REQUIRED`         | Não                    | Operação exige decisão de upgrade.   |
-| `ACCOUNT_BLOCKED`          | Não                    | Conta ou projeto está bloqueado.     |
-| `CONTENT_REFUSED`          | Depende                | Provedor recusou executar o pedido.  |
+| Código                     | Repetível normalmente? | Uso                                                 |
+| -------------------------- | ---------------------- | --------------------------------------------------- |
+| `INVALID_INPUT`            | Não                    | Valor incompatível com a porta.                     |
+| `INVALID_CONFIGURATION`    | Não                    | Parâmetro ausente ou inválido.                      |
+| `AUTHENTICATION_FAILED`    | Não                    | Credencial inválida ou expirada.                    |
+| `PERMISSION_DENIED`        | Não                    | Permissão não concedida.                            |
+| `NOT_FOUND`                | Não                    | Recurso solicitado não existe.                      |
+| `RATE_LIMIT`               | Sim                    | Limite temporário do provedor.                      |
+| `UPSTREAM_UNAVAILABLE`     | Sim                    | Provedor indisponível.                              |
+| `TIMEOUT`                  | Sim                    | Prazo excedido.                                     |
+| `OUTPUT_VALIDATION_FAILED` | Depende                | Provedor devolveu formato incorreto.                |
+| `JOB_FAILED`               | Depende                | Job assíncrono terminou com falha.                  |
+| `CANCELLED`                | Não                    | Execução cancelada.                                 |
+| `QUOTA_EXCEEDED`           | Não                    | Cota disponível foi esgotada.                       |
+| `UPGRADE_REQUIRED`         | Não                    | Operação exige decisão de upgrade.                  |
+| `ACCOUNT_BLOCKED`          | Não                    | Conta ou projeto está bloqueado.                    |
+| `CONTENT_REFUSED`          | Depende                | Provedor recusou executar o pedido.                 |
 | `DOM_INCOMPATIBLE`         | Não                    | Interface não corresponde ao contrato automatizado. |
 
 `retryable` informa possibilidade técnica; a política final pertence ao núcleo.
@@ -991,6 +1025,10 @@ Cada invocação deve ser tratada como independente. Plugins não podem depender
 - Estado necessário para `resume` deve estar no provedor externo, no `jobId` opaco ou no workspace obtido por `services.getWorkspacePath()`.
 
 Uma capacidade não deve implementar mutex global para serializar silenciosamente todo o aplicativo. Se o provedor só permite uma operação por vez, declare `maxConcurrency: 1` e documente o limite.
+
+Automação de navegador usa adicionalmente o contrato de Browser Bridge definido em [`browser-automation.md`](browser-automation.md). Esse transporte negocia versão e capabilities antes do primeiro efeito, usa `commandId` idempotente, sequência monotônica de eventos, snapshot sob demanda, observers limitados e backpressure por aba. A referência usada no handshake da Bridge é limitada à sessão e não expõe o `profileId` local persistente ao handler.
+
+Timeout, reconnect, worker reiniciado, perda do debugger ou resposta ausente depois de uma ação potencialmente mutável não provam que o efeito falhou. Nessas situações o plugin reconcilia recibo/job/resultado antes de qualquer replay. `reload` só pode ocorrer como ação allowlisted e controlada; enquanto houver efeito externo incerto, a recarga é bloqueada até reconciliação ou decisão explícita de recuperação segura.
 
 ## 23. Efeitos externos, custos e confirmação
 

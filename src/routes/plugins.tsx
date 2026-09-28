@@ -107,14 +107,42 @@ type PluginProfileUsage = PluginMethodDependency & {
   fallbackPosition?: number;
 };
 
-type ManagedPluginProfile = {
+type PublicBrowserProfile = {
   id: string;
-  pluginId: string;
   name: string;
   alias: string;
   createdAt: string;
   updatedAt: string;
+};
+
+type PluginProfileBinding = {
+  pluginId: string;
+  profileId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type PluginProfileInventory = {
+  linked: Array<{
+    profile: PublicBrowserProfile;
+    binding: PluginProfileBinding;
+    readiness?: { state: string; checkedAt?: string; preparedAt?: string };
+  }>;
+  candidates: Array<{
+    profile: PublicBrowserProfile;
+    linkedPluginIds: string[];
+  }>;
+  uses: Array<{
+    profileId: string;
+    pluginId: string;
+    methods: PluginProfileUsage[];
+  }>;
+};
+
+type ManagedPluginProfile = PublicBrowserProfile & {
+  pluginId: string;
   usages: PluginProfileUsage[];
+  bindingUpdatedAt: string;
 };
 
 type LocalPluginConnection = {
@@ -1148,11 +1176,14 @@ function PluginConnectionsPanel({ plugin }: { plugin: DiscoveredPlugin }) {
 
 function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
   type ProfileStatus = "unknown" | "checking" | "ready" | "missing" | "preparing";
+  const { t } = useAppPreferences();
   const [profiles, setProfiles] = useState<ManagedPluginProfile[]>([]);
+  const [candidates, setCandidates] = useState<PublicBrowserProfile[]>([]);
   const [statuses, setStatuses] = useState<Record<string, ProfileStatus>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const [existingProfileId, setExistingProfileId] = useState("");
   const [editingId, setEditingId] = useState<string>();
   const [editingName, setEditingName] = useState("");
   const [browserBridgeDirectory, setBrowserBridgeDirectory] = useState("");
@@ -1160,15 +1191,34 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/profiles`);
-      const result = (await response.json()) as {
-        profiles?: ManagedPluginProfile[];
-        browserBridgeDirectory?: string;
+      const [inventoryResponse, legacyResponse] = await Promise.all([
+        fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/profile-inventory`),
+        fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/profiles`),
+      ]);
+      const result = (await inventoryResponse.json()) as PluginProfileInventory & {
         error?: string;
       };
-      if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar os perfis.");
-      setProfiles(result.profiles ?? []);
-      setBrowserBridgeDirectory(result.browserBridgeDirectory ?? "");
+      if (!inventoryResponse.ok) {
+        throw new Error(result.error ?? "Não foi possível carregar os perfis.");
+      }
+      const usesByProfile = new Map(
+        (result.uses ?? [])
+          .filter((entry) => entry.pluginId === plugin.id)
+          .map((entry) => [entry.profileId, entry.methods] as const),
+      );
+      setProfiles(
+        (result.linked ?? []).map(({ profile, binding }) => ({
+          ...profile,
+          pluginId: plugin.id,
+          usages: usesByProfile.get(profile.id) ?? [],
+          bindingUpdatedAt: binding.updatedAt,
+        })),
+      );
+      setCandidates((result.candidates ?? []).map(({ profile }) => profile));
+      if (legacyResponse.ok) {
+        const legacy = (await legacyResponse.json()) as { browserBridgeDirectory?: string };
+        setBrowserBridgeDirectory(legacy.browserBridgeDirectory ?? "");
+      }
     } catch (error) {
       toast.error("Não foi possível carregar os perfis", {
         description: error instanceof Error ? error.message : undefined,
@@ -1191,7 +1241,7 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
       profiles.map(async (profile) => {
         try {
           const response = await fetch(
-            `/api/plugins/${encodeURIComponent(plugin.id)}/profiles/${encodeURIComponent(profile.id)}/status`,
+            `/api/plugins/${encodeURIComponent(plugin.id)}/profile-bindings/${encodeURIComponent(profile.id)}/status`,
             { method: "POST", signal: controller.signal },
           );
           const result = (await response.json()) as { ready?: boolean };
@@ -1211,12 +1261,24 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
   async function createProfile() {
     setCreating(true);
     try {
-      const response = await fetch(`/api/plugins/${encodeURIComponent(plugin.id)}/profiles`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const result = (await response.json()) as ManagedPluginProfile & { error?: string };
+      if (existingProfileId) {
+        const profile = candidates.find((candidate) => candidate.id === existingProfileId);
+        if (!profile) throw new Error("O perfil selecionado não está mais disponível.");
+        if (await linkProfile(profile)) setExistingProfileId("");
+        return;
+      }
+      const response = await fetch(
+        `/api/plugins/${encodeURIComponent(plugin.id)}/profile-bindings`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        },
+      );
+      const result = (await response.json()) as {
+        profile?: PublicBrowserProfile;
+        error?: string;
+      };
       if (!response.ok) throw new Error(result.error ?? "Não foi possível criar o perfil.");
       setName("");
       await load();
@@ -1232,23 +1294,50 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
     }
   }
 
+  async function linkProfile(profile: PublicBrowserProfile) {
+    const confirmed = window.confirm(
+      t(
+        `Vincular ${profile.name} a ${plugin.manifest.name}? Este plugin poderá usar a sessão local já existente neste perfil.`,
+      ),
+    );
+    if (!confirmed) return false;
+    const response = await fetch(
+      `/api/plugins/${encodeURIComponent(plugin.id)}/profile-bindings/${encodeURIComponent(profile.id)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sharedSessionConsent: true,
+          profileUpdatedAt: profile.updatedAt,
+        }),
+      },
+    );
+    const result = (await response.json()) as { error?: string };
+    if (!response.ok) throw new Error(result.error ?? "Não foi possível adicionar o perfil.");
+    await load();
+    toast.success("Perfil adicionado", {
+      description: "Agora prepare a conta para confirmar a sessão neste perfil.",
+    });
+    return true;
+  }
+
   async function copyBrowserBridgeDirectory() {
     if (!browserBridgeDirectory) return;
     await navigator.clipboard.writeText(browserBridgeDirectory);
     toast.success("Caminho da extensão copiado");
   }
 
-  async function renameProfile(profile: ManagedPluginProfile) {
+  async function renameProfile(profile: PublicBrowserProfile) {
     try {
       const response = await fetch(
-        `/api/plugins/${encodeURIComponent(plugin.id)}/profiles/${encodeURIComponent(profile.id)}`,
+        `/api/plugins/${encodeURIComponent(plugin.id)}/profile-bindings/${encodeURIComponent(profile.id)}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: editingName }),
+          body: JSON.stringify({ name: editingName, profileUpdatedAt: profile.updatedAt }),
         },
       );
-      const result = (await response.json()) as ManagedPluginProfile & { error?: string };
+      const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Não foi possível renomear o perfil.");
       setEditingId(undefined);
       await load();
@@ -1260,14 +1349,14 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
     }
   }
 
-  async function prepareProfile(profile: ManagedPluginProfile) {
+  async function prepareProfile(profile: PublicBrowserProfile) {
     setStatuses((current) => ({ ...current, [profile.id]: "preparing" }));
     toast.info("Prepare a conta na janela do navegador", {
       description: plugin.manifest.profileSetup?.description,
     });
     try {
       const response = await fetch(
-        `/api/plugins/${encodeURIComponent(plugin.id)}/profiles/${encodeURIComponent(profile.id)}/prepare`,
+        `/api/plugins/${encodeURIComponent(plugin.id)}/profile-bindings/${encodeURIComponent(profile.id)}/prepare`,
         { method: "POST" },
       );
       const result = (await response.json()) as {
@@ -1289,17 +1378,24 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
   }
 
   async function removeProfile(profile: ManagedPluginProfile) {
-    if (profile.usages.length) return;
     if (
       !window.confirm(
-        `Remover ${profile.name} do gerenciamento? A pasta de sessão local não será apagada.`,
+        t(
+          profile.usages.length
+            ? "Este perfil ainda está vinculado a processos. Ao removê-lo deste plugin, será necessário configurar outro perfil nesses processos antes de executar. O perfil global e a sessão local serão preservados."
+            : "Remover este perfil deste plugin? O perfil global e a sessão local serão preservados.",
+        ),
       )
     )
       return;
     try {
       const response = await fetch(
-        `/api/plugins/${encodeURIComponent(plugin.id)}/profiles/${encodeURIComponent(profile.id)}`,
-        { method: "DELETE" },
+        `/api/plugins/${encodeURIComponent(plugin.id)}/profile-bindings/${encodeURIComponent(profile.id)}`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bindingUpdatedAt: profile.bindingUpdatedAt }),
+        },
       );
       if (!response.ok) {
         const result = (await response.json()) as { error?: string };
@@ -1361,12 +1457,40 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
             value={name}
             maxLength={64}
             placeholder="Nome do novo perfil"
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => {
+              setName(event.target.value);
+              if (event.target.value) setExistingProfileId("");
+            }}
           />
+          <Select
+            value={existingProfileId}
+            onValueChange={(profileId) => {
+              setExistingProfileId(profileId);
+              setName("");
+            }}
+            disabled={!candidates.length}
+          >
+            <SelectTrigger className="sm:min-w-56">
+              <SelectValue
+                placeholder={
+                  candidates.length
+                    ? t("Usar perfil existente")
+                    : t("Nenhum perfil existente disponível")
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {candidates.map((profile) => (
+                <SelectItem key={profile.id} value={profile.id}>
+                  {profile.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             type="button"
             size="sm"
-            disabled={creating || !name.trim()}
+            disabled={creating || (!name.trim() && !existingProfileId)}
             onClick={() => void createProfile()}
           >
             {creating ? (
@@ -1476,12 +1600,7 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
                       variant="ghost"
                       className="size-8 text-destructive"
                       aria-label={`Remover ${profile.name}`}
-                      title={
-                        profile.usages.length
-                          ? "Troque as referências antes de remover"
-                          : "Remover do gerenciamento"
-                      }
-                      disabled={Boolean(profile.usages.length)}
+                      title={t("Desvincular deste plugin")}
                       onClick={() => void removeProfile(profile)}
                     >
                       <Trash2 className="size-3.5" />

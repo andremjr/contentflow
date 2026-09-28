@@ -117,6 +117,7 @@ import {
   type RegisteredPlugin,
 } from "./plugin-runner";
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
+import { legacyTypeListAccepts } from "../src/lib/data-shape";
 import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
 import { instructionWithRetryFeedback } from "../src/lib/retry-feedback";
 import {
@@ -125,12 +126,17 @@ import {
 } from "../src/lib/conversation-context";
 import { collectionItemValuesForPlugin } from "../src/lib/plugin-collection";
 import {
+  appendPluginDiagnostic,
   createPersistentPluginJob,
   isPluginJobTimedOut,
   type ClaimedPluginJob,
   type PersistentPluginJob,
   PluginJobStore,
 } from "./plugin-job-store";
+import { exportBrowserDiagnostics } from "./browser-diagnostics";
+import { normalizeBlockExecutionWorkUnits } from "./work-unit-normalization";
+import { materializeReceivedInputWorkUnits } from "./work-unit-materialization";
+import { registerDerivedWorkItems } from "./work-unit-registration";
 import {
   deletePluginConnectionSecret,
   deletePluginSecret,
@@ -139,24 +145,34 @@ import {
   setPluginConnectionSecret,
   setPluginSecret,
 } from "./credential-vault";
-import { canAdvanceProfileFallback, orderedProfileCandidates } from "./plugin-account-fallback";
+import { orderedProfileCandidates } from "./plugin-account-fallback";
+import { decideExecutionRecovery, recoveryProductMessage } from "./execution-recovery-policy";
 import {
+  aggregateCompatibilityItemOrchestration,
+  areRequiredOrchestratedItemsCompleted,
   belongsToSameItemActionGroup,
   blockExecutionItemsForJob,
-  completedOutputs,
+  claimOrchestratedItems,
+  consolidatedOrchestratedOutputs,
+  completeContinuousSessionClaims,
   completeCurrentOrchestratedItem,
+  continuousInvocationRequestForJob,
   declaredItemOrchestration,
   failCurrentOrchestratedItem,
   invocationRequestForJob,
   itemActionRequestForJob,
   itemProgressForJob,
   legacyItemOrchestration,
+  deterministicAggregateMapping,
   nextPendingItemIndex,
+  publishOrchestratedItemUpdate,
   resumedItemOrchestration,
   resumedItemOrchestrationFromItems,
+  releaseContinuousSessionClaims,
   selectedItemOrchestration,
   selectedItemOrchestrationFromItems,
   startCurrentOrchestratedItem,
+  usesContinuousItemSession,
 } from "./plugin-item-orchestration";
 import {
   applyPluginIncrementalItemUpdates,
@@ -183,6 +199,16 @@ import {
   syncPluginProfilesFromMethods,
 } from "./plugin-profiles";
 import {
+  BrowserProfileStore,
+  browserProfileInventory,
+  ensureLegacyBrowserProfile,
+  PluginProfileBindingStore,
+  PluginProfileReadinessStore,
+  resolveBoundBrowserProfile,
+  resolveLegacyBrowserProfile,
+} from "./browser-profiles";
+import { BrowserProfileLeaseStore } from "./browser-profile-leases";
+import {
   normalizeConnectionSecretPatch,
   resolvePluginConnectionSecrets,
 } from "./plugin-connection-runtime";
@@ -195,7 +221,12 @@ import {
   type PluginCatalog,
 } from "./plugin-catalog";
 import { migrateSiblingDataDirectory } from "./data-directory-migration";
-import { browserBridgeProfileState, stageBrowserBridge } from "./browser-profile-readiness";
+import { formatMigrationRecoveryLog, runSchemaMigrationsForStartup } from "./schema-migrations";
+import {
+  browserBridgeProfileDirectoryState,
+  browserBridgeProfileState,
+  stageBrowserBridge,
+} from "./browser-profile-readiness";
 import { fetchYouTubeChannel } from "./youtube";
 import { pluginConcurrencySlot, pluginConcurrencySlotForRequest } from "./plugin-concurrency";
 import {
@@ -203,6 +234,15 @@ import {
   validateBuilderMethods,
   type BuilderPluginContext,
 } from "./builder-methods";
+import {
+  clearImportedProfileAssociations,
+  materializeLocalProfileExecution,
+  resolveProfileExecutionSnapshot,
+  validateLocalProfileExecution,
+} from "./profile-execution-policy";
+import { materializeProfileLanePool } from "./profile-lane-pool";
+import { profileLaneProgressForJob } from "./profile-lane-progress";
+import { executeParallelProfileLanes } from "./parallel-profile-executor";
 
 const port = Number(process.env.CONTENTFLOW_API_PORT ?? 8787);
 const applicationRoot = path.resolve(process.env.CONTENTFLOW_APP_ROOT ?? process.cwd());
@@ -335,23 +375,13 @@ const database = new Database(
 );
 database.pragma("busy_timeout = 5000");
 database.pragma("journal_mode = WAL");
-const existingDatabaseTables = new Set(
-  (
-    database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
-      name: string;
-    }>
-  ).map((row) => row.name),
-);
-if (existingDatabaseTables.has("channels") && !existingDatabaseTables.has("plugin_profiles")) {
-  const migrationBackupsDirectory = path.join(dataDirectory, "migration-backups");
-  const profileMigrationBackup = path.join(
-    migrationBackupsDirectory,
-    "contentflow-before-profile-management.sqlite",
-  );
-  if (!existsSync(profileMigrationBackup)) {
-    mkdirSync(migrationBackupsDirectory, { recursive: true });
-    await database.backup(profileMigrationBackup);
-  }
+const schemaMigration = await runSchemaMigrationsForStartup(database, undefined, {
+  backupDirectory: path.join(dataDirectory, "migration-backups"),
+});
+if (!schemaMigration.ok) {
+  console.error(formatMigrationRecoveryLog(schemaMigration.diagnostic));
+  database.close();
+  process.exit(1);
 }
 database.exec(`
   CREATE TABLE IF NOT EXISTS channels (
@@ -484,8 +514,13 @@ if (!pluginConsentColumns.some((column) => column.name === "network_hosts")) {
 const pluginJobs = new PluginJobStore(database);
 const pluginConnections = new PluginConnectionStore(database);
 const pluginProfiles = new PluginProfileStore(database);
+const browserProfiles = new BrowserProfileStore(database);
+const pluginProfileBindings = new PluginProfileBindingStore(database);
+const pluginProfileReadiness = new PluginProfileReadinessStore(database);
+const browserProfileLeases = new BrowserProfileLeaseStore(database);
 const pluginConfigurationOptionsCache = new PluginConfigurationOptionsCache();
 pluginJobs.recoverInterrupted();
+browserProfileLeases.recoverExpired();
 // A database-wide sequence orders snapshots from commands and background workers.
 database.exec(
   "CREATE TABLE IF NOT EXISTS state_clock (id INTEGER PRIMARY KEY CHECK(id = 1), revision INTEGER NOT NULL); INSERT OR IGNORE INTO state_clock VALUES (1, 0)",
@@ -597,36 +632,6 @@ function reconcileStoredProjectTitles() {
 
 reconcileStoredProjectTitles();
 
-function capabilityWithDeterministicItemMapping(
-  capability: PluginCapability,
-  request: PluginExecutionRequest,
-  values: Record<string, RuntimeValue>,
-) {
-  if (capability.execution.itemOrchestration) return capability;
-  const inputCandidates = Object.entries(request.inputs).filter(
-    ([, value]) => Array.isArray(value) && value.length >= 2,
-  );
-  if (inputCandidates.length !== 1) return capability;
-  const [inputPort, inputItems] = inputCandidates[0];
-  if (!Array.isArray(inputItems)) return capability;
-  const outputCandidates = request.outputContract.filter((field) => {
-    const output = values[field.key];
-    return Array.isArray(output) && output.length > 0 && output.length <= inputItems.length;
-  });
-  if (outputCandidates.length !== 1) return capability;
-  return {
-    ...capability,
-    execution: {
-      ...capability.execution,
-      itemOrchestration: {
-        mode: "sequential" as const,
-        inputPort,
-        outputPort: outputCandidates[0].portKey,
-      },
-    },
-  } satisfies PluginCapability;
-}
-
 function reconcileStoredExecutionItems() {
   const executionRows = database
     .prepare("SELECT id, payload FROM process_executions")
@@ -654,12 +659,9 @@ function reconcileStoredExecutionItems() {
             (candidate) => candidate.id === job.capabilityId,
           );
           if (!capability) continue;
-          const effectiveCapability = capabilityWithDeterministicItemMapping(
-            capability,
-            job.request,
-            blockExecution.values,
-          );
-          const policy = effectiveCapability.execution.itemOrchestration;
+          const policy =
+            capability.execution.itemOrchestration ??
+            deterministicAggregateMapping(capability, job.request, blockExecution.values);
           if (!policy) continue;
           const inputItems = job.request.inputs[policy.inputPort];
           if (!Array.isArray(inputItems) || inputItems.length < 2) continue;
@@ -668,12 +670,19 @@ function reconcileStoredExecutionItems() {
             policy.outputPort;
           const outputs = blockExecution.values[outputKey];
           if (!Array.isArray(outputs) || outputs.length > inputItems.length) continue;
-          const migrated = legacyItemOrchestration(
-            effectiveCapability,
-            job.request,
-            structuredClone(outputs) as RuntimeValue[],
-            blockExecution.completedAt,
-          );
+          const migrated = capability.execution.itemOrchestration
+            ? legacyItemOrchestration(
+                capability,
+                job.request,
+                structuredClone(outputs) as RuntimeValue[],
+                blockExecution.completedAt,
+              )
+            : aggregateCompatibilityItemOrchestration(
+                capability,
+                job.request,
+                blockExecution.values,
+                blockExecution.completedAt,
+              );
           if (!migrated?.workItems?.length) continue;
           blockExecution.items = structuredClone(migrated.workItems);
           blockExecution.itemProgress = {
@@ -685,6 +694,45 @@ function reconcileStoredExecutionItems() {
           changed = true;
           break;
         }
+      }
+      if (changed) updateExecution.run(JSON.stringify(execution), execution.id);
+    }
+  })();
+}
+
+function normalizeStoredExecutionWorkUnits() {
+  const executionRows = database
+    .prepare("SELECT id, payload FROM process_executions")
+    .all() as Array<{ id: string; payload: string }>;
+  const jobsForBlock = database.prepare(
+    "SELECT payload FROM plugin_jobs WHERE execution_id = ? AND block_id = ? ORDER BY attempt ASC, updated_at ASC",
+  );
+  const updateExecution = database.prepare(
+    "UPDATE process_executions SET payload = ? WHERE id = ?",
+  );
+
+  database.transaction(() => {
+    for (const row of executionRows) {
+      const execution = JSON.parse(row.payload) as ProcessExecution;
+      let changed = false;
+      for (const blockExecution of execution.blocks) {
+        const jobs = (
+          jobsForBlock.all(execution.id, blockExecution.blockId) as Array<{ payload: string }>
+        ).map((jobRow) => JSON.parse(jobRow.payload) as PersistentPluginJob);
+        const normalized = normalizeBlockExecutionWorkUnits(blockExecution, jobs);
+        if (!normalized.length && !blockExecution.items?.length) continue;
+        if (JSON.stringify(normalized) === JSON.stringify(blockExecution.items ?? [])) continue;
+        blockExecution.items = normalized;
+        if (normalized.length && !blockExecution.itemProgress) {
+          const roots = normalized.filter((item) => !item.parentItemId);
+          const completed = roots.filter((item) => item.status === "completed").length;
+          blockExecution.itemProgress = {
+            total: roots.length,
+            completed,
+            pending: Math.max(0, roots.length - completed),
+          };
+        }
+        changed = true;
       }
       if (changed) updateExecution.run(JSON.stringify(execution), execution.id);
     }
@@ -742,6 +790,209 @@ function executionWorkspaceForPlugin(plugin: { id: string; manifest: { profileSe
   if (!plugin.manifest.profileSetup) return undefined;
   const safePluginId = plugin.id.replace(/[^A-Za-z0-9._-]/g, "_");
   return path.join(dataDirectory, "plugin-workspaces", "profiles", safePluginId);
+}
+
+function executionProfileForPluginRequest(
+  plugin: { id: string; manifest: { profileSetup?: PluginProfileSetup } },
+  request: PluginExecutionRequest,
+) {
+  return executionBrowserProfileForPluginRequest(plugin, request)?.profileDirectory;
+}
+
+function executionBrowserProfileForPluginRequest(
+  plugin: { id: string; manifest: { profileSetup?: PluginProfileSetup } },
+  request: PluginExecutionRequest,
+) {
+  const configurationKey = plugin.manifest.profileSetup?.configurationKey;
+  if (!configurationKey) return undefined;
+  const alias = String(request.configuration[configurationKey] ?? "").trim();
+  if (!alias) return undefined;
+  return resolveLegacyBrowserProfile(database, {
+    pluginId: plugin.id,
+    alias,
+    dataDirectory,
+  });
+}
+
+function persistLocalProfileExecution(blocks: ActionBlock[]) {
+  initializePluginRunner();
+  const materialized = materializeLocalProfileExecution({
+    blocks,
+    profileSetupForPlugin: (pluginId) => getRegisteredPlugin(pluginId)?.manifest.profileSetup,
+    resolveAlias: (pluginId, alias) => {
+      try {
+        return {
+          profileId: resolveLegacyBrowserProfile(database, { pluginId, alias, dataDirectory })
+            .profile.id,
+        };
+      } catch {
+        return undefined;
+      }
+    },
+  });
+  const errors: string[] = [];
+  const validated = materialized.map((block) => {
+    if (!block.plugin || block.plugin.profileExecution === undefined) return block;
+    const plugin = getRegisteredPlugin(block.plugin.pluginId);
+    const validation = validateLocalProfileExecution({
+      policy: block.plugin.profileExecution,
+      profileSetup: plugin?.manifest.profileSetup,
+      isBoundProfile: (profileId) =>
+        Boolean(pluginProfileBindings.get(block.plugin!.pluginId, profileId)),
+    });
+    if (validation.error) {
+      errors.push(`${block.name ?? block.type}: ${validation.error}`);
+      return block;
+    }
+    return validation.policy
+      ? { ...block, plugin: { ...block.plugin, profileExecution: validation.policy } }
+      : block;
+  });
+  return { blocks: validated, errors };
+}
+
+function resolvedProfileExecutionForBlock(plugin: RegisteredPlugin, block: ActionBlock) {
+  const policy = block.plugin?.profileExecution;
+  if (!policy) return undefined;
+  const setup = plugin.manifest.profileSetup;
+  if (!setup)
+    throw new Error("Este plugin não declara perfis de navegador para esta política local.");
+  return resolveProfileExecutionSnapshot({
+    policy,
+    configurationKey: setup.configurationKey,
+    resolveProfile: (profileId) => {
+      try {
+        const resolved = resolveBoundBrowserProfile(database, {
+          pluginId: plugin.id,
+          profileId,
+          dataDirectory,
+        });
+        return {
+          profileId: resolved.profile.id,
+          alias: resolved.profile.alias,
+          readinessState: pluginProfileReadiness.get(plugin.id, resolved.profile.id)?.state,
+        };
+      } catch {
+        return undefined;
+      }
+    },
+  });
+}
+
+function activeProfileAliasForJob(plugin: RegisteredPlugin, job: PersistentPluginJob) {
+  const configurationKey = plugin.manifest.profileSetup?.configurationKey;
+  if (!configurationKey) return undefined;
+  if (job.profileExecution) {
+    const index = job.profileFallback?.activeIndex ?? 0;
+    return job.profileExecution.profiles[index]?.alias;
+  }
+  if (job.profileFallback)
+    return job.profileFallback.candidates[job.profileFallback.activeIndex]?.trim() || undefined;
+  return String(job.request.configuration[configurationKey] ?? "").trim() || undefined;
+}
+
+function browserProfileForJob(plugin: RegisteredPlugin, job: PersistentPluginJob) {
+  if (job.profileExecution) {
+    const index = job.profileFallback?.activeIndex ?? 0;
+    const snapshot = job.profileExecution.profiles[index];
+    if (!snapshot) throw new Error("O perfil ativo não existe no snapshot desta tentativa.");
+    const resolved = resolveBoundBrowserProfile(database, {
+      pluginId: plugin.id,
+      profileId: snapshot.profileId,
+      dataDirectory,
+    });
+    if (resolved.profile.alias !== snapshot.alias) {
+      throw new Error("O alias do perfil físico mudou desde que a tentativa foi criada.");
+    }
+    if (job.browserProfile?.profileId && job.browserProfile.profileId !== snapshot.profileId) {
+      throw new Error("O perfil físico deste job divergiu do snapshot da política local.");
+    }
+    return resolved;
+  }
+  const alias = activeProfileAliasForJob(plugin, job);
+  if (!alias) return undefined;
+  const resolved = resolveLegacyBrowserProfile(database, {
+    pluginId: plugin.id,
+    alias,
+    dataDirectory,
+  });
+  if (job.browserProfile) {
+    if (job.browserProfile.profileId !== resolved.profile.id)
+      throw new Error("O perfil físico deste job mudou desde que a tentativa foi criada.");
+  } else {
+    job.browserProfile = { profileId: resolved.profile.id, alias };
+  }
+  return resolved;
+}
+
+function browserProfileSnapshot(plugin: RegisteredPlugin, alias: string | undefined) {
+  if (!alias) return undefined;
+  const resolved = resolveLegacyBrowserProfile(database, {
+    pluginId: plugin.id,
+    alias,
+    dataDirectory,
+  });
+  return { profileId: resolved.profile.id, alias: resolved.alias };
+}
+
+const BROWSER_PROFILE_LEASE_TTL_MS = 30_000;
+const BROWSER_PROFILE_LEASE_HEARTBEAT_MS = 10_000;
+const activeJobProfileLeases = new Map<
+  string,
+  { profileId: string; leaseToken: string; timer: ReturnType<typeof setInterval> }
+>();
+
+function releaseJobProfileLease(jobId: string) {
+  const active = activeJobProfileLeases.get(jobId);
+  if (active) {
+    clearInterval(active.timer);
+    browserProfileLeases.release(active.profileId, active.leaseToken);
+    activeJobProfileLeases.delete(jobId);
+    return;
+  }
+  browserProfileLeases.releaseByOwner("job", jobId);
+}
+
+function ensureJobProfileLease(plugin: RegisteredPlugin, job: PersistentPluginJob) {
+  const resolved = browserProfileForJob(plugin, job);
+  const active = activeJobProfileLeases.get(job.id);
+  if (!resolved) {
+    if (active) releaseJobProfileLease(job.id);
+    return true;
+  }
+  if (active && active.profileId !== resolved.profile.id) releaseJobProfileLease(job.id);
+
+  const acquired = browserProfileLeases.acquire({
+    profileId: resolved.profile.id,
+    ownerType: "job",
+    ownerId: job.id,
+    pluginId: plugin.id,
+    ttlMs: BROWSER_PROFILE_LEASE_TTL_MS,
+  });
+  if (!acquired.acquired) return false;
+
+  const current = activeJobProfileLeases.get(job.id);
+  if (current?.leaseToken === acquired.lease.leaseToken) return true;
+  if (current) clearInterval(current.timer);
+  const timer = setInterval(() => {
+    const renewed = browserProfileLeases.heartbeat(
+      resolved.profile.id,
+      acquired.lease.leaseToken,
+      new Date(),
+      BROWSER_PROFILE_LEASE_TTL_MS,
+    );
+    if (!renewed) {
+      clearInterval(timer);
+      activeJobProfileLeases.delete(job.id);
+    }
+  }, BROWSER_PROFILE_LEASE_HEARTBEAT_MS);
+  timer.unref();
+  activeJobProfileLeases.set(job.id, {
+    profileId: resolved.profile.id,
+    leaseToken: acquired.lease.leaseToken,
+    timer,
+  });
+  return true;
 }
 
 function executionFor(projectId: string, processType: string) {
@@ -1705,6 +1956,7 @@ function synchronizeExecutionItems(
   job: PersistentPluginJob | undefined,
   now: string,
 ) {
+  const nextValues = structuredClone(blockExecution.values);
   if (job?.itemOrchestration) {
     const outputKey = job.request.outputContract.find(
       (field) => field.portKey === job.itemOrchestration!.outputPort,
@@ -1714,30 +1966,29 @@ function synchronizeExecutionItems(
           (field) => field.portKey === job.itemOrchestration!.combinedOutputPort,
         )?.key
       : undefined;
-    const accumulatedItems = executionItems
-      .slice()
-      .sort((left, right) => left.order - right.order)
-      .flatMap((candidate) => {
-        if (candidate.status !== "completed" || candidate.output === undefined) return [];
-        return Array.isArray(candidate.output)
-          ? (structuredClone(candidate.output) as RuntimeValue[])
-          : [structuredClone(candidate.output) as RuntimeValue];
-      });
-    if (outputKey) blockExecution.values[outputKey] = accumulatedItems as RuntimeValue;
+    const rootIds = new Set(job.itemOrchestration.itemIds);
+    const registeredIds = new Set((job.registeredItems ?? []).map((item) => item.id));
+    job.itemOrchestration.workItems = executionItems
+      .filter((item) => rootIds.has(item.id))
+      .map((item) => structuredClone(item));
+    job.registeredItems = executionItems
+      .filter((item) => registeredIds.has(item.id))
+      .map((item) => structuredClone(item));
+    const accumulatedItems = consolidatedOrchestratedOutputs(job).outputs;
+    if (outputKey) nextValues[outputKey] = accumulatedItems as RuntimeValue;
     if (combinedOutputKey) {
-      blockExecution.values[combinedOutputKey] = accumulatedItems
+      nextValues[combinedOutputKey] = accumulatedItems
         .filter((value): value is string => typeof value === "string")
         .join(job.itemOrchestration.separator ?? "\n\n");
     }
-    job.itemOrchestration.workItems = structuredClone(executionItems);
     job.itemOrchestration.accumulatedItems = structuredClone(accumulatedItems);
   } else if (job && executionItems.some((item) => item.pluginCorrelation)) {
     job.incrementalItems = structuredClone(executionItems);
     const values = incrementalItemValues(executionItems, job.request.outputContract);
     for (const contract of job.request.outputContract) {
-      if (values[contract.key] === undefined) delete blockExecution.values[contract.key];
+      if (values[contract.key] === undefined) delete nextValues[contract.key];
     }
-    Object.assign(blockExecution.values, values);
+    Object.assign(nextValues, values);
   } else {
     for (const field of block.outputs ?? []) {
       const correlated = executionItems.filter(
@@ -1748,13 +1999,19 @@ function synchronizeExecutionItems(
         .filter((item) => item.status === "completed" && item.output !== undefined)
         .sort((left, right) => left.order - right.order)
         .map((item) => structuredClone(item.output!));
-      blockExecution.values[field.key] = outputs as RuntimeValue;
+      nextValues[field.key] = outputs as RuntimeValue;
     }
   }
   if (job) {
-    job.partialValues = structuredClone(blockExecution.values);
+    // O job é a autoridade persistente das unidades. A alteração proposta pela
+    // interface só vira projeção da execução depois que o snapshot autoritativo
+    // foi gravado com sucesso.
+    job.partialValues = structuredClone(nextValues);
     persistCompletedPluginJob(job, now);
+    blockExecution.items = blockExecutionItemsForJob(job, executionItems);
+    blockExecution.itemProgress = itemProgressForJob(job);
   }
+  blockExecution.values = nextValues;
 }
 
 function markPluginJobFailed(
@@ -1763,8 +2020,13 @@ function markPluginJobFailed(
   project: Project | undefined,
   message: string,
   status: "failed" | "abandoned" = "failed",
+  reasonCode?: string,
 ) {
-  const failedJob = failCurrentOrchestratedItem(claim.job, message);
+  const failedJob = appendPluginDiagnostic(failCurrentOrchestratedItem(claim.job, message), {
+    code: "JOB_FAILED",
+    ...(reasonCode ? { reasonCode } : {}),
+    attempt: claim.job.attempt,
+  });
   claim.job = failedJob;
   return pluginJobs.save(
     claim,
@@ -1785,7 +2047,8 @@ function markPluginJobFailed(
           if (block) recordBlockDeliveries(execution, block, saved.partialValues, "partial");
         }
         blockExecution.itemProgress = itemProgressForJob(saved);
-        blockExecution.items = blockExecutionItemsForJob(saved);
+        blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
+        blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
         blockExecution.status = "failed";
         blockExecution.error = message;
         blockExecution.progressMessage = message;
@@ -1806,7 +2069,10 @@ function markPluginJobCancelled(
   return pluginJobs.save(
     claim,
     {
-      ...claim.job,
+      ...appendPluginDiagnostic(claim.job, {
+        code: "JOB_CANCELLED",
+        attempt: claim.job.attempt,
+      }),
       status: "cancelled",
       cancelRequested: true,
       message,
@@ -1836,7 +2102,7 @@ async function resolvePluginConnection(plugin: RegisteredPlugin, requestedConnec
   });
 }
 
-async function processPluginJob(
+async function processPluginJobClaimed(
   jobId: string,
   transientSecrets: Record<string, string> = {},
   existingClaim?: ClaimedPluginJob,
@@ -1931,6 +2197,9 @@ async function processPluginJob(
       "abandoned",
     );
   }
+  if (!job.profileLanePool && !ensureJobProfileLease(plugin, job)) {
+    return pluginJobs.defer(claim, new Date(Date.now() + 250));
+  }
 
   const remainingMs = new Date(job.deadlineAt).getTime() - Date.now();
   let storedSecrets: Record<string, string> = {};
@@ -1957,13 +2226,12 @@ async function processPluginJob(
     }
     if (isPluginJobTimedOut(job)) {
       if (job.jobId && capability.execution.supportsCancellation) {
-        await executeRegisteredPlugin(
-          plugin,
-          { ...job.request, invocation: { mode: "cancel", jobId: job.jobId } },
-          30_000,
-          secrets,
-          { workspaceDirectory, existingArtifacts: job.partialArtifacts },
-        ).catch(() => undefined);
+        const cancelRequest = invocationRequestForJob(job, { mode: "cancel", jobId: job.jobId });
+        await executeRegisteredPlugin(plugin, cancelRequest, 30_000, secrets, {
+          workspaceDirectory,
+          profileDirectory: browserProfileForJob(plugin, job)?.profileDirectory,
+          existingArtifacts: job.partialArtifacts,
+        }).catch(() => undefined);
       }
       return markPluginJobFailed(
         claim,
@@ -1975,12 +2243,17 @@ async function processPluginJob(
 
     if (job.status === "cancel_requested") {
       if (job.jobId && capability.execution.supportsCancellation) {
+        const cancelRequest = invocationRequestForJob(job, { mode: "cancel", jobId: job.jobId });
         const cancelResponse = await executeRegisteredPlugin(
           plugin,
-          { ...job.request, invocation: { mode: "cancel", jobId: job.jobId } },
+          cancelRequest,
           invocationTimeout,
           secrets,
-          { workspaceDirectory, existingArtifacts: job.partialArtifacts },
+          {
+            workspaceDirectory,
+            profileDirectory: browserProfileForJob(plugin, job)?.profileDirectory,
+            existingArtifacts: job.partialArtifacts,
+          },
         );
         if (cancelResponse.status === "pending") {
           return pluginJobs.save(claim, {
@@ -2017,22 +2290,197 @@ async function processPluginJob(
       job.status === "starting"
         ? ({ mode: "start" } as const)
         : ({ mode: "resume", jobId: job.jobId! } as const);
-    const startedItemJob = startCurrentOrchestratedItem(job);
+    const parallelExecution = Boolean(job.profileLanePool);
+    const parallelResult = parallelExecution
+      ? await executeParallelProfileLanes({
+          plugin,
+          capability,
+          job,
+          timeoutMs: invocationTimeout,
+          secrets,
+          workspaceDirectory,
+          dependencies: {
+            pluginJobs,
+            browserProfileLeases,
+            resolveProfile: (pluginId, profileId) =>
+              resolveBoundBrowserProfile(database, {
+                pluginId,
+                profileId,
+                dataDirectory,
+              }),
+            executePlugin: executeRegisteredPlugin,
+            leaseTtlMs: BROWSER_PROFILE_LEASE_TTL_MS,
+            leaseHeartbeatMs: BROWSER_PROFILE_LEASE_HEARTBEAT_MS,
+          },
+        })
+      : undefined;
+    if (parallelResult) {
+      job = parallelResult.job;
+      claim.job = job;
+    }
+    const continuousSession = Boolean(
+      !parallelExecution && job.itemOrchestration && usesContinuousItemSession(capability),
+    );
+    const continuousInvocationId = continuousSession ? randomUUID() : undefined;
+    const startedItemJob =
+      parallelExecution || continuousSession ? job : startCurrentOrchestratedItem(job);
     if (startedItemJob !== job) {
       job = pluginJobs.updateClaimed(claim, startedItemJob);
       claim.job = job;
-      blockExecution.items = blockExecutionItemsForJob(job);
+      blockExecution.items = blockExecutionItemsForJob(job, blockExecution.items);
       blockExecution.itemProgress = itemProgressForJob(job);
+      blockExecution.profileLaneProgress = profileLaneProgressForJob(job);
       persistPluginExecution(execution, project);
     }
-    const pluginResponse = await executeRegisteredPlugin(
-      plugin,
-      invocationRequestForJob(job, invocation),
-      invocationTimeout,
-      secrets,
-      {
+    const invocationRequest = continuousSession
+      ? continuousInvocationRequestForJob(job, invocation)
+      : invocationRequestForJob(job, invocation);
+    const pluginResponse =
+      parallelResult?.response ??
+      (await executeRegisteredPlugin(plugin, invocationRequest, invocationTimeout, secrets, {
         workspaceDirectory,
+        profileDirectory: browserProfileForJob(plugin, job)?.profileDirectory,
         existingArtifacts: job.partialArtifacts,
+        onRegisterItems: async (parentItemId, plannedItems) => {
+          const latestExecution = executionById(job.executionId);
+          const latestProject = latestExecution
+            ? readPayload<Project>("projects", latestExecution.projectId)
+            : undefined;
+          const latestBlockExecution = latestExecution?.blocks.find(
+            (item) => item.blockId === job.blockId,
+          );
+          if (
+            !latestExecution ||
+            !latestProject ||
+            !latestBlockExecution ||
+            latestExecution.status === "cancelled" ||
+            (latestBlockExecution.attempt ?? 1) !== job.attempt
+          ) {
+            throw new Error("A tentativa do bloco não está mais ativa.");
+          }
+          const registered = registerDerivedWorkItems({
+            job,
+            existingItems: latestBlockExecution.items,
+            parentItemId,
+            plannedItems,
+          });
+          job = pluginJobs.updateClaimed(claim, registered.job);
+          claim.job = job;
+          latestBlockExecution.items = blockExecutionItemsForJob(job, latestBlockExecution.items);
+          persistPluginExecution(latestExecution, latestProject);
+          return registered.claimed;
+        },
+        ...(continuousInvocationId
+          ? {
+              onClaimItems: async (limit: number) => {
+                const latestExecution = executionById(job.executionId);
+                const latestProject = latestExecution
+                  ? readPayload<Project>("projects", latestExecution.projectId)
+                  : undefined;
+                const latestBlockExecution = latestExecution?.blocks.find(
+                  (item) => item.blockId === job.blockId,
+                );
+                if (
+                  !latestExecution ||
+                  !latestProject ||
+                  !latestBlockExecution ||
+                  latestExecution.status === "cancelled" ||
+                  (latestBlockExecution.attempt ?? 1) !== job.attempt
+                ) {
+                  return [];
+                }
+                const claimed = claimOrchestratedItems({
+                  job,
+                  limit,
+                  invocationId: continuousInvocationId,
+                  profileId: job.browserProfile?.profileId,
+                  expiresAt: job.deadlineAt,
+                });
+                job = pluginJobs.updateClaimed(claim, claimed.job);
+                claim.job = job;
+                latestBlockExecution.items = blockExecutionItemsForJob(
+                  job,
+                  latestBlockExecution.items,
+                );
+                latestBlockExecution.itemProgress = itemProgressForJob(job);
+                latestBlockExecution.profileLaneProgress = profileLaneProgressForJob(job);
+                persistPluginExecution(latestExecution, latestProject);
+                return claimed.claimed;
+              },
+              onPublishItemUpdate: async (update, storedArtifacts) => {
+                const latestExecution = executionById(job.executionId);
+                const latestProject = latestExecution
+                  ? readPayload<Project>("projects", latestExecution.projectId)
+                  : undefined;
+                const latestBlock = latestExecution?.methodSnapshot.blocks.find(
+                  (item) => item.id === job.blockId,
+                );
+                const latestBlockExecution = latestExecution?.blocks.find(
+                  (item) => item.blockId === job.blockId,
+                );
+                if (
+                  !latestExecution ||
+                  !latestProject ||
+                  !latestBlock ||
+                  !latestBlockExecution ||
+                  latestExecution.status === "cancelled" ||
+                  (latestBlockExecution.attempt ?? 1) !== job.attempt
+                ) {
+                  throw new Error("A tentativa do bloco não está mais ativa.");
+                }
+                const published = publishOrchestratedItemUpdate({
+                  job,
+                  invocationId: continuousInvocationId,
+                  update,
+                  storedArtifacts,
+                });
+                const nextJob = published.job;
+                const orchestration = nextJob.itemOrchestration!;
+                const consolidation = consolidatedOrchestratedOutputs(nextJob);
+                const accumulatedItems = consolidation.outputs;
+                const partialValues = { ...nextJob.partialValues };
+                const outputKey = nextJob.request.outputContract.find(
+                  (field) => field.portKey === orchestration.outputPort,
+                )?.key;
+                const combinedOutputKey = orchestration.combinedOutputPort
+                  ? nextJob.request.outputContract.find(
+                      (field) => field.portKey === orchestration.combinedOutputPort,
+                    )?.key
+                  : undefined;
+                if (outputKey) partialValues[outputKey] = accumulatedItems as RuntimeValue;
+                if (combinedOutputKey) {
+                  partialValues[combinedOutputKey] = accumulatedItems
+                    .filter((item): item is string => typeof item === "string")
+                    .join(orchestration.separator ?? "\\n\\n");
+                }
+                job = pluginJobs.updateClaimed(claim, {
+                  ...nextJob,
+                  partialValues,
+                  partialArtifacts: mergeStoredArtifacts(nextJob.partialArtifacts, storedArtifacts),
+                  progress:
+                    consolidation.requiredItems.filter((item) => item.status === "completed")
+                      .length / Math.max(1, consolidation.requiredItems.length),
+                  message: update.message ?? nextJob.message,
+                });
+                claim.job = job;
+                latestBlockExecution.status = "in_progress";
+                latestBlockExecution.values = structuredClone(partialValues);
+                latestBlockExecution.progress = job.progress;
+                latestBlockExecution.progressMessage = job.message;
+                latestBlockExecution.itemProgress = itemProgressForJob(job);
+                latestBlockExecution.profileLaneProgress = profileLaneProgressForJob(job);
+                latestBlockExecution.items = blockExecutionItemsForJob(
+                  job,
+                  latestBlockExecution.items,
+                );
+                latestExecution.status = "running";
+                latestExecution.error = undefined;
+                recordBlockDeliveries(latestExecution, latestBlock, partialValues, "partial");
+                persistPluginExecution(latestExecution, latestProject);
+                return published.receipt;
+              },
+            }
+          : {}),
         onPartial: async (update) => {
           const latestExecution = executionById(job.executionId);
           const latestProject = latestExecution
@@ -2109,15 +2557,31 @@ async function processPluginJob(
           latestBlockExecution.progress = job.progress;
           latestBlockExecution.progressMessage = job.message;
           latestBlockExecution.itemProgress = itemProgressForJob(job);
-          latestBlockExecution.items = blockExecutionItemsForJob(job);
+          latestBlockExecution.profileLaneProgress = profileLaneProgressForJob(job);
+          latestBlockExecution.items = blockExecutionItemsForJob(job, latestBlockExecution.items);
           latestBlockExecution.logs = update.logs ?? latestBlockExecution.logs;
           latestExecution.status = "running";
           latestExecution.error = undefined;
           recordBlockDeliveries(latestExecution, latestBlock, partialValues, "partial");
           persistPluginExecution(latestExecution, latestProject);
         },
-      },
-    );
+      }));
+    for (const event of pluginResponse.bridgeDiagnostics ?? []) {
+      job = appendPluginDiagnostic(job, {
+        code: event.code,
+        profileId: job.browserProfile?.profileId,
+        attempt: job.attempt,
+      });
+    }
+    claim.job = job;
+
+    if (continuousInvocationId && pluginResponse.status !== "success") {
+      job = pluginJobs.updateClaimed(
+        claim,
+        releaseContinuousSessionClaims(job, continuousInvocationId),
+      );
+      claim.job = job;
+    }
 
     // No object captured before an external await is allowed to overwrite newer state.
     execution = executionById(job.executionId);
@@ -2197,7 +2661,8 @@ async function processPluginJob(
       blockExecution.progress = saved.progress;
       blockExecution.progressMessage = saved.message;
       blockExecution.itemProgress = itemProgressForJob(saved);
-      blockExecution.items = blockExecutionItemsForJob(saved);
+      blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
+      blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
       blockExecution.logs = pluginResponse.logs;
       execution.status = "running";
       execution.error = undefined;
@@ -2220,12 +2685,20 @@ async function processPluginJob(
         pluginResponse.storedArtifacts,
       );
       const fallback = job.profileFallback;
-      if (fallback && canAdvanceProfileFallback(job, pluginResponse)) {
+      const recoveryDecision = decideExecutionRecovery({ job, failure: pluginResponse });
+      if (fallback && recoveryDecision.action === "switch_profile") {
         const currentProfile = fallback.candidates[fallback.activeIndex];
         const nextIndex = fallback.activeIndex + 1;
         const nextProfile = fallback.candidates[nextIndex];
+        const nextBrowserProfile = browserProfileSnapshot(plugin, nextProfile);
         const saved = pluginJobs.save(claim, {
-          ...job,
+          ...appendPluginDiagnostic(job, {
+            code: "PROFILE_SWITCH",
+            reasonCode: pluginResponse.code,
+            previousProfileId: job.browserProfile?.profileId,
+            profileId: nextBrowserProfile?.profileId,
+            attempt: job.attempt,
+          }),
           status: "starting",
           retryCount: job.retryCount + 1,
           profileFallback: {
@@ -2240,57 +2713,82 @@ async function processPluginJob(
               },
             ],
           },
+          browserProfile: nextBrowserProfile,
           partialValues,
           partialArtifacts,
           error: pluginResponse.message,
-          message: `Falha em ${currentProfile}; continuando com ${nextProfile}.`,
+          message: recoveryProductMessage({
+            decision: recoveryDecision,
+            failureMessage: pluginResponse.message,
+            currentProfile,
+            nextProfile,
+            preservedCount: itemProgressForJob(job)?.completed,
+          }),
           nextPollAt: new Date().toISOString(),
         });
+        releaseJobProfileLease(job.id);
         if (saved.status === "cancel_requested") return saved;
         blockExecution.status = "in_progress";
         blockExecution.values = structuredClone(partialValues);
         blockExecution.progressMessage = saved.message;
         blockExecution.itemProgress = itemProgressForJob(saved);
-        blockExecution.items = blockExecutionItemsForJob(saved);
+        blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
+        blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
         blockExecution.logs = pluginResponse.logs;
         execution.status = "running";
         recordBlockDeliveries(execution, block, partialValues, "partial");
         persistPluginExecution(execution, project);
         return saved;
       }
-      if (
-        pluginResponse.retryable &&
-        job.retryCount < 2 &&
-        Date.now() + 1_000 < new Date(job.deadlineAt).getTime()
-      ) {
+      if (recoveryDecision.action === "retry") {
         const retryCount = job.retryCount + 1;
-        const retryAfterMs = Math.max(
-          1_000,
-          Math.min(30_000, pluginResponse.retryAfterMs ?? 1_000 * 2 ** retryCount),
-        );
         const saved = pluginJobs.save(claim, {
-          ...job,
+          ...appendPluginDiagnostic(job, {
+            code: "PLUGIN_RETRY_SCHEDULED",
+            reasonCode: pluginResponse.code,
+            profileId: job.browserProfile?.profileId,
+            attempt: job.attempt,
+          }),
           status: job.jobId ? "pending" : "starting",
           retryCount,
           partialValues,
           partialArtifacts,
           error: pluginResponse.message,
-          message: `Tentativa ${retryCount + 1}: ${pluginResponse.message}`,
-          nextPollAt: new Date(Date.now() + retryAfterMs).toISOString(),
+          message: recoveryProductMessage({
+            decision: recoveryDecision,
+            failureMessage: pluginResponse.message,
+            currentProfile: activeProfileAliasForJob(plugin, job),
+            preservedCount: itemProgressForJob(job)?.completed,
+          }),
+          nextPollAt: new Date(Date.now() + recoveryDecision.delayMs).toISOString(),
         });
         if (saved.status === "cancel_requested") return saved;
         blockExecution.status = "in_progress";
         blockExecution.values = structuredClone(partialValues);
         blockExecution.progressMessage = saved.message;
         blockExecution.itemProgress = itemProgressForJob(saved);
-        blockExecution.items = blockExecutionItemsForJob(saved);
+        blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
+        blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
         blockExecution.logs = pluginResponse.logs;
         execution.status = "running";
         recordBlockDeliveries(execution, block, partialValues, "partial");
         persistPluginExecution(execution, project);
         return saved;
       }
-      return markPluginJobFailed(claim, execution, project, pluginResponse.message);
+      const terminalMessage = recoveryProductMessage({
+        decision: recoveryDecision,
+        failureMessage: pluginResponse.message,
+        currentProfile: activeProfileAliasForJob(plugin, job),
+        preservedCount: itemProgressForJob(job)?.completed,
+      });
+      return markPluginJobFailed(
+        claim,
+        execution,
+        project,
+        terminalMessage,
+        "failed",
+        pluginResponse.code,
+      );
     }
 
     const values = {
@@ -2318,13 +2816,36 @@ async function processPluginJob(
         : rawIncoming === undefined
           ? []
           : [rawIncoming];
-      const completedItemJob = completeCurrentOrchestratedItem(
-        job,
-        structuredClone(rawIncoming) as BlockExecutionItemValue,
-      );
+      const ownedClaimCount = continuousInvocationId
+        ? (itemOrchestration.claims ?? []).filter(
+            (claim) => claim.invocationId === continuousInvocationId,
+          ).length
+        : 0;
+      const completedItemJob = parallelExecution
+        ? job
+        : continuousInvocationId
+          ? completeContinuousSessionClaims(
+              job,
+              continuousInvocationId,
+              structuredClone(
+                ownedClaimCount === 1 && !Array.isArray(rawIncoming)
+                  ? [rawIncoming]
+                  : incomingItems,
+              ) as BlockExecutionItemValue[],
+            )
+          : completeCurrentOrchestratedItem(
+              job,
+              structuredClone(rawIncoming) as BlockExecutionItemValue,
+            );
       const completedItemOrchestration = completedItemJob.itemOrchestration!;
-      const accumulatedItems = completedItemOrchestration.workItems
-        ? completedOutputs(completedItemOrchestration.workItems)
+      const consolidation = consolidatedOrchestratedOutputs(completedItemJob);
+      if ((parallelExecution || continuousInvocationId) && !consolidation.complete) {
+        throw new Error(
+          "A sessão contínua encerrou antes de confirmar duravelmente todas as unidades concedidas.",
+        );
+      }
+      const accumulatedItems = consolidation.requiredItems.length
+        ? consolidation.outputs
         : ([...(itemOrchestration.accumulatedItems ?? []), ...incomingItems] as RuntimeValue[]);
       const accumulated = { ...job.partialValues, ...mappedValues };
       if (outputKey) accumulated[outputKey] = accumulatedItems as RuntimeValue;
@@ -2348,9 +2869,11 @@ async function processPluginJob(
           ),
           itemOrchestration: { ...nextItemOrchestration, currentIndex: nextIndex },
           progress:
-            (completedItemOrchestration.workItems?.filter((item) => item.status === "completed")
-              .length ?? nextIndex) / itemOrchestration.items.length,
-          message: `Item ${itemOrchestration.currentIndex + 1} de ${itemOrchestration.items.length} concluído.`,
+            consolidation.requiredItems.filter((item) => item.status === "completed").length /
+            Math.max(1, consolidation.requiredItems.length || itemOrchestration.items.length),
+          message: continuousInvocationId
+            ? job.message
+            : `Item ${itemOrchestration.currentIndex + 1} de ${itemOrchestration.items.length} concluído.`,
           error: undefined,
         });
         if (saved.status === "cancel_requested") return saved;
@@ -2359,7 +2882,8 @@ async function processPluginJob(
         blockExecution.progress = saved.progress;
         blockExecution.progressMessage = saved.message;
         blockExecution.itemProgress = itemProgressForJob(saved);
-        blockExecution.items = blockExecutionItemsForJob(saved);
+        blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
+        blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
         blockExecution.logs = pluginResponse.logs;
         execution.status = "running";
         recordBlockDeliveries(execution, block, accumulated, "partial");
@@ -2391,36 +2915,16 @@ async function processPluginJob(
       throw new Error(`O plugin entregou valores incompatíveis: ${restrictionIssues.join("; ")}.`);
     }
     if (!job.itemOrchestration) {
-      const inferredCapability = capabilityWithDeterministicItemMapping(
-        capability,
-        job.request,
-        values,
-      );
-      const inferredPolicy = inferredCapability.execution.itemOrchestration;
-      const inferredOutputKey = inferredPolicy
-        ? job.request.outputContract.find((field) => field.portKey === inferredPolicy.outputPort)
-            ?.key
-        : undefined;
-      const inferredInputs = inferredPolicy
-        ? job.request.inputs[inferredPolicy.inputPort]
-        : undefined;
-      const inferredOutputs = inferredOutputKey ? values[inferredOutputKey] : undefined;
-      if (
-        inferredPolicy &&
-        Array.isArray(inferredInputs) &&
-        Array.isArray(inferredOutputs) &&
-        inferredInputs.length === inferredOutputs.length
-      ) {
-        const materialized = legacyItemOrchestration(
-          inferredCapability,
-          job.request,
-          structuredClone(inferredOutputs) as RuntimeValue[],
-        );
-        if (materialized) {
-          job = { ...job, itemOrchestration: materialized };
-          claim.job = job;
-        }
+      const materialized = aggregateCompatibilityItemOrchestration(capability, job.request, values);
+      if (materialized) {
+        job = { ...job, itemOrchestration: materialized };
+        claim.job = job;
       }
+    }
+    if (job.itemOrchestration && !areRequiredOrchestratedItemsCompleted(job)) {
+      throw new Error(
+        "O plugin encerrou a execução antes de todas as unidades obrigatórias chegarem ao estado concluído.",
+      );
     }
     const completedConversationId = pluginResponse.conversation?.id
       ? normalizePluginConversationId(pluginResponse.conversation.id)
@@ -2428,7 +2932,11 @@ async function processPluginJob(
     const saved = pluginJobs.save(
       claim,
       {
-        ...job,
+        ...appendPluginDiagnostic(job, {
+          code: "JOB_COMPLETED",
+          profileId: job.browserProfile?.profileId,
+          attempt: job.attempt,
+        }),
         status: "completed",
         progress: 1,
         partialValues: values,
@@ -2444,16 +2952,12 @@ async function processPluginJob(
         if (!execution || !project || !block || !blockExecution) return;
         finishPluginBlock(execution, block, blockExecution, values);
         if (completedConversationId) {
-          const profileConfigurationKey = plugin.manifest.profileSetup?.configurationKey;
-          const activeProfile = job.profileFallback
-            ? job.profileFallback.candidates[job.profileFallback.activeIndex]
-            : profileConfigurationKey
-              ? String(job.request.configuration[profileConfigurationKey] ?? "").trim() || undefined
-              : undefined;
+          const activeProfile = activeProfileAliasForJob(plugin, job);
           blockExecution.pluginConversation = {
             pluginId: plugin.id,
             connectionId: block.plugin?.connectionId,
             profile: activeProfile,
+            profileId: job.browserProfile?.profileId,
             id: completedConversationId,
             fallbackContext: pluginConversationFallbackContext(block, values),
           };
@@ -2465,7 +2969,8 @@ async function processPluginJob(
         blockExecution.progress = 1;
         blockExecution.progressMessage = undefined;
         blockExecution.itemProgress = itemProgressForJob(saved);
-        blockExecution.items = blockExecutionItemsForJob(saved);
+        blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
+        blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
         blockExecution.itemRetryScope = undefined;
         persistPluginExecution(execution, project);
       },
@@ -2493,12 +2998,26 @@ async function processPluginJob(
     }
     const errorCode = (error as { code?: string })?.code || "JOB_FAILED";
     const fallback = job.profileFallback;
-    if (fallback && canAdvanceProfileFallback(job, { code: errorCode, message, status: "error" })) {
+    const recoveryDecision = decideExecutionRecovery({
+      job,
+      failure: { code: errorCode, message, retryable: errorCode === "JOB_FAILED" },
+    });
+    if (fallback && recoveryDecision.action === "switch_profile") {
       const currentProfile = fallback.candidates[fallback.activeIndex];
       const nextIndex = fallback.activeIndex + 1;
       const nextProfile = fallback.candidates[nextIndex];
+      const resolvedNextProfile = job.profileExecution?.profiles[nextIndex];
+      const nextBrowserProfile = resolvedNextProfile
+        ? { profileId: resolvedNextProfile.profileId, alias: resolvedNextProfile.alias }
+        : browserProfileSnapshot(plugin, nextProfile);
       const saved = pluginJobs.save(claim, {
-        ...job,
+        ...appendPluginDiagnostic(job, {
+          code: "PROFILE_SWITCH",
+          reasonCode: errorCode,
+          previousProfileId: job.browserProfile?.profileId,
+          profileId: nextBrowserProfile?.profileId,
+          attempt: job.attempt,
+        }),
         status: "starting",
         retryCount: job.retryCount + 1,
         profileFallback: {
@@ -2513,39 +3032,85 @@ async function processPluginJob(
             },
           ],
         },
+        browserProfile: nextBrowserProfile,
         error: message,
-        message: `Falha em ${currentProfile}; continuando com ${nextProfile}.`,
+        message: recoveryProductMessage({
+          decision: recoveryDecision,
+          failureMessage: message,
+          currentProfile,
+          nextProfile,
+          preservedCount: itemProgressForJob(job)?.completed,
+        }),
         nextPollAt: new Date().toISOString(),
       });
+      releaseJobProfileLease(job.id);
       if (saved.status === "cancel_requested") return saved;
       blockExecution.status = "in_progress";
       blockExecution.progressMessage = saved.message;
       blockExecution.itemProgress = itemProgressForJob(saved);
-      blockExecution.items = blockExecutionItemsForJob(saved);
+      blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
+      blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
       execution.status = "running";
       persistPluginExecution(execution, project);
       return saved;
     }
-    if (job.retryCount < 2 && Date.now() + 1_000 < new Date(job.deadlineAt).getTime()) {
+    if (recoveryDecision.action === "retry") {
       const retryCount = job.retryCount + 1;
       const saved = pluginJobs.save(claim, {
-        ...job,
+        ...appendPluginDiagnostic(job, {
+          code: "PLUGIN_RETRY_SCHEDULED",
+          reasonCode: errorCode,
+          profileId: job.browserProfile?.profileId,
+          attempt: job.attempt,
+        }),
         status: job.jobId ? "pending" : "starting",
         retryCount,
         error: message,
-        message: `Tentativa ${retryCount + 1}: ${message}`,
-        nextPollAt: new Date(Date.now() + Math.min(30_000, 1_000 * 2 ** retryCount)).toISOString(),
+        message: recoveryProductMessage({
+          decision: recoveryDecision,
+          failureMessage: message,
+          currentProfile: activeProfileAliasForJob(plugin, job),
+          preservedCount: itemProgressForJob(job)?.completed,
+        }),
+        nextPollAt: new Date(Date.now() + recoveryDecision.delayMs).toISOString(),
       });
       if (saved.status === "cancel_requested") return saved;
       blockExecution.status = "in_progress";
       blockExecution.progressMessage = saved.message;
       blockExecution.itemProgress = itemProgressForJob(saved);
-      blockExecution.items = blockExecutionItemsForJob(saved);
+      blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
+      blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
       execution.status = "running";
       persistPluginExecution(execution, project);
       return saved;
     }
-    return markPluginJobFailed(claim, execution, project, message);
+    return markPluginJobFailed(
+      claim,
+      execution,
+      project,
+      recoveryProductMessage({
+        decision: recoveryDecision,
+        failureMessage: message,
+        currentProfile: activeProfileAliasForJob(plugin, job),
+        preservedCount: itemProgressForJob(job)?.completed,
+      }),
+      "failed",
+      errorCode,
+    );
+  }
+}
+async function processPluginJob(
+  jobId: string,
+  transientSecrets: Record<string, string> = {},
+  existingClaim?: ClaimedPluginJob,
+) {
+  try {
+    return await processPluginJobClaimed(jobId, transientSecrets, existingClaim);
+  } finally {
+    const current = pluginJobs.get(jobId);
+    if (!current || ["completed", "failed", "cancelled", "abandoned"].includes(current.status)) {
+      releaseJobProfileLease(jobId);
+    }
   }
 }
 
@@ -2576,6 +3141,7 @@ async function processDuePluginJobs() {
 
 initializePluginRunner();
 reconcileStoredExecutionItems();
+normalizeStoredExecutionWorkUnits();
 const pluginJobScheduler = setInterval(() => void processDuePluginJobs(), 500);
 pluginJobScheduler.unref();
 function cleanupAbandonedPluginJobs() {
@@ -3187,6 +3753,9 @@ function profileInventory(plugin: RegisteredPlugin) {
   database.transaction(() =>
     syncPluginProfilesFromMethods(pluginProfiles, channels, plugin.id, setup, randomUUID),
   )();
+  for (const profile of pluginProfiles.list(plugin.id)) {
+    ensureLegacyBrowserProfile(database, profile);
+  }
   const usages = findPluginProfileUsages(channels, plugin.id, setup);
   return pluginProfiles.list(plugin.id).map((profile) => ({
     ...profile,
@@ -3210,6 +3779,250 @@ app.get("/api/plugins/:pluginId/profiles", (request, response) => {
   response.json({ profiles: profileInventory(plugin), browserBridgeDirectory });
 });
 
+app.get("/api/plugins/:pluginId/profile-inventory", (request, response) => {
+  const plugin = registeredProfilePlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+    return;
+  }
+  const channels = storedChannels();
+  profileInventory(plugin);
+  const inventory = browserProfileInventory(
+    browserProfiles,
+    pluginProfileBindings,
+    pluginProfileReadiness,
+    plugin.id,
+    (binding, profile) => {
+      const boundPlugin = getRegisteredPlugin(binding.pluginId);
+      const setup = boundPlugin?.manifest.profileSetup;
+      if (!setup) return [];
+      return (
+        findPluginProfileUsages(channels, binding.pluginId, setup).get(
+          profile.alias.toLocaleLowerCase(),
+        ) ?? []
+      );
+    },
+  );
+  response.json({
+    ...inventory,
+    linked: inventory.linked.map((entry) => {
+      const lease = browserProfileLeases.get(entry.profile.id);
+      return {
+        ...entry,
+        occupied: Boolean(lease && Date.parse(lease.expiresAt) > Date.now()),
+      };
+    }),
+  });
+});
+
+function linkedBrowserProfileAliasExists(
+  pluginId: string,
+  alias: string,
+  exceptProfileId?: string,
+) {
+  return pluginProfileBindings.listForPlugin(pluginId).some((binding) => {
+    if (binding.profileId === exceptProfileId) return false;
+    return (
+      browserProfiles.get(binding.profileId)?.alias.toLocaleLowerCase() ===
+      alias.toLocaleLowerCase()
+    );
+  });
+}
+
+function staleBrowserProfileRevision(expected: unknown, actual: string) {
+  return typeof expected !== "string" || expected !== actual;
+}
+
+app.post("/api/plugins/:pluginId/profile-bindings", (request, response) => {
+  const plugin = registeredProfilePlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+    return;
+  }
+  try {
+    const name = normalizePluginProfileName(request.body?.name);
+    const profileId = randomUUID();
+    const aliasBase =
+      request.body?.alias === undefined
+        ? pluginProfileAliasFromName(name) || `perfil-${profileId.slice(0, 8)}`
+        : normalizePluginProfileAlias(request.body.alias);
+    let alias = aliasBase;
+    let suffix = 2;
+    while (linkedBrowserProfileAliasExists(plugin.id, alias)) {
+      const suffixText = `-${suffix++}`;
+      alias = `${aliasBase.slice(0, 48 - suffixText.length).replace(/-+$/, "")}${suffixText}`;
+    }
+    const result = database
+      .transaction(() => {
+        const profile = browserProfiles.create({
+          id: profileId,
+          name,
+          alias,
+          storageKind: "managed",
+          storageKey: `browser-profiles/${profileId}`,
+        });
+        const binding = pluginProfileBindings.link(plugin.id, profileId);
+        return { profile, binding };
+      })
+      .immediate();
+    response.status(201).json(result);
+  } catch (error) {
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível criar o perfil.",
+    });
+  }
+});
+
+app.post("/api/plugins/:pluginId/profile-bindings/:profileId", (request, response) => {
+  const plugin = registeredProfilePlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+    return;
+  }
+  const profile = browserProfiles.get(request.params.profileId);
+  if (!profile) {
+    response.status(404).json({ error: "Perfil de navegador não encontrado." });
+    return;
+  }
+  if (request.body?.sharedSessionConsent !== true) {
+    response.status(422).json({
+      error:
+        "Confirme explicitamente o uso da sessão local compartilhada antes de vincular o perfil.",
+    });
+    return;
+  }
+  if (staleBrowserProfileRevision(request.body?.profileUpdatedAt, profile.updatedAt)) {
+    response
+      .status(409)
+      .json({ error: "O perfil mudou. Recarregue o inventário antes de vinculá-lo." });
+    return;
+  }
+  if (pluginProfileBindings.get(plugin.id, profile.id)) {
+    response.status(409).json({ error: "Este perfil já está vinculado ao plugin." });
+    return;
+  }
+  if (linkedBrowserProfileAliasExists(plugin.id, profile.alias)) {
+    response.status(409).json({
+      error: "Já existe um perfil vinculado a este plugin com o mesmo alias.",
+    });
+    return;
+  }
+  try {
+    const binding = database
+      .transaction(() => {
+        const latest = browserProfiles.get(profile.id);
+        if (
+          !latest ||
+          staleBrowserProfileRevision(request.body?.profileUpdatedAt, latest.updatedAt)
+        ) {
+          throw new Error("PROFILE_REVISION_CONFLICT");
+        }
+        return pluginProfileBindings.link(plugin.id, profile.id);
+      })
+      .immediate();
+    response.status(201).json({ profile, binding });
+  } catch (error) {
+    if (error instanceof Error && error.message === "PROFILE_REVISION_CONFLICT") {
+      response
+        .status(409)
+        .json({ error: "O perfil mudou. Recarregue o inventário antes de vinculá-lo." });
+      return;
+    }
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível vincular o perfil.",
+    });
+  }
+});
+
+app.patch("/api/plugins/:pluginId/profile-bindings/:profileId", (request, response) => {
+  const plugin = registeredProfilePlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+    return;
+  }
+  const binding = pluginProfileBindings.get(plugin.id, request.params.profileId);
+  const profile = browserProfiles.get(request.params.profileId);
+  if (!binding || !profile) {
+    response.status(404).json({ error: "Vínculo de perfil não encontrado." });
+    return;
+  }
+  if (staleBrowserProfileRevision(request.body?.profileUpdatedAt, profile.updatedAt)) {
+    response
+      .status(409)
+      .json({ error: "O perfil mudou. Recarregue o inventário antes de renomeá-lo." });
+    return;
+  }
+  try {
+    const name = normalizePluginProfileName(request.body?.name);
+    const renamed = database
+      .transaction(() => {
+        const latest = browserProfiles.get(profile.id);
+        if (
+          !latest ||
+          staleBrowserProfileRevision(request.body?.profileUpdatedAt, latest.updatedAt)
+        ) {
+          throw new Error("PROFILE_REVISION_CONFLICT");
+        }
+        return browserProfiles.rename(profile.id, name)!;
+      })
+      .immediate();
+    response.json({ profile: renamed, binding: pluginProfileBindings.get(plugin.id, profile.id) });
+  } catch (error) {
+    if (error instanceof Error && error.message === "PROFILE_REVISION_CONFLICT") {
+      response
+        .status(409)
+        .json({ error: "O perfil mudou. Recarregue o inventário antes de renomeá-lo." });
+      return;
+    }
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível renomear o perfil.",
+    });
+  }
+});
+
+app.delete("/api/plugins/:pluginId/profile-bindings/:profileId", (request, response) => {
+  const plugin = registeredProfilePlugin(request.params.pluginId);
+  if (!plugin) {
+    response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+    return;
+  }
+  const binding = pluginProfileBindings.get(plugin.id, request.params.profileId);
+  const profile = browserProfiles.get(request.params.profileId);
+  if (!binding || !profile) {
+    response.status(404).json({ error: "Vínculo de perfil não encontrado." });
+    return;
+  }
+  if (request.body?.bindingUpdatedAt !== binding.updatedAt) {
+    response
+      .status(409)
+      .json({ error: "O vínculo mudou. Recarregue o inventário antes de desvinculá-lo." });
+    return;
+  }
+  try {
+    const remainingBindings = database
+      .transaction(() => {
+        const latest = pluginProfileBindings.get(plugin.id, profile.id);
+        if (!latest || request.body?.bindingUpdatedAt !== latest.updatedAt) {
+          throw new Error("BINDING_REVISION_CONFLICT");
+        }
+        pluginProfileBindings.unlink(plugin.id, profile.id);
+        return pluginProfileBindings.listForProfile(profile.id).length;
+      })
+      .immediate();
+    response.json({ profileId: profile.id, remainingBindings, profilePreserved: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === "BINDING_REVISION_CONFLICT") {
+      response
+        .status(409)
+        .json({ error: "O vínculo mudou. Recarregue o inventário antes de desvinculá-lo." });
+      return;
+    }
+    response.status(422).json({
+      error: error instanceof Error ? error.message : "Não foi possível desvincular o perfil.",
+    });
+  }
+});
+
 app.post("/api/plugins/:pluginId/profiles", (request, response) => {
   const plugin = registeredProfilePlugin(request.params.pluginId);
   if (!plugin) {
@@ -3229,7 +4042,11 @@ app.post("/api/plugins/:pluginId/profiles", (request, response) => {
       const suffixText = `-${suffix++}`;
       alias = `${aliasBase.slice(0, 48 - suffixText.length).replace(/-+$/, "")}${suffixText}`;
     }
-    const profile = pluginProfiles.create({ id: profileId, pluginId: plugin.id, name, alias });
+    const profile = database.transaction(() => {
+      const created = pluginProfiles.create({ id: profileId, pluginId: plugin.id, name, alias });
+      ensureLegacyBrowserProfile(database, created);
+      return created;
+    })();
     response.status(201).json({ ...profile, usages: [] });
   } catch (error) {
     response.status(422).json({
@@ -3278,16 +4095,9 @@ app.delete("/api/plugins/:pluginId/profiles/:profileId", (request, response) => 
     response.status(404).json({ error: "Perfil não encontrado." });
     return;
   }
-  const usages =
-    findPluginProfileUsages(storedChannels(), plugin.id, plugin.manifest.profileSetup!).get(
-      profile.alias.toLocaleLowerCase(),
-    ) ?? [];
-  if (usages.length) {
-    response.status(409).json({
-      error: "Este perfil ainda é usado por Métodos. Troque essas referências antes de removê-lo.",
-      usages,
-    });
-    return;
+  const migratedProfileId = `legacy:${profile.id}`;
+  if (pluginProfileBindings.get(plugin.id, migratedProfileId)) {
+    pluginProfileBindings.unlink(plugin.id, migratedProfileId);
   }
   pluginProfiles.remove(plugin.id, profile.id);
   response.status(204).end();
@@ -3297,6 +4107,7 @@ async function executePluginProfileAction(
   plugin: RegisteredPlugin,
   action: "status" | "prepare",
   profileName: string,
+  profileDirectory?: string,
 ) {
   const setup = plugin.manifest.profileSetup as PluginProfileSetup;
   const profileKey = setup.configurationKey;
@@ -3335,6 +4146,26 @@ async function executePluginProfileAction(
   const timeoutMs = action === "prepare" ? undefined : 30_000;
   return executeRegisteredPlugin(plugin, pluginRequest, timeoutMs, pluginSecrets, {
     workspaceDirectory: executionWorkspaceForPlugin(plugin),
+    profileDirectory: profileDirectory ?? executionProfileForPluginRequest(plugin, pluginRequest),
+  });
+}
+
+function updateBoundProfileReadiness(input: {
+  pluginId: string;
+  profileId: string;
+  action: "status" | "prepare";
+  ready: boolean;
+  bridgeState: "installed" | "missing" | "unknown";
+}) {
+  const now = new Date().toISOString();
+  const previous = pluginProfileReadiness.get(input.pluginId, input.profileId);
+  return pluginProfileReadiness.set({
+    pluginId: input.pluginId,
+    profileId: input.profileId,
+    state: input.ready ? "ready" : "not_ready",
+    checkedAt: now,
+    preparedAt: input.action === "prepare" && input.ready ? now : previous?.preparedAt,
+    metadata: { bridgeState: input.bridgeState },
   });
 }
 
@@ -3411,6 +4242,7 @@ async function executePluginConfigurationOptions(input: {
   };
   const result = await executeRegisteredPlugin(input.plugin, pluginRequest, 60_000, pluginSecrets, {
     workspaceDirectory: executionWorkspaceForPlugin(input.plugin),
+    profileDirectory: executionProfileForPluginRequest(input.plugin, pluginRequest),
   });
   const options = parseConfigurationOptionsResponse(result);
   pluginConfigurationOptionsCache.set(cacheKey, options, provider.cacheTtlMs ?? 300_000);
@@ -3523,6 +4355,118 @@ app.post("/api/plugins/:pluginId/profiles/:profileId/:action", async (request, r
     });
   }
 });
+
+app.post(
+  "/api/plugins/:pluginId/profile-bindings/:profileId/:action",
+  async (request, response) => {
+    const plugin = registeredProfilePlugin(request.params.pluginId);
+    const action = request.params.action;
+    if (!plugin) {
+      response.status(404).json({ error: "Este plugin não oferece gerenciamento de perfis." });
+      return;
+    }
+    if (!plugin.executable || !pluginConsentIsCurrent(plugin)) {
+      response.status(403).json({
+        error: "Ative este plugin e confirme suas permissões na Central de Plugins.",
+      });
+      return;
+    }
+    if (action !== "status" && action !== "prepare") {
+      response.status(400).json({ error: "Ação de perfil inválida." });
+      return;
+    }
+
+    let resolved;
+    try {
+      resolved = resolveBoundBrowserProfile(database, {
+        pluginId: plugin.id,
+        profileId: request.params.profileId,
+        dataDirectory,
+      });
+    } catch (error) {
+      response.status(404).json({
+        ready: false,
+        error: error instanceof Error ? error.message : "Vínculo de perfil não encontrado.",
+      });
+      return;
+    }
+
+    try {
+      const result = await executePluginProfileAction(
+        plugin,
+        action,
+        resolved.profile.alias,
+        resolved.profileDirectory,
+      );
+      if (result.status === "error") {
+        const readiness = updateBoundProfileReadiness({
+          pluginId: plugin.id,
+          profileId: resolved.profile.id,
+          action,
+          ready: false,
+          bridgeState: browserBridgeProfileDirectoryState(resolved.profileDirectory),
+        });
+        response.status(action === "status" ? 200 : 422).json({
+          ready: false,
+          readiness: {
+            state: readiness.state,
+            checkedAt: readiness.checkedAt,
+            preparedAt: readiness.preparedAt,
+          },
+          error: result.message,
+        });
+        return;
+      }
+
+      const markerReady = result.status === "success" && result.values.ready === true;
+      const bridgeState = markerReady
+        ? browserBridgeProfileDirectoryState(resolved.profileDirectory)
+        : "unknown";
+      const ready = markerReady && bridgeState !== "missing";
+      const readiness = updateBoundProfileReadiness({
+        pluginId: plugin.id,
+        profileId: resolved.profile.id,
+        action,
+        ready,
+        bridgeState,
+      });
+      response.json({
+        ready,
+        bridgeState,
+        readiness: {
+          state: readiness.state,
+          checkedAt: readiness.checkedAt,
+          preparedAt: readiness.preparedAt,
+        },
+        error:
+          markerReady && bridgeState === "missing"
+            ? `A ContentFlow Browser Bridge não permaneceu instalada neste perfil. Em chrome://extensions, carregue uma única vez a pasta estável ${browserBridgeDirectory ?? "indicada na Central de Plugins"} e prepare novamente.`
+            : undefined,
+        message:
+          result.status === "success" && typeof result.values.message === "string"
+            ? result.values.message
+            : undefined,
+      });
+    } catch (error) {
+      const readiness = updateBoundProfileReadiness({
+        pluginId: plugin.id,
+        profileId: resolved.profile.id,
+        action,
+        ready: false,
+        bridgeState: browserBridgeProfileDirectoryState(resolved.profileDirectory),
+      });
+      response.status(422).json({
+        ready: false,
+        readiness: {
+          state: readiness.state,
+          checkedAt: readiness.checkedAt,
+          preparedAt: readiness.preparedAt,
+        },
+        error: error instanceof Error ? error.message : "Não foi possível preparar o perfil.",
+      });
+    }
+  },
+);
 
 app.post("/api/plugins/:pluginId/profile", async (request, response) => {
   initializePluginRunner();
@@ -3949,6 +4893,7 @@ app.delete("/api/plugins/:pluginId", async (request, response) => {
       await deletePluginSecret(plugin.id, secretKey);
     }
     database.prepare("DELETE FROM plugin_connections WHERE plugin_id = ?").run(plugin.id);
+    pluginProfileBindings.unlinkPlugin(plugin.id);
     database.prepare("DELETE FROM plugin_profiles WHERE plugin_id = ?").run(plugin.id);
     initializePluginRunner();
     response.status(204).end();
@@ -4326,27 +5271,29 @@ function requireBuilderMcp(request: Request, response: Response, next: NextFunct
 async function builderPluginContexts(): Promise<BuilderPluginContext[]> {
   const registry = initializePluginRunner();
   return Promise.all(
-    registry.plugins.map(async (plugin) => ({
-      plugin,
-      enabled: pluginConsentIsCurrent(plugin),
-      connections: await Promise.all(
-        pluginConnections.list(plugin.id).map(async (connection) => {
-          const publicConnection = await publicPluginConnection(plugin, connection);
-          return {
-            id: publicConnection.id,
-            name: publicConnection.name,
-            connected: publicConnection.connected,
-          };
-        }),
-      ),
-      profiles: plugin.manifest.profileSetup
-        ? profileInventory(plugin).map((profile) => ({
-            id: profile.id,
-            name: profile.name,
-            alias: profile.alias,
-          }))
-        : [],
-    })),
+    registry.plugins.map(async (plugin) => {
+      if (plugin.manifest.profileSetup) profileInventory(plugin);
+      return {
+        plugin,
+        enabled: pluginConsentIsCurrent(plugin),
+        connections: await Promise.all(
+          pluginConnections.list(plugin.id).map(async (connection) => {
+            const publicConnection = await publicPluginConnection(plugin, connection);
+            return {
+              id: publicConnection.id,
+              name: publicConnection.name,
+              connected: publicConnection.connected,
+            };
+          }),
+        ),
+        profiles: plugin.manifest.profileSetup
+          ? pluginProfileBindings.listForPlugin(plugin.id).flatMap((binding) => {
+              const profile = browserProfiles.get(binding.profileId);
+              return profile ? [{ id: profile.id, name: profile.name, alias: profile.alias }] : [];
+            })
+          : [],
+      };
+    }),
   );
 }
 
@@ -4946,6 +5893,13 @@ app.post("/api/builder/channels/:channelId/apply", requireBuilderMcp, async (req
     UniversalProcess,
     ProcessMethod,
   ][]) {
+    const localProfiles = persistLocalProfileExecution(method.blocks);
+    if (localProfiles.errors.length) {
+      response
+        .status(422)
+        .json({ ok: false, errors: localProfiles.errors, warnings: result.warnings });
+      return;
+    }
     channel.methods[processType] = {
       ...method,
       imageUrl:
@@ -4954,6 +5908,7 @@ app.post("/api/builder/channels/:channelId/apply", requireBuilderMcp, async (req
           /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(method.imageUrl))
           ? method.imageUrl.slice(0, 1_500_000)
           : undefined,
+      blocks: localProfiles.blocks,
     };
   }
   const dependencyErrors = validateProcessDependencies(
@@ -5069,7 +6024,21 @@ app.post("/api/execute-block", async (request, response) => {
       .all(project.id) as { payload: string }[]
   ).map((row) => normalizeExecutionDeliveries(JSON.parse(row.payload) as ProcessExecution));
   let conversation: PluginExecutionRequest["conversation"];
+  let resolvedProfileExecution: ReturnType<typeof resolvedProfileExecutionForBlock>;
   try {
+    resolvedProfileExecution = resolvedProfileExecutionForBlock(plugin, block);
+    const profileConfigurationKey = plugin.manifest.profileSetup?.configurationKey;
+    const configuredProfileAlias = profileConfigurationKey
+      ? String(block.plugin?.configuration[profileConfigurationKey] ?? "").trim() || undefined
+      : undefined;
+    const configuredBrowserProfile = resolvedProfileExecution?.profiles[0]
+      ? {
+          profileId: resolvedProfileExecution.profiles[0].profileId,
+          alias: resolvedProfileExecution.profiles[0].alias,
+        }
+      : configuredProfileAlias
+        ? browserProfileSnapshot(plugin, configuredProfileAlias)
+        : undefined;
     conversation = resolvePluginConversation({
       block,
       blockExecution,
@@ -5079,6 +6048,7 @@ app.post("/api/execute-block", async (request, response) => {
       pluginId: plugin.id,
       supportsContinuation: plugin.manifest.supportsConversationContinuation === true,
       profileSetup: plugin.manifest.profileSetup,
+      profileId: configuredBrowserProfile?.profileId,
     });
   } catch (error) {
     response.status(422).json({
@@ -5181,7 +6151,9 @@ app.post("/api/execute-block", async (request, response) => {
       targetBlock?.outputs?.[0];
     const targetValue = targetOutput ? targetExecution?.values[targetOutput.key] : undefined;
     const targetPort = targetOutput
-      ? capability.inputPorts.find((port) => port.acceptedTypes.includes(targetOutput.type))
+      ? capability.inputPorts.find((port) =>
+          legacyTypeListAccepts(port.acceptedTypes, targetOutput.type),
+        )
       : undefined;
     if (
       targetOutput &&
@@ -5223,7 +6195,8 @@ app.post("/api/execute-block", async (request, response) => {
     (field) =>
       field.portKey &&
       !capability.outputPorts.some(
-        (port) => port.key === field.portKey && port.producedTypes.includes(field.type),
+        (port) =>
+          port.key === field.portKey && legacyTypeListAccepts(port.producedTypes, field.type),
       ),
   );
   if (invalidOutputBindings.length) {
@@ -5256,7 +6229,9 @@ app.post("/api/execute-block", async (request, response) => {
           presentation: field.presentation,
           portKey:
             field.portKey ??
-            capability.outputPorts.find((port) => port.producedTypes.includes(field.type))?.key ??
+            capability.outputPorts.find((port) =>
+              legacyTypeListAccepts(port.producedTypes, field.type),
+            )?.key ??
             capability.outputPorts[0]?.key ??
             field.key,
         }));
@@ -5345,6 +6320,15 @@ app.post("/api/execute-block", async (request, response) => {
     });
     return;
   }
+  const requestConfiguration = {
+    ...block.plugin.configuration,
+    ...executionParameters,
+  };
+  if (resolvedProfileExecution) {
+    delete requestConfiguration[resolvedProfileExecution.configurationKey];
+    const fallbackConfigurationKey = plugin.manifest.profileSetup?.fallbackConfigurationKey;
+    if (fallbackConfigurationKey) delete requestConfiguration[fallbackConfigurationKey];
+  }
   const pluginRequest: PluginExecutionRequest = {
     executionId: execution.id,
     traceId: randomUUID(),
@@ -5352,10 +6336,7 @@ app.post("/api/execute-block", async (request, response) => {
     capabilityId: capability.id,
     attempt: blockExecution.attempt ?? 1,
     invocation: { mode: "start" },
-    configuration: {
-      ...block.plugin.configuration,
-      ...executionParameters,
-    },
+    configuration: requestConfiguration,
     settings: resolvedConnection.connectionId
       ? { connectionId: resolvedConnection.connectionId }
       : {},
@@ -5426,11 +6407,13 @@ app.post("/api/execute-block", async (request, response) => {
     return;
   }
   const executionTimeoutMs = capability.execution.defaultTimeoutMs ?? 60_000;
+  const previousExecutionItems = blockExecution.items;
+  const materializedInputItems = materializeReceivedInputWorkUnits(
+    pluginRequest,
+    previousExecutionItems,
+  );
   const requestedRetryScope = blockExecution.itemRetryScope ?? "all";
-  const itemCapability =
-    requestedRetryScope === "all"
-      ? capability
-      : capabilityWithDeterministicItemMapping(capability, pluginRequest, blockExecution.values);
+  const itemCapability = capability;
   const previousJob =
     ["remaining", "selected"].includes(requestedRetryScope) && pluginRequest.attempt > 1
       ? pluginJobs.getByExecution(execution.id, block.id, pluginRequest.attempt - 1)
@@ -5461,7 +6444,7 @@ app.post("/api/execute-block", async (request, response) => {
   const itemOrchestration =
     selectedOrchestration ??
     resumedOrchestration ??
-    declaredItemOrchestration(itemCapability, pluginRequest);
+    declaredItemOrchestration(itemCapability, pluginRequest, materializedInputItems);
   const retryScope = selectedOrchestration
     ? "selected"
     : resumedOrchestration
@@ -5474,22 +6457,51 @@ app.post("/api/execute-block", async (request, response) => {
   ) {
     blockExecution.values = {};
     blockExecution.itemProgress = undefined;
+    blockExecution.profileLaneProgress = undefined;
   }
-  const pendingJob = createPersistentPluginJob({
+  const resolvedFallback =
+    resolvedProfileExecution?.mode === "fallback"
+      ? {
+          configurationKey: resolvedProfileExecution.configurationKey,
+          candidates: resolvedProfileExecution.profiles.map((profile) => profile.alias),
+          activeIndex: 0,
+          history: [],
+        }
+      : undefined;
+  const legacyFallback = resolvedProfileExecution
+    ? undefined
+    : orderedProfileCandidates(plugin.manifest, pluginRequest.configuration);
+  const initialResolvedProfile = resolvedProfileExecution?.profiles[0];
+  let pendingJob = createPersistentPluginJob({
     pluginId: plugin.id,
     pluginVersion: plugin.manifest.version,
     request: pluginRequest,
     timeoutMs: executionTimeoutMs,
-    profileFallback: orderedProfileCandidates(plugin.manifest, pluginRequest.configuration),
+    profileFallback: resolvedFallback ?? legacyFallback,
+    browserProfile: initialResolvedProfile
+      ? { profileId: initialResolvedProfile.profileId, alias: initialResolvedProfile.alias }
+      : browserProfileSnapshot(
+          plugin,
+          legacyFallback?.candidates[0] ??
+            (plugin.manifest.profileSetup?.configurationKey
+              ? String(
+                  pluginRequest.configuration[plugin.manifest.profileSetup.configurationKey] ?? "",
+                ).trim() || undefined
+              : undefined),
+        ),
+    profileExecution: resolvedProfileExecution,
     itemOrchestration,
     retryScope,
   });
+  const profileLanePool = materializeProfileLanePool(pendingJob, capability);
+  if (profileLanePool) pendingJob = { ...pendingJob, profileLanePool };
   if (selectedOrchestration) pendingJob.partialValues = structuredClone(blockExecution.values);
   const createdJob = pluginJobs.create(pendingJob);
   blockExecution.status = "in_progress";
   blockExecution.traceId = pluginRequest.traceId;
   blockExecution.itemProgress = itemProgressForJob(createdJob);
-  blockExecution.items = blockExecutionItemsForJob(createdJob);
+  blockExecution.profileLaneProgress = profileLaneProgressForJob(createdJob);
+  blockExecution.items = blockExecutionItemsForJob(createdJob, materializedInputItems);
   blockExecution.itemRetryScope = undefined;
   blockExecution.itemRetryId = undefined;
   blockExecution.progress = itemOrchestration
@@ -5956,6 +6968,13 @@ app.put("/api/channels/:id/methods/:processType", (request, response) => {
     });
     return;
   }
+  const localProfiles = persistLocalProfileExecution(
+    normalizeMethodBlocks(request.body.blocks, processType),
+  );
+  if (localProfiles.errors.length) {
+    response.status(422).json({ error: localProfiles.errors[0], errors: localProfiles.errors });
+    return;
+  }
   const nextMethod: ProcessMethod = {
     name:
       typeof request.body?.name === "string" && request.body.name.trim()
@@ -5968,7 +6987,7 @@ app.put("/api/channels/:id/methods/:processType", (request, response) => {
         ? request.body.imageUrl.slice(0, 1_500_000)
         : channel.methods[processType]?.imageUrl,
     processType,
-    blocks: normalizeMethodBlocks(request.body.blocks, processType),
+    blocks: localProfiles.blocks,
   };
   const errors = validateProcessDependencies(
     effectiveProcessOrder(channel),
@@ -6015,20 +7034,36 @@ app.put("/api/channels/:id/methods", (request, response) => {
     response.status(400).json({ error: "Pacote de Métodos inválido." });
     return;
   }
+  const preparedEntries: Array<[UniversalProcess, ProcessMethod]> = [];
   for (const [processType, method] of entries) {
-    channel.methods[processType] = {
-      name:
-        typeof method.name === "string" && method.name.trim()
-          ? method.name.trim().slice(0, 200)
-          : `Método de ${PROCESS_META[processType].label}`,
-      imageUrl:
-        typeof method.imageUrl === "string" &&
-        (/^data:image\/(webp|png|jpeg);base64,/.test(method.imageUrl) ||
-          /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(method.imageUrl))
-          ? method.imageUrl.slice(0, 1_500_000)
-          : undefined,
+    const localProfiles = persistLocalProfileExecution(
+      normalizeMethodBlocks(method.blocks, processType),
+    );
+    if (localProfiles.errors.length) {
+      response.status(422).json({ error: localProfiles.errors[0], errors: localProfiles.errors });
+      return;
+    }
+    preparedEntries.push([
       processType,
-      blocks: normalizeMethodBlocks(method.blocks, processType),
+      {
+        name:
+          typeof method.name === "string" && method.name.trim()
+            ? method.name.trim().slice(0, 200)
+            : `Método de ${PROCESS_META[processType].label}`,
+        imageUrl:
+          typeof method.imageUrl === "string" &&
+          (/^data:image\/(webp|png|jpeg);base64,/.test(method.imageUrl) ||
+            /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(method.imageUrl))
+            ? method.imageUrl.slice(0, 1_500_000)
+            : undefined,
+        processType,
+        blocks: localProfiles.blocks,
+      },
+    ]);
+  }
+  for (const [processType, method] of preparedEntries) {
+    channel.methods[processType] = {
+      ...method,
     };
   }
   const errors = validateProcessDependencies(effectiveProcessOrder(channel), channel.methods);
@@ -6182,10 +7217,49 @@ app.post("/api/method-transfers/apply", (request, response) => {
     };
   });
 
-  const copied = copyImportedMethods(selected, (prefix) => `${prefix}-${randomUUID()}`, {
-    collectionIds,
-    preserveLocalConnections: body.preserveLocalConnections === true,
-  });
+  const localCopy = Boolean(body.sourceChannelId);
+  const copied: ProcessMethod[] = copyImportedMethods(
+    selected,
+    (prefix) => `${prefix}-${randomUUID()}`,
+    {
+      collectionIds,
+      preserveLocalConnections: body.preserveLocalConnections === true,
+      remapLocalProfileExecution: localCopy
+        ? (pluginId, policy) => {
+            const plugin = getRegisteredPlugin(pluginId);
+            const validation = validateLocalProfileExecution({
+              policy,
+              profileSetup: plugin?.manifest.profileSetup,
+              isBoundProfile: (profileId) =>
+                Boolean(pluginProfileBindings.get(pluginId, profileId)),
+            });
+            return validation.policy;
+          }
+        : undefined,
+    },
+  );
+  if (!localCopy) {
+    for (const method of copied) {
+      method.blocks = clearImportedProfileAssociations({
+        blocks: method.blocks,
+        profileSetupForPlugin: (pluginId) => getRegisteredPlugin(pluginId)?.manifest.profileSetup,
+      });
+    }
+  } else {
+    for (const method of copied) {
+      const sourceMethod = selected.find(
+        (candidate) => candidate.processType === method.processType,
+      );
+      method.blocks = method.blocks.map((block, index) => {
+        const sourceBlock = sourceMethod?.blocks[index];
+        if (!sourceBlock?.plugin?.profileExecution || block.plugin?.profileExecution) return block;
+        return clearImportedProfileAssociations({
+          blocks: [block],
+          profileSetupForPlugin: (pluginId) => getRegisteredPlugin(pluginId)?.manifest.profileSetup,
+        })[0];
+      });
+    }
+  }
   const finalMethods = existing ? structuredClone(existing.methods) : createEmptyMethods();
   for (const method of copied) finalMethods[method.processType] = method;
   const preferredOrder = existing ? effectiveProcessOrder(existing) : body.preferredOrder;
@@ -6910,6 +7984,15 @@ app.get("/api/executions/:id/state", (request, response) => {
   response.json({ execution, project, jobs });
 });
 
+app.get("/api/executions/:id/browser-diagnostics", (request, response) => {
+  const execution = executionById(request.params.id);
+  if (!execution) {
+    response.status(404).json({ error: "Execução não encontrada." });
+    return;
+  }
+  response.json(exportBrowserDiagnostics(execution.id, pluginJobs.listForExecution(execution.id)));
+});
+
 app.post("/api/executions/:id/cancel", (request, response) => {
   const execution = executionById(request.params.id);
   const project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
@@ -7382,6 +8465,7 @@ app.post(
         connection.secrets,
         {
           workspaceDirectory: executionWorkspaceForPlugin(declared.plugin),
+          profileDirectory: browserProfileForJob(declared.plugin, job)?.profileDirectory,
           existingArtifacts: job.partialArtifacts,
         },
       );

@@ -12,6 +12,7 @@ import type {
   StoredFile,
   UniversalProcess,
 } from "@/lib/domain";
+import type { DataShape } from "@/lib/data-shape";
 
 export const CONTENTFLOW_PLUGIN_API_VERSION = "1" as const;
 
@@ -60,13 +61,15 @@ export type JsonSchema = {
   };
 };
 
-export type PluginDataType = HumanFieldType;
+/** Canonical semantic descriptor; API v1 manifests keep HumanFieldType strings as their legacy wire form. */
+export type PluginDataType = DataShape;
+export type LegacyPluginDataType = HumanFieldType;
 
 export type PluginInputPort = {
   key: string;
   label: string;
   description?: string;
-  acceptedTypes: PluginDataType[];
+  acceptedTypes: LegacyPluginDataType[];
   required: boolean;
   multiple?: boolean;
   /** Optional request for a renderer owned and validated by the core. */
@@ -77,7 +80,7 @@ export type PluginOutputPort = {
   key: string;
   label: string;
   description?: string;
-  producedTypes: PluginDataType[];
+  producedTypes: LegacyPluginDataType[];
   required: boolean;
   /** Optional request for a renderer owned and validated by the core. */
   presentation?: FieldPresentation;
@@ -96,6 +99,23 @@ export type PluginExecutionPolicy = {
     /** Optional text output rebuilt from the accumulated list after each item. */
     combinedOutputPort?: string;
     separator?: string;
+    /** Additive API v1 declaration. Omitted means the legacy per-item behavior. */
+    strategies?: Array<"continuous_session" | "per_item">;
+    /** Must reference one of `strategies` when present. */
+    preferredStrategy?: "continuous_session" | "per_item";
+    /** Declares future eligibility for core-owned distribution across distinct physical profiles. */
+    profileParallelism?: {
+      supported: boolean;
+      maxProfiles?: number;
+    };
+    /** Additional structurally valid input/output pairs selectable by Method configuration. */
+    collectionAssociations?: Array<{
+      key: string;
+      inputPort: string;
+      outputPort: string;
+      combinedOutputPort?: string;
+      separator?: string;
+    }>;
   };
 };
 
@@ -166,8 +186,8 @@ export type PluginCapability = {
   processTypes?: UniversalProcess[];
   inputPorts: PluginInputPort[];
   outputPorts: PluginOutputPort[];
-  acceptedInputTypes?: PluginDataType[];
-  producedOutputTypes?: PluginDataType[];
+  acceptedInputTypes?: LegacyPluginDataType[];
+  producedOutputTypes?: LegacyPluginDataType[];
   execution: PluginExecutionPolicy;
   sideEffects: PluginSideEffect[];
   cost: PluginCostPolicy;
@@ -259,6 +279,8 @@ export type PluginManifest = {
   deliveryTypes?: PluginDeliveryType[];
   /** Optional interactive preparation for a dedicated browser profile referenced by block configuration. */
   profileSetup?: PluginProfileSetup;
+  /** Core opens and closes the physical browser; the plugin only controls the authorized page. */
+  browserRuntime?: { lifecycle: "core" };
   /** O pacote pode retomar entre capabilities uma conversa opaca produzida por um bloco anterior. */
   supportsConversationContinuation?: boolean;
   capabilities: PluginCapability[];
@@ -414,6 +436,8 @@ export type PluginExecutionResponse =
       storedArtifacts?: StoredFile[];
       usage?: PluginUsage;
       logs?: string[];
+      /** Eventos estruturais e redigidos da Browser Bridge, sem conteúdo da página. */
+      bridgeDiagnostics?: Array<{ code: "BRIDGE_CONTROLLED_RELOAD" | "BRIDGE_WORKER_RESTART" }>;
       conversation?: { id: string };
     }
   | {
@@ -430,11 +454,17 @@ export type PluginExecutionResponse =
       storedArtifacts?: StoredFile[];
       usage?: PluginUsage;
       logs?: string[];
+      bridgeDiagnostics?: Array<{ code: "BRIDGE_CONTROLLED_RELOAD" | "BRIDGE_WORKER_RESTART" }>;
     }
   | {
       status: "error";
       code: string;
       message: string;
+      /**
+       * Operational facts observed by the adapter. They are evidence for the
+       * core recovery policy, never an instruction to retry or switch profile.
+       */
+      recovery?: PluginRecoveryFacts;
       retryable: boolean;
       retryAfterMs?: number;
       /** Completed outputs remain durable when a later item fails. */
@@ -443,7 +473,26 @@ export type PluginExecutionResponse =
       storedArtifacts?: StoredFile[];
       usage?: PluginUsage;
       logs?: string[];
+      bridgeDiagnostics?: Array<{ code: "BRIDGE_CONTROLLED_RELOAD" | "BRIDGE_WORKER_RESTART" }>;
     };
+
+export type PluginRecoveryFacts = {
+  /** Last externally relevant stage reached by this invocation. */
+  stage?: "before_effect" | "effect_submitted" | "awaiting_result" | "effect_confirmed";
+  /** Whether the invocation can prove that an external side effect did or did not happen. */
+  externalEffect?: "none" | "possible" | "confirmed";
+  /** Opaque provider receipt used only to reconcile the same operation. */
+  externalReceipt?: string;
+  /** Human condition observed by the adapter, without choosing the recovery action. */
+  intervention?:
+    | "authentication"
+    | "captcha"
+    | "permission"
+    | "quota"
+    | "upgrade"
+    | "account_blocked"
+    | "provider_ui_changed";
+};
 
 export type PluginConfigurationOption = {
   value: string | number | boolean;
@@ -481,14 +530,76 @@ export type PluginPartialUpdate = {
   logs?: string[];
 };
 
+export type PluginWorkItemStatus =
+  | "planned"
+  | "pending"
+  | "leased"
+  | "submitted"
+  | "awaiting_result"
+  | "completed"
+  | "failed"
+  | "awaiting_human"
+  | "cancelled";
+
+export type PluginPlannedWorkItem = {
+  /** Correlation key supplied by the plugin only for this derived-item plan. */
+  key: string;
+  order: number;
+  input: BlockExecutionItemValue;
+};
+
+export type PluginClaimedWorkItem = {
+  itemId: string;
+  index: number;
+  total: number;
+  order: number;
+  attempt: number;
+  revision: number;
+  /** Durable state observed before this invocation claimed the item. */
+  state: PluginWorkItemStatus;
+  input: BlockExecutionItemValue;
+  sourceDeliveryId?: string;
+  sourceItemId?: string;
+  parentItemId?: string;
+};
+
+export type PluginWorkItemUpdate = {
+  itemId: string;
+  expectedRevision: number;
+  state: Exclude<PluginWorkItemStatus, "planned" | "pending" | "leased">;
+  outputPort?: string;
+  value?: BlockExecutionItemValue;
+  artifacts?: PluginArtifact[];
+  externalReceipt?: string;
+  message?: string;
+  errorCode?: string;
+  retryable?: boolean;
+};
+
+export type PluginWorkItemUpdateReceipt = {
+  itemId: string;
+  revision: number;
+};
+
 export type PluginExecutionServices = {
   signal: AbortSignal;
   getSecret: (key: string) => Promise<string | undefined>;
   resolveInputFile: (file: StoredFile) => Promise<string>;
   getOutputPath: (relativePath: string) => string;
   getWorkspacePath: (relativePath: string) => string;
+  /** Reserved additive API v1 service for a core-selected global browser profile. */
+  getProfilePath?: (relativePath: string) => string;
   /** Makes completed intermediate work durable before execute() returns. */
   publishPartial: (update: PluginPartialUpdate) => Promise<void>;
+  /** Reserved additive API v1 service; runtime support is negotiated before use. */
+  registerItems?: (
+    parentItemId: string,
+    plannedItems: PluginPlannedWorkItem[],
+  ) => Promise<PluginClaimedWorkItem[]>;
+  /** Reserved additive API v1 service for continuous sessions. */
+  claimItems?: (limit: number) => Promise<PluginClaimedWorkItem[]>;
+  /** Resolves only after the core durably persists the material state transition. */
+  publishItemUpdate?: (update: PluginWorkItemUpdate) => Promise<PluginWorkItemUpdateReceipt>;
 };
 
 export type PluginEntrypoint = {

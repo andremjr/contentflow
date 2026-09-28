@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "scenario": "06-completed-project",
+  "description": "Projeto concluído com execução e item concluído preserváveis.",
+  "counts": {
+    "channels": 1,
+    "projects": 1,
+    "process_executions": 1,
+    "plugin_profiles": 1,
+    "plugin_workspaces": 0,
+    "plugin_jobs": 0
+  },
+  "payloadSha256": {
+    "channels:completed": "c05c76606575d6d30d55fb435c2d774235481d5d465cb613fb57872ee3f8300b",
+    "projects:project-completed": "52938a48af1e096fd44e238a421c7ae64fb9ca37b38e17dbea9c4d005b3d86a6",
+    "process_executions:execution-completed": "a4b0af9d9f201f2a1de747f1ac6be8e5352f4f9ab69b2cafc59fd489896013f4"
+  },
+  "resolvedFolders": {},
+  "markers": []
+}

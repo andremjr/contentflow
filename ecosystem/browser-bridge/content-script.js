@@ -1,20 +1,30 @@
-// Mantém o Service Worker detectável durante jobs longos. Abrir a porta não é
-// suficiente nas versões atuais do Chrome, portanto a página autorizada envia
-// um heartbeat curto enquanto continuar aberta.
+// Mantém o worker ativo somente enquanto há uma sessão de execução.
 function connectContentFlowBridge() {
   const port = chrome.runtime.connect({ name: "contentflow-provider-page" });
-  const heartbeat = setInterval(() => {
+  let heartbeat;
+  let jobActive = false;
+  port.onMessage.addListener((message) => {
+    if (message?.action !== "job-active" && message?.action !== "job-idle") return;
+    jobActive = message.action === "job-active";
+    if (heartbeat) clearInterval(heartbeat);
+    heartbeat = undefined;
+    if (!jobActive) return;
     try {
       port.postMessage({ action: "keepalive" });
-    } catch {
-      clearInterval(heartbeat);
-    }
-  }, 20_000);
-  port.onDisconnect.addListener(() => {
-    clearInterval(heartbeat);
-    setTimeout(connectContentFlowBridge, 500);
+      heartbeat = setInterval(() => {
+        try {
+          port.postMessage({ action: "keepalive" });
+        } catch {
+          clearInterval(heartbeat);
+          heartbeat = undefined;
+        }
+      }, 20_000);
+    } catch {}
   });
-  port.postMessage({ action: "keepalive" });
+  port.onDisconnect.addListener(() => {
+    if (heartbeat) clearInterval(heartbeat);
+    if (jobActive) setTimeout(connectContentFlowBridge, 500);
+  });
 }
 
 connectContentFlowBridge();

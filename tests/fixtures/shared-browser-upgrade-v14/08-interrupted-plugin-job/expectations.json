@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "scenario": "08-interrupted-plugin-job",
+  "description": "Job de plugin interrompido preservando cursor de fallback.",
+  "counts": {
+    "channels": 1,
+    "projects": 1,
+    "process_executions": 1,
+    "plugin_profiles": 2,
+    "plugin_workspaces": 0,
+    "plugin_jobs": 1
+  },
+  "payloadSha256": {
+    "channels:job": "e1ab049f35defa0da30dd5c52ab7c75c7f4bf129258420c06ce5d5caacfd74af",
+    "projects:project-job": "24d6677c48c759f3495aaaea5b4118c3dc2d75bc24b28f58af15fa7dde6254fc",
+    "process_executions:execution-job": "4fa0bbd1574b1c8c9761fdd3ca876725f93d8e6aa43275a597c2c990082ce4dd",
+    "plugin_jobs:job-interrupted": "71987021bb8520ed09b7a23155ec5efe69f9262a929e0ffa99a35b6da58583ee"
+  },
+  "resolvedFolders": {},
+  "markers": []
+}

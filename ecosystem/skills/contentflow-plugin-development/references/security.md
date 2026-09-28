@@ -12,15 +12,15 @@ No Windows, `process` também autoriza a leitura dos caminhos exatos das instala
 
 ## Permissões
 
-| Permissão | Uso | Cuidados |
-| --- | --- | --- |
-| nenhuma | Cálculo e transformação em memória | Preferir sempre que possível. |
-| `network` | Conexões externas | Declarar `networkHosts`; tratar como egress potencialmente amplo no Node 26. |
-| `filesystem:read` | Arquivos liberados e staging | Usar `resolveInputFile`; não explorar outras pastas. |
-| `filesystem:write` | Saída temporária e workspace autorizado | Usar `getOutputPath`/`getWorkspacePath`; não usar armazenamento definitivo. |
-| `process` | FFmpeg, Python, navegador e subprocessos | Permissão avançada; argumentos estruturados e allowlist. |
-| `worker` | Workers locais | Limitar concorrência e fechar recursos. |
-| `native` | Addons nativos empacotados | Tratar como alto nível de confiança. |
+| Permissão          | Uso                                      | Cuidados                                                                     |
+| ------------------ | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| nenhuma            | Cálculo e transformação em memória       | Preferir sempre que possível.                                                |
+| `network`          | Conexões externas                        | Declarar `networkHosts`; tratar como egress potencialmente amplo no Node 26. |
+| `filesystem:read`  | Arquivos liberados e staging             | Usar `resolveInputFile`; não explorar outras pastas.                         |
+| `filesystem:write` | Saída temporária e workspace autorizado  | Usar `getOutputPath`/`getWorkspacePath`; não usar armazenamento definitivo.  |
+| `process`          | FFmpeg, Python, navegador e subprocessos | Permissão avançada; argumentos estruturados e allowlist.                     |
+| `worker`           | Workers locais                           | Limitar concorrência e fechar recursos.                                      |
+| `native`           | Addons nativos empacotados               | Tratar como alto nível de confiança.                                         |
 
 Uma permissão técnica não declara o efeito. Combine `network` com `external_read`, `external_write` ou `public_publish` conforme o comportamento real.
 
@@ -47,6 +47,8 @@ Nunca interpolar nomes de arquivos, URLs ou inputs de usuário em shell, SQL, pa
 ## Arquivos, mídia e artifacts
 
 Use caminhos retornados por serviços controlados. Rejeite `..`, symlinks externos, colisões e overwrite. Limite bytes, dimensões, duração, frames, streams, páginas e taxa de descompressão. Normalize nomes, valide MIME e tipo real e remova conteúdo ativo desnecessário. Não devolva base64 em `values`; use artifacts.
+
+Perfis globais de navegador pertencem ao núcleo. Depois de validar vínculo, readiness e lease, o runtime fornece apenas a sessão efêmera e os serviços autorizados para o perfil ativo; plugins oficiais não iniciam nem encerram o Chrome físico. `profileId`, `profileExecution`, caminhos absolutos, `storage_key`, cookies, storage de sessão e IDs de vínculo/readiness/lease não entram no request portátil, exportação ou diagnóstico. Revogar um vínculo remove a autoridade daquele plugin sem apagar o perfil físico nem vínculos de terceiros.
 
 ## Conteúdo externo e prompt injection
 

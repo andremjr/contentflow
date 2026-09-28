@@ -1,0 +1,50 @@
+{
+  "apiVersion": "1",
+  "id": "com.example.continuous-items",
+  "name": "Continuous Items Fixture",
+  "version": "1.0.0",
+  "description": "Fixture válida do contrato aditivo de itens do pacote 0.3.",
+  "author": "ContentFlow Tests",
+  "license": "MIT",
+  "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
+  "entrypoint": "handler.mjs",
+  "permissions": [],
+  "capabilities": [
+    {
+      "id": "process-items",
+      "operator": "Código",
+      "blockTypes": ["CRIAR"],
+      "inputPorts": [
+        { "key": "prompts", "label": "Prompts", "acceptedTypes": ["list"], "required": true },
+        { "key": "briefs", "label": "Briefs", "acceptedTypes": ["records"], "required": false }
+      ],
+      "outputPorts": [
+        { "key": "images", "label": "Images", "producedTypes": ["files"], "required": true },
+        { "key": "summaries", "label": "Summaries", "producedTypes": ["list"], "required": false }
+      ],
+      "execution": {
+        "mode": "immediate",
+        "itemOrchestration": {
+          "inputPort": "prompts",
+          "outputPort": "images",
+          "mode": "sequential",
+          "strategies": ["continuous_session", "per_item"],
+          "preferredStrategy": "continuous_session",
+          "profileParallelism": { "supported": true, "maxProfiles": 4 },
+          "collectionAssociations": [
+            {
+              "key": "brief-summaries",
+              "inputPort": "briefs",
+              "outputPort": "summaries"
+            }
+          ]
+        }
+      },
+      "sideEffects": [],
+      "cost": { "model": "free", "estimateSupported": false },
+      "dataPolicy": { "sendsDataToThirdParties": false },
+      "blockConfigSchema": { "type": "object", "additionalProperties": false },
+      "outputSchema": { "type": "object" }
+    }
+  ]
+}

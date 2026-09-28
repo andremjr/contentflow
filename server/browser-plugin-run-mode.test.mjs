@@ -48,21 +48,15 @@ test("todos os jobs de navegador iniciam minimizados por padrão", async () => {
   }
 });
 
-test("Browser Studios selecionados preservam a execução com a janela minimizada", async () => {
+test("o lifecycle central preserva a execução com a janela minimizada", async () => {
   const requiredFlags = [
     "--disable-background-timer-throttling",
     "--disable-backgrounding-occluded-windows",
     "--disable-renderer-backgrounding",
     "--disable-features=CalculateNativeWinOcclusion",
   ];
-  for (const plugin of backgroundSafeBrowserPlugins) {
-    const root = new URL(`../ecosystem/plugins/reference/${plugin}/`, import.meta.url);
-    const source = await readFile(new URL("handler.mjs", root), "utf8");
-    for (const flag of requiredFlags) {
-      assert.ok(
-        source.includes(flag),
-        `${plugin} precisa iniciar o Chrome minimizado sem throttling de segundo plano (${flag})`,
-      );
-    }
+  const source = await readFile(new URL("./browser-session-manager.ts", import.meta.url), "utf8");
+  for (const flag of requiredFlags) {
+    assert.ok(source.includes(flag), `o núcleo precisa configurar o Chrome minimizado com ${flag}`);
   }
 });

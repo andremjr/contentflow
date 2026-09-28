@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-26T12:00:00.000Z",
+  "scenarios": [
+    {
+      "id": "01-no-profiles",
+      "description": "Instalação legada sem perfis de navegador."
+    },
+    {
+      "id": "02-single-profile-ready",
+      "description": "Um plugin com um perfil pronto e marker legado."
+    },
+    {
+      "id": "03-multiple-profiles-fallbacks",
+      "description": "Vários perfis com principal e fallbacks ordenados."
+    },
+    {
+      "id": "04-homonymous-aliases",
+      "description": "Aliases iguais em plugins distintos sem fusão implícita."
+    },
+    {
+      "id": "05-method-primary-and-fallback",
+      "description": "Método legado persistindo aliases principal e fallback."
+    },
+    {
+      "id": "06-completed-project",
+      "description": "Projeto concluído com execução e item concluído preserváveis."
+    },
+    {
+      "id": "07-paused-project",
+      "description": "Projeto pausado com execução em andamento."
+    },
+    {
+      "id": "08-interrupted-plugin-job",
+      "description": "Job de plugin interrompido preservando cursor de fallback."
+    },
+    {
+      "id": "09-partial-item-queue",
+      "description": "Fila com itens concluído, ativo e pendente mais partial incremental."
+    },
+    {
+      "id": "10-missing-plugin",
+      "description": "Método referencia plugin ausente/desinstalado sem apagar a configuração."
+    },
+    {
+      "id": "11-custom-workspace",
+      "description": "Plugin com workspace customizado contendo sessão física legada."
+    }
+  ]
+}

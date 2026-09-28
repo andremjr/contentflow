@@ -129,6 +129,34 @@ test("abre conversa nova com contexto quando o perfil mudou", () => {
   );
 });
 
+test("não reutiliza conversa quando o alias é igual mas o perfil físico mudou", () => {
+  const profiledSource = structuredClone(source);
+  profiledSource.plugin!.configuration.accountProfile = "principal";
+  const profiledTarget = structuredClone(target);
+  profiledTarget.plugin!.configuration.accountProfile = "principal";
+  const profiledExecution = structuredClone(execution);
+  profiledExecution.methodSnapshot.blocks = [profiledSource, profiledTarget];
+  profiledExecution.blocks[0].pluginConversation = {
+    ...profiledExecution.blocks[0].pluginConversation!,
+    profile: "principal",
+    profileId: "profile-old",
+    fallbackContext: "Título: Como começar",
+  };
+  assert.deepEqual(
+    resolvePluginConversation({
+      block: profiledTarget,
+      blockExecution: profiledExecution.blocks[1],
+      execution: profiledExecution,
+      projectExecutions: [profiledExecution],
+      pluginId: "browser",
+      supportsContinuation: true,
+      profileSetup: { configurationKey: "accountProfile", label: "Perfil" },
+      profileId: "profile-new",
+    }),
+    { mode: "new", fallbackContext: "Título: Como começar", continuationMessage: undefined },
+  );
+});
+
 test("repete no mesmo chat enviando somente as observações", () => {
   const retryExecution = structuredClone(execution);
   const retryBlock = retryExecution.blocks[0];

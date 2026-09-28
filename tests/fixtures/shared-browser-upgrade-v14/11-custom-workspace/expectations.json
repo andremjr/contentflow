@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "scenario": "11-custom-workspace",
+  "description": "Plugin com workspace customizado contendo sessão física legada.",
+  "counts": {
+    "channels": 1,
+    "projects": 0,
+    "process_executions": 0,
+    "plugin_profiles": 1,
+    "plugin_workspaces": 1,
+    "plugin_jobs": 0
+  },
+  "payloadSha256": {
+    "channels:custom": "faaf50d0c2fe25a38e68b27bcbfecd0d973f2d43d9e3da635d2f816dfb108d77"
+  },
+  "resolvedFolders": {
+    "com.contentflow.fixture.browser:principal": "custom-workspace/principal"
+  },
+  "markers": ["custom-workspace/principal/.contentflow-profile-ready.json"]
+}

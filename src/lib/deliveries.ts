@@ -10,6 +10,7 @@ import type {
   StructuredRecord,
 } from "@/lib/domain";
 import { createProcessOutputFields } from "@/lib/human-workflow";
+import { areHumanFieldTypesCompatible } from "@/lib/data-shape";
 
 const MANY_TYPES = new Set<HumanFieldType>(["list", "multiselect", "records", "files"]);
 
@@ -150,6 +151,15 @@ export function recordProcessOutputDelivery(
   values: Record<string, RuntimeValue>,
   now = new Date().toISOString(),
 ) {
+  const promoted = promotedProcessOutputDeliveries(execution, values);
+  if (promoted.length === createProcessOutputFields(execution.processType).length) {
+    execution.deliveries = (execution.deliveries ?? []).map((delivery) =>
+      delivery.blockId === "__process_output__" && delivery.status !== "invalidated"
+        ? { ...delivery, status: "invalidated" as const, updatedAt: now }
+        : delivery,
+    );
+    return promoted;
+  }
   const syntheticBlock: ActionBlock = {
     id: "__process_output__",
     type: "CRIAR",
@@ -161,6 +171,54 @@ export function recordProcessOutputDelivery(
     order: execution.methodSnapshot.blocks.length,
   };
   return recordBlockDeliveries(execution, syntheticBlock, values, "completed", now);
+}
+
+export function processOutputDeliveryFor(
+  execution: ProcessExecution,
+  outputKey: string,
+): ProjectDelivery | undefined {
+  const synthetic = [...(execution.deliveries ?? [])]
+    .reverse()
+    .find(
+      (delivery) =>
+        delivery.blockId === "__process_output__" &&
+        delivery.outputKey === outputKey &&
+        delivery.status !== "invalidated",
+    );
+  if (synthetic) return synthetic;
+
+  const value = execution.output?.values[outputKey];
+  if (value === undefined || !execution.output?.sourceBlockId) return undefined;
+  return promotedProcessOutputDeliveries(execution, { [outputKey]: value }).find((delivery) =>
+    deepEqual(deliveryRuntimeValue(delivery), value),
+  );
+}
+
+function promotedProcessOutputDeliveries(
+  execution: ProcessExecution,
+  values: Record<string, RuntimeValue>,
+) {
+  const sourceBlockId = execution.output?.sourceBlockId;
+  if (!sourceBlockId) return [];
+
+  return createProcessOutputFields(execution.processType).flatMap((output) => {
+    const value = values[output.key];
+    if (value === undefined) return [];
+    const delivery = [...(execution.deliveries ?? [])]
+      .reverse()
+      .find(
+        (candidate) =>
+          candidate.blockId === sourceBlockId &&
+          candidate.status !== "invalidated" &&
+          areDeliveryTypesCompatible(candidate.type, output.type) &&
+          deepEqual(deliveryRuntimeValue(candidate), value),
+      );
+    return delivery ? [delivery] : [];
+  });
+}
+
+function areDeliveryTypesCompatible(output: HumanFieldType, input: HumanFieldType) {
+  return areHumanFieldTypesCompatible(output, input);
 }
 
 export function invalidateBlockDeliveries(

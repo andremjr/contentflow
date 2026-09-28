@@ -47,6 +47,9 @@ Estas invariantes orientam mudanças no Método, no motor de execução, nos plu
 10. **Orquestradores agendam trabalho; não determinam estratégia.** Eles escolhem quando e qual Projeto avança; o próximo Processo elegível vem da ordem congelada e do estado desse Projeto.
 11. **O núcleo conhece contratos universais, nunca regras específicas de ferramentas.** Integrações, fornecedores e técnicas particulares vivem nos plugins e na composição do Método.
 12. **Uma nova necessidade só cria uma primitiva quando não puder ser expressa pela composição das existentes.** Antes de ampliar a gramática, testar a combinação de Processos, Blocos, Operadores, contratos e Itens.
+13. **Perfis de navegador são recursos locais globais; vínculos são explícitos.** A pasta física e sua identidade pertencem ao ContentFlow local. Cada plugin recebe acesso somente por um vínculo autorizado pelo usuário, e o estado de preparação é registrado por vínculo, nunca inferido de nome, e-mail, cookie ou outra heurística.
+14. **Toda unidade intermediária recebe identidade do núcleo.** `BlockExecution`, unidade de trabalho, entrega, item de entrega e artifact são níveis distintos de proveniência. Plugins podem correlacionar IDs concedidos, mas não decidem a identidade lógica nem se um item já foi concluído.
+15. **Paralelismo de perfis distribui unidades; não replica a estratégia.** Uma mesma pasta física possui no máximo uma execução de navegador ativa. Várias lanes podem existir somente em perfis físicos distintos e recebem unidades exclusivas da mesma `BlockExecution`.
 
 Evoluções dessas invariantes devem preservar a leitura e a continuidade segura dos snapshots e das filas existentes, com migração explícita quando necessária.
 
@@ -99,7 +102,17 @@ A experiência do usuário no ContentFlow apoia-se em três interfaces de domín
 
 3. **Interface 3: Gerenciador de Plugins (Operação & Pacotes)**
    - **Objetivo**: Gestão do ciclo de vida das ferramentas instaladas.
-   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, atualização, ativação, consentimento de permissões, inspeção de dependências e remoção de qualquer plugin pelo mesmo fluxo, sem distinção baseada no autor. Contas, perfis, secrets, sessões, workspaces e preferências técnicas são gerenciados nessa interface e continuam protegidos pelo núcleo fora do arquivo do Método. O Bloco apenas escolhe, entre os vínculos locais já cadastrados, qual será usado naquela ação.
+   - **Funcionamento**: Instalação por pasta, vínculo de desenvolvimento, atualização, ativação, consentimento de permissões, inspeção de dependências e remoção de qualquer plugin pelo mesmo fluxo, sem distinção baseada no autor. Contas, perfis globais de navegador, vínculos explícitos de plugin, readiness por vínculo, secrets, sessões, workspaces e preferências técnicas são gerenciados nessa interface e continuam protegidos pelo núcleo fora do arquivo portátil do Método. O Bloco apenas escolhe, entre os perfis já vinculados ao plugin, a política local usada naquela ação.
+
+### 2.1. Vocabulário canônico: Interface do plugin
+
+**Interface do plugin** é a segunda superfície de configuração aberta a partir de um Bloco no editor de Método. Ela aparece ao lado da configuração do Bloco e pertence à **Interface 2: Métodos do Canal**. Fechá-la devolve o foco e a centralização ao Bloco.
+
+O termo não designa o Gerenciador de Plugins (`/plugins`), a página de detalhes de instalação, nem a interface original do serviço automatizado. Também não cria uma quarta interface de domínio.
+
+Sua função principal é responder, em linguagem de usuário: **como a capability selecionada deve executar este Bloco?** Portanto, a primeira camada apresenta as possibilidades funcionais declaradas pelo plugin, como modo de geração, modelo, referências, anexos, voz, formato, quantidade, proporção, duração, resolução e critérios de seleção, conforme a capability realmente suportar. Informações sobre bindings, portas, payload, prévia técnica do prompt, compatibilidade, retries, concorrência e outros mecanismos do núcleo ficam em uma camada secundária ou avançada, salvo quando uma pendência exigir ação imediata.
+
+O núcleo é responsável pela moldura, hierarquia, componentes acessíveis, validação e persistência. O plugin descreve declarativamente a semântica, os campos, as opções e as condições de visibilidade de sua capability; ele não injeta React, HTML ou uma tela própria. A especificação detalhada desta superfície está em [`docs/PLUGIN_INTERFACE.md`](PLUGIN_INTERFACE.md).
 
 No nível global, a navegação principal possui quatro áreas, nesta ordem:
 
@@ -158,10 +171,13 @@ Cada Bloco de Ação em um Método é atribuído a um Operador:
 
 A experiência de configuração funcional vive **dentro do Bloco do Método**.
 
-- Quando o usuário adiciona um Bloco no Método (ex: `CRIAR`), ele seleciona o Operador (ex: `IA`), o **Plugin**, a capacidade e uma conexão ou perfil local já cadastrado.
-- A interface do Bloco lê o manifesto e renderiza os campos funcionais que aquela capacidade precisa, como modelo, temperatura, formato ou voz. Perfis não são criados por texto livre no Bloco: ele apenas seleciona o principal e, quando declarado, ordena perfis alternativos existentes.
-- O Método local guarda `pluginId`, `pluginVersion`, `capabilityId`, configuração, bindings e uma referência opaca `connectionId` quando o executor exigir conta ou sessão.
-- Uma conexão ou perfil é um registro local, estável e nomeado, pertencente ao plugin e reutilizável sem restrição por vários blocos e Canais. O Gerenciador de Plugins mostra de forma derivada onde ele é usado; essa visualização não cria permissões, cotas nem regras de disponibilidade. Renomear o nome visual não altera o alias interno e não quebra o Método.
+- Quando o usuário adiciona um Bloco no Método (ex: `CRIAR`), ele seleciona o Operador (ex: `IA`), o **Plugin**, a capacidade e, quando necessário, uma conexão local ou um perfil global de navegador já vinculado explicitamente àquele plugin.
+- A interface do Bloco lê o manifesto e renderiza os campos funcionais que aquela capacidade precisa, como modelo, temperatura, formato ou voz. Perfis não são criados por texto livre no Bloco: a configuração local escolhe perfis já vinculados e sua política de execução.
+- O Método local guarda `pluginId`, `pluginVersion`, `capabilityId`, configuração funcional, bindings e uma referência opaca `connectionId` quando o executor exigir uma conexão. A política de perfil é estado local do ambiente e não integra o pacote portátil do Método.
+- Um **perfil de navegador** é uma identidade global local com uma única pasta física de sessão. Ele pode ser reutilizado por vários plugins, mas cada reutilização exige um **vínculo de plugin** explícito. Criar um perfil nos detalhes de um plugin vincula somente aquele plugin; outros plugins apenas o enxergam como candidato compatível até nova ação do usuário.
+- O **readiness** pertence ao par plugin + perfil. Preparar ChatGPT, Flow, Gemini ou qualquer outro provedor valida apenas aquele vínculo e não torna os demais prontos. URL, autenticação, seletores, estados de página e validação continuam responsabilidade do plugin.
+- A seleção local do Bloco é uma política do núcleo com dois modos conceituais: `fallback` ordenado e `parallel`. O fallback ordenado é sempre o padrão, inclusive quando existe apenas um perfil selecionado; nesse caso, a lista simplesmente não possui um próximo perfil. O modo paralelo distribui unidades exclusivas entre dois ou mais perfis compatíveis. A política referencia IDs locais de perfis vinculados, limita concorrência aos perfis escolhidos e nunca é exportada com cookies, caminhos, aliases de storage ou IDs locais. O núcleo injeta ao plugin somente a referência compatível necessária para a invocação ativa. O valor histórico `single` é aceito apenas para migração e normalizado para `fallback`.
+- Cada perfil físico possui um lock/lease global. Jobs, plugins ou lanes diferentes não podem abrir simultaneamente a mesma pasta do navegador; paralelismo real exige perfis físicos distintos.
 - O valor real de API keys, tokens, cookies e outros secrets nunca entra em `connectionId`, configuração, Método, exportação, SQLite, request, snapshot ou log. Ele permanece no cofre seguro e só é resolvido em memória para a invocação autorizada.
 - Permissões, consentimento, origem, integridade, runtime, workspace, criação e preparação de perfis e preferências técnicas da instalação continuam sob responsabilidade do núcleo no Gerenciador de Plugins. Esses dados não se tornam configuração portátil do Método.
 
@@ -228,11 +244,31 @@ Cada nova tentativa incrementa a identidade de execução dos blocos já iniciad
 
 Cada execução mantém um snapshot do Método utilizado, o estado individual dos blocos, rascunhos, entregas concluídas e referências a arquivos armazenados localmente. As saídas concluídas tornam-se contexto para os blocos seguintes.
 
+### 7.1. Hierarquia universal de identidade e proveniência
+
+O motor separa cinco níveis que não podem ser confundidos, independentemente de o executor ser `Humano`, `IA` ou `Código`:
+
+1. **`BlockExecution`** — instância persistente da ação estratégica de um Bloco dentro da execução de um Projeto. Ela contém estado, tentativas, entradas resolvidas e as unidades necessárias para produzir suas saídas.
+2. **Unidade de trabalho** — menor parcela endereçável que precisa ser executada. Toda `BlockExecution` possui ao menos uma unidade escalar; coleções produzem uma unidade por elemento e itens derivados recebem identidade antes de qualquer efeito externo.
+3. **Entrega** — materialização tipada de uma porta de saída do Bloco. Ela possui identidade própria, cardinalidade, tentativa e estado e permanece ligada à `BlockExecution` que a produziu.
+4. **Item de entrega** — elemento endereçável de uma entrega. Uma entrega escalar possui exatamente um item; uma entrega em lista possui um item por elemento, preservando ordem e, quando houver, a referência à unidade ou ao item de origem.
+5. **Artifact** — arquivo ou mídia armazenada que concretiza ou acompanha um resultado. O artifact fica ligado à entrega e, quando aplicável, ao item que o produziu; seu caminho não substitui a identidade universal do item.
+
+Essas identidades pertencem ao núcleo. O plugin recebe IDs já concedidos para correlação, pode publicar progresso ou resultados associados a eles e pode solicitar o registro de itens derivados, mas o núcleo cria os IDs filhos antes da execução externa. Retry, fallback, retomada, consolidação e prevenção de duplicação usam essa identidade persistida em vez de posição textual ou memória do handler.
+
+Os outputs oficiais dos Processos usam as mesmas entregas e itens. Promover uma saída compatível a output de Processo preserva os IDs e a proveniência existentes em vez de criar uma cópia paralela.
+
+Exemplos universais:
+
+- **Escalar:** um Bloco `CRIAR` produz um único texto de título. A `BlockExecution` possui uma unidade escalar; a porta `title` materializa uma entrega `one` com um item de entrega textual. Nenhum conceito de fornecedor é necessário.
+- **Lista de cenas:** uma entrega anterior contém N registros de cena. O Bloco seguinte recebe N itens identificados pelo núcleo e materializa N unidades de trabalho relacionadas aos respectivos `sourceItemId`. Execução, retry ou distribuição podem ocorrer por unidade sem perder a ordem nem repetir as cenas já concluídas.
+- **Lista de assets:** um Bloco produz N imagens, vídeos ou arquivos. A porta correspondente materializa uma entrega `many` com N itens; cada arquivo importado é um artifact ligado ao item de entrega que o referencia. Reordenar ou regenerar um item não muda a identidade dos irmãos concluídos.
+
 A página do processo mantém um painel expansível de resultados concluídos. O tipo técnico do campo continua sendo a autoridade para validação e compatibilidade, enquanto `presentation` pode solicitar, de forma opcional, um renderer padronizado do núcleo. O registro central oferece modo automático, texto curto ou longo, lista ou etiquetas, tabela ou cartões, lista de arquivos, galeria de imagens, players de áudio e vídeo e decisão/aprovação. Assim, por exemplo, um mesmo valor `files` pode aparecer como lista de arquivos ou galeria sem alterar seu contrato técnico. Métodos e snapshots antigos, sem `presentation`, são normalizados para `auto`.
 
 Renderers são componentes internos do ContentFlow. Plugins podem apenas indicar um identificador permitido e restrições declarativas de item ou MIME; nunca fornecem React, HTML, scripts ou outra interface arbitrária. Preferências incompatíveis ou desconhecidas são ignoradas pelo núcleo e recaem no modo automático.
 
-### 7.1. Itens operacionais universais
+### 7.2. Itens operacionais universais
 
 Quando uma capability declara `execution.itemOrchestration`, uma entrada em lista passa a ser um lote ordenado administrado pelo núcleo. O significado dos itens é irrelevante para o motor: podem ser prompts de texto, descrições de imagens, trechos de áudio, palavras-chave de pesquisa, registros de cenas, arquivos ou qualquer outro valor aceito pelo contrato universal. O núcleo não precisa conhecer Pexels, Pixabay, um modelo de IA ou a finalidade editorial do lote.
 
@@ -250,7 +286,7 @@ Quando uma tentativa termina com parte do lote concluída, a interface oferece o
 
 O plugin continua responsável apenas por executar a capability sobre o item recebido e devolver seu resultado. A reconciliação entre recebido, concluído e pendente, a persistência, a decisão de retomar e a prevenção de duplicação pertencem ao núcleo. Essa capacidade não cria loops no canvas nem um novo tipo de validação editorial: é infraestrutura de execução reutilizável por qualquer Bloco e qualquer tipo de entrega compatível.
 
-### 7.2. Orquestrador de execução entre Projetos
+### 7.3. Orquestrador de execução entre Projetos
 
 Na página global `/orchestrator`, o usuário seleciona **um ou vários Canais**, informa quantos Projetos deseja criar por Canal e escolhe a política de execução. Uma solicitação multi-Canal recebe identidade global própria e cria uma fila persistente por Canal. Isso reutiliza o mesmo motor robusto de filas sem criar um segundo tipo de Projeto ou uma estratégia especial para produções globais.
 
@@ -389,7 +425,9 @@ Na V1, a extensão companheira é instalada manualmente em cada perfil dedicado 
 
 A execução rotineira ocorre minimizada ou em background por comandos estruturados entre o handler, o service worker e o content script. Ela não depende de foco do Windows, teclado ou mouse do sistema e não deve trazer a janela para frente. Login, reautenticação e diagnóstico podem abrir uma superfície visível somente mediante ação explícita do usuário. Headless é uma evolução do mesmo contrato quando tecnicamente compatível.
 
-O núcleo mantém a ordem, o cursor e as entregas e pode avançar automaticamente para o próximo perfil explicitamente preparado quando uma tentativa terminar com qualquer falha reportada pelo plugin, inclusive autenticação, rate limit, cota, permissão ou validação de output. O fallback nunca ignora um cancelamento solicitado pelo usuário, nunca ultrapassa a lista ordenada de perfis configurados e preserva o histórico das tentativas. Estados que o plugin reportar como espera por intervenção humana continuam pausados, em vez de serem tratados como erro para troca de perfil. Capacidades que declaram uma entrada em lote podem solicitar orquestração sequencial item a item pelo núcleo, que persiste cada texto ou mídia antes de avançar e nunca repete itens concluídos ao trocar de perfil. A extensão existe para produtividade, isolamento, determinismo e observabilidade da automação.
+A Browser Bridge é um protocolo compartilhado e versionado. Cliente e extensão negociam versão e capabilities antes do primeiro efeito; comandos possuem identidade idempotente e validade limitada; eventos de lifecycle usam sequência monotônica; snapshots são solicitados sob demanda; observadores de condição são temporários e sujeitos a timeout, debounce e backpressure. Reconnect, timeout ou perda do worker/debugger depois de uma ação potencialmente mutável exigem reconciliação antes de replay. Recarga é uma primitiva allowlisted e controlada, nunca fallback universal, e permanece bloqueada enquanto houver efeito externo incerto. Diagnósticos da ponte registram somente metadados redigidos e não transportam conteúdo privado, cookies, tokens, storage de sessão ou caminhos físicos.
+
+O núcleo mantém a ordem, o cursor e as entregas e decide recuperação por uma política única. Ele só avança para outro perfil explicitamente preparado quando a falha é segura para redistribuição, associada ao perfil e não há efeito externo incerto; autenticação, CAPTCHA, permissão, cota, upgrade ou bloqueio sem alternativa segura viram intervenção, e qualquer efeito potencialmente submetido exige reconciliação antes de retry ou fallback. Cancelamento nunca avança o cursor, a lista configurada nunca é ultrapassada e o histórico das tentativas é preservado. Capacidades que declaram uma entrada em lote podem solicitar orquestração sequencial ou multiperfil por unidades persistidas pelo núcleo, que nunca repete silenciosamente itens concluídos ou efeitos incertos. A extensão existe para produtividade, isolamento, determinismo e observabilidade da automação.
 
 Qualquer integração com modelos de linguagem, catálogos de modelos, pesquisa web ou mídia especializada é responsabilidade do respectivo plugin externo. O núcleo apenas apresenta `blockConfigSchema`, capacidades e contratos declarados pelo pacote; ele não conhece fornecedor, endpoint, modelo ou ferramenta específica.
 

@@ -152,7 +152,7 @@ test("faz backup e inventaria perfis legados sem reescrever o Canal", async () =
     const backupPath = path.join(
       dataDirectory,
       "migration-backups",
-      "contentflow-before-profile-management.sqlite",
+      "contentflow-before-schema-v1.sqlite",
     );
     assert.equal(existsSync(backupPath), true);
     const backupDatabase = new Database(backupPath, { readonly: true, fileMustExist: true });

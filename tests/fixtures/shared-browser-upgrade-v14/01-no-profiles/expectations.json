@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "scenario": "01-no-profiles",
+  "description": "Instalação legada sem perfis de navegador.",
+  "counts": {
+    "channels": 1,
+    "projects": 0,
+    "process_executions": 0,
+    "plugin_profiles": 0,
+    "plugin_workspaces": 0,
+    "plugin_jobs": 0
+  },
+  "payloadSha256": {
+    "channels:empty": "7d3e5a4313124626bb5b12cd5caa1e58fba5b2afecda8ff394f55396d48ef1c6"
+  },
+  "resolvedFolders": {},
+  "markers": []
+}

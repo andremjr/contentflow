@@ -11,12 +11,12 @@ Classifique pela origem do item manipulado:
 
 Se houver dúvida entre `ESCOLHER` e `VALIDAR`, use `VALIDAR`, salvo coleção estratégica explicitamente pré-existente.
 
-| Bloco | Use quando | Não use para |
-| --- | --- | --- |
-| `BUSCAR` | Recuperar informação, fonte, mídia ou dado externo. | Sintetizar ou decidir. |
-| `CRIAR` | Produzir texto, lista, arquivo, imagem, áudio, vídeo ou síntese nova. | Apenas consultar fonte. |
-| `ESCOLHER` | Aplicar item já cadastrado na Biblioteca Estratégica. | Selecionar resultado desta execução. |
-| `VALIDAR` | Aprovar, reprovar ou selecionar resultado pesquisado/gerado. | Buscar fonte ou criar ativo inicial. |
+| Bloco      | Use quando                                                            | Não use para                         |
+| ---------- | --------------------------------------------------------------------- | ------------------------------------ |
+| `BUSCAR`   | Recuperar informação, fonte, mídia ou dado externo.                   | Sintetizar ou decidir.               |
+| `CRIAR`    | Produzir texto, lista, arquivo, imagem, áudio, vídeo ou síntese nova. | Apenas consultar fonte.              |
+| `ESCOLHER` | Aplicar item já cadastrado na Biblioteca Estratégica.                 | Selecionar resultado desta execução. |
+| `VALIDAR`  | Aprovar, reprovar ou selecionar resultado pesquisado/gerado.          | Buscar fonte ou criar ativo inicial. |
 
 ## Operadores
 

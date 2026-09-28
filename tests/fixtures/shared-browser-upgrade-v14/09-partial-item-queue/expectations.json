@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "scenario": "09-partial-item-queue",
+  "description": "Fila com itens concluído, ativo e pendente mais partial incremental.",
+  "counts": {
+    "channels": 1,
+    "projects": 1,
+    "process_executions": 1,
+    "plugin_profiles": 1,
+    "plugin_workspaces": 0,
+    "plugin_jobs": 1
+  },
+  "payloadSha256": {
+    "channels:partial": "887a4610e953046a663fbaab09fa4aa314087748309d2639059ac06150c34bc2",
+    "projects:project-partial": "58f0a6eaef3467e5db1886ad7f3936d1c3792b3e7d9a5bb8885bf20afa7b432f",
+    "process_executions:execution-partial": "83f226b1dc89bc9af373615137c851728d9f305e2b438d474ea8be39b935ec35",
+    "plugin_jobs:job-partial": "931f2fc1a6ea87dafd390863120f2c5a7362e3d40a6e23fbfc12c9cb8e9699bc"
+  },
+  "resolvedFolders": {},
+  "markers": []
+}

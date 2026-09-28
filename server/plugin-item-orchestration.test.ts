@@ -219,7 +219,7 @@ test("retoma itens pendentes usando somente o estado persistido da execução", 
   assert.deepEqual(resumed?.accumulatedItems, ["image-a"]);
 });
 
-test("considera todos os itens concluídos quando o job termina", () => {
+test("mantém fallback legado quando o snapshot ainda não possui estado durável por item", () => {
   const job = createPersistentPluginJob({
     pluginId: "test.browser",
     pluginVersion: "1.0.0",

@@ -154,6 +154,10 @@ Entradas e saídas são verificadas por caminho canônico, tamanho e tipo real. 
 
 URLs remotas de artifacts passam pelo mesmo downloader protegido contra SSRF. O plugin nunca decide sozinho o destino definitivo.
 
+Perfis globais de navegador são raízes locais concedidas separadamente do workspace privado do plugin. Um handler só recebe `services.getProfilePath()` quando o usuário vinculou explicitamente o perfil ao plugin e o núcleo validou o vínculo para aquela invocação. A sandbox não concede enumeração dos demais perfis. `profileId`, caminho absoluto, `storage_key`, cookies, storage de sessão, credenciais e IDs internos de vínculo/readiness/lease não entram no request, no Método exportado nem em diagnósticos.
+
+Revogar um vínculo corta novas concessões daquele plugin ao perfil; não autoriza apagar a pasta física nem afetar vínculos de outros plugins. Desinstalar um plugin remove apenas sua autoridade e seu estado específico. Compartilhar um perfil com outro plugin exige um novo consentimento explícito, mesmo quando a sessão física já existe.
+
 O downloader resolve todos os registros antes de conectar e rejeita o host inteiro se qualquer endereço for não público. A conexão HTTPS usa diretamente um IP validado, mantendo o hostname original em SNI/Host, para impedir uma segunda resolução suscetível a DNS rebinding. Cada redirect repete URL, host e DNS. Downloads usam arquivo parcial exclusivo, hash incremental, promoção atômica e limpeza em falha. MIME ainda é validado pela declaração e pelo cabeçalho HTTP; inspeção profunda de magic bytes, codecs e malware permanece hardening futuro.
 
 ## 9. IA, conteúdo externo e prompt injection
@@ -178,7 +182,9 @@ Outputs de IA são validados estruturalmente e, quando houver risco de ação ex
 - Estado incerto após timeout não é repetido automaticamente; primeiro ocorre reconciliação pelo identificador externo.
 - Cancelamento informa efeitos que não puderam ser revertidos.
 
-Automação de navegador obedece também a [`browser-automation.md`](browser-automation.md). O executor não extrai nem entrega automaticamente cookies, tokens, histórico, armazenamento de sessão ou perfis. O usuário pode conectar explicitamente um secret ou escolher uma pasta para uma capacidade que declare as permissões avançadas necessárias; nesse caso, o plugin responde pelo runtime e opera dentro do consentimento concedido. CAPTCHA, anti-bot, reautenticação, cota esgotada e upgrade podem permanecer pendentes no perfil atual; se o plugin devolver erro, o núcleo pode avançar para o próximo perfil explicitamente preparado. Isso não autoriza descobrir contas, trocar endpoint, IP ou fingerprint nem ampliar permissões fora do consentimento.
+Automação de navegador obedece também a [`browser-automation.md`](browser-automation.md). O executor não extrai nem entrega automaticamente cookies, tokens, histórico ou armazenamento de sessão. Perfis físicos pertencem ao núcleo e só são ligados a plugins por consentimento explícito; o plugin recebe apenas a sessão efêmera e os serviços autorizados para o perfil ativo. CAPTCHA, anti-bot, reautenticação, cota esgotada e upgrade podem permanecer pendentes no perfil atual; se a tentativa terminar, a política central decide entre intervenção, fallback seguro, retry, reconciliação ou falha. Isso não autoriza descobrir contas, trocar endpoint, IP ou fingerprint nem ampliar permissões fora do consentimento.
+
+A Browser Bridge trata content script e página como contextos menos confiáveis. O handshake precisa negociar versão/capabilities antes do primeiro efeito; comandos usam token efêmero, ID idempotente, validade curta, origem/aba esperadas e payload validado. Eventos de lifecycle e snapshots são redigidos e nunca carregam cookies, tokens, storage, HTML ou conteúdo integral. Observadores são temporários e limitados; filas e eventos aplicam backpressure. Reconnect ou timeout após ação mutável entram em reconciliação, e `reload` permanece bloqueado enquanto houver efeito externo incerto.
 
 ## 11. Logs, auditoria e privacidade
 

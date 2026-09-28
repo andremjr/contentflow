@@ -6,7 +6,7 @@ Leia este arquivo sempre que o plugin envolver manifesto, portas, tipos, execuç
 
 O arquivo `contentflow.plugin.json` fica na raiz do pacote. Os campos essenciais são `apiVersion: "1"`, `id` reverso e imutável, `name`, `version` SemVer, `description`, `author`, `license`, `runtime`, `entrypoint` e `capabilities`. Declare `minCoreVersion` quando aplicável. O runtime v1 é Node/ESM, normalmente `>=26 <27`.
 
-Cada capability deve declarar `id`, `operator` (`IA` ou `Código`), `blockTypes`, `processTypes` quando necessário, `inputPorts`, `outputPorts`, `execution`, `sideEffects`, `cost`, `dataPolicy`, `blockConfigSchema` e, quando útil, `outputSchema`. `deliveryTypes` classifica o pacote para descoberta, mas não substitui as portas. `instructionUsage` informa se a capability exige, aceita ou ignora a instrução resolvida do bloco; ausência equivale a `optional`.
+Cada capability deve declarar `id`, `operator` (`IA` ou `Código`), `blockTypes`, `processTypes` quando necessário, `inputPorts`, `outputPorts`, `execution`, `sideEffects`, `cost`, `dataPolicy`, `blockConfigSchema` e, quando útil, `outputSchema`. `deliveryTypes` classifica o pacote para descoberta, mas não substitui as portas. `instructionUsage` informa se a capability exige, aceita ou ignora a instrução resolvida do bloco; ausência equivale a `optional`. O `blockConfigSchema` também é a declaração da interface funcional da capability: propriedades visíveis aparecem na área principal, na ordem declarada, com os componentes seguros do núcleo. O plugin controla títulos, descrições, opções, defaults, limites e visibilidade condicional, mas não injeta React, HTML ou CSS.
 
 No manifesto, `branding.iconPath` pode apontar para PNG/WebP local de até 512 KiB, relativo ao pacote, sem URL, caminho absoluto, `..` ou symlink externo. Recomenda-se 256 × 256; o autor precisa possuir direito de uso. `profileSetup`, `execution.itemOrchestration` e `supportsConversationContinuation` são contratos funcionais: só os declare quando handler e testes cobrirem seus ciclos completos.
 
@@ -26,21 +26,28 @@ Capabilities com `instructionUsage: required` devem falhar de forma clara quando
 
 Plugins que preservam uma conversa no provedor podem declarar `supportsConversationContinuation: true`. O request recebe `conversation: { mode: "new" }` ou `conversation: { mode: "reuse", id: "..." }`; o sucesso devolve opcionalmente `conversation: { id: "..." }`. Trate o ID como opaco, valide que pertence ao provedor esperado e nunca inclua tokens. O núcleo só permite reutilização entre blocos anteriores com o mesmo plugin e a mesma conexão local.
 
-`execution.itemOrchestration` declara `inputPort`, `outputPort` e `mode: "sequential"`. O núcleo chama uma vez por item, fornece `request.batch` com ID/índice/total, acumula o output e persiste cada entrega antes da seguinte. O plugin não cria o loop editorial nem reprocessa itens já concluídos.
+`execution.itemOrchestration` preserva `inputPort`, `outputPort` e `mode: "sequential"` para compatibilidade. `strategies` pode declarar `per_item`, `continuous_session` ou ambas; `preferredStrategy` precisa pertencer à lista. A ausência desses campos continua significando o comportamento legado por item. `collectionAssociations` declara pares adicionais de coleção/entrega quando houver mais de uma combinação estruturalmente válida, e `profileParallelism` apenas informa elegibilidade futura para lanes em perfis físicos distintos.
 
-`profileSetup` habilita `invocation.mode = "configure"` com `action = "status"` ou `"prepare"`. Essas chamadas não pertencem a Projeto e retornam `values.ready`. Perfis alternativos só usam `fallbackConfigurationKey` com aliases preparados explicitamente. Qualquer resposta de erro pode avançar para o próximo alias, inclusive autenticação, rate limit, cota, permissão, upgrade, bloqueio ou validação de output; cancelamento e lista esgotada encerram o fallback.
+Em `per_item`, o núcleo chama uma vez por unidade e fornece `request.batch` com ID/índice/total. Em `continuous_session`, o request preserva a coleção inteira e o runtime pode expor `services.claimItems` para que uma única invocação processe várias unidades sem fechar o recurso externo entre elas. Cada concessão contém ID, índice, total, tentativa e input persistidos pelo núcleo e fica associada à invocação/perfil ativo até conclusão, erro, cancelamento ou expiração. `services.registerItems` também pode ser negociado em jobs de Projeto compatíveis e só resolve depois que parent, ordem, entrada, chave semântica e IDs foram persistidos; repetir o mesmo plano na mesma tentativa lógica reaproveita os IDs. `services.publishItemUpdate` permanece aditivo/opcional até o runtime concluir a persistência incremental por item. `services.publishPartial` permanece como compatibilidade para snapshots agregados. Handlers legados sem `itemOrchestration` recebem a coleção inteira; quando o retorno final admite um pareamento unívoco de mesma cardinalidade, o núcleo pode materializar as unidades apenas após a conclusão, marcando-as como compatibilidade agregada sem suporte a updates tardios, tempo real ou paralelismo por perfil.
+
+Estados duráveis de unidade: `planned`, `pending`, `leased`, `submitted`, `awaiting_result`, `completed`, `failed`, `awaiting_human` e `cancelled`. O plugin repete somente o `itemId` concedido como correlação e nunca inventa IDs do núcleo. `submitted` bloqueia retry cego; tentativa e revisão fazem parte da correlação e resultados concluídos não podem ser repetidos silenciosamente.
+
+`profileSetup` habilita `invocation.mode = "configure"` com `action = "status"` ou `"prepare"`. Essas chamadas não pertencem a Projeto e retornam `values.ready`. Perfis alternativos só usam `fallbackConfigurationKey` com aliases preparados explicitamente. O núcleo consulta a política central antes de trocar de perfil: somente falhas seguras e associadas ao perfil podem avançar; efeito externo incerto exige reconciliação e condições humanas exigem intervenção. Cancelamento e lista esgotada encerram o fallback.
+
+O contrato alvo separa alias legado de identidade física: `profileId` é um identificador local opaco e a política local do Bloco chama-se `profileExecution`, com `profileIds` e modos canônicos `fallback` ou `parallel`. Fallback ordenado é o padrão mesmo com um perfil; o valor histórico `single` é aceito apenas na leitura e normalizado para `fallback`. Métodos API v1 existentes continuam resolvendo por `pluginId + alias`; aliases iguais em plugins diferentes não são fundidos. Depois de vínculo explícito e válido, o handler pode receber `services.getProfilePath(relativePath)`; ele nunca recebe `profileId` nem enumera perfis.
 
 A assinatura é `execute(request, services)`. Serviços:
 
-| Serviço                          | Regra                                                       |
-| -------------------------------- | ----------------------------------------------------------- |
-| `signal`                         | Encaminhar para operações abortáveis.                       |
-| `getSecret(key)`                 | Só aceita chaves declaradas no manifesto.                   |
-| `resolveInputFile(file)`         | Resolve `StoredFile` autorizado em staging.                 |
-| `getOutputPath(relativePath)`    | Retorna caminho temporário exclusivo de saída.              |
-| `getWorkspacePath(relativePath)` | Retorna caminho persistente dentro do workspace autorizado. |
+| Serviço                          | Regra                                                        |
+| -------------------------------- | ------------------------------------------------------------ |
+| `signal`                         | Encaminhar para operações abortáveis.                        |
+| `getSecret(key)`                 | Só aceita chaves declaradas no manifesto.                    |
+| `resolveInputFile(file)`         | Resolve `StoredFile` autorizado em staging.                  |
+| `getOutputPath(relativePath)`    | Retorna caminho temporário exclusivo de saída.               |
+| `getWorkspacePath(relativePath)` | Retorna caminho persistente dentro do workspace autorizado.  |
+| `getProfilePath(relativePath)`   | Raiz opcional do perfil global ativo, concedida por vínculo. |
 
-Secrets nunca aparecem no envelope serializável, Método, snapshot, log ou artifact.
+Secrets, cookies, storage de sessão, caminhos físicos, `profileId`, `profileExecution` e IDs internos de vínculo/readiness/lease nunca aparecem no envelope serializável ou pacote portátil.
 
 ## Valores universais
 
