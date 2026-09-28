@@ -1,6 +1,6 @@
 # ChatGPT Browser Studio
 
-Versão **1.0.14** para ContentFlow Plugin API v1.
+Versão **1.0.15** para ContentFlow Plugin API v1.
 
 ## Contrato simplificado
 
@@ -27,7 +27,7 @@ O manifesto anuncia `supportsConversationContinuation`. O handler valida referê
 
 Na geração inicial de imagens em lote, cada `batch.itemId` abre obrigatoriamente uma conversa nova. Os prompts não compartilham contexto nem comandos. Cada variante guarda apenas uma correlação opaca com a conversa que a produziu. Ao regenerar, essa conversa é reutilizada somente se conexão e perfil ainda coincidirem; caso contrário, uma conversa nova recebe a imagem reprovada como anexo. O artifact inclui o item do lote e a tentativa em sua identidade, e o núcleo usa essas identidades para preservar a posição, o histórico, a proveniência, a retomada e a troca de perfil sem reenviar prompts concluídos. O teto permanece `maxConcurrency: 1`; um cancelamento é observado antes de iniciar o item seguinte.
 
-A saída obrigatória `result` une as respostas. A saída opcional `parts` preserva cada resposta individual, na ordem em que foi capturada.
+A saída obrigatória `result` une as respostas e pode ser vinculada como texto, número ou lista tipada. A saída opcional `parts` preserva cada resposta individual, na ordem em que foi capturada.
 
 ## Contas por canal
 

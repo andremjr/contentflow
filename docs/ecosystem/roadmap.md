@@ -1,24 +1,12 @@
 # Roadmap estratégico de plugins
 
-Este documento é um catálogo estratégico de capacidades, não a documentação de instalação nem uma promessa de integrações já disponíveis. Para criar um plugin, comece em [`quickstart.md`](quickstart.md). Atualize este backlog conforme integrações forem validadas pela comunidade.
+**Classificação: D — planejamento ativo.** Este documento é um catálogo estratégico de capacidades, não fonte normativa do núcleo, documentação de instalação nem promessa de integrações disponíveis. Para criar um plugin, comece em [`quickstart.md`](quickstart.md). Atualize este backlog conforme integrações forem validadas pela comunidade.
 
 O protocolo normativo está em [`protocol.md`](protocol.md) e o guia prático em [`development.md`](development.md).
 
-## Experiência declarativa dos plugins
-
-Objetivo: permitir que plugins ricos de automação de navegador exponham suas capacidades na interface nativa do ContentFlow sem fornecer HTML/React próprio e sem colocar regras de fornecedor no núcleo.
-
-1. **Protocolo declarativo — concluído:** opções dinâmicas de configuração resolvidas pelo plugin, ações padronizadas por item e atualizações incrementais de itens.
-2. **Perfis + opções dinâmicas — concluído:** usar perfis já preparados para descobrir modelos, modos, resoluções, vozes e outras opções atuais, com cache e atualização explícita.
-3. **Renderer de configuração — concluído:** renderizar opções dinâmicas, dependências e campos condicionais preservando a mesma experiência em todos os plugins.
-4. **Slots incrementais — concluído:** materializar cada imagem, vídeo ou outro resultado assim que for produzido, usando a identidade universal de Item já persistida pelo núcleo. O núcleo valida a porta e o tipo, importa artifacts antes de expor o valor, atribui o ID universal e persiste as transições `created`, `running`, `completed` e `failed` no snapshot da execução. Google Flow e Meta Vibes exercitam o mesmo contrato de referência.
-5. **Ações por item — concluído:** refletir nos slots somente as capacidades declaradas (`regenerate`, `replace`, `select` e `download`), com validação também no servidor. Regenerações usam `invocation.mode = "item_action"`; substituições, seleções e downloads permanecem locais quando aplicável. ID, posição, seleção, histórico e tentativas são preservados pelo núcleo.
-
-Validação de referência: aplicar primeiro ao plugin do Google Flow e depois ao Meta Vibes. A implementação é considerada universal somente se os dois puderem usar os mesmos contratos sem exceções de fornecedor no núcleo.
-
 ## 1. Princípio de desenvolvimento
 
-Na v0.2, a fundação já inclui plugin comunitário de referência, sandbox Node 26, jobs retomáveis, artifacts, Plugin Kit e IDs universais de entregas. A fase atual é ampliar capacidades reais com a comunidade e comprovar esteiras verticais de vídeo completo.
+A fundação atual inclui plugin comunitário de referência, sandbox Node 26, jobs retomáveis, artifacts, Plugin Kit e IDs universais de entregas. O trabalho ativo é ampliar capacidades reais com a comunidade e comprovar esteiras verticais de vídeo completo.
 
 Um plugin deve oferecer capacidades atômicas para `BUSCAR`, `ESCOLHER`, `CRIAR` ou `VALIDAR`. Ele não deve esconder um método inteiro dentro de uma integração. Sequência, conexões, repetição e pausas humanas continuam pertencendo ao núcleo.
 

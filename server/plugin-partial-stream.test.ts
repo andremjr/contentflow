@@ -98,3 +98,82 @@ test("imports and forwards partial plugin snapshots before the final response", 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a rejected partial callback fails the plugin execution without becoming an unhandled rejection", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "contentflow-partial-stream-rejection-"));
+  const entrypoint = path.join(root, "handler.mjs");
+  await writeFile(
+    entrypoint,
+    `export async function execute(_request, services) {
+      await services.publishPartial({
+        values: {},
+        itemUpdates: [{ key: "prompt:1", outputPort: "result", state: "completed", value: "primeiro" }],
+      });
+      await services.publishPartial({
+        values: {},
+        itemUpdates: [{ key: "prompt:1", outputPort: "result", state: "completed", value: "segundo" }],
+      });
+      return { status: "success", values: { result: "final" } };
+    }`,
+    "utf8",
+  );
+  const manifest = {
+    id: "partial-stream-rejection-test",
+    version: "1.0.0",
+    permissions: [],
+    capabilities: [],
+  } as unknown as PluginManifest;
+  const plugin: RegisteredPlugin = {
+    id: manifest.id,
+    source: "local",
+    directory: root,
+    absoluteDirectory: root,
+    entrypoint,
+    manifest,
+    executable: true,
+  };
+  let calls = 0;
+  try {
+    await assert.rejects(
+      executeRegisteredPlugin(
+        plugin,
+        {
+          pluginId: plugin.id,
+          capabilityId: "test",
+          executionId: "execution",
+          blockId: "block",
+          attempt: 1,
+          traceId: "trace",
+          invocation: { mode: "start" },
+          inputs: {},
+          configuration: {},
+          settings: {},
+          inputContract: [],
+          outputContract: [
+            { key: "result", portKey: "result", label: "Resultado", type: "text", required: true },
+          ],
+          context: {
+            project: { id: "project", title: "Project" },
+            processType: "assets",
+            blockType: "CRIAR",
+            operator: "IA",
+          },
+        } as unknown as PluginExecutionRequest,
+        10_000,
+        {},
+        {
+          workspaceDirectory: path.join(root, "workspace"),
+          artifactDirectory: path.join(root, "artifacts"),
+          onPartial: async () => {
+            calls += 1;
+            if (calls === 2) throw new Error("O item incremental prompt:1 mudou depois de concluído.");
+          },
+        },
+      ),
+      /prompt:1 mudou depois de concluído/,
+    );
+    assert.equal(calls, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -151,6 +151,30 @@ test("translates shared browser profile linking UI from package 7.4", () => {
   );
 });
 
+test("translates the user-controlled profile preparation window lifecycle", () => {
+  assert.equal(
+    translate(
+      "A janela continuará aberta. Instale ou atualize a extensão, faça login e feche o navegador quando terminar.",
+      "en",
+    ),
+    "The window will remain open. Install or update the extension, sign in, and close the browser when you are finished.",
+  );
+  assert.equal(
+    translate(
+      "O perfil está pronto. Feche o navegador quando terminar a configuração.",
+      "es",
+    ),
+    "El perfil está listo. Cierra el navegador cuando termines de configurarlo.",
+  );
+  assert.equal(
+    translate(
+      "A janela permanecerá aberta para você corrigir a extensão ou o login. Feche o navegador quando terminar.",
+      "en",
+    ),
+    "The window will remain open so you can fix the extension or sign-in. Close the browser when you are finished.",
+  );
+});
+
 test("translates the MCP Method builder connection UI", () => {
   assert.equal(translate("Conectar agente via MCP", "en"), "Connect agent via MCP");
   assert.equal(translate("Conectar agente via MCP", "es"), "Conectar agente mediante MCP");

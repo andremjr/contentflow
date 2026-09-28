@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -136,121 +135,33 @@ function portFor(base, alias) {
   return Math.min(64000, Math.max(1024, Number(base) || DEFAULT_PORT) + offset);
 }
 
-async function fetchBrowserVersion(port, timeoutMs = 1200) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(`http://127.0.0.1:${port}/json/version`, {
-      signal: controller.signal,
-    });
-    if (!response.ok) return undefined;
-    const value = await response.json();
-    return typeof value?.webSocketDebuggerUrl === "string" ? value : undefined;
-  } catch {
-    return undefined;
-  } finally {
-    clearTimeout(timer);
+function requireCoreBrowserSession(coreSession) {
+  if (
+    !coreSession ||
+    !Number.isInteger(coreSession.port) ||
+    typeof coreSession.webSocketDebuggerUrl !== "string" ||
+    !coreSession.webSocketDebuggerUrl
+  ) {
+    throw codedError(
+      "INVALID_CONFIGURATION",
+      "O ContentFlow não forneceu a sessão de navegador reservada para este perfil.",
+    );
   }
+  return coreSession;
 }
 
-function chromeCandidates(settings) {
-  const configured = String(settings?.chromeExecutable ?? "").trim();
-  if (configured) return [configured];
-  if (platform() === "win32") {
-    return [
-      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-      join(process.env.LOCALAPPDATA || "", "Google", "Chrome", "Application", "chrome.exe"),
-    ].filter((path) => path && existsSync(path));
-  }
-  if (platform() === "darwin")
-    return ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"];
-  return ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium"].filter(
-    existsSync,
-  );
+async function launchChrome({ settings }) {
+  const session = requireCoreBrowserSession(settings?.__contentFlowBrowserSession);
+  return {
+    version: { webSocketDebuggerUrl: session.webSocketDebuggerUrl },
+    child: undefined,
+    startedByPlugin: false,
+    startedByCore: true,
+  };
 }
 
-async function launchChrome({ settings, profilePath, port, startMinimized, signal, url }) {
-  const existing = await fetchBrowserVersion(port);
-  if (existing) return { version: existing, child: undefined, startedByPlugin: false };
-  const candidates = chromeCandidates(settings);
-  if (!candidates.length)
-    throw codedError("INVALID_CONFIGURATION", "Google Chrome não localizado.");
-  const args = [
-    `--remote-debugging-port=${port}`,
-    "--remote-debugging-address=127.0.0.1",
-    `--user-data-dir=${profilePath}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    url,
-  ];
-  if (startMinimized) args.unshift("--start-minimized");
-  const failures = [];
-  for (const executable of candidates) {
-    let child;
-    try {
-      child = spawn(executable, args, {
-        detached: false,
-        stdio: "ignore",
-        windowsHide: false,
-        shell: false,
-      });
-    } catch (error) {
-      failures.push(String(error?.message ?? error));
-      continue;
-    }
-    const deadline = Date.now() + 20_000;
-    while (Date.now() < deadline) {
-      if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-      const version = await fetchBrowserVersion(port);
-      if (version) return { version, child, startedByPlugin: true };
-      await sleep(300, signal);
-    }
-    child.kill?.();
-    failures.push(`${basename(executable)}: CDP não respondeu`);
-  }
-  throw codedError(
-    "PERMISSION_DENIED",
-    `Não foi possível iniciar o Chrome dedicado. ${failures.join(" | ")}`,
-  );
-}
-
-async function waitForChildExit(child, timeoutMs = 5000) {
-  if (!child || child.exitCode !== null) return true;
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (exited) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      child.removeListener("exit", onExit);
-      resolve(exited);
-    };
-    const onExit = () => finish(true);
-    const timer = setTimeout(() => finish(false), timeoutMs);
-    timer.unref?.();
-    child.once("exit", onExit);
-  });
-}
-
-async function closeBrowserGracefully(client, child, port) {
-  try {
-    await client?.send("Browser.close");
-  } catch {}
-  const exited = await waitForChildExit(child);
+async function closeBrowserGracefully(client) {
   client?.close();
-  if (!exited && child?.exitCode === null) {
-    try {
-      child.kill();
-    } catch {}
-  }
-  if (Number.isInteger(port)) {
-    const deadline = Date.now() + 10_000;
-    while (Date.now() < deadline && (await fetchBrowserVersion(port))) {
-      await sleep(200);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 750));
-  }
 }
 
 function isTransientBrowserAttachmentError(error) {

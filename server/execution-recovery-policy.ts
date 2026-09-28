@@ -4,6 +4,10 @@ import type { PersistentPluginJob } from "./plugin-job-store";
 export const DEFAULT_MAX_TECHNICAL_RETRIES = 2;
 export const MIN_RECOVERY_DELAY_MS = 1_000;
 export const MAX_RECOVERY_DELAY_MS = 30_000;
+export const RATE_LIMIT_MAX_RETRIES = 8;
+export const RATE_LIMIT_WITH_PROGRESS_DELAY_MS = 60_000;
+export const RATE_LIMIT_WITHOUT_PROGRESS_DELAY_MS = 5 * 60_000;
+export const RATE_LIMIT_MAX_DELAY_MS = 30 * 60_000;
 
 export type RecoveryDecision =
   | { action: "cancel"; reasonCode: string }
@@ -71,9 +75,25 @@ export function hasUncertainExternalEffect(failure: RecoveryFailure) {
   );
 }
 
-function retryDelay(failure: RecoveryFailure, nextRetryCount: number) {
+function technicalRetryDelay(failure: RecoveryFailure, nextRetryCount: number) {
   const requested = failure.retryAfterMs ?? MIN_RECOVERY_DELAY_MS * 2 ** nextRetryCount;
   return Math.max(MIN_RECOVERY_DELAY_MS, Math.min(MAX_RECOVERY_DELAY_MS, requested));
+}
+
+function hasPersistedProgress(job: PersistentPluginJob) {
+  if (job.incrementalItems?.some((item) => item.status === "completed")) return true;
+  if (job.itemOrchestration?.workItems?.some((item) => item.status === "completed")) return true;
+  return Object.keys(job.partialValues).length > 0 || job.partialArtifacts.length > 0;
+}
+
+function rateLimitRetryDelay(failure: RecoveryFailure, job: PersistentPluginJob) {
+  if (failure.retryAfterMs !== undefined) {
+    return Math.max(MIN_RECOVERY_DELAY_MS, Math.min(RATE_LIMIT_MAX_DELAY_MS, failure.retryAfterMs));
+  }
+  const initialDelay = hasPersistedProgress(job)
+    ? RATE_LIMIT_WITH_PROGRESS_DELAY_MS
+    : RATE_LIMIT_WITHOUT_PROGRESS_DELAY_MS;
+  return Math.min(RATE_LIMIT_MAX_DELAY_MS, initialDelay * 3 ** job.retryCount);
 }
 
 export function decideExecutionRecovery(input: {
@@ -103,8 +123,25 @@ export function decideExecutionRecovery(input: {
   if (intervention) return { action: "intervene", reasonCode: code, intervention };
 
   const nowMs = input.nowMs ?? Date.now();
+  if (code === "PROFILE_BUSY") {
+    const delayMs = technicalRetryDelay(failure, job.retryCount + 1);
+    if (nowMs + delayMs < new Date(job.deadlineAt).getTime()) {
+      return { action: "retry", reasonCode: code, delayMs };
+    }
+    return { action: "fail", reasonCode: code };
+  }
+
+  if (code === "RATE_LIMIT") {
+    const delayMs = rateLimitRetryDelay(failure, job);
+    const deadlineAllowsRetry = nowMs + delayMs < new Date(job.deadlineAt).getTime();
+    if (job.retryCount < RATE_LIMIT_MAX_RETRIES && deadlineAllowsRetry) {
+      return { action: "retry", reasonCode: code, delayMs };
+    }
+    return { action: "fail", reasonCode: code };
+  }
+
   const maxRetries = input.maxTechnicalRetries ?? DEFAULT_MAX_TECHNICAL_RETRIES;
-  const delayMs = retryDelay(failure, job.retryCount + 1);
+  const delayMs = technicalRetryDelay(failure, job.retryCount + 1);
   const deadlineAllowsRetry = nowMs + delayMs < new Date(job.deadlineAt).getTime();
   const isKnownSafeRetry = SAFE_TECHNICAL_RETRY_CODES.has(code);
   const legacySafeRetry = failure.retryable === true && failure.recovery?.externalEffect === "none";

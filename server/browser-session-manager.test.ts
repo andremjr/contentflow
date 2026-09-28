@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
 import type { ChildProcess } from "node:child_process";
-import { BrowserSessionManager } from "./browser-session-manager";
+import {
+  BrowserSessionManager,
+  shouldAutoCloseCoreBrowserSession,
+} from "./browser-session-manager";
 
 function fakeChild() {
   const emitter = new EventEmitter() as EventEmitter & {
@@ -94,4 +97,10 @@ test("fechamento tenta CDP primeiro e força kill somente se o Chrome continuar 
 
   assert.deepEqual(closed, ["ws://127.0.0.1:45680/devtools/browser/test"]);
   assert.equal(child.killed, true);
+});
+
+test("configuração de perfil deixa o fechamento do navegador com o usuário", () => {
+  assert.equal(shouldAutoCloseCoreBrowserSession({ mode: "configure", action: "prepare" }), false);
+  assert.equal(shouldAutoCloseCoreBrowserSession({ mode: "configure", action: "status" }), false);
+  assert.equal(shouldAutoCloseCoreBrowserSession({ mode: "start" }), true);
 });

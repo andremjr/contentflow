@@ -258,17 +258,23 @@ export function ensureLegacyBrowserProfile(
           legacyProfile.createdAt,
           legacyProfile.updatedAt,
         );
+      database
+        .prepare(
+          `INSERT INTO plugin_profile_bindings
+            (plugin_id, profile_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(plugin_id, profile_id) DO NOTHING`,
+        )
+        .run(pluginId, profileId, legacyProfile.createdAt, legacyProfile.updatedAt);
     }
-    database
-      .prepare(
-        `INSERT INTO plugin_profile_bindings
-          (plugin_id, profile_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(plugin_id, profile_id) DO NOTHING`,
-      )
-      .run(pluginId, profileId, legacyProfile.createdAt, legacyProfile.updatedAt);
     return profileId;
   })();
+}
+
+function legacyProfileDirectory(customWorkspace: string, alias: string) {
+  return alias.toLocaleLowerCase() === "default"
+    ? path.resolve(customWorkspace)
+    : path.resolve(customWorkspace, alias);
 }
 
 function tableExists(database: Database.Database, tableName: string) {
@@ -370,7 +376,7 @@ export function resolveLegacyBrowserProfile(
       profile,
       binding,
       profileDirectory: customWorkspace
-        ? path.resolve(customWorkspace, legacy.alias)
+        ? legacyProfileDirectory(customWorkspace, legacy.alias)
         : path.resolve(dataDirectory, profile.storageKey),
       source: "legacy",
     };
@@ -429,7 +435,9 @@ export function resolveBoundBrowserProfile(
       .prepare("SELECT directory FROM plugin_workspaces WHERE plugin_id = ?")
       .pluck()
       .get(pluginId) as string | undefined;
-    if (customWorkspace) profileDirectory = path.resolve(customWorkspace, profile.alias);
+    if (customWorkspace) {
+      profileDirectory = legacyProfileDirectory(customWorkspace, profile.alias);
+    }
   }
 
   return { pluginId, profile, binding, profileDirectory };

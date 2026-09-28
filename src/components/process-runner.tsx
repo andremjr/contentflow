@@ -443,6 +443,9 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
               isLastBlock={activeBlockIsLast}
               onAcceptCurrent={acceptCurrentDelivery}
               onRetry={retry}
+              onRestartProcess={() =>
+                void resetStage(project.id, processId).catch((error) => toast.error(error.message))
+              }
             />
           ) : execution.status === "cancelled" && activeBlock && activeExecution ? (
             <ExecutionCancelled
@@ -615,12 +618,25 @@ function ExecutionResults({
           );
           const editing = editingBlockId === blockExecution.blockId;
           const pluginManifest = block.plugin ? pluginManifests[block.plugin.pluginId] : undefined;
-          const itemActions =
+          const pluginCapability =
             block.plugin && pluginManifest
-              ? (localizePluginManifest(pluginManifest, language).capabilities.find(
+              ? localizePluginManifest(pluginManifest, language).capabilities.find(
                   (capability) => capability.id === block.plugin?.capabilityId,
-                )?.itemActions ?? [])
+                )
+              : undefined;
+          const itemActions =
+            block.plugin && pluginCapability
+              ? (pluginCapability.itemActions ?? [])
               : ([{ action: "replace" }] satisfies PluginItemActionDeclaration[]);
+          const showExecutionItemsWorkspace = Boolean(
+            (pluginCapability?.execution.itemOrchestration && blockExecution.itemProgress) ||
+              blockExecution.items?.some(
+                (item) =>
+                  item.output !== undefined ||
+                  item.parentItemId !== undefined ||
+                  item.pluginCorrelation !== undefined,
+              ),
+          );
 
           async function saveEditedValues() {
             setSavingBlockId(blockExecution.blockId);
@@ -664,7 +680,7 @@ function ExecutionResults({
                 </Badge>
               </summary>
               <div className="border-t border-border/60 p-3">
-                {blockExecution.items?.length ? (
+                {showExecutionItemsWorkspace ? (
                   <ExecutionItemsWorkspace
                     execution={execution}
                     blockExecution={blockExecution}
@@ -2260,6 +2276,7 @@ function FailedExecutionGate({
   isLastBlock,
   onAcceptCurrent,
   onRetry,
+  onRestartProcess,
 }: {
   block: ActionBlock;
   error?: string;
@@ -2268,6 +2285,7 @@ function FailedExecutionGate({
   isLastBlock: boolean;
   onAcceptCurrent: () => void;
   onRetry: (retryScope: BlockItemRetryScope) => void;
+  onRestartProcess: () => void;
 }) {
   const canContinuePending = Boolean(
     itemProgress && itemProgress.completed > 0 && itemProgress.pending > 0,
@@ -2309,6 +2327,9 @@ function FailedExecutionGate({
           <RotateCcw className="mr-1.5 size-4" /> Refazer este bloco
         </Button>
       )}
+      <Button className="mt-3" variant="ghost" onClick={onRestartProcess}>
+        Reiniciar processo do zero
+      </Button>
     </section>
   );
 }

@@ -5,6 +5,6 @@ Os executáveis desta versão são publicados na página [Releases do projeto](h
 - **Setup.exe — recomendado:** instala o aplicativo e cria atalhos. Não exige Node, npm ou terminal.
 - **Portable.exe:** não instala, mas pode levar alguns minutos para abrir porque descompacta o aplicativo a cada execução.
 
-Projetos, plugins e credenciais permanecem na área de dados do usuário e não são apagados ao instalar uma nova compilação. Consulte [`../../../docs/DESKTOP_V0.md`](../../../docs/DESKTOP_V0.md) para instruções completas.
+Projetos, plugins e credenciais permanecem na área de dados do usuário e não são apagados ao instalar uma nova compilação. Consulte [`../../../docs/DESKTOP.md`](../../../docs/DESKTOP.md) para as instruções atualmente mantidas.
 
 Esta pasta registra a versão e mantém o caminho estável da documentação, mas não contém os binários. Isso evita aumentar o histórico do código-fonte a cada recompilação.

@@ -31,14 +31,62 @@
             "type": "records",
             "required": true,
             "recordFields": [
-              { "id": "asset-id", "label": "ID", "key": "asset_id", "type": "text", "required": true },
-              { "id": "external-id", "label": "ID externo", "key": "external_id", "type": "text", "required": true },
-              { "id": "provider", "label": "Fonte", "key": "provider", "type": "text", "required": true },
-              { "id": "media-type", "label": "Tipo", "key": "media_type", "type": "text", "required": true },
-              { "id": "source-url", "label": "Página original", "key": "source_url", "type": "url", "required": true },
-              { "id": "attribution", "label": "Atribuição", "key": "attribution", "type": "text", "required": true },
-              { "id": "license-name", "label": "Licença", "key": "license_name", "type": "text", "required": true },
-              { "id": "license-url", "label": "URL da licença", "key": "license_url", "type": "url", "required": true }
+              {
+                "id": "asset-id",
+                "label": "ID",
+                "key": "asset_id",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "external-id",
+                "label": "ID externo",
+                "key": "external_id",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "provider",
+                "label": "Fonte",
+                "key": "provider",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "media-type",
+                "label": "Tipo",
+                "key": "media_type",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "source-url",
+                "label": "Página original",
+                "key": "source_url",
+                "type": "url",
+                "required": true
+              },
+              {
+                "id": "attribution",
+                "label": "Atribuição",
+                "key": "attribution",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "license-name",
+                "label": "Licença",
+                "key": "license_name",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "license-url",
+                "label": "URL da licença",
+                "key": "license_url",
+                "type": "url",
+                "required": true
+              }
             ],
             "presentation": { "renderer": "cards", "itemType": "record" }
           }
@@ -75,12 +123,48 @@
             "optionsSourceBlockId": "p24-search",
             "optionsSourceKey": "candidates",
             "recordFields": [
-              { "id": "selected-asset-id", "label": "ID", "key": "asset_id", "type": "text", "required": true },
-              { "id": "selected-provider", "label": "Fonte", "key": "provider", "type": "text", "required": true },
-              { "id": "selected-source-url", "label": "Página original", "key": "source_url", "type": "url", "required": true },
-              { "id": "selected-attribution", "label": "Atribuição", "key": "attribution", "type": "text", "required": true },
-              { "id": "selected-license-name", "label": "Licença", "key": "license_name", "type": "text", "required": true },
-              { "id": "selected-license-url", "label": "URL da licença", "key": "license_url", "type": "url", "required": true }
+              {
+                "id": "selected-asset-id",
+                "label": "ID",
+                "key": "asset_id",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "selected-provider",
+                "label": "Fonte",
+                "key": "provider",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "selected-source-url",
+                "label": "Página original",
+                "key": "source_url",
+                "type": "url",
+                "required": true
+              },
+              {
+                "id": "selected-attribution",
+                "label": "Atribuição",
+                "key": "attribution",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "selected-license-name",
+                "label": "Licença",
+                "key": "license_name",
+                "type": "text",
+                "required": true
+              },
+              {
+                "id": "selected-license-url",
+                "label": "URL da licença",
+                "key": "license_url",
+                "type": "url",
+                "required": true
+              }
             ]
           },
           {

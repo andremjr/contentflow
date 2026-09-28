@@ -30,7 +30,7 @@ function createLegacySchema(database: Database.Database) {
   `);
 }
 
-async function migratedFixture(customWorkspace?: string) {
+async function migratedFixture(customWorkspace?: string, alias = "principal") {
   const root = mkdtempSync(path.join(os.tmpdir(), "contentflow-profile-v33-"));
   const database = new Database(path.join(root, "contentflow.sqlite"));
   database.pragma("foreign_keys = ON");
@@ -43,8 +43,8 @@ async function migratedFixture(customWorkspace?: string) {
     .run(
       "legacy-primary",
       "plugin.alpha",
-      "Principal",
-      "principal",
+      alias === "default" ? "Default" : "Principal",
+      alias,
       "2026-09-20T10:00:00.000Z",
       "2026-09-20T10:00:00.000Z",
     );
@@ -91,6 +91,24 @@ test("pacote 3.3 preserva a raiz de workspace customizada do plugin", async () =
       dataDirectory: fixture.root,
     });
     assert.equal(resolved.profileDirectory, path.resolve(customWorkspace, "principal"));
+  } finally {
+    fixture.database.close();
+    rmSync(fixture.root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("pacote 3.3 resolve default legado na própria raiz do workspace customizado", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "contentflow-profile-v33-default-"));
+  const customWorkspace = path.join(root, "external-workspace");
+  const fixture = await migratedFixture(customWorkspace, "default");
+  try {
+    const resolved = resolveLegacyBrowserProfile(fixture.database, {
+      pluginId: "plugin.alpha",
+      alias: "default",
+      dataDirectory: fixture.root,
+    });
+    assert.equal(resolved.profileDirectory, path.resolve(customWorkspace));
   } finally {
     fixture.database.close();
     rmSync(fixture.root, { recursive: true, force: true });

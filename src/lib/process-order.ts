@@ -71,6 +71,24 @@ export function captureProjectStrategy(project: Project, channel: Channel, hasEx
   };
 }
 
+/** An explicit full-process restart adopts the Channel's latest Method for that process only. */
+export function refreshProjectProcessStrategy(
+  project: Project,
+  channel: Channel,
+  processType: UniversalProcess,
+) {
+  const current = project.strategySnapshot;
+  project.strategySnapshot = {
+    processOrder: current?.processOrder ?? effectiveProcessOrder(channel),
+    methods: {
+      ...(current?.methods ?? structuredClone(channel.methods)),
+      [processType]: structuredClone(channel.methods[processType]),
+    },
+    definitionRevision: channel.definitionRevision ?? 0,
+    capturedAt: new Date().toISOString(),
+  };
+}
+
 function compatible(source: HumanFieldType, target: HumanFieldType) {
   return areHumanFieldTypesCompatible(source, target);
 }

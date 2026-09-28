@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.chatgpt-browser-studio",
   "name": "ChatGPT Browser Studio",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "Automação modular do ChatGPT web para criar, pesquisar, escolher, validar, analisar arquivos e gerar imagens.",
   "localizations": {
     "en": {
@@ -95,6 +95,7 @@
   },
   "minCoreVersion": "0.4.8",
   "entrypoint": "handler.mjs",
+  "browserRuntime": { "lifecycle": "core" },
   "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
   "networkHosts": ["chatgpt.com", "files.oaiusercontent.com"],
   "deliveryTypes": ["text", "image", "processing"],
@@ -232,7 +233,7 @@
         {
           "key": "result",
           "label": "Texto gerado",
-          "producedTypes": ["text", "textarea", "number"],
+          "producedTypes": ["text", "textarea", "number", "list"],
           "required": true,
           "presentation": {
             "renderer": "text-long"
@@ -269,14 +270,7 @@
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,
         "supportsCancellation": true,
-        "maxConcurrency": 1,
-        "itemOrchestration": {
-          "inputPort": "content",
-          "outputPort": "parts",
-          "combinedOutputPort": "result",
-          "separator": "\n\n",
-          "mode": "sequential"
-        }
+        "maxConcurrency": 1
       },
       "sideEffects": ["external_write", "subprocess"],
       "cost": {

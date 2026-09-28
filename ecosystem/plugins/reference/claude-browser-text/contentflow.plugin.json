@@ -17,6 +17,7 @@
   },
   "minCoreVersion": "0.3.0",
   "entrypoint": "handler.mjs",
+  "browserRuntime": { "lifecycle": "core" },
   "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
   "networkHosts": ["claude.ai"],
   "deliveryTypes": ["text", "processing"],

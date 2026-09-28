@@ -34,7 +34,10 @@ import {
   downloadRemoteArtifact,
 } from "./remote-artifact-downloader";
 import { findPluginManifest, validatePluginDirectory } from "./plugin-validation";
-import { BrowserSessionManager } from "./browser-session-manager";
+import {
+  BrowserSessionManager,
+  shouldAutoCloseCoreBrowserSession,
+} from "./browser-session-manager";
 
 const browserSessionManager = new BrowserSessionManager();
 
@@ -353,6 +356,7 @@ export async function executeRegisteredPlugin(
     let stderr = "";
     let partialArtifacts = [...(options.existingArtifacts ?? [])];
     let partialChain = Promise.resolve();
+    let partialFailure: unknown;
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const abort = () => {
@@ -515,6 +519,9 @@ export async function executeRegisteredPlugin(
               : update.values,
           storedArtifacts: imported.storedArtifacts,
         });
+      }).catch((error) => {
+        partialFailure ??= error;
+        child.kill();
       });
     };
     child.stdout.on("data", (chunk: Buffer) => {
@@ -531,33 +538,32 @@ export async function executeRegisteredPlugin(
     child.on("error", (error) => finish(() => reject(error)));
     child.on("close", () => {
       if (stdoutBuffer) consumeStdoutLine(stdoutBuffer);
-      void partialChain.then(
-        () =>
-          finish(() => {
-            try {
-              const pluginResponse = JSON.parse(stdout.trim()) as PluginExecutionResponse;
-              void importPluginArtifacts(
-                pluginResponse,
-                outputDirectory,
-                artifactDirectory,
-                plugin.manifest,
-                {
-                  existingArtifacts: partialArtifacts,
-                  urlPrefix: options.artifactUrlPrefix,
-                },
-              )
-                .then(resolve, reject)
-                .finally(() => rmSync(outputDirectory, { recursive: true, force: true }));
-            } catch {
-              reject(new Error(stderr.trim() || "O plugin devolveu uma resposta inválida."));
-              rmSync(outputDirectory, { recursive: true, force: true });
-            }
-          }),
-        (error) =>
-          finish(() => {
+      void partialChain.then(() =>
+        finish(() => {
+          if (partialFailure) {
             rmSync(outputDirectory, { recursive: true, force: true });
-            reject(error);
-          }),
+            reject(partialFailure);
+            return;
+          }
+          try {
+            const pluginResponse = JSON.parse(stdout.trim()) as PluginExecutionResponse;
+            void importPluginArtifacts(
+              pluginResponse,
+              outputDirectory,
+              artifactDirectory,
+              plugin.manifest,
+              {
+                existingArtifacts: partialArtifacts,
+                urlPrefix: options.artifactUrlPrefix,
+              },
+            )
+              .then(resolve, reject)
+              .finally(() => rmSync(outputDirectory, { recursive: true, force: true }));
+          } catch {
+            reject(new Error(stderr.trim() || "O plugin devolveu uma resposta inválida."));
+            rmSync(outputDirectory, { recursive: true, force: true });
+          }
+        }),
       );
     });
     const declaredSecrets = new Set(plugin.manifest.secretKeys ?? []);
@@ -583,7 +589,9 @@ export async function executeRegisteredPlugin(
   try {
     return await execution;
   } finally {
-    if (coreBrowserSession) await browserSessionManager.close(coreBrowserSession);
+    if (coreBrowserSession && shouldAutoCloseCoreBrowserSession(request.invocation)) {
+      await browserSessionManager.close(coreBrowserSession);
+    }
   }
 }
 

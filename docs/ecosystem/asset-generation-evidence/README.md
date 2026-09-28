@@ -1,6 +1,6 @@
-# Evidências — Asset Generation Plugins
+# Evidências históricas — Asset Generation Plugins
 
-Índice dos relatórios produzidos pelo roadmap `asset-generation-plugins-roadmap.md`.
+Estes relatórios preservam implementação, compatibilidade e validação da iniciativa P00–P61. São **evidência histórica útil (classe C)**, não fonte normativa. Para o comportamento vigente, consulte [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md), [`../protocol.md`](../protocol.md), [`../browser-automation.md`](../browser-automation.md) e [`../automation-media-conventions.md`](../automation-media-conventions.md).
 
 - [P00](P00.md) — P00 — Inventário, baseline e ambiente de validação
 - [P01](P01.md) — P01 — Identidade de lote, variantes e ações locais
@@ -35,4 +35,14 @@
 - [P60](P60.md) — P60 — Esteira integrada com fixture canônica
 - [P61](P61.md) — P61 — Auditoria final de implementação, sem publicação
 
-Estado de fechamento em 25/09/2026: implementação e validação automatizada avançaram até P61; os E2Es reais ainda declarados como pendentes em P34, P53 e P60 continuam pendentes e impedem considerar o aceite global concluído.
+## Pendências reais preservadas
+
+Estado consolidado em 25/09/2026: implementação e validação automatizada avançaram até P61, mas o aceite global continua aberto.
+
+| Evidência | Pendência real |
+| --- | --- |
+| [P34](P34.md) | Completar a matriz E6 do ChatGPT Images: referências, múltiplas imagens, resposta sem mídia, ações por item e passagem real das capabilities não visuais. |
+| [P53](P53.md) | Completar C6 do Meta: terceira proporção, variantes reais, sessão expirada, reload, limite de uso e cancelamento; animação permanece indisponível para a conta testada. |
+| [P60](P60.md) | Executar a esteira integrada real somente depois de P34 e P53, preservando ordem, tentativas, hashes, licença e proveniência. |
+
+[P61](P61.md) consolida a auditoria automatizada e registra explicitamente que esses E2Es não foram substituídos por fixtures.

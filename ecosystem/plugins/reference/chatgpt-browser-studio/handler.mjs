@@ -1,10 +1,10 @@
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, extname, join } from "node:path";
 import { attachContentFlowBridge } from "./browser-bridge-client.mjs";
+import { createBridgeDiagnostics } from "./bridge-diagnostics.mjs";
 
 const PLUGIN_ID = "local.contentflow.chatgpt-browser-studio";
 const CHATGPT_HOST = "chatgpt.com";
@@ -20,6 +20,7 @@ const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
 const DOCUMENT_EXTENSIONS = new Set([
   ".md",
   ".pdf",
+  ".srt",
   ".docx",
   ".csv",
   ".txt",
@@ -623,22 +624,64 @@ function runtimeProfilePath(settings, name, services) {
   if (settings?.profilesBasePath?.trim?.()) return profilePathFor(settings, name);
   return services.getWorkspacePath(name);
 }
+function profileReadinessFile(name) {
+  const digest = createHash("sha256").update(name).digest("hex").slice(0, 16);
+  return `.contentflow-chatgpt-profile-ready-${digest}.json`;
+}
 function profileMarkerPath(path) {
   return join(path, ".contentflow-profile-ready.json");
 }
-async function profileIsPrepared(path, name) {
-  try {
-    const marker = JSON.parse(await readFile(profileMarkerPath(path), "utf8"));
-    return (
-      marker?.provider === CHATGPT_HOST && marker?.profile === name && marker?.bridgeProtocol === 2
-    );
-  } catch {
-    return false;
+function resolveProfileRuntime(request, services) {
+  const settings = request?.settings ?? {};
+  const name = normalizeAccountProfile(request?.configuration?.accountProfile);
+  const port = profilePort(
+    clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
+    name,
+  );
+  if (typeof services?.getProfilePath === "function") {
+    const profilePath = services.getProfilePath(".");
+    return {
+      name,
+      profilePath,
+      port,
+      readinessPath:
+        typeof services?.getWorkspacePath === "function"
+          ? services.getWorkspacePath(profileReadinessFile(name))
+          : profileMarkerPath(profilePath),
+      legacyReadinessPath: profileMarkerPath(profilePath),
+    };
   }
+  const profilePath = runtimeProfilePath(settings, name, services);
+  return { name, profilePath, port, readinessPath: profileMarkerPath(profilePath) };
 }
-async function markProfilePrepared(path, name) {
+function profileReadinessPaths(runtimeOrPath) {
+  if (typeof runtimeOrPath === "string") return [profileMarkerPath(runtimeOrPath)];
+  return [runtimeOrPath?.readinessPath, runtimeOrPath?.legacyReadinessPath].filter(
+    (value, index, values) => value && values.indexOf(value) === index,
+  );
+}
+async function profileIsPrepared(runtimeOrPath, name) {
+  for (const readinessPath of profileReadinessPaths(runtimeOrPath)) {
+    try {
+      const marker = JSON.parse(await readFile(readinessPath, "utf8"));
+      if (
+        marker?.provider === CHATGPT_HOST &&
+        marker?.profile === name &&
+        marker?.bridgeProtocol === 2
+      ) {
+        return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+async function markProfilePrepared(runtimeOrPath, name) {
+  const [readinessPath] = profileReadinessPaths(runtimeOrPath);
+  if (!readinessPath) {
+    throw codedError("INVALID_CONFIGURATION", "Não foi possível resolver o readiness do perfil.");
+  }
   await writeFile(
-    profileMarkerPath(path),
+    readinessPath,
     JSON.stringify({
       provider: CHATGPT_HOST,
       profile: name,
@@ -667,241 +710,34 @@ function assertDedicatedProfilePath(path, allowExistingChromeProfile = false) {
     throw codedError("INVALID_CONFIGURATION", "Use um perfil Chrome dedicado ao plugin.");
 }
 
-async function captureProcess(executable, args, timeoutMs = 4000) {
-  return await new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn(executable, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        windowsHide: true,
-        shell: false,
-      });
-    } catch {
-      resolve({ ok: false, stdout: "" });
-      return;
-    }
-    let stdout = "",
-      settled = false;
-    const finish = (ok) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ ok, stdout });
-    };
-    const timer = setTimeout(() => {
-      try {
-        child.kill();
-      } catch {}
-      finish(false);
-    }, timeoutMs);
-    child.stdout?.setEncoding("utf8");
-    child.stdout?.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.once("error", () => finish(false));
-    child.once("close", (code) => finish(code === 0));
-  });
-}
-
-function parseRegistryDefaultValue(output) {
-  for (const line of String(output ?? "").split(/\r?\n/)) {
-    const match = line.match(/REG_(?:SZ|EXPAND_SZ)\s+(.+?)\s*$/i);
-    if (match?.[1]) return match[1].trim().replace(/^"|"$/g, "");
-  }
-  return "";
-}
-
-async function chromeCandidates() {
-  if (platform() === "win32") {
-    const standardCandidates = [
-      process.env.PROGRAMFILES &&
-        join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe"),
-      process.env["PROGRAMFILES(X86)"] &&
-        join(process.env["PROGRAMFILES(X86)"], "Google", "Chrome", "Application", "chrome.exe"),
-      process.env.LOCALAPPDATA &&
-        join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
-      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    ].filter(Boolean);
-    const existing = standardCandidates.filter((p) => existsSync(p));
-    if (existing.length) return [...new Set(existing)];
-
-    const found = [];
-    for (const key of [
-      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
-      "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
-      "HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
-    ]) {
-      const result = await captureProcess("reg.exe", ["query", key, "/ve"]);
-      if (result.ok) found.push(parseRegistryDefaultValue(result.stdout));
-    }
-    const where = await captureProcess("where.exe", ["chrome.exe"]);
-    if (where.ok) found.push(...where.stdout.split(/\r?\n/));
-    return [
-      ...new Set(
-        found
-          .filter(Boolean)
-          .map(String)
-          .map((value) => value.trim())
-          .filter(Boolean),
-      ),
-    ];
-  }
-  if (platform() === "darwin")
-    return ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"];
-  const found = [];
-  for (const name of ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]) {
-    const result = await captureProcess("which", [name]);
-    if (result.ok) found.push(...result.stdout.split(/\r?\n/));
-  }
-  return [...new Set(found.filter(Boolean))];
-}
-
-async function resolveChromeExecutables(settings) {
-  if (settings?.chromeExecutable?.trim?.()) return [settings.chromeExecutable.trim()];
-  const candidates = await chromeCandidates();
-  if (!candidates.length)
+function requireCoreBrowserSession(coreSession) {
+  if (
+    !coreSession ||
+    !Number.isInteger(coreSession.port) ||
+    typeof coreSession.webSocketDebuggerUrl !== "string" ||
+    !coreSession.webSocketDebuggerUrl
+  ) {
     throw codedError(
       "INVALID_CONFIGURATION",
-      "Google Chrome não localizado. Configure chromeExecutable.",
-    );
-  return candidates;
-}
-
-async function fetchBrowserVersion(port, timeoutMs = 1500) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(`http://127.0.0.1:${port}/json/version`, {
-      signal: controller.signal,
-    });
-    if (!response.ok) return null;
-    const value = await response.json();
-    return typeof value?.webSocketDebuggerUrl === "string" ? value : null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function launchOrReuseChrome({
-  executables,
-  profilePath,
-  port,
-  startMinimized,
-  keepBrowserOpen,
-  signal,
-}) {
-  const existing = await fetchBrowserVersion(port);
-  if (existing) return { version: existing, child: null, reused: true };
-  const args = [
-    `--remote-debugging-port=${port}`,
-    "--remote-debugging-address=127.0.0.1",
-    `--user-data-dir=${profilePath}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    CHATGPT_NEW_URL,
-  ];
-  if (startMinimized) {
-    // A janela dedicada pode ficar minimizada durante todo o job. Sem estes
-    // flags, o Chrome reduz timers e renderização de uma janela oculta e a UI
-    // do provedor deixa de avançar antes de o polling do handler expirar.
-    args.unshift(
-      "--start-minimized",
-      "--disable-background-timer-throttling",
-      "--disable-backgrounding-occluded-windows",
-      "--disable-renderer-backgrounding",
-      "--disable-features=CalculateNativeWinOcclusion",
+      "O ContentFlow não forneceu a sessão de navegador reservada para este perfil.",
     );
   }
-  const failures = [];
-  for (const executable of executables) {
-    for (let launchAttempt = 1; launchAttempt <= 2; launchAttempt += 1) {
-      const delayedExisting = await fetchBrowserVersion(port);
-      if (delayedExisting) return { version: delayedExisting, child: null, reused: true };
-      let child;
-      let spawnError;
-      try {
-        child = spawn(executable, args, {
-          detached: Boolean(keepBrowserOpen),
-          stdio: "ignore",
-          windowsHide: false,
-          shell: false,
-        });
-        child.once("error", (error) => {
-          spawnError = error;
-        });
-      } catch (error) {
-        spawnError = error;
-      }
-      if (!child) {
-        failures.push(`${executable}: ${spawnError?.message ?? spawnError ?? "falha ao iniciar"}`);
-        break;
-      }
-      const deadline = Date.now() + (launchAttempt === 1 ? 15000 : 25000);
-      while (Date.now() < deadline) {
-        if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-        const version = await fetchBrowserVersion(port);
-        if (version) {
-          if (keepBrowserOpen) child.unref();
-          return { version, child, reused: false };
-        }
-        if (spawnError || child.exitCode !== null) break;
-        await sleep(350, signal);
-      }
-      const exitDetail = spawnError
-        ? spawnError.message
-        : child.exitCode !== null
-          ? `Chrome encerrou com código ${child.exitCode}`
-          : "CDP não respondeu";
-      failures.push(`${executable} (tentativa ${launchAttempt}/2): ${exitDetail}.`);
-      try {
-        child.kill();
-      } catch {}
-      if (launchAttempt < 2) {
-        // O Chrome pode fechar a última janela de um perfil alguns instantes
-        // depois de o job anterior terminar. Aguarde a liberação do singleton
-        // e cheque novamente a porta antes de relançar o mesmo perfil.
-        await sleep(1500, signal);
-      }
-    }
-  }
-  throw codedError(
-    "PERMISSION_DENIED",
-    `Não foi possível iniciar o Chrome dedicado. ${failures.slice(0, 3).join(" | ")}`,
-  );
+  return coreSession;
 }
 
-async function waitForChildExit(child, timeoutMs = 5000) {
-  if (!child || child.exitCode !== null) return true;
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (exited) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      child.removeListener("exit", onExit);
-      resolve(exited);
-    };
-    const onExit = () => finish(true);
-    const timer = setTimeout(() => finish(false), timeoutMs);
-    timer.unref?.();
-    child.once("exit", onExit);
-  });
+async function launchOrReuseChrome({ coreSession }) {
+  const session = requireCoreBrowserSession(coreSession);
+  return {
+    version: { webSocketDebuggerUrl: session.webSocketDebuggerUrl },
+    child: null,
+    reused: true,
+    startedByCore: true,
+    startedByPlugin: false,
+  };
 }
 
-async function closeBrowserGracefully(client, child) {
-  try {
-    await client?.send("Browser.close");
-  } catch {}
-  const exited = await waitForChildExit(child);
+async function closeBrowserGracefully(client) {
   client?.close();
-  if (!exited && child?.exitCode === null) {
-    try {
-      child.kill();
-    } catch {}
-  }
 }
 
 class CdpClient {
@@ -1156,6 +992,44 @@ export function responseHasStrongCompletionSignal({
   );
 }
 
+export function classifyProviderResponseFailure(text) {
+  const normalized = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return undefined;
+  if (
+    /^(conex[aã]o interrompida[.!]?\s*)?(aguardando a resposta completa|waiting for the complete response|esperando la respuesta completa)[.!]?$/i.test(
+      normalized,
+    ) ||
+    /^(conex[aã]o interrompida|connection interrupted|conexi[oó]n interrumpida)[.!]?(\s+(aguardando|waiting|esperando).*)?$/i.test(
+      normalized,
+    )
+  ) {
+    return {
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "A resposta do ChatGPT foi interrompida antes de ser concluída.",
+      retryable: true,
+    };
+  }
+  if (
+    /^(there was an error generating a response|houve um erro ao gerar uma resposta|ocurri[oó] un error al generar una respuesta)([.!].*)?$/i.test(
+      normalized,
+    )
+  ) {
+    return {
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "O ChatGPT informou erro ao gerar a resposta.",
+      retryable: true,
+    };
+  }
+  return undefined;
+}
+
+function assertProviderResponseSucceeded(text) {
+  const failure = classifyProviderResponseFailure(text);
+  if (failure) throw codedError(failure.code, failure.message, failure.retryable);
+}
+
 // Runs in the provider page. Uploaded references can use the same content URL
 // and alt text as generated images after submission, so URL/alt alone cannot
 // establish provenance. Require an assistant message or assistant turn.
@@ -1218,7 +1092,8 @@ function cfPrompt(){const selectors=['#prompt-textarea','[contenteditable="true"
 function cfAssistantNodes(){const selectors=['[data-message-author-role="assistant"] .markdown','[data-message-author-role="assistant"]','article[data-testid^="conversation-turn-"] .markdown'];for(const s of selectors){const n=[...document.querySelectorAll(s)].filter(cfVisible);if(n.length)return n}return []}
 function cfGeneratedImages(){return (${collectGeneratedImages.toString()})(document)}
 function cfResolveComparison(){const body=document.body?.innerText||'';if(!/giving feedback on a new version|qual resposta voc[êe] prefere|dando feedback sobre uma nova vers[ãa]o/i.test(body))return false;const button=[...document.querySelectorAll('button')].find(el=>cfVisible(el)&&/prefer this response|prefiro esta resposta|choose this response|escolher esta resposta/i.test(cfText(el)));if(!button)return false;button.click();return true}
-function cfResponseState(){const comparisonResolved=cfResolveComparison(),nodes=cfAssistantNodes(),entries=nodes.map(el=>({text:(el.innerText||el.textContent||'').trim(),links:[...el.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text);return{texts:entries.map(x=>x.text),entries,stop:cfGenerating(),voiceReady:cfVoiceReady(),completedActionCount:document.querySelectorAll('button[data-testid="copy-turn-action-button"]').length,comparisonResolved,bodyHint:(document.body?.innerText||'').slice(0,6000)}}
+function cfUserTurnCount(){const authored=document.querySelectorAll('[data-message-author-role="user"]').length;if(authored)return authored;return document.querySelectorAll('[data-turn="user"]').length}
+function cfResponseState(){const comparisonResolved=cfResolveComparison(),nodes=cfAssistantNodes(),entries=nodes.map(el=>({text:(el.innerText||el.textContent||'').trim(),links:[...el.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text);return{texts:entries.map(x=>x.text),entries,stop:cfGenerating(),userTurnCount:cfUserTurnCount(),voiceReady:cfVoiceReady(),completedActionCount:document.querySelectorAll('button[data-testid="copy-turn-action-button"]').length,comparisonResolved,bodyHint:(document.body?.innerText||'').slice(0,6000)}}
 `;
 
 export const CHATGPT_SEND_BUTTON_SELECTORS = [
@@ -1674,29 +1549,63 @@ async function clickSendWithBridge(bridge, signal, operationKey, timing = {}) {
   );
 }
 
-async function confirmPromptSubmitted(client, sessionId, signal, timeoutMs = 15000) {
+function promptSubmissionConfirmed(
+  { promptText = "", generating = false, userTurnCount = 0, assistantTurnCount = 0 } = {},
+  { baselineUserTurnCount = 0, baselineAssistantTurnCount = 0 } = {},
+) {
+  return Boolean(
+    !String(promptText).trim() ||
+      generating ||
+      userTurnCount > baselineUserTurnCount ||
+      assistantTurnCount > baselineAssistantTurnCount,
+  );
+}
+
+async function confirmPromptSubmitted(
+  client,
+  sessionId,
+  signal,
+  {
+    baselineUserTurnCount = 0,
+    baselineAssistantTurnCount = 0,
+    timeoutMs = 15000,
+  } = {},
+) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    const submitted = await evaluate(
+    const state = await evaluate(
       client,
       sessionId,
-      `(() => {${PAGE_HELPERS};const prompt=cfPrompt();const text=(prompt?.innerText||prompt?.textContent||'').trim();return !text||cfGenerating()})()`,
+      `(() => {${PAGE_HELPERS};const prompt=cfPrompt();return{promptText:(prompt?.innerText||prompt?.textContent||'').trim(),generating:cfGenerating(),userTurnCount:cfUserTurnCount(),assistantTurnCount:cfAssistantNodes().length}})()`,
     );
-    if (submitted) return true;
+    if (
+      promptSubmissionConfirmed(state, {
+        baselineUserTurnCount,
+        baselineAssistantTurnCount,
+      })
+    )
+      return true;
     await sleep(150, signal);
   }
   return false;
 }
 
-async function clickSend(client, sessionId, bridge, signal, operationKey) {
+async function clickSend(
+  client,
+  sessionId,
+  bridge,
+  signal,
+  operationKey,
+  submissionBaseline = {},
+) {
   // O compositor atual pode exibir a seta azul habilitada sem expor atributos
   // acessiveis suficientes para que a leitura DOM reconheca o botao. Enviar
   // Enter pelo editor focado usa a acao estruturada da Bridge e evita ficar
   // preso antes do clique. A confirmacao impede um segundo envio; o clique
   // permanece como fallback para layouts em que Enter apenas cria uma linha.
   await clickSendWithBridge(bridge, signal, `${operationKey}:enter`);
-  if (await confirmPromptSubmitted(client, sessionId, signal)) return;
+  if (await confirmPromptSubmitted(client, sessionId, signal, submissionBaseline)) return;
   await waitAndClickSend(
     () => evaluate(client, sessionId, `(${composerUploadState.toString()})(document)`),
     (attempt) =>
@@ -1709,7 +1618,7 @@ async function clickSend(client, sessionId, bridge, signal, operationKey) {
       ),
     signal,
   );
-  if (await confirmPromptSubmitted(client, sessionId, signal)) return;
+  if (await confirmPromptSubmitted(client, sessionId, signal, submissionBaseline)) return;
   throw codedError("OUTPUT_VALIDATION_FAILED", "O ChatGPT não confirmou o envio do prompt.", true);
 }
 
@@ -1767,6 +1676,7 @@ async function waitForResponse(
           baselineCompletedActionCount,
         })
       ) {
+        assertProviderResponseSucceeded(confirmedNewest);
         return {
           text: confirmedNewest.trim(),
           links: confirmedState.entries?.at(-1)?.links ?? [],
@@ -1787,6 +1697,7 @@ async function waitForResponse(
       const confirmedTexts = confirmedState?.texts ?? [];
       const confirmedNewest = confirmedTexts.length > baselineCount ? confirmedTexts.at(-1) : "";
       if (confirmedNewest === newest && !confirmedState?.stop) {
+        assertProviderResponseSucceeded(confirmedNewest);
         return {
           text: confirmedNewest.trim(),
           links: confirmedState.entries?.at(-1)?.links ?? [],
@@ -1810,9 +1721,13 @@ async function waitForResponse(
 async function generatePart(client, sessionId, bridge, prompt, settings, signal, operationKey) {
   const before = await responseState(client, sessionId),
     baseline = before?.texts?.length ?? 0,
-    baselineCompletedActionCount = before?.completedActionCount ?? 0;
+    baselineCompletedActionCount = before?.completedActionCount ?? 0,
+    baselineUserTurnCount = before?.userTurnCount ?? 0;
   await setPrompt(bridge, prompt, `prompt:${operationKey}`);
-  await clickSend(client, sessionId, bridge, signal, `send:${operationKey}`);
+  await clickSend(client, sessionId, bridge, signal, `send:${operationKey}`, {
+    baselineUserTurnCount,
+    baselineAssistantTurnCount: baseline,
+  });
   return await waitForResponse(
     client,
     sessionId,
@@ -1832,6 +1747,7 @@ async function generateImagePart(
   signal,
   operationKey,
 ) {
+  const before = await responseState(client, sessionId);
   const baselineImages = await evaluate(
     client,
     sessionId,
@@ -1839,7 +1755,10 @@ async function generateImagePart(
   );
   const baselineSources = (baselineImages ?? []).map((image) => image.src).filter(Boolean);
   await setPrompt(bridge, prompt, `image-prompt:${operationKey}`);
-  await clickSend(client, sessionId, bridge, signal, `image-send:${operationKey}`);
+  await clickSend(client, sessionId, bridge, signal, `image-send:${operationKey}`, {
+    baselineUserTurnCount: before?.userTurnCount ?? 0,
+    baselineAssistantTurnCount: before?.texts?.length ?? 0,
+  });
   const deadline =
     Date.now() + clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000;
   while (Date.now() < deadline) {
@@ -2117,15 +2036,10 @@ export function generatedImagesAfterBaseline(images = [], baselineSources = []) 
 
 async function configureProfile(request, services) {
   const settings = request?.settings ?? {};
-  let profileName, profilePath, port;
+  let runtime;
   try {
-    profileName = normalizeAccountProfile(request?.configuration?.accountProfile);
-    profilePath = runtimeProfilePath(settings, profileName, services);
-    port = profilePort(
-      clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
-      profileName,
-    );
-    assertDedicatedProfilePath(profilePath, settings.allowExistingChromeProfile === true);
+    runtime = resolveProfileRuntime(request, services);
+    assertDedicatedProfilePath(runtime.profilePath, settings.allowExistingChromeProfile === true);
   } catch (error) {
     return resultError(
       error?.code || "INVALID_CONFIGURATION",
@@ -2135,7 +2049,7 @@ async function configureProfile(request, services) {
   if (request?.invocation?.action === "status") {
     return {
       status: "success",
-      values: { ready: await profileIsPrepared(profilePath, profileName) },
+      values: { ready: await profileIsPrepared(runtime, runtime.name) },
     };
   }
   if (request?.invocation?.action !== "prepare") {
@@ -2143,20 +2057,18 @@ async function configureProfile(request, services) {
   }
 
   let client,
-    child,
     bridge,
     taskTargetId,
     closeTaskTarget = false;
   try {
     const launched = await launchOrReuseChrome({
-      executables: await resolveChromeExecutables(settings),
-      profilePath,
-      port,
+      profilePath: runtime.profilePath,
+      port: runtime.port,
       startMinimized: false,
       keepBrowserOpen: false,
       signal: services.signal,
+      coreSession: settings.__contentFlowBrowserSession,
     });
-    child = launched.child;
     client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
     const initialPage = await attachChatGptPage(client, services.signal, true);
     bridge = await prepareProfileSession({
@@ -2165,7 +2077,7 @@ async function configureProfile(request, services) {
           client,
           pageSessionId: initialPage.sessionId,
           pluginId: PLUGIN_ID,
-          profileId: profileName,
+          profileId: runtime.name,
           request,
           signal: services.signal,
           allowedOrigins: ["https://chatgpt.com"],
@@ -2175,10 +2087,10 @@ async function configureProfile(request, services) {
       waitPrompt: (sessionId) =>
         waitForPrompt(client, sessionId, PROFILE_SETUP_WAIT_MS, services.signal),
     });
-    await markProfilePrepared(profilePath, profileName);
+    await markProfilePrepared(runtime, runtime.name);
     return {
       status: "success",
-      values: { ready: true, message: `Perfil ${profileName} validado no ChatGPT.` },
+      values: { ready: true, message: `Perfil ${runtime.name} validado no ChatGPT.` },
     };
   } catch (error) {
     return resultError(
@@ -2187,8 +2099,8 @@ async function configureProfile(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
-    bridge?.dispose();
-    await closeBrowserGracefully(client, child);
+    await bridge?.dispose();
+    await closeBrowserGracefully(client);
   }
 }
 
@@ -2202,12 +2114,12 @@ async function prepareProfileSession({ attachBridge, attachPage, waitPrompt }) {
     await waitPrompt(sessionId);
     return bridge;
   } catch (error) {
-    bridge?.dispose();
+    await bridge?.dispose();
     throw error;
   }
 }
 
-export async function execute(request, services) {
+async function executeHandler(request, services) {
   if (request?.invocation?.mode === "configure") return await configureProfile(request, services);
   const settings = request?.settings ?? {},
     capabilityId = String(request?.capabilityId ?? "generate-text-in-browser"),
@@ -2275,21 +2187,18 @@ export async function execute(request, services) {
   const configuration = request?.configuration ?? {};
   const conversation = conversationForInvocation(request, capabilityId);
   let client,
-    child,
     bridge,
     taskTargetId,
     closeTaskTarget = false;
   try {
-    const profileName = normalizeAccountProfile(configuration.accountProfile),
-      profilePath = runtimeProfilePath(settings, profileName, services),
-      port = profilePort(
-        clampInteger(settings.remoteDebuggingPort, DEFAULT_PORT, 1024, 64000),
-        profileName,
-      );
+    const profileRuntime = resolveProfileRuntime(request, services),
+      profileName = profileRuntime.name,
+      profilePath = profileRuntime.profilePath,
+      port = profileRuntime.port;
     const primaryAttachments = await resolveAttachments(request, services);
     const excludedImageHashes = await imageActionBaselineHashes(request, services);
     assertDedicatedProfilePath(profilePath, settings.allowExistingChromeProfile === true);
-    if (!(await profileIsPrepared(profilePath, profileName))) {
+    if (!(await profileIsPrepared(profileRuntime, profileName))) {
       throw codedError(
         "AUTHENTICATION_FAILED",
         `O perfil ${profileName} ainda não foi salvo. Abra a configuração do Método e use Salvar perfil antes de executar.`,
@@ -2303,15 +2212,14 @@ export async function execute(request, services) {
     step(`Preparando perfil ${profileName} para ${parts.length} etapa(s).`);
     const keepBrowserOpen = settings.keepBrowserOpen !== false;
     const launched = await launchOrReuseChrome({
-      executables: await resolveChromeExecutables(settings),
       profilePath,
       port,
       startMinimized,
       keepBrowserOpen,
       signal: services.signal,
+      coreSession: settings.__contentFlowBrowserSession,
     });
     step(`Chrome ${launched.reused ? "reutilizado" : "iniciado"}; conectando ao CDP.`);
-    child = launched.child;
     client = await new CdpClient(launched.version.webSocketDebuggerUrl, trace).connect(
       services.signal,
     );
@@ -2406,7 +2314,14 @@ export async function execute(request, services) {
             bridge = undefined;
             await sleep(300, services.signal);
             sessionId = await attachExistingChatGptPage(client, taskTargetId);
-            if (!(await confirmPromptSubmitted(client, sessionId, services.signal))) {
+            if (
+              !(
+                await confirmPromptSubmitted(client, sessionId, services.signal, {
+                  baselineUserTurnCount: before?.userTurnCount ?? 0,
+                  baselineAssistantTurnCount: baseline,
+                })
+              )
+            ) {
               throw codedError(
                 "OUTPUT_VALIDATION_FAILED",
                 "O ChatGPT não confirmou o envio do prompt.",
@@ -2536,23 +2451,22 @@ export async function execute(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
-    bridge?.dispose();
+    await bridge?.dispose();
     if (closeTaskTarget && taskTargetId)
       try {
         await client?.send("Target.closeTarget", { targetId: taskTargetId });
       } catch {}
-    const keepBrowserOpen = settings.keepBrowserOpen !== false;
-    if (!keepBrowserOpen && child)
-      try {
-        await client?.send("Browser.close");
-      } catch {}
     client?.close();
-    if (!keepBrowserOpen && child) {
-      try {
-        child.kill();
-      } catch {}
-    }
   }
+}
+
+export async function execute(request, services) {
+  const bridgeDiagnosticsState = await createBridgeDiagnostics(request, services);
+  const response = await executeHandler(
+    { ...request, __bridgeDiagnosticsState: bridgeDiagnosticsState },
+    services,
+  );
+  return { ...response, bridgeDiagnostics: bridgeDiagnosticsState.bridgeDiagnostics };
 }
 
 export const __test = {
@@ -2575,9 +2489,9 @@ export const __test = {
   profileIsPrepared,
   markProfilePrepared,
   profilePathFor,
+  resolveProfileRuntime,
   runtimeProfilePath,
   profilePort,
-  waitForChildExit,
   closeBrowserGracefully,
   taskPageMarker,
   prepareConversation,
@@ -2590,6 +2504,8 @@ export const __test = {
   generationControlIsStop,
   voiceControlIsReady,
   responseHasStrongCompletionSignal,
+  promptSubmissionConfirmed,
+  classifyProviderResponseFailure,
   summarizeBlock,
   responsePhase,
 };

@@ -8,6 +8,10 @@ export type CoreBrowserSession = {
   webSocketDebuggerUrl: string;
 };
 
+export function shouldAutoCloseCoreBrowserSession(invocation?: { mode?: string; action?: string }) {
+  return invocation?.mode !== "configure";
+}
+
 type ManagedSession = CoreBrowserSession & { child: ChildProcess };
 
 export type BrowserSessionManagerDependencies = {

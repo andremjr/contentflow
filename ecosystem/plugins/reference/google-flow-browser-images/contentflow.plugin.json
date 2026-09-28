@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "local.contentflow.google-flow-batch-images",
   "name": "Google Flow Browser Images",
-  "version": "1.3.7",
+  "version": "1.3.8",
   "description": "Gera imagens reais e vídeos no Google Flow com modelos Nano Banana e Veo, proporções configuráveis, animação de imagens, referências visuais, continuidade de projeto e produção visual em lote.",
   "localizations": {
     "en": {
@@ -40,6 +40,10 @@
             }
           },
           "outputPorts": {
+            "assets": {
+              "label": "Assets by item",
+              "description": "Images and videos produced for each independently orchestrated scene."
+            },
             "images": {
               "label": "Final images",
               "description": "Images preserved by the configured retention policy."
@@ -520,6 +524,10 @@
             }
           },
           "outputPorts": {
+            "assets": {
+              "label": "Activos por elemento",
+              "description": "Imágenes y videos producidos para cada escena orquestada de forma independiente."
+            },
             "images": {
               "label": "Imágenes finales",
               "description": "Imágenes conservadas por la política de retención configurada."
@@ -995,6 +1003,7 @@
     "description": "Abre o Chrome dedicado. Instale manualmente a ContentFlow Browser Bridge no perfil e conclua o login do Google Flow.",
     "fallbackConfigurationKey": "fallbackAccountProfiles"
   },
+  "browserRuntime": { "lifecycle": "core" },
   "settingsSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -1132,6 +1141,13 @@
         }
       ],
       "outputPorts": [
+        {
+          "key": "assets",
+          "label": "Ativos por item",
+          "description": "Imagens e vídeos produzidos para cada cena orquestrada individualmente pelo ContentFlow.",
+          "producedTypes": ["files"],
+          "required": false
+        },
         {
           "key": "images",
           "label": "Imagens finais",
@@ -1297,7 +1313,7 @@
             "title": "Gerações de imagem simultâneas",
             "minimum": 1,
             "maximum": 3,
-            "default": 1,
+            "default": 3,
             "visibleWhen": {
               "property": "productionMode",
               "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
@@ -1471,7 +1487,7 @@
             "title": "Pausa entre prompts (ms)",
             "minimum": 0,
             "maximum": 30000,
-            "default": 6000
+            "default": 1500
           },
           "retryAttempts": {
             "type": "integer",
@@ -1505,6 +1521,7 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "assets": { "type": "array" },
           "images": { "type": "array" },
           "character_references": { "type": "array" },
           "videos": { "type": "array" },
@@ -1590,7 +1607,9 @@
         "itemOrchestration": {
           "mode": "sequential",
           "inputPort": "prompts",
-          "outputPort": "images"
+          "outputPort": "images",
+          "strategies": ["continuous_session", "per_item"],
+          "preferredStrategy": "continuous_session"
         }
       },
       "sideEffects": ["external_write", "local_artifact", "subprocess"],
@@ -1725,7 +1744,7 @@
             "title": "Pausa entre prompts (ms)",
             "minimum": 0,
             "maximum": 30000,
-            "default": 6000,
+            "default": 1500,
             "description": "Pausa base entre envios para evitar solicitações consecutivas acidentais."
           },
           "maxConcurrentGenerations": {
@@ -1733,7 +1752,7 @@
             "title": "Gerações de imagem simultâneas",
             "minimum": 1,
             "maximum": 3,
-            "default": 1,
+            "default": 3,
             "description": "Quantidade máxima em geração simultânea."
           },
           "retryAttempts": {
@@ -1879,7 +1898,14 @@
         "mode": "immediate",
         "defaultTimeoutMs": 900000,
         "supportsCancellation": true,
-        "maxConcurrency": 1
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "mode": "sequential",
+          "inputPort": "images",
+          "outputPort": "video",
+          "strategies": ["per_item"],
+          "preferredStrategy": "per_item"
+        }
       },
       "sideEffects": ["external_write", "local_artifact", "subprocess"],
       "cost": {
@@ -2164,7 +2190,14 @@
         "mode": "immediate",
         "defaultTimeoutMs": 900000,
         "supportsCancellation": true,
-        "maxConcurrency": 1
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "mode": "sequential",
+          "inputPort": "prompts",
+          "outputPort": "video",
+          "strategies": ["continuous_session", "per_item"],
+          "preferredStrategy": "continuous_session"
+        }
       },
       "sideEffects": ["external_write", "local_artifact", "subprocess"],
       "cost": {

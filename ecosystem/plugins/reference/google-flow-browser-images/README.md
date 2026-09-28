@@ -1,14 +1,15 @@
 # Google Flow Browser Images — ContentFlow
 
-Versão **1.3.7**.
+Versão **1.3.8**.
 
-Plugin avançado de geração de imagens e vídeos no Google Flow através do Chrome dedicado com perfil persistente. A versão 1.3.7 mantém uma única fila por execução, persiste o progresso de cada prompt concluído para retomada sem duplicação e inclui produção visual completa em lote:
+Plugin avançado de geração de imagens e vídeos no Google Flow através do Chrome dedicado com perfil persistente. O plugin delega ao ContentFlow a ordem, a identidade e a persistência dos itens da fila, preservando a sessão do navegador entre as invocações:
 
 - **Geração de Imagens** com Nano Banana 2, Nano Banana Pro, modelos adicionais pelo rótulo visível do Flow e proporções (16:9, 4:3, 1:1, 3:4, 9:16).
 - **Animação de Imagens (Image-to-Video)** com Veo 3.1 (Quality, Fast, Lite) e Omni 1.1 Flash.
 - **Geração Direta de Vídeo (Text-to-Video)** com modelos selecionáveis, referências visuais, modo Frame/Elemento, duração, proporção e resolução.
-- **Fila interna em projeto único:** a capability recebe a lista completa sem impor teto local, cria ou abre um projeto uma vez e mantém os envios e esperas dentro desse mesmo projeto.
-- **Retomada sem duplicação:** cada prompt concluído é registrado no checkpoint local; após troca de perfil, somente os índices ainda pendentes voltam para a fila.
+- **Fila orquestrada pelo núcleo:** as capabilities de geração e animação recebem coleções no bloco, mas o ContentFlow invoca o plugin com um item por vez e persiste cada resultado antes de avançar.
+- **Retomada sem duplicação:** IDs, cursor e itens concluídos pertencem ao ContentFlow; checkpoints locais permanecem apenas como apoio para reconciliação de efeitos externos incertos.
+- **Navegador reutilizado:** o Chrome, o perfil e a aba do Flow permanecem abertos entre os itens; apenas a conexão técnica CDP/Browser Bridge é renovada quando necessário.
 - **Continuidade de Projeto e Chat (`project_url`)** para encadeamento de múltiplos blocos no Método preservando personagens, galeria e histórico.
 - **Produção visual em lote:** gera todas as imagens de uma lista ordenada de cenas e anima somente a quantidade escolhida, sem exigir que o Método crie um bloco por cena.
 - **Intervenção humana segura**: login, reautenticação e CAPTCHA permanecem visíveis para conclusão manual, sem tentativa de contornar as proteções do provedor.
@@ -20,7 +21,7 @@ Plugin avançado de geração de imagens e vídeos no Google Flow através do Ch
 - **Operador:** IA | **Bloco:** CRIAR | **Processo:** `assets`
 - **Entradas:** `prompts` (cenas, obrigatório), `character_prompts` (referências de personagem a gerar, opcional), `animation_prompts` (movimento/câmera, opcional), `reference_images` (personagem, produto, cenário e estilo, opcional) e `project_url` (opcional).
 - **Modo de produção:** escolha diretamente entre somente imagens, texto para vídeo, imagens com algumas animações ou imagens com todas as animações. A tela mostra apenas os controles relevantes ao modo escolhido.
-- **Fluxo de imagens:** produz as imagens na ordem dos prompts, seleciona as imagens a animar e então cria os vídeos um a um, preservando checkpoints da fila de imagens.
+- **Fluxo de imagens:** o ContentFlow entrega cada prompt com `batch.itemId`, índice e total; o plugin produz a imagem e a animação selecionada daquele item antes de devolver o controle ao núcleo.
 - **Orçamento de vídeo:** `maxVideosToAnimate` permite gerar, por exemplo, 300 imagens e animar apenas 3; `0` entrega somente imagens.
 - **Seleção:** primeiras, últimas, distribuídas pela fila ou índices manuais (por exemplo, `1, 7, 10-14`).
 - **Retenção:** salva todas as imagens, somente as animadas, ou apenas os vídeos na entrega final. As imagens continuam disponíveis ao plugin durante a animação mesmo quando não forem entregues à etapa de edição.
@@ -37,8 +38,9 @@ Plugin avançado de geração de imagens e vídeos no Google Flow através do Ch
 ### 3. `animate-image-in-browser` (Animar Imagem / Image-to-Video)
 
 - **Operador:** IA | **Bloco:** CRIAR | **Processos:** `assets`, `editing`
-- **Entradas:** `images` (imagem base para animar), `prompts` (instrução opcional de movimento/câmera), `project_url` (opcional).
+- **Entradas:** `images` (uma imagem ou coleção selecionada para animar), `prompts` (instrução opcional de movimento/câmera), `project_url` (opcional).
 - **Saídas:** `video` (arquivo MP4 renderizado em alta definição), `project_url` (URL do projeto ativo).
+- **Orquestração:** quando recebe vários arquivos, o núcleo cria uma unidade por imagem, preserva identidade e ordem e consolida os vídeos sem arrays aninhados.
 - **Modelos de Vídeo:** Veo 3.1 - Quality, Veo 3.1 - Fast, Veo 3.1 - Lite, Omni 1.1 Flash.
 - **Configuração:** modelo predefinido ou rótulo de modelo novo, imagem como Frame/Elemento, duração de 4/6/8/10 s, proporção e resolução (padrão, 720p, 1080p).
 
@@ -63,7 +65,7 @@ Plugin avançado de geração de imagens e vídeos no Google Flow através do Ch
 
 ## Itens, variantes e ações
 
-- Cada prompt preserva a identidade de lote atribuída pelo ContentFlow; cada imagem usa uma `variantKey` própria e cada vídeo permanece na sua porta de saída.
+- Cada prompt preserva a identidade de lote atribuída pelo ContentFlow; a saída neutra `assets` mantém a conclusão atômica mesmo nos modos que produzem somente imagens ou somente vídeos, enquanto cada mídia permanece também na sua porta específica.
 - `generate-images-in-browser` aplica `regenerate`, `replace`, `select` e `download` somente em `images`. `animate-image-in-browser` e `generate-video-in-browser` aplicam as mesmas ações somente em `video`.
 - `replace`, `select` e `download` são ações locais do ContentFlow. Somente `regenerate` chama novamente o plugin, validando a porta original antes de gerar.
 - A capability composta não declara ações globais porque mistura imagens finais, referências de personagem, vídeos e intermediários opcionais. Isso impede que referências ou mídias omitidas recebam ações falsas; use as capabilities atômicas quando precisar manipular itens individualmente.

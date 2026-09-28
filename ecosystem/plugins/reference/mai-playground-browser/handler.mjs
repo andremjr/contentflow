@@ -1,10 +1,10 @@
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, extname, join } from "node:path";
 import { attachContentFlowBridge } from "./browser-bridge-client.mjs";
+import { createBridgeDiagnostics } from "./bridge-diagnostics.mjs";
 
 const PLUGIN_ID = "local.contentflow.mai-playground-browser";
 const HOST = "playground.microsoft.ai";
@@ -274,144 +274,30 @@ export function assertProfile(p, allowExistingChromeProfile = false) {
   }
 }
 
-async function capture(exe, args, ms = 4000) {
-  return await new Promise((resolve) => {
-    let c;
-    try {
-      c = spawn(exe, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: false });
-    } catch {
-      return resolve({ ok: false, stdout: "" });
-    }
-    let stdout = "";
-    let done = false;
-    const end = (ok) => {
-      if (done) return;
-      done = true;
-      clearTimeout(t);
-      resolve({ ok, stdout });
-    };
-    const t = setTimeout(() => {
-      try {
-        c.kill();
-      } catch {}
-      end(false);
-    }, ms);
-    c.stdout?.setEncoding("utf8");
-    c.stdout?.on("data", (x) => (stdout += x));
-    c.once("error", () => end(false));
-    c.once("close", (code) => end(code === 0));
-  });
+function requireCoreBrowserSession(coreSession) {
+  if (
+    !coreSession ||
+    !Number.isInteger(coreSession.port) ||
+    typeof coreSession.webSocketDebuggerUrl !== "string" ||
+    !coreSession.webSocketDebuggerUrl
+  ) {
+    throw codedError(
+      "INVALID_CONFIGURATION",
+      "O ContentFlow não forneceu a sessão de navegador reservada para este perfil.",
+    );
+  }
+  return coreSession;
 }
 
-function regValue(o) {
-  for (const l of String(o ?? "").split(/\r?\n/)) {
-    const m = l.match(/REG_(?:SZ|EXPAND_SZ)\s+(.+?)\s*$/i);
-    if (m) return m[1].trim().replace(/^"|"$/g, "");
-  }
-  return "";
-}
-
-export async function chromeCandidates() {
-  if (platform() === "win32") {
-    const standardCandidates = [
-      process.env.PROGRAMFILES &&
-        join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe"),
-      process.env["PROGRAMFILES(X86)"] &&
-        join(process.env["PROGRAMFILES(X86)"], "Google", "Chrome", "Application", "chrome.exe"),
-      process.env.LOCALAPPDATA &&
-        join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
-    ].filter(Boolean);
-
-    const f = standardCandidates.filter((p) => existsSync(p));
-    if (f.length) return f;
-
-    for (const key of [
-      "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
-      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
-    ]) {
-      const r = await capture("reg", ["query", key, "/ve"]);
-      if (r.ok) {
-        const v = regValue(r.stdout);
-        if (v && existsSync(v)) f.push(v);
-      }
-    }
-    const w = await capture("where", ["chrome.exe"]);
-    if (w.ok) f.push(...w.stdout.split(/\r?\n/).filter((x) => x.trim() && existsSync(x.trim())));
-    return [...new Set(f.filter(Boolean).map((x) => x.trim()))];
-  }
-  if (platform() === "darwin") {
-    return ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"];
-  }
-  const f = [];
-  for (const n of ["google-chrome", "chromium"]) {
-    const r = await capture("which", [n]);
-    if (r.ok) f.push(...r.stdout.split(/\r?\n/));
-  }
-  return f.filter(Boolean);
-}
-
-export async function checkDebuggerVersion(port, ms = 1500) {
-  const c = new AbortController();
-  const t = setTimeout(() => c.abort(), ms);
-  try {
-    const r = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: c.signal });
-    if (!r.ok) return null;
-    const v = await r.json();
-    return v?.webSocketDebuggerUrl ? v : null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-export async function launchBrowser(settings, profileDir, port, signal, initialUrl = BASE_URL) {
-  const existing = await checkDebuggerVersion(port);
-  if (existing) return { version: existing, child: null, reused: true };
-
-  const exes = settings?.chromeExecutable?.trim?.()
-    ? [settings.chromeExecutable.trim()]
-    : await chromeCandidates();
-  if (!exes.length) {
-    throw codedError("INVALID_CONFIGURATION", "Nenhum executável do Google Chrome foi localizado.");
-  }
-
-  const keepBrowserOpen = settings.keepBrowserOpen !== false;
-  const args = [
-    `--remote-debugging-port=${port}`,
-    "--remote-debugging-address=127.0.0.1",
-    `--user-data-dir=${profileDir}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    initialUrl,
-  ];
-  if (settings.startMinimized !== false) args.unshift("--start-minimized");
-
-  for (const exe of exes) {
-    let child;
-    try {
-      child = spawn(exe, args, {
-        detached: keepBrowserOpen,
-        stdio: "ignore",
-        windowsHide: false,
-        shell: false,
-      });
-    } catch {
-      continue;
-    }
-    if (keepBrowserOpen) child.unref();
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
-      if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-      const v = await checkDebuggerVersion(port);
-      if (v) return { version: v, child, reused: false };
-      await sleep(350, signal);
-    }
-    try {
-      child.kill();
-    } catch {}
-  }
-  throw codedError("PERMISSION_DENIED", "Não foi possível iniciar o Chrome dedicado.");
+export async function launchBrowser(settings) {
+  const session = requireCoreBrowserSession(settings?.__contentFlowBrowserSession);
+  return {
+    version: { webSocketDebuggerUrl: session.webSocketDebuggerUrl },
+    child: null,
+    reused: true,
+    startedByCore: true,
+    startedByPlugin: false,
+  };
 }
 
 export class CDPClient {
@@ -545,14 +431,8 @@ export async function detachPage(client, sessionId) {
   await client.send("Target.detachFromTarget", { sessionId });
 }
 
-export async function closeBrowserSession(client, child) {
-  try {
-    await client?.send("Browser.close");
-  } catch {}
+export async function closeBrowserSession(client) {
   client?.close();
-  try {
-    child?.kill();
-  } catch {}
 }
 
 const DOM_HELPERS = String.raw`
@@ -1158,7 +1038,6 @@ export async function configureProfile(request, services) {
       services.signal,
       BASE_URL,
     );
-    child = launched.child;
     client = await new CDPClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
     const { sessionId } = await attachPage(client, services.signal, BASE_URL, true);
 
@@ -1185,18 +1064,12 @@ export async function configureProfile(request, services) {
       Boolean(error?.retryable),
     );
   } finally {
-    bridge?.dispose();
-    try {
-      await client?.send("Browser.close");
-    } catch {}
+    await bridge?.dispose();
     client?.close();
-    try {
-      child?.kill();
-    } catch {}
   }
 }
 
-export async function execute(request, services) {
+async function executeHandler(request, services) {
   if (request?.invocation?.mode === "configure") {
     return await configureProfile(request, services);
   }
@@ -1297,7 +1170,6 @@ export async function execute(request, services) {
       services.signal,
       targetUrl,
     );
-    child = launched.child;
 
     client = await new CDPClient(
       launched.version.webSocketDebuggerUrl,
@@ -1530,6 +1402,15 @@ export async function execute(request, services) {
     );
   } finally {
     await bridge?.dispose();
-    await closeBrowserSession(client, child);
+    await closeBrowserSession(client);
   }
+}
+
+export async function execute(request, services) {
+  const bridgeDiagnosticsState = await createBridgeDiagnostics(request, services);
+  const response = await executeHandler(
+    { ...request, __bridgeDiagnosticsState: bridgeDiagnosticsState },
+    services,
+  );
+  return { ...response, bridgeDiagnostics: bridgeDiagnosticsState.bridgeDiagnostics };
 }

@@ -6,6 +6,7 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import {
   BrowserProfileStore,
+  ensureLegacyBrowserProfile,
   PluginProfileBindingStore,
   PluginProfileReadinessStore,
 } from "./browser-profiles";
@@ -105,6 +106,39 @@ test("link e unlink são explícitos e unlink remove readiness específico sem a
     assert.equal(readiness.get("plugin.a", "shared-profile"), undefined);
     assert.ok(bindings.get("plugin.b", "shared-profile"));
     assert.ok(profiles.get("shared-profile"));
+  } finally {
+    database.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("perfil legado explicitamente desvinculado não é vinculado novamente ao reler inventário", async () => {
+  const { root, database, profiles, bindings } = await fixture();
+  try {
+    ensureLegacyBrowserProfile(database, {
+      id: "legacy-default-source",
+      pluginId: "plugin.a",
+      name: "default",
+      alias: "default",
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    });
+    const profileId = "legacy:legacy-default-source";
+    assert.ok(profiles.get(profileId));
+    assert.ok(bindings.get("plugin.a", profileId));
+
+    assert.equal(bindings.unlink("plugin.a", profileId), 1);
+    assert.equal(bindings.get("plugin.a", profileId), undefined);
+
+    ensureLegacyBrowserProfile(database, {
+      id: "legacy-default-source",
+      pluginId: "plugin.a",
+      name: "default",
+      alias: "default",
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    });
+    assert.equal(bindings.get("plugin.a", profileId), undefined);
   } finally {
     database.close();
     rmSync(root, { recursive: true, force: true });

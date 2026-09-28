@@ -136,7 +136,7 @@ if (process.env[LIVE_FLAG] !== "1") {
     order: 0,
     plugin: {
       pluginId: "local.contentflow.chatgpt-browser-studio",
-      pluginVersion: "1.0.14",
+      pluginVersion: "1.0.15",
       capabilityId: "generate-image-in-browser",
       connectionRequired: false,
       configuration: {

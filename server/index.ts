@@ -59,6 +59,7 @@ import {
   completedProcessProgress,
   nextExecutableProcess,
   projectProcessOrder,
+  refreshProjectProcessStrategy,
   resolveProcessOrderForMethods,
 } from "../src/lib/process-order";
 import {
@@ -941,6 +942,44 @@ const activeJobProfileLeases = new Map<
   string,
   { profileId: string; leaseToken: string; timer: ReturnType<typeof setInterval> }
 >();
+const activePluginInvocations = new Map<
+  string,
+  { executionId: string; controller: AbortController }
+>();
+
+async function runActivePluginInvocation<T>(
+  job: PersistentPluginJob,
+  invoke: (signal: AbortSignal) => Promise<T>,
+) {
+  const controller = new AbortController();
+  activePluginInvocations.set(job.id, { executionId: job.executionId, controller });
+  if (pluginJobs.get(job.id)?.status === "cancel_requested") controller.abort();
+  try {
+    return await invoke(controller.signal);
+  } finally {
+    if (activePluginInvocations.get(job.id)?.controller === controller) {
+      activePluginInvocations.delete(job.id);
+    }
+  }
+}
+
+async function executeActivePlugin(
+  job: PersistentPluginJob,
+  ...args: Parameters<typeof executeRegisteredPlugin>
+) {
+  return runActivePluginInvocation(job, (signal) => {
+    const [plugin, request, timeoutMs, secrets, options] = args;
+    return executeRegisteredPlugin(plugin, request, timeoutMs, secrets, { ...options, signal });
+  });
+}
+
+function requestPluginExecutionCancellation(executionId: string) {
+  const changed = pluginJobs.requestCancellation(executionId);
+  for (const active of activePluginInvocations.values()) {
+    if (active.executionId === executionId) active.controller.abort();
+  }
+  return changed;
+}
 
 function releaseJobProfileLease(jobId: string) {
   const active = activeJobProfileLeases.get(jobId);
@@ -1878,7 +1917,7 @@ function cancelStoredProcessExecution(execution: ProcessExecution, project: Proj
   delete project.runThrough;
   delete project.runFrom;
   execution.revision = (execution.revision ?? 0) + 1;
-  pluginJobs.requestCancellation(execution.id);
+  requestPluginExecutionCancellation(execution.id);
   execution.status = "cancelled";
   execution.blocks = execution.blocks.map((item) =>
     item.status === "completed" ? item : { ...item, status: "cancelled" },
@@ -2198,7 +2237,100 @@ async function processPluginJobClaimed(
     );
   }
   if (!job.profileLanePool && !ensureJobProfileLease(plugin, job)) {
-    return pluginJobs.defer(claim, new Date(Date.now() + 250));
+    const fallback = job.profileFallback;
+    const recoveryDecision = decideExecutionRecovery({
+      job,
+      failure: {
+        code: "PROFILE_BUSY",
+        message: "Os perfis selecionados estão sendo usados por outra execução.",
+        retryable: true,
+        recovery: { externalEffect: "none", stage: "before_effect" },
+      },
+    });
+    if (fallback && recoveryDecision.action === "switch_profile") {
+      const currentProfile = fallback.candidates[fallback.activeIndex];
+      const nextIndex = fallback.activeIndex + 1;
+      const nextProfile = fallback.candidates[nextIndex];
+      const resolvedNextProfile = job.profileExecution?.profiles[nextIndex];
+      const nextBrowserProfile = resolvedNextProfile
+        ? { profileId: resolvedNextProfile.profileId, alias: resolvedNextProfile.alias }
+        : browserProfileSnapshot(plugin, nextProfile);
+      const saved = pluginJobs.save(claim, {
+        ...appendPluginDiagnostic(job, {
+          code: "PROFILE_SWITCH",
+          reasonCode: "PROFILE_BUSY",
+          previousProfileId: job.browserProfile?.profileId,
+          profileId: nextBrowserProfile?.profileId,
+          attempt: job.attempt,
+        }),
+        status: "starting",
+        profileFallback: {
+          ...fallback,
+          activeIndex: nextIndex,
+          history: [
+            ...fallback.history,
+            {
+              profile: currentProfile,
+              code: "PROFILE_BUSY",
+              message: "Os perfis selecionados estão sendo usados por outra execução.",
+            },
+          ],
+        },
+        browserProfile: nextBrowserProfile,
+        message: recoveryProductMessage({
+          decision: recoveryDecision,
+          failureMessage: "Os perfis selecionados estão sendo usados por outra execução.",
+          currentProfile,
+          nextProfile,
+          preservedCount: itemProgressForJob(job)?.completed,
+        }),
+        nextPollAt: new Date().toISOString(),
+      });
+      if (saved.status === "cancel_requested") return saved;
+      blockExecution.status = "in_progress";
+      blockExecution.progressMessage = saved.message;
+      execution.status = "running";
+      persistPluginExecution(execution, project);
+      return saved;
+    }
+    if (recoveryDecision.action === "retry") {
+      const saved = pluginJobs.save(claim, {
+        ...appendPluginDiagnostic(job, {
+          code: "PLUGIN_RETRY_SCHEDULED",
+          reasonCode: "PROFILE_BUSY",
+          profileId: job.browserProfile?.profileId,
+          attempt: job.attempt,
+        }),
+        status: "starting",
+        retryCount: job.retryCount + 1,
+        message: recoveryProductMessage({
+          decision: recoveryDecision,
+          failureMessage: "Os perfis selecionados estão sendo usados por outra execução.",
+          currentProfile: activeProfileAliasForJob(plugin, job),
+          preservedCount: itemProgressForJob(job)?.completed,
+        }),
+        nextPollAt: new Date(Date.now() + recoveryDecision.delayMs).toISOString(),
+      });
+      if (saved.status === "cancel_requested") return saved;
+      blockExecution.status = "in_progress";
+      blockExecution.progressMessage = saved.message;
+      execution.status = "running";
+      persistPluginExecution(execution, project);
+      return saved;
+    }
+    return markPluginJobFailed(
+      claim,
+      execution,
+      project,
+      recoveryProductMessage({
+        decision: recoveryDecision,
+        failureMessage: "Os perfis selecionados estão sendo usados por outra execução.",
+        currentProfile: activeProfileAliasForJob(plugin, job),
+        preservedCount: itemProgressForJob(job)?.completed,
+      }),
+      "failed",
+      "PROFILE_BUSY",
+    );
   }
 
   const remainingMs = new Date(job.deadlineAt).getTime() - Date.now();
@@ -2292,27 +2424,30 @@ async function processPluginJobClaimed(
         : ({ mode: "resume", jobId: job.jobId! } as const);
     const parallelExecution = Boolean(job.profileLanePool);
     const parallelResult = parallelExecution
-      ? await executeParallelProfileLanes({
-          plugin,
-          capability,
-          job,
-          timeoutMs: invocationTimeout,
-          secrets,
-          workspaceDirectory,
-          dependencies: {
-            pluginJobs,
-            browserProfileLeases,
-            resolveProfile: (pluginId, profileId) =>
-              resolveBoundBrowserProfile(database, {
-                pluginId,
-                profileId,
-                dataDirectory,
-              }),
-            executePlugin: executeRegisteredPlugin,
-            leaseTtlMs: BROWSER_PROFILE_LEASE_TTL_MS,
-            leaseHeartbeatMs: BROWSER_PROFILE_LEASE_HEARTBEAT_MS,
-          },
-        })
+      ? await runActivePluginInvocation(job, (signal) =>
+          executeParallelProfileLanes({
+            plugin,
+            capability,
+            job,
+            timeoutMs: invocationTimeout,
+            secrets,
+            workspaceDirectory,
+            signal,
+            dependencies: {
+              pluginJobs,
+              browserProfileLeases,
+              resolveProfile: (pluginId, profileId) =>
+                resolveBoundBrowserProfile(database, {
+                  pluginId,
+                  profileId,
+                  dataDirectory,
+                }),
+              executePlugin: executeRegisteredPlugin,
+              leaseTtlMs: BROWSER_PROFILE_LEASE_TTL_MS,
+              leaseHeartbeatMs: BROWSER_PROFILE_LEASE_HEARTBEAT_MS,
+            },
+          }),
+        )
       : undefined;
     if (parallelResult) {
       job = parallelResult.job;
@@ -2337,7 +2472,7 @@ async function processPluginJobClaimed(
       : invocationRequestForJob(job, invocation);
     const pluginResponse =
       parallelResult?.response ??
-      (await executeRegisteredPlugin(plugin, invocationRequest, invocationTimeout, secrets, {
+      (await executeActivePlugin(job, plugin, invocationRequest, invocationTimeout, secrets, {
         workspaceDirectory,
         profileDirectory: browserProfileForJob(plugin, job)?.profileDirectory,
         existingArtifacts: job.partialArtifacts,
@@ -6717,7 +6852,10 @@ app.post("/api/commands", (request, response) => {
           );
           if (prior && !["completed", "cancelled", "failed"].includes(prior.status))
             throw new Error("Cancele a execução antes de reiniciar.");
+          const channel = state.channels.find((item) => item.id === project.channelId);
+          if (!channel) throw new Error("Canal não encontrado.");
           if (prior) database.prepare("DELETE FROM process_executions WHERE id = ?").run(prior.id);
+          refreshProjectProcessStrategy(project, channel, command.processType);
           delete project.runThrough;
           project.stages[command.processType] = "not_started";
           project.currentStage = command.processType;
@@ -7545,7 +7683,7 @@ app.delete("/api/channels/:id", (request, response) => {
       for (const row of database
         .prepare("SELECT id FROM process_executions WHERE project_id = ?")
         .all(project.id) as { id: string }[])
-        pluginJobs.requestCancellation(row.id);
+        requestPluginExecutionCancellation(row.id);
       database.prepare("DELETE FROM process_executions WHERE project_id = ?").run(project.id);
     }
     database.prepare("DELETE FROM projects WHERE channel_id = ?").run(channelId);
@@ -7896,7 +8034,7 @@ app.delete("/api/projects/:id", (request, response) => {
     for (const row of database
       .prepare("SELECT id FROM process_executions WHERE project_id = ?")
       .all(projectId) as { id: string }[])
-      pluginJobs.requestCancellation(row.id);
+      requestPluginExecutionCancellation(row.id);
     database.prepare("DELETE FROM process_executions WHERE project_id = ?").run(projectId);
     return database.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
   });
@@ -8579,7 +8717,7 @@ app.put("/api/executions/:id", (request, response) => {
 });
 
 app.delete("/api/executions/:id", (request, response) => {
-  pluginJobs.requestCancellation(request.params.id);
+  requestPluginExecutionCancellation(request.params.id);
   const result = database
     .prepare("DELETE FROM process_executions WHERE id = ?")
     .run(request.params.id);

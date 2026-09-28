@@ -296,7 +296,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "1.0.14");
+  assert.equal(manifest.version, "1.0.15");
   assert.equal(manifest.supportsConversationContinuation, true);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -311,7 +311,9 @@ test("manifesto declara oito capabilities modulares", () => {
     "text",
     "textarea",
     "number",
+    "list",
   ]);
+  assert.equal(generation.execution.itemOrchestration, undefined);
   const imageGeneration = manifest.capabilities.find(
     (item) => item.id === "generate-image-in-browser",
   );
@@ -484,6 +486,7 @@ test("P32 cancela antes de iniciar o próximo item", async () => {
     code: "CANCELLED",
     message: "Execução cancelada.",
     retryable: false,
+    bridgeDiagnostics: [],
   });
 });
 
@@ -702,6 +705,46 @@ test("modela as fases observáveis da resposta", () => {
   );
 });
 
+test("confirma envio por novo turno mesmo quando o compositor ainda conserva o texto", () => {
+  const baseline = { baselineUserTurnCount: 3, baselineAssistantTurnCount: 3 };
+  assert.equal(
+    __test.promptSubmissionConfirmed(
+      {
+        promptText: "prompt ainda visível",
+        generating: false,
+        userTurnCount: 4,
+        assistantTurnCount: 3,
+      },
+      baseline,
+    ),
+    true,
+  );
+  assert.equal(
+    __test.promptSubmissionConfirmed(
+      {
+        promptText: "prompt ainda visível",
+        generating: false,
+        userTurnCount: 3,
+        assistantTurnCount: 4,
+      },
+      baseline,
+    ),
+    true,
+  );
+  assert.equal(
+    __test.promptSubmissionConfirmed(
+      {
+        promptText: "prompt ainda visível",
+        generating: false,
+        userTurnCount: 3,
+        assistantTurnCount: 3,
+      },
+      baseline,
+    ),
+    false,
+  );
+});
+
 test("identifica cada aba de tarefa sem colisão entre tentativas", () => {
   const first = __test.taskPageMarker({
     executionId: "execution",
@@ -906,12 +949,38 @@ test("reconecta o service worker da Browser Bridge quando a sessão CDP desapare
         if (expression.includes("contentFlowBridge?.identity"))
           return {
             result: {
-              value: { bridgeId: "com.contentflow.browser-bridge", protocolVersion: 2 },
+              value: {
+                bridgeId: "com.contentflow.browser-bridge",
+                protocolVersion: 2,
+                protocol: { min: 2, max: 2 },
+                capabilities: [
+                  "idempotent-replay.v1",
+                  "lifecycle-events.v1",
+                  "snapshot.v1",
+                  "condition-observer.v1",
+                  "reload.v1",
+                ],
+                bridgeVersion: "0.4.0",
+              },
             },
           };
         if (expression.includes("contentFlowBridge.connect")) {
           connectCount += 1;
-          return { result: { value: { ok: true } } };
+          return {
+            result: {
+              value: {
+                ok: true,
+                protocolVersion: 2,
+                capabilities: [
+                  "idempotent-replay.v1",
+                  "lifecycle-events.v1",
+                  "snapshot.v1",
+                  "condition-observer.v1",
+                  "reload.v1",
+                ],
+              },
+            },
+          };
         }
         if (expression.includes("bridge.dispatch")) {
           if (!lostOnce) {
@@ -1096,6 +1165,18 @@ test("ignora partes personalizadas", () => {
     ).length,
     1,
   );
+});
+
+test("trata lista em content como um único contexto agregado", () => {
+  const parts = __test.buildParts(
+    request({
+      inputs: { content: ["Cena A", "Cena B", "Cena C"] },
+    }),
+  );
+  assert.equal(parts.length, 1);
+  assert.match(parts[0], /Cena A/);
+  assert.match(parts[0], /Cena B/);
+  assert.match(parts[0], /Cena C/);
 });
 
 test("preserva respostas individuais quando parts está conectada", () => {
@@ -1831,6 +1912,23 @@ test("aceita apenas sinais fortes associados a uma nova resposta concluída", ()
   assert.equal(
     __test.responseHasStrongCompletionSignal({ ...completed, completedActionCount: 2 }),
     false,
+  );
+});
+
+test("não aceita mensagens operacionais de interrupção do ChatGPT como conteúdo final", () => {
+  assert.deepEqual(
+    __test.classifyProviderResponseFailure(
+      "Conexão interrompida. Aguardando a resposta completa",
+    ),
+    {
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "A resposta do ChatGPT foi interrompida antes de ser concluída.",
+      retryable: true,
+    },
+  );
+  assert.equal(
+    __test.classifyProviderResponseFailure("Uma cena mostra uma rodoviária vazia ao amanhecer."),
+    undefined,
   );
 });
 

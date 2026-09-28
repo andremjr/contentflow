@@ -363,9 +363,13 @@ test("calcula jitter e atraso dinâmico de timing", () => {
   assert.ok(delay >= 800 && delay <= 1250);
 });
 
-test("lança Chrome com flags anti-detecção e resolução realista", async () => {
-  const source = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
-  assert.ok(source.includes("--disable-blink-features=AutomationControlled"));
-  assert.ok(source.includes("--window-size=1280,900"));
-  assert.doesNotMatch(source, /if\s*\(\/limite\|rate limit\|upgrade\/i\.test\(st\.body\)\)/);
+test("o núcleo lança Chrome com flags anti-detecção e resolução realista", async () => {
+  const handler = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
+  const core = await readFile(
+    new URL("../../../../server/browser-session-manager.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(core.includes("--disable-blink-features=AutomationControlled"));
+  assert.ok(core.includes("--window-size=1280,800"));
+  assert.doesNotMatch(handler, /if\s*\(\/limite\|rate limit\|upgrade\/i\.test\(st\.body\)\)/);
 });

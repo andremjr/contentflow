@@ -9,7 +9,9 @@
   "settings": {},
   "inputs": { "context": "Tema de teste" },
   "inputContract": [{ "id": "context", "portKey": "context", "label": "Contexto", "type": "text" }],
-  "outputContract": [{ "portKey": "result", "key": "title", "label": "Título", "type": "text", "required": true }],
+  "outputContract": [
+    { "portKey": "result", "key": "title", "label": "Título", "type": "text", "required": true }
+  ],
   "resolvedInstruction": "Crie um título curto.",
   "context": {
     "locale": "pt-BR",

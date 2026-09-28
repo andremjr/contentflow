@@ -109,13 +109,13 @@ Antes de persistir ou expor um erro, remova credenciais em URL, bearer/basic aut
 Checklist obrigatório para capabilities com `profileSetup` ou navegador:
 
 - [ ] `configure/status` consulta sem abrir UI e devolve `values.ready` booleano.
-- [ ] `configure/prepare` abre superfície visível somente por ação explícita, valida conta/origem/Bridge e fecha o navegador após sucesso ou falha.
+- [ ] `configure/prepare` abre superfície visível somente por ação explícita, valida conta/origem/Bridge e mantém o navegador aberto após sucesso ou falha até o usuário fechá-lo.
 - [ ] Perfil é dedicado, preparado e referenciado por alias; Método não guarda pasta, cookie ou sessão.
 - [ ] `start` valida origem, conta, estado e recibo antes de submeter.
 - [ ] `resume` usa job/recibo persistente e não depende de memória global.
 - [ ] `cancel` é idempotente, marca a solicitação antes de agir e informa efeitos externos que permaneceram.
 - [ ] `services.signal` alcança requests, streams, polls e subprocessos.
-- [ ] Sucesso, erro, timeout e cancelamento fecham abas criadas, browser quando pertencente à invocação, streams, sockets, listeners, timers, arquivos, workers e processos filhos.
+- [ ] Sucesso, erro, timeout e cancelamento fecham abas criadas, browser quando pertencente à execução normal, streams, sockets, listeners, timers, arquivos, workers e processos filhos; a exceção explícita é a instância interativa de `configure/prepare`, fechada pelo usuário.
 - [ ] CAPTCHA, compra, upgrade, publicação, deleção e consentimento nunca são automatizados sem a intervenção/confirmação exigida.
 - [ ] Fallback preserva recibo, item, histórico e artifacts e nunca repete efeito incerto.
 

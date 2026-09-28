@@ -2,8 +2,15 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { __test } from "./handler.mjs";
+import { __test, execute } from "./handler.mjs";
 import { testExtensionBridge } from "../../../browser-bridge/test.mjs";
+
+assert.equal(
+  __test.describeCdpParams("Page.navigate", { url: "https://flow.google.com/tools" }),
+  "url=https://flow.google.com/tools",
+);
+assert.equal(__test.describeCdpParams("Target.createTarget", { url: "not a url" }), "url=invalid");
+assert.equal(__test.describeCdpParams("Runtime.evaluate", { expression: "location.href" }), "");
 
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
@@ -16,7 +23,7 @@ assert.deepEqual(
   canonicalFixture.slots.map((slot) => slot.expectedItemId),
   ["asset-slot-image-city-dawn", "asset-slot-image-forest-rain", "asset-slot-stock-commute"],
 );
-assert.equal(manifest.version, "1.3.7");
+assert.equal(manifest.version, "1.3.8");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.ok(manifest.permissions.includes("filesystem:read"));
@@ -24,6 +31,25 @@ assert.ok(manifest.permissions.includes("filesystem:write"));
 assert.ok(manifest.permissions.includes("network"));
 assert.ok(manifest.permissions.includes("process"));
 assert.deepEqual(manifest.deliveryTypes, ["image", "video"]);
+
+const emptyContinuousResult = await execute(
+  {
+    capabilityId: "generate-images-in-browser",
+    invocation: { mode: "start" },
+    inputs: { prompts: ["personagem"] },
+    configuration: {},
+    settings: {},
+    context: { locale: "pt-BR" },
+  },
+  {
+    claimItems: async () => [],
+    publishItemUpdate: async () => {
+      throw new Error("não deveria publicar sem unidades concedidas");
+    },
+  },
+);
+assert.equal(emptyContinuousResult.status, "success");
+assert.deepEqual(emptyContinuousResult.values.images, []);
 assert.ok(manifest.networkHosts.includes("flow.google.com"));
 assert.equal(manifest.settingsSchema.properties.keepBrowserOpen.default, false);
 assert.deepEqual(Object.keys(manifest.localizations).sort(), ["en", "es"]);
@@ -120,14 +146,16 @@ assert.deepEqual(cap.execution.itemOrchestration, {
   mode: "sequential",
   inputPort: "prompts",
   outputPort: "images",
+  strategies: ["continuous_session", "per_item"],
+  preferredStrategy: "continuous_session",
 });
 assert.deepEqual(
   cap.itemActions.map((item) => item.action),
   ["regenerate", "replace", "select", "download"],
 );
 assert.equal(__test.actionableOutputPort(cap.id), "images");
-assert.equal(cap.blockConfigSchema.properties.maxConcurrentGenerations.default, 1);
-assert.equal(cap.blockConfigSchema.properties.delayBetweenPromptsMs.default, 6000);
+assert.equal(cap.blockConfigSchema.properties.maxConcurrentGenerations.default, 3);
+assert.equal(cap.blockConfigSchema.properties.delayBetweenPromptsMs.default, 1500);
 assert.equal(cap.blockConfigSchema.properties.rateLimitRetryAttempts.default, 8);
 assert.equal(cap.blockConfigSchema.properties.maxReferenceImages.maximum, 10);
 assert.equal(cap.blockConfigSchema.properties.maxImagesPerPrompt.maximum, 4);
@@ -173,8 +201,9 @@ assert.deepEqual(
 );
 assert.deepEqual(
   productionCap.outputPorts.map((port) => port.key),
-  ["images", "character_references", "videos", "project_url"],
+  ["assets", "images", "character_references", "videos", "project_url"],
 );
+assert.equal(productionCap.execution.itemOrchestration, undefined);
 assert.equal(productionCap.blockConfigSchema.properties.productionMode.default, "images_only");
 assert.deepEqual(Object.keys(productionCap.blockConfigSchema.properties), [
   "accountProfile",
@@ -255,6 +284,27 @@ for (const capabilityId of ["animate-image-in-browser", "generate-video-in-brows
     },
   ]);
 }
+const videoGenerationCap = manifest.capabilities.find(
+  (item) => item.id === "generate-video-in-browser",
+);
+assert.deepEqual(videoGenerationCap.execution.itemOrchestration, {
+  mode: "sequential",
+  inputPort: "prompts",
+  outputPort: "video",
+  strategies: ["continuous_session", "per_item"],
+  preferredStrategy: "continuous_session",
+});
+assert.deepEqual(
+  manifest.capabilities.find((item) => item.id === "animate-image-in-browser").execution
+    .itemOrchestration,
+  {
+    mode: "sequential",
+    inputPort: "images",
+    outputPort: "video",
+    strategies: ["per_item"],
+    preferredStrategy: "per_item",
+  },
+);
 for (const capability of manifest.capabilities) {
   for (const property of ["imageModel", "videoModel"]) {
     const schema = capability.blockConfigSchema.properties[property];
@@ -405,6 +455,62 @@ assert.deepEqual(
   }),
   [0, 4, 5],
 );
+const firstBatchItem = {
+  batch: { itemId: "batch-item-1", index: 0, total: 3 },
+  settings: { keepBrowserOpen: false },
+};
+const lastBatchItem = {
+  batch: { itemId: "batch-item-3", index: 2, total: 3 },
+  settings: { keepBrowserOpen: false },
+};
+assert.equal(__test.isCoreItemInvocation(firstBatchItem), true);
+assert.equal(__test.keepBrowserForCurrentItem(firstBatchItem), true);
+assert.equal(__test.keepBrowserForCurrentItem(lastBatchItem), false);
+assert.equal(__test.keepBrowserForCurrentItem(lastBatchItem, true), true);
+assert.deepEqual(
+  __test.visualBatchItemSelection(firstBatchItem, {
+    productionMode: "images_then_selected_videos",
+    maxVideosToAnimate: 2,
+    animationSelection: "last",
+  }),
+  [1, 2],
+);
+assert.deepEqual(
+  __test.visualBatchItemSelection(firstBatchItem, {
+    productionMode: "images_to_video_all",
+  }),
+  [0, 1, 2],
+);
+assert.equal(
+  __test.resumeValueForPort(
+    {
+      outputContract: [{ key: "referencias", portKey: "character_references", type: "files" }],
+      resume: { values: { referencias: ["character-1"] } },
+    },
+    "character_references",
+  )[0],
+  "character-1",
+);
+assert.deepEqual(
+  __test.remapNestedFailure(
+    {
+      status: "error",
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "falhou",
+      retryable: true,
+      partialValues: {
+        video: [{ id: "video-1", mimeType: "video/mp4" }],
+        project_url: "https://flow.google.com/project/item-1",
+      },
+    },
+    "video",
+    "videos",
+  ).partialValues,
+  {
+    videos: [{ id: "video-1", mimeType: "video/mp4" }],
+    project_url: "https://flow.google.com/project/item-1",
+  },
+);
 
 const closeCalls = [];
 await __test.maybeCloseBrowser(
@@ -419,7 +525,7 @@ await __test.maybeCloseBrowser(
   { startedByPlugin: false },
   false,
 );
-assert.deepEqual(closeCalls, ["Browser.close", "client.close"]);
+assert.deepEqual(closeCalls, ["client.close"]);
 const animCap = manifest.capabilities.find((item) => item.id === "animate-image-in-browser");
 assert.ok(animCap);
 assert.deepEqual(
@@ -985,6 +1091,29 @@ const failedRequest = {
   attempt: 1,
   configuration: { accountProfile: "flow-e2e" },
 };
+await __test.saveVisualBatchProjectUrl(
+  failedRequest,
+  retryServices,
+  "https://flow.google.com/project/project-primary",
+);
+await __test.saveVisualBatchProjectUrl(
+  { ...failedRequest, configuration: { accountProfile: "contaflow2" } },
+  retryServices,
+  "https://flow.google.com/project/project-fallback",
+);
+assert.equal(
+  await __test.visualBatchProjectUrl(failedRequest, retryServices),
+  "https://flow.google.com/project/project-primary",
+);
+assert.equal(
+  await __test.visualBatchProjectUrl(
+    { ...failedRequest, configuration: { accountProfile: "contaflow2" } },
+    retryServices,
+  ),
+  "https://flow.google.com/project/project-fallback",
+);
+await __test.clearVisualBatchSession(failedRequest, retryServices);
+assert.equal(await __test.readVisualBatchSession(failedRequest, retryServices), undefined);
 await __test.saveCaptchaRetryNavigation(
   failedRequest,
   retryServices,
@@ -1258,13 +1387,33 @@ const managedRuntime = __test.resolveProfileRuntime(
   { configuration: { accountProfile: "default" }, settings: {} },
   { getWorkspacePath: (relativePath) => `workspace/${relativePath}` },
 );
+const sharedProfileDirectory = await mkdtemp(join(tmpdir(), "contentflow-flow-shared-profile-"));
+const privateWorkspaceDirectory = await mkdtemp(
+  join(tmpdir(), "contentflow-flow-private-workspace-"),
+);
+const sharedRuntime = __test.resolveProfileRuntime(
+  { configuration: { accountProfile: "conta-a" }, settings: {} },
+  {
+    getProfilePath: (relativePath) => join(sharedProfileDirectory, relativePath),
+    getWorkspacePath: (relativePath) => join(privateWorkspaceDirectory, relativePath),
+  },
+);
 assert.equal(defaultRuntime.port, 9333);
 assert.equal(managedRuntime.profilePath, "workspace/.");
+assert.equal(sharedRuntime.profilePath, join(sharedProfileDirectory, "."));
+assert.ok(sharedRuntime.readinessPath.startsWith(privateWorkspaceDirectory));
+assert.ok(!sharedRuntime.readinessPath.startsWith(sharedProfileDirectory));
 assert.notEqual(channelRuntime.port, 9333);
 assert.match(
   channelRuntime.profilePath.replaceAll("\\", "/"),
   /google-flow-chrome-profiles\/canal_a$/,
 );
+assert.equal(await __test.profileIsPrepared(sharedRuntime, "conta-a"), false);
+await __test.markProfilePrepared(sharedRuntime, "conta-a", { extensionVersion: "2.0.0" });
+assert.equal(await __test.profileIsPrepared(sharedRuntime, "conta-a"), true);
+assert.equal(await __test.profileIsPrepared(sharedRuntime, "conta-b"), false);
+await rm(sharedProfileDirectory, { recursive: true, force: true });
+await rm(privateWorkspaceDirectory, { recursive: true, force: true });
 const profileDirectory = await mkdtemp(join(tmpdir(), "contentflow-flow-profile-"));
 assert.equal(await __test.profileIsPrepared(profileDirectory, "conta-a"), false);
 await __test.markProfilePrepared(profileDirectory, "conta-a", { extensionVersion: "2.0.0" });
@@ -1817,10 +1966,9 @@ assert.match(source, /selectors: \["flow-add-menu button"\]/);
 assert.match(source, /const launchMinimized = startMinimized && referencePaths\.length === 0/);
 assert.match(source, /keepBrowserOpen: productionMode !== "images_only"/);
 assert.match(source, /position < selectedIndexes\.length - 1/);
-assert.match(
-  source,
-  /const probe = await new CdpClient\(existing\.webSocketDebuggerUrl\)\.connect/,
-);
+assert.match(source, /function requireCoreBrowserSession\(coreSession\)/);
+assert.match(source, /startedByCore: true/);
+assert.doesNotMatch(source, /existing\.webSocketDebuggerUrl/);
 assert.match(source, /async function clickGenerateAndConfirm/);
 assert.match(source, /"pressEnter"/);
 assert.match(source, /adapter\?\.configureGeneration/);
@@ -1978,7 +2126,7 @@ assert.ok(
 );
 assert.ok(!extensionContent.includes("dispatchAction"));
 assert.ok(!source.includes("--load-extension="));
-assert.ok(source.includes("Carregar sem compactação"));
+assert.ok(source.includes("requireCoreBrowserSession"));
 assert.ok(source.includes("ContentFlow Browser Bridge conectada"));
 assert.ok(!/client\.send\(\s*["']Input\./.test(source));
 assert.equal((source.match(/Page\.bringToFront/g) || []).length, 2);
@@ -2006,5 +2154,5 @@ await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), 
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v1.3.7 validado (modos de produção visual, fila interna sem teto local, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
+  "OK: v1.3.8 validado (lote interno concorrente, animação item a item, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
 );

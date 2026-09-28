@@ -4,6 +4,14 @@ export const PLUGIN_ID = "local.contentflow.vibes-browser-studio";
 export const VIBES_ORIGIN = "https://vibes.ai";
 export const BRIDGE_ID = "com.contentflow.browser-bridge";
 export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_RANGE = Object.freeze({ min: 2, max: 2 });
+export const REQUIRED_CAPABILITIES = Object.freeze([
+  "idempotent-replay.v1",
+  "lifecycle-events.v1",
+  "snapshot.v1",
+  "condition-observer.v1",
+  "reload.v1",
+]);
 
 const PROJECT_URL = /^https:\/\/vibes\.ai\/projects\/[A-Za-z0-9_-]+\/?$/;
 const COPY = {
@@ -126,6 +134,19 @@ function missingSession(error) {
   );
 }
 
+function supportsRequiredBridge(identity) {
+  const min = Number(identity?.protocol?.min ?? identity?.protocolVersion);
+  const max = Number(identity?.protocol?.max ?? identity?.protocolVersion);
+  const capabilities = Array.isArray(identity?.capabilities) ? identity.capabilities : [];
+  return (
+    identity?.bridgeId === BRIDGE_ID &&
+    Number.isInteger(min) &&
+    Number.isInteger(max) &&
+    Math.min(PROTOCOL_RANGE.max, max) >= Math.max(PROTOCOL_RANGE.min, min) &&
+    REQUIRED_CAPABILITIES.every((capability) => capabilities.includes(capability))
+  );
+}
+
 function validateProjectUrl(value, request) {
   const url = String(value || "");
   if (!PROJECT_URL.test(url)) throw codedError("INVALID_CONFIGURATION", copy(request, "origin"));
@@ -172,13 +193,15 @@ export async function attachVibesBridge({
             "globalThis.contentFlowBridge?.identity",
           );
           if (
-            candidateIdentity?.bridgeId === BRIDGE_ID &&
-            candidateIdentity?.protocolVersion === PROTOCOL_VERSION &&
+            supportsRequiredBridge(candidateIdentity) &&
             /^0\.(?:[4-9]|[1-9][0-9])\.|^[1-9][0-9]*\./.test(
-              String(candidateIdentity?.extensionVersion || ""),
+              String(candidateIdentity?.bridgeVersion || candidateIdentity?.extensionVersion || ""),
             )
           ) {
             return { sessionId: attached.sessionId, identity: candidateIdentity };
+          }
+          if (candidateIdentity?.bridgeId === BRIDGE_ID) {
+            throw codedError("INVALID_CONFIGURATION", copy(request, "incompatible"));
           }
         } catch (error) {
           if (!missingSession(error)) throw error;
@@ -198,9 +221,13 @@ export async function attachVibesBridge({
   ({ sessionId: workerSessionId, identity } = await attachWorker());
   const sessionToken = randomUUID();
   const key = executionKey(request, profileId);
+  let negotiatedProtocolVersion = PROTOCOL_VERSION;
   const handshake = {
     pluginId: PLUGIN_ID,
     protocolVersion: PROTOCOL_VERSION,
+    protocol: PROTOCOL_RANGE,
+    clientVersion: "1",
+    requestedCapabilities: REQUIRED_CAPABILITIES,
     profileId,
     sessionToken,
   };
@@ -210,6 +237,15 @@ export async function attachVibesBridge({
     if (!response?.ok) {
       throw codedError("INVALID_CONFIGURATION", response?.message || copy(request, "refused"));
     }
+    if (
+      !Number.isInteger(response.protocolVersion) ||
+      response.protocolVersion < PROTOCOL_RANGE.min ||
+      response.protocolVersion > PROTOCOL_RANGE.max ||
+      !REQUIRED_CAPABILITIES.every((capability) => response.capabilities?.includes(capability))
+    ) {
+      throw codedError("INVALID_CONFIGURATION", copy(request, "incompatible"));
+    }
+    negotiatedProtocolVersion = response.protocolVersion;
   };
   const recover = async () => {
     if (workerSessionId) {
@@ -232,6 +268,39 @@ export async function attachVibesBridge({
 
   await connect();
   let disposed = false;
+  const lifecycleRequest = (extra = {}) => ({
+    ...handshake,
+    protocolVersion: negotiatedProtocolVersion,
+    ...extra,
+  });
+  const readLifecycleEvents = async (afterSequence = 0) => {
+    const response = await evaluateBridge(
+      `globalThis.contentFlowBridge.events(${JSON.stringify(
+        lifecycleRequest({ afterSequence: Math.max(0, Number(afterSequence) || 0) }),
+      )})`,
+    );
+    if (!response?.ok) {
+      throw codedError(
+        "UPSTREAM_UNAVAILABLE",
+        response?.message || "A Browser Bridge não conseguiu ler eventos de lifecycle.",
+        true,
+      );
+    }
+    return response;
+  };
+  const getRecoverySnapshot = async () => {
+    const response = await evaluateBridge(
+      `globalThis.contentFlowBridge.snapshot(${JSON.stringify(lifecycleRequest())})`,
+    );
+    if (!response?.ok) {
+      throw codedError(
+        "UPSTREAM_UNAVAILABLE",
+        response?.message || "A Browser Bridge não conseguiu produzir o snapshot de recuperação.",
+        true,
+      );
+    }
+    return response;
+  };
   const dispatch = async (action, payload = {}, operationKey = action, timeoutMs = 30_000) => {
     if (signal?.aborted) throw codedError("CANCELLED", copy(request, "cancelled"));
     let pageUrl = projectUrl;
@@ -250,6 +319,7 @@ export async function attachVibesBridge({
     const boundedTimeout = Math.max(1000, Math.min(30_000, timeoutMs));
     const command = {
       ...handshake,
+      protocolVersion: negotiatedProtocolVersion,
       executionKey: key,
       commandId: commandId(key, action, operationKey),
       issuedAt,
@@ -270,6 +340,13 @@ export async function attachVibesBridge({
     if (["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code)) {
       throw codedError("UPSTREAM_UNAVAILABLE", response?.message || copy(request, "timeout"), true);
     }
+    if (code === "COMMAND_OUTCOME_UNKNOWN") {
+      throw codedError(
+        "COMMAND_OUTCOME_UNKNOWN",
+        response?.message || "O resultado do último comando precisa ser reconciliado.",
+        true,
+      );
+    }
     if (
       ["SESSION_MISMATCH", "PROFILE_MISMATCH", "PROTOCOL_MISMATCH", "HANDSHAKE_REJECTED"].includes(
         code,
@@ -287,6 +364,7 @@ export async function attachVibesBridge({
   const cancel = () => {
     const payload = {
       ...handshake,
+      protocolVersion: negotiatedProtocolVersion,
       executionKey: key,
       commandId: commandId(key, "cancel", "execution"),
     };
@@ -315,6 +393,19 @@ export async function attachVibesBridge({
     identity,
     executionKey: key,
     dispatch,
+    readLifecycleEvents,
+    getRecoverySnapshot,
+    events({ afterSequence } = {}) {
+      return readLifecycleEvents(afterSequence);
+    },
+    observeCondition(condition, operationKey = "condition") {
+      return dispatch(
+        "observeCondition",
+        condition,
+        operationKey,
+        Math.max(1000, Math.min(30_000, Number(condition?.timeoutMs) || 10_000)),
+      );
+    },
     setFiles(files, selectors, operationKey = "upload") {
       return dispatch("setFiles", { files, selectors }, operationKey);
     },
@@ -330,12 +421,20 @@ export async function attachVibesBridge({
     async dispose() {
       if (disposed) return;
       disposed = true;
+      await request?.__bridgeDiagnosticsState
+        ?.capture?.({
+          events: ({ afterSequence }) => readLifecycleEvents(afterSequence),
+        })
+        .catch(() => undefined);
       signal?.removeEventListener("abort", cancel);
       await dispatch("leaseRelease", {}, "dispose").catch(() => undefined);
       await evaluateWorker(
         client,
         workerSessionId,
-        `globalThis.contentFlowBridge?.disconnect(${JSON.stringify(handshake)})`,
+        `globalThis.contentFlowBridge?.disconnect(${JSON.stringify({
+          ...handshake,
+          protocolVersion: negotiatedProtocolVersion,
+        })})`,
       ).catch(() => undefined);
       await client
         .send("Target.detachFromTarget", { sessionId: workerSessionId })

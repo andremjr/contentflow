@@ -220,7 +220,7 @@ test("aguarda cinco segundos entre os prompts de áudio", () => {
   assert.equal(AUDIO_PROMPT_INTERVAL_MS, 5000);
 });
 
-test("fecha a sessão do navegador depois da execução", async () => {
+test("fecha apenas o cliente CDP; o núcleo encerra a sessão física", async () => {
   const calls = [];
   const client = {
     async send(method) {
@@ -230,11 +230,9 @@ test("fecha a sessão do navegador depois da execução", async () => {
       calls.push("client.close");
     },
   };
-  const child = { kill: () => calls.push("child.kill") };
+  await closeBrowserSession(client);
 
-  await closeBrowserSession(client, child);
-
-  assert.deepEqual(calls, ["Browser.close", "client.close", "child.kill"]);
+  assert.deepEqual(calls, ["client.close"]);
 });
 
 test("mock de TTS gera arquivo de áudio e artifact válido sem abrir navegador", async () => {

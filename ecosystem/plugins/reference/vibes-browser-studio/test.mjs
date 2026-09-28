@@ -889,6 +889,15 @@ test("cliente conecta, envia upload/lease e libera a sessão", async () => {
   const identity = {
     bridgeId: "com.contentflow.browser-bridge",
     protocolVersion: 2,
+    protocol: { min: 2, max: 2 },
+    capabilities: [
+      "idempotent-replay.v1",
+      "lifecycle-events.v1",
+      "snapshot.v1",
+      "condition-observer.v1",
+      "reload.v1",
+    ],
+    bridgeVersion: "0.4.0",
     extensionVersion: "0.4.0",
   };
   const context = vm.createContext({
@@ -899,7 +908,11 @@ test("cliente conecta, envia upload/lease e libera a sessão", async () => {
     },
     contentFlowBridge: {
       identity,
-      connect: () => ({ ok: true }),
+      connect: () => ({
+        ok: true,
+        protocolVersion: 2,
+        capabilities: identity.capabilities,
+      }),
       dispatch: (command) => {
         actions.push(command.action);
         return { ok: true, protocolVersion: 2 };
@@ -948,26 +961,19 @@ test("cliente conecta, envia upload/lease e libera a sessão", async () => {
   assert.deepEqual(actions, ["ping", "setFiles", "leaseAcquire", "leaseRelease", "leaseRelease"]);
 });
 
-test("aguarda o Chrome persistir o perfil antes de encerrar à força", async () => {
+test("encerra somente o cliente CDP; o núcleo encerra a sessão física", async () => {
   const events = [];
-  const child = new EventEmitter();
-  child.exitCode = null;
-  child.kill = () => events.push("kill");
   const client = {
     async send(command) {
       events.push(command);
-      setTimeout(() => {
-        child.exitCode = 0;
-        child.emit("exit", 0);
-      }, 10);
     },
     close() {
       events.push("client.close");
     },
   };
 
-  await automationTest.closeBrowserGracefully(client, child);
-  assert.deepEqual(events, ["Browser.close", "client.close"]);
+  await automationTest.closeBrowserGracefully(client);
+  assert.deepEqual(events, ["client.close"]);
 });
 
 test("repete somente corridas transitórias ao anexar a aba do Chrome", () => {

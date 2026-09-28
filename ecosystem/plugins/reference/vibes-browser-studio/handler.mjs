@@ -1,4 +1,5 @@
 import { createVibesAutomation } from "./vibes-automation.mjs";
+import { createBridgeDiagnostics } from "./bridge-diagnostics.mjs";
 
 export const CAPABILITY_ID = "generate-images-in-browser";
 export const FRAME_VIDEO_CAPABILITY_ID = "animate-frame-in-browser";
@@ -349,7 +350,7 @@ async function run(request, services, automation) {
     : automation.start({ ...input, ...execution });
 }
 
-export async function execute(request, services) {
+async function executeHandler(request, services) {
   try {
     const automation = createVibesAutomation(request, services);
     return await run(request, services, automation);
@@ -375,7 +376,7 @@ export async function execute(request, services) {
   }
 }
 
-export async function executeWithAutomation(request, services, automation) {
+async function executeWithAutomationHandler(request, services, automation) {
   try {
     return await run(request, services, automation);
   } catch (error) {
@@ -386,6 +387,25 @@ export async function executeWithAutomation(request, services, automation) {
       retryable: Boolean(error?.retryable),
     };
   }
+}
+
+export async function execute(request, services) {
+  const bridgeDiagnosticsState = await createBridgeDiagnostics(request, services);
+  const response = await executeHandler(
+    { ...request, __bridgeDiagnosticsState: bridgeDiagnosticsState },
+    services,
+  );
+  return { ...response, bridgeDiagnostics: bridgeDiagnosticsState.bridgeDiagnostics };
+}
+
+export async function executeWithAutomation(request, services, automation) {
+  const bridgeDiagnosticsState = await createBridgeDiagnostics(request, services);
+  const response = await executeWithAutomationHandler(
+    { ...request, __bridgeDiagnosticsState: bridgeDiagnosticsState },
+    services,
+    automation,
+  );
+  return { ...response, bridgeDiagnostics: bridgeDiagnosticsState.bridgeDiagnostics };
 }
 
 export const __test = {

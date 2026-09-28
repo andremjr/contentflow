@@ -11,6 +11,7 @@ import {
   captureProjectStrategy,
   nextExecutableProcess,
   projectProcessOrder,
+  refreshProjectProcessStrategy,
   effectiveProcessOrder,
   isProcessOrder,
   resolveProcessOrderForMethods,
@@ -210,6 +211,28 @@ test("a project freezes order and all Methods once at first execution", () => {
   assert.equal(project.strategySnapshot?.methods.script.name, "script");
   captureProjectStrategy(project, channel, false);
   assert.equal(project.strategySnapshot?.methods.script.name, "script");
+});
+
+test("an explicit process restart adopts only that process' latest Method", () => {
+  const channel = {
+    processOrder: reordered,
+    definitionRevision: 5,
+    methods: Object.fromEntries(PROCESS_ORDER.map((id) => [id, method(id)])),
+  } as Channel;
+  const project = {
+    stages: Object.fromEntries(PROCESS_ORDER.map((id) => [id, "not_started"])),
+  } as Project;
+  captureProjectStrategy(project, channel, false);
+  channel.definitionRevision = 6;
+  channel.methods.assets.name = "Assets corrigidos";
+  channel.methods.script.name = "Roteiro alterado depois";
+
+  refreshProjectProcessStrategy(project, channel, "assets");
+
+  assert.equal(project.strategySnapshot?.definitionRevision, 6);
+  assert.equal(project.strategySnapshot?.methods.assets.name, "Assets corrigidos");
+  assert.equal(project.strategySnapshot?.methods.script.name, "script");
+  assert.deepEqual(project.strategySnapshot?.processOrder, reordered);
 });
 
 test("legacy started projects retain the historical sequence", () => {

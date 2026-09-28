@@ -19,14 +19,7 @@
       "variants": ["desert-a", "desert-b"]
     }
   ],
-  "flattenedVariants": [
-    "city-a",
-    "city-b",
-    "forest-a",
-    "forest-b",
-    "desert-a",
-    "desert-b"
-  ],
+  "flattenedVariants": ["city-a", "city-b", "forest-a", "forest-b", "desert-a", "desert-b"],
   "resumeAfterCompleted": ["batch-image-city", "batch-image-forest"],
   "expectedNextItemId": "batch-image-desert"
 }

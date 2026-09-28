@@ -9,6 +9,7 @@ O ContentFlow é um gerenciador estratégico de Métodos para produção de cont
 | Área         | Conteúdo                                                                         | Comece aqui                                                                                            |
 | ------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Núcleo       | Interface React, API local, execução de Métodos, persistência e desktop Electron | [`docs/README.md`](docs/README.md)                                                                     |
+| Confiabilidade | Consolidação atual, decisões, estado e roadmap do Reliability Program           | [`docs/reliability-program/README.md`](docs/reliability-program/README.md)                             |
 | Ecossistema  | Protocolo público, plugins, exemplos, Browser Bridge, Plugin Kit e skills        | [`ecosystem/README.md`](ecosystem/README.md)                                                           |
 | Criar plugin | Guia rápido, templates, testes e contratos da Plugin API v1                      | [`docs/ecosystem/quickstart.md`](docs/ecosystem/quickstart.md)                                         |
 | Criar Método | Skill portátil para modelar e validar arquivos `.contentflow-method.json`        | [`ecosystem/skills/contentflow-method-development/`](ecosystem/skills/contentflow-method-development/) |
@@ -85,7 +86,9 @@ npm run plugin:kit -- check ./meu-plugin
 ## Documentação essencial
 
 - [Arquitetura e visão de produto](docs/ARCHITECTURE.md)
-- [Roadmap do produto](docs/V1_ROADMAP.md)
+- [Reliability Program](docs/reliability-program/README.md)
+- [Mapa e autoridade da documentação](docs/README.md)
+- [Interface do plugin](docs/PLUGIN_INTERFACE.md)
 - [Plugin API v1](docs/ecosystem/protocol.md)
 - [Segurança de plugins](docs/ecosystem/security.md)
 - [Automação de navegador](docs/ecosystem/browser-automation.md)

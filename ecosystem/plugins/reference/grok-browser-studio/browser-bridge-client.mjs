@@ -2,6 +2,14 @@ import { createHash, randomUUID } from "node:crypto";
 
 const BRIDGE_ID = "com.contentflow.browser-bridge";
 const PROTOCOL_VERSION = 2;
+const PROTOCOL_RANGE = Object.freeze({ min: 2, max: 2 });
+const REQUIRED_CAPABILITIES = Object.freeze([
+  "idempotent-replay.v1",
+  "lifecycle-events.v1",
+  "snapshot.v1",
+  "condition-observer.v1",
+  "reload.v1",
+]);
 
 function codedError(code, message, retryable = false) {
   const error = new Error(message);
@@ -61,6 +69,19 @@ function isMissingCdpSession(error) {
   );
 }
 
+function supportsRequiredBridge(identity) {
+  const min = Number(identity?.protocol?.min ?? identity?.protocolVersion);
+  const max = Number(identity?.protocol?.max ?? identity?.protocolVersion);
+  const capabilities = Array.isArray(identity?.capabilities) ? identity.capabilities : [];
+  return (
+    identity?.bridgeId === BRIDGE_ID &&
+    Number.isInteger(min) &&
+    Number.isInteger(max) &&
+    Math.min(PROTOCOL_RANGE.max, max) >= Math.max(PROTOCOL_RANGE.min, min) &&
+    REQUIRED_CAPABILITIES.every((capability) => capabilities.includes(capability))
+  );
+}
+
 export async function attachContentFlowBridge({
   client,
   pageSessionId,
@@ -102,15 +123,15 @@ export async function attachContentFlowBridge({
             attached.sessionId,
             "globalThis.contentFlowBridge?.identity",
           );
-          if (
-            candidateIdentity?.bridgeId === BRIDGE_ID &&
-            candidateIdentity?.protocolVersion === PROTOCOL_VERSION
-          ) {
+          if (supportsRequiredBridge(candidateIdentity)) {
             return {
               target: candidate,
               sessionId: attached.sessionId,
               identity: candidateIdentity,
             };
+          }
+          if (candidateIdentity?.bridgeId === BRIDGE_ID) {
+            throw codedError("INVALID_CONFIGURATION", "A extensão instalada é incompatível.");
           }
         } catch (error) {
           if (!isMissingCdpSession(error)) throw error;
@@ -133,10 +154,14 @@ export async function attachContentFlowBridge({
 
   const sessionToken = randomUUID();
   const key = executionKey(request, profileId, pluginId);
+  let negotiatedProtocolVersion = PROTOCOL_VERSION;
   const connectionExpression = () =>
     `globalThis.contentFlowBridge.connect(${JSON.stringify({
       pluginId,
       protocolVersion: PROTOCOL_VERSION,
+      protocol: PROTOCOL_RANGE,
+      clientVersion: "1",
+      requestedCapabilities: REQUIRED_CAPABILITIES,
       profileId,
       sessionToken,
     })})`;
@@ -148,6 +173,15 @@ export async function attachContentFlowBridge({
         handshake?.message || "A extensão recusou a conexão efêmera do plugin.",
       );
     }
+    if (
+      !Number.isInteger(handshake.protocolVersion) ||
+      handshake.protocolVersion < PROTOCOL_RANGE.min ||
+      handshake.protocolVersion > PROTOCOL_RANGE.max ||
+      !REQUIRED_CAPABILITIES.every((capability) => handshake.capabilities?.includes(capability))
+    ) {
+      throw codedError("INVALID_CONFIGURATION", "A extensão instalada é incompatível.");
+    }
+    negotiatedProtocolVersion = handshake.protocolVersion;
   };
   const recoverWorkerSession = async () => {
     if (workerSessionId)
@@ -172,6 +206,42 @@ export async function attachContentFlowBridge({
   };
 
   await connectWorker();
+
+  const lifecycleRequest = (extra = {}) => ({
+    pluginId,
+    protocolVersion: negotiatedProtocolVersion,
+    profileId,
+    sessionToken,
+    ...extra,
+  });
+  const readLifecycleEvents = async (afterSequence = 0) => {
+    const response = await evaluateBridge(
+      `globalThis.contentFlowBridge.events(${JSON.stringify(
+        lifecycleRequest({ afterSequence: Math.max(0, Number(afterSequence) || 0) }),
+      )})`,
+    );
+    if (!response?.ok) {
+      throw codedError(
+        "UPSTREAM_UNAVAILABLE",
+        response?.message || "A Browser Bridge não conseguiu ler eventos de lifecycle.",
+        true,
+      );
+    }
+    return response;
+  };
+  const getRecoverySnapshot = async () => {
+    const response = await evaluateBridge(
+      `globalThis.contentFlowBridge.snapshot(${JSON.stringify(lifecycleRequest())})`,
+    );
+    if (!response?.ok) {
+      throw codedError(
+        "UPSTREAM_UNAVAILABLE",
+        response?.message || "A Browser Bridge não conseguiu produzir o snapshot de recuperação.",
+        true,
+      );
+    }
+    return response;
+  };
 
   const origins = new Set(allowedOrigins);
   const dispatch = async (action, payload = {}, operationKey = action, timeoutMs = 30000) => {
@@ -205,7 +275,7 @@ export async function attachContentFlowBridge({
     const commandTimeoutMs = Math.max(1000, Math.min(30000, timeoutMs));
     const command = {
       pluginId,
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: negotiatedProtocolVersion,
       profileId,
       sessionToken,
       executionKey: key,
@@ -253,6 +323,13 @@ export async function attachContentFlowBridge({
           true,
         );
       }
+      if (code === "COMMAND_OUTCOME_UNKNOWN") {
+        throw codedError(
+          "COMMAND_OUTCOME_UNKNOWN",
+          response?.message || "O resultado do último comando precisa ser reconciliado.",
+          true,
+        );
+      }
       if (
         [
           "SESSION_MISMATCH",
@@ -278,7 +355,7 @@ export async function attachContentFlowBridge({
   const cancel = () => {
     const payload = {
       pluginId,
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: negotiatedProtocolVersion,
       sessionToken,
       profileId,
       executionKey: key,
@@ -305,17 +382,12 @@ export async function attachContentFlowBridge({
       ping = await dispatch("ping", {}, "bridge-ready");
     } catch (error) {
       if (error?.code !== "UPSTREAM_UNAVAILABLE") throw error;
-      if (pageSessionId) {
-        await client.send("Page.reload", { ignoreCache: true }, pageSessionId);
-        await delay(1500, signal);
-        ping = await dispatch("ping", {}, "bridge-ready-after-reload");
-      } else {
-        // Voice execution deliberately releases the direct CDP page session so
-        // the Browser Bridge can own the debugger. In that mode there is no
-        // Page.reload target; wait for the extension to settle and retry ping.
-        await delay(750, signal);
-        ping = await dispatch("ping", {}, "bridge-ready-retry");
-      }
+      await dispatch(
+        "reload",
+        { reconciliationState: "safe", bypassCache: true },
+        "bridge-ready-controlled-reload",
+      );
+      ping = await dispatch("ping", {}, "bridge-ready-after-reload");
     }
   } catch (error) {
     // A failed initialization must not leave chrome.debugger attached. A
@@ -325,7 +397,7 @@ export async function attachContentFlowBridge({
       workerSessionId,
       `globalThis.contentFlowBridge?.disconnect(${JSON.stringify({
         pluginId,
-        protocolVersion: PROTOCOL_VERSION,
+        protocolVersion: negotiatedProtocolVersion,
         profileId,
         sessionToken,
       })})`,
@@ -335,18 +407,41 @@ export async function attachContentFlowBridge({
       .catch(() => undefined);
     throw error;
   }
-  if (ping?.protocolVersion !== PROTOCOL_VERSION) {
+  if (ping?.protocolVersion !== negotiatedProtocolVersion) {
     throw codedError("INVALID_CONFIGURATION", "A ContentFlow Browser Bridge está desatualizada.");
   }
 
   return {
     dispatch,
     identity,
+    readLifecycleEvents,
+    getRecoverySnapshot,
+    events({ afterSequence } = {}) {
+      return readLifecycleEvents(afterSequence);
+    },
+    observeCondition(condition, operationKey = "condition") {
+      return dispatch(
+        "observeCondition",
+        condition,
+        operationKey,
+        Math.max(1000, Math.min(30000, Number(condition?.timeoutMs) || 10000)),
+      );
+    },
     async dispose() {
       if (disposed) return;
       disposed = true;
+      await request?.__bridgeDiagnosticsState
+        ?.capture?.({
+          events: ({ afterSequence }) => readLifecycleEvents(afterSequence),
+        })
+        .catch(() => undefined);
       signal?.removeEventListener("abort", cancel);
-      const payload = { pluginId, protocolVersion: PROTOCOL_VERSION, profileId, sessionToken };
+      const payload = {
+        pluginId,
+        protocolVersion: negotiatedProtocolVersion,
+        profileId,
+        sessionToken,
+      };
       await client
         .send(
           "Runtime.evaluate",

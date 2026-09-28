@@ -1352,7 +1352,12 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
   async function prepareProfile(profile: PublicBrowserProfile) {
     setStatuses((current) => ({ ...current, [profile.id]: "preparing" }));
     toast.info("Prepare a conta na janela do navegador", {
-      description: plugin.manifest.profileSetup?.description,
+      description: [
+        plugin.manifest.profileSetup?.description,
+        t("A janela continuará aberta. Instale ou atualize a extensão, faça login e feche o navegador quando terminar."),
+      ]
+        .filter(Boolean)
+        .join(" "),
     });
     try {
       const response = await fetch(
@@ -1368,11 +1373,23 @@ function PluginProfilesPanel({ plugin }: { plugin: DiscoveredPlugin }) {
         throw new Error(result.error ?? "O login não foi confirmado pelo plugin.");
       }
       setStatuses((current) => ({ ...current, [profile.id]: "ready" }));
-      toast.success("Perfil pronto", { description: result.message });
+      toast.success("Perfil pronto", {
+        description: [
+          result.message,
+          t("O perfil está pronto. Feche o navegador quando terminar a configuração."),
+        ]
+          .filter(Boolean)
+          .join(" "),
+      });
     } catch (error) {
       setStatuses((current) => ({ ...current, [profile.id]: "missing" }));
       toast.error("Não foi possível preparar o perfil", {
-        description: error instanceof Error ? error.message : undefined,
+        description: [
+          error instanceof Error ? error.message : undefined,
+          t("A janela permanecerá aberta para você corrigir a extensão ou o login. Feche o navegador quando terminar."),
+        ]
+          .filter(Boolean)
+          .join(" "),
       });
     }
   }

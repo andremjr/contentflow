@@ -27,6 +27,7 @@ type PluginExecutionOptions = {
   workspaceDirectory?: string;
   profileDirectory?: string;
   existingArtifacts?: StoredFile[];
+  signal?: AbortSignal;
   onClaimItems?: (limit: number) => Promise<PluginClaimedWorkItem[]>;
   onPublishItemUpdate?: (
     update: PluginWorkItemUpdate,
@@ -65,6 +66,7 @@ export async function executeParallelProfileLanes(input: {
   timeoutMs: number;
   secrets: Record<string, string>;
   workspaceDirectory?: string;
+  signal?: AbortSignal;
   dependencies: ParallelProfileExecutorDependencies;
 }): Promise<{ job: PersistentPluginJob; response: PluginExecutionResponse }> {
   const { dependencies } = input;
@@ -169,6 +171,7 @@ export async function executeParallelProfileLanes(input: {
               workspaceDirectory: input.workspaceDirectory,
               profileDirectory: resolved.profileDirectory,
               existingArtifacts: latest.partialArtifacts,
+              signal: input.signal,
               onClaimItems: async (limit) =>
                 claimNextProfileLaneItem({
                   store: dependencies.pluginJobs,

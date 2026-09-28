@@ -11,6 +11,7 @@
   "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
   "minCoreVersion": "1.1.1",
   "entrypoint": "handler.mjs",
+  "browserRuntime": { "lifecycle": "core" },
   "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
   "networkHosts": ["vibes.ai", "*.fbcdn.net"],
   "deliveryTypes": ["image", "video", "processing"],
