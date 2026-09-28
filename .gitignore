@@ -63,3 +63,6 @@ release/
 *.njsproj
 *.sln
 *.sw?
+
+# Planejamento arquitetural local (deliberacoes privadas, nao publicar)
+planejamento/
