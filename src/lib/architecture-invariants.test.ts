@@ -224,6 +224,14 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(automaticScheduler, /executePluginBlockInternal\(requestBody\)/);
   assert.doesNotMatch(automaticScheduler, /\bfetch\s*\(/);
   assert.doesNotMatch(automaticScheduler, /127\.0\.0\.1|localhost/);
+  assert.match(
+    automaticScheduler,
+    /error instanceof PersistenceCommitError[\s\S]*?console\.error\([\s\S]*?return;/,
+  );
+  assert.doesNotMatch(
+    automaticScheduler,
+    /error instanceof PersistenceCommitError\)\s*(?:\{\s*)?throw\b/,
+  );
 
   const pluginBlockOperationStart = server.indexOf("async function executePluginBlockInternal");
   const pluginBlockRouteStart = server.indexOf('app.post("/api/execute-block"');

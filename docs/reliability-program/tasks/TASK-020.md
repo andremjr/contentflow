@@ -54,7 +54,7 @@ O endpoint público `POST /api/execute-block` contém a operação de aplicaçã
 - `latestExecution`, revision e cancelamento continuam verificados antes da criação.
 - Criação do job + execution `running` + projeção de Project continuam no mesmo `commitPluginJobTransition()`.
 - `processDuePluginJobs()` permanece fora da transação.
-- `PersistenceCommitError` continua propagando como erro local.
+- `PersistenceCommitError` continua sendo erro local e não é convertido em falha do plugin; boundaries fire-and-forget devem registrá-lo e consumi-lo sem rejection não tratada.
 
 ## Validação planejada
 
@@ -107,7 +107,7 @@ A operação preserva a lógica anteriormente contida na rota: registro/consenti
 - A releitura de `latestExecution`, o check de revision e o bloqueio de execução cancelada permanecem antes da criação do job.
 - `PluginJobStore.create()`, execution `running` e projeção de Project continuam na mesma `commitPluginJobTransition()`.
 - `processDuePluginJobs()` continua depois da transação.
-- `PersistenceCommitError` propaga pela operação interna e não é convertido pelo scheduler em falha do plugin.
+- `PersistenceCommitError` propaga pela operação interna até a boundary chamadora. No scheduler fire-and-forget, ele é registrado como erro interno e consumido sem chamar `failAutomaticPluginStart()` e sem produzir unhandled rejection.
 - Plugins async continuam retornando pending/202; plugins sync continuam aguardando `processPluginJob()` e retornando o status/payload vigente.
 
 ## Testes
@@ -121,7 +121,14 @@ O guardrail em `src/lib/architecture-invariants.test.ts` passou a verificar que:
 - `scheduleAutomaticPluginBlock()` chama `executePluginBlockInternal()`;
 - o scheduler não contém `fetch`, `127.0.0.1` ou `localhost`;
 - a operação interna não usa `request`/`response`;
-- a rota pública usa a mesma operação e não contém lógica de job/transação.
+- a rota pública usa a mesma operação e não contém lógica de job/transação;
+- o scheduler registra e consome `PersistenceCommitError`, sem relançá-lo no catch fire-and-forget.
+
+### Correção pós-fechamento
+
+Após o primeiro commit da TASK-020, foi identificado que o catch fire-and-forget de `scheduleAutomaticPluginBlock()` relançava `PersistenceCommitError`, o que poderia produzir unhandled rejection. A boundary agora registra o erro com `console.error(...)` e retorna. Outros erros continuam seguindo para `failAutomaticPluginStart(...)`. Não foi adicionado recovery, retry, estado ou infraestrutura.
+
+A correção foi revalidada com typecheck, lint e as suites focais de execução automática, máquina de estados, persistência e arquitetura.
 
 ## Validação
 

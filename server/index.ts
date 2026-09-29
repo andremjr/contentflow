@@ -1277,7 +1277,10 @@ function scheduleAutomaticPluginBlock(execution: ProcessExecution) {
         );
       })
       .catch((error) => {
-        if (error instanceof PersistenceCommitError) throw error;
+        if (error instanceof PersistenceCommitError) {
+          console.error("Falha interna de persistência ao iniciar plugin automaticamente:", error);
+          return;
+        }
         failAutomaticPluginStart(
           executionId,
           blockId,
