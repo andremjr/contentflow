@@ -1,5 +1,5 @@
 import {
-  type BlockInputBinding,
+  type BlockInputSourceBinding,
   type HumanFieldType,
   type ProcessExecution,
   type Project,
@@ -73,25 +73,16 @@ export function createChannelHistoryRecordFields(
 }
 
 export function resolveChannelHistory({
-  input,
+  binding,
   currentExecution,
   channelExecutions,
   channelProjects,
 }: {
-  input: BlockInputBinding;
+  binding: Extract<BlockInputSourceBinding, { kind: "channel_history" }>;
   currentExecution: ProcessExecution;
   channelExecutions: ProcessExecution[];
   channelProjects: Project[];
 }): StructuredRecord[] | undefined {
-  if (
-    input.source !== "channel_history" ||
-    !input.sourceProcessType ||
-    !input.blockId ||
-    !input.sourceKey
-  ) {
-    return undefined;
-  }
-
   const projects = new Map(
     channelProjects
       .filter((project) => project.channelId === currentExecution.channelId)
@@ -114,20 +105,20 @@ export function resolveChannelHistory({
       )
       .map((execution) => execution.projectId),
   );
-  const limit = Math.min(100, Math.max(1, input.historyLimit ?? 10));
-  const eligibility = input.historyEligibility ?? "completed";
-  const sourceKey = input.sourceKey;
+  const limit = Math.min(100, Math.max(1, binding.limit));
+  const eligibility = binding.eligibility;
+  const sourceKey = binding.outputKey;
 
   return executions
     .filter(
       (execution) =>
-        execution.processType === input.sourceProcessType &&
+        execution.processType === binding.processType &&
         (eligibility !== "published" || publishedProjectIds.has(execution.projectId)),
     )
     .flatMap((execution) => {
       const normalized = normalizeExecutionDeliveries(execution);
       const deliveries =
-        input.blockId === "__process_output__"
+        binding.blockId === "__process_output__"
           ? [processOutputDeliveryFor(normalized, sourceKey)].filter(
               (delivery): delivery is NonNullable<typeof delivery> => Boolean(delivery),
             )
@@ -135,8 +126,8 @@ export function resolveChannelHistory({
       return deliveries
         .filter(
           (delivery) =>
-            (input.blockId === "__process_output__" || delivery.blockId === input.blockId) &&
-            (input.blockId === "__process_output__" || delivery.outputKey === sourceKey) &&
+            (binding.blockId === "__process_output__" || delivery.blockId === binding.blockId) &&
+            (binding.blockId === "__process_output__" || delivery.outputKey === sourceKey) &&
             delivery.status === "completed",
         )
         .flatMap((delivery) => {

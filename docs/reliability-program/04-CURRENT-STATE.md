@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --------------------------- | ------------------------------------------ |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão                      | `1.2.1`                                    |
-| Task concluída              | TASK-021                                   |
+| Task concluída              | TASK-022                                   |
 | Task ativa                  | Nenhuma                                    |
-| Próxima                     | TASK-022 (`ready`), ainda não iniciada     |
+| Próxima                     | TASK-023 (`ready`), ainda não iniciada     |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -97,11 +97,15 @@ A boundary continua validando required outputs, restrições de apresentação e
 
 ### Resolução heurística de inputs
 
-`resolveBlockInputs()` em `src/lib/runtime-contract.ts` ainda seleciona candidatos compatíveis e os ordena por `labelScore()`. Isso permite que semelhança textual participe da escolha em runtime quando não existe binding explícito, em conflito com o estado alvo de bindings determinísticos.
+Inputs de Métodos modernos possuem `BlockInputSourceBinding`, uma representação canônica e discriminada da origem estratégica. As variantes explícitas cobrem Projeto, Processo anterior, Bloco anterior, Histórico do Canal, valor fornecido na execução e valor estático. A referência canônica usa identificadores estruturais, não contém porta ou identidade de plugin e tem precedência sobre os campos planos históricos. O Builder materializa essa forma somente quando a representação legada já contém todos os identificadores necessários; snapshots e arquivos/pacotes de Método a preservam.
+
+`resolveBlockInputs()` resolve o binding canônico diretamente. Uma referência canônica inválida ou cuja origem não existe permanece não resolvida e não cai nos campos legados nem em `labelScore()`. `previous_process` sem `blockId` designa exatamente o output oficial do Processo declarado; `previous_block` exige bloco e output explícitos. `channel_library` continua fora do binding canônico normal e mantém apenas a compatibilidade histórica já vigente, incluindo o filtro em `normalizeActionBlock()`.
+
+Métodos antigos sem binding canônico continuam temporariamente aceitos. Seus campos planos ainda passam pela resolução explícita histórica e, quando incompletos, `resolveBlockInputs()` ainda seleciona candidatos compatíveis e os ordena por `labelScore()`. Portanto, input resolution ainda não é totalmente determinística; a remoção desse último fallback pertence à TASK-023 e a concentração definitiva do legado à TASK-027.
 
 `selectPluginInputPort()` em `server/plugin-input-values.ts` respeita uma `portKey` explícita, mas, quando ela não existe, ainda escolhe a porta por compatibilidade, identidade semântica, apresentação e ordem. A boundary de plugin também infere portas de output por tipo ou pela primeira porta disponível.
 
-Esses fallbacks continuam presentes, mas a TASK-021 os identificou e delimitou com characterization tests e guardrails arquiteturais. Binding/source explícito e `portKey` explícita possuem precedência protegida. `labelScore()` permanece restrito à resolução de inputs, a inferência de porta permanece na boundary server-side e o Execution Core permanece sem conhecimento de labels, manifestos, portas ou respostas de plugin.
+Os fallbacks de porta continuam presentes, mas a TASK-021 os identificou e delimitou com characterization tests e guardrails arquiteturais. A TASK-022 acrescentou guardrails para a precedência do binding canônico e para impedir que o source binding conheça labels, portas, plugin ou capability. `labelScore()` permanece restrito à compatibilidade de inputs sem binding, a inferência de porta permanece na boundary server-side e o Execution Core permanece sem conhecimento de labels, manifestos, portas ou respostas de plugin.
 
 ### Mapeamento permissivo de outputs
 
@@ -155,6 +159,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para iniciar a TASK-022. A TASK-021 apenas delimitou e caracterizou as heurísticas vigentes; não iniciou bindings canônicos, remoção de fallbacks, adapter legado ou normalização de respostas.
+Não há blocker externo confirmado para iniciar a TASK-023. A TASK-022 introduziu e protegeu bindings canônicos, mas preservou deliberadamente `labelScore()` apenas para Métodos históricos sem binding; sua retirada pertence à próxima missão.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

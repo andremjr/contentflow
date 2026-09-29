@@ -160,3 +160,39 @@ test("builder validates cross process references against the channel sequence", 
   });
   assert.equal(reordered.ok, true, reordered.errors.join("\n"));
 });
+
+test("builder materializes a canonical binding only from an explicit legacy reference", () => {
+  const method = manualThemeMethod();
+  method.blocks.push({
+    id: "use-theme",
+    type: "CRIAR",
+    operator: "Humano",
+    inputs: [
+      {
+        id: "theme-reference",
+        label: "Tema",
+        type: "textarea",
+        source: "previous_block",
+        blockId: "theme-input",
+        sourceKey: "theme",
+      },
+    ],
+    outputs: [],
+    parameters: [],
+    order: 1,
+  });
+
+  const result = validateBuilderMethods({
+    channel,
+    methods: { theme: method },
+    plugins: [],
+    collections: [],
+  });
+
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.deepEqual(result.methods?.theme?.blocks[1].inputs?.[0].binding, {
+    kind: "previous_block",
+    blockId: "theme-input",
+    outputKey: "theme",
+  });
+});

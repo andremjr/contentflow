@@ -53,7 +53,7 @@ test("keeps textual and plugin contract heuristics out of the Execution Core", (
   }
 });
 
-test("keeps label matching and implicit input-port selection in their current boundaries", () => {
+test("keeps canonical source bindings authoritative before compatibility heuristics", () => {
   const productionFiles = [...TypeScriptFilesUnder("src/lib"), ...TypeScriptFilesUnder("server")];
   const filesMentioning = (identifier: string) =>
     productionFiles.filter((file) => read(file).includes(identifier)).sort();
@@ -73,9 +73,34 @@ test("keeps label matching and implicit input-port selection in their current bo
     "function collectCandidates",
   );
   assert.ok(
-    inputResolution.indexOf("resolveExplicitInput(") < inputResolution.indexOf("labelScore("),
-    "explicit Method bindings must be resolved before the temporary label fallback",
+    inputResolution.indexOf("authoritativeInputSource(input)") <
+      inputResolution.indexOf("labelScore("),
+    "canonical Method bindings must be selected before the temporary label fallback",
   );
+  assert.ok(
+    inputResolution.indexOf('authority.representation === "canonical"') <
+      inputResolution.indexOf("labelScore("),
+    "an unresolved canonical binding must stop before the temporary label fallback",
+  );
+
+  const domain = read("src/lib/domain.ts");
+  const canonicalBinding = sourceBetween(
+    domain,
+    "export type BlockInputSourceBinding",
+    "export type BlockInputBinding",
+  );
+  assert.doesNotMatch(canonicalBinding, /portKey|pluginId|capabilityId|label/);
+  assert.match(
+    canonicalBinding,
+    /kind: "previous_block"[\s\S]*blockId: string;[\s\S]*outputKey: string/,
+  );
+  assert.match(
+    canonicalBinding,
+    /kind: "previous_process"[\s\S]*processType: UniversalProcess;[\s\S]*outputKey: string/,
+  );
+
+  const bindingMaterialization = read("src/lib/input-source-binding.ts");
+  assert.doesNotMatch(bindingMaterialization, /\.label\b|portKey|pluginId|capabilityId/);
 
   const pluginInputs = read("server/plugin-input-values.ts");
   const portSelection = sourceBetween(

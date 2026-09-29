@@ -115,10 +115,45 @@ export type BlockInputSource =
 
 export type ChannelHistoryEligibility = "completed" | "published";
 
+export type BlockInputSourceBinding =
+  | {
+      kind: "project";
+      key: "title" | "deadline";
+    }
+  | {
+      kind: "previous_process";
+      processType: UniversalProcess;
+      outputKey: string;
+      blockId?: string;
+    }
+  | {
+      kind: "previous_block";
+      blockId: string;
+      outputKey: string;
+    }
+  | {
+      kind: "channel_history";
+      processType: UniversalProcess;
+      blockId: string;
+      outputKey: string;
+      limit: number;
+      eligibility: ChannelHistoryEligibility;
+    }
+  | {
+      kind: "runtime";
+    }
+  | {
+      kind: "static";
+      value: string;
+    };
+
 export type BlockInputBinding = {
   id: string;
   label: string;
   type: HumanFieldType;
+  /** Canonical strategic origin. Authoritative when present. */
+  binding?: BlockInputSourceBinding;
+  /** Temporary compatibility representation retained until TASK-027. */
   source: BlockInputSource;
   sourceKey?: string;
   sourceProcessType?: UniversalProcess;

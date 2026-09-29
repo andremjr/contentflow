@@ -14,6 +14,7 @@ import { effectiveProcessOrder, validateProcessDependencies } from "../src/lib/p
 import type { RegisteredPlugin } from "./plugin-runner";
 import { pluginConnectionRequired } from "../src/lib/plugin-contract";
 import { validateLocalProfileExecution } from "./profile-execution-policy";
+import { authoritativeInputSource } from "../src/lib/input-source-binding";
 
 const processSchema = z.enum(PROCESS_ORDER);
 const fieldTypeSchema = z.enum([
@@ -77,11 +78,42 @@ const presentationSchema = z
     acceptedMimeTypes: z.array(z.string()).optional(),
   })
   .passthrough();
+const inputSourceBindingSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("project"), key: z.enum(["title", "deadline"]) }).strict(),
+  z
+    .object({
+      kind: z.literal("previous_process"),
+      processType: processSchema,
+      outputKey: z.string().min(1),
+      blockId: z.string().min(1).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("previous_block"),
+      blockId: z.string().min(1),
+      outputKey: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("channel_history"),
+      processType: processSchema,
+      blockId: z.string().min(1),
+      outputKey: z.string().min(1),
+      limit: z.number().int().min(1).max(100),
+      eligibility: z.enum(["completed", "published"]),
+    })
+    .strict(),
+  z.object({ kind: z.literal("runtime") }).strict(),
+  z.object({ kind: z.literal("static"), value: z.string() }).strict(),
+]);
 const inputSchema = z
   .object({
     id: z.string().min(1),
     label: z.string().min(1),
     type: fieldTypeSchema,
+    binding: inputSourceBindingSchema.optional(),
     source: z.enum([
       "project",
       "previous_process",
@@ -365,16 +397,25 @@ export function validateBuilderMethods(input: {
         errors.push(`${label}: coleção estratégica não encontrada.`);
       }
       for (const binding of block.inputs ?? []) {
-        if (binding.source === "static" && !binding.staticValue?.trim())
+        const source = authoritativeInputSource(binding).binding;
+        const sourceKind = source?.kind ?? binding.source;
+        if (
+          sourceKind === "static" &&
+          (source?.kind === "static" ? !source.value.trim() : !binding.staticValue?.trim())
+        )
           errors.push(`${label}: a entrada estática “${binding.label}” não possui valor.`);
-        if (binding.source === "previous_block") {
-          const sourceIndex = blocks.findIndex((candidate) => candidate.id === binding.blockId);
-          const source = blocks[sourceIndex]?.outputs?.find(
-            (item) => item.key === binding.sourceKey,
+        if (sourceKind === "previous_block") {
+          const sourceBlockId =
+            source?.kind === "previous_block" ? source.blockId : binding.blockId;
+          const sourceOutputKey =
+            source?.kind === "previous_block" ? source.outputKey : binding.sourceKey;
+          const sourceIndex = blocks.findIndex((candidate) => candidate.id === sourceBlockId);
+          const sourceOutput = blocks[sourceIndex]?.outputs?.find(
+            (item) => item.key === sourceOutputKey,
           );
-          if (sourceIndex < 0 || sourceIndex >= index || !source)
+          if (sourceIndex < 0 || sourceIndex >= index || !sourceOutput)
             errors.push(`${label}: referência inválida na entrada “${binding.label}”.`);
-          else if (!compatibleType(source.type, binding.type))
+          else if (!compatibleType(sourceOutput.type, binding.type))
             errors.push(`${label}: tipo incompatível na entrada “${binding.label}”.`);
         }
       }

@@ -44,31 +44,31 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 
 ### Sovereign Core — TASK-006 a TASK-020
 
-| Task     | Missão                                              | Estado    |
-| -------- | --------------------------------------------------- | --------- |
-| TASK-006 | Criar módulo canônico do Core de execução           | `done`    |
-| TASK-007 | Unificar criação de `ProcessExecution`              | `done`    |
-| TASK-008 | Fazer start manual usar criação canônica            | `done`    |
-| TASK-009 | Fazer Orchestrator/standalone usar criação canônica | `done`    |
-| TASK-010 | Isolar `POST /api/executions` legado                | `done`    |
-| TASK-011 | Unificar transição bloco concluído → próximo estado | `done`    |
-| TASK-012 | Conclusão Humana passa pelo Core                    | `done`    |
-| TASK-013 | Conclusão de Plugin passa pelo Core                 | `done`    |
-| TASK-014 | Unificar semântica de `VALIDAR`                     | `done`    |
-| TASK-015 | Centralizar retry manual de Bloco                   | `done`    |
-| TASK-016 | Centralizar “usar entrega atual”                    | `done`    |
-| TASK-017 | Centralizar cancelamento                            | `done`    |
-| TASK-018 | Centralizar projeção do estado de Project           | `done`    |
-| TASK-019 | Persistência atômica das transições                 | `done`    |
-| TASK-020 | Remover auto-agendamento interno via HTTP loopback  | `done`    |
+| Task     | Missão                                              | Estado |
+| -------- | --------------------------------------------------- | ------ |
+| TASK-006 | Criar módulo canônico do Core de execução           | `done` |
+| TASK-007 | Unificar criação de `ProcessExecution`              | `done` |
+| TASK-008 | Fazer start manual usar criação canônica            | `done` |
+| TASK-009 | Fazer Orchestrator/standalone usar criação canônica | `done` |
+| TASK-010 | Isolar `POST /api/executions` legado                | `done` |
+| TASK-011 | Unificar transição bloco concluído → próximo estado | `done` |
+| TASK-012 | Conclusão Humana passa pelo Core                    | `done` |
+| TASK-013 | Conclusão de Plugin passa pelo Core                 | `done` |
+| TASK-014 | Unificar semântica de `VALIDAR`                     | `done` |
+| TASK-015 | Centralizar retry manual de Bloco                   | `done` |
+| TASK-016 | Centralizar “usar entrega atual”                    | `done` |
+| TASK-017 | Centralizar cancelamento                            | `done` |
+| TASK-018 | Centralizar projeção do estado de Project           | `done` |
+| TASK-019 | Persistência atômica das transições                 | `done` |
+| TASK-020 | Remover auto-agendamento interno via HTTP loopback  | `done` |
 
 ### Deterministic Contracts — TASK-021 a TASK-028
 
 | Task     | Missão                                                  | Estado    |
 | -------- | ------------------------------------------------------- | --------- |
 | TASK-021 | Guardrails arquiteturais automatizados                  | `done`    |
-| TASK-022 | Representação canônica de bindings                      | `ready`   |
-| TASK-023 | Retirar `labelScore` do runtime canônico                | `pending` |
+| TASK-022 | Representação canônica de bindings                      | `done`    |
+| TASK-023 | Retirar `labelScore` do runtime canônico                | `ready`   |
 | TASK-024 | Porta de entrada de plugin explícita                    | `pending` |
 | TASK-025 | Outputs de plugin explícitos                            | `pending` |
 | TASK-026 | `VALIDAR` com alvo explícito                            | `pending` |

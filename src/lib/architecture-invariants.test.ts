@@ -92,6 +92,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "tasks/TASK-019.md",
     "tasks/TASK-020.md",
     "tasks/TASK-021.md",
+    "tasks/TASK-022.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -122,10 +123,10 @@ test("keeps the Reliability Program connected and bounded", () => {
   const roadmapTaskIds = [...roadmap.matchAll(/\| (TASK-\d{3}) \|/g)].map((match) => match[1]);
   assert.deepEqual(roadmapTaskIds, expectedTaskIds);
   assert.match(roadmap, /Estado da TASK-000: `done`/);
-  for (const taskId of expectedTaskIds.slice(0, 21)) {
+  for (const taskId of expectedTaskIds.slice(0, 22)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `done`\\s+\\|"));
   }
-  assert.match(roadmap, /\| TASK-022 \|[^\n]+\| `ready`\s+\|/);
+  assert.match(roadmap, /\| TASK-023 \|[^\n]+\| `ready`\s+\|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
@@ -182,6 +183,11 @@ test("keeps the Reliability Program connected and bounded", () => {
     "utf8",
   );
   assert.match(task021, /## Estado\s+`done`/);
+  const task022 = readFileSync(
+    new URL("../../docs/reliability-program/tasks/TASK-022.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(task022, /## Estado\s+`done`/);
 
   const projectProjection = readFileSync(
     new URL("./execution-core/project-projection.ts", import.meta.url),
@@ -448,7 +454,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   );
   assert.doesNotMatch(server, /function updateProjectAfterPluginBlock/);
 
-  for (const taskId of expectedTaskIds.slice(22)) {
+  for (const taskId of expectedTaskIds.slice(23)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

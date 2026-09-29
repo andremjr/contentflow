@@ -2,6 +2,7 @@ import {
   PROCESS_META,
   type ActionBlock,
   type BlockInputBinding,
+  type BlockInputSourceBinding,
   type ChannelLibraryItem,
   type HumanFieldType,
   type ProcessExecution,
@@ -16,6 +17,7 @@ import { normalizeExecutionDeliveries, processOutputDeliveryFor } from "@/lib/de
 import { resolveChannelHistory } from "@/lib/channel-history";
 import { collectionItemValuesForPlugin } from "@/lib/plugin-collection";
 import { areHumanFieldTypesCompatible } from "@/lib/data-shape";
+import { authoritativeInputSource } from "@/lib/input-source-binding";
 
 type RuntimeCandidate = {
   id: string;
@@ -76,19 +78,32 @@ export function resolveBlockInputs({
   const usedCandidateIds = new Set<string>();
 
   return (block.inputs ?? []).map((input) => {
-    if (input.source === "channel_history" && block.type !== "ESCOLHER" && block.type !== "CRIAR") {
+    const authority = authoritativeInputSource(input);
+    const sourceKind = authority.binding?.kind ?? input.source;
+    if (sourceKind === "channel_history" && block.type !== "ESCOLHER" && block.type !== "CRIAR") {
       return { input, resolved: false };
     }
-    const explicit = resolveExplicitInput(input, project, candidates, usedCandidateIds, {
+    const context = {
       execution,
       blockId: block.id,
       channelExecutions,
       channelProjects,
-    });
+    };
+    const explicit = authority.binding
+      ? resolveCanonicalInput(
+          input,
+          authority.binding,
+          project,
+          candidates,
+          usedCandidateIds,
+          context,
+        )
+      : resolveLegacyExplicitInput(input, project, candidates, usedCandidateIds, context);
     if (explicit) {
       if (explicit.candidateId) usedCandidateIds.add(explicit.candidateId);
       return { input, ...explicit.result };
     }
+    if (authority.representation === "canonical") return { input, resolved: false };
 
     const available = candidates.filter(
       (candidate) =>
@@ -257,26 +272,117 @@ function collectCandidates({
   return candidates;
 }
 
-function resolveExplicitInput(
+type ExplicitResolution = {
+  candidateId?: string;
+  result: Omit<ResolvedBlockInput, "input">;
+};
+
+type InputResolutionContext = {
+  execution: ProcessExecution;
+  blockId: string;
+  channelExecutions: ProcessExecution[];
+  channelProjects: Project[];
+};
+
+function resultForCandidate(candidate: RuntimeCandidate): ExplicitResolution {
+  return {
+    candidateId: candidate.id,
+    result: {
+      resolved: true,
+      value: candidate.value,
+      resolvedSourceKey: candidate.key,
+      sourceLabel: candidate.sourceLabel,
+      sourceBlockId: candidate.sourceBlockId,
+      sourceProcessType: candidate.sourceProcessType,
+      sourceDeliveryId: candidate.deliveryId,
+      sourceDeliveryItemIds: candidate.deliveryItemIds,
+    },
+  };
+}
+
+function resolveCanonicalInput(
+  input: BlockInputBinding,
+  binding: BlockInputSourceBinding,
+  project: Project,
+  candidates: RuntimeCandidate[],
+  usedCandidateIds: ReadonlySet<string>,
+  context: InputResolutionContext,
+): ExplicitResolution {
+  switch (binding.kind) {
+    case "channel_history": {
+      const value = resolveChannelHistory({
+        binding,
+        currentExecution: context.execution,
+        channelExecutions: context.channelExecutions,
+        channelProjects: context.channelProjects,
+      });
+      return value
+        ? { result: { resolved: true, value, sourceLabel: "Histórico do canal" } }
+        : { result: { resolved: false } };
+    }
+    case "static":
+      return typeof binding.value === "string" && binding.value.trim()
+        ? { result: { resolved: true, value: binding.value, sourceLabel: "Valor fixo" } }
+        : { result: { resolved: false } };
+    case "runtime": {
+      const value = context.execution.blocks.find((block) => block.blockId === context.blockId)
+        ?.runtimeInputs?.[input.id];
+      return value === undefined || isEmptyRuntimeValue(value)
+        ? { result: { resolved: false } }
+        : { result: { resolved: true, value, sourceLabel: "Fornecido na execução" } };
+    }
+    case "project": {
+      if (binding.key !== "title" && binding.key !== "deadline") {
+        return { result: { resolved: false } };
+      }
+      const value = binding.key === "deadline" ? project.deadline : project.title;
+      return { result: { resolved: true, value, sourceLabel: "Projeto" } };
+    }
+    case "previous_block": {
+      const candidate = candidates.find(
+        (item) =>
+          !usedCandidateIds.has(item.id) &&
+          item.sourceProcessType === undefined &&
+          item.sourceBlockId === binding.blockId &&
+          item.key === binding.outputKey &&
+          areRuntimeTypesCompatible(item.type, input.type),
+      );
+      return candidate ? resultForCandidate(candidate) : { result: { resolved: false } };
+    }
+    case "previous_process": {
+      const candidate = candidates.find(
+        (item) =>
+          !usedCandidateIds.has(item.id) &&
+          item.sourceProcessType === binding.processType &&
+          item.sourceBlockId === (binding.blockId ?? "__process_output__") &&
+          item.key === binding.outputKey &&
+          areRuntimeTypesCompatible(item.type, input.type),
+      );
+      return candidate ? resultForCandidate(candidate) : { result: { resolved: false } };
+    }
+    default:
+      return { result: { resolved: false } };
+  }
+}
+
+function resolveLegacyExplicitInput(
   input: BlockInputBinding,
   project: Project,
   candidates: RuntimeCandidate[],
   usedCandidateIds: ReadonlySet<string>,
-  historyContext: {
-    execution: ProcessExecution;
-    blockId: string;
-    channelExecutions: ProcessExecution[];
-    channelProjects: Project[];
-  },
-):
-  | {
-      candidateId?: string;
-      result: Omit<ResolvedBlockInput, "input">;
-    }
-  | undefined {
+  historyContext: InputResolutionContext,
+): ExplicitResolution | undefined {
   if (input.source === "channel_history") {
+    if (!input.sourceProcessType || !input.blockId || !input.sourceKey) return undefined;
     const value = resolveChannelHistory({
-      input,
+      binding: {
+        kind: "channel_history",
+        processType: input.sourceProcessType,
+        blockId: input.blockId,
+        outputKey: input.sourceKey,
+        limit: input.historyLimit ?? 10,
+        eligibility: input.historyEligibility ?? "completed",
+      },
       currentExecution: historyContext.execution,
       channelExecutions: historyContext.channelExecutions,
       channelProjects: historyContext.channelProjects,

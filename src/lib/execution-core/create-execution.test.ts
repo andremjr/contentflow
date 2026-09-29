@@ -142,12 +142,26 @@ test("E05 — every block owns an independent empty values object", () => {
 
 test("E06 — methodSnapshot is a defensive clone", () => {
   const liveMethod = method([block("stable")]);
+  liveMethod.blocks[0].inputs = [
+    {
+      id: "project-title",
+      label: "Título",
+      type: "text",
+      source: "project",
+      binding: { kind: "project", key: "title" },
+    },
+  ];
   const execution = requireExecution(create(liveMethod));
   liveMethod.name = "mutated";
   liveMethod.blocks[0].name = "mutated block";
+  liveMethod.blocks[0].inputs[0].binding = { kind: "project", key: "deadline" };
   liveMethod.blocks.push(block("new"));
   assert.equal(execution.methodSnapshot.name, "Creation test");
   assert.equal(execution.methodSnapshot.blocks[0].name, "stable");
+  assert.deepEqual(execution.methodSnapshot.blocks[0].inputs?.[0].binding, {
+    kind: "project",
+    key: "title",
+  });
   assert.equal(execution.methodSnapshot.blocks.length, 1);
 });
 

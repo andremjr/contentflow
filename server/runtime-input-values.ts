@@ -5,6 +5,7 @@ import type {
   StoredFile,
 } from "../src/lib/domain";
 import { isEmptyRuntimeValue } from "../src/lib/human-workflow";
+import { authoritativeInputSource } from "../src/lib/input-source-binding";
 import { getPresentationRestrictionIssue } from "../src/lib/presentation";
 
 function isStoredFile(value: unknown): value is StoredFile {
@@ -69,7 +70,9 @@ function mediaTypeIssue(input: BlockInputBinding, value: RuntimeValue) {
 }
 
 export function runtimeInputBindings(inputs: BlockInputBinding[] | undefined) {
-  return (inputs ?? []).filter((input) => input.source === "runtime");
+  return (inputs ?? []).filter(
+    (input) => (authoritativeInputSource(input).binding?.kind ?? input.source) === "runtime",
+  );
 }
 
 export function runtimeInputsReady(

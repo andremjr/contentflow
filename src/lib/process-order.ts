@@ -9,6 +9,7 @@ import {
 } from "./domain";
 import { createProcessOutputFields } from "./human-workflow";
 import { areHumanFieldTypesCompatible } from "./data-shape";
+import { authoritativeInputSource } from "./input-source-binding";
 
 export function isProcessOrder(value: unknown): value is UniversalProcess[] {
   return (
@@ -106,18 +107,24 @@ export function validateProcessDependencies(
     for (const [index, block] of blocks.entries()) {
       const label = `${processType}/${block.name ?? block.type}`;
       for (const input of block.inputs ?? []) {
-        if (input.source !== "previous_process") continue;
-        const source = input.sourceProcessType;
+        const binding = authoritativeInputSource(input).binding;
+        const sourceKind = binding?.kind ?? input.source;
+        if (sourceKind !== "previous_process") continue;
+        const source =
+          binding?.kind === "previous_process" ? binding.processType : input.sourceProcessType;
+        const outputKey =
+          binding?.kind === "previous_process" ? binding.outputKey : input.sourceKey;
+        const blockId = binding?.kind === "previous_process" ? binding.blockId : input.blockId;
         if (!source || (positions.get(source) ?? Infinity) >= (positions.get(processType) ?? -1)) {
           errors.push(`${label}: processo anterior inválido na entrada “${input.label}”.`);
           continue;
         }
         const output =
-          input.blockId === "__process_output__"
-            ? createProcessOutputFields(source).find((field) => field.key === input.sourceKey)
+          blockId === "__process_output__" || blockId === undefined
+            ? createProcessOutputFields(source).find((field) => field.key === outputKey)
             : methods[source]?.blocks
-                .find((candidate) => candidate.id === input.blockId)
-                ?.outputs?.find((field) => field.key === input.sourceKey);
+                .find((candidate) => candidate.id === blockId)
+                ?.outputs?.find((field) => field.key === outputKey);
         if (!output) errors.push(`${label}: saída anterior não encontrada para “${input.label}”.`);
         else if (!compatible(output.type, input.type))
           errors.push(`${label}: tipo incompatível na entrada “${input.label}”.`);
@@ -170,7 +177,13 @@ export function resolveProcessOrderForMethods(
   for (const processType of PROCESS_ORDER) {
     for (const block of methods[processType]?.blocks ?? []) {
       for (const input of block.inputs ?? []) {
-        if (input.source === "previous_process") addEdge(input.sourceProcessType, processType);
+        const binding = authoritativeInputSource(input).binding;
+        if ((binding?.kind ?? input.source) === "previous_process") {
+          addEdge(
+            binding?.kind === "previous_process" ? binding.processType : input.sourceProcessType,
+            processType,
+          );
+        }
       }
       const conversation = block.plugin?.conversation;
       if (conversation?.mode === "reuse") addEdge(conversation.sourceProcessType, processType);

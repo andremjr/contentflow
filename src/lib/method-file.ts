@@ -11,6 +11,7 @@ import type {
 } from "@/lib/domain";
 import { normalizeFieldPresentation } from "@/lib/presentation";
 import { instructionCollectionKey, instructionVariables } from "@/lib/instruction-template";
+import { authoritativeInputSource } from "@/lib/input-source-binding";
 
 const universalProcessSchema = z.enum([
   "theme",
@@ -73,6 +74,37 @@ const presentationSchema = z.object({
   acceptedMimeTypes: z.array(z.string().max(200)).max(50).optional(),
 });
 
+const inputSourceBindingSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("project"), key: z.enum(["title", "deadline"]) }).strict(),
+  z
+    .object({
+      kind: z.literal("previous_process"),
+      processType: universalProcessSchema,
+      outputKey: z.string().min(1).max(200),
+      blockId: z.string().min(1).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("previous_block"),
+      blockId: z.string().min(1),
+      outputKey: z.string().min(1).max(200),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("channel_history"),
+      processType: universalProcessSchema,
+      blockId: z.string().min(1),
+      outputKey: z.string().min(1).max(200),
+      limit: z.number().int().min(1).max(100),
+      eligibility: z.enum(["completed", "published"]),
+    })
+    .strict(),
+  z.object({ kind: z.literal("runtime") }).strict(),
+  z.object({ kind: z.literal("static"), value: z.string().max(10_000) }).strict(),
+]);
+
 const inputSchema = z
   .object({
     id: z.string(),
@@ -98,6 +130,7 @@ const inputSchema = z
         "thumbnail_layout",
       ])
       .default("text"),
+    binding: inputSourceBindingSchema.optional(),
     source: z.enum([
       "project",
       "previous_process",
@@ -475,15 +508,20 @@ export function collectMethodRequirements(
       });
     }
     for (const input of block.inputs ?? []) {
-      if (input.source === "previous_process" && input.sourceProcessType) {
+      const binding = authoritativeInputSource(input).binding;
+      const sourceKind = binding?.kind ?? input.source;
+      const sourceProcessType =
+        binding?.kind === "previous_process" ? binding.processType : input.sourceProcessType;
+      const sourceKey = binding?.kind === "previous_process" ? binding.outputKey : input.sourceKey;
+      if (sourceKind === "previous_process" && sourceProcessType) {
         requirements.push({
           kind: "previous_process",
-          processType: input.sourceProcessType,
-          sourceKey: input.sourceKey,
+          processType: sourceProcessType,
+          sourceKey,
           blockName: block.name ?? block.type,
         });
       }
-      if (input.source === "channel_library") {
+      if (sourceKind === "channel_library") {
         requirements.push({
           kind: "collection",
           name: input.collection?.trim() || "Coleção estratégica não identificada",
@@ -604,6 +642,27 @@ function createPortableMethodV2(
           ...input,
           id: `${blockKey}:input:${inputIndex + 1}`,
           blockId: mapBlockReference(input.blockId, input.sourceProcessType ?? method.processType),
+          binding:
+            input.binding?.kind === "previous_block"
+              ? {
+                  ...input.binding,
+                  blockId: mapBlockReference(input.binding.blockId) ?? input.binding.blockId,
+                }
+              : input.binding?.kind === "previous_process"
+                ? {
+                    ...input.binding,
+                    blockId:
+                      mapBlockReference(input.binding.blockId, input.binding.processType) ??
+                      input.binding.blockId,
+                  }
+                : input.binding?.kind === "channel_history"
+                  ? {
+                      ...input.binding,
+                      blockId:
+                        mapBlockReference(input.binding.blockId, input.binding.processType) ??
+                        input.binding.blockId,
+                    }
+                  : input.binding,
           recordFields: input.recordFields?.map((field, fieldIndex) => ({
             ...field,
             id: `${blockKey}:input:${inputIndex + 1}:field:${fieldIndex + 1}`,
@@ -1046,6 +1105,30 @@ function copyBlocksWithIds(
         input.blockId && input.blockId !== "__process_output__"
           ? (blockIds.get(input.blockId) ?? input.blockId)
           : input.blockId,
+      binding:
+        input.binding?.kind === "previous_block"
+          ? {
+              ...input.binding,
+              blockId: blockIds.get(input.binding.blockId) ?? input.binding.blockId,
+            }
+          : input.binding?.kind === "previous_process"
+            ? {
+                ...input.binding,
+                blockId: input.binding.blockId
+                  ? input.binding.blockId === "__process_output__"
+                    ? input.binding.blockId
+                    : (blockIds.get(input.binding.blockId) ?? input.binding.blockId)
+                  : undefined,
+              }
+            : input.binding?.kind === "channel_history"
+              ? {
+                  ...input.binding,
+                  blockId:
+                    input.binding.blockId === "__process_output__"
+                      ? input.binding.blockId
+                      : (blockIds.get(input.binding.blockId) ?? input.binding.blockId),
+                }
+              : input.binding,
     })),
     outputs: block.outputs?.map((output) => ({
       ...output,

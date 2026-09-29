@@ -88,6 +88,60 @@ test("preserva a declaração portátil de entrada fornecida na execução", () 
   assert.equal(parsed.method.blocks[0].inputs?.[0].portKey, "reference_images");
 });
 
+test("preserva binding canônico e remapeia seu blockId no round-trip portátil", () => {
+  const connected: ProcessMethod = {
+    ...method,
+    blocks: [
+      {
+        ...method.blocks[0],
+        operator: "Humano",
+        plugin: undefined,
+        outputs: [
+          {
+            id: "draft-output",
+            label: "Rascunho",
+            key: "draft",
+            type: "textarea",
+            required: true,
+          },
+        ],
+      },
+      {
+        ...method.blocks[0],
+        id: "revise-script",
+        operator: "Humano",
+        plugin: undefined,
+        order: 1,
+        inputs: [
+          {
+            id: "draft-input",
+            label: "Rascunho",
+            type: "textarea",
+            source: "previous_block",
+            binding: {
+              kind: "previous_block",
+              blockId: "write-script",
+              outputKey: "draft",
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const parsed = parseMethodFile(serializeMethodFile("Roteiro conectado", connected));
+  assert.deepEqual(parsed.method.blocks[1].inputs?.[0].binding, {
+    kind: "previous_block",
+    blockId: "write-script",
+    outputKey: "draft",
+  });
+  const copied = copyImportedBlocks("script", parsed.method.blocks, (prefix) => `${prefix}-new`);
+  assert.equal(copied[1].inputs?.[0].binding?.kind, "previous_block");
+  if (copied[1].inputs?.[0].binding?.kind === "previous_block") {
+    assert.equal(copied[1].inputs[0].binding.blockId, copied[0].id);
+  }
+});
+
 test("cópia interna pode preservar a referência local sem copiar secrets", () => {
   const [copied] = copyImportedBlocks("script", method.blocks, (prefix) => `${prefix}-new`, {
     preserveLocalConnections: true,

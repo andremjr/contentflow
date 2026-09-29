@@ -10,6 +10,7 @@ import {
   type ValidationMode,
 } from "@/lib/domain";
 import { normalizeFieldPresentation } from "@/lib/presentation";
+import { authoritativeInputSource } from "@/lib/input-source-binding";
 
 export function getMethodConfigurationIssue(method?: ProcessMethod) {
   if (!method?.blocks.length) return "O processo ainda não possui um método.";
@@ -28,23 +29,18 @@ export function getMethodConfigurationIssue(method?: ProcessMethod) {
       return `As chaves das entregas do bloco “${block.name ?? block.type}” precisam ser únicas.`;
     }
     for (const input of block.inputs ?? []) {
-      if (input.source === "runtime" && (!block.plugin || block.operator === "Humano")) {
+      const source = authoritativeInputSource(input).binding;
+      const sourceKind = source?.kind ?? input.source;
+      if (sourceKind === "runtime" && (!block.plugin || block.operator === "Humano")) {
         return `A entrada “${input.label}” fornecida na execução exige um plugin de IA ou Código.`;
       }
-      if (
-        input.source === "channel_history" &&
-        block.type !== "ESCOLHER" &&
-        block.type !== "CRIAR"
-      ) {
+      if (sourceKind === "channel_history" && block.type !== "ESCOLHER" && block.type !== "CRIAR") {
         return `O Histórico do Canal só pode orientar um bloco “Escolher” ou “Criar”. Remova-o do bloco “${block.name ?? block.type}”.`;
       }
-      if (
-        input.source === "channel_history" &&
-        (!input.sourceProcessType || !input.blockId || !input.sourceKey)
-      ) {
+      if (sourceKind === "channel_history" && source?.kind !== "channel_history") {
         return `Selecione a origem do histórico do canal na entrada “${input.label}”.`;
       }
-      if (input.source === "channel_history" && input.type !== "records") {
+      if (sourceKind === "channel_history" && input.type !== "records") {
         return `A entrada de histórico “${input.label}” precisa usar Lista de registros.`;
       }
     }
@@ -250,19 +246,30 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
     name: block.name || `${block.type.charAt(0)}${block.type.slice(1).toLowerCase()}`,
     instructions: block.instructions ?? "",
     inputs: (block.inputs ?? [])
-      .filter((input) => input.source !== "channel_library")
+      .filter((input) => {
+        const authority = authoritativeInputSource(input);
+        return authority.representation === "canonical" || input.source !== "channel_library";
+      })
       .map((input) => {
-        const type = input.source === "channel_history" ? "records" : (input.type ?? "text");
+        const authority = authoritativeInputSource(input);
+        const binding = authority.binding;
+        const sourceKind = binding?.kind ?? input.source;
+        const type = sourceKind === "channel_history" ? "records" : (input.type ?? "text");
         return {
           ...input,
+          binding,
           type,
           historyLimit:
-            input.source === "channel_history"
-              ? Math.min(100, Math.max(1, input.historyLimit ?? 10))
+            sourceKind === "channel_history"
+              ? binding?.kind === "channel_history"
+                ? binding.limit
+                : Math.min(100, Math.max(1, input.historyLimit ?? 10))
               : undefined,
           historyEligibility:
-            input.source === "channel_history"
-              ? (input.historyEligibility ?? "completed")
+            sourceKind === "channel_history"
+              ? binding?.kind === "channel_history"
+                ? binding.eligibility
+                : (input.historyEligibility ?? "completed")
               : undefined,
           presentation: normalizeFieldPresentation(type, input.presentation),
         };

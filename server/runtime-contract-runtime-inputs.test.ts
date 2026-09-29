@@ -132,8 +132,13 @@ test("explicit binding wins over a semantically stronger heuristic candidate", (
         label: "Roteiro final",
         type: "textarea",
         source: "previous_block",
-        blockId: explicitSource.id,
-        sourceKey: "approved_copy",
+        blockId: heuristicSource.id,
+        sourceKey: "matching_script",
+        binding: {
+          kind: "previous_block",
+          blockId: explicitSource.id,
+          outputKey: "approved_copy",
+        },
       },
     ],
     outputs: [],
@@ -179,6 +184,142 @@ test("explicit binding wins over a semantically stronger heuristic candidate", (
   assert.equal(resolved.value, "explicit value");
   assert.equal(resolved.sourceBlockId, explicitSource.id);
   assert.equal(resolved.resolvedSourceKey, "approved_copy");
+});
+
+test("canonical previous_process resolves the exact process output", () => {
+  const target: ActionBlock = {
+    id: "target-process",
+    type: "CRIAR",
+    operator: "IA",
+    order: 0,
+    parameters: [],
+    inputs: [
+      {
+        id: "script-input",
+        label: "Texto qualquer",
+        type: "textarea",
+        source: "previous_block",
+        binding: { kind: "previous_process", processType: "script", outputKey: "script" },
+      },
+    ],
+    outputs: [],
+  };
+  const execution: ProcessExecution = {
+    id: "execution-canonical-process",
+    projectId: project.id,
+    channelId: project.channelId,
+    processType: "assets",
+    status: "blocked_executor",
+    outputStatus: "pending",
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    methodSnapshot: { name: "Assets", processType: "assets", blocks: [target] },
+    blocks: [{ blockId: target.id, status: "blocked_executor", values: {} }],
+  };
+  const scriptExecution: ProcessExecution = {
+    id: "execution-script",
+    projectId: project.id,
+    channelId: project.channelId,
+    processType: "script",
+    status: "completed",
+    outputStatus: "completed",
+    output: {
+      processType: "script",
+      values: { script: "canonical script" },
+      createdAt: project.createdAt,
+    },
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    methodSnapshot: { name: "Script", processType: "script", blocks: [] },
+    blocks: [],
+  };
+
+  const [resolved] = resolveBlockInputs({
+    block: target,
+    execution,
+    project,
+    projectExecutions: [scriptExecution, execution],
+    collections: [],
+    libraryItems: [],
+  });
+
+  assert.equal(resolved.resolved, true);
+  assert.equal(resolved.value, "canonical script");
+  assert.equal(resolved.sourceProcessType, "script");
+  assert.equal(resolved.resolvedSourceKey, "script");
+});
+
+test("an unresolved canonical binding never falls back to legacy fields or labelScore", () => {
+  const source: ActionBlock = {
+    id: "available-source",
+    type: "CRIAR",
+    operator: "Humano",
+    order: 0,
+    parameters: [],
+    outputs: [
+      {
+        id: "matching-output",
+        label: "Roteiro final",
+        key: "matching_script",
+        type: "textarea",
+        required: true,
+      },
+    ],
+  };
+  const target: ActionBlock = {
+    id: "canonical-missing-target",
+    type: "CRIAR",
+    operator: "IA",
+    order: 1,
+    parameters: [],
+    inputs: [
+      {
+        id: "canonical-missing-input",
+        label: "Roteiro final",
+        type: "textarea",
+        source: "previous_block",
+        blockId: source.id,
+        sourceKey: "matching_script",
+        binding: {
+          kind: "previous_block",
+          blockId: "removed-source",
+          outputKey: "removed-output",
+        },
+      },
+    ],
+    outputs: [],
+  };
+  const execution: ProcessExecution = {
+    id: "execution-canonical-missing",
+    projectId: project.id,
+    channelId: project.channelId,
+    processType: "assets",
+    status: "blocked_executor",
+    outputStatus: "pending",
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    methodSnapshot: {
+      name: "Missing canonical source",
+      processType: "assets",
+      blocks: [source, target],
+    },
+    blocks: [
+      { blockId: source.id, status: "completed", values: { matching_script: "must not win" } },
+      { blockId: target.id, status: "blocked_executor", values: {} },
+    ],
+  };
+
+  const [resolved] = resolveBlockInputs({
+    block: target,
+    execution,
+    project,
+    projectExecutions: [execution],
+    collections: [],
+    libraryItems: [],
+  });
+
+  assert.equal(resolved.resolved, false);
+  assert.equal(resolved.value, undefined);
 });
 
 test("LEGACY / TEMPORARY CHARACTERIZATION: resolves an unbound input by label similarity", () => {
