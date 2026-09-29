@@ -8,4 +8,5 @@ export * from "./apply-validation-outcome";
 export * from "./create-execution";
 export * from "./evaluate";
 export * from "./invariants";
+export * from "./project-projection";
 export type * from "./types";

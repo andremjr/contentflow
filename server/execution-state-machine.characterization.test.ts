@@ -164,9 +164,9 @@ test("C02 — start com primeiro Bloco automático projeta executor bloqueado", 
     ["blocked_executor", "pending"],
   );
   assert.ok(execution.blocks[0].startedAt);
-  assert.equal(project.stages.theme, "processing");
+  assert.equal(project.stages.theme, "blocked");
   assert.equal(project.currentStage, "theme");
-  assert.equal(project.state, "processing");
+  assert.equal(project.state, "blocked");
 });
 
 test("C02A — start manual é semanticamente equivalente à criação canônica", () => {

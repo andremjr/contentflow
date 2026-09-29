@@ -88,6 +88,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "tasks/TASK-015.md",
     "tasks/TASK-016.md",
     "tasks/TASK-017.md",
+    "tasks/TASK-018.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -118,10 +119,10 @@ test("keeps the Reliability Program connected and bounded", () => {
   const roadmapTaskIds = [...roadmap.matchAll(/\| (TASK-\d{3}) \|/g)].map((match) => match[1]);
   assert.deepEqual(roadmapTaskIds, expectedTaskIds);
   assert.match(roadmap, /Estado da TASK-000: `done`/);
-  for (const taskId of expectedTaskIds.slice(0, 17)) {
+  for (const taskId of expectedTaskIds.slice(0, 18)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `done`\\s+\\|"));
   }
-  assert.match(roadmap, /\| TASK-018 \|[^\n]+\| `ready`\s+\|/);
+  assert.match(roadmap, /\| TASK-019 \|[^\n]+\| `ready`\s+\|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
@@ -163,6 +164,29 @@ test("keeps the Reliability Program connected and bounded", () => {
     "utf8",
   );
   assert.match(task017, /## Estado\s+`done`/);
+  const task018 = readFileSync(
+    new URL("../../docs/reliability-program/tasks/TASK-018.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(task018, /## Estado\s+`done`/);
+
+  const projectProjection = readFileSync(
+    new URL("./execution-core/project-projection.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(projectProjection, /Record<ProcessExecutionStatus, ProcessState>/);
+  for (const status of [
+    "not_started",
+    "running",
+    "awaiting_human",
+    "awaiting_output",
+    "blocked_executor",
+    "failed",
+    "completed",
+    "cancelled",
+  ]) {
+    assert.match(projectProjection, new RegExp(`\\b${status}:`));
+  }
 
   const executionCommands = readFileSync(
     new URL("../../server/execution-commands.ts", import.meta.url),
@@ -176,6 +200,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "startProcessExecution should remain discoverable for architecture guardrails",
   );
   assert.match(manualStart, /createCanonicalProcessExecution\(/);
+  assert.match(manualStart, /applyExecutionProjectProjection\(/);
   assert.doesNotMatch(manualStart, /blocks:\s*methodSnapshot\.blocks\.map/);
   assert.doesNotMatch(manualStart, /status:\s*"not_started"/);
   const server = readFileSync(new URL("../../server/index.ts", import.meta.url), "utf8");
@@ -187,6 +212,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "startOrchestratedProcess should remain discoverable for architecture guardrails",
   );
   assert.match(orchestratedStart, /createCanonicalProcessExecution\(/);
+  assert.match(orchestratedStart, /applyExecutionProjectProjection\(/);
   assert.doesNotMatch(orchestratedStart, /blocks:\s*methodSnapshot\.blocks\.map/);
   assert.doesNotMatch(orchestratedStart, /block\.operator === "Humano"/);
 
@@ -211,6 +237,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   )?.[0];
   assert.ok(manualProgression, "manual block progression should remain discoverable");
   assert.match(manualProgression, /applyCompletedBlockTransition\(/);
+  assert.match(manualProgression, /applyExecutionProjectProjection\(/);
 
   const humanCompletion = executionCommands.match(
     /function completeHumanBlock[\s\S]*?\n {2}function completeProcessOutput/,
@@ -254,6 +281,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   )?.[0];
   assert.ok(manualRetry, "manual block retry should remain discoverable");
   assert.match(manualRetry, /applyManualBlockRetry\(/);
+  assert.match(manualRetry, /applyExecutionProjectProjection\(/);
   for (const duplicatedManualRetryAlgorithm of [
     /\.attempt\s*=/,
     /invalidateBlockDeliveries/,
@@ -291,6 +319,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "stored execution cancellation should remain discoverable",
   );
   assert.match(storedExecutionCancellation, /applyExecutionCancellation\(/);
+  assert.match(storedExecutionCancellation, /applyExecutionProjectProjection\(/);
   assert.doesNotMatch(storedExecutionCancellation, /execution\.status\s*=\s*"cancelled"/);
   assert.doesNotMatch(
     storedExecutionCancellation,
@@ -302,6 +331,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   )?.[0];
   assert.ok(pluginJobCancellation, "plugin job cancellation should remain discoverable");
   assert.match(pluginJobCancellation, /applyExecutionCancellation\(/);
+  assert.match(pluginJobCancellation, /persistPluginExecution\(/);
   assert.doesNotMatch(pluginJobCancellation, /execution\.status\s*=\s*"cancelled"/);
   assert.doesNotMatch(pluginJobCancellation, /execution\.blocks\s*=\s*execution\.blocks\.map/);
 
@@ -312,7 +342,14 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(legacyBoundary, /adaptLegacyExecutionCreatePayload/);
   assert.match(legacyBoundary, /Compatibility adapter for the historical HTTP creation boundary/);
 
-  for (const taskId of expectedTaskIds.slice(18)) {
+  const pluginPersistence = server.match(
+    /function persistPluginExecution[\s\S]*?\nfunction failAutomaticPluginStart/,
+  )?.[0];
+  assert.ok(pluginPersistence, "plugin persistence should remain discoverable");
+  assert.match(pluginPersistence, /applyExecutionProjectProjection\(/);
+  assert.doesNotMatch(server, /function updateProjectAfterPluginBlock/);
+
+  for (const taskId of expectedTaskIds.slice(19)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

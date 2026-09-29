@@ -13,12 +13,7 @@ import {
   type RuntimeValue,
   type StrategicCollection,
 } from "../src/lib/domain";
-import {
-  captureProjectStrategy,
-  completedProcessProgress,
-  nextExecutableProcess,
-  projectProcessOrder,
-} from "../src/lib/process-order";
+import { captureProjectStrategy } from "../src/lib/process-order";
 import {
   createProcessOutputFields,
   getMethodConfigurationIssue,
@@ -31,6 +26,7 @@ import { recordBlockDeliveries, recordProcessOutputDelivery } from "../src/lib/d
 import {
   applyCompletedBlockTransition,
   applyCurrentBlockDeliveryAcceptance,
+  applyExecutionProjectProjection,
   applyHumanBlockCompletion,
   applyManualBlockRetry,
   applyValidationOutcome,
@@ -49,15 +45,6 @@ export function executionCommands(db: {
   const touchExecution = (execution: ProcessExecution) => {
     execution.updatedAt = new Date().toISOString();
   };
-  function completeProjectStage(project: Project, stage: ProcessId) {
-    project.stages = { ...project.stages, [stage]: "done" };
-    const order = projectProcessOrder(project);
-    const next = nextExecutableProcess(order, project.stages, project.runFrom, project.runThrough);
-    project.currentStage = next ?? stage;
-    project.state = next ? project.stages[next] : "done";
-    project.progress = completedProcessProgress(project.stages);
-  }
-
   function startProcessExecution(projectId: string, processType: ProcessId) {
     const existing = db.executions.find(
       (item) => item.projectId === projectId && item.processType === processType,
@@ -106,12 +93,7 @@ export function executionCommands(db: {
     if (!creation.ok) return undefined;
     const execution = creation.execution;
     db.executions.unshift(execution);
-    project.stages = {
-      ...project.stages,
-      [processType]: execution.status === "awaiting_human" ? "awaiting_human" : "processing",
-    };
-    project.currentStage = processType;
-    project.state = project.stages[processType];
+    applyExecutionProjectProjection(project, execution);
     touchExecution(execution);
     return execution;
   }
@@ -132,24 +114,8 @@ export function executionCommands(db: {
 
     const project = db.projects.find((item) => item.id === execution.projectId);
     if (project) {
-      if (transition.outcome === "finish_blocks") {
-        if (execution.status === "completed") {
-          completeProjectStage(project, execution.processType);
-          applyGeneratedProjectTitle(project, execution);
-        } else {
-          project.stages = { ...project.stages, [execution.processType]: "awaiting_human" };
-          project.currentStage = execution.processType;
-          project.state = "awaiting_human";
-        }
-      } else {
-        project.stages = {
-          ...project.stages,
-          [execution.processType]:
-            transition.decision.blockStatus === "awaiting_human" ? "awaiting_human" : "blocked",
-        };
-        project.currentStage = execution.processType;
-        project.state = project.stages[execution.processType];
-      }
+      applyExecutionProjectProjection(project, execution);
+      if (execution.status === "completed") applyGeneratedProjectTitle(project, execution);
     }
     touchExecution(execution);
     return execution;
@@ -312,17 +278,12 @@ export function executionCommands(db: {
         return { ok: false, missing: [validation.message] };
       }
       if (validation.outcome === "paused") {
+        applyExecutionProjectProjection(project, execution);
         touchExecution(execution);
         return { ok: true, completedProcess: false, pausedValidation: true };
       }
       if (validation.outcome === "retry_target") {
-        project.stages = {
-          ...project.stages,
-          [execution.processType]:
-            execution.status === "awaiting_human" ? "awaiting_human" : "blocked",
-        };
-        project.currentStage = execution.processType;
-        project.state = project.stages[execution.processType];
+        applyExecutionProjectProjection(project, execution);
         touchExecution(execution);
         return {
           ok: true,
@@ -358,7 +319,7 @@ export function executionCommands(db: {
     execution.status = "completed";
     const project = db.projects.find((item) => item.id === execution.projectId);
     if (project) {
-      completeProjectStage(project, execution.processType);
+      applyExecutionProjectProjection(project, execution);
       applyGeneratedProjectTitle(project, execution);
     }
     touchExecution(execution);
@@ -404,15 +365,7 @@ export function executionCommands(db: {
     );
     if (!result.ok) return false;
     const project = db.projects.find((item) => item.id === execution.projectId);
-    if (project) {
-      project.stages = {
-        ...project.stages,
-        [execution.processType]:
-          execution.status === "awaiting_human" ? "awaiting_human" : "blocked",
-      };
-      project.currentStage = execution.processType;
-      project.state = project.stages[execution.processType];
-    }
+    if (project) applyExecutionProjectProjection(project, execution);
     touchExecution(execution);
     return true;
   }

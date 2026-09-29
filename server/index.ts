@@ -82,6 +82,7 @@ import {
 import {
   applyCompletedBlockTransition,
   applyExecutionCancellation,
+  applyExecutionProjectProjection,
   applyExecutorBlockCompletion,
   applyValidationOutcome,
   createCanonicalProcessExecution,
@@ -1089,35 +1090,6 @@ function valuesForPluginResponse(
   return values;
 }
 
-function updateProjectAfterPluginBlock(project: Project, execution: ProcessExecution) {
-  project.currentStage = execution.processType;
-  project.state =
-    execution.status === "cancelled"
-      ? "not_started"
-      : execution.status === "awaiting_human"
-        ? "awaiting_human"
-        : execution.status === "failed"
-          ? "error"
-          : execution.status === "completed"
-            ? "done"
-            : execution.status === "blocked_executor"
-              ? "blocked"
-              : "processing";
-  project.stages = { ...project.stages, [execution.processType]: project.state };
-  if (execution.status === "completed") {
-    project.progress = completedProcessProgress(project.stages);
-    const next = nextExecutableProcess(
-      projectProcessOrder(project),
-      project.stages,
-      project.runFrom,
-      project.runThrough,
-    );
-    project.currentStage = next ?? execution.processType;
-    project.state = next ? project.stages[next] : "done";
-  }
-  project.updatedAt = "Agora";
-}
-
 function finishPluginBlock(
   execution: ProcessExecution,
   block: ActionBlock,
@@ -1186,7 +1158,8 @@ function persistPluginExecution(execution: ProcessExecution, project: Project) {
   if (latestProject) Object.assign(project, latestProject);
   execution.revision = (executionById(execution.id)?.revision ?? 0) + 1;
   execution.updatedAt = new Date().toISOString();
-  updateProjectAfterPluginBlock(project, execution);
+  applyExecutionProjectProjection(project, execution);
+  project.updatedAt = "Agora";
   applyGeneratedProjectTitle(project, execution);
   const persist = () => {
     database
@@ -1447,12 +1420,7 @@ function startOrchestratedProcess(
   });
   if (!creation.ok) return { issue: "O método deste processo não está disponível." };
   const execution = creation.execution;
-  project.stages = {
-    ...project.stages,
-    [processType]: execution.status === "awaiting_human" ? "awaiting_human" : "processing",
-  };
-  project.currentStage = processType;
-  project.state = project.stages[processType];
+  applyExecutionProjectProjection(project, execution);
   project.updatedAt = "Agora";
 
   database.transaction(() => {
@@ -1856,9 +1824,7 @@ function cancelStoredProcessExecution(execution: ProcessExecution, project: Proj
   execution.revision = (execution.revision ?? 0) + 1;
   requestPluginExecutionCancellation(execution.id);
   execution.updatedAt = new Date().toISOString();
-  project.stages = { ...project.stages, [execution.processType]: "not_started" };
-  project.currentStage = execution.processType;
-  project.state = "not_started";
+  applyExecutionProjectProjection(project, execution);
   project.updatedAt = "Agora";
   database.transaction(() => {
     database
@@ -2057,9 +2023,6 @@ function markPluginJobCancelled(
         type: "execution_cancellation_requested",
       });
       if (!cancellation.ok || cancellation.outcome === "already_cancelled") return;
-      project.stages = { ...project.stages, [execution.processType]: "not_started" };
-      project.currentStage = execution.processType;
-      project.state = "not_started";
       persistPluginExecution(execution, project);
     },
   );
