@@ -206,6 +206,7 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
           type: "list",
           source: "static",
           staticValue: ["one", "two", "three"],
+          portKey: "prompts",
         },
       ],
       outputs: [

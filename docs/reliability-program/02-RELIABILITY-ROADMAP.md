@@ -69,8 +69,8 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 | TASK-021 | Guardrails arquiteturais automatizados                  | `done`    |
 | TASK-022 | Representação canônica de bindings                      | `done`    |
 | TASK-023 | Retirar `labelScore` do runtime canônico                | `done`    |
-| TASK-024 | Porta de entrada de plugin explícita                    | `ready`   |
-| TASK-025 | Outputs de plugin explícitos                            | `pending` |
+| TASK-024 | Porta de entrada de plugin explícita                    | `done`    |
+| TASK-025 | Outputs de plugin explícitos                            | `ready`   |
 | TASK-026 | `VALIDAR` com alvo explícito                            | `pending` |
 | TASK-027 | Adapter para Métodos legados                            | `pending` |
 | TASK-028 | Normalização/validação canônica da resposta do executor | `pending` |

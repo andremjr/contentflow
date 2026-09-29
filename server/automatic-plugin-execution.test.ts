@@ -126,6 +126,7 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
             source: "previous_block",
             blockId: "block-one",
             sourceKey: "intermediate",
+            portKey: "content",
           },
         ],
         outputs: [
@@ -153,6 +154,7 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
             type: "textarea",
             source: "static",
             staticValue: "wrong final value",
+            portKey: "content",
           },
         ],
         outputs: [

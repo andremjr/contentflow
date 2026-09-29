@@ -60,8 +60,10 @@ test("keeps runtime input sources deterministic and canonical bindings authorita
 
   assert.deepEqual(filesMentioning("labelScore("), []);
   assert.deepEqual(filesMentioning("normalizeLabel("), []);
-  assert.deepEqual(filesMentioning("semanticIdentityScore("), ["server/plugin-input-values.ts"]);
-  assert.deepEqual(filesMentioning("presentationScore("), ["server/plugin-input-values.ts"]);
+  assert.deepEqual(filesMentioning("semanticIdentityScore("), []);
+  assert.deepEqual(filesMentioning("presentationScore("), []);
+  assert.deepEqual(filesMentioning("mimePatternMatches("), []);
+  assert.deepEqual(filesMentioning("selectPluginImplicitContextPort("), []);
   assert.deepEqual(filesMentioning("selectPluginInputPort("), [
     "server/index.ts",
     "server/plugin-input-values.ts",
@@ -113,12 +115,16 @@ test("keeps runtime input sources deterministic and canonical bindings authorita
   const portSelection = sourceBetween(
     pluginInputs,
     "export function selectPluginInputPort",
-    "export function selectPluginImplicitContextPort",
+    "export function composePluginPortValue",
   );
-  assert.ok(
-    portSelection.indexOf("if (input.portKey)") <
-      portSelection.indexOf("semanticIdentityScore(input"),
-    "an explicit portKey must be authoritative before temporary inference",
+  assert.match(portSelection, /if \(!input\.portKey\) return undefined/);
+  assert.match(portSelection, /ports\.find\(\(candidate\) => candidate\.key === input\.portKey\)/);
+  assert.match(portSelection, /legacyTypeListAccepts\(port\.acceptedTypes, input\.type\)/);
+  assert.match(portSelection, /!port\.multiple && usedInputPorts\.has\(port\.key\)/);
+  assert.doesNotMatch(
+    portSelection,
+    /\.sort\(|\.filter\(|acceptedTypes[\s\S]*\[0\]|presentation|sourceKey|input\.label|input\.id/,
+    "runtime input port selection must be an exact portKey lookup without ranking or fallback",
   );
 });
 
@@ -190,5 +196,8 @@ test("keeps Method resolution authoritative before plugin capability mapping", (
   assert.ok(resolveInputsAt >= 0);
   assert.ok(selectPortAt > resolveInputsAt);
   assert.ok(createJobAt > selectPortAt);
+  assert.match(pluginOperation, /portKey: item\.input\.portKey!/);
+  assert.doesNotMatch(pluginOperation, /port\?\.key \?\? item\.input\.id/);
+  assert.doesNotMatch(pluginOperation, /inputContract\[index\]\?\.portKey \?\? item\.input\.id/);
   assert.doesNotMatch(read("server/plugin-input-values.ts"), /targetBlockId|targetOutputKey/);
 });

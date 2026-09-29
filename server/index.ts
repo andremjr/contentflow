@@ -6241,9 +6241,9 @@ async function executePluginBlockInternal(
       },
     };
   }
-  const inputContract = assignedInputs.map(({ resolved: item, port }) => ({
+  const inputContract = assignedInputs.map(({ resolved: item }) => ({
     id: item.input.id,
-    portKey: port?.key ?? item.input.id,
+    portKey: item.input.portKey!,
     label: item.input.label,
     type: item.input.type,
     recordFields: item.input.recordFields,
@@ -6386,7 +6386,7 @@ async function executePluginBlockInternal(
       id: resolved.input.id,
       label: resolved.input.label,
       sourceKey: resolved.resolvedSourceKey ?? resolved.input.sourceKey,
-      portKey: port?.key,
+      portKey: port!.key,
       value: resolved.value ?? null,
     })),
     parameters: executionParameters,
@@ -6480,9 +6480,9 @@ async function executePluginBlockInternal(
     inputs,
     instructionContextInputs,
     inputContract,
-    inputDeliveries: resolvedInputs.map((item, index) => ({
+    inputDeliveries: resolvedInputs.map((item) => ({
       inputId: item.input.id,
-      portKey: inputContract[index]?.portKey ?? item.input.id,
+      portKey: item.input.portKey!,
       deliveryId: item.sourceDeliveryId,
       itemIds: item.sourceDeliveryItemIds ?? [],
     })),

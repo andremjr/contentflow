@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { BlockInputBinding, RuntimeValue } from "../src/lib/domain";
+import type { BlockInputBinding } from "../src/lib/domain";
 import type { PluginInputPort } from "../src/lib/plugin-contract";
-import {
-  composePluginPortValue,
-  selectPluginImplicitContextPort,
-  selectPluginInputPort,
-} from "./plugin-input-values";
+import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
 
 test("preserva uma lista atribuída sozinha a uma porta de plugin", () => {
   const prompts = ["primeiro prompt", "segundo prompt", "terceiro prompt"];
@@ -27,7 +23,7 @@ test("mantém a composição textual para várias entradas atribuídas à mesma 
   assert.equal(value, 'Tema: "oceano"\nTom: "cinematográfico"');
 });
 
-test("distingue coleções de imagens e legendas pelo contrato de apresentação", () => {
+test("não escolhe porta por apresentação ou MIME sem portKey explícita", () => {
   const ports: PluginInputPort[] = [
     {
       key: "images",
@@ -66,10 +62,10 @@ test("distingue coleções de imagens e legendas pelo contrato de apresentação
     },
   };
 
-  assert.equal(selectPluginInputPort(subtitles, ports, new Set())?.key, "subtitles");
+  assert.equal(selectPluginInputPort(subtitles, ports, new Set()), undefined);
 });
 
-test("usa a chave técnica da origem quando a apresentação do Método é automática", () => {
+test("não escolhe porta por sourceKey sem portKey explícita", () => {
   const ports: PluginInputPort[] = [
     {
       key: "images",
@@ -95,10 +91,10 @@ test("usa a chave técnica da origem quando a apresentação do Método é autom
     presentation: { renderer: "auto" },
   };
 
-  assert.equal(selectPluginInputPort(subtitles, ports, new Set())?.key, "subtitles");
+  assert.equal(selectPluginInputPort(subtitles, ports, new Set()), undefined);
 });
 
-test("não injeta contexto implícito em uma porta textual especializada", () => {
+test("não escolhe porta por label mesmo com duas candidatas compatíveis", () => {
   const ports: PluginInputPort[] = [
     {
       key: "content",
@@ -115,60 +111,19 @@ test("não injeta contexto implícito em uma porta textual especializada", () =>
       multiple: false,
     },
   ];
-  const methodInputs: BlockInputBinding[] = [
-    {
-      id: "title-structure",
-      label: "estrutura escolhida",
-      type: "text",
-      source: "previous_block",
-    },
-    {
-      id: "video-theme",
-      label: "Tema do vídeo",
-      type: "textarea",
-      source: "previous_process",
-      sourceKey: "theme",
-    },
-  ];
-  const usedPorts = new Set<string>();
-  const assigned = methodInputs.map((input) => {
-    const port = selectPluginInputPort(input, ports, usedPorts);
-    if (port && !port.multiple) usedPorts.add(port.key);
-    return { input, port };
-  });
-  const assignedValues = Object.fromEntries(
-    ports.flatMap((port) => {
-      const matching = assigned.filter((item) => item.port?.key === port.key);
-      return matching.length
-        ? [
-            [
-              port.key,
-              composePluginPortValue(
-                matching.map(({ input }) => ({ label: input.label, value: input.label })),
-              ),
-            ],
-          ]
-        : [];
-    }),
-  ) as Record<string, RuntimeValue>;
+  const input: BlockInputBinding = {
+    id: "section-count",
+    label: "Quantidade de blocos",
+    type: "number",
+    source: "static",
+    staticValue: "1",
+  };
 
-  assert.deepEqual(
-    assigned.map((item) => item.port?.key),
-    ["content", "content"],
-  );
-  assert.equal(selectPluginImplicitContextPort(ports, assignedValues), undefined);
-  assert.equal(assignedValues.sections, undefined);
+  assert.equal(selectPluginInputPort(input, ports, new Set()), undefined);
 });
 
-test("usa uma porta semântica livre para o contexto implícito", () => {
+test("não escolhe a única porta compatível sem portKey explícita", () => {
   const ports: PluginInputPort[] = [
-    {
-      key: "sections",
-      label: "Quantidade de blocos",
-      acceptedTypes: ["number", "text"],
-      required: false,
-      multiple: false,
-    },
     {
       key: "additional_context",
       label: "Contexto adicional",
@@ -178,35 +133,14 @@ test("usa uma porta semântica livre para o contexto implícito", () => {
     },
   ];
 
-  assert.equal(selectPluginImplicitContextPort(ports, {})?.key, "additional_context");
-});
-
-test("LEGACY / TEMPORARY CHARACTERIZATION: infere uma porta pelo rótulo semântico", () => {
   const input: BlockInputBinding = {
-    id: "title-create-section-count",
-    label: "Quantidade de blocos",
-    type: "number",
-    source: "static",
-    staticValue: "1",
+    id: "context",
+    label: "Contexto adicional",
+    type: "textarea",
+    source: "previous_block",
   };
-  const ports: PluginInputPort[] = [
-    {
-      key: "content",
-      label: "Contexto para geração",
-      acceptedTypes: ["text", "textarea", "number"],
-      required: false,
-      multiple: true,
-    },
-    {
-      key: "sections",
-      label: "Quantidade de blocos",
-      acceptedTypes: ["number", "text", "textarea"],
-      required: false,
-      multiple: false,
-    },
-  ];
 
-  assert.equal(selectPluginInputPort(input, ports, new Set())?.key, "sections");
+  assert.equal(selectPluginInputPort(input, ports, new Set()), undefined);
 });
 
 test("respeita a porta explícita escolhida no editor mesmo quando outra aparece primeiro", () => {
@@ -261,4 +195,32 @@ test("não mascara uma porta explícita inválida com binding automático", () =
   ];
 
   assert.equal(selectPluginInputPort(input, ports, new Set()), undefined);
+});
+
+test("não remapeia a segunda entrada de uma porta explícita não-multiple", () => {
+  const input: BlockInputBinding = {
+    id: "prompts",
+    label: "Sequência de prompts",
+    type: "list",
+    source: "previous_block",
+    portKey: "outline",
+  };
+  const ports: PluginInputPort[] = [
+    {
+      key: "outline",
+      label: "Estrutura",
+      acceptedTypes: ["list"],
+      required: false,
+      multiple: false,
+    },
+    {
+      key: "fallback",
+      label: "Alternativa",
+      acceptedTypes: ["list"],
+      required: false,
+      multiple: true,
+    },
+  ];
+
+  assert.equal(selectPluginInputPort(input, ports, new Set(["outline"])), undefined);
 });

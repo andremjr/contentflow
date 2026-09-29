@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Channel, ProcessMethod } from "../src/lib/domain";
-import { validateBuilderMethods } from "./builder-methods";
+import type { RegisteredPlugin } from "./plugin-runner";
+import { type BuilderPluginContext, validateBuilderMethods } from "./builder-methods";
 
 const channel = {
   id: "channel-1",
@@ -38,6 +39,82 @@ function manualThemeMethod(): ProcessMethod {
       },
     ],
   };
+}
+
+function pluginContext(inputPortKeys: string[]): BuilderPluginContext {
+  const plugin: RegisteredPlugin = {
+    id: "dev.contentflow.port-test",
+    source: "local",
+    directory: "port-test",
+    absoluteDirectory: "C:/plugins/port-test",
+    entrypoint: "index.mjs",
+    executable: true,
+    manifest: {
+      apiVersion: "1",
+      id: "dev.contentflow.port-test",
+      name: "Port test",
+      version: "1.0.0",
+      description: "Fixture",
+      author: "ContentFlow",
+      license: "proprietary",
+      runtime: { kind: "node", version: ">=26", module: "esm" },
+      entrypoint: "index.mjs",
+      permissions: [],
+      capabilities: [
+        {
+          id: "create-theme",
+          operator: "IA",
+          blockTypes: ["CRIAR"],
+          processTypes: ["theme"],
+          inputPorts: inputPortKeys.map((key) => ({
+            key,
+            label: key,
+            acceptedTypes: ["number"],
+            required: false,
+          })),
+          outputPorts: [
+            {
+              key: "theme",
+              label: "Tema",
+              producedTypes: ["textarea"],
+              required: true,
+            },
+          ],
+          execution: { mode: "immediate" },
+          sideEffects: [],
+          cost: { model: "free", estimateSupported: false },
+          dataPolicy: { sendsDataToThirdParties: false },
+          blockConfigSchema: { type: "object", properties: {}, additionalProperties: false },
+          outputSchema: { type: "object", properties: {}, additionalProperties: false },
+        },
+      ],
+    },
+  };
+  return { plugin, enabled: true, connections: [], profiles: [] };
+}
+
+function pluginThemeMethod(): ProcessMethod {
+  const method = manualThemeMethod();
+  method.blocks[0] = {
+    ...method.blocks[0],
+    operator: "IA",
+    inputs: [
+      {
+        id: "section-count",
+        label: "Quantidade de blocos",
+        type: "number",
+        source: "static",
+        staticValue: "1",
+      },
+    ],
+    outputs: method.blocks[0].outputs?.map((output) => ({ ...output, portKey: "theme" })),
+    plugin: {
+      pluginId: "dev.contentflow.port-test",
+      capabilityId: "create-theme",
+      configuration: {},
+    },
+  };
+  return method;
 }
 
 test("accepts a complete manual Method without requiring a plugin", () => {
@@ -195,4 +272,28 @@ test("builder materializes a canonical binding only from an explicit legacy refe
     blockId: "theme-input",
     outputKey: "theme",
   });
+});
+
+test("builder materializes the only compatible plugin input port before runtime", () => {
+  const result = validateBuilderMethods({
+    channel,
+    methods: { theme: pluginThemeMethod() },
+    plugins: [pluginContext(["sections"])],
+    collections: [],
+  });
+
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.equal(result.methods?.theme?.blocks[0].inputs?.[0].portKey, "sections");
+});
+
+test("builder requires an explicit portKey when multiple plugin ports are compatible", () => {
+  const result = validateBuilderMethods({
+    channel,
+    methods: { theme: pluginThemeMethod() },
+    plugins: [pluginContext(["sections", "count"])],
+    collections: [],
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /informe portKey para a entrada ambígua/);
 });
