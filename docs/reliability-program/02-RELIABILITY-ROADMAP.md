@@ -59,8 +59,8 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 | TASK-016 | Centralizar “usar entrega atual”                    | `done`    |
 | TASK-017 | Centralizar cancelamento                            | `done`    |
 | TASK-018 | Centralizar projeção do estado de Project           | `done`    |
-| TASK-019 | Persistência atômica das transições                 | `ready`   |
-| TASK-020 | Remover auto-agendamento interno via HTTP loopback  | `pending` |
+| TASK-019 | Persistência atômica das transições                 | `done`    |
+| TASK-020 | Remover auto-agendamento interno via HTTP loopback  | `ready`   |
 
 ### Deterministic Contracts — TASK-021 a TASK-028
 

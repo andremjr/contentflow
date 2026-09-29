@@ -89,6 +89,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "tasks/TASK-016.md",
     "tasks/TASK-017.md",
     "tasks/TASK-018.md",
+    "tasks/TASK-019.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -119,10 +120,10 @@ test("keeps the Reliability Program connected and bounded", () => {
   const roadmapTaskIds = [...roadmap.matchAll(/\| (TASK-\d{3}) \|/g)].map((match) => match[1]);
   assert.deepEqual(roadmapTaskIds, expectedTaskIds);
   assert.match(roadmap, /Estado da TASK-000: `done`/);
-  for (const taskId of expectedTaskIds.slice(0, 18)) {
+  for (const taskId of expectedTaskIds.slice(0, 19)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `done`\\s+\\|"));
   }
-  assert.match(roadmap, /\| TASK-019 \|[^\n]+\| `ready`\s+\|/);
+  assert.match(roadmap, /\| TASK-020 \|[^\n]+\| `ready`\s+\|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
@@ -347,9 +348,19 @@ test("keeps the Reliability Program connected and bounded", () => {
   )?.[0];
   assert.ok(pluginPersistence, "plugin persistence should remain discoverable");
   assert.match(pluginPersistence, /applyExecutionProjectProjection\(/);
+  assert.match(pluginPersistence, /database\.inTransaction/);
+  assert.match(
+    pluginPersistence,
+    /if \(!database\.inTransaction\) queueOrchestratorReconciliationForProject/,
+  );
+  assert.match(server, /function commitPluginJobTransition/);
+  assert.match(
+    server,
+    /pluginJobs\.requestCancellation\(execution\.id\);[\s\S]*?database[\s\S]*?abortActivePluginInvocations\(execution\.id\)/,
+  );
   assert.doesNotMatch(server, /function updateProjectAfterPluginBlock/);
 
-  for (const taskId of expectedTaskIds.slice(19)) {
+  for (const taskId of expectedTaskIds.slice(20)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

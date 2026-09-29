@@ -978,11 +978,15 @@ async function executeActivePlugin(
   });
 }
 
-function requestPluginExecutionCancellation(executionId: string) {
-  const changed = pluginJobs.requestCancellation(executionId);
+function abortActivePluginInvocations(executionId: string) {
   for (const active of activePluginInvocations.values()) {
     if (active.executionId === executionId) active.controller.abort();
   }
+}
+
+function requestPluginExecutionCancellation(executionId: string) {
+  const changed = pluginJobs.requestCancellation(executionId);
+  abortActivePluginInvocations(executionId);
   return changed;
 }
 
@@ -1153,6 +1157,12 @@ function executionById(executionId: string) {
   return row ? (JSON.parse(row.payload) as ProcessExecution) : undefined;
 }
 
+class PersistenceCommitError extends Error {
+  constructor(cause: unknown) {
+    super("A transição não pôde ser persistida.", { cause });
+  }
+}
+
 function persistPluginExecution(execution: ProcessExecution, project: Project) {
   const latestProject = readPayload<Project>("projects", project.id);
   if (latestProject) Object.assign(project, latestProject);
@@ -1169,9 +1179,44 @@ function persistPluginExecution(execution: ProcessExecution, project: Project) {
       .prepare("UPDATE projects SET payload = ? WHERE id = ?")
       .run(JSON.stringify(project), project.id);
   };
-  if (database.inTransaction) persist();
-  else database.transaction(persist)();
-  queueOrchestratorReconciliationForProject(execution.projectId);
+  try {
+    if (database.inTransaction) persist();
+    else database.transaction(persist)();
+  } catch (error) {
+    throw new PersistenceCommitError(error);
+  }
+  // An outer PluginJobStore.save() owns the commit when called from onSaved.
+  // Its caller queues reconciliation only after that commit succeeds.
+  if (!database.inTransaction) queueOrchestratorReconciliationForProject(execution.projectId);
+}
+
+function savePluginJob(
+  claim: ClaimedPluginJob,
+  job: PersistentPluginJob,
+  onSaved?: (saved: PersistentPluginJob) => void,
+) {
+  let saved: PersistentPluginJob;
+  try {
+    saved = pluginJobs.save(claim, job, onSaved);
+  } catch (error) {
+    throw new PersistenceCommitError(error);
+  }
+  if (onSaved && !database.inTransaction) {
+    const execution = executionById(saved.executionId);
+    if (execution) queueOrchestratorReconciliationForProject(execution.projectId);
+  }
+  return saved;
+}
+
+function commitPluginJobTransition<T>(projectId: string, apply: () => T): T {
+  let result: T;
+  try {
+    result = database.transaction(apply)();
+  } catch (error) {
+    throw new PersistenceCommitError(error);
+  }
+  queueOrchestratorReconciliationForProject(projectId);
+  return result;
 }
 
 function failAutomaticPluginStart(executionId: string, blockId: string, message: string) {
@@ -1822,11 +1867,11 @@ function cancelStoredProcessExecution(execution: ProcessExecution, project: Proj
   delete project.runThrough;
   delete project.runFrom;
   execution.revision = (execution.revision ?? 0) + 1;
-  requestPluginExecutionCancellation(execution.id);
   execution.updatedAt = new Date().toISOString();
   applyExecutionProjectProjection(project, execution);
   project.updatedAt = "Agora";
   database.transaction(() => {
+    pluginJobs.requestCancellation(execution.id);
     database
       .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
       .run(JSON.stringify(execution), execution.updatedAt, execution.id);
@@ -1834,6 +1879,7 @@ function cancelStoredProcessExecution(execution: ProcessExecution, project: Proj
       .prepare("UPDATE projects SET payload = ? WHERE id = ?")
       .run(JSON.stringify(project), project.id);
   })();
+  abortActivePluginInvocations(execution.id);
   void processDuePluginJobs();
   return cancellation;
 }
@@ -1967,7 +2013,7 @@ function markPluginJobFailed(
     attempt: claim.job.attempt,
   });
   claim.job = failedJob;
-  return pluginJobs.save(
+  return savePluginJob(
     claim,
     {
       ...failedJob,
@@ -2005,7 +2051,7 @@ function markPluginJobCancelled(
   project: Project | undefined,
   message = "Execução cancelada.",
 ) {
-  return pluginJobs.save(
+  return savePluginJob(
     claim,
     {
       ...appendPluginDiagnostic(claim.job, {
@@ -2152,68 +2198,72 @@ async function processPluginJobClaimed(
       const nextBrowserProfile = resolvedNextProfile
         ? { profileId: resolvedNextProfile.profileId, alias: resolvedNextProfile.alias }
         : browserProfileSnapshot(plugin, nextProfile);
-      const saved = pluginJobs.save(claim, {
-        ...appendPluginDiagnostic(job, {
-          code: "PROFILE_SWITCH",
-          reasonCode: "PROFILE_BUSY",
-          previousProfileId: job.browserProfile?.profileId,
-          profileId: nextBrowserProfile?.profileId,
-          attempt: job.attempt,
-        }),
-        status: "starting",
-        profileFallback: {
-          ...fallback,
-          activeIndex: nextIndex,
-          history: [
-            ...fallback.history,
-            {
-              profile: currentProfile,
-              code: "PROFILE_BUSY",
-              message: "Os perfis selecionados estão sendo usados por outra execução.",
-            },
-          ],
-        },
-        browserProfile: nextBrowserProfile,
-        message: recoveryProductMessage({
-          decision: recoveryDecision,
-          failureMessage: "Os perfis selecionados estão sendo usados por outra execução.",
-          currentProfile,
-          nextProfile,
-          preservedCount: itemProgressForJob(job)?.completed,
-        }),
-        nextPollAt: new Date().toISOString(),
+      return commitPluginJobTransition(project.id, () => {
+        const saved = savePluginJob(claim, {
+          ...appendPluginDiagnostic(job, {
+            code: "PROFILE_SWITCH",
+            reasonCode: "PROFILE_BUSY",
+            previousProfileId: job.browserProfile?.profileId,
+            profileId: nextBrowserProfile?.profileId,
+            attempt: job.attempt,
+          }),
+          status: "starting",
+          profileFallback: {
+            ...fallback,
+            activeIndex: nextIndex,
+            history: [
+              ...fallback.history,
+              {
+                profile: currentProfile,
+                code: "PROFILE_BUSY",
+                message: "Os perfis selecionados estão sendo usados por outra execução.",
+              },
+            ],
+          },
+          browserProfile: nextBrowserProfile,
+          message: recoveryProductMessage({
+            decision: recoveryDecision,
+            failureMessage: "Os perfis selecionados estão sendo usados por outra execução.",
+            currentProfile,
+            nextProfile,
+            preservedCount: itemProgressForJob(job)?.completed,
+          }),
+          nextPollAt: new Date().toISOString(),
+        });
+        if (saved.status === "cancel_requested") return saved;
+        blockExecution!.status = "in_progress";
+        blockExecution!.progressMessage = saved.message;
+        execution!.status = "running";
+        persistPluginExecution(execution!, project!);
+        return saved;
       });
-      if (saved.status === "cancel_requested") return saved;
-      blockExecution.status = "in_progress";
-      blockExecution.progressMessage = saved.message;
-      execution.status = "running";
-      persistPluginExecution(execution, project);
-      return saved;
     }
     if (recoveryDecision.action === "retry") {
-      const saved = pluginJobs.save(claim, {
-        ...appendPluginDiagnostic(job, {
-          code: "PLUGIN_RETRY_SCHEDULED",
-          reasonCode: "PROFILE_BUSY",
-          profileId: job.browserProfile?.profileId,
-          attempt: job.attempt,
-        }),
-        status: "starting",
-        retryCount: job.retryCount + 1,
-        message: recoveryProductMessage({
-          decision: recoveryDecision,
-          failureMessage: "Os perfis selecionados estão sendo usados por outra execução.",
-          currentProfile: activeProfileAliasForJob(plugin, job),
-          preservedCount: itemProgressForJob(job)?.completed,
-        }),
-        nextPollAt: new Date(Date.now() + recoveryDecision.delayMs).toISOString(),
+      return commitPluginJobTransition(project.id, () => {
+        const saved = savePluginJob(claim, {
+          ...appendPluginDiagnostic(job, {
+            code: "PLUGIN_RETRY_SCHEDULED",
+            reasonCode: "PROFILE_BUSY",
+            profileId: job.browserProfile?.profileId,
+            attempt: job.attempt,
+          }),
+          status: "starting",
+          retryCount: job.retryCount + 1,
+          message: recoveryProductMessage({
+            decision: recoveryDecision,
+            failureMessage: "Os perfis selecionados estão sendo usados por outra execução.",
+            currentProfile: activeProfileAliasForJob(plugin, job),
+            preservedCount: itemProgressForJob(job)?.completed,
+          }),
+          nextPollAt: new Date(Date.now() + recoveryDecision.delayMs).toISOString(),
+        });
+        if (saved.status === "cancel_requested") return saved;
+        blockExecution!.status = "in_progress";
+        blockExecution!.progressMessage = saved.message;
+        execution!.status = "running";
+        persistPluginExecution(execution!, project!);
+        return saved;
       });
-      if (saved.status === "cancel_requested") return saved;
-      blockExecution.status = "in_progress";
-      blockExecution.progressMessage = saved.message;
-      execution.status = "running";
-      persistPluginExecution(execution, project);
-      return saved;
     }
     return markPluginJobFailed(
       claim,
@@ -2285,7 +2335,7 @@ async function processPluginJobClaimed(
           },
         );
         if (cancelResponse.status === "pending") {
-          return pluginJobs.save(claim, {
+          return savePluginJob(claim, {
             ...job,
             status: "cancel_requested",
             cancelRequested: true,
@@ -2357,12 +2407,14 @@ async function processPluginJobClaimed(
     const startedItemJob =
       parallelExecution || continuousSession ? job : startCurrentOrchestratedItem(job);
     if (startedItemJob !== job) {
-      job = pluginJobs.updateClaimed(claim, startedItemJob);
-      claim.job = job;
-      blockExecution.items = blockExecutionItemsForJob(job, blockExecution.items);
-      blockExecution.itemProgress = itemProgressForJob(job);
-      blockExecution.profileLaneProgress = profileLaneProgressForJob(job);
-      persistPluginExecution(execution, project);
+      commitPluginJobTransition(project.id, () => {
+        job = pluginJobs.updateClaimed(claim, startedItemJob);
+        claim.job = job;
+        blockExecution!.items = blockExecutionItemsForJob(job, blockExecution!.items);
+        blockExecution!.itemProgress = itemProgressForJob(job);
+        blockExecution!.profileLaneProgress = profileLaneProgressForJob(job);
+        persistPluginExecution(execution!, project!);
+      });
     }
     const invocationRequest = continuousSession
       ? continuousInvocationRequestForJob(job, invocation)
@@ -2396,10 +2448,12 @@ async function processPluginJobClaimed(
             parentItemId,
             plannedItems,
           });
-          job = pluginJobs.updateClaimed(claim, registered.job);
-          claim.job = job;
-          latestBlockExecution.items = blockExecutionItemsForJob(job, latestBlockExecution.items);
-          persistPluginExecution(latestExecution, latestProject);
+          commitPluginJobTransition(latestProject.id, () => {
+            job = pluginJobs.updateClaimed(claim, registered.job);
+            claim.job = job;
+            latestBlockExecution.items = blockExecutionItemsForJob(job, latestBlockExecution.items);
+            persistPluginExecution(latestExecution, latestProject);
+          });
           return registered.claimed;
         },
         ...(continuousInvocationId
@@ -2428,15 +2482,17 @@ async function processPluginJobClaimed(
                   profileId: job.browserProfile?.profileId,
                   expiresAt: job.deadlineAt,
                 });
-                job = pluginJobs.updateClaimed(claim, claimed.job);
-                claim.job = job;
-                latestBlockExecution.items = blockExecutionItemsForJob(
-                  job,
-                  latestBlockExecution.items,
-                );
-                latestBlockExecution.itemProgress = itemProgressForJob(job);
-                latestBlockExecution.profileLaneProgress = profileLaneProgressForJob(job);
-                persistPluginExecution(latestExecution, latestProject);
+                commitPluginJobTransition(latestProject.id, () => {
+                  job = pluginJobs.updateClaimed(claim, claimed.job);
+                  claim.job = job;
+                  latestBlockExecution.items = blockExecutionItemsForJob(
+                    job,
+                    latestBlockExecution.items,
+                  );
+                  latestBlockExecution.itemProgress = itemProgressForJob(job);
+                  latestBlockExecution.profileLaneProgress = profileLaneProgressForJob(job);
+                  persistPluginExecution(latestExecution, latestProject);
+                });
                 return claimed.claimed;
               },
               onPublishItemUpdate: async (update, storedArtifacts) => {
@@ -2485,30 +2541,35 @@ async function processPluginJobClaimed(
                     .filter((item): item is string => typeof item === "string")
                     .join(orchestration.separator ?? "\\n\\n");
                 }
-                job = pluginJobs.updateClaimed(claim, {
-                  ...nextJob,
-                  partialValues,
-                  partialArtifacts: mergeStoredArtifacts(nextJob.partialArtifacts, storedArtifacts),
-                  progress:
-                    consolidation.requiredItems.filter((item) => item.status === "completed")
-                      .length / Math.max(1, consolidation.requiredItems.length),
-                  message: update.message ?? nextJob.message,
+                commitPluginJobTransition(latestProject.id, () => {
+                  job = pluginJobs.updateClaimed(claim, {
+                    ...nextJob,
+                    partialValues,
+                    partialArtifacts: mergeStoredArtifacts(
+                      nextJob.partialArtifacts,
+                      storedArtifacts,
+                    ),
+                    progress:
+                      consolidation.requiredItems.filter((item) => item.status === "completed")
+                        .length / Math.max(1, consolidation.requiredItems.length),
+                    message: update.message ?? nextJob.message,
+                  });
+                  claim.job = job;
+                  latestBlockExecution.status = "in_progress";
+                  latestBlockExecution.values = structuredClone(partialValues);
+                  latestBlockExecution.progress = job.progress;
+                  latestBlockExecution.progressMessage = job.message;
+                  latestBlockExecution.itemProgress = itemProgressForJob(job);
+                  latestBlockExecution.profileLaneProgress = profileLaneProgressForJob(job);
+                  latestBlockExecution.items = blockExecutionItemsForJob(
+                    job,
+                    latestBlockExecution.items,
+                  );
+                  latestExecution.status = "running";
+                  latestExecution.error = undefined;
+                  recordBlockDeliveries(latestExecution, latestBlock, partialValues, "partial");
+                  persistPluginExecution(latestExecution, latestProject);
                 });
-                claim.job = job;
-                latestBlockExecution.status = "in_progress";
-                latestBlockExecution.values = structuredClone(partialValues);
-                latestBlockExecution.progress = job.progress;
-                latestBlockExecution.progressMessage = job.message;
-                latestBlockExecution.itemProgress = itemProgressForJob(job);
-                latestBlockExecution.profileLaneProgress = profileLaneProgressForJob(job);
-                latestBlockExecution.items = blockExecutionItemsForJob(
-                  job,
-                  latestBlockExecution.items,
-                );
-                latestExecution.status = "running";
-                latestExecution.error = undefined;
-                recordBlockDeliveries(latestExecution, latestBlock, partialValues, "partial");
-                persistPluginExecution(latestExecution, latestProject);
                 return published.receipt;
               },
             }
@@ -2573,29 +2634,31 @@ async function processPluginJobClaimed(
                 .join(orchestration.separator ?? "\n\n");
             }
           }
-          job = pluginJobs.updateClaimed(claim, {
-            ...job,
-            incrementalItems: incremental.items,
-            partialValues,
-            partialArtifacts: mergeStoredArtifacts(job.partialArtifacts, update.storedArtifacts),
-            progress: Number.isFinite(update.progress)
-              ? Math.max(job.progress ?? 0, Math.min(1, Math.max(0, update.progress!)))
-              : job.progress,
-            message: update.message ?? job.message,
+          commitPluginJobTransition(latestProject.id, () => {
+            job = pluginJobs.updateClaimed(claim, {
+              ...job,
+              incrementalItems: incremental.items,
+              partialValues,
+              partialArtifacts: mergeStoredArtifacts(job.partialArtifacts, update.storedArtifacts),
+              progress: Number.isFinite(update.progress)
+                ? Math.max(job.progress ?? 0, Math.min(1, Math.max(0, update.progress!)))
+                : job.progress,
+              message: update.message ?? job.message,
+            });
+            claim.job = job;
+            latestBlockExecution.status = "in_progress";
+            latestBlockExecution.values = structuredClone(partialValues);
+            latestBlockExecution.progress = job.progress;
+            latestBlockExecution.progressMessage = job.message;
+            latestBlockExecution.itemProgress = itemProgressForJob(job);
+            latestBlockExecution.profileLaneProgress = profileLaneProgressForJob(job);
+            latestBlockExecution.items = blockExecutionItemsForJob(job, latestBlockExecution.items);
+            latestBlockExecution.logs = update.logs ?? latestBlockExecution.logs;
+            latestExecution.status = "running";
+            latestExecution.error = undefined;
+            recordBlockDeliveries(latestExecution, latestBlock, partialValues, "partial");
+            persistPluginExecution(latestExecution, latestProject);
           });
-          claim.job = job;
-          latestBlockExecution.status = "in_progress";
-          latestBlockExecution.values = structuredClone(partialValues);
-          latestBlockExecution.progress = job.progress;
-          latestBlockExecution.progressMessage = job.message;
-          latestBlockExecution.itemProgress = itemProgressForJob(job);
-          latestBlockExecution.profileLaneProgress = profileLaneProgressForJob(job);
-          latestBlockExecution.items = blockExecutionItemsForJob(job, latestBlockExecution.items);
-          latestBlockExecution.logs = update.logs ?? latestBlockExecution.logs;
-          latestExecution.status = "running";
-          latestExecution.error = undefined;
-          recordBlockDeliveries(latestExecution, latestBlock, partialValues, "partial");
-          persistPluginExecution(latestExecution, latestProject);
         },
       }));
     for (const event of pluginResponse.bridgeDiagnostics ?? []) {
@@ -2671,36 +2734,38 @@ async function processPluginJobClaimed(
       const pollAfterMs = Number.isFinite(pluginResponse.pollAfterMs)
         ? Math.max(500, Math.min(30_000, pluginResponse.pollAfterMs))
         : 5_000;
-      const saved = pluginJobs.save(claim, {
-        ...job,
-        jobId: pluginResponse.jobId,
-        status: "pending",
-        nextPollAt: new Date(Date.now() + pollAfterMs).toISOString(),
-        progress,
-        message: pluginResponse.message,
-        partialValues,
-        partialArtifacts: mergeStoredArtifacts(
-          job.partialArtifacts,
-          pluginResponse.storedArtifacts,
-        ),
-        error: undefined,
+      return commitPluginJobTransition(project.id, () => {
+        const saved = savePluginJob(claim, {
+          ...job,
+          jobId: pluginResponse.jobId,
+          status: "pending",
+          nextPollAt: new Date(Date.now() + pollAfterMs).toISOString(),
+          progress,
+          message: pluginResponse.message,
+          partialValues,
+          partialArtifacts: mergeStoredArtifacts(
+            job.partialArtifacts,
+            pluginResponse.storedArtifacts,
+          ),
+          error: undefined,
+        });
+        if (saved.status === "cancel_requested") return saved;
+        blockExecution!.status = "in_progress";
+        blockExecution!.values = structuredClone(partialValues);
+        blockExecution!.jobId = saved.jobId;
+        blockExecution!.traceId = saved.traceId;
+        blockExecution!.progress = saved.progress;
+        blockExecution!.progressMessage = saved.message;
+        blockExecution!.itemProgress = itemProgressForJob(saved);
+        blockExecution!.profileLaneProgress = profileLaneProgressForJob(saved);
+        blockExecution!.items = blockExecutionItemsForJob(saved, blockExecution!.items);
+        blockExecution!.logs = pluginResponse.logs;
+        execution!.status = "running";
+        execution!.error = undefined;
+        recordBlockDeliveries(execution!, block!, partialValues, "partial");
+        persistPluginExecution(execution!, project!);
+        return saved;
       });
-      if (saved.status === "cancel_requested") return saved;
-      blockExecution.status = "in_progress";
-      blockExecution.values = structuredClone(partialValues);
-      blockExecution.jobId = saved.jobId;
-      blockExecution.traceId = saved.traceId;
-      blockExecution.progress = saved.progress;
-      blockExecution.progressMessage = saved.message;
-      blockExecution.itemProgress = itemProgressForJob(saved);
-      blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
-      blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
-      blockExecution.logs = pluginResponse.logs;
-      execution.status = "running";
-      execution.error = undefined;
-      recordBlockDeliveries(execution, block, partialValues, "partial");
-      persistPluginExecution(execution, project);
-      return saved;
     }
 
     if (pluginResponse.status === "error") {
@@ -2723,89 +2788,93 @@ async function processPluginJobClaimed(
         const nextIndex = fallback.activeIndex + 1;
         const nextProfile = fallback.candidates[nextIndex];
         const nextBrowserProfile = browserProfileSnapshot(plugin, nextProfile);
-        const saved = pluginJobs.save(claim, {
-          ...appendPluginDiagnostic(job, {
-            code: "PROFILE_SWITCH",
-            reasonCode: pluginResponse.code,
-            previousProfileId: job.browserProfile?.profileId,
-            profileId: nextBrowserProfile?.profileId,
-            attempt: job.attempt,
-          }),
-          status: "starting",
-          retryCount: job.retryCount + 1,
-          profileFallback: {
-            ...fallback,
-            activeIndex: nextIndex,
-            history: [
-              ...fallback.history,
-              {
-                profile: currentProfile,
-                code: pluginResponse.code,
-                message: pluginResponse.message,
-              },
-            ],
-          },
-          browserProfile: nextBrowserProfile,
-          partialValues,
-          partialArtifacts,
-          error: pluginResponse.message,
-          message: recoveryProductMessage({
-            decision: recoveryDecision,
-            failureMessage: pluginResponse.message,
-            currentProfile,
-            nextProfile,
-            preservedCount: itemProgressForJob(job)?.completed,
-          }),
-          nextPollAt: new Date().toISOString(),
+        return commitPluginJobTransition(project.id, () => {
+          const saved = savePluginJob(claim, {
+            ...appendPluginDiagnostic(job, {
+              code: "PROFILE_SWITCH",
+              reasonCode: pluginResponse.code,
+              previousProfileId: job.browserProfile?.profileId,
+              profileId: nextBrowserProfile?.profileId,
+              attempt: job.attempt,
+            }),
+            status: "starting",
+            retryCount: job.retryCount + 1,
+            profileFallback: {
+              ...fallback,
+              activeIndex: nextIndex,
+              history: [
+                ...fallback.history,
+                {
+                  profile: currentProfile,
+                  code: pluginResponse.code,
+                  message: pluginResponse.message,
+                },
+              ],
+            },
+            browserProfile: nextBrowserProfile,
+            partialValues,
+            partialArtifacts,
+            error: pluginResponse.message,
+            message: recoveryProductMessage({
+              decision: recoveryDecision,
+              failureMessage: pluginResponse.message,
+              currentProfile,
+              nextProfile,
+              preservedCount: itemProgressForJob(job)?.completed,
+            }),
+            nextPollAt: new Date().toISOString(),
+          });
+          releaseJobProfileLease(job.id);
+          if (saved.status === "cancel_requested") return saved;
+          blockExecution!.status = "in_progress";
+          blockExecution!.values = structuredClone(partialValues);
+          blockExecution!.progressMessage = saved.message;
+          blockExecution!.itemProgress = itemProgressForJob(saved);
+          blockExecution!.profileLaneProgress = profileLaneProgressForJob(saved);
+          blockExecution!.items = blockExecutionItemsForJob(saved, blockExecution!.items);
+          blockExecution!.logs = pluginResponse.logs;
+          execution!.status = "running";
+          recordBlockDeliveries(execution!, block!, partialValues, "partial");
+          persistPluginExecution(execution!, project!);
+          return saved;
         });
-        releaseJobProfileLease(job.id);
-        if (saved.status === "cancel_requested") return saved;
-        blockExecution.status = "in_progress";
-        blockExecution.values = structuredClone(partialValues);
-        blockExecution.progressMessage = saved.message;
-        blockExecution.itemProgress = itemProgressForJob(saved);
-        blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
-        blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
-        blockExecution.logs = pluginResponse.logs;
-        execution.status = "running";
-        recordBlockDeliveries(execution, block, partialValues, "partial");
-        persistPluginExecution(execution, project);
-        return saved;
       }
       if (recoveryDecision.action === "retry") {
         const retryCount = job.retryCount + 1;
-        const saved = pluginJobs.save(claim, {
-          ...appendPluginDiagnostic(job, {
-            code: "PLUGIN_RETRY_SCHEDULED",
-            reasonCode: pluginResponse.code,
-            profileId: job.browserProfile?.profileId,
-            attempt: job.attempt,
-          }),
-          status: job.jobId ? "pending" : "starting",
-          retryCount,
-          partialValues,
-          partialArtifacts,
-          error: pluginResponse.message,
-          message: recoveryProductMessage({
-            decision: recoveryDecision,
-            failureMessage: pluginResponse.message,
-            currentProfile: activeProfileAliasForJob(plugin, job),
-            preservedCount: itemProgressForJob(job)?.completed,
-          }),
-          nextPollAt: new Date(Date.now() + recoveryDecision.delayMs).toISOString(),
+        return commitPluginJobTransition(project.id, () => {
+          const saved = savePluginJob(claim, {
+            ...appendPluginDiagnostic(job, {
+              code: "PLUGIN_RETRY_SCHEDULED",
+              reasonCode: pluginResponse.code,
+              profileId: job.browserProfile?.profileId,
+              attempt: job.attempt,
+            }),
+            status: job.jobId ? "pending" : "starting",
+            retryCount,
+            partialValues,
+            partialArtifacts,
+            error: pluginResponse.message,
+            message: recoveryProductMessage({
+              decision: recoveryDecision,
+              failureMessage: pluginResponse.message,
+              currentProfile: activeProfileAliasForJob(plugin, job),
+              preservedCount: itemProgressForJob(job)?.completed,
+            }),
+            nextPollAt: new Date(Date.now() + recoveryDecision.delayMs).toISOString(),
+          });
+          if (saved.status === "cancel_requested") return saved;
+          blockExecution!.status = "in_progress";
+          blockExecution!.values = structuredClone(partialValues);
+          blockExecution!.progressMessage = saved.message;
+          blockExecution!.itemProgress = itemProgressForJob(saved);
+          blockExecution!.profileLaneProgress = profileLaneProgressForJob(saved);
+          blockExecution!.items = blockExecutionItemsForJob(saved, blockExecution!.items);
+          blockExecution!.logs = pluginResponse.logs;
+          execution!.status = "running";
+          recordBlockDeliveries(execution!, block!, partialValues, "partial");
+          persistPluginExecution(execution!, project!);
+          return saved;
         });
-        if (saved.status === "cancel_requested") return saved;
-        blockExecution.status = "in_progress";
-        blockExecution.values = structuredClone(partialValues);
-        blockExecution.progressMessage = saved.message;
-        blockExecution.itemProgress = itemProgressForJob(saved);
-        blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
-        blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
-        blockExecution.logs = pluginResponse.logs;
-        execution.status = "running";
-        recordBlockDeliveries(execution, block, partialValues, "partial");
-        persistPluginExecution(execution, project);
-        return saved;
       }
       const terminalMessage = recoveryProductMessage({
         decision: recoveryDecision,
@@ -2889,38 +2958,40 @@ async function processPluginJobClaimed(
       const nextItemOrchestration = { ...completedItemOrchestration, accumulatedItems };
       const nextIndex = nextPendingItemIndex(completedItemJob);
       if (nextIndex !== undefined) {
-        const saved = pluginJobs.save(claim, {
-          ...completedItemJob,
-          status: "starting",
-          nextPollAt: new Date().toISOString(),
-          retryCount: 0,
-          partialValues: accumulated,
-          partialArtifacts: mergeStoredArtifacts(
-            job.partialArtifacts,
-            pluginResponse.storedArtifacts,
-          ),
-          itemOrchestration: { ...nextItemOrchestration, currentIndex: nextIndex },
-          progress:
-            consolidation.requiredItems.filter((item) => item.status === "completed").length /
-            Math.max(1, consolidation.requiredItems.length || itemOrchestration.items.length),
-          message: continuousInvocationId
-            ? job.message
-            : `Item ${itemOrchestration.currentIndex + 1} de ${itemOrchestration.items.length} concluído.`,
-          error: undefined,
+        return commitPluginJobTransition(project.id, () => {
+          const saved = savePluginJob(claim, {
+            ...completedItemJob,
+            status: "starting",
+            nextPollAt: new Date().toISOString(),
+            retryCount: 0,
+            partialValues: accumulated,
+            partialArtifacts: mergeStoredArtifacts(
+              job.partialArtifacts,
+              pluginResponse.storedArtifacts,
+            ),
+            itemOrchestration: { ...nextItemOrchestration, currentIndex: nextIndex },
+            progress:
+              consolidation.requiredItems.filter((item) => item.status === "completed").length /
+              Math.max(1, consolidation.requiredItems.length || itemOrchestration.items.length),
+            message: continuousInvocationId
+              ? job.message
+              : `Item ${itemOrchestration.currentIndex + 1} de ${itemOrchestration.items.length} concluído.`,
+            error: undefined,
+          });
+          if (saved.status === "cancel_requested") return saved;
+          blockExecution!.status = "in_progress";
+          blockExecution!.values = structuredClone(accumulated);
+          blockExecution!.progress = saved.progress;
+          blockExecution!.progressMessage = saved.message;
+          blockExecution!.itemProgress = itemProgressForJob(saved);
+          blockExecution!.profileLaneProgress = profileLaneProgressForJob(saved);
+          blockExecution!.items = blockExecutionItemsForJob(saved, blockExecution!.items);
+          blockExecution!.logs = pluginResponse.logs;
+          execution!.status = "running";
+          recordBlockDeliveries(execution!, block!, accumulated, "partial");
+          persistPluginExecution(execution!, project!);
+          return saved;
         });
-        if (saved.status === "cancel_requested") return saved;
-        blockExecution.status = "in_progress";
-        blockExecution.values = structuredClone(accumulated);
-        blockExecution.progress = saved.progress;
-        blockExecution.progressMessage = saved.message;
-        blockExecution.itemProgress = itemProgressForJob(saved);
-        blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
-        blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
-        blockExecution.logs = pluginResponse.logs;
-        execution.status = "running";
-        recordBlockDeliveries(execution, block, accumulated, "partial");
-        persistPluginExecution(execution, project);
-        return saved;
       }
       Object.assign(values, accumulated);
       job = { ...completedItemJob, itemOrchestration: nextItemOrchestration };
@@ -2961,7 +3032,7 @@ async function processPluginJobClaimed(
     const completedConversationId = pluginResponse.conversation?.id
       ? normalizePluginConversationId(pluginResponse.conversation.id)
       : undefined;
-    const saved = pluginJobs.save(
+    const saved = savePluginJob(
       claim,
       {
         ...appendPluginDiagnostic(job, {
@@ -3010,6 +3081,9 @@ async function processPluginJobClaimed(
     scheduleAutomaticPluginBlock(execution);
     return saved;
   } catch (error) {
+    // A failed local commit is not a plugin failure: keep the durable snapshots
+    // unchanged and let the worker boundary report the persistence error.
+    if (error instanceof PersistenceCommitError) throw error;
     const message = error instanceof Error ? error.message : "Não foi possível executar o plugin.";
     execution = executionById(job.executionId);
     project = execution ? readPayload<Project>("projects", execution.projectId) : undefined;
@@ -3042,79 +3116,83 @@ async function processPluginJobClaimed(
       const nextBrowserProfile = resolvedNextProfile
         ? { profileId: resolvedNextProfile.profileId, alias: resolvedNextProfile.alias }
         : browserProfileSnapshot(plugin, nextProfile);
-      const saved = pluginJobs.save(claim, {
-        ...appendPluginDiagnostic(job, {
-          code: "PROFILE_SWITCH",
-          reasonCode: errorCode,
-          previousProfileId: job.browserProfile?.profileId,
-          profileId: nextBrowserProfile?.profileId,
-          attempt: job.attempt,
-        }),
-        status: "starting",
-        retryCount: job.retryCount + 1,
-        profileFallback: {
-          ...fallback,
-          activeIndex: nextIndex,
-          history: [
-            ...fallback.history,
-            {
-              profile: currentProfile,
-              code: errorCode,
-              message,
-            },
-          ],
-        },
-        browserProfile: nextBrowserProfile,
-        error: message,
-        message: recoveryProductMessage({
-          decision: recoveryDecision,
-          failureMessage: message,
-          currentProfile,
-          nextProfile,
-          preservedCount: itemProgressForJob(job)?.completed,
-        }),
-        nextPollAt: new Date().toISOString(),
+      return commitPluginJobTransition(project.id, () => {
+        const saved = savePluginJob(claim, {
+          ...appendPluginDiagnostic(job, {
+            code: "PROFILE_SWITCH",
+            reasonCode: errorCode,
+            previousProfileId: job.browserProfile?.profileId,
+            profileId: nextBrowserProfile?.profileId,
+            attempt: job.attempt,
+          }),
+          status: "starting",
+          retryCount: job.retryCount + 1,
+          profileFallback: {
+            ...fallback,
+            activeIndex: nextIndex,
+            history: [
+              ...fallback.history,
+              {
+                profile: currentProfile,
+                code: errorCode,
+                message,
+              },
+            ],
+          },
+          browserProfile: nextBrowserProfile,
+          error: message,
+          message: recoveryProductMessage({
+            decision: recoveryDecision,
+            failureMessage: message,
+            currentProfile,
+            nextProfile,
+            preservedCount: itemProgressForJob(job)?.completed,
+          }),
+          nextPollAt: new Date().toISOString(),
+        });
+        releaseJobProfileLease(job.id);
+        if (saved.status === "cancel_requested") return saved;
+        blockExecution!.status = "in_progress";
+        blockExecution!.progressMessage = saved.message;
+        blockExecution!.itemProgress = itemProgressForJob(saved);
+        blockExecution!.profileLaneProgress = profileLaneProgressForJob(saved);
+        blockExecution!.items = blockExecutionItemsForJob(saved, blockExecution!.items);
+        execution!.status = "running";
+        persistPluginExecution(execution!, project!);
+        return saved;
       });
-      releaseJobProfileLease(job.id);
-      if (saved.status === "cancel_requested") return saved;
-      blockExecution.status = "in_progress";
-      blockExecution.progressMessage = saved.message;
-      blockExecution.itemProgress = itemProgressForJob(saved);
-      blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
-      blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
-      execution.status = "running";
-      persistPluginExecution(execution, project);
-      return saved;
     }
     if (recoveryDecision.action === "retry") {
       const retryCount = job.retryCount + 1;
-      const saved = pluginJobs.save(claim, {
-        ...appendPluginDiagnostic(job, {
-          code: "PLUGIN_RETRY_SCHEDULED",
-          reasonCode: errorCode,
-          profileId: job.browserProfile?.profileId,
-          attempt: job.attempt,
-        }),
-        status: job.jobId ? "pending" : "starting",
-        retryCount,
-        error: message,
-        message: recoveryProductMessage({
-          decision: recoveryDecision,
-          failureMessage: message,
-          currentProfile: activeProfileAliasForJob(plugin, job),
-          preservedCount: itemProgressForJob(job)?.completed,
-        }),
-        nextPollAt: new Date(Date.now() + recoveryDecision.delayMs).toISOString(),
+      return commitPluginJobTransition(project.id, () => {
+        const saved = savePluginJob(claim, {
+          ...appendPluginDiagnostic(job, {
+            code: "PLUGIN_RETRY_SCHEDULED",
+            reasonCode: errorCode,
+            profileId: job.browserProfile?.profileId,
+            attempt: job.attempt,
+          }),
+          status: job.jobId ? "pending" : "starting",
+          retryCount,
+          error: message,
+          message: recoveryProductMessage({
+            decision: recoveryDecision,
+            failureMessage: message,
+            currentProfile: activeProfileAliasForJob(plugin, job),
+            preservedCount: itemProgressForJob(job)?.completed,
+          }),
+          nextPollAt: new Date(Date.now() + recoveryDecision.delayMs).toISOString(),
+        });
+        if (saved.status === "cancel_requested") return saved;
+        blockExecution!.status = "in_progress";
+        blockExecution!.progressMessage = saved.message;
+        blockExecution!.itemProgress = itemProgressForJob(saved);
+        blockExecution!.profileLaneProgress = profileLaneProgressForJob(saved);
+        blockExecution!.items = blockExecutionItemsForJob(saved, blockExecution!.items);
+        execution!.status = "running";
+        persistPluginExecution(execution!, project!);
+        return saved;
       });
-      if (saved.status === "cancel_requested") return saved;
-      blockExecution.status = "in_progress";
-      blockExecution.progressMessage = saved.message;
-      blockExecution.itemProgress = itemProgressForJob(saved);
-      blockExecution.profileLaneProgress = profileLaneProgressForJob(saved);
-      blockExecution.items = blockExecutionItemsForJob(saved, blockExecution.items);
-      execution.status = "running";
-      persistPluginExecution(execution, project);
-      return saved;
     }
     return markPluginJobFailed(
       claim,
@@ -6528,20 +6606,23 @@ app.post("/api/execute-block", async (request, response) => {
   const profileLanePool = materializeProfileLanePool(pendingJob, capability);
   if (profileLanePool) pendingJob = { ...pendingJob, profileLanePool };
   if (selectedOrchestration) pendingJob.partialValues = structuredClone(blockExecution.values);
-  const createdJob = pluginJobs.create(pendingJob);
-  blockExecution.status = "in_progress";
-  blockExecution.traceId = pluginRequest.traceId;
-  blockExecution.itemProgress = itemProgressForJob(createdJob);
-  blockExecution.profileLaneProgress = profileLaneProgressForJob(createdJob);
-  blockExecution.items = blockExecutionItemsForJob(createdJob, materializedInputItems);
-  blockExecution.itemRetryScope = undefined;
-  blockExecution.itemRetryId = undefined;
-  blockExecution.progress = itemOrchestration
-    ? (blockExecution.itemProgress?.completed ?? 0) / itemOrchestration.items.length
-    : 0;
-  blockExecution.progressMessage = "Iniciando job…";
-  execution.status = "running";
-  persistPluginExecution(execution, project);
+  const createdJob = commitPluginJobTransition(project.id, () => {
+    const created = pluginJobs.create(pendingJob);
+    blockExecution.status = "in_progress";
+    blockExecution.traceId = pluginRequest.traceId;
+    blockExecution.itemProgress = itemProgressForJob(created);
+    blockExecution.profileLaneProgress = profileLaneProgressForJob(created);
+    blockExecution.items = blockExecutionItemsForJob(created, materializedInputItems);
+    blockExecution.itemRetryScope = undefined;
+    blockExecution.itemRetryId = undefined;
+    blockExecution.progress = itemOrchestration
+      ? (blockExecution.itemProgress?.completed ?? 0) / itemOrchestration.items.length
+      : 0;
+    blockExecution.progressMessage = "Iniciando job…";
+    execution.status = "running";
+    persistPluginExecution(execution, project);
+    return created;
+  });
 
   if (capability.execution.mode === "async") {
     void processDuePluginJobs();
@@ -7572,6 +7653,7 @@ app.post("/api/channels/:id/sync-youtube", async (request, response) => {
 });
 
 app.delete("/api/channels/:id", (request, response) => {
+  const cancelledExecutions: string[] = [];
   const remove = database.transaction((channelId: string) => {
     const projects = database
       .prepare("SELECT id FROM projects WHERE channel_id = ?")
@@ -7579,8 +7661,10 @@ app.delete("/api/channels/:id", (request, response) => {
     for (const project of projects) {
       for (const row of database
         .prepare("SELECT id FROM process_executions WHERE project_id = ?")
-        .all(project.id) as { id: string }[])
-        requestPluginExecutionCancellation(row.id);
+        .all(project.id) as { id: string }[]) {
+        pluginJobs.requestCancellation(row.id);
+        cancelledExecutions.push(row.id);
+      }
       database.prepare("DELETE FROM process_executions WHERE project_id = ?").run(project.id);
     }
     database.prepare("DELETE FROM projects WHERE channel_id = ?").run(channelId);
@@ -7592,6 +7676,7 @@ app.delete("/api/channels/:id", (request, response) => {
     return database.prepare("DELETE FROM channels WHERE id = ?").run(channelId);
   });
   const result = remove(request.params.id) as { changes: number };
+  for (const executionId of cancelledExecutions) abortActivePluginInvocations(executionId);
   response.status(result.changes ? 204 : 404).end();
 });
 
@@ -7927,15 +8012,19 @@ app.delete("/api/projects/:id", (request, response) => {
     });
     return;
   }
+  const cancelledExecutions: string[] = [];
   const remove = database.transaction((projectId: string) => {
     for (const row of database
       .prepare("SELECT id FROM process_executions WHERE project_id = ?")
-      .all(projectId) as { id: string }[])
-      requestPluginExecutionCancellation(row.id);
+      .all(projectId) as { id: string }[]) {
+      pluginJobs.requestCancellation(row.id);
+      cancelledExecutions.push(row.id);
+    }
     database.prepare("DELETE FROM process_executions WHERE project_id = ?").run(projectId);
     return database.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
   });
   const result = remove(request.params.id) as { changes: number };
+  for (const executionId of cancelledExecutions) abortActivePluginInvocations(executionId);
   response.status(result.changes ? 204 : 404).end();
 });
 

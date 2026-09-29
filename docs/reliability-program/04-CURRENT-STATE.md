@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --------------------------- | ------------------------------------------ |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão                      | `1.2.1`                                    |
-| Task concluída              | TASK-018                                   |
+| Task concluída              | TASK-019                                   |
 | Task ativa                  | Nenhuma                                    |
-| Próxima                     | TASK-019 (`ready`), ainda não iniciada     |
+| Próxima                     | TASK-020 (`ready`), ainda não iniciada     |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -45,6 +45,7 @@ As capacidades abaixo existem no checkout atual e constituem base a preservar, c
 - **work units:** `BlockExecutionItem` com identidade do núcleo, proveniência, tentativa, estado durável, receipt e histórico;
 - **deliveries:** `ProjectDelivery` e `DeliveryItem`, incluindo materialização, invalidação e promoção de outputs;
 - **durable plugin jobs:** tabela/store `plugin_jobs`, claims, deadlines, retries, partials, artifacts, cancelamento e recuperação após restart;
+- **commit local de transições:** comandos manuais persistem `ProcessExecution`, projeção de `Project` e receipt na mesma transação; callbacks terminais de `PluginJobStore.save()` e atualizações correlacionadas de job/execution/project compartilham o commit SQLite. Cancelamento registra intenção de job e execution/project antes do abort externo; scheduling e reconciliação seguem o commit. SQLite não cobre efeitos externos.
 - **browser profiles globais:** identidades físicas em `browser_profiles`, separadas dos plugins;
 - **plugin-profile bindings:** vínculos explícitos em `plugin_profile_bindings`, sem fusão silenciosa por alias;
 - **readiness por vínculo:** estado específico de plugin + perfil;
@@ -79,7 +80,7 @@ Os starts internos normais convergiram para a criação canônica. O `POST /api/
 
 A aplicação comum invalida deliveries do alvo até o `VALIDAR`, inclusive o output oficial do Processo, limpa `execution.output`, restaura `outputStatus = pending` e reseta o trecho downstream; Blocos e deliveries anteriores ao alvo são preservados. `retryMode = full` limpa a conversa do alvo, enquanto `conversation_feedback` a preserva; ambos materializam feedback, fallback context e imagens da tentativa rejeitada nos campos de retry.
 
-A checagem de `maxAttempts` ocorre depois de persistir values e deliveries da rejeição. Portanto, uma rejeição que não pode abrir nova rodada ainda atualiza o estado editorial do `VALIDAR`, mas não reinicia o alvo. A projeção subsequente de `Project` é canônica; atomicidade da persistência permanece gap da próxima task.
+A checagem de `maxAttempts` ocorre depois de persistir values e deliveries da rejeição. Portanto, uma rejeição que não pode abrir nova rodada ainda atualiza o estado editorial do `VALIDAR`, mas não reinicia o alvo. A projeção subsequente de `Project` é canônica e compartilha a transação do comando.
 
 ### Retry manual de Bloco
 
@@ -149,6 +150,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-019. A projeção de `Project` já converge em um helper puro; TASK-019 pode focar atomicidade das transições sem reabrir essa autoridade.
+Não há blocker externo confirmado para iniciar a TASK-020. O gap imediato é o auto-agendamento interno via HTTP loopback.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

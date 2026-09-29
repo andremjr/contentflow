@@ -341,9 +341,6 @@ export class PluginJobStore {
   }
 
   requestCancellation(executionId: string, now = new Date()) {
-    const jobs = this.listForExecution(executionId).filter((job) =>
-      ["starting", "pending", "cancel_requested"].includes(job.status),
-    );
     const update = this.database.prepare(
       `UPDATE plugin_jobs
        SET status = 'cancel_requested', next_poll_at = ?, payload = ?, updated_at = ?
@@ -351,6 +348,9 @@ export class PluginJobStore {
     );
     const timestamp = now.toISOString();
     return this.database.transaction(() => {
+      const jobs = this.listForExecution(executionId).filter((job) =>
+        ["starting", "pending", "cancel_requested"].includes(job.status),
+      );
       let changed = 0;
       for (const job of jobs) {
         const next = cancelProfileLanePool({
