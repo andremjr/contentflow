@@ -27,14 +27,11 @@ import {
 } from "../src/lib/human-workflow";
 import { getPresentationRestrictionIssue } from "../src/lib/presentation";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
-import {
-  invalidateBlockDeliveries,
-  recordBlockDeliveries,
-  recordProcessOutputDelivery,
-} from "../src/lib/deliveries";
+import { recordBlockDeliveries, recordProcessOutputDelivery } from "../src/lib/deliveries";
 import {
   applyCompletedBlockTransition,
   applyHumanBlockCompletion,
+  applyManualBlockRetry,
   applyValidationOutcome,
   createCanonicalProcessExecution,
   validationOutcomeFromValues,
@@ -405,48 +402,19 @@ export function executionCommands(db: {
     itemId?: string,
   ) {
     const execution = db.executions.find((item) => item.id === executionId);
-    const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
-    const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
-    if (
-      !execution ||
-      !blockExecution ||
-      !block ||
-      (!["failed", "cancelled"].includes(blockExecution.status) &&
-        !(retryScope === "selected" && blockExecution.status === "completed"))
-    )
-      return false;
-    blockExecution.attempt = (blockExecution.attempt ?? 1) + 1;
-    invalidateBlockDeliveries(execution, [blockId]);
-    blockExecution.error = undefined;
-    blockExecution.pluginConversation = undefined;
-    blockExecution.jobId = undefined;
-    blockExecution.traceId = undefined;
-    if (retryScope === "selected" && !blockExecution.items?.some((item) => item.id === itemId)) {
-      return false;
-    }
-    blockExecution.itemRetryScope = retryScope;
-    blockExecution.itemRetryId = retryScope === "selected" ? itemId : undefined;
-    blockExecution.completedAt = undefined;
-    if (retryScope === "all") {
-      blockExecution.values = {};
-      blockExecution.itemProgress = undefined;
-      blockExecution.progress = undefined;
-    } else if (blockExecution.itemProgress?.total) {
-      blockExecution.progress =
-        blockExecution.itemProgress.completed / blockExecution.itemProgress.total;
-    }
-    blockExecution.progressMessage = undefined;
-    blockExecution.status =
-      block.operator === "Humano" && !block.plugin ? "awaiting_human" : "blocked_executor";
-    execution.error = undefined;
-    execution.status =
-      blockExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
+    if (!execution) return false;
+    const result = applyManualBlockRetry(
+      execution,
+      { type: "manual_block_retry_requested", blockId, scope: retryScope, itemId },
+      new Date().toISOString(),
+    );
+    if (!result.ok) return false;
     const project = db.projects.find((item) => item.id === execution.projectId);
     if (project) {
       project.stages = {
         ...project.stages,
         [execution.processType]:
-          blockExecution.status === "awaiting_human" ? "awaiting_human" : "blocked",
+          execution.status === "awaiting_human" ? "awaiting_human" : "blocked",
       };
       project.currentStage = execution.processType;
       project.state = project.stages[execution.processType];

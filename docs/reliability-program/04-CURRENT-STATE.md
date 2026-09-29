@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --------------------------- | ------------------------------------------ |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão                      | `1.2.1`                                    |
-| Task concluída              | TASK-014                                   |
+| Task concluída              | TASK-015                                   |
 | Task ativa                  | Nenhuma                                    |
-| Próxima                     | TASK-015 (`ready`), ainda não iniciada     |
+| Próxima                     | TASK-016 (`ready`), ainda não iniciada     |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -32,7 +32,7 @@ Consequentemente, o produto não é apenas conceitual e o início do pipeline j�
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) continua sendo a fonte normativa do domínio atual: 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores e 3 interfaces de domínio.
 - Projetos podem congelar a ordem e os Métodos do Canal em `strategySnapshot`; cada `ProcessExecution` também conserva seu `methodSnapshot`.
 - A máquina de execução atual está dividida entre `server/execution-commands.ts`, funções e rotas de `server/index.ts`, scheduler de jobs de plugin e reconciliação do Orchestrator.
-- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais, decide ativação do primeiro/próximo Bloco e possui o construtor canônico `createCanonicalProcessExecution()`. Esse construtor recebe identidade e tempo explicitamente, clona o snapshot defensivamente e materializa a ativação inicial pela própria máquina do Core. Os starts manual, Orchestrator e standalone/runThrough usam esse construtor; não resta constructor interno normal duplicado de `ProcessExecution`. Conclusões humanas normais entram no Core como `human_block_completed` e conclusões automáticas normais de executor como `executor_block_completed`; cada caminho possui aplicação canônica própria e ambos convergem depois na progressão compartilhada `applyCompletedBlockTransition()`. `VALIDAR` possui uma única aplicação editorial no Core, compartilhada entre resultados humanos e de executor. A boundary continua resolvendo inputs e mapeando/validando respostas de plugin; deliveries são registradas somente depois de a conclusão ser aceita pelo Core. Resultados parciais, recovery e handoff de Bloco Humano assistido por plugin permanecem nos adapters. O `POST /api/executions` permanece apenas como boundary explícita de compatibilidade histórica em `server/legacy-execution-boundary.ts`: valida estrutura mínima, preserva a representação materializada recebida e não define a forma canônica de nascimento da execução.
+- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais, decide ativação do primeiro/próximo Bloco e possui o construtor canônico `createCanonicalProcessExecution()`. Esse construtor recebe identidade e tempo explicitamente, clona o snapshot defensivamente e materializa a ativação inicial pela própria máquina do Core. Os starts manual, Orchestrator e standalone/runThrough usam esse construtor; não resta constructor interno normal duplicado de `ProcessExecution`. Conclusões humanas normais entram no Core como `human_block_completed` e conclusões automáticas normais de executor como `executor_block_completed`; cada caminho possui aplicação canônica própria e ambos convergem depois na progressão compartilhada `applyCompletedBlockTransition()`. `VALIDAR` possui uma única aplicação editorial no Core, compartilhada entre resultados humanos e de executor. O retry manual de Bloco entra como `manual_block_retry_requested` e é avaliado/aplicado por `applyManualBlockRetry()`: eligibility, scopes `all`/`remaining`/`selected`, tentativa, limpeza técnica, invalidação da delivery e reativação humano/executor deixaram de ser determinados pelo adapter. A boundary continua resolvendo inputs e mapeando/validando respostas de plugin; deliveries são registradas somente depois de a conclusão ser aceita pelo Core. Resultados parciais, recovery e handoff de Bloco Humano assistido por plugin permanecem nos adapters. O `POST /api/executions` permanece apenas como boundary explícita de compatibilidade histórica em `server/legacy-execution-boundary.ts`: valida estrutura mínima, preserva a representação materializada recebida e não define a forma canônica de nascimento da execução.
 - O Orchestrator novo cria filas com `strategyVersion = 5`, ordem congelada e slots elegíveis. Versões históricas continuam aceitas.
 - O núcleo persiste execuções, jobs, unidades, deliveries, perfis, bindings, readiness, leases, filas e journals em SQLite, ainda com parte relevante do comportamento concentrada no servidor HTTP.
 - Plugin API, Browser Bridge, React, Express, SQLite, filesystem e formatos históricos ainda não estão completamente isolados do Core canônico descrito na arquitetura-alvo.
@@ -69,7 +69,7 @@ Existência não significa convergência completa com a arquitetura-alvo. Essas 
 
 ### Autoridade de execução ainda distribuída em semânticas especiais
 
-- `chooseCollectionItem()`, drafts, retry manual, uso de entrega atual e output final do Processo conservam seus caminhos especializados até as tasks correspondentes.
+- `chooseCollectionItem()`, drafts, uso de entrega atual e output final do Processo conservam seus caminhos especializados até as tasks correspondentes.
 
 Os starts internos normais convergiram para a criação canônica. O `POST /api/executions` deixou de ser tratado como constructor concorrente: ele é uma boundary histórica explícita e testada. Conclusões humanas normais e conclusões automáticas normais de executor agora passam por fatos e aplicações canônicas do Core antes da mesma progressão subsequente. A autoridade ainda está distribuída nas semânticas especializadas, na projeção e na persistência até as tasks seguintes.
 
@@ -79,7 +79,13 @@ Os starts internos normais convergiram para a criação canônica. O `POST /api/
 
 A aplicação comum invalida deliveries do alvo até o `VALIDAR`, inclusive o output oficial do Processo, limpa `execution.output`, restaura `outputStatus = pending` e reseta o trecho downstream; Blocos e deliveries anteriores ao alvo são preservados. `retryMode = full` limpa a conversa do alvo, enquanto `conversation_feedback` a preserva; ambos materializam feedback, fallback context e imagens da tentativa rejeitada nos campos de retry.
 
-A checagem de `maxAttempts` ocorre depois de persistir values e deliveries da rejeição. Portanto, uma rejeição que não pode abrir nova rodada ainda atualiza o estado editorial do `VALIDAR`, mas não reinicia o alvo. Projeção de Project, atomicidade da persistência, retry manual normal, uso da entrega atual e cancelamento permanecem gaps das tasks seguintes.
+A checagem de `maxAttempts` ocorre depois de persistir values e deliveries da rejeição. Portanto, uma rejeição que não pode abrir nova rodada ainda atualiza o estado editorial do `VALIDAR`, mas não reinicia o alvo. Projeção de Project, atomicidade da persistência, uso da entrega atual e cancelamento permanecem gaps das tasks seguintes.
+
+### Retry manual de Bloco
+
+O retry manual possui aplicação canônica própria no Execution Core. `failed` e `cancelled` são elegíveis; `completed` é elegível somente para `selected`. O item selecionado precisa existir antes de qualquer mutação. A aplicação incrementa a tentativa, invalida deliveries do Bloco, limpa o estado técnico da tentativa anterior, preserva a semântica de `all`, `remaining` e `selected` e reabre o Bloco como `awaiting_human` ou `blocked_executor` pela definição canônica do snapshot.
+
+O adapter conserva apenas tradução para boolean, projeção de `Project`, `touchExecution()` e persistência externa. No comportamento vigente preservado, um retry `selected` de Bloco concluído mantém `execution.output` e `outputStatus = completed` enquanto reabre o Bloco; a política de invalidação desse output oficial não foi redefinida pela TASK-015.
 
 ### Resolução heurística de inputs
 
@@ -137,6 +143,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-015. A semântica editorial de `VALIDAR` já converge pelo Execution Core; TASK-015 pode focar o retry manual normal de Bloco.
+Não há blocker externo confirmado para preparar a especificação da TASK-016. Retry editorial e retry manual já convergem por aplicações distintas do Execution Core; TASK-016 pode focar exclusivamente “usar entrega atual”.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

@@ -1,6 +1,7 @@
 export * from "./apply-completed-transition";
 export * from "./apply-executor-completion";
 export * from "./apply-human-completion";
+export * from "./apply-manual-retry";
 export * from "./apply-validation-outcome";
 export * from "./create-execution";
 export * from "./evaluate";

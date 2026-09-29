@@ -1,10 +1,18 @@
-import type { ProcessExecution, RuntimeValue } from "../domain";
+import type { BlockItemRetryScope, ProcessExecution, RuntimeValue } from "../domain";
 
 export type ExecutionCoreState = Readonly<ProcessExecution>;
+
+export type ManualBlockRetryRequestedFact = {
+  type: "manual_block_retry_requested";
+  blockId: string;
+  scope: BlockItemRetryScope;
+  itemId?: string;
+};
 
 export type ExecutionCoreFact =
   | { type: "start_requested" }
   | { type: "block_completed"; blockId: string }
+  | ManualBlockRetryRequestedFact
   | {
       type: "human_block_completed";
       blockId: string;
