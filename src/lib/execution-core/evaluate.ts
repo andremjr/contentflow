@@ -74,6 +74,34 @@ export function evaluateExecutionCore(
     };
   }
 
+  if (fact.type === "human_block_completed") {
+    const blockIndex = state.methodSnapshot.blocks.findIndex((block) => block.id === fact.blockId);
+    if (blockIndex < 0) return blocked(state, fact, "unknown_human_block", diagnostics);
+
+    const block = state.methodSnapshot.blocks[blockIndex];
+    if (block.operator !== "Humano" || block.plugin) {
+      return blocked(state, fact, "block_not_human", diagnostics);
+    }
+    if (state.blocks[blockIndex]?.status !== "awaiting_human") {
+      return blocked(state, fact, "human_block_not_awaiting", diagnostics);
+    }
+    if (state.status !== "awaiting_human") {
+      return blocked(state, fact, "execution_not_awaiting_human", diagnostics);
+    }
+    return {
+      state,
+      fact,
+      decision: {
+        type: "complete_human_block",
+        blockId: fact.blockId,
+        blockIndex,
+        reason: "human_block_completion_allowed",
+        expectedRevision: state.revision,
+      },
+      diagnostics,
+    };
+  }
+
   const completedIndex = state.methodSnapshot.blocks.findIndex(
     (block) => block.id === fact.blockId,
   );

@@ -351,6 +351,26 @@ test("C08 — conclusão fora do estado ativo falha sem mutação", () => {
   assert.deepEqual(project, beforeProject);
 });
 
+test("C08A — rejeição estrutural do Core não materializa conclusão, delivery ou progressão", () => {
+  const { commands, project } = fixture([
+    humanBlock("human-first", 0),
+    humanBlock("human-second", 1),
+  ]);
+  const execution = commands.startProcessExecution(project.id, "theme")!;
+  execution.blocks[1].status = "awaiting_human";
+  const beforeExecution = structuredClone(execution);
+  const beforeProject = structuredClone(project);
+
+  const result = commands.completeHumanBlock(execution.id, "human-first", {
+    value_0: "não deve persistir",
+  });
+
+  assert.deepEqual(result, { ok: false, missing: ["Executor humano indisponível"] });
+  assert.deepEqual(execution, beforeExecution);
+  assert.deepEqual(project, beforeProject);
+  assert.equal(execution.deliveries, undefined);
+});
+
 test("C09 — input ausente impede conclusão humana e promoção de delivery", () => {
   const block = humanBlock("human-with-input", 0);
   block.inputs = [

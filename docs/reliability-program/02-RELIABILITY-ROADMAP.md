@@ -52,8 +52,8 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 | TASK-009 | Fazer Orchestrator/standalone usar criação canônica | `done` |
 | TASK-010 | Isolar `POST /api/executions` legado | `done` |
 | TASK-011 | Unificar transição bloco concluído → próximo estado | `done` |
-| TASK-012 | Conclusão Humana passa pelo Core | `ready` |
-| TASK-013 | Conclusão de Plugin passa pelo Core | `pending` |
+| TASK-012 | Conclusão Humana passa pelo Core | `done` |
+| TASK-013 | Conclusão de Plugin passa pelo Core | `ready` |
 | TASK-014 | Unificar semântica de `VALIDAR` | `pending` |
 | TASK-015 | Centralizar retry manual de Bloco | `pending` |
 | TASK-016 | Centralizar “usar entrega atual” | `pending` |

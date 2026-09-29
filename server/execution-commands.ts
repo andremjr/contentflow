@@ -39,6 +39,7 @@ import {
 } from "../src/lib/deliveries";
 import {
   applyCompletedBlockTransition,
+  applyHumanBlockCompletion,
   createCanonicalProcessExecution,
 } from "../src/lib/execution-core";
 
@@ -407,9 +408,15 @@ export function executionCommands(db: {
       return { ok: true, completedProcess: false, pausedValidation: true };
     }
     const now = new Date().toISOString();
-    blockExecution.values = structuredClone(values);
-    blockExecution.status = "completed";
-    blockExecution.completedAt = now;
+    const completion = applyHumanBlockCompletion(execution, {
+      type: "human_block_completed",
+      blockId,
+      values,
+      now,
+    });
+    if (!completion.ok) {
+      return { ok: false, missing: ["Executor humano indisponível"] };
+    }
     recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
     const updated = activateNextBlock(execution, blockExecution.blockId);
     return { ok: true, completedProcess: updated.status === "completed" };

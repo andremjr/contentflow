@@ -1,16 +1,24 @@
-import type { ProcessExecution } from "../domain";
+import type { ProcessExecution, RuntimeValue } from "../domain";
 
 export type ExecutionCoreState = Readonly<ProcessExecution>;
 
 export type ExecutionCoreFact =
-  { type: "start_requested" } | { type: "block_completed"; blockId: string };
+  | { type: "start_requested" }
+  | { type: "block_completed"; blockId: string }
+  | {
+      type: "human_block_completed";
+      blockId: string;
+      values: Record<string, RuntimeValue>;
+      now: string;
+    };
 
 export type ExecutionCoreReason =
   | "first_block_human"
   | "first_block_executor"
   | "next_block_human"
   | "next_block_executor"
-  | "method_blocks_complete";
+  | "method_blocks_complete"
+  | "human_block_completion_allowed";
 
 export type ExecutionCoreDiagnosticCode =
   | "empty_method"
@@ -18,9 +26,20 @@ export type ExecutionCoreDiagnosticCode =
   | "unknown_completed_block"
   | "block_not_completed"
   | "next_block_not_pending"
-  | "start_state_not_pristine";
+  | "start_state_not_pristine"
+  | "unknown_human_block"
+  | "block_not_human"
+  | "human_block_not_awaiting"
+  | "execution_not_awaiting_human";
 
 export type ExecutionCoreDecision =
+  | {
+      type: "complete_human_block";
+      blockId: string;
+      blockIndex: number;
+      reason: "human_block_completion_allowed";
+      expectedRevision?: number;
+    }
   | {
       type: "activate_block";
       blockId: string;

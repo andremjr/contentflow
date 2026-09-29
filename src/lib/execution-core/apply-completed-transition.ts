@@ -67,6 +67,10 @@ export function applyCompletedBlockTransition(
     };
   }
 
+  if (transition.decision.type !== "finish_blocks") {
+    throw new Error(`Unexpected completed block decision: ${transition.decision.type}`);
+  }
+
   const output = dependencies.deriveProcessOutput(execution);
   if (output) {
     execution.output = { ...output, createdAt: now };
