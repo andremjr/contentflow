@@ -1,0 +1,203 @@
+{
+  "apiVersion": "1",
+  "id": "com.contentflow.test.deterministic-fault",
+  "name": "Deterministic Fault Injection",
+  "version": "0.1.0",
+  "description": "Internal reliability fixture for deterministic plugin execution failures.",
+  "author": "ContentFlow",
+  "license": "LicenseRef-ContentFlow-Source-Available-1.0",
+  "localizations": {
+    "pt-BR": {
+      "name": "Injeção determinística de falhas",
+      "description": "Fixture interna de confiabilidade para falhas determinísticas na execução de plugins.",
+      "capabilities": {
+        "fault": {
+          "name": "Cenário determinístico de falha",
+          "description": "Executa um cenário controlado sem provider externo.",
+          "inputPorts": {
+            "content": { "label": "Conteúdo" }
+          },
+          "outputPorts": {
+            "result": { "label": "Resultado" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "scenario": {
+                "title": "Cenário",
+                "description": "Resultado determinístico que a fixture deve produzir.",
+                "options": [
+                  { "value": "success", "label": "Sucesso" },
+                  { "value": "technical_retryable", "label": "Falha técnica recuperável" },
+                  { "value": "timeout", "label": "Timeout" },
+                  { "value": "rate_limit", "label": "Limite de taxa" },
+                  { "value": "intervention", "label": "Intervenção humana" },
+                  { "value": "external_effect_uncertain", "label": "Efeito externo incerto" },
+                  {
+                    "value": "external_effect_confirmed_failure",
+                    "label": "Falha após efeito confirmado"
+                  },
+                  { "value": "cancel_aware", "label": "Aguardando cancelamento" }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "en": {
+      "name": "Deterministic Fault Injection",
+      "description": "Internal reliability fixture for deterministic plugin execution failures.",
+      "capabilities": {
+        "fault": {
+          "name": "Deterministic fault scenario",
+          "description": "Runs a controlled scenario without an external provider.",
+          "inputPorts": {
+            "content": { "label": "Content" }
+          },
+          "outputPorts": {
+            "result": { "label": "Result" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "scenario": {
+                "title": "Scenario",
+                "description": "Deterministic outcome produced by the fixture.",
+                "options": [
+                  { "value": "success", "label": "Success" },
+                  { "value": "technical_retryable", "label": "Retryable technical failure" },
+                  { "value": "timeout", "label": "Timeout" },
+                  { "value": "rate_limit", "label": "Rate limit" },
+                  { "value": "intervention", "label": "Human intervention" },
+                  { "value": "external_effect_uncertain", "label": "Uncertain external effect" },
+                  {
+                    "value": "external_effect_confirmed_failure",
+                    "label": "Failure after confirmed effect"
+                  },
+                  { "value": "cancel_aware", "label": "Waiting for cancellation" }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "es": {
+      "name": "Inyección determinista de fallos",
+      "description": "Fixture interna de fiabilidad para fallos deterministas en la ejecución de plugins.",
+      "capabilities": {
+        "fault": {
+          "name": "Escenario determinista de fallo",
+          "description": "Ejecuta un escenario controlado sin proveedor externo.",
+          "inputPorts": {
+            "content": { "label": "Contenido" }
+          },
+          "outputPorts": {
+            "result": { "label": "Resultado" }
+          },
+          "blockConfigSchema": {
+            "properties": {
+              "scenario": {
+                "title": "Escenario",
+                "description": "Resultado determinista que debe producir la fixture.",
+                "options": [
+                  { "value": "success", "label": "Éxito" },
+                  { "value": "technical_retryable", "label": "Fallo técnico reintentable" },
+                  { "value": "timeout", "label": "Tiempo de espera agotado" },
+                  { "value": "rate_limit", "label": "Límite de frecuencia" },
+                  { "value": "intervention", "label": "Intervención humana" },
+                  { "value": "external_effect_uncertain", "label": "Efecto externo incierto" },
+                  {
+                    "value": "external_effect_confirmed_failure",
+                    "label": "Fallo tras efecto confirmado"
+                  },
+                  { "value": "cancel_aware", "label": "Esperando cancelación" }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "runtime": {
+    "kind": "node",
+    "version": ">=26 <27",
+    "module": "esm"
+  },
+  "entrypoint": "handler.mjs",
+  "permissions": [],
+  "deliveryTypes": ["text"],
+  "capabilities": [
+    {
+      "id": "fault",
+      "name": "Deterministic fault scenario",
+      "description": "Runs a controlled scenario without an external provider.",
+      "operator": "Código",
+      "instructionUsage": "not_applicable",
+      "blockTypes": ["CRIAR"],
+      "inputPorts": [
+        {
+          "key": "content",
+          "label": "Content",
+          "acceptedTypes": ["textarea"],
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "producedTypes": ["textarea"],
+          "required": true
+        }
+      ],
+      "acceptedInputTypes": ["textarea"],
+      "producedOutputTypes": ["textarea"],
+      "execution": {
+        "mode": "immediate",
+        "defaultTimeoutMs": 1000,
+        "supportsCancellation": true,
+        "maxConcurrency": 1
+      },
+      "sideEffects": [],
+      "cost": {
+        "model": "free",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": false
+      },
+      "blockConfigSchema": {
+        "type": "object",
+        "properties": {
+          "scenario": {
+            "type": "string",
+            "title": "Scenario",
+            "description": "Deterministic outcome produced by the fixture.",
+            "enum": [
+              "success",
+              "technical_retryable",
+              "timeout",
+              "rate_limit",
+              "intervention",
+              "external_effect_uncertain",
+              "external_effect_confirmed_failure",
+              "cancel_aware"
+            ],
+            "default": "success"
+          }
+        },
+        "required": ["scenario"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": { "type": "string" }
+        },
+        "required": ["result"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

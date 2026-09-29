@@ -1,0 +1,48 @@
+{
+  "executionId": "fault-execution-001",
+  "traceId": "fault-trace-001",
+  "blockId": "fault-block-001",
+  "capabilityId": "fault",
+  "attempt": 1,
+  "invocation": { "mode": "start" },
+  "configuration": { "scenario": "success" },
+  "settings": {},
+  "inputs": { "content": "  hello  " },
+  "inputContract": [
+    {
+      "id": "fault-input-content",
+      "portKey": "content",
+      "label": "Content",
+      "type": "textarea"
+    }
+  ],
+  "outputContract": [
+    {
+      "portKey": "result",
+      "label": "Result",
+      "key": "result",
+      "type": "textarea",
+      "required": true
+    }
+  ],
+  "context": {
+    "locale": "en",
+    "timeZone": "UTC",
+    "channel": {
+      "id": "fault-channel",
+      "name": "Fault fixture",
+      "language": "en",
+      "niche": "Reliability"
+    },
+    "project": {
+      "id": "fault-project",
+      "title": "Deterministic fault injection"
+    },
+    "processType": "theme",
+    "block": {
+      "type": "CRIAR",
+      "name": "Fault injection",
+      "instructions": ""
+    }
+  }
+}

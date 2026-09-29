@@ -65,6 +65,7 @@
     "test:automatic-execution": "tsx --test server/automatic-plugin-execution.test.ts server/execution-retry.test.ts",
     "test:execution-state-machine": "tsx --test server/execution-state-machine.characterization.test.ts",
     "test:validation-retry": "tsx --test server/validation-retry.characterization.test.ts",
+    "test:fault-injection": "tsx --test ecosystem/plugins/testing/deterministic-fault-injection/test.mjs server/deterministic-fault-injection.integration.test.ts",
     "test:orchestrator": "tsx --test server/execution-orchestrator.test.ts server/execution-orchestrator.integration.test.ts",
     "benchmark:orchestrator-v4": "node scripts/benchmark-orchestrator-v4.mjs",
     "benchmark:shared-browser-v15": "node --import tsx scripts/benchmark-shared-browser-v15.mjs",

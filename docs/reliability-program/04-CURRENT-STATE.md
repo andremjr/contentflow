@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --- | --- |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão | `1.2.1` |
-| Task concluída | TASK-003 |
+| Task concluída | TASK-004 |
 | Task ativa | Nenhuma |
-| Próxima | TASK-004 (`ready`), ainda não iniciada |
+| Próxima | TASK-005 (`ready`), ainda não iniciada |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -50,6 +50,7 @@ As capacidades abaixo existem no checkout atual e constituem base a preservar, c
 - **leases:** lock persistente por perfil físico, token, TTL, heartbeat e liberação;
 - **profile lanes:** pool multiperfil, distribuição exclusiva de unidades, falha de lane e reconciliação;
 - **recovery policy:** `decideExecutionRecovery()` distingue `cancel`, `reconcile`, `intervene`, `switch_profile`, `retry` e `fail`;
+- **fault injection determinístico:** fixture interna sem provider externo reproduz success, falha técnica recuperável, rate limit, intervenção, efeito externo incerto, falha após efeito confirmado, timeout e cancelamento pelo runner;
 - **migration journal:** schema versionado com journal, passos, estados `started/completed/failed` e recuperação de migração interrompida;
 - **Orchestrator V5:** elegibilidade por slots, ordem congelada e retomada de filas persistidas;
 - **characterization da execução básica:** suíte dedicada cobre start humano/automático, avanço sequencial, espera humana/de executor, outputs, drafts, rejeições sem mutação, snapshot congelado e sucesso simples de plugin;
@@ -120,7 +121,6 @@ Esses caminhos preservam instalações existentes, mas parte da reconciliação 
 Existem suites importantes para arquitetura, máquina básica de execução, `VALIDAR`/retry editorial, ordem de Processos, jobs persistentes, restart de componentes, Browser Bridge, perfis, lanes, migrações, plugins e contratos. As TASK-002 e TASK-003 protegem respectivamente a máquina básica e a semântica humana de validação/retry. Ainda não existe um gate único que prove, em conjunto:
 
 - jornada automática completa dos 8 Processos;
-- fault injection determinístico;
 - restart em todos os estados relevantes;
 - cinco vídeos desacompanhados;
 - efeito externo incerto e reconciliação;
@@ -137,6 +137,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-004. Sua criação e implementação ainda exigem autorização explícita.
+Não há blocker externo confirmado para preparar a especificação da TASK-005. Sua criação e implementação ainda exigem autorização explícita.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.
