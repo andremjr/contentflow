@@ -15,6 +15,10 @@ export type CurrentBlockDeliveryAcceptedFact = {
   now: string;
 };
 
+export type ExecutionCancellationRequestedFact = {
+  type: "execution_cancellation_requested";
+};
+
 export type ExecutionCoreFact =
   | { type: "start_requested" }
   | { type: "block_completed"; blockId: string }

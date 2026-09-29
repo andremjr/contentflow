@@ -87,6 +87,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "tasks/TASK-014.md",
     "tasks/TASK-015.md",
     "tasks/TASK-016.md",
+    "tasks/TASK-017.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -117,10 +118,10 @@ test("keeps the Reliability Program connected and bounded", () => {
   const roadmapTaskIds = [...roadmap.matchAll(/\| (TASK-\d{3}) \|/g)].map((match) => match[1]);
   assert.deepEqual(roadmapTaskIds, expectedTaskIds);
   assert.match(roadmap, /Estado da TASK-000: `done`/);
-  for (const taskId of expectedTaskIds.slice(0, 16)) {
+  for (const taskId of expectedTaskIds.slice(0, 17)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `done`\\s+\\|"));
   }
-  assert.match(roadmap, /\| TASK-017 \|[^\n]+\| `ready`\s+\|/);
+  assert.match(roadmap, /\| TASK-018 \|[^\n]+\| `ready`\s+\|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
@@ -157,6 +158,11 @@ test("keeps the Reliability Program connected and bounded", () => {
     "utf8",
   );
   assert.match(task016, /## Estado\s+`done`/);
+  const task017 = readFileSync(
+    new URL("../../docs/reliability-program/tasks/TASK-017.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(task017, /## Estado\s+`done`/);
 
   const executionCommands = readFileSync(
     new URL("../../server/execution-commands.ts", import.meta.url),
@@ -277,6 +283,28 @@ test("keeps the Reliability Program connected and bounded", () => {
     assert.doesNotMatch(currentDeliveryAcceptance, duplicatedCurrentDeliveryAcceptance);
   }
 
+  const storedExecutionCancellation = server.match(
+    /function cancelStoredProcessExecution[\s\S]*?\nfunction resumeExecutionOrchestrators/,
+  )?.[0];
+  assert.ok(
+    storedExecutionCancellation,
+    "stored execution cancellation should remain discoverable",
+  );
+  assert.match(storedExecutionCancellation, /applyExecutionCancellation\(/);
+  assert.doesNotMatch(storedExecutionCancellation, /execution\.status\s*=\s*"cancelled"/);
+  assert.doesNotMatch(
+    storedExecutionCancellation,
+    /execution\.blocks\s*=\s*execution\.blocks\.map/,
+  );
+
+  const pluginJobCancellation = server.match(
+    /function markPluginJobCancelled[\s\S]*?\nasync function resolvePluginConnection/,
+  )?.[0];
+  assert.ok(pluginJobCancellation, "plugin job cancellation should remain discoverable");
+  assert.match(pluginJobCancellation, /applyExecutionCancellation\(/);
+  assert.doesNotMatch(pluginJobCancellation, /execution\.status\s*=\s*"cancelled"/);
+  assert.doesNotMatch(pluginJobCancellation, /execution\.blocks\s*=\s*execution\.blocks\.map/);
+
   const legacyBoundary = readFileSync(
     new URL("../../server/legacy-execution-boundary.ts", import.meta.url),
     "utf8",
@@ -284,7 +312,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(legacyBoundary, /adaptLegacyExecutionCreatePayload/);
   assert.match(legacyBoundary, /Compatibility adapter for the historical HTTP creation boundary/);
 
-  for (const taskId of expectedTaskIds.slice(17)) {
+  for (const taskId of expectedTaskIds.slice(18)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

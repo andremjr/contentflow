@@ -81,6 +81,7 @@ import {
 } from "../src/lib/execution-orchestrator";
 import {
   applyCompletedBlockTransition,
+  applyExecutionCancellation,
   applyExecutorBlockCompletion,
   applyValidationOutcome,
   createCanonicalProcessExecution,
@@ -1845,14 +1846,15 @@ function queueOrchestratorReconciliationForProject(projectId: string) {
 }
 
 function cancelStoredProcessExecution(execution: ProcessExecution, project: Project) {
+  const cancellation = applyExecutionCancellation(execution, {
+    type: "execution_cancellation_requested",
+  });
+  if (!cancellation.ok || cancellation.outcome === "already_cancelled") return cancellation;
+
   delete project.runThrough;
   delete project.runFrom;
   execution.revision = (execution.revision ?? 0) + 1;
   requestPluginExecutionCancellation(execution.id);
-  execution.status = "cancelled";
-  execution.blocks = execution.blocks.map((item) =>
-    item.status === "completed" ? item : { ...item, status: "cancelled" },
-  );
   execution.updatedAt = new Date().toISOString();
   project.stages = { ...project.stages, [execution.processType]: "not_started" };
   project.currentStage = execution.processType;
@@ -1867,6 +1869,7 @@ function cancelStoredProcessExecution(execution: ProcessExecution, project: Proj
       .run(JSON.stringify(project), project.id);
   })();
   void processDuePluginJobs();
+  return cancellation;
 }
 
 function resumeExecutionOrchestrators() {
@@ -2050,10 +2053,10 @@ function markPluginJobCancelled(
     },
     () => {
       if (!execution || !project) return;
-      execution.status = "cancelled";
-      execution.blocks = execution.blocks.map((item) =>
-        item.status === "completed" ? item : { ...item, status: "cancelled" },
-      );
+      const cancellation = applyExecutionCancellation(execution, {
+        type: "execution_cancellation_requested",
+      });
+      if (!cancellation.ok || cancellation.outcome === "already_cancelled") return;
       project.stages = { ...project.stages, [execution.processType]: "not_started" };
       project.currentStage = execution.processType;
       project.state = "not_started";
@@ -8073,7 +8076,13 @@ app.post("/api/executions/:id/cancel", (request, response) => {
     response.status(409).json({ error: "Uma execução concluída não pode ser cancelada." });
     return;
   }
-  cancelStoredProcessExecution(execution, project);
+  const cancellation = cancelStoredProcessExecution(execution, project);
+  if (!cancellation.ok) {
+    response
+      .status(409)
+      .json({ error: "A execução mudou. Recarregue o estado antes de continuar." });
+    return;
+  }
   response.status(202).json({ ok: true, execution, project });
 });
 

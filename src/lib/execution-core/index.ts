@@ -1,5 +1,6 @@
 export * from "./apply-completed-transition";
 export * from "./apply-current-delivery-acceptance";
+export * from "./apply-execution-cancellation";
 export * from "./apply-executor-completion";
 export * from "./apply-human-completion";
 export * from "./apply-manual-retry";

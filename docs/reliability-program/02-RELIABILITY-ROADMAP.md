@@ -57,8 +57,8 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 | TASK-014 | Unificar semântica de `VALIDAR` | `done` |
 | TASK-015 | Centralizar retry manual de Bloco | `done` |
 | TASK-016 | Centralizar “usar entrega atual” | `done` |
-| TASK-017 | Centralizar cancelamento | `ready` |
-| TASK-018 | Centralizar projeção do estado de Project | `pending` |
+| TASK-017 | Centralizar cancelamento | `done` |
+| TASK-018 | Centralizar projeção do estado de Project | `ready` |
 | TASK-019 | Persistência atômica das transições | `pending` |
 | TASK-020 | Remover auto-agendamento interno via HTTP loopback | `pending` |
 
