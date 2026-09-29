@@ -79,7 +79,10 @@ import {
   type ExecutionOrchestratorMode,
   type ExecutionOrchestratorStatus,
 } from "../src/lib/execution-orchestrator";
-import { createCanonicalProcessExecution } from "../src/lib/execution-core";
+import {
+  applyCompletedBlockTransition,
+  createCanonicalProcessExecution,
+} from "../src/lib/execution-core";
 import {
   getCompatiblePresentationRenderers,
   getPresentationRestrictionIssue,
@@ -1203,26 +1206,16 @@ function finishPluginBlock(
       return;
     }
   }
-  const nextExecution = execution.blocks[completedIndex + 1];
-  const nextBlock = execution.methodSnapshot.blocks[completedIndex + 1];
-
-  if (nextExecution && nextBlock) {
-    nextExecution.status =
-      nextBlock.operator === "Humano" && !nextBlock.plugin ? "awaiting_human" : "blocked_executor";
-    nextExecution.startedAt = now;
-    execution.status =
-      nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
-  } else {
-    const output = deriveProcessOutput(execution);
-    if (output) {
-      execution.output = output;
-      recordProcessOutputDelivery(execution, execution.output.values, now);
-      execution.outputStatus = "completed";
-      execution.status = "completed";
-    } else {
-      execution.outputStatus = "awaiting_human";
-      execution.status = "awaiting_output";
-    }
+  const transition = applyCompletedBlockTransition(execution, blockExecution.blockId, now, {
+    deriveProcessOutput,
+    recordProcessOutputDelivery,
+  });
+  if (!transition.ok) {
+    throw new Error(
+      `Execution Core blocked transition: ${transition.decision.reason} (${transition.diagnostics
+        .map((diagnostic) => diagnostic.code)
+        .join(", ")})`,
+    );
   }
   execution.updatedAt = now;
 }

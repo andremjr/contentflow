@@ -37,7 +37,10 @@ import {
   recordBlockDeliveries,
   recordProcessOutputDelivery,
 } from "../src/lib/deliveries";
-import { createCanonicalProcessExecution, evaluateExecutionCore } from "../src/lib/execution-core";
+import {
+  applyCompletedBlockTransition,
+  createCanonicalProcessExecution,
+} from "../src/lib/execution-core";
 
 /** Synchronous domain transitions. The caller owns the SQLite transaction. */
 export function executionCommands(db: {
@@ -117,40 +120,13 @@ export function executionCommands(db: {
     return execution;
   }
 
-  function finalizeOrRequestOutput(execution: ProcessExecution) {
-    const project = db.projects.find((item) => item.id === execution.projectId);
-    const output = deriveProcessOutput(execution);
-    if (output) {
-      execution.output = output;
-      recordProcessOutputDelivery(execution, output.values, output.createdAt);
-      execution.outputStatus = "completed";
-      execution.status = "completed";
-      if (project) {
-        completeProjectStage(project, execution.processType);
-        applyGeneratedProjectTitle(project, execution);
-      }
-    } else {
-      execution.outputStatus = "awaiting_human";
-      execution.status = "awaiting_output";
-      if (project) {
-        project.stages = { ...project.stages, [execution.processType]: "awaiting_human" };
-        project.currentStage = execution.processType;
-        project.state = "awaiting_human";
-      }
-    }
-    touchExecution(execution);
-    return execution;
-  }
-
-  function activateNextBlock(execution: ProcessExecution, completedIndex: number) {
-    const completedBlock = execution.blocks[completedIndex];
-    if (!completedBlock) return execution;
-    const transition = evaluateExecutionCore(execution, {
-      type: "block_completed",
-      blockId: completedBlock.blockId,
+  function activateNextBlock(execution: ProcessExecution, completedBlockId: string) {
+    const now = new Date().toISOString();
+    const transition = applyCompletedBlockTransition(execution, completedBlockId, now, {
+      deriveProcessOutput,
+      recordProcessOutputDelivery,
     });
-    if (transition.decision.type === "finish_blocks") return finalizeOrRequestOutput(execution);
-    if (transition.decision.type === "blocked") {
+    if (!transition.ok) {
       throw new Error(
         `Execution Core blocked transition: ${transition.decision.reason} (${transition.diagnostics
           .map((diagnostic) => diagnostic.code)
@@ -158,22 +134,26 @@ export function executionCommands(db: {
       );
     }
 
-    const now = new Date().toISOString();
-    const nextExecution = execution.blocks[transition.decision.blockIndex];
-    nextExecution.startedAt = now;
-    nextExecution.attempt = Math.max(1, nextExecution.attempt ?? 1);
-    nextExecution.error = undefined;
-    nextExecution.status = transition.decision.blockStatus;
-    execution.status = transition.decision.executionStatus;
     const project = db.projects.find((item) => item.id === execution.projectId);
     if (project) {
-      project.stages = {
-        ...project.stages,
-        [execution.processType]:
-          nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked",
-      };
-      project.currentStage = execution.processType;
-      project.state = project.stages[execution.processType];
+      if (transition.outcome === "finish_blocks") {
+        if (execution.status === "completed") {
+          completeProjectStage(project, execution.processType);
+          applyGeneratedProjectTitle(project, execution);
+        } else {
+          project.stages = { ...project.stages, [execution.processType]: "awaiting_human" };
+          project.currentStage = execution.processType;
+          project.state = "awaiting_human";
+        }
+      } else {
+        project.stages = {
+          ...project.stages,
+          [execution.processType]:
+            transition.decision.blockStatus === "awaiting_human" ? "awaiting_human" : "blocked",
+        };
+        project.currentStage = execution.processType;
+        project.state = project.stages[execution.processType];
+      }
     }
     touchExecution(execution);
     return execution;
@@ -248,7 +228,7 @@ export function executionCommands(db: {
     blockExecution.status = "completed";
     blockExecution.completedAt = now;
     recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
-    activateNextBlock(execution, execution.blocks.indexOf(blockExecution));
+    activateNextBlock(execution, blockExecution.blockId);
     return true;
   }
 
@@ -431,7 +411,7 @@ export function executionCommands(db: {
     blockExecution.status = "completed";
     blockExecution.completedAt = now;
     recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
-    const updated = activateNextBlock(execution, execution.blocks.indexOf(blockExecution));
+    const updated = activateNextBlock(execution, blockExecution.blockId);
     return { ok: true, completedProcess: updated.status === "completed" };
   }
 
@@ -492,7 +472,7 @@ export function executionCommands(db: {
     blockExecution.itemRetryScope = undefined;
     recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
     execution.error = undefined;
-    const updated = activateNextBlock(execution, execution.blocks.indexOf(blockExecution));
+    const updated = activateNextBlock(execution, blockExecution.blockId);
     return { ok: true as const, completedProcess: updated.status === "completed" };
   }
 

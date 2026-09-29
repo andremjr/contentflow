@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --- | --- |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão | `1.2.1` |
-| Task concluída | TASK-010 |
+| Task concluída | TASK-011 |
 | Task ativa | Nenhuma |
-| Próxima | TASK-011 (`ready`), ainda não iniciada |
+| Próxima | TASK-012 (`ready`), ainda não iniciada |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -32,7 +32,7 @@ Consequentemente, o produto não é apenas conceitual e o início do pipeline j�
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) continua sendo a fonte normativa do domínio atual: 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores e 3 interfaces de domínio.
 - Projetos podem congelar a ordem e os Métodos do Canal em `strategySnapshot`; cada `ProcessExecution` também conserva seu `methodSnapshot`.
 - A máquina de execução atual está dividida entre `server/execution-commands.ts`, funções e rotas de `server/index.ts`, scheduler de jobs de plugin e reconciliação do Orchestrator.
-- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais, decide ativação do primeiro/próximo Bloco e possui o construtor canônico `createCanonicalProcessExecution()`. Esse construtor recebe identidade e tempo explicitamente, clona o snapshot defensivamente e materializa a ativação inicial pela própria máquina do Core. Os starts manual, Orchestrator e standalone/runThrough usam esse construtor; não resta constructor interno normal duplicado de `ProcessExecution`. O `POST /api/executions` permanece apenas como boundary explícita de compatibilidade histórica em `server/legacy-execution-boundary.ts`: valida estrutura mínima, preserva a representação materializada recebida e não define a forma canônica de nascimento da execução.
+- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais, decide ativação do primeiro/próximo Bloco e possui o construtor canônico `createCanonicalProcessExecution()`. Esse construtor recebe identidade e tempo explicitamente, clona o snapshot defensivamente e materializa a ativação inicial pela própria máquina do Core. Os starts manual, Orchestrator e standalone/runThrough usam esse construtor; não resta constructor interno normal duplicado de `ProcessExecution`. A transição normal `Bloco concluído → próximo Bloco ou fim dos Blocos` também é decidida pelo Execution Core e aplicada por `applyCompletedBlockTransition()`, compartilhada entre conclusão humana/manual e plugin. A materialização da conclusão humana e de plugin ainda permanece em adapters separados até TASK-012 e TASK-013. O `POST /api/executions` permanece apenas como boundary explícita de compatibilidade histórica em `server/legacy-execution-boundary.ts`: valida estrutura mínima, preserva a representação materializada recebida e não define a forma canônica de nascimento da execução.
 - O Orchestrator novo cria filas com `strategyVersion = 5`, ordem congelada e slots elegíveis. Versões históricas continuam aceitas.
 - O núcleo persiste execuções, jobs, unidades, deliveries, perfis, bindings, readiness, leases, filas e journals em SQLite, ainda com parte relevante do comportamento concentrada no servidor HTTP.
 - Plugin API, Browser Bridge, React, Express, SQLite, filesystem e formatos históricos ainda não estão completamente isolados do Core canônico descrito na arquitetura-alvo.
@@ -67,11 +67,11 @@ Existência não significa convergência completa com a arquitetura-alvo. Essas 
 
 `server/index.ts` continua combinando HTTP, persistência, lifecycle de plugins, criação e aplicação de execuções, recovery, Orchestrator, reconciliação e inicialização de storage. O gap arquitetural é a concentração de responsabilidades, independentemente da contagem momentânea de linhas ou rotas.
 
-### Autoridade de execução ainda distribuída nas transições posteriores
+### Autoridade de execução ainda distribuída na materialização de conclusão
 
-- conclusão e avanço de plugin permanecem aplicados por caminhos próprios em `server/index.ts`.
+- conclusão humana e conclusão de plugin ainda materializam values, deliveries e metadados por caminhos próprios antes da progressão compartilhada.
 
-Os starts internos normais convergiram para a criação canônica. O `POST /api/executions` deixou de ser tratado como constructor concorrente: ele é uma boundary histórica explícita e testada. A autoridade de produção ainda está distribuída nas transições posteriores: conclusão de plugin, VALIDAR, retry, projeção e persistência continuam em caminhos próprios até as tasks seguintes.
+Os starts internos normais convergiram para a criação canônica. O `POST /api/executions` deixou de ser tratado como constructor concorrente: ele é uma boundary histórica explícita e testada. Depois que um Bloco está concluído, próximo Bloco, status inicial e fim da sequência vêm do Core e são aplicados pelo mesmo helper nos caminhos manual e plugin. A autoridade ainda está distribuída na materialização da conclusão, VALIDAR, retry, projeção e persistência até as tasks seguintes.
 
 ### Semântica vigente de `VALIDAR` e retry editorial
 
@@ -137,6 +137,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-011. Os starts manual, Orchestrator e standalone/runThrough convergem pela criação canônica, e o `POST /api/executions` está isolado como boundary de compatibilidade histórica.
+Não há blocker externo confirmado para preparar a especificação da TASK-012. A progressão normal após Bloco concluído já converge pelo Execution Core e pela aplicação compartilhada; TASK-012 pode focar a materialização da conclusão humana em si.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

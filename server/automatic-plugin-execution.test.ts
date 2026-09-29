@@ -261,6 +261,107 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
     assert.equal(execution.blocks[1].values.theme, "HELLO");
     assert.equal(execution.blocks[2].values.theme, "WRONG FINAL VALUE");
     assert.equal(execution.output?.values.theme, "HELLO");
+
+    const pluginThenHumanBlocks = [
+      {
+        id: "plugin-before-human",
+        type: "CRIAR",
+        operator: "Código",
+        name: "Plugin antes do humano",
+        inputs: [
+          {
+            id: "static-input",
+            label: "Texto",
+            type: "textarea",
+            source: "static",
+            staticValue: "plugin to human",
+            portKey: "content",
+          },
+        ],
+        outputs: [
+          {
+            id: "plugin-output",
+            label: "Intermediário",
+            key: "intermediate",
+            type: "textarea",
+            required: true,
+          },
+        ],
+        plugin,
+        parameters: [],
+        order: 0,
+      },
+      {
+        id: "human-after-plugin",
+        type: "CRIAR",
+        operator: "Humano",
+        name: "Humano depois do plugin",
+        inputs: [],
+        outputs: [],
+        parameters: [],
+        order: 1,
+      },
+    ];
+    await request("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "plugin-human-project",
+        title: "Plugin para humano",
+        channelId: "test-channel",
+        currentStage: "theme",
+        state: "processing",
+        progress: 0,
+        deadline: "Sem prazo",
+        duration: "—",
+        updatedAt: "Agora",
+        createdAt: now,
+        stages,
+        assignee: { name: "Teste", initials: "T" },
+        thumbHue: 0,
+      }),
+    });
+    await request("/api/executions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "plugin-human-execution",
+        projectId: "plugin-human-project",
+        channelId: "test-channel",
+        processType: "theme",
+        methodSnapshot: { processType: "theme", blocks: pluginThenHumanBlocks },
+        blocks: [
+          {
+            blockId: "plugin-before-human",
+            status: "blocked_executor",
+            values: {},
+            attempt: 1,
+            startedAt: now,
+          },
+          { blockId: "human-after-plugin", status: "pending", values: {}, attempt: 1 },
+        ],
+        status: "blocked_executor",
+        outputStatus: "pending",
+        createdAt: now,
+        updatedAt: now,
+      }),
+    });
+
+    let pluginToHuman: AutomaticExecutionState | null = null;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const state = (await request("/api/executions/plugin-human-execution/state")) as {
+        execution: AutomaticExecutionState;
+      };
+      pluginToHuman = state.execution;
+      if (pluginToHuman?.status === "awaiting_human" || pluginToHuman?.status === "failed") break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    assert.ok(pluginToHuman, "a execução plugin → humano deve existir");
+    assert.equal(pluginToHuman.status, "awaiting_human", pluginToHuman.error ?? output.join("\n"));
+    assert.deepEqual(
+      pluginToHuman.blocks.map((block) => block.status),
+      ["completed", "awaiting_human"],
+    );
   } finally {
     server.kill();
     await new Promise((resolve) => server.once("exit", resolve));

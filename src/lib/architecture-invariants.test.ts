@@ -81,6 +81,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "tasks/TASK-008.md",
     "tasks/TASK-009.md",
     "tasks/TASK-010.md",
+    "tasks/TASK-011.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -121,20 +122,26 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(roadmap, /\| TASK-008 \|[^\n]+\| `done` \|/);
   assert.match(roadmap, /\| TASK-009 \|[^\n]+\| `done` \|/);
   assert.match(roadmap, /\| TASK-010 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-011 \|[^\n]+\| `ready` \|/);
+  assert.match(roadmap, /\| TASK-011 \|[^\n]+\| `done` \|/);
+  assert.match(roadmap, /\| TASK-012 \|[^\n]+\| `ready` \|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
     "utf8",
   );
   assert.match(task010, /## Estado\s+`done`/);
+  const task011 = readFileSync(
+    new URL("../../docs/reliability-program/tasks/TASK-011.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(task011, /## Estado\s+`done`/);
 
   const executionCommands = readFileSync(
     new URL("../../server/execution-commands.ts", import.meta.url),
     "utf8",
   );
   const manualStart = executionCommands.match(
-    /function startProcessExecution[\s\S]*?\n {2}function finalizeOrRequestOutput/,
+    /function startProcessExecution[\s\S]*?\n {2}function activateNextBlock/,
   )?.[0];
   assert.ok(
     manualStart,
@@ -171,6 +178,20 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.doesNotMatch(legacyExecutionPost, /request\.body as StoredPayload/);
   assert.doesNotMatch(legacyExecutionPost, /as unknown as ProcessExecution/);
 
+  const manualProgression = executionCommands.match(
+    /function activateNextBlock[\s\S]*?\n {2}function blockDeliveryIssues/,
+  )?.[0];
+  assert.ok(manualProgression, "manual block progression should remain discoverable");
+  assert.match(manualProgression, /applyCompletedBlockTransition\(/);
+
+  const pluginProgression = server.match(
+    /function finishPluginBlock[\s\S]*?\nfunction executionById/,
+  )?.[0];
+  assert.ok(pluginProgression, "plugin block completion should remain discoverable");
+  assert.match(pluginProgression, /applyCompletedBlockTransition\(/);
+  assert.doesNotMatch(pluginProgression, /completedIndex\s*\+\s*1/);
+  assert.doesNotMatch(pluginProgression, /nextBlock\.operator\s*===\s*"Humano"/);
+
   const legacyBoundary = readFileSync(
     new URL("../../server/legacy-execution-boundary.ts", import.meta.url),
     "utf8",
@@ -178,7 +199,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(legacyBoundary, /adaptLegacyExecutionCreatePayload/);
   assert.match(legacyBoundary, /Compatibility adapter for the historical HTTP creation boundary/);
 
-  for (const taskId of expectedTaskIds.slice(11)) {
+  for (const taskId of expectedTaskIds.slice(12)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);
