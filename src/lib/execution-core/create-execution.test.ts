@@ -205,3 +205,20 @@ test("E13 — canonical creation is semantically equivalent to the current creat
     assert.deepEqual(canonical, expectedCurrentCreation(snapshot));
   }
 });
+
+test("E14 — processType mismatching methodSnapshot.processType is rejected", () => {
+  const methodSnapshot = method([block("first")], "thumbnail");
+  const result = createCanonicalProcessExecution({
+    executionId: "execution-007",
+    projectId: "project-007",
+    channelId: "channel-007",
+    processType: "script",
+    methodSnapshot,
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.reason, "malformed_state");
+  assert.ok(result.diagnostics.some((item) => item.code === "process_type_snapshot_mismatch"));
+});

@@ -18,6 +18,9 @@ export function validateExecutionCoreInvariants(
   const snapshotBlocks = state.methodSnapshot.blocks;
   const executionBlocks = state.blocks;
 
+  if (state.processType !== state.methodSnapshot.processType) {
+    violations.push({ code: "process_type_snapshot_mismatch" });
+  }
   if (new Set(snapshotBlocks.map((block) => block.id)).size !== snapshotBlocks.length) {
     violations.push({ code: "snapshot_block_ids_not_unique" });
   }

@@ -53,6 +53,7 @@ A classificação humano/executor e a escolha do primeiro Bloco continuam perten
 
 - Método vazio retorna `ok: false`, `reason: empty_method`.
 - Snapshot estruturalmente inválido retorna `ok: false`, `reason: malformed_state` e os diagnósticos de `validateExecutionCoreInvariants()`.
+- Divergência entre `execution.processType` e `methodSnapshot.processType` é rejeitada com o diagnóstico `process_type_snapshot_mismatch`.
 - Nenhuma execução parcialmente inicializada é retornada em falha.
 
 ## Determinismo e imutabilidade
@@ -94,7 +95,7 @@ Nenhum novo `DECISION REQUIRED` foi identificado. A duplicação de produção p
 | `npm run lint` | pass |
 | `npm run typecheck` | pass |
 | `npm run test:architecture` | pass, 4/4 após atualizar o guardrail para TASK-007 concluída e TASK-008 pronta |
-| `npm run test:execution-core` | pass, 24/24 incluindo E01-E13 e C01-C10 |
+| `npm run test:execution-core` | pass, 25/25 incluindo E01-E14 e C01-C10 |
 | `npm run test:execution-state-machine` | pass, 13/13 |
 | `npm run test:validation-retry` | pass, 11/11 |
 | `npm run test:fault-injection` | pass, 15/15 |
@@ -111,6 +112,7 @@ Nenhum novo `DECISION REQUIRED` foi identificado. A duplicação de produção p
 - Todos os `BlockExecution` são criados `pending`, com `attempt = 1` e objetos `values` independentes; a ativação inicial é decidida por `evaluateExecutionCore(start_requested)`.
 - O snapshot é clonado defensivamente e os inputs permanecem imutáveis.
 - Método vazio e snapshots estruturalmente inválidos retornam diagnóstico explícito sem execução parcial.
+- `processType` contraditório com o snapshot é detectado como invariant violation antes da ativação inicial.
 - Teste dedicado prova determinismo, invariantes e equivalência semântica com a criação vigente para primeiro Bloco humano e automático.
 - `startProcessExecution()`, `startOrchestratedProcess()` e `POST /api/executions` permanecem nos caminhos atuais e serão tratados nas TASK-008, TASK-009 e TASK-010, respectivamente.
 

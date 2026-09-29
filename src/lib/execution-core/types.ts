@@ -42,6 +42,7 @@ export type ExecutionCoreDecision =
     };
 
 export type ExecutionCoreInvariantCode =
+  | "process_type_snapshot_mismatch"
   | "snapshot_block_ids_not_unique"
   | "execution_block_ids_not_unique"
   | "snapshot_execution_length_mismatch"
