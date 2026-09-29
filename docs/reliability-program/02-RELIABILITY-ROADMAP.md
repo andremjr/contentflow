@@ -66,8 +66,8 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 
 | Task     | Missão                                                  | Estado    |
 | -------- | ------------------------------------------------------- | --------- |
-| TASK-021 | Guardrails arquiteturais automatizados                  | `ready`   |
-| TASK-022 | Representação canônica de bindings                      | `pending` |
+| TASK-021 | Guardrails arquiteturais automatizados                  | `done`    |
+| TASK-022 | Representação canônica de bindings                      | `ready`   |
 | TASK-023 | Retirar `labelScore` do runtime canônico                | `pending` |
 | TASK-024 | Porta de entrada de plugin explícita                    | `pending` |
 | TASK-025 | Outputs de plugin explícitos                            | `pending` |

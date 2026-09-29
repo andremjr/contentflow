@@ -109,7 +109,7 @@
     "test:shared-browser-v123": "tsx --test server/shared-browser-plugin-config-window-v123.test.ts src/lib/app-preferences.test.ts",
     "test:shared-browser-v124": "tsx --test server/shared-browser-plugin-config-editor-v124.test.ts",
     "test:process-order": "tsx --test src/lib/process-order.test.ts server/process-order.integration.test.ts",
-    "test:architecture": "tsx --test src/lib/architecture-invariants.test.ts",
+    "test:architecture": "tsx --test src/lib/architecture-invariants.test.ts src/lib/deterministic-contract-guardrails.test.ts",
     "test:plugin-kit": "tsx server/plugin-kit.test.ts",
     "test:plugin-branding": "tsx --test server/plugin-branding.test.ts",
     "test:plugin-dependencies": "tsx --test server/plugin-dependencies.test.ts",

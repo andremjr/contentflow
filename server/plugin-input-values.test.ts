@@ -181,7 +181,7 @@ test("usa uma porta semântica livre para o contexto implícito", () => {
   assert.equal(selectPluginImplicitContextPort(ports, {})?.key, "additional_context");
 });
 
-test("prioriza o rótulo semântico da porta sobre uma porta genérica", () => {
+test("LEGACY / TEMPORARY CHARACTERIZATION: infere uma porta pelo rótulo semântico", () => {
   const input: BlockInputBinding = {
     id: "title-create-section-count",
     label: "Quantidade de blocos",

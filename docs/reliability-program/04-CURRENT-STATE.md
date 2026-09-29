@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --------------------------- | ------------------------------------------ |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão                      | `1.2.1`                                    |
-| Task concluída              | TASK-020                                   |
+| Task concluída              | TASK-021                                   |
 | Task ativa                  | Nenhuma                                    |
-| Próxima                     | TASK-021 (`ready`), ainda não iniciada     |
+| Próxima                     | TASK-022 (`ready`), ainda não iniciada     |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -101,11 +101,15 @@ A boundary continua validando required outputs, restrições de apresentação e
 
 `selectPluginInputPort()` em `server/plugin-input-values.ts` respeita uma `portKey` explícita, mas, quando ela não existe, ainda escolhe a porta por compatibilidade, identidade semântica, apresentação e ordem. A boundary de plugin também infere portas de output por tipo ou pela primeira porta disponível.
 
+Esses fallbacks continuam presentes, mas a TASK-021 os identificou e delimitou com characterization tests e guardrails arquiteturais. Binding/source explícito e `portKey` explícita possuem precedência protegida. `labelScore()` permanece restrito à resolução de inputs, a inferência de porta permanece na boundary server-side e o Execution Core permanece sem conhecimento de labels, manifestos, portas ou respostas de plugin.
+
 ### Mapeamento permissivo de outputs
 
 `valuesForPluginResponse()` em `server/index.ts` ainda tenta, nesta ordem, chave do campo, `portKey` do contrato e o fallback genérico `responseValues.result`. O caminho de `ESCOLHER` também aceita `selectedItemId ?? result`. Esse comportamento pode transformar resposta ambígua em aparente sucesso e precisa migrar para outputs explícitos com adapter legado delimitado.
 
 `VALIDAR` possui alvo persistido, mas a normalização de Método ainda pode inferir o último Bloco não-`VALIDAR` e uma saída compatível. Na boundary de plugin, a primeira saída do alvo e a primeira porta de input compatível ainda funcionam como fallback.
+
+Os fallbacks de output, resposta, `ESCOLHER` e `VALIDAR` também estão localizados por guardrails focais. Essa proteção impede sua expansão para o Core ou para novas boundaries sem declarar que os contratos já são determinísticos; a remoção continua pertencendo às TASKs 022–028.
 
 ### Recovery decidido de forma mais rica do que é aplicado
 
@@ -151,6 +155,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para iniciar a TASK-021. A TASK-020 removeu o auto-agendamento interno via HTTP loopback sem iniciar o trabalho de contratos determinísticos.
+Não há blocker externo confirmado para iniciar a TASK-022. A TASK-021 apenas delimitou e caracterizou as heurísticas vigentes; não iniciou bindings canônicos, remoção de fallbacks, adapter legado ou normalização de respostas.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.
