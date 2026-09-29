@@ -27,11 +27,6 @@ import {
 } from "../src/lib/human-workflow";
 import { getPresentationRestrictionIssue } from "../src/lib/presentation";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
-import { attemptAfterRetryInvalidation } from "../src/lib/retry-attempt";
-import {
-  pluginConversationFallbackAttachments,
-  pluginConversationFallbackContext,
-} from "../src/lib/conversation-context";
 import {
   invalidateBlockDeliveries,
   recordBlockDeliveries,
@@ -40,7 +35,9 @@ import {
 import {
   applyCompletedBlockTransition,
   applyHumanBlockCompletion,
+  applyValidationOutcome,
   createCanonicalProcessExecution,
+  validationOutcomeFromValues,
 } from "../src/lib/execution-core";
 
 /** Synchronous domain transitions. The caller owns the SQLite transaction. */
@@ -254,105 +251,6 @@ export function executionCommands(db: {
     return true;
   }
 
-  function retryValidatedBlock(
-    execution: ProcessExecution,
-    validationBlock: ActionBlock,
-    validationValues: Record<string, RuntimeValue>,
-  ) {
-    const targetBlockId = validationBlock.validation?.targetBlockId;
-    const targetIndex = execution.methodSnapshot.blocks.findIndex(
-      (candidate) => candidate.id === targetBlockId,
-    );
-    const validationIndex = execution.methodSnapshot.blocks.findIndex(
-      (candidate) => candidate.id === validationBlock.id,
-    );
-    if (targetIndex < 0 || targetIndex >= validationIndex) {
-      return {
-        ok: false as const,
-        message: "O bloco validado não está disponível para nova tentativa.",
-      };
-    }
-
-    const targetBlock = execution.methodSnapshot.blocks[targetIndex];
-    const targetExecution = execution.blocks[targetIndex];
-    const maxAttempts = Math.max(1, validationBlock.validation?.maxAttempts ?? 3);
-    // Provider retries before the first review must not consume editorial
-    // validation rounds. The validator's own attempt tracks those rounds.
-    if ((execution.blocks[validationIndex].attempt ?? 1) >= maxAttempts) {
-      return {
-        ok: false as const,
-        message: `O limite de ${maxAttempts} tentativas foi atingido. Revise o método ou aprove manualmente o resultado atual.`,
-      };
-    }
-
-    const now = new Date().toISOString();
-    const retryMode = validationBlock.validation?.retryMode ?? "full";
-    const retryConversationContext = pluginConversationFallbackContext(
-      targetBlock,
-      targetExecution.values,
-    );
-    const retryConversationAttachments = pluginConversationFallbackAttachments(
-      targetExecution.values,
-    );
-    for (let index = targetIndex; index < execution.blocks.length; index += 1) {
-      const blockExecution = execution.blocks[index];
-      const preserveConversation = index === targetIndex && retryMode === "conversation_feedback";
-      blockExecution.attempt = attemptAfterRetryInvalidation(blockExecution);
-      blockExecution.values = {};
-      blockExecution.error = undefined;
-      blockExecution.logs = undefined;
-      blockExecution.completedAt = undefined;
-      blockExecution.jobId = undefined;
-      blockExecution.progress = undefined;
-      blockExecution.progressMessage = undefined;
-      blockExecution.retryFeedback = undefined;
-      blockExecution.retryMode = undefined;
-      blockExecution.retryConversationContext = undefined;
-      blockExecution.retryConversationAttachments = undefined;
-      if (!preserveConversation) blockExecution.pluginConversation = undefined;
-      if (index === targetIndex) {
-        blockExecution.startedAt = now;
-        blockExecution.retryFeedback = structuredClone(validationValues);
-        blockExecution.retryMode = retryMode;
-        blockExecution.retryConversationContext = retryConversationContext;
-        blockExecution.retryConversationAttachments = retryConversationAttachments;
-        blockExecution.status =
-          targetBlock.operator === "Humano" && !targetBlock.plugin
-            ? "awaiting_human"
-            : "blocked_executor";
-      } else {
-        blockExecution.startedAt = undefined;
-        blockExecution.status = "pending";
-      }
-    }
-    invalidateBlockDeliveries(
-      execution,
-      [
-        ...execution.methodSnapshot.blocks.slice(targetIndex).map((item) => item.id),
-        "__process_output__",
-      ],
-      now,
-    );
-
-    execution.output = undefined;
-    execution.outputStatus = "pending";
-    execution.error = undefined;
-    execution.status =
-      targetExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
-    const project = db.projects.find((candidate) => candidate.id === execution.projectId);
-    if (project) {
-      project.stages = {
-        ...project.stages,
-        [execution.processType]:
-          targetExecution.status === "awaiting_human" ? "awaiting_human" : "blocked",
-      };
-      project.currentStage = execution.processType;
-      project.state = project.stages[execution.processType];
-    }
-    touchExecution(execution);
-    return { ok: true as const, blockName: targetBlock.name ?? targetBlock.type };
-  }
-
   function completeHumanBlock(
     executionId: string,
     blockId: string,
@@ -393,20 +291,6 @@ export function executionCommands(db: {
     }
     const missing = blockDeliveryIssues(block, values);
     if (missing.length) return { ok: false, missing };
-    const rejected = (block.outputs ?? []).some(
-      (output) => output.type === "approval" && values[output.key] === "rejected",
-    );
-    if (rejected) {
-      blockExecution.values = structuredClone(values);
-      recordBlockDeliveries(execution, block, blockExecution.values, "completed");
-      if (block.type === "VALIDAR" && block.validation?.onReject === "retry_target") {
-        const retry = retryValidatedBlock(execution, block, values);
-        if (!retry.ok) return { ok: false, missing: [retry.message] };
-        return { ok: true, completedProcess: false, retriedBlock: retry.blockName };
-      }
-      touchExecution(execution);
-      return { ok: true, completedProcess: false, pausedValidation: true };
-    }
     const now = new Date().toISOString();
     const completion = applyHumanBlockCompletion(execution, {
       type: "human_block_completed",
@@ -418,6 +302,37 @@ export function executionCommands(db: {
       return { ok: false, missing: ["Executor humano indisponível"] };
     }
     recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
+    if (block.type === "VALIDAR") {
+      const validation = applyValidationOutcome(
+        execution,
+        block.id,
+        validationOutcomeFromValues(block, blockExecution.values),
+        now,
+      );
+      if (!validation.ok) {
+        touchExecution(execution);
+        return { ok: false, missing: [validation.message] };
+      }
+      if (validation.outcome === "paused") {
+        touchExecution(execution);
+        return { ok: true, completedProcess: false, pausedValidation: true };
+      }
+      if (validation.outcome === "retry_target") {
+        project.stages = {
+          ...project.stages,
+          [execution.processType]:
+            execution.status === "awaiting_human" ? "awaiting_human" : "blocked",
+        };
+        project.currentStage = execution.processType;
+        project.state = project.stages[execution.processType];
+        touchExecution(execution);
+        return {
+          ok: true,
+          completedProcess: false,
+          retriedBlock: validation.targetBlockName,
+        };
+      }
+    }
     const updated = activateNextBlock(execution, blockExecution.blockId);
     return { ok: true, completedProcess: updated.status === "completed" };
   }

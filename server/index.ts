@@ -82,7 +82,9 @@ import {
 import {
   applyCompletedBlockTransition,
   applyExecutorBlockCompletion,
+  applyValidationOutcome,
   createCanonicalProcessExecution,
+  validationOutcomeFromValues,
 } from "../src/lib/execution-core";
 import {
   getCompatiblePresentationRenderers,
@@ -109,10 +111,8 @@ import {
 } from "../src/lib/instruction-template";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { normalizeItemReplacement } from "../src/lib/plugin-item-actions";
-import { attemptAfterRetryInvalidation } from "../src/lib/retry-attempt";
 import {
   activeProjectDeliveries,
-  invalidateBlockDeliveries,
   normalizeExecutionDeliveries,
   recordBlockDeliveries,
   recordProcessOutputDelivery,
@@ -127,10 +127,7 @@ import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
 import { legacyTypeListAccepts } from "../src/lib/data-shape";
 import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
 import { instructionWithRetryFeedback } from "../src/lib/retry-feedback";
-import {
-  pluginConversationFallbackAttachments,
-  pluginConversationFallbackContext,
-} from "../src/lib/conversation-context";
+import { pluginConversationFallbackContext } from "../src/lib/conversation-context";
 import { collectionItemValuesForPlugin } from "../src/lib/plugin-collection";
 import {
   appendPluginDiagnostic,
@@ -1150,68 +1147,14 @@ function finishPluginBlock(
     );
   }
   recordBlockDeliveries(execution, block, values, "completed", now);
-  const completedIndex = execution.blocks.indexOf(blockExecution);
-  const rejected =
-    block.type === "VALIDAR" &&
-    (block.outputs ?? []).some(
-      (output) => output.type === "approval" && values[output.key] === "rejected",
+  if (block.type === "VALIDAR") {
+    const validation = applyValidationOutcome(
+      execution,
+      block.id,
+      validationOutcomeFromValues(block, values),
+      now,
     );
-  if (rejected && block.validation?.onReject === "retry_target") {
-    const targetIndex = execution.methodSnapshot.blocks.findIndex(
-      (candidate) => candidate.id === block.validation?.targetBlockId,
-    );
-    const maxAttempts = Math.max(1, block.validation.maxAttempts ?? 3);
-    const targetExecution = execution.blocks[targetIndex];
-    const targetBlock = execution.methodSnapshot.blocks[targetIndex];
-    if (targetIndex >= 0 && targetIndex < completedIndex && targetExecution && targetBlock) {
-      if ((targetExecution.attempt ?? 1) >= maxAttempts) {
-        execution.status = "awaiting_human";
-        blockExecution.status = "awaiting_human";
-        blockExecution.error = `O limite de ${maxAttempts} tentativas foi atingido.`;
-      } else {
-        const retryMode = block.validation.retryMode ?? "full";
-        const retryConversationContext = pluginConversationFallbackContext(
-          targetBlock,
-          targetExecution.values,
-        );
-        const retryConversationAttachments = pluginConversationFallbackAttachments(
-          targetExecution.values,
-        );
-        for (let index = targetIndex; index < execution.blocks.length; index += 1) {
-          const item = execution.blocks[index];
-          const preserveConversation =
-            index === targetIndex && retryMode === "conversation_feedback";
-          item.attempt = attemptAfterRetryInvalidation(item);
-          item.values = {};
-          item.error = undefined;
-          item.logs = undefined;
-          item.completedAt = undefined;
-          item.jobId = undefined;
-          item.progress = undefined;
-          item.progressMessage = undefined;
-          item.retryFeedback = undefined;
-          item.retryMode = undefined;
-          item.retryConversationContext = undefined;
-          item.retryConversationAttachments = undefined;
-          if (!preserveConversation) item.pluginConversation = undefined;
-          item.status = "pending";
-        }
-        targetExecution.retryFeedback = structuredClone(values);
-        targetExecution.retryMode = retryMode;
-        targetExecution.retryConversationContext = retryConversationContext;
-        targetExecution.retryConversationAttachments = retryConversationAttachments;
-        targetExecution.startedAt = now;
-        targetExecution.status =
-          targetBlock.operator === "Humano" && !targetBlock.plugin
-            ? "awaiting_human"
-            : "blocked_executor";
-        invalidateBlockDeliveries(
-          execution,
-          execution.methodSnapshot.blocks.slice(targetIndex).map((candidate) => candidate.id),
-        );
-        execution.status =
-          targetExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
-      }
+    if (!validation.ok || validation.outcome !== "approved") {
       execution.updatedAt = now;
       return;
     }

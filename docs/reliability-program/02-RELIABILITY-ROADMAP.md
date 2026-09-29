@@ -54,8 +54,8 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 | TASK-011 | Unificar transição bloco concluído → próximo estado | `done` |
 | TASK-012 | Conclusão Humana passa pelo Core | `done` |
 | TASK-013 | Conclusão de Plugin passa pelo Core | `done` |
-| TASK-014 | Unificar semântica de `VALIDAR` | `ready` |
-| TASK-015 | Centralizar retry manual de Bloco | `pending` |
+| TASK-014 | Unificar semântica de `VALIDAR` | `done` |
+| TASK-015 | Centralizar retry manual de Bloco | `ready` |
 | TASK-016 | Centralizar “usar entrega atual” | `pending` |
 | TASK-017 | Centralizar cancelamento | `pending` |
 | TASK-018 | Centralizar projeção do estado de Project | `pending` |

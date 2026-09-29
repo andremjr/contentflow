@@ -4,13 +4,13 @@
 
 Este documento representa o estado semântico e arquitetural conhecido do produto: capabilities presentes, gaps, blockers e posição no programa. Ele não é autoridade para o HEAD Git, a branch ativa nem a condição atual do worktree. Toda task deve descobrir esses dados diretamente do checkout no momento em que começa.
 
-| Campo | Estado atual |
-| --- | --- |
+| Campo                       | Estado atual                               |
+| --------------------------- | ------------------------------------------ |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
-| Versão | `1.2.1` |
-| Task concluída | TASK-013 |
-| Task ativa | Nenhuma |
-| Próxima | TASK-014 (`ready`), ainda não iniciada |
+| Versão                      | `1.2.1`                                    |
+| Task concluída              | TASK-014                                   |
+| Task ativa                  | Nenhuma                                    |
+| Próxima                     | TASK-015 (`ready`), ainda não iniciada     |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -32,7 +32,7 @@ Consequentemente, o produto não é apenas conceitual e o início do pipeline j�
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) continua sendo a fonte normativa do domínio atual: 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores e 3 interfaces de domínio.
 - Projetos podem congelar a ordem e os Métodos do Canal em `strategySnapshot`; cada `ProcessExecution` também conserva seu `methodSnapshot`.
 - A máquina de execução atual está dividida entre `server/execution-commands.ts`, funções e rotas de `server/index.ts`, scheduler de jobs de plugin e reconciliação do Orchestrator.
-- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais, decide ativação do primeiro/próximo Bloco e possui o construtor canônico `createCanonicalProcessExecution()`. Esse construtor recebe identidade e tempo explicitamente, clona o snapshot defensivamente e materializa a ativação inicial pela própria máquina do Core. Os starts manual, Orchestrator e standalone/runThrough usam esse construtor; não resta constructor interno normal duplicado de `ProcessExecution`. Conclusões humanas normais entram no Core como `human_block_completed` e conclusões automáticas normais de executor como `executor_block_completed`; cada caminho possui aplicação canônica própria e ambos convergem depois na progressão compartilhada `applyCompletedBlockTransition()`. A boundary continua resolvendo inputs e mapeando/validando respostas de plugin; deliveries são registradas somente depois de a conclusão ser aceita pelo Core. Resultados parciais, recovery, handoff de Bloco Humano assistido por plugin e a semântica especial de rejeição/retry de `VALIDAR` permanecem nos adapters. O `POST /api/executions` permanece apenas como boundary explícita de compatibilidade histórica em `server/legacy-execution-boundary.ts`: valida estrutura mínima, preserva a representação materializada recebida e não define a forma canônica de nascimento da execução.
+- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais, decide ativação do primeiro/próximo Bloco e possui o construtor canônico `createCanonicalProcessExecution()`. Esse construtor recebe identidade e tempo explicitamente, clona o snapshot defensivamente e materializa a ativação inicial pela própria máquina do Core. Os starts manual, Orchestrator e standalone/runThrough usam esse construtor; não resta constructor interno normal duplicado de `ProcessExecution`. Conclusões humanas normais entram no Core como `human_block_completed` e conclusões automáticas normais de executor como `executor_block_completed`; cada caminho possui aplicação canônica própria e ambos convergem depois na progressão compartilhada `applyCompletedBlockTransition()`. `VALIDAR` possui uma única aplicação editorial no Core, compartilhada entre resultados humanos e de executor. A boundary continua resolvendo inputs e mapeando/validando respostas de plugin; deliveries são registradas somente depois de a conclusão ser aceita pelo Core. Resultados parciais, recovery e handoff de Bloco Humano assistido por plugin permanecem nos adapters. O `POST /api/executions` permanece apenas como boundary explícita de compatibilidade histórica em `server/legacy-execution-boundary.ts`: valida estrutura mínima, preserva a representação materializada recebida e não define a forma canônica de nascimento da execução.
 - O Orchestrator novo cria filas com `strategyVersion = 5`, ordem congelada e slots elegíveis. Versões históricas continuam aceitas.
 - O núcleo persiste execuções, jobs, unidades, deliveries, perfis, bindings, readiness, leases, filas e journals em SQLite, ainda com parte relevante do comportamento concentrada no servidor HTTP.
 - Plugin API, Browser Bridge, React, Express, SQLite, filesystem e formatos históricos ainda não estão completamente isolados do Core canônico descrito na arquitetura-alvo.
@@ -56,7 +56,7 @@ As capacidades abaixo existem no checkout atual e constituem base a preservar, c
 - **migration journal:** schema versionado com journal, passos, estados `started/completed/failed` e recuperação de migração interrompida;
 - **Orchestrator V5:** elegibilidade por slots, ordem congelada e retomada de filas persistidas;
 - **characterization da execução básica:** suíte dedicada cobre start humano/automático, avanço sequencial, espera humana/de executor, outputs, drafts, rejeições sem mutação, snapshot congelado e sucesso simples de plugin;
-- **characterization de `VALIDAR` e retry editorial:** suíte dedicada cobre aprovação, pausa, `retry_target`, attempts editoriais, limite, invalidação do trecho, deliveries, output do Processo, modos de conversa, nova rodada, aprovação posterior e seleção singular;
+- **characterization de `VALIDAR` e retry editorial:** suíte dedicada cobre, para resultados humanos e de executor, aprovação, pausa, `retry_target`, attempts editoriais, limite, invalidação do trecho, deliveries, output do Processo, modos de conversa, nova rodada, aprovação posterior e seleção singular;
 - **testes extensos:** suites para arquitetura, execução, plugins, perfis, Browser Bridge, persistência, migrações e distribuição.
 
 Existência não significa convergência completa com a arquitetura-alvo. Essas capacidades ainda passam por caminhos de aplicação diferentes e precisam de characterization tests antes de consolidação.
@@ -69,17 +69,17 @@ Existência não significa convergência completa com a arquitetura-alvo. Essas 
 
 ### Autoridade de execução ainda distribuída em semânticas especiais
 
-- `chooseCollectionItem()`, drafts, `VALIDAR` rejeitado, retry, uso de entrega atual e output final do Processo conservam seus caminhos especializados até as tasks correspondentes.
+- `chooseCollectionItem()`, drafts, retry manual, uso de entrega atual e output final do Processo conservam seus caminhos especializados até as tasks correspondentes.
 
 Os starts internos normais convergiram para a criação canônica. O `POST /api/executions` deixou de ser tratado como constructor concorrente: ele é uma boundary histórica explícita e testada. Conclusões humanas normais e conclusões automáticas normais de executor agora passam por fatos e aplicações canônicas do Core antes da mesma progressão subsequente. A autoridade ainda está distribuída nas semânticas especializadas, na projeção e na persistência até as tasks seguintes.
 
 ### Semântica vigente de `VALIDAR` e retry editorial
 
-No caminho humano atual, aprovação conclui o `VALIDAR` e avança; rejeição com `pause` conserva o Bloco em `awaiting_human`, mas já materializa values e deliveries concluídas da decisão. Com `retry_target`, a rodada editorial é contada pelo `attempt` do próprio `VALIDAR`, separada das tentativas técnicas anteriores do alvo.
+`VALIDAR` possui uma única semântica editorial compartilhada entre resultados humanos e de executor em `applyValidationOutcome()`. Aprovação segue a progressão normal; rejeição com `pause` conserva o Bloco em `awaiting_human`, com values e delivery da decisão materializados, sem avançar. Com `retry_target`, a rodada editorial é contada pelo `attempt` do próprio `VALIDAR`, separada das tentativas técnicas anteriores do alvo.
 
-O retry invalida deliveries do alvo até o `VALIDAR`, inclusive o output oficial do Processo, limpa o output atual e reseta o trecho downstream; Blocos e deliveries anteriores ao alvo são preservados. `retryMode = full` limpa a conversa do alvo, enquanto `conversation_feedback` a preserva; ambos materializam feedback, fallback context e imagens da tentativa rejeitada nos campos de retry.
+A aplicação comum invalida deliveries do alvo até o `VALIDAR`, inclusive o output oficial do Processo, limpa `execution.output`, restaura `outputStatus = pending` e reseta o trecho downstream; Blocos e deliveries anteriores ao alvo são preservados. `retryMode = full` limpa a conversa do alvo, enquanto `conversation_feedback` a preserva; ambos materializam feedback, fallback context e imagens da tentativa rejeitada nos campos de retry.
 
-A checagem de `maxAttempts` ocorre depois de persistir values e deliveries da rejeição. Portanto, uma rejeição que não pode abrir nova rodada ainda atualiza o estado editorial do `VALIDAR`, embora não reinicie o alvo nem altere a projeção do Projeto. Esse comportamento foi caracterizado, não corrigido.
+A checagem de `maxAttempts` ocorre depois de persistir values e deliveries da rejeição. Portanto, uma rejeição que não pode abrir nova rodada ainda atualiza o estado editorial do `VALIDAR`, mas não reinicia o alvo. Projeção de Project, atomicidade da persistência, retry manual normal, uso da entrega atual e cancelamento permanecem gaps das tasks seguintes.
 
 ### Resolução heurística de inputs
 
@@ -137,6 +137,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-014. Conclusões humanas normais e conclusões automáticas normais de executor já convergem pelo Execution Core; TASK-014 pode focar a semântica especial de `VALIDAR`.
+Não há blocker externo confirmado para preparar a especificação da TASK-015. A semântica editorial de `VALIDAR` já converge pelo Execution Core; TASK-015 pode focar o retry manual normal de Bloco.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

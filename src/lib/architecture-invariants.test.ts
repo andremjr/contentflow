@@ -84,6 +84,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "tasks/TASK-011.md",
     "tasks/TASK-012.md",
     "tasks/TASK-013.md",
+    "tasks/TASK-014.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -127,7 +128,8 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(roadmap, /\| TASK-011 \|[^\n]+\| `done` \|/);
   assert.match(roadmap, /\| TASK-012 \|[^\n]+\| `done` \|/);
   assert.match(roadmap, /\| TASK-013 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-014 \|[^\n]+\| `ready` \|/);
+  assert.match(roadmap, /\| TASK-014 \|[^\n]+\| `done` \|/);
+  assert.match(roadmap, /\| TASK-015 \|[^\n]+\| `ready` \|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
@@ -149,6 +151,11 @@ test("keeps the Reliability Program connected and bounded", () => {
     "utf8",
   );
   assert.match(task013, /## Estado\s+`done`/);
+  const task014 = readFileSync(
+    new URL("../../docs/reliability-program/tasks/TASK-014.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(task014, /## Estado\s+`done`/);
 
   const executionCommands = readFileSync(
     new URL("../../server/execution-commands.ts", import.meta.url),
@@ -203,20 +210,18 @@ test("keeps the Reliability Program connected and bounded", () => {
   )?.[0];
   assert.ok(humanCompletion, "normal human completion should remain discoverable");
   assert.match(humanCompletion, /applyHumanBlockCompletion\(/);
+  assert.match(humanCompletion, /applyValidationOutcome\(/);
   assert.doesNotMatch(humanCompletion, /blockExecution\.status\s*=\s*"completed"/);
   assert.doesNotMatch(humanCompletion, /blockExecution\.completedAt\s*=/);
-  const rejectedBranch = humanCompletion.indexOf("if (rejected)");
-  const coreApplication = humanCompletion.indexOf("applyHumanBlockCompletion(");
   const directValueAssignments = [...humanCompletion.matchAll(/blockExecution\.values\s*=/g)];
-  assert.equal(directValueAssignments.length, 1);
-  assert.ok(directValueAssignments[0].index > rejectedBranch);
-  assert.ok(directValueAssignments[0].index < coreApplication);
+  assert.equal(directValueAssignments.length, 0);
 
   const pluginProgression = server.match(
     /function finishPluginBlock[\s\S]*?\nfunction executionById/,
   )?.[0];
   assert.ok(pluginProgression, "plugin block completion should remain discoverable");
   assert.match(pluginProgression, /applyExecutorBlockCompletion\(/);
+  assert.match(pluginProgression, /applyValidationOutcome\(/);
   assert.match(pluginProgression, /applyCompletedBlockTransition\(/);
   assert.doesNotMatch(pluginProgression, /blockExecution\.status\s*=\s*"completed"/);
   assert.doesNotMatch(pluginProgression, /blockExecution\.completedAt\s*=/);
@@ -227,6 +232,15 @@ test("keeps the Reliability Program connected and bounded", () => {
   );
   assert.doesNotMatch(pluginProgression, /completedIndex\s*\+\s*1/);
   assert.doesNotMatch(pluginProgression, /nextBlock\.operator\s*===\s*"Humano"/);
+  for (const duplicatedValidationAlgorithm of [
+    /targetIndex/,
+    /maxAttempts/,
+    /retryMode/,
+    /invalidateBlockDeliveries/,
+  ]) {
+    assert.doesNotMatch(pluginProgression, duplicatedValidationAlgorithm);
+  }
+  assert.doesNotMatch(executionCommands, /function retryValidatedBlock/);
 
   const legacyBoundary = readFileSync(
     new URL("../../server/legacy-execution-boundary.ts", import.meta.url),
@@ -235,7 +249,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(legacyBoundary, /adaptLegacyExecutionCreatePayload/);
   assert.match(legacyBoundary, /Compatibility adapter for the historical HTTP creation boundary/);
 
-  for (const taskId of expectedTaskIds.slice(14)) {
+  for (const taskId of expectedTaskIds.slice(15)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

@@ -11,6 +11,11 @@ import {
   type StoredFile,
 } from "../src/lib/domain";
 import { recordBlockDeliveries, recordProcessOutputDelivery } from "../src/lib/deliveries";
+import {
+  applyExecutorBlockCompletion,
+  applyValidationOutcome,
+  validationOutcomeFromValues,
+} from "../src/lib/execution-core";
 import { executionCommands } from "./execution-commands";
 
 const initialStages = () =>
@@ -64,6 +69,7 @@ function validationBlock(
     retryMode?: "full" | "conversation_feedback";
     mode?: "approval" | "select_one" | "select_many";
     targetOutputKey?: string;
+    operator?: ActionBlock["operator"];
   } = {},
 ): ActionBlock {
   const mode = options.mode ?? "approval";
@@ -76,7 +82,7 @@ function validationBlock(
   return {
     id,
     type: "VALIDAR",
-    operator: "Humano",
+    operator: options.operator ?? "Humano",
     name: id,
     inputs: [],
     outputs: [
@@ -107,6 +113,14 @@ function validationBlock(
       maxAttempts: options.maxAttempts ?? 3,
       retryMode: options.retryMode ?? "full",
     },
+    plugin:
+      options.operator && options.operator !== "Humano"
+        ? {
+            pluginId: "com.contentflow.characterization",
+            capabilityId: "validate",
+            configuration: {},
+          }
+        : undefined,
     parameters: [],
     order,
   };
@@ -176,6 +190,31 @@ function activeDelivery(execution: ProcessExecution, blockId: string, outputKey?
       delivery.blockId === blockId &&
       (!outputKey || delivery.outputKey === outputKey) &&
       delivery.status !== "invalidated",
+  );
+}
+
+function completeExecutorValidation(
+  execution: ProcessExecution,
+  block: ActionBlock,
+  values: Record<string, RuntimeValue>,
+) {
+  const blockExecution = execution.blocks.find((candidate) => candidate.blockId === block.id)!;
+  blockExecution.status = "in_progress";
+  execution.status = "running";
+  const now = "2026-09-28T03:00:00.000Z";
+  const completion = applyExecutorBlockCompletion(execution, {
+    type: "executor_block_completed",
+    blockId: block.id,
+    values,
+    now,
+  });
+  assert.equal(completion.ok, true);
+  recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
+  return applyValidationOutcome(
+    execution,
+    block.id,
+    validationOutcomeFromValues(block, blockExecution.values),
+    now,
   );
 }
 
@@ -679,4 +718,124 @@ test("V14 — select_one persiste a seleção e avança sem retry editorial", ()
   assert.equal(execution.blocks[0].attempt, 1);
   assert.equal(activeDelivery(execution, review.id, "selected_value")?.status, "completed");
   assert.equal(execution.blocks[2].status, "awaiting_human");
+});
+
+test("P01 — plugin rejected + pause materializa a decisão sem avançar", () => {
+  const target = createBlock("target", 0);
+  const review = validationBlock("review", 1, target.id, {
+    onReject: "pause",
+    operator: "Código",
+  });
+  const next = createBlock("next", 2);
+  const { execution, commands } = fixture([target, review, next]);
+  completeHuman(commands, execution, target.id, { target_value: "versão em revisão" });
+
+  const result = completeExecutorValidation(execution, review, {
+    decision: "rejected",
+    feedback: "Aguardar intervenção",
+  });
+
+  assert.deepEqual(result, { ok: true, outcome: "paused" });
+  assert.equal(execution.blocks[1].status, "awaiting_human");
+  assert.equal(execution.blocks[1].completedAt, undefined);
+  assert.equal(execution.blocks[2].status, "pending");
+  assert.equal(execution.status, "awaiting_human");
+  assert.equal(activeDelivery(execution, review.id, "decision")?.status, "completed");
+});
+
+test("P02 — plugin usa attempt editorial do VALIDAR e invalida output oficial", () => {
+  const target = createBlock("target", 0, "Código");
+  const review = validationBlock("review", 1, target.id, {
+    maxAttempts: 3,
+    operator: "Código",
+  });
+  const { execution } = fixture([target, review]);
+  Object.assign(execution.blocks[0], {
+    status: "completed",
+    values: { target_value: "nona tentativa técnica" },
+    attempt: 9,
+    completedAt: "2026-09-28T02:50:00.000Z",
+  });
+  Object.assign(execution.blocks[1], { status: "blocked_executor", attempt: 1 });
+  execution.status = "blocked_executor";
+  recordBlockDeliveries(execution, target, execution.blocks[0].values, "completed");
+  execution.output = {
+    processType: "theme",
+    values: { theme: "output antigo" },
+    createdAt: "2026-09-28T02:50:00.000Z",
+  };
+  execution.outputStatus = "completed";
+  recordProcessOutputDelivery(execution, execution.output.values, execution.output.createdAt);
+
+  const result = completeExecutorValidation(execution, review, {
+    decision: "rejected",
+    feedback: "Nova rodada editorial",
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcome, "retry_target");
+  assert.equal(execution.blocks[0].attempt, 10);
+  assert.equal(execution.blocks[1].attempt, 2);
+  assert.equal(execution.output, undefined);
+  assert.equal(execution.outputStatus, "pending");
+  assert.equal(
+    execution.deliveries?.find((delivery) => delivery.blockId === "__process_output__")?.status,
+    "invalidated",
+  );
+});
+
+test("P03 — humano e plugin aplicam os mesmos modos editoriais de conversa", () => {
+  for (const retryMode of ["full", "conversation_feedback"] as const) {
+    const humanTarget = createBlock("target", 0, "Código", "asset", "image");
+    const humanReview = validationBlock("review", 1, humanTarget.id, { retryMode });
+    const pluginTarget = createBlock("target", 0, "Código", "asset", "image");
+    const pluginReview = validationBlock("review", 1, pluginTarget.id, {
+      retryMode,
+      operator: "Código",
+    });
+    const human = fixture([humanTarget, humanReview]);
+    const plugin = fixture([pluginTarget, pluginReview]);
+    const image: StoredFile = {
+      id: `image-${retryMode}`,
+      name: `${retryMode}.png`,
+      mimeType: "image/png",
+      size: 42,
+      url: `contentflow://${retryMode}.png`,
+    };
+    const conversation = {
+      pluginId: "com.contentflow.characterization",
+      id: `conversation-${retryMode}`,
+    };
+    for (const execution of [human.execution, plugin.execution]) {
+      Object.assign(execution.blocks[0], {
+        status: "completed",
+        values: { asset: image },
+        attempt: 1,
+        completedAt: "2026-09-28T02:50:00.000Z",
+        pluginConversation: conversation,
+      });
+      Object.assign(execution.blocks[1], {
+        status: execution === human.execution ? "awaiting_human" : "blocked_executor",
+        attempt: 1,
+      });
+      execution.status = execution === human.execution ? "awaiting_human" : "blocked_executor";
+    }
+
+    const values = { decision: "rejected", feedback: `Refazer ${retryMode}` };
+    completeHuman(human.commands, human.execution, humanReview.id, values);
+    const pluginResult = completeExecutorValidation(plugin.execution, pluginReview, values);
+
+    assert.equal(pluginResult.ok, true);
+    assert.equal(pluginResult.outcome, "retry_target");
+    for (const execution of [human.execution, plugin.execution]) {
+      assert.equal(execution.blocks[0].retryMode, retryMode);
+      assert.deepEqual(execution.blocks[0].retryFeedback, values);
+      assert.deepEqual(execution.blocks[0].retryConversationAttachments, [image]);
+      assert.equal(
+        execution.blocks[0].pluginConversation?.id,
+        retryMode === "conversation_feedback" ? conversation.id : undefined,
+      );
+      assert.equal(execution.blocks[1].status, "pending");
+    }
+  }
 });
