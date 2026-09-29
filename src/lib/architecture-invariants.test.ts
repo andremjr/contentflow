@@ -79,6 +79,8 @@ test("keeps the Reliability Program connected and bounded", () => {
     "tasks/TASK-006.md",
     "tasks/TASK-007.md",
     "tasks/TASK-008.md",
+    "tasks/TASK-009.md",
+    "tasks/TASK-010.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -118,7 +120,14 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(roadmap, /\| TASK-007 \|[^\n]+\| `done` \|/);
   assert.match(roadmap, /\| TASK-008 \|[^\n]+\| `done` \|/);
   assert.match(roadmap, /\| TASK-009 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-010 \|[^\n]+\| `ready` \|/);
+  assert.match(roadmap, /\| TASK-010 \|[^\n]+\| `done` \|/);
+  assert.match(roadmap, /\| TASK-011 \|[^\n]+\| `ready` \|/);
+
+  const task010 = readFileSync(
+    new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(task010, /## Estado\s+`done`/);
 
   const executionCommands = readFileSync(
     new URL("../../server/execution-commands.ts", import.meta.url),
@@ -145,7 +154,31 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(orchestratedStart, /createCanonicalProcessExecution\(/);
   assert.doesNotMatch(orchestratedStart, /blocks:\s*methodSnapshot\.blocks\.map/);
   assert.doesNotMatch(orchestratedStart, /block\.operator === "Humano"/);
-  for (const taskId of expectedTaskIds.slice(10)) {
+
+  const legacyPostStart = server.indexOf('app.post("/api/executions",');
+  const legacyPostEnd = server.indexOf(
+    'app.patch("/api/executions/:id/blocks/:blockId/runtime-inputs",',
+    legacyPostStart,
+  );
+  assert.ok(legacyPostStart >= 0 && legacyPostEnd > legacyPostStart);
+  const legacyExecutionPost = server.slice(legacyPostStart, legacyPostEnd);
+  assert.match(
+    server,
+    /import \{ adaptLegacyExecutionCreatePayload \} from "\.\/legacy-execution-boundary"/,
+  );
+  assert.match(legacyExecutionPost, /adaptLegacyExecutionCreatePayload\(request\.body\)/);
+  assert.doesNotMatch(legacyExecutionPost, /createCanonicalProcessExecution\(/);
+  assert.doesNotMatch(legacyExecutionPost, /request\.body as StoredPayload/);
+  assert.doesNotMatch(legacyExecutionPost, /as unknown as ProcessExecution/);
+
+  const legacyBoundary = readFileSync(
+    new URL("../../server/legacy-execution-boundary.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(legacyBoundary, /adaptLegacyExecutionCreatePayload/);
+  assert.match(legacyBoundary, /Compatibility adapter for the historical HTTP creation boundary/);
+
+  for (const taskId of expectedTaskIds.slice(11)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

@@ -6,6 +6,7 @@ import express, {
 } from "express";
 import { z } from "zod";
 import { executionCommands } from "./execution-commands";
+import { adaptLegacyExecutionCreatePayload } from "./legacy-execution-boundary";
 import { createMethodPackage, readMethodPackage } from "./method-package";
 import {
   copyImportedMethods,
@@ -8131,12 +8132,13 @@ app.post("/api/executions/:id/cancel", (request, response) => {
 });
 
 app.post("/api/executions", (request, response) => {
-  const execution = request.body as StoredPayload;
-  if (!execution?.id || !execution.projectId || !execution.processType || !execution.updatedAt) {
+  const adapted = adaptLegacyExecutionCreatePayload(request.body);
+  if (!adapted.ok) {
     response.status(400).json({ error: "Execução inválida." });
     return;
   }
-  const project = readPayload<Project>("projects", String(execution.projectId));
+  const execution = adapted.execution;
+  const project = readPayload<Project>("projects", execution.projectId);
   const channel = project && readPayload<Channel>("channels", project.channelId);
   if (project && channel && !project.strategySnapshot) {
     captureProjectStrategy(
@@ -8154,7 +8156,7 @@ app.post("/api/executions", (request, response) => {
         .run(JSON.stringify(project), project.id);
     }
   }
-  const existing = executionFor(execution.projectId, execution.processType as UniversalProcess);
+  const existing = executionFor(execution.projectId, execution.processType);
   if (existing) {
     response
       .status(409)
@@ -8173,7 +8175,7 @@ app.post("/api/executions", (request, response) => {
       JSON.stringify(execution),
       execution.updatedAt,
     );
-  scheduleAutomaticPluginBlock(execution as unknown as ProcessExecution);
+  scheduleAutomaticPluginBlock(execution);
   queueOrchestratorReconciliationForProject(execution.projectId);
   response.status(201).json(execution);
 });

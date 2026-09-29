@@ -50,8 +50,8 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 | TASK-007 | Unificar criação de `ProcessExecution` | `done` |
 | TASK-008 | Fazer start manual usar criação canônica | `done` |
 | TASK-009 | Fazer Orchestrator/standalone usar criação canônica | `done` |
-| TASK-010 | Isolar `POST /api/executions` legado | `ready` |
-| TASK-011 | Unificar transição bloco concluído → próximo estado | `pending` |
+| TASK-010 | Isolar `POST /api/executions` legado | `done` |
+| TASK-011 | Unificar transição bloco concluído → próximo estado | `ready` |
 | TASK-012 | Conclusão Humana passa pelo Core | `pending` |
 | TASK-013 | Conclusão de Plugin passa pelo Core | `pending` |
 | TASK-014 | Unificar semântica de `VALIDAR` | `pending` |
