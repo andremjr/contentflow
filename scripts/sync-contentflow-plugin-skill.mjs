@@ -3,13 +3,13 @@ import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
-const source = path.join(root, "ecosystem", "skills", "contentflow-plugin-development");
-const target = path.join(root, ".agents", "skills", "contentflow-plugin-development");
+const SKILLS = ["contentflow-method-development", "contentflow-plugin-development"];
 
 async function filesUnder(directory, prefix = "") {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
+    if (entry.name === "__pycache__") continue;
     const relative = path.join(prefix, entry.name);
     if (entry.isDirectory())
       files.push(...(await filesUnder(path.join(directory, entry.name), relative)));
@@ -18,7 +18,9 @@ async function filesUnder(directory, prefix = "") {
   return files.sort();
 }
 
-async function differences() {
+async function differences(skill) {
+  const source = path.join(root, "ecosystem", "skills", skill);
+  const target = path.join(root, ".agents", "skills", skill);
   const sourceFiles = await filesUnder(source);
   const targetFiles = await filesUnder(target);
   const all = Array.from(new Set([...sourceFiles, ...targetFiles])).sort();
@@ -38,18 +40,24 @@ async function differences() {
 }
 
 if (process.argv.includes("--check")) {
-  const changed = await differences();
-  if (changed.length) {
-    console.error(`Skill local fora de sincronia: ${changed.join(", ")}`);
-    process.exitCode = 1;
-  } else {
-    console.log("OK: skill contentflow-plugin-development sincronizada.");
+  let failed = false;
+  for (const skill of SKILLS) {
+    const changed = await differences(skill);
+    for (const file of changed) console.error(`${skill}: ${file} fora de sincronia`);
+    failed ||= changed.length > 0;
   }
+  if (failed) process.exitCode = 1;
+  else console.log(`OK: ${SKILLS.length} skills sincronizadas.`);
 } else {
-  await rm(target, { recursive: true, force: true });
-  await mkdir(path.dirname(target), { recursive: true });
-  await cp(source, target, { recursive: true });
-  console.log(
-    "OK: skill contentflow-plugin-development sincronizada a partir de ecosystem/skills.",
-  );
+  for (const skill of SKILLS) {
+    const source = path.join(root, "ecosystem", "skills", skill);
+    const target = path.join(root, ".agents", "skills", skill);
+    await rm(target, { recursive: true, force: true });
+    await mkdir(path.dirname(target), { recursive: true });
+    await cp(source, target, {
+      recursive: true,
+      filter: (sourcePath) => !sourcePath.endsWith("__pycache__"),
+    });
+  }
+  console.log(`OK: ${SKILLS.length} skills copiadas de ecosystem/skills para .agents/skills.`);
 }

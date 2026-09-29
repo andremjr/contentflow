@@ -73,6 +73,14 @@ test("preserva o planejamento legado para filas em lote já persistidas", () => 
   ]);
 });
 
+test("mantém as versões históricas V1–V4 aceitas junto da V5", () => {
+  for (const version of [1, 2, 3, 4, 5] as const) {
+    assert.doesNotThrow(() =>
+      buildOrchestratorSteps(["project-1", "project-2"], "batch", version, PROCESS_ORDER),
+    );
+  }
+});
+
 test("o lote V4 respeita a ordem congelada e só agrega processos elegíveis na posição correta", () => {
   const order = [
     "theme",

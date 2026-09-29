@@ -117,7 +117,8 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(roadmap, /\| TASK-006 \|[^\n]+\| `done` \|/);
   assert.match(roadmap, /\| TASK-007 \|[^\n]+\| `done` \|/);
   assert.match(roadmap, /\| TASK-008 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-009 \|[^\n]+\| `ready` \|/);
+  assert.match(roadmap, /\| TASK-009 \|[^\n]+\| `done` \|/);
+  assert.match(roadmap, /\| TASK-010 \|[^\n]+\| `ready` \|/);
 
   const executionCommands = readFileSync(
     new URL("../../server/execution-commands.ts", import.meta.url),
@@ -133,7 +134,18 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(manualStart, /createCanonicalProcessExecution\(/);
   assert.doesNotMatch(manualStart, /blocks:\s*methodSnapshot\.blocks\.map/);
   assert.doesNotMatch(manualStart, /status:\s*"not_started"/);
-  for (const taskId of expectedTaskIds.slice(9)) {
+  const server = readFileSync(new URL("../../server/index.ts", import.meta.url), "utf8");
+  const orchestratedStart = server.match(
+    /function startOrchestratedProcess[\s\S]*?\nfunction orchestrationMessage/,
+  )?.[0];
+  assert.ok(
+    orchestratedStart,
+    "startOrchestratedProcess should remain discoverable for architecture guardrails",
+  );
+  assert.match(orchestratedStart, /createCanonicalProcessExecution\(/);
+  assert.doesNotMatch(orchestratedStart, /blocks:\s*methodSnapshot\.blocks\.map/);
+  assert.doesNotMatch(orchestratedStart, /block\.operator === "Humano"/);
+  for (const taskId of expectedTaskIds.slice(10)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

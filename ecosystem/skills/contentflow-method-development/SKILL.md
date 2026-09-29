@@ -1,114 +1,77 @@
 ---
 name: contentflow-method-development
-description: Criação, revisão, validação e importação de Métodos para o ContentFlow, incluindo processos universais, blocos, operadores, prompts, parâmetros, contratos tipados, validações, retries, entregas e arquivos .contentflow-method.json.
+description: Criação, revisão e validação de Métodos compatíveis com os contratos atuais do ContentFlow.
 ---
 
 # Desenvolvimento de Métodos no ContentFlow
 
-Use esta skill para modelar processos executáveis de produção de vídeo no ContentFlow. O objetivo é produzir Métodos portáveis, explícitos, validáveis e compatíveis com o contrato do sistema; não criar plugins, clonar o produto, inventar APIs ou prometer automações que não estejam configuradas.
+Use esta skill para criar ou revisar a estratégia de um Processo Universal. Um **Method define estratégia**. Ele não executa plugins, não controla recovery do Core e não cria primitivas novas.
 
-## Princípios obrigatórios
+## Antes de desenvolver
 
-1. **Modele um vídeo individual.** Estratégia permanente de canal, nicho, público, posicionamento, monetização, mercado e audiência geral ficam fora do Método. Só proponha uma coleção da Biblioteca Estratégica quando ela já existir antes do vídeo, for reutilizada em vários vídeos, for consumida por um bloco e tiver schema definível.
-2. **Use um processo por Método.** Todo Método individual contém exatamente um `processType`: `theme`, `title`, `thumbnail`, `script`, `narration`, `assets`, `editing` ou `publishing`. Um pacote de Canal pode reunir vários Métodos individuais sem fundi-los em um fluxo novo.
-3. **Classifique pela origem do item.** `BUSCAR` recupera dados externos; `CRIAR` produz algo novo; `ESCOLHER` aplica item pré-existente de coleção estratégica do mesmo canal; `VALIDAR` aprova, reprova ou seleciona resultado produzido durante a execução.
-4. **Escolha o executor real.** Use `IA`, `Humano` ou `Código`. Se o relato não esclarecer, use `Humano` e registre a suposição; não esconda revisão humana em prompt de IA.
-5. **Separe contrato de dados de apresentação.** `type` define o valor universal; `presentation` só define renderer. Não inclua HTML, scripts, React, secrets, `deliveryId` ou `itemId` no Método.
-6. **Preserve decisões e proveniência.** Inputs devem apontar estruturalmente para Projeto, processo anterior, bloco anterior, Biblioteca ou contexto estático; o runtime resolve os IDs concretos.
-7. **Não permita conflitos de contrato.** Antes de conectar qualquer output a input, valide `type`, schema (`recordFields`/`options`), cardinalidade, obrigatoriedade, MIME/apresentação e proveniência. Leia [data-compatibility.md](references/data-compatibility.md). Se a conexão não for compatível, altere o contrato, insira transformação explícita ou peça esclarecimento; nunca faça coerção silenciosa.
-8. **Separe referências portáteis de vínculos locais.** O arquivo pode declarar requisitos de plugin, conversa e Biblioteca, mas nunca exporta `connectionId`, `collectionId`, secrets ou IDs opacos do provedor. Depois da importação, o usuário reassocia conta e coleção no Canal.
+Leia no checkout atual `AGENTS.md`, `docs/ARCHITECTURE.md`, `src/lib/domain.ts` e `src/lib/method-file.ts`. Quando a tarefa tocar execução, leia também os contratos vivos de deliveries/work units e o estado vigente do Reliability Program. Esses arquivos prevalecem sobre exemplos congelados desta skill.
 
-## Fluxo principal
+Modelo atual:
 
-Siga esta sequência em qualquer criação ou revisão:
+- Processos, nessa ordem: `theme`, `title`, `thumbnail`, `script`, `narration`, `assets`, `editing`, `publishing`.
+- Blocos: `BUSCAR`, `ESCOLHER`, `CRIAR`, `VALIDAR`.
+- Operadores: `Humano`, `IA`, `Código`.
 
-1. **Identifique a fonte e o objetivo.** Determine se há briefing, relato, transcrição, tutorial, URL pública ou combinação. Se a transcrição de um vídeo não estiver disponível, peça o texto; não invente etapas.
-2. **Extraia o processo.** Para cada etapa, registre objetivo, entrada, ação, responsável, decisão, critério de qualidade e entrega.
-3. **Faça a triagem de escopo.** Separe contexto estratégico, proposta de Biblioteca Estratégica, execução do vídeo e conteúdo fora do aplicativo. Converta somente a execução em blocos.
-4. **Escolha o processo universal.** Se o fluxo atravessar vários processos, divida-o em arquivos separados e conecte-os com `previous_process`.
-5. **Mapeie blocos e operadores.** Use a árvore de decisão de [blocks-and-operators.md](references/blocks-and-operators.md). Em dúvida entre `ESCOLHER` e `VALIDAR`, use `VALIDAR`, salvo coleção estratégica explicitamente pré-existente.
-6. **Defina o contrato de cada bloco.** Declare `inputs`, `outputs`, `parameters`, `instructions`, `order` e, quando aplicável, `validation`, `recordFields`, `presentation` e configuração de plugin.
-7. **Projete prompts e configurações.** Separe instruções imperativas, parâmetros editáveis, configuração do executor, settings locais e secrets. Leia [prompt-design.md](references/prompt-design.md) quando houver IA, placeholders ou formato estruturado. Ao usar uma capability com `promptPreview`, confira no editor a prévia declarada pelo plugin: as variáveis devem aparecer no lugar certo e cada entrada deve estar ligada à porta semântica correta antes de executar.
-8. **Conecte as referências.** Use `previous_block` apenas no mesmo Método; use `previous_process` para processos anteriores; use `project` apenas para `title`/`deadline`; use `static` para contexto fixo; use `channel_history` somente em `ESCOLHER` ou `CRIAR`, conforme [runtime-execution.md](references/runtime-execution.md).
-9. **Modele validação.** Para aprovação, seleção ou reprovação de resultado gerado/pesquisado, use `VALIDAR` com `targetBlockId`, `targetOutputKey`, `mode`, `onReject` e `maxAttempts`.
-10. **Mostre uma prévia antes do JSON**, salvo pedido explícito de JSON pronto. Inclua processo, resumo, blocos, exclusões estratégicas, coleções propostas, suposições e perguntas mínimas.
-11. **Gere e valide o JSON.** Use [method-format.md](references/method-format.md), o template em `templates/method-skeleton.json` e a lista de validação em [validation.md](references/validation.md), incluindo obrigatoriamente a matriz de [data-compatibility.md](references/data-compatibility.md).
-12. **Teste e importe.** Prefira o pacote `.contentflow-method.zip`, que contém `manifest.json` e capas em `assets/`; JSONs individuais continuam válidos para compatibilidade. Importe no processo ou na Biblioteca de Métodos, configure coleções/plugins/secrets manualmente e execute um Projeto de teste antes da produção.
+Não crie uma nova primitiva quando o comportamento puder ser expresso pela composição dessas primitivas universais.
 
-## Decisões rápidas
+## Fronteiras de autoridade
 
-| Necessidade                                                       | Decisão                                                                          |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Pesquisar notícias, canais, API, fontes ou mídia externa          | `BUSCAR`                                                                         |
-| Gerar lista, texto, áudio, imagem, vídeo, arquivo ou síntese      | `CRIAR`                                                                          |
-| Aplicar template/layout/estrutura já salvo na Biblioteca do Canal | `ESCOLHER`; o JSON portátil preserva o requisito, mas não o `collectionId` local |
-| Aprovar, reprovar, escolher ou curar resultado desta execução     | `VALIDAR`                                                                        |
-| Tema recém-gerado e escolha humana                                | `CRIAR` → `VALIDAR/select_one`                                                   |
-| Banco permanente reutilizado em vários vídeos                     | Propor coleção; não misturar automaticamente no JSON portátil                    |
-| Contexto de canal anterior aos vídeos                             | Excluir do Método e documentar na prévia                                         |
-| Output de processo anterior                                       | `previous_process` + `sourceProcessType` + `sourceKey`                           |
-| Output de bloco anterior do mesmo processo                        | `previous_block` + `blockId` + `sourceKey`                                       |
-| Memória de Projetos anteriores do Canal                           | `channel_history` como `records`, somente em `ESCOLHER`/`CRIAR`                  |
-| Continuar conversa de plugin                                      | `plugin.conversation.mode = reuse` + processo/bloco anterior compatível          |
+`Method → define estratégia`
 
-## Contrato mínimo de bloco
+`Plugin → fornece capacidade declarada`
 
-Cada bloco usa IDs únicos, `order` sequencial começando em 0 e `parameters` mesmo quando vazia. Instruções devem ser imperativas, observáveis e curtas: ação, contexto, restrições, critério de qualidade e entrega. Cada bloco deve produzir uma saída útil, exceto a semântica especial de `ESCOLHER` configurada na coleção.
+`Core → cria a execução, persiste identidade/proveniência/ordem, decide progressão e recovery`
 
-Os tipos universais são `text`, `textarea`, `number`, `select`, `boolean`, `multiselect`, `list`, `records`, `datetime`, `url`, `file`, `image`, `audio`, `video`, `files`, `approval` e `thumbnail_layout`. Parâmetros aceitam somente `text`, `number`, `select`, `boolean` e `textarea`; `options` só em `select` e no máximo 100 itens. Outputs e inputs `records` devem declarar `recordFields` com keys não vazias e únicas.
+O Method é congelado em `methodSnapshot` dentro da execução e pode integrar o `strategySnapshot` do Projeto. Não coloque fallback estratégico, avanço de Processo, retry técnico ou identidade de work units em configuração de plugin.
 
-Para detalhes normativos de envelope, campos, fontes, outputs, records e apresentação, leia [method-format.md](references/method-format.md). Para regras de compatibilidade entre conexões, leia [data-compatibility.md](references/data-compatibility.md). Para ciclo de execução, estados, entregas e binding, leia [runtime-execution.md](references/runtime-execution.md).
+## Workflow
 
-## Configuração de IA, Código e Humano
+1. Identifique qual dos 8 Processos está sendo modelado. Um arquivo `contentflow-method` v1 contém um único `processType`.
+2. Modele a estratégia com os quatro Blocos existentes e operadores compatíveis.
+3. Declare `inputs` e `outputs` no próprio Bloco. Use bindings estruturais (`project`, `previous_process`, `previous_block`, `channel_history`, `channel_library`, `runtime`, `static`) conforme o schema vivo.
+4. Trate contexto implícito/deprecated do executor apenas como **legacy compatibility**. Novos Métodos devem preferir bindings explícitos.
+5. Ligue plugin/capability ao Bloco somente quando necessário. O binding escolhe capacidade; não transfere ao plugin autoridade sobre o fluxo.
+6. Valide tipo, schema, cardinalidade, `portKey`, proveniência e ordem antes de conectar uma saída a uma entrada.
+7. Para listas/coleções, trate items/work units como estado operacional criado e persistido pelo Core. O Method não inventa `itemId`, delivery ID ou identidade intermediária.
+8. Valide o JSON com o parser real de `src/lib/method-file.ts` antes de entregar.
 
-Trate cinco camadas separadamente:
+## VALIDAR e retry editorial
 
-| Camada          | Conteúdo                                                           |
-| --------------- | ------------------------------------------------------------------ |
-| `instructions`  | Ação desta etapa e critério de entrega.                            |
-| `parameters`    | Limites e escolhas do Método: quantidade, duração, preset, estilo. |
-| Executor/plugin | Modelo, endpoint, codec, formato ou operação específica.           |
-| Settings        | Preferências da instalação ou do canal.                            |
-| Secrets         | Credenciais em cofre; nunca serializar no Método.                  |
+`VALIDAR` aponta para resultado anterior por `targetBlockId`/`targetOutputKey` e usa os modos vivos `approval`, `select_one` ou `select_many`. `onReject` aceita os valores definidos no contrato atual, hoje `retry_target` ou `pause`, com `maxAttempts` e `retryMode` quando aplicável.
 
-Use placeholders somente quando a fonte estiver declarada, por exemplo `{{project.title}}`, `{{video.topic}}` ou `{{block_01.output}}`. Para IA, peça saída compatível com o `type` do output e não misture seleção humana dentro da geração. Para Código, declare entrada, formato, artefato e erro esperado. Para Humano, declare o que revisar ou entregar e como o resultado será representado.
+Uma reprovação editorial pode gerar nova tentativa do alvo e feedback editorial. Isso é diferente de falha técnica de plugin. Não converta rejeição editorial em `retryable` técnico e não invente semântica futura.
 
-Quando o plugin declarar continuidade, escolha explicitamente conversa nova ou uma referência estrutural anterior. A reutilização só é válida no mesmo Projeto, com o mesmo `pluginId` e a mesma conexão local; o arquivo portátil nunca contém o ID real da conversa.
+## Inputs, outputs, deliveries e work units
 
-## Validação final
+Inputs/outputs pertencem aos Blocos. O Core resolve os bindings em runtime, materializa deliveries e cria/persiste work units antes de delegar efeitos ao executor. Plugins recebem valores e IDs concedidos pelo Core apenas para correlação.
 
-Antes de entregar um arquivo, confirme:
+## Portabilidade
 
-- envelope `format`, `version`, `name`, `exportedAt` e `method` válidos;
-- exatamente um processo universal e entre 1 e 200 blocos;
-- `id` único, `order` sem saltos, enums válidos e `parameters` em todos os blocos;
-- cada `output.key` não vazia e única no bloco;
-- cada referência aponta para bloco/processo anterior e output existente;
-- `channel_history` usa `records`, pertence a `ESCOLHER`/`CRIAR` e possui origem/limite válidos;
-- referências de conversa apontam para bloco anterior do mesmo plugin e não carregam ID opaco ou conta local;
-- cada conexão output→input passa na matriz de compatibilidade de tipo, schema, cardinalidade, obrigatoriedade, options/MIME e proveniência;
-- nenhum `list`, `records`, `files`, `multiselect` ou mídia especializada é ligado a formato incompatível sem transformação explícita;
-- `records` possui schema completo e keys únicas;
-- `VALIDAR` não aponta para outro `VALIDAR` e usa mode coerente;
-- `ESCOLHER` representa coleção estratégica pré-existente; em arquivo portátil, documenta o requisito e exige reassociação a uma coleção local após importar;
-- não há secrets, conteúdo protegido desnecessário, `deliveryId`, `itemId` ou valores transitórios;
-- o output oficial do Processo é alcançável e será promovido ao fim.
+Não serialize secrets, cookies, storage, caminhos locais, IDs físicos de perfil, `connectionId`, `collectionId` local, IDs de deliveries/work units ou estado transitório. Perfil/browser binding é estado local do Core e deve ser reassociado quando aplicável.
 
-Use [validation.md](references/validation.md) para auditoria detalhada e [templates/review-checklist.md](templates/review-checklist.md) para revisão por pares.
+## Exemplo oficial
 
-## Referências sob demanda
+Use `templates/method-skeleton.json` como exemplo mínimo. Antes de reutilizá-lo, valide contra `src/lib/method-file.ts`; não copie campos de exemplos antigos sem conferir o contrato atual.
 
-- **Contrato completo e schema:** [method-format.md](references/method-format.md).
-- **Blocos, operadores e Biblioteca Estratégica:** [blocks-and-operators.md](references/blocks-and-operators.md).
-- **Compatibilidade de inputs/outputs, schemas e cardinalidade:** [data-compatibility.md](references/data-compatibility.md).
-- **Runtime, estados, binding, retries e entregas:** [runtime-execution.md](references/runtime-execution.md).
-- **Prompts, placeholders, parâmetros e configuração de executor:** [prompt-design.md](references/prompt-design.md).
-- **Escopo de tradução e divisão em processos:** [translation-scope.md](references/translation-scope.md).
-- **Exemplos Tema e Roteiro:** [examples.md](references/examples.md).
-- **Validação e importação:** [validation.md](references/validation.md).
-- **Esqueleto JSON:** `templates/method-skeleton.json`.
-- **Checklist para agentes:** `templates/review-checklist.md`.
+## Referências
 
-## Limites
+- `docs/ARCHITECTURE.md`
+- `src/lib/domain.ts`
+- `src/lib/method-file.ts`
+- `references/data-compatibility.md`
+- `references/runtime-execution.md`
 
-Não transforme a estrutura do ContentFlow em clone, white-label, rebranding ou produto concorrente. Não declare integrações, chamadas de API, execução de IA ou automações que não estejam configuradas. Não inclua credenciais nem trate uma reprovação editorial como falha técnica. Preserve a intenção do processo fornecido pelo usuário.
+## Checklist
+
+- composição usa apenas primitivas universais existentes;
+- Method contém estratégia e Blocos, não política do executor;
+- inputs/outputs pertencem aos Blocos e bindings são explícitos;
+- VALIDAR diferencia reprovação editorial de falha técnica;
+- nenhuma identidade intermediária é inventada fora do Core;
+- configuração portátil não contém secrets nem identidade física local;
+- exemplo/arquivo final passa pelo parser real do checkout.

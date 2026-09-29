@@ -1,8 +1,9 @@
-# Skills do ContentFlow
+# Skills oficiais do ContentFlow
 
-- [`contentflow-plugin-development`](contentflow-plugin-development/) ensina agentes a criar, revisar, testar e empacotar plugins da Plugin API v1.
-- [`contentflow-method-development`](contentflow-method-development/) ensina agentes a modelar, revisar e validar Métodos portáteis.
+`ecosystem/skills/` é a fonte canônica distribuível de `contentflow-method-development` e `contentflow-plugin-development`. A árvore `.agents/skills/` é somente a cópia local derivada usada por agentes neste checkout.
 
-As skills são versionadas junto do contrato que descrevem. Sempre prefira a cópia da mesma versão do repositório ou release que está sendo usada.
+Sincronize as duas cópias locais com `node scripts/sync-contentflow-plugin-skill.mjs`. Para verificar sem alterar arquivos, execute `npm run test:skill-sync`.
 
-Nas releases, cada skill é distribuída em seu próprio ZIP para instalação independente: `ContentFlow-Skill-Plugin-Development.zip` e `ContentFlow-Skill-Method-Development.zip`.
+Para instalar uma skill separadamente, copie a pasta completa correspondente de `ecosystem/skills/` para o diretório de skills do agente. Para atualizar, substitua a instalação antiga pela versão atual da fonte oficial. Não há atualização externa automática implícita.
+
+Nas releases, cada skill continua apta a distribuição independente.

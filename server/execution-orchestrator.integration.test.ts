@@ -7,7 +7,12 @@ import os from "node:os";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import test from "node:test";
-import { PROCESS_ORDER, type Channel, type ProcessExecution } from "../src/lib/domain";
+import {
+  PROCESS_ORDER,
+  type Channel,
+  type ProcessExecution,
+  type Project,
+} from "../src/lib/domain";
 import type { ExecutionOrchestrator } from "../src/lib/execution-orchestrator";
 
 type OrchestratorState = {
@@ -82,7 +87,18 @@ function testChannel(): Channel {
               operator: "Humano",
               name: `Executar ${processType}`,
               inputs: [],
-              outputs: [],
+              outputs:
+                processType === "theme" || processType === "title"
+                  ? [
+                      {
+                        id: `${processType}-output-test`,
+                        label: processType === "theme" ? "Tema produzido" : "Título produzido",
+                        key: processType,
+                        type: processType === "theme" ? "textarea" : "text",
+                        required: true,
+                      },
+                    ]
+                  : [],
               parameters: [],
               order: 0,
             },
@@ -90,6 +106,42 @@ function testChannel(): Channel {
         },
       ]),
     ) as unknown as Channel["methods"],
+  };
+}
+
+function testProject(channelId: string, id: string = randomUUID()): Project {
+  const createdAt = new Date().toISOString();
+  return {
+    id,
+    title: "Projeto standalone",
+    channelId,
+    currentStage: "theme",
+    state: "not_started",
+    progress: 0,
+    deadline: "Sem prazo",
+    duration: "—",
+    updatedAt: "Agora",
+    createdAt,
+    stages: Object.fromEntries(
+      PROCESS_ORDER.map((processType) => [processType, "not_started"]),
+    ) as Project["stages"],
+    assignee: { name: "Não atribuído", initials: "—" },
+    thumbHue: 180,
+  };
+}
+
+function initialDomainShape(execution: ProcessExecution) {
+  return {
+    processType: execution.processType,
+    methodSnapshot: execution.methodSnapshot,
+    blocks: execution.blocks.map((block) => ({
+      blockId: block.blockId,
+      status: block.status,
+      values: block.values,
+      attempt: block.attempt,
+    })),
+    status: execution.status,
+    outputStatus: execution.outputStatus,
   };
 }
 
@@ -124,6 +176,101 @@ test(
       });
       assert.equal(channelResponse.response.status, 201, channelResponse.body.error);
 
+      const standaloneProject = testProject(channel.id, "project-standalone-canonical");
+      const standaloneProjectResponse = await jsonRequest<Project>(`${baseUrl}/api/projects`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(standaloneProject),
+      });
+      assert.equal(
+        standaloneProjectResponse.response.status,
+        201,
+        standaloneProjectResponse.body.error,
+      );
+      const manualStart = await jsonRequest<{ result: ProcessExecution }>(
+        `${baseUrl}/api/commands`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: randomUUID(),
+            action: "start",
+            projectId: standaloneProject.id,
+            processType: "theme",
+          }),
+        },
+      );
+      assert.equal(manualStart.response.status, 200, manualStart.body.error);
+      assert.equal(manualStart.body.result.status, "awaiting_human");
+      assert.equal(manualStart.body.result.blocks[0].status, "awaiting_human");
+
+      const frozenTitleBlockId = channel.methods.title.blocks[0].id;
+      const liveTitleMethod = {
+        ...channel.methods.title,
+        blocks: channel.methods.title.blocks.map((block, index) =>
+          index === 0 ? { ...block, id: "title-live-mutated-after-snapshot" } : block,
+        ),
+      };
+      const mutateTitleMethod = await jsonRequest<Channel["methods"]["title"]>(
+        `${baseUrl}/api/channels/${channel.id}/methods/title`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(liveTitleMethod),
+        },
+      );
+      assert.equal(mutateTitleMethod.response.status, 200, mutateTitleMethod.body.error);
+
+      const completedStandaloneTheme = await jsonRequest<{
+        result: { ok: boolean; completedProcess?: boolean };
+      }>(`${baseUrl}/api/commands`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: randomUUID(),
+          action: "completeHuman",
+          executionId: manualStart.body.result.id,
+          blockId: manualStart.body.result.blocks[0].blockId,
+          attempt: 1,
+          values: { theme: "Tema standalone" },
+        }),
+      });
+      assert.equal(
+        completedStandaloneTheme.body.result.ok,
+        true,
+        JSON.stringify(completedStandaloneTheme.body),
+      );
+      let standaloneExecutions: ProcessExecution[] = [];
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const state = await jsonRequest<ProcessExecution[]>(
+          `${baseUrl}/api/executions?projectId=${standaloneProject.id}`,
+        );
+        standaloneExecutions = state.body;
+        if (standaloneExecutions.some((execution) => execution.processType === "title")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      const standaloneTitle = standaloneExecutions.find(
+        (execution) => execution.processType === "title",
+      );
+      assert.ok(standaloneTitle, "runThrough standalone não iniciou o próximo Processo");
+      assert.equal(standaloneTitle.status, "awaiting_human");
+      assert.equal(standaloneTitle.blocks[0].status, "awaiting_human");
+      assert.equal(
+        standaloneTitle.methodSnapshot.blocks[0].id,
+        frozenTitleBlockId,
+        "o standalone deixou de usar o snapshot congelado do Projeto",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+      const standaloneAfterReconcile = await jsonRequest<ProcessExecution[]>(
+        `${baseUrl}/api/executions?projectId=${standaloneProject.id}`,
+      );
+      assert.equal(
+        standaloneAfterReconcile.body.filter((execution) => execution.processType === "title")
+          .length,
+        1,
+        "reconcileStandaloneProcesses duplicou uma execution existente",
+      );
+
       const first = await jsonRequest<OrchestratorState>(`${baseUrl}/api/orchestrators`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -138,6 +285,86 @@ test(
       assert.equal(first.body.orchestrator.strategyVersion, 5);
       assert.equal(first.body.orchestrator.status, "awaiting_human");
       assert.equal(first.body.executions.length, 1);
+      assert.deepEqual(
+        initialDomainShape(first.body.executions[0]),
+        initialDomainShape(manualStart.body.result),
+        "Orchestrator e start manual divergiram na forma inicial do mesmo Method",
+      );
+
+      const humanShapeChannel = testChannel();
+      humanShapeChannel.id = "channel-orchestrator-human-shape";
+      humanShapeChannel.methods.theme.blocks.push({
+        id: "theme-human-downstream",
+        type: "VALIDAR",
+        operator: "Humano",
+        name: "Validar tema",
+        inputs: [],
+        outputs: [],
+        parameters: [],
+        order: 1,
+      });
+      const humanShapeChannelResponse = await jsonRequest<Channel>(`${baseUrl}/api/channels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(humanShapeChannel),
+      });
+      assert.equal(
+        humanShapeChannelResponse.response.status,
+        201,
+        humanShapeChannelResponse.body.error,
+      );
+      const humanShape = await jsonRequest<OrchestratorState>(`${baseUrl}/api/orchestrators`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelId: humanShapeChannel.id,
+          mode: "end_to_end",
+          quantity: 1,
+          projectPrefix: "Forma humana",
+        }),
+      });
+      assert.equal(humanShape.response.status, 201, humanShape.body.error);
+      assert.equal(humanShape.body.orchestrator.status, "awaiting_human");
+      assert.deepEqual(
+        humanShape.body.executions[0].blocks.map((block) => block.status),
+        ["awaiting_human", "pending"],
+      );
+      await jsonRequest<OrchestratorState>(
+        `${baseUrl}/api/orchestrators/${humanShape.body.orchestrator.id}/stop`,
+        { method: "POST" },
+      );
+
+      const invalidMethodChannel = testChannel();
+      invalidMethodChannel.id = "channel-orchestrator-invalid-method";
+      invalidMethodChannel.methods.theme.blocks = [];
+      const invalidMethodChannelResponse = await jsonRequest<Channel>(`${baseUrl}/api/channels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(invalidMethodChannel),
+      });
+      assert.equal(
+        invalidMethodChannelResponse.response.status,
+        201,
+        invalidMethodChannelResponse.body.error,
+      );
+      const invalidMethod = await jsonRequest<OrchestratorState>(`${baseUrl}/api/orchestrators`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelId: invalidMethodChannel.id,
+          mode: "end_to_end",
+          quantity: 1,
+          projectPrefix: "Método inválido",
+        }),
+      });
+      assert.equal(invalidMethod.response.status, 201, invalidMethod.body.error);
+      assert.equal(invalidMethod.body.orchestrator.status, "blocked");
+      assert.equal(invalidMethod.body.executions.length, 0);
+      const invalidProjects = await jsonRequest<Project[]>(
+        `${baseUrl}/api/projects?channelId=${invalidMethodChannel.id}`,
+      );
+      assert.equal(invalidProjects.body[0].stages.theme, "not_started");
+      assert.equal(invalidProjects.body[0].state, "not_started");
 
       const failedExecution = {
         ...first.body.executions[0],
@@ -307,6 +534,16 @@ test(
           configuration: {},
         },
       };
+      missingPluginChannel.methods.theme.blocks.push({
+        id: "theme-after-missing-plugin",
+        type: "VALIDAR",
+        operator: "Humano",
+        name: "Validar tema automático",
+        inputs: [],
+        outputs: [],
+        parameters: [],
+        order: 1,
+      });
       const missingChannelResponse = await jsonRequest<Channel>(`${baseUrl}/api/channels`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -331,6 +568,13 @@ test(
       assert.equal(missingPlugin.body.executions.length, 2);
       assert.ok(
         missingPlugin.body.executions.every((execution) => execution.status === "blocked_executor"),
+      );
+      assert.ok(
+        missingPlugin.body.executions.every(
+          (execution) =>
+            execution.blocks[0].status === "blocked_executor" &&
+            execution.blocks[1].status === "pending",
+        ),
       );
       await new Promise((resolve) => setTimeout(resolve, 100));
       const missingPluginState = await jsonRequest<OrchestratorState>(

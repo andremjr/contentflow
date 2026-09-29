@@ -78,6 +78,7 @@ import {
   type ExecutionOrchestratorMode,
   type ExecutionOrchestratorStatus,
 } from "../src/lib/execution-orchestrator";
+import { createCanonicalProcessExecution } from "../src/lib/execution-core";
 import {
   getCompatiblePresentationRenderers,
   getPresentationRestrictionIssue,
@@ -1488,33 +1489,16 @@ function startOrchestratedProcess(
   if (!method || issue) return { issue: issue ?? "O método deste processo não está disponível." };
 
   const now = new Date().toISOString();
-  const methodSnapshot = structuredClone(method);
-  const execution: ProcessExecution = {
-    id: randomUUID(),
+  const creation = createCanonicalProcessExecution({
+    executionId: randomUUID(),
     projectId: project.id,
     channelId: channel.id,
     processType,
-    methodSnapshot,
-    blocks: methodSnapshot.blocks.map((block, index) => ({
-      blockId: block.id,
-      status:
-        index === 0
-          ? block.operator === "Humano" && !block.plugin
-            ? "awaiting_human"
-            : "blocked_executor"
-          : "pending",
-      values: {},
-      attempt: 1,
-      startedAt: index === 0 ? now : undefined,
-    })),
-    status:
-      methodSnapshot.blocks[0].operator === "Humano" && !methodSnapshot.blocks[0].plugin
-        ? "awaiting_human"
-        : "blocked_executor",
-    outputStatus: "pending",
-    createdAt: now,
-    updatedAt: now,
-  };
+    methodSnapshot: method,
+    now,
+  });
+  if (!creation.ok) return { issue: "O método deste processo não está disponível." };
+  const execution = creation.execution;
   project.stages = {
     ...project.stages,
     [processType]: execution.status === "awaiting_human" ? "awaiting_human" : "processing",

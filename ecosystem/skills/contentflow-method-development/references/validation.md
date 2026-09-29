@@ -24,13 +24,9 @@ Valide nesta ordem:
 
 ## Validação automática
 
-Use o script:
+Quando estiver no checkout oficial, valide com o parser/importador real de `src/lib/method-file.ts` e com as suites do repositório. O exemplo oficial desta skill é exercitado por `npm run test:skill-sync`. Não use um validador paralelo congelado como autoridade: o schema e os contratos vivos do ContentFlow prevalecem.
 
-```bash
-python scripts/validate_method_contract.py metodo.contentflow-method.json
-```
-
-O script verifica envelope, enums, IDs, ordem, parâmetros, outputs, referências, Histórico do Canal, bindings portáteis, continuidade de conversa, validação e conexões explícitas `previous_block`. Ele trata incompatibilidade de tipo como erro, não como aviso. Use a referência [data-compatibility.md](data-compatibility.md) para decisões que exigem transformação.
+Use [data-compatibility.md](data-compatibility.md) para decisões que exigem transformação e confirme qualquer regra estrutural no código atual antes de gerar o arquivo final.
 
 ## Teste de aceitação mínimo
 

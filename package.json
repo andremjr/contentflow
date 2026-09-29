@@ -42,7 +42,7 @@
     "test:browser-bridge": "node --test server/browser-bridge-client.test.mjs server/browser-bridge-contract-v05.test.mjs",
     "test:browser-runtime-core": "tsx --test server/browser-session-manager.test.ts server/execution-recovery-policy.test.ts && node --test server/browser-bridge-sdk-sync.test.mjs",
     "test:data-shape": "tsx --test src/lib/data-shape.test.ts",
-    "test:skill-sync": "node --test server/contentflow-plugin-skill-sync.test.mjs",
+    "test:skill-sync": "node scripts/sync-contentflow-plugin-skill.mjs --check && node --test server/contentflow-plugin-skill-sync.test.mjs && tsx --test server/contentflow-skill-examples.test.ts",
     "test:browser-bridge-v51": "node --test server/browser-bridge-chrome-v51.test.mjs",
     "test:browser-bridge-v57": "node --test server/browser-bridge-idle-v57.test.mjs",
     "test:browser-bridge-v58": "tsx --test server/browser-diagnostics-v58.test.ts server/browser-plugin-diagnostics-v58.test.mjs ecosystem/browser-bridge/test.mjs",
