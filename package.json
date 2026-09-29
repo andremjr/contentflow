@@ -64,6 +64,7 @@
     "test:plugin-inputs": "tsx --test server/plugin-input-values.test.ts server/runtime-input-values.test.ts server/runtime-contract-runtime-inputs.test.ts",
     "test:automatic-execution": "tsx --test server/automatic-plugin-execution.test.ts server/execution-retry.test.ts",
     "test:execution-state-machine": "tsx --test server/execution-state-machine.characterization.test.ts",
+    "test:validation-retry": "tsx --test server/validation-retry.characterization.test.ts",
     "test:orchestrator": "tsx --test server/execution-orchestrator.test.ts server/execution-orchestrator.integration.test.ts",
     "benchmark:orchestrator-v4": "node scripts/benchmark-orchestrator-v4.mjs",
     "benchmark:shared-browser-v15": "node --import tsx scripts/benchmark-shared-browser-v15.mjs",

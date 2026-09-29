@@ -38,8 +38,8 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 | --- | --- | --- |
 | TASK-001 | Congelar baseline de confiabilidade | `done` |
 | TASK-002 | Characterization tests da máquina de estados atual | `done` |
-| TASK-003 | Caracterizar `VALIDAR` e retry editorial | `ready` |
-| TASK-004 | Plugin determinístico de fault injection | `pending` |
+| TASK-003 | Caracterizar `VALIDAR` e retry editorial | `done` |
+| TASK-004 | Plugin determinístico de fault injection | `ready` |
 | TASK-005 | Fixture persistente representativa da 1.2.1 | `pending` |
 
 ### Sovereign Core — TASK-006 a TASK-020

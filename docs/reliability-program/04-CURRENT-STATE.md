@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --- | --- |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão | `1.2.1` |
-| Task concluída | TASK-002 |
+| Task concluída | TASK-003 |
 | Task ativa | Nenhuma |
-| Próxima | TASK-003 (`ready`), ainda não iniciada |
+| Próxima | TASK-004 (`ready`), ainda não iniciada |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -53,6 +53,7 @@ As capacidades abaixo existem no checkout atual e constituem base a preservar, c
 - **migration journal:** schema versionado com journal, passos, estados `started/completed/failed` e recuperação de migração interrompida;
 - **Orchestrator V5:** elegibilidade por slots, ordem congelada e retomada de filas persistidas;
 - **characterization da execução básica:** suíte dedicada cobre start humano/automático, avanço sequencial, espera humana/de executor, outputs, drafts, rejeições sem mutação, snapshot congelado e sucesso simples de plugin;
+- **characterization de `VALIDAR` e retry editorial:** suíte dedicada cobre aprovação, pausa, `retry_target`, attempts editoriais, limite, invalidação do trecho, deliveries, output do Processo, modos de conversa, nova rodada, aprovação posterior e seleção singular;
 - **testes extensos:** suites para arquitetura, execução, plugins, perfis, Browser Bridge, persistência, migrações e distribuição.
 
 Existência não significa convergência completa com a arquitetura-alvo. Essas capacidades ainda passam por caminhos de aplicação diferentes e precisam de characterization tests antes de consolidação.
@@ -71,6 +72,14 @@ Existência não significa convergência completa com a arquitetura-alvo. Essas 
 - conclusão e avanço de plugin permanecem aplicados por caminhos próprios em `server/index.ts`.
 
 O comportamento converge em vários pontos, mas ainda não existe um único módulo canônico que decida e aplique todas as transições.
+
+### Semântica vigente de `VALIDAR` e retry editorial
+
+No caminho humano atual, aprovação conclui o `VALIDAR` e avança; rejeição com `pause` conserva o Bloco em `awaiting_human`, mas já materializa values e deliveries concluídas da decisão. Com `retry_target`, a rodada editorial é contada pelo `attempt` do próprio `VALIDAR`, separada das tentativas técnicas anteriores do alvo.
+
+O retry invalida deliveries do alvo até o `VALIDAR`, inclusive o output oficial do Processo, limpa o output atual e reseta o trecho downstream; Blocos e deliveries anteriores ao alvo são preservados. `retryMode = full` limpa a conversa do alvo, enquanto `conversation_feedback` a preserva; ambos materializam feedback, fallback context e imagens da tentativa rejeitada nos campos de retry.
+
+A checagem de `maxAttempts` ocorre depois de persistir values e deliveries da rejeição. Portanto, uma rejeição que não pode abrir nova rodada ainda atualiza o estado editorial do `VALIDAR`, embora não reinicie o alvo nem altere a projeção do Projeto. Esse comportamento foi caracterizado, não corrigido.
 
 ### Resolução heurística de inputs
 
@@ -108,7 +117,7 @@ Esses caminhos preservam instalações existentes, mas parte da reconciliação 
 
 ## Known test gaps
 
-Existem suites importantes para arquitetura, máquina básica de execução, ordem de Processos, jobs persistentes, restart de componentes, Browser Bridge, perfis, lanes, migrações, plugins e contratos. A TASK-002 passou a proteger explicitamente C01–C12 e o sucesso simples de plugin. Ainda não existe um gate único que prove, em conjunto:
+Existem suites importantes para arquitetura, máquina básica de execução, `VALIDAR`/retry editorial, ordem de Processos, jobs persistentes, restart de componentes, Browser Bridge, perfis, lanes, migrações, plugins e contratos. As TASK-002 e TASK-003 protegem respectivamente a máquina básica e a semântica humana de validação/retry. Ainda não existe um gate único que prove, em conjunto:
 
 - jornada automática completa dos 8 Processos;
 - fault injection determinístico;
@@ -128,6 +137,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-003. Sua criação e implementação ainda exigem autorização explícita.
+Não há blocker externo confirmado para preparar a especificação da TASK-004. Sua criação e implementação ainda exigem autorização explícita.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.
