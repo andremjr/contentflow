@@ -37,7 +37,7 @@ import {
   recordBlockDeliveries,
   recordProcessOutputDelivery,
 } from "../src/lib/deliveries";
-import { evaluateExecutionCore } from "../src/lib/execution-core";
+import { createCanonicalProcessExecution, evaluateExecutionCore } from "../src/lib/execution-core";
 
 /** Synchronous domain transitions. The caller owns the SQLite transaction. */
 export function executionCommands(db: {
@@ -94,31 +94,18 @@ export function executionCommands(db: {
       name: normalizedMethod.name,
       imageUrl: normalizedMethod.imageUrl,
       processType,
-      blocks: structuredClone(normalizedMethod.blocks),
+      blocks: normalizedMethod.blocks,
     };
-    const execution: ProcessExecution = {
-      id: crypto.randomUUID(),
+    const creation = createCanonicalProcessExecution({
+      executionId: crypto.randomUUID(),
       projectId,
       channelId: channel.id,
       processType,
       methodSnapshot,
-      blocks: methodSnapshot.blocks.map((block) => ({
-        blockId: block.id,
-        status: "pending",
-        values: {},
-        attempt: 1,
-      })),
-      status: "not_started",
-      outputStatus: "pending",
-      createdAt: now,
-      updatedAt: now,
-    };
-    const transition = evaluateExecutionCore(execution, { type: "start_requested" });
-    if (transition.decision.type !== "activate_block") return undefined;
-    const firstExecution = execution.blocks[transition.decision.blockIndex];
-    firstExecution.status = transition.decision.blockStatus;
-    firstExecution.startedAt = now;
-    execution.status = transition.decision.executionStatus;
+      now,
+    });
+    if (!creation.ok) return undefined;
+    const execution = creation.execution;
     db.executions.unshift(execution);
     project.stages = {
       ...project.stages,

@@ -15,6 +15,7 @@ import {
   type ProcessMethod,
   type Project,
 } from "../src/lib/domain";
+import { createCanonicalProcessExecution } from "../src/lib/execution-core";
 import { executionCommands } from "./execution-commands";
 
 const initialStages = () =>
@@ -166,6 +167,54 @@ test("C02 — start com primeiro Bloco automático projeta executor bloqueado", 
   assert.equal(project.stages.theme, "processing");
   assert.equal(project.currentStage, "theme");
   assert.equal(project.state, "processing");
+});
+
+test("C02A — start manual é semanticamente equivalente à criação canônica", () => {
+  for (const blocks of [
+    [humanBlock("human-first", 0), automaticBlock("automatic-second", 1)],
+    [automaticBlock("automatic-first", 0), humanBlock("human-second", 1)],
+  ]) {
+    const { commands, project } = fixture(blocks);
+    const execution = commands.startProcessExecution(project.id, "theme");
+    assert.ok(execution);
+    const canonical = createCanonicalProcessExecution({
+      executionId: execution.id,
+      projectId: execution.projectId,
+      channelId: execution.channelId,
+      processType: execution.processType,
+      methodSnapshot: execution.methodSnapshot,
+      now: execution.createdAt,
+    });
+    assert.equal(canonical.ok, true);
+    if (!canonical.ok) continue;
+    assert.deepEqual(
+      {
+        processType: execution.processType,
+        methodSnapshot: execution.methodSnapshot,
+        blocks: execution.blocks,
+        status: execution.status,
+        outputStatus: execution.outputStatus,
+        createdAt: execution.createdAt,
+      },
+      {
+        processType: canonical.execution.processType,
+        methodSnapshot: canonical.execution.methodSnapshot,
+        blocks: canonical.execution.blocks,
+        status: canonical.execution.status,
+        outputStatus: canonical.execution.outputStatus,
+        createdAt: canonical.execution.createdAt,
+      },
+    );
+  }
+});
+
+test("C02B — segunda chamada retorna a execução existente sem duplicar", () => {
+  const { commands, project, db } = fixture([humanBlock("human-first", 0)]);
+  const first = commands.startProcessExecution(project.id, "theme");
+  const second = commands.startProcessExecution(project.id, "theme");
+  assert.ok(first);
+  assert.equal(second, first);
+  assert.equal(db.executions.length, 1);
 });
 
 test("C03 — conclusão Humana ativa o próximo Bloco Humano", () => {
@@ -360,6 +409,18 @@ test("C11 — snapshot do Método permanece congelado após alteração do Canal
     ],
   );
   assert.equal(project.strategySnapshot?.methods.theme.name, "Método caracterizado");
+});
+
+test("C11A — Method inválido não cria execução nem projeta start", () => {
+  const { commands, project, channel, db } = fixture([humanBlock("human-first", 0)]);
+  channel.methods.theme.blocks = [];
+  const beforeStages = structuredClone(project.stages);
+  const beforeState = project.state;
+  const execution = commands.startProcessExecution(project.id, "theme");
+  assert.equal(execution, undefined);
+  assert.equal(db.executions.length, 0);
+  assert.deepEqual(project.stages, beforeStages);
+  assert.equal(project.state, beforeState);
 });
 
 test("C12 — somente o próximo Bloco é ativado em sequência de três", () => {

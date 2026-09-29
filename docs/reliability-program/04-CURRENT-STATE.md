@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --- | --- |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão | `1.2.1` |
-| Task concluída | TASK-007 |
+| Task concluída | TASK-008 |
 | Task ativa | Nenhuma |
-| Próxima | TASK-008 (`ready`), ainda não iniciada |
+| Próxima | TASK-009 (`ready`), ainda não iniciada |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -32,7 +32,7 @@ Consequentemente, o produto não é apenas conceitual e o início do pipeline j�
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) continua sendo a fonte normativa do domínio atual: 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores e 3 interfaces de domínio.
 - Projetos podem congelar a ordem e os Métodos do Canal em `strategySnapshot`; cada `ProcessExecution` também conserva seu `methodSnapshot`.
 - A máquina de execução atual está dividida entre `server/execution-commands.ts`, funções e rotas de `server/index.ts`, scheduler de jobs de plugin e reconciliação do Orchestrator.
-- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais, decide ativação do primeiro/próximo Bloco e possui o construtor canônico `createCanonicalProcessExecution()`. Esse construtor recebe identidade e tempo explicitamente, clona o snapshot defensivamente e materializa a ativação inicial pela própria máquina do Core. Os callers de produção ainda serão migrados separadamente.
+- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais, decide ativação do primeiro/próximo Bloco e possui o construtor canônico `createCanonicalProcessExecution()`. Esse construtor recebe identidade e tempo explicitamente, clona o snapshot defensivamente e materializa a ativação inicial pela própria máquina do Core. O start manual em `server/execution-commands.ts` já usa esse construtor; Orchestrator e POST legado permanecem para as tasks seguintes.
 - O Orchestrator novo cria filas com `strategyVersion = 5`, ordem congelada e slots elegíveis. Versões históricas continuam aceitas.
 - O núcleo persiste execuções, jobs, unidades, deliveries, perfis, bindings, readiness, leases, filas e journals em SQLite, ainda com parte relevante do comportamento concentrada no servidor HTTP.
 - Plugin API, Browser Bridge, React, Express, SQLite, filesystem e formatos históricos ainda não estão completamente isolados do Core canônico descrito na arquitetura-alvo.
@@ -69,7 +69,6 @@ Existência não significa convergência completa com a arquitetura-alvo. Essas 
 
 ### Autoridade de execução duplicada
 
-- `server/execution-commands.ts` cria `ProcessExecution` para o fluxo de comandos e conclui trabalho humano.
 - `startOrchestratedProcess()` em `server/index.ts` possui outra construção de `ProcessExecution`.
 - `POST /api/executions` ainda aceita e persiste uma representação recebida pela borda legada.
 - conclusão e avanço de plugin permanecem aplicados por caminhos próprios em `server/index.ts`.
@@ -139,6 +138,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-008. A TASK-007 concluiu o contrato de criação canônica sem migrar os callers de produção.
+Não há blocker externo confirmado para preparar a especificação da TASK-009. O start manual já converge pela criação canônica; o Orchestrator permanece como próximo caller de produção a migrar.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.
