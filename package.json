@@ -64,6 +64,7 @@
     "test:plugin-inputs": "tsx --test server/plugin-input-values.test.ts server/runtime-input-values.test.ts server/runtime-contract-runtime-inputs.test.ts",
     "test:automatic-execution": "tsx --test server/automatic-plugin-execution.test.ts server/execution-retry.test.ts",
     "test:execution-state-machine": "tsx --test server/execution-state-machine.characterization.test.ts",
+    "test:execution-core": "tsx --test src/lib/execution-core/execution-core.test.ts",
     "test:validation-retry": "tsx --test server/validation-retry.characterization.test.ts",
     "test:fault-injection": "tsx --test ecosystem/plugins/testing/deterministic-fault-injection/test.mjs server/deterministic-fault-injection.integration.test.ts",
     "build:v121-fixture": "tsx scripts/build-reliability-v121-fixture.ts",

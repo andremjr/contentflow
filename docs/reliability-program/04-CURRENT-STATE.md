@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --- | --- |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão | `1.2.1` |
-| Task concluída | TASK-005 |
+| Task concluída | TASK-006 |
 | Task ativa | Nenhuma |
-| Próxima | TASK-006 (`ready`), ainda não iniciada |
+| Próxima | TASK-007 (`ready`), ainda não iniciada |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -32,6 +32,7 @@ Consequentemente, o produto não é apenas conceitual e o início do pipeline j�
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) continua sendo a fonte normativa do domínio atual: 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores e 3 interfaces de domínio.
 - Projetos podem congelar a ordem e os Métodos do Canal em `strategySnapshot`; cada `ProcessExecution` também conserva seu `methodSnapshot`.
 - A máquina de execução atual está dividida entre `server/execution-commands.ts`, funções e rotas de `server/index.ts`, scheduler de jobs de plugin e reconciliação do Orchestrator.
+- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais e decide ativação do primeiro/próximo Bloco. `server/execution-commands.ts` já consome essas primitivas; os demais caminhos de produção ainda não convergiram.
 - O Orchestrator novo cria filas com `strategyVersion = 5`, ordem congelada e slots elegíveis. Versões históricas continuam aceitas.
 - O núcleo persiste execuções, jobs, unidades, deliveries, perfis, bindings, readiness, leases, filas e journals em SQLite, ainda com parte relevante do comportamento concentrada no servidor HTTP.
 - Plugin API, Browser Bridge, React, Express, SQLite, filesystem e formatos históricos ainda não estão completamente isolados do Core canônico descrito na arquitetura-alvo.
@@ -73,7 +74,7 @@ Existência não significa convergência completa com a arquitetura-alvo. Essas 
 - `POST /api/executions` ainda aceita e persiste uma representação recebida pela borda legada.
 - conclusão e avanço de plugin permanecem aplicados por caminhos próprios em `server/index.ts`.
 
-O comportamento converge em vários pontos, mas ainda não existe um único módulo canônico que decida e aplique todas as transições.
+O módulo canônico de decisão já existe, mas a autoridade de produção ainda está distribuída: criação pelo Orchestrator/POST legado, conclusão de plugin, VALIDAR, retry, projeção e persistência continuam em caminhos próprios até as tasks seguintes.
 
 ### Semântica vigente de `VALIDAR` e retry editorial
 

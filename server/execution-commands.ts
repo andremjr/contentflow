@@ -37,6 +37,7 @@ import {
   recordBlockDeliveries,
   recordProcessOutputDelivery,
 } from "../src/lib/deliveries";
+import { evaluateExecutionCore } from "../src/lib/execution-core";
 
 /** Synchronous domain transitions. The caller owns the SQLite transaction. */
 export function executionCommands(db: {
@@ -101,26 +102,23 @@ export function executionCommands(db: {
       channelId: channel.id,
       processType,
       methodSnapshot,
-      blocks: methodSnapshot.blocks.map((block, index) => ({
+      blocks: methodSnapshot.blocks.map((block) => ({
         blockId: block.id,
-        status:
-          index === 0
-            ? block.operator === "Humano" && !block.plugin
-              ? "awaiting_human"
-              : "blocked_executor"
-            : "pending",
+        status: "pending",
         values: {},
         attempt: 1,
-        startedAt: index === 0 ? now : undefined,
       })),
-      status:
-        methodSnapshot.blocks[0]?.operator === "Humano" && !methodSnapshot.blocks[0]?.plugin
-          ? "awaiting_human"
-          : "blocked_executor",
+      status: "not_started",
       outputStatus: "pending",
       createdAt: now,
       updatedAt: now,
     };
+    const transition = evaluateExecutionCore(execution, { type: "start_requested" });
+    if (transition.decision.type !== "activate_block") return undefined;
+    const firstExecution = execution.blocks[transition.decision.blockIndex];
+    firstExecution.status = transition.decision.blockStatus;
+    firstExecution.startedAt = now;
+    execution.status = transition.decision.executionStatus;
     db.executions.unshift(execution);
     project.stages = {
       ...project.stages,
@@ -158,18 +156,28 @@ export function executionCommands(db: {
   }
 
   function activateNextBlock(execution: ProcessExecution, completedIndex: number) {
-    const nextExecution = execution.blocks[completedIndex + 1];
-    const nextBlock = execution.methodSnapshot.blocks[completedIndex + 1];
-    if (!nextExecution || !nextBlock) return finalizeOrRequestOutput(execution);
+    const completedBlock = execution.blocks[completedIndex];
+    if (!completedBlock) return execution;
+    const transition = evaluateExecutionCore(execution, {
+      type: "block_completed",
+      blockId: completedBlock.blockId,
+    });
+    if (transition.decision.type === "finish_blocks") return finalizeOrRequestOutput(execution);
+    if (transition.decision.type === "blocked") {
+      throw new Error(
+        `Execution Core blocked transition: ${transition.decision.reason} (${transition.diagnostics
+          .map((diagnostic) => diagnostic.code)
+          .join(", ")})`,
+      );
+    }
 
     const now = new Date().toISOString();
+    const nextExecution = execution.blocks[transition.decision.blockIndex];
     nextExecution.startedAt = now;
     nextExecution.attempt = Math.max(1, nextExecution.attempt ?? 1);
     nextExecution.error = undefined;
-    nextExecution.status =
-      nextBlock.operator === "Humano" && !nextBlock.plugin ? "awaiting_human" : "blocked_executor";
-    execution.status =
-      nextExecution.status === "awaiting_human" ? "awaiting_human" : "blocked_executor";
+    nextExecution.status = transition.decision.blockStatus;
+    execution.status = transition.decision.executionStatus;
     const project = db.projects.find((item) => item.id === execution.projectId);
     if (project) {
       project.stages = {
