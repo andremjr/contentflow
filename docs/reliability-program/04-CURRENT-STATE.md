@@ -1,6 +1,6 @@
 # Current State
 
-Última revisão semântica: 28/09/2026.
+Última revisão semântica: 29/09/2026.
 
 Este documento representa o estado semântico e arquitetural conhecido do produto: capabilities presentes, gaps, blockers e posição no programa. Ele não é autoridade para o HEAD Git, a branch ativa nem a condição atual do worktree. Toda task deve descobrir esses dados diretamente do checkout no momento em que começa.
 
@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --- | --- |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão | `1.2.1` |
-| Task concluída | TASK-006 |
+| Task concluída | TASK-007 |
 | Task ativa | Nenhuma |
-| Próxima | TASK-007 (`ready`), ainda não iniciada |
+| Próxima | TASK-008 (`ready`), ainda não iniciada |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -32,7 +32,7 @@ Consequentemente, o produto não é apenas conceitual e o início do pipeline j�
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) continua sendo a fonte normativa do domínio atual: 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores e 3 interfaces de domínio.
 - Projetos podem congelar a ordem e os Métodos do Canal em `strategySnapshot`; cada `ProcessExecution` também conserva seu `methodSnapshot`.
 - A máquina de execução atual está dividida entre `server/execution-commands.ts`, funções e rotas de `server/index.ts`, scheduler de jobs de plugin e reconciliação do Orchestrator.
-- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais e decide ativação do primeiro/próximo Bloco. `server/execution-commands.ts` já consome essas primitivas; os demais caminhos de produção ainda não convergiram.
+- Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais, decide ativação do primeiro/próximo Bloco e possui o construtor canônico `createCanonicalProcessExecution()`. Esse construtor recebe identidade e tempo explicitamente, clona o snapshot defensivamente e materializa a ativação inicial pela própria máquina do Core. Os callers de produção ainda serão migrados separadamente.
 - O Orchestrator novo cria filas com `strategyVersion = 5`, ordem congelada e slots elegíveis. Versões históricas continuam aceitas.
 - O núcleo persiste execuções, jobs, unidades, deliveries, perfis, bindings, readiness, leases, filas e journals em SQLite, ainda com parte relevante do comportamento concentrada no servidor HTTP.
 - Plugin API, Browser Bridge, React, Express, SQLite, filesystem e formatos históricos ainda não estão completamente isolados do Core canônico descrito na arquitetura-alvo.
@@ -139,6 +139,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-007. Sua criação e implementação ainda exigem autorização explícita.
+Não há blocker externo confirmado para preparar a especificação da TASK-008. A TASK-007 concluiu o contrato de criação canônica sem migrar os callers de produção.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.
