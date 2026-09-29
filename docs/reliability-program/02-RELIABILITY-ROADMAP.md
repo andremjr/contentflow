@@ -60,13 +60,13 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 | TASK-017 | Centralizar cancelamento                            | `done`    |
 | TASK-018 | Centralizar projeção do estado de Project           | `done`    |
 | TASK-019 | Persistência atômica das transições                 | `done`    |
-| TASK-020 | Remover auto-agendamento interno via HTTP loopback  | `ready`   |
+| TASK-020 | Remover auto-agendamento interno via HTTP loopback  | `done`    |
 
 ### Deterministic Contracts — TASK-021 a TASK-028
 
 | Task     | Missão                                                  | Estado    |
 | -------- | ------------------------------------------------------- | --------- |
-| TASK-021 | Guardrails arquiteturais automatizados                  | `pending` |
+| TASK-021 | Guardrails arquiteturais automatizados                  | `ready`   |
 | TASK-022 | Representação canônica de bindings                      | `pending` |
 | TASK-023 | Retirar `labelScore` do runtime canônico                | `pending` |
 | TASK-024 | Porta de entrada de plugin explícita                    | `pending` |

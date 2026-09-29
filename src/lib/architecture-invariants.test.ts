@@ -90,6 +90,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "tasks/TASK-017.md",
     "tasks/TASK-018.md",
     "tasks/TASK-019.md",
+    "tasks/TASK-020.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -120,10 +121,10 @@ test("keeps the Reliability Program connected and bounded", () => {
   const roadmapTaskIds = [...roadmap.matchAll(/\| (TASK-\d{3}) \|/g)].map((match) => match[1]);
   assert.deepEqual(roadmapTaskIds, expectedTaskIds);
   assert.match(roadmap, /Estado da TASK-000: `done`/);
-  for (const taskId of expectedTaskIds.slice(0, 19)) {
+  for (const taskId of expectedTaskIds.slice(0, 20)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `done`\\s+\\|"));
   }
-  assert.match(roadmap, /\| TASK-020 \|[^\n]+\| `ready`\s+\|/);
+  assert.match(roadmap, /\| TASK-021 \|[^\n]+\| `ready`\s+\|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
@@ -170,6 +171,11 @@ test("keeps the Reliability Program connected and bounded", () => {
     "utf8",
   );
   assert.match(task018, /## Estado\s+`done`/);
+  const task020 = readFileSync(
+    new URL("../../docs/reliability-program/tasks/TASK-020.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(task020, /## Estado\s+`done`/);
 
   const projectProjection = readFileSync(
     new URL("./execution-core/project-projection.ts", import.meta.url),
@@ -205,6 +211,39 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.doesNotMatch(manualStart, /blocks:\s*methodSnapshot\.blocks\.map/);
   assert.doesNotMatch(manualStart, /status:\s*"not_started"/);
   const server = readFileSync(new URL("../../server/index.ts", import.meta.url), "utf8");
+  const automaticSchedulerStart = server.indexOf("function scheduleAutomaticPluginBlock");
+  const automaticSchedulerEnd = server.indexOf(
+    "const orchestratorReconciliationLocks",
+    automaticSchedulerStart,
+  );
+  assert.ok(
+    automaticSchedulerStart >= 0 && automaticSchedulerEnd > automaticSchedulerStart,
+    "automatic plugin scheduler should remain discoverable",
+  );
+  const automaticScheduler = server.slice(automaticSchedulerStart, automaticSchedulerEnd);
+  assert.match(automaticScheduler, /executePluginBlockInternal\(requestBody\)/);
+  assert.doesNotMatch(automaticScheduler, /\bfetch\s*\(/);
+  assert.doesNotMatch(automaticScheduler, /127\.0\.0\.1|localhost/);
+
+  const pluginBlockOperationStart = server.indexOf("async function executePluginBlockInternal");
+  const pluginBlockRouteStart = server.indexOf('app.post("/api/execute-block"');
+  const pluginBlockRouteEnd = server.indexOf(
+    'app.get("/api/youtube/channel"',
+    pluginBlockRouteStart,
+  );
+  assert.ok(
+    pluginBlockOperationStart >= 0 &&
+      pluginBlockRouteStart > pluginBlockOperationStart &&
+      pluginBlockRouteEnd > pluginBlockRouteStart,
+    "shared plugin block operation and HTTP boundary should remain discoverable",
+  );
+  const pluginBlockOperation = server.slice(pluginBlockOperationStart, pluginBlockRouteStart);
+  const pluginBlockRoute = server.slice(pluginBlockRouteStart, pluginBlockRouteEnd);
+  assert.doesNotMatch(pluginBlockOperation, /\brequest\.|\bresponse\./);
+  assert.match(pluginBlockRoute, /executePluginBlockInternal\(request\.body/);
+  assert.match(pluginBlockRoute, /response\.status\(result\.status\)\.json\(result\.body\)/);
+  assert.doesNotMatch(pluginBlockRoute, /pluginJobs\.|commitPluginJobTransition\(/);
+
   const orchestratedStart = server.match(
     /function startOrchestratedProcess[\s\S]*?\nfunction orchestrationMessage/,
   )?.[0];
@@ -395,7 +434,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   );
   assert.doesNotMatch(server, /function updateProjectAfterPluginBlock/);
 
-  for (const taskId of expectedTaskIds.slice(20)) {
+  for (const taskId of expectedTaskIds.slice(21)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

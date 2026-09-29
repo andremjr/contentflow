@@ -1265,21 +1265,19 @@ function scheduleAutomaticPluginBlock(execution: ProcessExecution) {
     parameters: {},
   };
   setTimeout(() => {
-    void fetch(`http://127.0.0.1:${port}/api/execute-block`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
-    })
-      .then(async (response) => {
-        if (response.ok) return;
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
+    void executePluginBlockInternal(requestBody)
+      .then((result) => {
+        if (result.status >= 200 && result.status < 300) return;
         failAutomaticPluginStart(
           executionId,
           blockId,
-          body.error ?? "Não foi possível iniciar automaticamente o plugin.",
+          typeof result.body.error === "string"
+            ? result.body.error
+            : "Não foi possível iniciar automaticamente o plugin.",
         );
       })
       .catch((error) => {
+        if (error instanceof PersistenceCommitError) throw error;
         failAutomaticPluginStart(
           executionId,
           blockId,
@@ -6044,14 +6042,22 @@ app.post("/api/builder/channels/:channelId/apply", requireBuilderMcp, async (req
   });
 });
 
-app.post("/api/execute-block", async (request, response) => {
-  const body = request.body as {
-    projectId?: string;
-    processType?: UniversalProcess;
-    blockId?: string;
-    pluginId?: string;
-    parameters?: Record<string, unknown>;
-  };
+type ExecutePluginBlockInput = {
+  projectId?: string;
+  processType?: UniversalProcess;
+  blockId?: string;
+  pluginId?: string;
+  parameters?: Record<string, unknown>;
+};
+
+type ExecutePluginBlockResult = {
+  status: number;
+  body: Record<string, unknown>;
+};
+
+async function executePluginBlockInternal(
+  body: ExecutePluginBlockInput,
+): Promise<ExecutePluginBlockResult> {
   if (
     !body.projectId ||
     !body.processType ||
@@ -6062,34 +6068,33 @@ app.post("/api/execute-block", async (request, response) => {
     typeof body.parameters !== "object" ||
     Array.isArray(body.parameters)
   ) {
-    response.status(400).json({ error: "Solicitação de execução inválida." });
-    return;
+    return { status: 400, body: { error: "Solicitação de execução inválida." } };
   }
 
   const plugin = getRegisteredPlugin(body.pluginId);
   if (!plugin) {
-    response.status(404).json({ error: "Plugin não encontrado no registro local." });
-    return;
+    return { status: 404, body: { error: "Plugin não encontrado no registro local." } };
   }
   if (!plugin.executable || !pluginConsentIsCurrent(plugin)) {
-    response.status(403).json({
-      error: "Ative este plugin e confirme suas permissões na Central de Plugins.",
-    });
-    return;
+    return {
+      status: 403,
+      body: { error: "Ative este plugin e confirme suas permissões na Central de Plugins." },
+    };
   }
 
   const project = readPayload<Project>("projects", body.projectId);
   const execution = executionFor(body.projectId, body.processType);
   const channel = project ? readPayload<Channel>("channels", project.channelId) : undefined;
   if (!project || !execution || !channel) {
-    response.status(404).json({ error: "Projeto ou execução não encontrados." });
-    return;
+    return { status: 404, body: { error: "Projeto ou execução não encontrados." } };
   }
   const block = execution.methodSnapshot.blocks.find((item) => item.id === body.blockId);
   const blockExecution = execution.blocks.find((item) => item.blockId === body.blockId);
   if (!block || !blockExecution) {
-    response.status(404).json({ error: "Bloco não encontrado no snapshot desta execução." });
-    return;
+    return {
+      status: 404,
+      body: { error: "Bloco não encontrado no snapshot desta execução." },
+    };
   }
   const existingJob = pluginJobs.getByExecution(
     execution.id,
@@ -6100,21 +6105,23 @@ app.post("/api/execute-block", async (request, response) => {
     const currentExecution = executionById(execution.id) ?? execution;
     const currentProject = readPayload<Project>("projects", project.id) ?? project;
     const pending = ["starting", "pending", "cancel_requested"].includes(existingJob.status);
-    response.status(pending ? 202 : existingJob.status === "completed" ? 200 : 409).json({
-      ok: pending || existingJob.status === "completed",
-      pending,
-      job: publicPluginJob(existingJob),
-      execution: currentExecution,
-      project: currentProject,
-      error: existingJob.error,
-    });
-    return;
+    return {
+      status: pending ? 202 : existingJob.status === "completed" ? 200 : 409,
+      body: {
+        ok: pending || existingJob.status === "completed",
+        pending,
+        job: publicPluginJob(existingJob),
+        execution: currentExecution,
+        project: currentProject,
+        error: existingJob.error,
+      },
+    };
   }
   if (blockExecution.status !== "blocked_executor" || block.plugin?.pluginId !== plugin.id) {
-    response.status(409).json({
-      error: "Este bloco não está pronto ou não está vinculado ao plugin informado.",
-    });
-    return;
+    return {
+      status: 409,
+      body: { error: "Este bloco não está pronto ou não está vinculado ao plugin informado." },
+    };
   }
 
   const capability = plugin.manifest.capabilities.find(
@@ -6126,8 +6133,7 @@ app.post("/api/execute-block", async (request, response) => {
     !capability.blockTypes.includes(block.type) ||
     (capability.processTypes && !capability.processTypes.includes(body.processType))
   ) {
-    response.status(422).json({ error: "A capacidade não é compatível com este bloco." });
-    return;
+    return { status: 422, body: { error: "A capacidade não é compatível com este bloco." } };
   }
 
   const projectExecutions = (
@@ -6163,10 +6169,12 @@ app.post("/api/execute-block", async (request, response) => {
       profileId: configuredBrowserProfile?.profileId,
     });
   } catch (error) {
-    response.status(422).json({
-      error: error instanceof Error ? error.message : "Não foi possível resolver a conversa.",
-    });
-    return;
+    return {
+      status: 422,
+      body: {
+        error: error instanceof Error ? error.message : "Não foi possível resolver a conversa.",
+      },
+    };
   }
   const channelProjects = (
     database.prepare("SELECT payload FROM projects WHERE channel_id = ?").all(channel.id) as {
@@ -6205,10 +6213,12 @@ app.post("/api/execute-block", async (request, response) => {
   });
   const missingInputs = resolvedInputs.filter((item) => !item.resolved);
   if (missingInputs.length) {
-    response.status(422).json({
-      error: `Entradas ausentes: ${missingInputs.map((item) => item.input.label).join(", ")}.`,
-    });
-    return;
+    return {
+      status: 422,
+      body: {
+        error: `Entradas ausentes: ${missingInputs.map((item) => item.input.label).join(", ")}.`,
+      },
+    };
   }
 
   const usedInputPorts = new Set<string>();
@@ -6219,12 +6229,14 @@ app.post("/api/execute-block", async (request, response) => {
   });
   const unsupportedInputs = assignedInputs.filter((item) => !item.port);
   if (unsupportedInputs.length) {
-    response.status(422).json({
-      error: `O plugin não aceita: ${unsupportedInputs
-        .map((item) => item.resolved.input.label)
-        .join(", ")}.`,
-    });
-    return;
+    return {
+      status: 422,
+      body: {
+        error: `O plugin não aceita: ${unsupportedInputs
+          .map((item) => item.resolved.input.label)
+          .join(", ")}.`,
+      },
+    };
   }
   const inputContract = assignedInputs.map(({ resolved: item, port }) => ({
     id: item.input.id,
@@ -6295,12 +6307,14 @@ app.post("/api/execute-block", async (request, response) => {
     ? libraryItems.filter((item) => item.collectionId === selectedCollection.id)
     : [];
   if (block.type === "ESCOLHER" && (!selectedCollection || !selectedCollectionItems.length)) {
-    response.status(422).json({
-      error: selectedCollection
-        ? "A coleção vinculada ao bloco não possui itens para escolher."
-        : "O bloco Escolher precisa estar vinculado a uma coleção do canal.",
-    });
-    return;
+    return {
+      status: 422,
+      body: {
+        error: selectedCollection
+          ? "A coleção vinculada ao bloco não possui itens para escolher."
+          : "O bloco Escolher precisa estar vinculado a uma coleção do canal.",
+      },
+    };
   }
 
   const invalidOutputBindings = (block.outputs ?? []).filter(
@@ -6312,12 +6326,14 @@ app.post("/api/execute-block", async (request, response) => {
       ),
   );
   if (invalidOutputBindings.length) {
-    response.status(422).json({
-      error: `O plugin não consegue entregar: ${invalidOutputBindings
-        .map((field) => field.label)
-        .join(", ")}. Revise o vínculo da entrega no painel do plugin.`,
-    });
-    return;
+    return {
+      status: 422,
+      body: {
+        error: `O plugin não consegue entregar: ${invalidOutputBindings
+          .map((field) => field.label)
+          .join(", ")}. Revise o vínculo da entrega no painel do plugin.`,
+      },
+    };
   }
 
   const outputContract: PluginFieldContract[] =
@@ -6379,18 +6395,22 @@ app.post("/api/execute-block", async (request, response) => {
     })),
   });
   if (resolvedInstruction.unresolved.length) {
-    response.status(422).json({
-      error: `Variáveis sem valor no prompt: ${resolvedInstruction.unresolved
-        .map((variable) => `{{${variable}}}`)
-        .join(", ")}. Revise as entradas conectadas ao bloco.`,
-    });
-    return;
+    return {
+      status: 422,
+      body: {
+        error: `Variáveis sem valor no prompt: ${resolvedInstruction.unresolved
+          .map((variable) => `{{${variable}}}`)
+          .join(", ")}. Revise as entradas conectadas ao bloco.`,
+      },
+    };
   }
   if (capability.instructionUsage === "required" && !resolvedInstruction.instruction) {
-    response.status(422).json({
-      error: `Defina o prompt do bloco “${block.name ?? block.type}” antes de executar.`,
-    });
-    return;
+    return {
+      status: 422,
+      body: {
+        error: `Defina o prompt do bloco “${block.name ?? block.type}” antes de executar.`,
+      },
+    };
   }
   const referencedInstructionInputIds = new Set(resolvedInstruction.referencedInputIds);
   const instructionContextInputs = Object.fromEntries(
@@ -6420,17 +6440,19 @@ app.post("/api/execute-block", async (request, response) => {
   try {
     resolvedConnection = await resolvePluginConnection(plugin, block.plugin.connectionId);
   } catch (error) {
-    response.status(422).json({
-      error: error instanceof Error ? error.message : "Não foi possível carregar a conexão.",
-    });
-    return;
+    return {
+      status: 422,
+      body: {
+        error: error instanceof Error ? error.message : "Não foi possível carregar a conexão.",
+      },
+    };
   }
   const pluginSecrets: Record<string, string> = { ...resolvedConnection.secrets };
   if (pluginConnectionRequired(plugin.manifest) && !Object.keys(pluginSecrets).length) {
-    response.status(422).json({
-      error: "Crie ou associe uma conta local válida a este bloco.",
-    });
-    return;
+    return {
+      status: 422,
+      body: { error: "Crie ou associe uma conta local válida a este bloco." },
+    };
   }
   const requestConfiguration = {
     ...block.plugin.configuration,
@@ -6504,19 +6526,20 @@ app.post("/api/execute-block", async (request, response) => {
 
   const latestExecution = executionById(execution.id);
   if (!latestExecution) {
-    response.status(404).json({ error: "Execução removida." });
-    return;
+    return { status: 404, body: { error: "Execução removida." } };
   }
   if (
     latestExecution.status === "cancelled" ||
     (latestExecution.revision ?? 0) !== (execution.revision ?? 0)
   ) {
-    response.status(202).json({
-      ok: true,
-      execution: latestExecution,
-      project: readPayload<Project>("projects", project.id),
-    });
-    return;
+    return {
+      status: 202,
+      body: {
+        ok: true,
+        execution: latestExecution,
+        project: readPayload<Project>("projects", project.id),
+      },
+    };
   }
   const executionTimeoutMs = capability.execution.defaultTimeoutMs ?? 60_000;
   const previousExecutionItems = blockExecution.items;
@@ -6628,38 +6651,50 @@ app.post("/api/execute-block", async (request, response) => {
 
   if (capability.execution.mode === "async") {
     void processDuePluginJobs();
-    response.status(202).json({
-      ok: true,
-      pending: true,
-      job: publicPluginJob(createdJob),
-      execution,
-      project,
-      values: {},
-    });
-    return;
+    return {
+      status: 202,
+      body: {
+        ok: true,
+        pending: true,
+        job: publicPluginJob(createdJob),
+        execution,
+        project,
+        values: {},
+      },
+    };
   }
 
   const job = await processPluginJob(createdJob.id, pluginSecrets);
   const currentExecution = executionById(execution.id) ?? execution;
   const currentProject = readPayload<Project>("projects", project.id) ?? project;
   if (!job || ["failed", "abandoned", "cancelled"].includes(job.status)) {
-    response.status(job?.status === "cancelled" ? 409 : 422).json({
-      error: job?.error ?? job?.message ?? "O job do plugin não pôde ser iniciado.",
-      job: job ? publicPluginJob(job) : undefined,
-      execution: currentExecution,
-      project: currentProject,
-    });
-    return;
+    return {
+      status: job?.status === "cancelled" ? 409 : 422,
+      body: {
+        error: job?.error ?? job?.message ?? "O job do plugin não pôde ser iniciado.",
+        job: job ? publicPluginJob(job) : undefined,
+        execution: currentExecution,
+        project: currentProject,
+      },
+    };
   }
   const pending = ["starting", "pending", "cancel_requested"].includes(job.status);
-  response.status(pending ? 202 : 200).json({
-    ok: true,
-    pending,
-    job: publicPluginJob(job),
-    execution: currentExecution,
-    project: currentProject,
-    values: job.partialValues,
-  });
+  return {
+    status: pending ? 202 : 200,
+    body: {
+      ok: true,
+      pending,
+      job: publicPluginJob(job),
+      execution: currentExecution,
+      project: currentProject,
+      values: job.partialValues,
+    },
+  };
+}
+
+app.post("/api/execute-block", async (request, response) => {
+  const result = await executePluginBlockInternal(request.body as ExecutePluginBlockInput);
+  response.status(result.status).json(result.body);
 });
 
 app.get("/api/youtube/channel", async (request, response) => {

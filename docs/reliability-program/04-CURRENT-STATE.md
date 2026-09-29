@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --------------------------- | ------------------------------------------ |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão                      | `1.2.1`                                    |
-| Task concluída              | TASK-019                                   |
+| Task concluída              | TASK-020                                   |
 | Task ativa                  | Nenhuma                                    |
-| Próxima                     | TASK-020 (`ready`), ainda não iniciada     |
+| Próxima                     | TASK-021 (`ready`), ainda não iniciada     |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -32,6 +32,7 @@ Consequentemente, o produto não é apenas conceitual e o início do pipeline j�
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) continua sendo a fonte normativa do domínio atual: 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores e 3 interfaces de domínio.
 - Projetos podem congelar a ordem e os Métodos do Canal em `strategySnapshot`; cada `ProcessExecution` também conserva seu `methodSnapshot`.
 - A máquina de execução atual está dividida entre `server/execution-commands.ts`, funções e rotas de `server/index.ts`, scheduler de jobs de plugin e reconciliação do Orchestrator.
+- O auto-agendamento de Blocos de plugin não usa mais HTTP loopback. A boundary HTTP `POST /api/execute-block` e `scheduleAutomaticPluginBlock()` convergem em `executePluginBlockInternal()`, uma operação da camada server/application sem dependência de Request/Response. Scheduling continua assíncrono e pós-commit; o Execution Core permanece independente de HTTP e infraestrutura de plugins.
 - Existe agora `src/lib/execution-core/`, um módulo puro e determinístico que reutiliza `ProcessExecution.methodSnapshot`, expõe State/Fact/Decision/Transition Result, valida invariantes estruturais, decide ativação do primeiro/próximo Bloco e possui o construtor canônico `createCanonicalProcessExecution()`. Esse construtor recebe identidade e tempo explicitamente, clona o snapshot defensivamente e materializa a ativação inicial pela própria máquina do Core. Os starts manual, Orchestrator e standalone/runThrough usam esse construtor; não resta constructor interno normal duplicado de `ProcessExecution`. Conclusões humanas normais entram no Core como `human_block_completed` e conclusões automáticas normais de executor como `executor_block_completed`; cada caminho possui aplicação canônica própria e ambos convergem depois na progressão compartilhada `applyCompletedBlockTransition()`. `VALIDAR` possui uma única aplicação editorial no Core, compartilhada entre resultados humanos e de executor. O retry manual de Bloco entra como `manual_block_retry_requested` e é avaliado/aplicado por `applyManualBlockRetry()`: eligibility, scopes `all`/`remaining`/`selected`, tentativa, limpeza técnica, invalidação da delivery e reativação humano/executor deixaram de ser determinados pelo adapter. “Usar entrega atual” entra como `current_block_delivery_accepted` e é aplicado por `applyCurrentBlockDeliveryAcceptance()`: o Core valida se um Bloco `failed` ou `cancelled`, exceto `ESCOLHER` e `VALIDAR`, pode promover seus values existentes para conclusão. Cancelamento entra como `execution_cancellation_requested` e possui uma única aplicação em `applyExecutionCancellation()`: Blocos concluídos permanecem concluídos e qualquer Bloco ainda não consolidado torna-se `cancelled`, preservando os dados produzidos. `Project` possui uma projeção canônica derivada de `ProcessExecution`: start manual, Orchestrator, progressão humana, plugin, retry, falha e cancelamento usam a mesma tabela de estados e a mesma regra de conclusão/progresso; o Projeto não decide execução. Plugin jobs, abort de execução externa, Orchestrator, revision e persistência permanecem nos adapters. A boundary continua resolvendo inputs e mapeando/validando respostas de plugin, valida o contrato material dos values e registra deliveries somente depois de a conclusão ser aceita pelo Core. Resultados parciais, recovery e handoff de Bloco Humano assistido por plugin permanecem nos adapters. O `POST /api/executions` permanece apenas como boundary explícita de compatibilidade histórica em `server/legacy-execution-boundary.ts`: valida estrutura mínima, preserva a representação materializada recebida e não define a forma canônica de nascimento da execução.
 - O Orchestrator novo cria filas com `strategyVersion = 5`, ordem congelada e slots elegíveis. Versões históricas continuam aceitas.
 - O núcleo persiste execuções, jobs, unidades, deliveries, perfis, bindings, readiness, leases, filas e journals em SQLite, ainda com parte relevante do comportamento concentrada no servidor HTTP.
@@ -66,7 +67,7 @@ Existência não significa convergência completa com a arquitetura-alvo. Essas 
 
 ### Servidor concentrado
 
-`server/index.ts` continua combinando HTTP, persistência, lifecycle de plugins, criação e aplicação de execuções, recovery, Orchestrator, reconciliação e inicialização de storage. O gap arquitetural é a concentração de responsabilidades, independentemente da contagem momentânea de linhas ou rotas.
+`server/index.ts` continua combinando persistência, lifecycle de plugins, criação e aplicação de execuções, recovery, Orchestrator, reconciliação e inicialização de storage. A operação compartilhada de start de plugin já separa a tradução HTTP da aplicação, mas o gap arquitetural restante é a concentração das demais responsabilidades, independentemente da contagem momentânea de linhas ou rotas.
 
 ### Autoridade de execução ainda distribuída em semânticas especiais
 
@@ -150,6 +151,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para iniciar a TASK-020. O gap imediato é o auto-agendamento interno via HTTP loopback.
+Não há blocker externo confirmado para iniciar a TASK-021. A TASK-020 removeu o auto-agendamento interno via HTTP loopback sem iniciar o trabalho de contratos determinísticos.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.
