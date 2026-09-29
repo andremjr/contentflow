@@ -30,6 +30,7 @@ import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { recordBlockDeliveries, recordProcessOutputDelivery } from "../src/lib/deliveries";
 import {
   applyCompletedBlockTransition,
+  applyCurrentBlockDeliveryAcceptance,
   applyHumanBlockCompletion,
   applyManualBlockRetry,
   applyValidationOutcome,
@@ -368,29 +369,22 @@ export function executionCommands(db: {
     const execution = db.executions.find((item) => item.id === executionId);
     const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
     const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
-    if (
-      !execution ||
-      !blockExecution ||
-      !block ||
-      !["failed", "cancelled"].includes(blockExecution.status) ||
-      block.type === "ESCOLHER" ||
-      block.type === "VALIDAR"
-    ) {
+    if (!execution || !blockExecution || !block) {
       return { ok: false as const, missing: ["Esta entrega não pode ser finalizada neste estado"] };
     }
     const missing = blockDeliveryIssues(block, blockExecution.values);
     if (missing.length) return { ok: false as const, missing };
 
     const now = new Date().toISOString();
-    blockExecution.status = "completed";
-    blockExecution.completedAt = now;
-    blockExecution.error = undefined;
-    blockExecution.progress = 1;
-    blockExecution.progressMessage = undefined;
-    blockExecution.itemProgress = undefined;
-    blockExecution.itemRetryScope = undefined;
+    const acceptance = applyCurrentBlockDeliveryAcceptance(execution, {
+      type: "current_block_delivery_accepted",
+      blockId,
+      now,
+    });
+    if (!acceptance.ok) {
+      return { ok: false as const, missing: ["Esta entrega não pode ser finalizada neste estado"] };
+    }
     recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
-    execution.error = undefined;
     const updated = activateNextBlock(execution, blockExecution.blockId);
     return { ok: true as const, completedProcess: updated.status === "completed" };
   }

@@ -9,10 +9,17 @@ export type ManualBlockRetryRequestedFact = {
   itemId?: string;
 };
 
+export type CurrentBlockDeliveryAcceptedFact = {
+  type: "current_block_delivery_accepted";
+  blockId: string;
+  now: string;
+};
+
 export type ExecutionCoreFact =
   | { type: "start_requested" }
   | { type: "block_completed"; blockId: string }
   | ManualBlockRetryRequestedFact
+  | CurrentBlockDeliveryAcceptedFact
   | {
       type: "human_block_completed";
       blockId: string;

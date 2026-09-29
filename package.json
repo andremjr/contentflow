@@ -64,7 +64,7 @@
     "test:plugin-inputs": "tsx --test server/plugin-input-values.test.ts server/runtime-input-values.test.ts server/runtime-contract-runtime-inputs.test.ts",
     "test:automatic-execution": "tsx --test server/automatic-plugin-execution.test.ts server/execution-retry.test.ts",
     "test:execution-state-machine": "tsx --test server/execution-state-machine.characterization.test.ts",
-    "test:execution-core": "tsx --test src/lib/execution-core/execution-core.test.ts src/lib/execution-core/create-execution.test.ts src/lib/execution-core/apply-completed-transition.test.ts src/lib/execution-core/apply-human-completion.test.ts src/lib/execution-core/apply-executor-completion.test.ts src/lib/execution-core/apply-manual-retry.test.ts",
+    "test:execution-core": "tsx --test src/lib/execution-core/execution-core.test.ts src/lib/execution-core/create-execution.test.ts src/lib/execution-core/apply-completed-transition.test.ts src/lib/execution-core/apply-human-completion.test.ts src/lib/execution-core/apply-executor-completion.test.ts src/lib/execution-core/apply-manual-retry.test.ts src/lib/execution-core/apply-current-delivery-acceptance.test.ts",
     "test:legacy-execution-boundary": "tsx --test server/legacy-execution-boundary.test.ts server/legacy-execution-boundary.integration.test.ts",
     "test:validation-retry": "tsx --test server/validation-retry.characterization.test.ts",
     "test:fault-injection": "tsx --test ecosystem/plugins/testing/deterministic-fault-injection/test.mjs server/deterministic-fault-injection.integration.test.ts",

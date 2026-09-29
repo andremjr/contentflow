@@ -86,6 +86,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "tasks/TASK-013.md",
     "tasks/TASK-014.md",
     "tasks/TASK-015.md",
+    "tasks/TASK-016.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -116,22 +117,10 @@ test("keeps the Reliability Program connected and bounded", () => {
   const roadmapTaskIds = [...roadmap.matchAll(/\| (TASK-\d{3}) \|/g)].map((match) => match[1]);
   assert.deepEqual(roadmapTaskIds, expectedTaskIds);
   assert.match(roadmap, /Estado da TASK-000: `done`/);
-  assert.match(roadmap, /\| TASK-001 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-002 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-003 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-004 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-005 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-006 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-007 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-008 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-009 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-010 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-011 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-012 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-013 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-014 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-015 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-016 \|[^\n]+\| `ready` \|/);
+  for (const taskId of expectedTaskIds.slice(0, 16)) {
+    assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `done`\\s+\\|"));
+  }
+  assert.match(roadmap, /\| TASK-017 \|[^\n]+\| `ready`\s+\|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
@@ -163,6 +152,11 @@ test("keeps the Reliability Program connected and bounded", () => {
     "utf8",
   );
   assert.match(task015, /## Estado\s+`done`/);
+  const task016 = readFileSync(
+    new URL("../../docs/reliability-program/tasks/TASK-016.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(task016, /## Estado\s+`done`/);
 
   const executionCommands = readFileSync(
     new URL("../../server/execution-commands.ts", import.meta.url),
@@ -265,6 +259,24 @@ test("keeps the Reliability Program connected and bounded", () => {
     assert.doesNotMatch(manualRetry, duplicatedManualRetryAlgorithm);
   }
 
+  const currentDeliveryAcceptance = executionCommands.match(
+    /function acceptBlockDelivery[\s\S]*?\n {2}function retryBlockExecution/,
+  )?.[0];
+  assert.ok(currentDeliveryAcceptance, "current delivery acceptance should remain discoverable");
+  assert.match(currentDeliveryAcceptance, /applyCurrentBlockDeliveryAcceptance\(/);
+  assert.match(
+    currentDeliveryAcceptance,
+    /applyCurrentBlockDeliveryAcceptance\([\s\S]*?recordBlockDeliveries\([\s\S]*?activateNextBlock\(/,
+  );
+  for (const duplicatedCurrentDeliveryAcceptance of [
+    /blockExecution\.status\s*=\s*"completed"/,
+    /blockExecution\.completedAt\s*=/,
+    /blockExecution\.progress\s*=\s*1/,
+    /execution\.error\s*=\s*undefined/,
+  ]) {
+    assert.doesNotMatch(currentDeliveryAcceptance, duplicatedCurrentDeliveryAcceptance);
+  }
+
   const legacyBoundary = readFileSync(
     new URL("../../server/legacy-execution-boundary.ts", import.meta.url),
     "utf8",
@@ -272,7 +284,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(legacyBoundary, /adaptLegacyExecutionCreatePayload/);
   assert.match(legacyBoundary, /Compatibility adapter for the historical HTTP creation boundary/);
 
-  for (const taskId of expectedTaskIds.slice(16)) {
+  for (const taskId of expectedTaskIds.slice(17)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);
