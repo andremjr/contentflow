@@ -93,7 +93,7 @@ Interromper se a implementação exigir ampliar eligibility, limpar dados ou del
 
 ### Fato e aplicação canônica
 
-`ExecutionCancellationRequestedFact` representa `execution_cancellation_requested` sem timestamp artificial. `applyExecutionCancellation()` valida invariantes antes de mutar e retorna `cancelled`, `already_cancelled` ou `blocked`, com os reason codes mínimos `execution_already_completed` e `malformed_state`.
+`ExecutionCancellationRequestedFact` representa `execution_cancellation_requested` sem timestamp artificial e integra o union canônico `ExecutionCoreFact`. `ExecutionCoreEvaluationFact` delimita os fatos consumidos pelo avaliador genérico, enquanto a intenção de cancelamento continua aplicada por `applyExecutionCancellation()`. Essa aplicação valida invariantes antes de mutar e retorna `cancelled`, `already_cancelled` ou `blocked`, com os reason codes mínimos `execution_already_completed` e `malformed_state`.
 
 ### Eligibility e idempotência
 
@@ -127,7 +127,7 @@ Foram adicionados três testes focais em `apply-execution-cancellation.test.ts`:
 2. `completed` e estado estrutural inválido são bloqueados com deep equality;
 3. `already_cancelled` é idempotente e não mutante.
 
-Não foi criada outra suíte de integração porque os efeitos externos, Orchestrator, retry e lanes já possuem cobertura dedicada.
+O fixture usa `satisfies ExecutionCoreFact`, criando uma prova de tipo que falha no typecheck se o fato deixar de integrar o union canônico. Não foi criada outra suíte de integração porque os efeitos externos, Orchestrator, retry e lanes já possuem cobertura dedicada.
 
 ## Arquivos alterados
 

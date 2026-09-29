@@ -3,6 +3,11 @@ import test from "node:test";
 
 import { createEmptyMethods, type ProcessExecution } from "../domain";
 import { applyExecutionCancellation } from "./apply-execution-cancellation";
+import type { ExecutionCoreFact } from "./types";
+
+const CANCELLATION_FACT = {
+  type: "execution_cancellation_requested",
+} satisfies ExecutionCoreFact;
 
 function cancellableExecution(status: ProcessExecution["status"] = "running"): ProcessExecution {
   const method = createEmptyMethods().assets;
@@ -137,13 +142,10 @@ test("cancels every currently eligible execution state with one canonical block 
       executionError: execution.error,
     };
 
-    assert.deepEqual(
-      applyExecutionCancellation(execution, { type: "execution_cancellation_requested" }),
-      {
-        ok: true,
-        outcome: "cancelled",
-      },
-    );
+    assert.deepEqual(applyExecutionCancellation(execution, CANCELLATION_FACT), {
+      ok: true,
+      outcome: "cancelled",
+    });
     assert.equal(execution.status, "cancelled");
     assert.deepEqual(
       execution.blocks.map((block) => block.status),
@@ -165,27 +167,21 @@ test("blocks completed and malformed executions before mutation", () => {
   completed.blocks[1].status = "completed";
   completed.blocks[2].status = "completed";
   const completedBefore = structuredClone(completed);
-  assert.deepEqual(
-    applyExecutionCancellation(completed, { type: "execution_cancellation_requested" }),
-    {
-      ok: false,
-      outcome: "blocked",
-      reason: "execution_already_completed",
-    },
-  );
+  assert.deepEqual(applyExecutionCancellation(completed, CANCELLATION_FACT), {
+    ok: false,
+    outcome: "blocked",
+    reason: "execution_already_completed",
+  });
   assert.deepEqual(completed, completedBefore);
 
   const malformed = cancellableExecution();
   malformed.methodSnapshot.processType = "theme";
   const malformedBefore = structuredClone(malformed);
-  assert.deepEqual(
-    applyExecutionCancellation(malformed, { type: "execution_cancellation_requested" }),
-    {
-      ok: false,
-      outcome: "blocked",
-      reason: "malformed_state",
-    },
-  );
+  assert.deepEqual(applyExecutionCancellation(malformed, CANCELLATION_FACT), {
+    ok: false,
+    outcome: "blocked",
+    reason: "malformed_state",
+  });
   assert.deepEqual(malformed, malformedBefore);
 });
 
@@ -195,12 +191,9 @@ test("reports an already cancelled execution idempotently without mutation", () 
   execution.blocks[2].status = "cancelled";
   const before = structuredClone(execution);
 
-  assert.deepEqual(
-    applyExecutionCancellation(execution, { type: "execution_cancellation_requested" }),
-    {
-      ok: true,
-      outcome: "already_cancelled",
-    },
-  );
+  assert.deepEqual(applyExecutionCancellation(execution, CANCELLATION_FACT), {
+    ok: true,
+    outcome: "already_cancelled",
+  });
   assert.deepEqual(execution, before);
 });

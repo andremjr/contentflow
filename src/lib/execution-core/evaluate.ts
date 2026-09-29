@@ -2,7 +2,7 @@ import type { ActionBlock } from "../domain";
 import { validateExecutionCoreInvariants } from "./invariants";
 import type {
   ExecutionCoreDecision,
-  ExecutionCoreFact,
+  ExecutionCoreEvaluationFact,
   ExecutionCoreReason,
   ExecutionCoreState,
   ExecutionCoreTransitionResult,
@@ -36,7 +36,7 @@ function activationDecision(
 
 function blocked(
   state: ExecutionCoreState,
-  fact: ExecutionCoreFact,
+  fact: ExecutionCoreEvaluationFact,
   reason: Extract<ExecutionCoreDecision, { type: "blocked" }>["reason"],
   diagnostics = validateExecutionCoreInvariants(state),
 ): ExecutionCoreTransitionResult {
@@ -50,7 +50,7 @@ function blocked(
 
 export function evaluateExecutionCore(
   state: ExecutionCoreState,
-  fact: ExecutionCoreFact,
+  fact: ExecutionCoreEvaluationFact,
 ): ExecutionCoreTransitionResult {
   const diagnostics = validateExecutionCoreInvariants(state);
   if (diagnostics.length) return blocked(state, fact, "malformed_state", diagnostics);

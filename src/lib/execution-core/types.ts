@@ -19,11 +19,9 @@ export type ExecutionCancellationRequestedFact = {
   type: "execution_cancellation_requested";
 };
 
-export type ExecutionCoreFact =
+export type ExecutionCoreEvaluationFact =
   | { type: "start_requested" }
   | { type: "block_completed"; blockId: string }
-  | ManualBlockRetryRequestedFact
-  | CurrentBlockDeliveryAcceptedFact
   | {
       type: "human_block_completed";
       blockId: string;
@@ -36,6 +34,12 @@ export type ExecutionCoreFact =
       values: Record<string, RuntimeValue>;
       now: string;
     };
+
+export type ExecutionCoreFact =
+  | ExecutionCoreEvaluationFact
+  | ManualBlockRetryRequestedFact
+  | CurrentBlockDeliveryAcceptedFact
+  | ExecutionCancellationRequestedFact;
 
 export type ExecutionCoreReason =
   | "first_block_human"
