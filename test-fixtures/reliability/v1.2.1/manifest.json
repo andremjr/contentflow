@@ -1,0 +1,34 @@
+{
+  "productVersion": "1.2.1",
+  "fixtureVersion": 1,
+  "schemaVersion": 4,
+  "generatedBy": "scripts/build-reliability-v121-fixture.ts",
+  "terminalJobRetentionAnchor": "9999-12-31T23:59:59.999Z",
+  "description": "Synthetic persistent ContentFlow 1.2.1 installation with completed early stages and a script stage awaiting human work.",
+  "expected": {
+    "channels": 1,
+    "projects": 1,
+    "processExecutions": 4,
+    "completedExecutions": 3,
+    "awaitingHumanExecutions": 1,
+    "deliveries": 4,
+    "workUnits": 2,
+    "pluginJobs": 1,
+    "browserProfiles": 1,
+    "pluginProfileBindings": 1,
+    "pluginProfileReadiness": 1,
+    "expiredLeasesBeforeBootstrap": 1,
+    "leasesAfterBootstrap": 0,
+    "orchestrators": 1,
+    "libraryCollections": 1,
+    "libraryItems": 1
+  },
+  "ids": {
+    "channelId": "fixture-v121-channel",
+    "projectId": "fixture-v121-project",
+    "scriptExecutionId": "fixture-v121-execution-script",
+    "pluginJobId": "fixture-v121-plugin-job",
+    "profileId": "fixture-v121-browser-profile",
+    "orchestratorId": "fixture-v121-orchestrator"
+  }
+}

@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --- | --- |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão | `1.2.1` |
-| Task concluída | TASK-004 |
+| Task concluída | TASK-005 |
 | Task ativa | Nenhuma |
-| Próxima | TASK-005 (`ready`), ainda não iniciada |
+| Próxima | TASK-006 (`ready`), ainda não iniciada |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -51,6 +51,7 @@ As capacidades abaixo existem no checkout atual e constituem base a preservar, c
 - **profile lanes:** pool multiperfil, distribuição exclusiva de unidades, falha de lane e reconciliação;
 - **recovery policy:** `decideExecutionRecovery()` distingue `cancel`, `reconcile`, `intervene`, `switch_profile`, `retry` e `fail`;
 - **fault injection determinístico:** fixture interna sem provider externo reproduz success, falha técnica recuperável, rate limit, intervenção, efeito externo incerto, falha após efeito confirmado, timeout e cancelamento pelo runner;
+- **fixture persistente 1.2.1:** baseline sintética, versionada e reiniciável em `test-fixtures/reliability/v1.2.1/`, com Canal, Projeto, snapshots, executions, deliveries, work units, job de plugin, perfil/vínculo/readiness, Orchestrator, Biblioteca e preferências para futuros testes de compatibilidade e upgrade;
 - **migration journal:** schema versionado com journal, passos, estados `started/completed/failed` e recuperação de migração interrompida;
 - **Orchestrator V5:** elegibilidade por slots, ordem congelada e retomada de filas persistidas;
 - **characterization da execução básica:** suíte dedicada cobre start humano/automático, avanço sequencial, espera humana/de executor, outputs, drafts, rejeições sem mutação, snapshot congelado e sucesso simples de plugin;
@@ -137,6 +138,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para preparar a especificação da TASK-005. Sua criação e implementação ainda exigem autorização explícita.
+Não há blocker externo confirmado para preparar a especificação da TASK-006. Sua criação e implementação ainda exigem autorização explícita.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

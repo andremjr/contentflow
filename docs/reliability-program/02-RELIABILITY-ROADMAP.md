@@ -40,13 +40,13 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 | TASK-002 | Characterization tests da máquina de estados atual | `done` |
 | TASK-003 | Caracterizar `VALIDAR` e retry editorial | `done` |
 | TASK-004 | Plugin determinístico de fault injection | `done` |
-| TASK-005 | Fixture persistente representativa da 1.2.1 | `ready` |
+| TASK-005 | Fixture persistente representativa da 1.2.1 | `done` |
 
 ### Sovereign Core — TASK-006 a TASK-020
 
 | Task | Missão | Estado |
 | --- | --- | --- |
-| TASK-006 | Criar módulo canônico do Core de execução | `pending` |
+| TASK-006 | Criar módulo canônico do Core de execução | `ready` |
 | TASK-007 | Unificar criação de `ProcessExecution` | `pending` |
 | TASK-008 | Fazer start manual usar criação canônica | `pending` |
 | TASK-009 | Fazer Orchestrator/standalone usar criação canônica | `pending` |
