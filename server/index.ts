@@ -2788,7 +2788,7 @@ async function processPluginJobClaimed(
         const nextIndex = fallback.activeIndex + 1;
         const nextProfile = fallback.candidates[nextIndex];
         const nextBrowserProfile = browserProfileSnapshot(plugin, nextProfile);
-        return commitPluginJobTransition(project.id, () => {
+        const saved = commitPluginJobTransition(project.id, () => {
           const saved = savePluginJob(claim, {
             ...appendPluginDiagnostic(job, {
               code: "PROFILE_SWITCH",
@@ -2824,7 +2824,6 @@ async function processPluginJobClaimed(
             }),
             nextPollAt: new Date().toISOString(),
           });
-          releaseJobProfileLease(job.id);
           if (saved.status === "cancel_requested") return saved;
           blockExecution!.status = "in_progress";
           blockExecution!.values = structuredClone(partialValues);
@@ -2838,6 +2837,8 @@ async function processPluginJobClaimed(
           persistPluginExecution(execution!, project!);
           return saved;
         });
+        releaseJobProfileLease(job.id);
+        return saved;
       }
       if (recoveryDecision.action === "retry") {
         const retryCount = job.retryCount + 1;
@@ -3116,7 +3117,7 @@ async function processPluginJobClaimed(
       const nextBrowserProfile = resolvedNextProfile
         ? { profileId: resolvedNextProfile.profileId, alias: resolvedNextProfile.alias }
         : browserProfileSnapshot(plugin, nextProfile);
-      return commitPluginJobTransition(project.id, () => {
+      const saved = commitPluginJobTransition(project.id, () => {
         const saved = savePluginJob(claim, {
           ...appendPluginDiagnostic(job, {
             code: "PROFILE_SWITCH",
@@ -3150,7 +3151,6 @@ async function processPluginJobClaimed(
           }),
           nextPollAt: new Date().toISOString(),
         });
-        releaseJobProfileLease(job.id);
         if (saved.status === "cancel_requested") return saved;
         blockExecution!.status = "in_progress";
         blockExecution!.progressMessage = saved.message;
@@ -3161,6 +3161,8 @@ async function processPluginJobClaimed(
         persistPluginExecution(execution!, project!);
         return saved;
       });
+      releaseJobProfileLease(job.id);
+      return saved;
     }
     if (recoveryDecision.action === "retry") {
       const retryCount = job.retryCount + 1;

@@ -354,6 +354,41 @@ test("keeps the Reliability Program connected and bounded", () => {
     /if \(!database\.inTransaction\) queueOrchestratorReconciliationForProject/,
   );
   assert.match(server, /function commitPluginJobTransition/);
+  const transactionalCallbacks = [
+    ...server.matchAll(/commitPluginJobTransition\([^\n]+\(\) => \{/g),
+  ].map((match) => {
+    const start = match.index! + match[0].length;
+    let depth = 1;
+    let cursor = start;
+    while (cursor < server.length && depth > 0) {
+      if (server[cursor] === "{") depth += 1;
+      if (server[cursor] === "}") depth -= 1;
+      cursor += 1;
+    }
+    assert.equal(depth, 0, "commitPluginJobTransition callback should remain balanced");
+    return server.slice(start, cursor - 1);
+  });
+  assert.ok(transactionalCallbacks.length > 0);
+  for (const callback of transactionalCallbacks) {
+    for (const nonRollbackableEffect of [
+      "releaseJobProfileLease(",
+      "abortActivePluginInvocations(",
+      "scheduleAutomaticPluginBlock(",
+      "processDuePluginJobs(",
+      "queueOrchestratorReconciliationForProject(",
+      "clearInterval(",
+      "setInterval(",
+      "setTimeout(",
+      "activeJobProfileLeases.delete(",
+      "activeJobProfileLeases.set(",
+    ]) {
+      assert.equal(
+        callback.includes(nonRollbackableEffect),
+        false,
+        `${nonRollbackableEffect} must run only after the SQLite commit`,
+      );
+    }
+  }
   assert.match(
     server,
     /pluginJobs\.requestCancellation\(execution\.id\);[\s\S]*?database[\s\S]*?abortActivePluginInvocations\(execution\.id\)/,

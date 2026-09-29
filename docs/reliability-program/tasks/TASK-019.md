@@ -26,6 +26,7 @@
 - A criação inicial do job era confirmada antes de marcar a execution como `running`. Agora `PluginJobStore.create()`, estado da execution e projeção do project compartilham a transação de start do plugin.
 - `persistPluginExecution()` enfileirava reconciliação mesmo quando chamado de dentro de `onSaved`, antes do commit do job. Agora, dentro de transação, apenas grava; `savePluginJob()` agenda após `save()` retornar com sucesso. Fora de transação, o próprio helper agenda após seu commit.
 - Falha de persistência durante o processamento do worker é classificada como `PersistenceCommitError` e propagada; não é reinterpretada como falha do plugin nem resulta em resposta de sucesso. Objetos JS mutados em callback que falhou são descartados no unwind; a próxima leitura usa SQLite. O worker não reutiliza o snapshot após esse erro.
+- A liberação do lease de perfil nos dois caminhos de `switch_profile` ocorre somente depois de `commitPluginJobTransition()` retornar com sucesso. Assim, `clearInterval`, remoção do map em memória e liberação/reconciliação do lease não podem anteceder uma escrita SQLite posterior sujeita a rollback. O guardrail arquitetural rejeita esses e os demais efeitos pós-commit conhecidos dentro das callbacks transacionais.
 
 ## Cancelamento e efeitos externos
 
@@ -52,6 +53,8 @@ Ordem adotada: intenção/estado durável → commit → `AbortController.abort(
 | `npx tsx --test server/execution-retry.test.ts` | pass, 6/6 |
 | `npm run test:plugin-partials` | pass, 6/6 |
 | `npm run test:plugin-concurrency` | pass, 4/4 |
+| `npm run test:plugin-fallback` | pass, 28/28 |
+| `npm run test:shared-browser-v43` | pass, 4/4 |
 | `npm run test:automatic-execution` | pass, 7/7 |
 | `npm run test:validation-retry` | pass, 14/14 |
 | `npm run test:orchestrator` | pass, 9/9 |
