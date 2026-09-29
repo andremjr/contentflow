@@ -102,6 +102,34 @@ export function evaluateExecutionCore(
     };
   }
 
+  if (fact.type === "executor_block_completed") {
+    const blockIndex = state.methodSnapshot.blocks.findIndex((block) => block.id === fact.blockId);
+    if (blockIndex < 0) return blocked(state, fact, "unknown_executor_block", diagnostics);
+
+    const block = state.methodSnapshot.blocks[blockIndex];
+    if (block.operator === "Humano") {
+      return blocked(state, fact, "block_not_executor", diagnostics);
+    }
+    if (state.blocks[blockIndex]?.status !== "in_progress") {
+      return blocked(state, fact, "executor_block_not_active", diagnostics);
+    }
+    if (state.status !== "running") {
+      return blocked(state, fact, "execution_not_running", diagnostics);
+    }
+    return {
+      state,
+      fact,
+      decision: {
+        type: "complete_executor_block",
+        blockId: fact.blockId,
+        blockIndex,
+        reason: "executor_block_completion_allowed",
+        expectedRevision: state.revision,
+      },
+      diagnostics,
+    };
+  }
+
   const completedIndex = state.methodSnapshot.blocks.findIndex(
     (block) => block.id === fact.blockId,
   );

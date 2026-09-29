@@ -10,6 +10,12 @@ export type ExecutionCoreFact =
       blockId: string;
       values: Record<string, RuntimeValue>;
       now: string;
+    }
+  | {
+      type: "executor_block_completed";
+      blockId: string;
+      values: Record<string, RuntimeValue>;
+      now: string;
     };
 
 export type ExecutionCoreReason =
@@ -18,7 +24,8 @@ export type ExecutionCoreReason =
   | "next_block_human"
   | "next_block_executor"
   | "method_blocks_complete"
-  | "human_block_completion_allowed";
+  | "human_block_completion_allowed"
+  | "executor_block_completion_allowed";
 
 export type ExecutionCoreDiagnosticCode =
   | "empty_method"
@@ -30,7 +37,11 @@ export type ExecutionCoreDiagnosticCode =
   | "unknown_human_block"
   | "block_not_human"
   | "human_block_not_awaiting"
-  | "execution_not_awaiting_human";
+  | "execution_not_awaiting_human"
+  | "unknown_executor_block"
+  | "block_not_executor"
+  | "executor_block_not_active"
+  | "execution_not_running";
 
 export type ExecutionCoreDecision =
   | {
@@ -38,6 +49,13 @@ export type ExecutionCoreDecision =
       blockId: string;
       blockIndex: number;
       reason: "human_block_completion_allowed";
+      expectedRevision?: number;
+    }
+  | {
+      type: "complete_executor_block";
+      blockId: string;
+      blockIndex: number;
+      reason: "executor_block_completion_allowed";
       expectedRevision?: number;
     }
   | {

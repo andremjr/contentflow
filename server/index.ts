@@ -81,6 +81,7 @@ import {
 } from "../src/lib/execution-orchestrator";
 import {
   applyCompletedBlockTransition,
+  applyExecutorBlockCompletion,
   createCanonicalProcessExecution,
 } from "../src/lib/execution-core";
 import {
@@ -1135,10 +1136,19 @@ function finishPluginBlock(
     execution.updatedAt = now;
     return;
   }
-  blockExecution.values = values;
-  blockExecution.status = "completed";
-  blockExecution.completedAt = now;
-  blockExecution.error = undefined;
+  const completion = applyExecutorBlockCompletion(execution, {
+    type: "executor_block_completed",
+    blockId: blockExecution.blockId,
+    values,
+    now,
+  });
+  if (!completion.ok) {
+    throw new Error(
+      `Execution Core blocked executor completion: ${completion.decision.reason} (${completion.diagnostics
+        .map((diagnostic) => diagnostic.code)
+        .join(", ")})`,
+    );
+  }
   recordBlockDeliveries(execution, block, values, "completed", now);
   const completedIndex = execution.blocks.indexOf(blockExecution);
   const rejected =

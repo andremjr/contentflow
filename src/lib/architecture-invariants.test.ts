@@ -83,6 +83,7 @@ test("keeps the Reliability Program connected and bounded", () => {
     "tasks/TASK-010.md",
     "tasks/TASK-011.md",
     "tasks/TASK-012.md",
+    "tasks/TASK-013.md",
     "decisions/README.md",
     "decisions/ADR-001-PERSISTENT-AI-CONTEXT.md",
     "decisions/ADR-002-CORE-EXECUTION-AUTHORITY.md",
@@ -125,7 +126,8 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(roadmap, /\| TASK-010 \|[^\n]+\| `done` \|/);
   assert.match(roadmap, /\| TASK-011 \|[^\n]+\| `done` \|/);
   assert.match(roadmap, /\| TASK-012 \|[^\n]+\| `done` \|/);
-  assert.match(roadmap, /\| TASK-013 \|[^\n]+\| `ready` \|/);
+  assert.match(roadmap, /\| TASK-013 \|[^\n]+\| `done` \|/);
+  assert.match(roadmap, /\| TASK-014 \|[^\n]+\| `ready` \|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
@@ -142,6 +144,11 @@ test("keeps the Reliability Program connected and bounded", () => {
     "utf8",
   );
   assert.match(task012, /## Estado\s+`done`/);
+  const task013 = readFileSync(
+    new URL("../../docs/reliability-program/tasks/TASK-013.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(task013, /## Estado\s+`done`/);
 
   const executionCommands = readFileSync(
     new URL("../../server/execution-commands.ts", import.meta.url),
@@ -209,7 +216,15 @@ test("keeps the Reliability Program connected and bounded", () => {
     /function finishPluginBlock[\s\S]*?\nfunction executionById/,
   )?.[0];
   assert.ok(pluginProgression, "plugin block completion should remain discoverable");
+  assert.match(pluginProgression, /applyExecutorBlockCompletion\(/);
   assert.match(pluginProgression, /applyCompletedBlockTransition\(/);
+  assert.doesNotMatch(pluginProgression, /blockExecution\.status\s*=\s*"completed"/);
+  assert.doesNotMatch(pluginProgression, /blockExecution\.completedAt\s*=/);
+  assert.doesNotMatch(pluginProgression, /blockExecution\.values\s*=\s*values/);
+  assert.match(
+    pluginProgression,
+    /block\.operator === "Humano"[\s\S]*?blockExecution\.status = "awaiting_human"/,
+  );
   assert.doesNotMatch(pluginProgression, /completedIndex\s*\+\s*1/);
   assert.doesNotMatch(pluginProgression, /nextBlock\.operator\s*===\s*"Humano"/);
 
@@ -220,7 +235,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.match(legacyBoundary, /adaptLegacyExecutionCreatePayload/);
   assert.match(legacyBoundary, /Compatibility adapter for the historical HTTP creation boundary/);
 
-  for (const taskId of expectedTaskIds.slice(13)) {
+  for (const taskId of expectedTaskIds.slice(14)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);
