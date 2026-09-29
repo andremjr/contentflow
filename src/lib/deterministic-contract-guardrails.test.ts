@@ -53,12 +53,13 @@ test("keeps textual and plugin contract heuristics out of the Execution Core", (
   }
 });
 
-test("keeps canonical source bindings authoritative before compatibility heuristics", () => {
+test("keeps runtime input sources deterministic and canonical bindings authoritative", () => {
   const productionFiles = [...TypeScriptFilesUnder("src/lib"), ...TypeScriptFilesUnder("server")];
   const filesMentioning = (identifier: string) =>
     productionFiles.filter((file) => read(file).includes(identifier)).sort();
 
-  assert.deepEqual(filesMentioning("labelScore("), ["src/lib/runtime-contract.ts"]);
+  assert.deepEqual(filesMentioning("labelScore("), []);
+  assert.deepEqual(filesMentioning("normalizeLabel("), []);
   assert.deepEqual(filesMentioning("semanticIdentityScore("), ["server/plugin-input-values.ts"]);
   assert.deepEqual(filesMentioning("presentationScore("), ["server/plugin-input-values.ts"]);
   assert.deepEqual(filesMentioning("selectPluginInputPort("), [
@@ -72,15 +73,21 @@ test("keeps canonical source bindings authoritative before compatibility heurist
     "export function resolveBlockInputs",
     "function collectCandidates",
   );
-  assert.ok(
-    inputResolution.indexOf("authoritativeInputSource(input)") <
-      inputResolution.indexOf("labelScore("),
-    "canonical Method bindings must be selected before the temporary label fallback",
+  assert.match(inputResolution, /authoritativeInputSource\(input\)/);
+  assert.match(inputResolution, /resolveCanonicalInput[\s\S]*resolveLegacyExplicitInput/);
+  assert.match(
+    inputResolution,
+    /if \(explicit\)[\s\S]*return \{ input, \.\.\.explicit\.result \};[\s\S]*return \{ input, resolved: false \};/,
   );
-  assert.ok(
-    inputResolution.indexOf('authority.representation === "canonical"') <
-      inputResolution.indexOf("labelScore("),
-    "an unresolved canonical binding must stop before the temporary label fallback",
+  assert.doesNotMatch(inputResolution, /labelScore|normalizeLabel|\.sort\(|available\[0\]/);
+  assert.doesNotMatch(
+    inputResolution,
+    /candidates\.(?:find|filter)\([\s\S]*areRuntimeTypesCompatible/,
+    "resolveBlockInputs must not select a compatible candidate after explicit resolution",
+  );
+  assert.doesNotMatch(
+    runtimeContract,
+    /key:\s*"selectedItem"|!input\.sourceKey\s*&&|&&\s*!input\.sourceKey/,
   );
 
   const domain = read("src/lib/domain.ts");

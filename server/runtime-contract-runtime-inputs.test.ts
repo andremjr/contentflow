@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ActionBlock, ProcessExecution, Project, StoredFile } from "../src/lib/domain";
+import type {
+  ActionBlock,
+  ProcessExecution,
+  Project,
+  RuntimeValue,
+  StoredFile,
+} from "../src/lib/domain";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 
 const project: Project = {
@@ -87,7 +93,7 @@ test("resolves runtime files from the active execution without storing them in t
   assert.equal("runtimeInputs" in execution.methodSnapshot.blocks[0], false);
 });
 
-test("explicit binding wins over a semantically stronger heuristic candidate", () => {
+test("explicit binding wins over conflicting legacy source fields", () => {
   const heuristicSource: ActionBlock = {
     id: "heuristic-source",
     type: "CRIAR",
@@ -249,7 +255,7 @@ test("canonical previous_process resolves the exact process output", () => {
   assert.equal(resolved.resolvedSourceKey, "script");
 });
 
-test("an unresolved canonical binding never falls back to legacy fields or labelScore", () => {
+test("an unresolved canonical binding never falls back to legacy fields", () => {
   const source: ActionBlock = {
     id: "available-source",
     type: "CRIAR",
@@ -322,7 +328,77 @@ test("an unresolved canonical binding never falls back to legacy fields or label
   assert.equal(resolved.value, undefined);
 });
 
-test("LEGACY / TEMPORARY CHARACTERIZATION: resolves an unbound input by label similarity", () => {
+test("legacy previous_block with complete identifiers resolves exactly", () => {
+  const source: ActionBlock = {
+    id: "legacy-explicit-source",
+    type: "CRIAR",
+    operator: "Humano",
+    order: 0,
+    parameters: [],
+    outputs: [
+      {
+        id: "legacy-explicit-output",
+        label: "Roteiro final",
+        key: "script",
+        type: "textarea",
+        required: true,
+      },
+    ],
+  };
+  const target: ActionBlock = {
+    id: "legacy-explicit-target",
+    type: "CRIAR",
+    operator: "IA",
+    order: 1,
+    parameters: [],
+    inputs: [
+      {
+        id: "legacy-explicit-input",
+        label: "Contexto",
+        type: "textarea",
+        source: "previous_block",
+        blockId: source.id,
+        sourceKey: "script",
+      },
+    ],
+    outputs: [],
+  };
+  const execution: ProcessExecution = {
+    id: "execution-legacy-explicit",
+    projectId: project.id,
+    channelId: project.channelId,
+    processType: "assets",
+    status: "blocked_executor",
+    outputStatus: "pending",
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    methodSnapshot: {
+      name: "Legacy explicit",
+      processType: "assets",
+      blocks: [source, target],
+    },
+    blocks: [
+      { blockId: source.id, status: "completed", values: { script: "explicit legacy value" } },
+      { blockId: target.id, status: "blocked_executor", values: {} },
+    ],
+  };
+
+  const [resolved] = resolveBlockInputs({
+    block: target,
+    execution,
+    project,
+    projectExecutions: [execution],
+    collections: [],
+    libraryItems: [],
+  });
+
+  assert.equal(resolved.resolved, true);
+  assert.equal(resolved.value, "explicit legacy value");
+  assert.equal(resolved.sourceBlockId, source.id);
+  assert.equal(resolved.resolvedSourceKey, "script");
+});
+
+test("ambiguous legacy input stays unresolved regardless of candidate order or matching label", () => {
   const genericSource: ActionBlock = {
     id: "generic-source",
     type: "CRIAR",
@@ -371,8 +447,73 @@ test("LEGACY / TEMPORARY CHARACTERIZATION: resolves an unbound input by label si
     ],
     outputs: [],
   };
+  for (const [index, sources] of [
+    [genericSource, matchingSource],
+    [matchingSource, genericSource],
+  ].entries()) {
+    const orderedSources = sources.map((source, order) => ({ ...source, order }));
+    const orderedTarget = { ...target, order: orderedSources.length };
+    const execution: ProcessExecution = {
+      id: `execution-legacy-ambiguous-${index}`,
+      projectId: project.id,
+      channelId: project.channelId,
+      processType: "assets",
+      status: "blocked_executor",
+      outputStatus: "pending",
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+      methodSnapshot: {
+        name: "Legacy ambiguous",
+        processType: "assets",
+        blocks: [...orderedSources, orderedTarget],
+      },
+      blocks: [
+        ...orderedSources.map((source) => {
+          const values: Record<string, RuntimeValue> =
+            source.id === genericSource.id
+              ? { generic_text: "generic value" }
+              : { matching_script: "matching value" };
+          return { blockId: source.id, status: "completed" as const, values };
+        }),
+        { blockId: target.id, status: "blocked_executor", values: {} },
+      ],
+    };
+
+    const [resolved] = resolveBlockInputs({
+      block: orderedTarget,
+      execution,
+      project,
+      projectExecutions: [execution],
+      collections: [],
+      libraryItems: [],
+    });
+
+    assert.equal(resolved.resolved, false);
+    assert.equal(resolved.value, undefined);
+    assert.equal(resolved.sourceBlockId, undefined);
+  }
+});
+
+test("legacy previous_process without process identity stays unresolved", () => {
+  const target: ActionBlock = {
+    id: "legacy-process-target",
+    type: "CRIAR",
+    operator: "IA",
+    order: 0,
+    parameters: [],
+    inputs: [
+      {
+        id: "legacy-process-input",
+        label: "Roteiro final",
+        type: "textarea",
+        source: "previous_process",
+        sourceKey: "script",
+      },
+    ],
+    outputs: [],
+  };
   const execution: ProcessExecution = {
-    id: "execution-legacy-label-score",
+    id: "execution-legacy-process-target",
     projectId: project.id,
     channelId: project.channelId,
     processType: "assets",
@@ -380,35 +521,37 @@ test("LEGACY / TEMPORARY CHARACTERIZATION: resolves an unbound input by label si
     outputStatus: "pending",
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
-    methodSnapshot: {
-      name: "Legacy heuristic",
-      processType: "assets",
-      blocks: [genericSource, matchingSource, target],
+    methodSnapshot: { name: "Assets", processType: "assets", blocks: [target] },
+    blocks: [{ blockId: target.id, status: "blocked_executor", values: {} }],
+  };
+  const scriptExecution: ProcessExecution = {
+    id: "execution-legacy-process-source",
+    projectId: project.id,
+    channelId: project.channelId,
+    processType: "script",
+    status: "completed",
+    outputStatus: "completed",
+    output: {
+      processType: "script",
+      values: { script: "must not be inferred" },
+      createdAt: project.createdAt,
     },
-    blocks: [
-      {
-        blockId: genericSource.id,
-        status: "completed",
-        values: { generic_text: "generic value" },
-      },
-      {
-        blockId: matchingSource.id,
-        status: "completed",
-        values: { matching_script: "heuristic value" },
-      },
-      { blockId: target.id, status: "blocked_executor", values: {} },
-    ],
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    methodSnapshot: { name: "Script", processType: "script", blocks: [] },
+    blocks: [],
   };
 
   const [resolved] = resolveBlockInputs({
     block: target,
     execution,
     project,
-    projectExecutions: [execution],
+    projectExecutions: [scriptExecution, execution],
     collections: [],
     libraryItems: [],
   });
 
-  assert.equal(resolved.value, "heuristic value");
-  assert.equal(resolved.sourceBlockId, matchingSource.id);
+  assert.equal(resolved.resolved, false);
+  assert.equal(resolved.value, undefined);
+  assert.equal(resolved.sourceProcessType, undefined);
 });

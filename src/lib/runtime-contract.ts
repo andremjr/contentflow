@@ -15,7 +15,6 @@ import { projectProcessOrder } from "@/lib/process-order";
 import { createProcessOutputFields, isEmptyRuntimeValue } from "@/lib/human-workflow";
 import { normalizeExecutionDeliveries, processOutputDeliveryFor } from "@/lib/deliveries";
 import { resolveChannelHistory } from "@/lib/channel-history";
-import { collectionItemValuesForPlugin } from "@/lib/plugin-collection";
 import { areHumanFieldTypesCompatible } from "@/lib/data-shape";
 import { authoritativeInputSource } from "@/lib/input-source-binding";
 
@@ -98,35 +97,12 @@ export function resolveBlockInputs({
           usedCandidateIds,
           context,
         )
-      : resolveLegacyExplicitInput(input, project, candidates, usedCandidateIds, context);
+      : resolveLegacyExplicitInput(input, project, context);
     if (explicit) {
       if (explicit.candidateId) usedCandidateIds.add(explicit.candidateId);
       return { input, ...explicit.result };
     }
-    if (authority.representation === "canonical") return { input, resolved: false };
-
-    const available = candidates.filter(
-      (candidate) =>
-        !usedCandidateIds.has(candidate.id) &&
-        areRuntimeTypesCompatible(candidate.type, input.type),
-    );
-    const completeSelectedItems = available.filter((candidate) => candidate.key === "selectedItem");
-    const selected = [...(completeSelectedItems.length ? completeSelectedItems : available)].sort(
-      (left, right) => labelScore(input.label, right.label) - labelScore(input.label, left.label),
-    )[0];
-    if (!selected) return { input, resolved: false };
-    usedCandidateIds.add(selected.id);
-    return {
-      input,
-      resolved: true,
-      value: selected.value,
-      resolvedSourceKey: selected.key,
-      sourceLabel: selected.sourceLabel,
-      sourceBlockId: selected.sourceBlockId,
-      sourceProcessType: selected.sourceProcessType,
-      sourceDeliveryId: selected.deliveryId,
-      sourceDeliveryItemIds: selected.deliveryItemIds,
-    };
+    return { input, resolved: false };
   });
 }
 
@@ -166,29 +142,19 @@ function collectCandidates({
           : undefined;
       const collection = collections.find((candidate) => candidate.id === item?.collectionId);
       if (item && collection) {
-        const completeItem = collectionItemValuesForPlugin(collection, item);
-        candidates.push({
-          id: `${completed.blockId}:selected-item`,
-          label: `Item escolhido — ${collection.name}`,
-          key: "selectedItem",
-          type: "textarea",
-          value: `ITEM ESCOLHIDO — ${collection.name}:\n${JSON.stringify(completeItem, null, 2)}`,
-          sourceLabel: definition.name ?? "Escolher",
-          sourceBlockId: completed.blockId,
-        });
-      }
-      for (const field of collection?.fields ?? []) {
-        const value = item?.values[field.id];
-        if (value === undefined || isEmptyRuntimeValue(value)) continue;
-        candidates.push({
-          id: `${completed.blockId}:${field.id}`,
-          label: field.label,
-          key: field.id,
-          type: field.type,
-          value,
-          sourceLabel: definition.name ?? "Escolher",
-          sourceBlockId: completed.blockId,
-        });
+        for (const field of collection.fields) {
+          const value = item.values[field.id];
+          if (value === undefined || isEmptyRuntimeValue(value)) continue;
+          candidates.push({
+            id: `${completed.blockId}:${field.id}`,
+            label: field.label,
+            key: field.id,
+            type: field.type,
+            value,
+            sourceLabel: definition.name ?? "Escolher",
+            sourceBlockId: completed.blockId,
+          });
+        }
       }
       continue;
     }
@@ -368,8 +334,6 @@ function resolveCanonicalInput(
 function resolveLegacyExplicitInput(
   input: BlockInputBinding,
   project: Project,
-  candidates: RuntimeCandidate[],
-  usedCandidateIds: ReadonlySet<string>,
   historyContext: InputResolutionContext,
 ): ExplicitResolution | undefined {
   if (input.source === "channel_history") {
@@ -420,54 +384,11 @@ function resolveLegacyExplicitInput(
     const value = input.sourceKey === "deadline" ? project.deadline : project.title;
     return { result: { resolved: true, value, sourceLabel: "Projeto" } };
   }
-  if (input.source === "previous_block" && input.blockId) {
-    const candidate = candidates.find(
-      (item) =>
-        (!usedCandidateIds.has(item.id) || (!input.sourceKey && item.key === "selectedItem")) &&
-        item.sourceBlockId === input.blockId &&
-        (!input.sourceKey || item.key === input.sourceKey) &&
-        areRuntimeTypesCompatible(item.type, input.type),
-    );
-    return candidate
-      ? {
-          candidateId:
-            !input.sourceKey && candidate.key === "selectedItem" ? undefined : candidate.id,
-          result: {
-            resolved: true,
-            value: candidate.value,
-            resolvedSourceKey: candidate.key,
-            sourceLabel: candidate.sourceLabel,
-            sourceBlockId: candidate.sourceBlockId,
-            sourceDeliveryId: candidate.deliveryId,
-            sourceDeliveryItemIds: candidate.deliveryItemIds,
-          },
-        }
-      : { result: { resolved: false } };
+  if (input.source === "previous_block") {
+    return { result: { resolved: false } };
   }
-  if (input.source === "previous_process" && input.sourceKey) {
-    const candidate = candidates.find(
-      (item) =>
-        Boolean(item.sourceProcessType) &&
-        (!input.sourceProcessType || item.sourceProcessType === input.sourceProcessType) &&
-        (!input.blockId || item.sourceBlockId === input.blockId) &&
-        item.key === input.sourceKey &&
-        areRuntimeTypesCompatible(item.type, input.type),
-    );
-    return candidate
-      ? {
-          candidateId: candidate.id,
-          result: {
-            resolved: true,
-            value: candidate.value,
-            resolvedSourceKey: candidate.key,
-            sourceLabel: candidate.sourceLabel,
-            sourceProcessType: candidate.sourceProcessType,
-            sourceBlockId: candidate.sourceBlockId,
-            sourceDeliveryId: candidate.deliveryId,
-            sourceDeliveryItemIds: candidate.deliveryItemIds,
-          },
-        }
-      : { result: { resolved: false } };
+  if (input.source === "previous_process") {
+    return { result: { resolved: false } };
   }
   return undefined;
 }
@@ -485,19 +406,4 @@ function activeDeliveryFor(
         delivery.outputKey === outputKey &&
         delivery.status !== "invalidated",
     );
-}
-
-function labelScore(inputLabel: string, outputLabel: string) {
-  const inputTokens = normalizeLabel(inputLabel);
-  const outputTokens = normalizeLabel(outputLabel);
-  return inputTokens.filter((token) => outputTokens.includes(token)).length;
-}
-
-function normalizeLabel(label: string) {
-  return label
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((token) => token.length > 2);
 }

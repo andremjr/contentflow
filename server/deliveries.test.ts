@@ -10,7 +10,6 @@ import { deriveProcessOutput } from "../src/lib/process-output";
 import type { ActionBlock, ProcessExecution, Project } from "../src/lib/domain";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { projectThumbnail } from "../src/lib/project-thumbnail";
-import { composePluginPortValue } from "./plugin-input-values";
 
 function executionFor(
   processType: ProcessExecution["processType"],
@@ -403,7 +402,7 @@ test("permite resolver campos específicos do mesmo item escolhido", () => {
   );
 });
 
-test("envia completos todos os itens escolhidos ligados a um bloco Criar", () => {
+test("não infere itens escolhidos completos quando sourceKey está ausente", () => {
   const chooseCategory: ActionBlock = {
     id: "choose-category",
     type: "ESCOLHER",
@@ -536,24 +535,14 @@ test("envia completos todos os itens escolhidos ligados a um bloco Criar", () =>
   });
 
   assert.equal(resolved.length, 2);
-  assert.match(String(resolved[0].value), /ITEM ESCOLHIDO — Linha Editorial/);
-  assert.match(String(resolved[0].value), /"Categoria": "Grandes conflitos"/);
-  assert.match(String(resolved[0].value), /"Descrição": "Guerras e disputas decisivas\."/);
-  assert.match(String(resolved[0].value), /"Período": "Antiguidade ao século XX"/);
-  assert.match(String(resolved[1].value), /ITEM ESCOLHIDO — Perspectiva do canal/);
-  assert.match(String(resolved[1].value), /"Ângulo": "Consequências humanas"/);
-  assert.match(
-    String(resolved[1].value),
-    /"Abordagem": "Mostrar como pessoas comuns foram afetadas\."/,
+  assert.deepEqual(
+    resolved.map((item) => item.resolved),
+    [false, false],
   );
-
-  const pluginContext = composePluginPortValue(
-    resolved.map((item) => ({ label: item.input.label, value: item.value ?? null })),
+  assert.deepEqual(
+    resolved.map((item) => item.value),
+    [undefined, undefined],
   );
-  assert.match(String(pluginContext), /ITEM ESCOLHIDO — Linha Editorial/);
-  assert.match(String(pluginContext), /ITEM ESCOLHIDO — Perspectiva do canal/);
-  assert.doesNotMatch(String(pluginContext), /ITEM NÃO ESCOLHIDO/);
-  assert.doesNotMatch(String(pluginContext), /ÂNGULO NÃO ESCOLHIDO/);
 });
 
 test("materializa itens individuais em saídas do tipo list", () => {
