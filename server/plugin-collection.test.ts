@@ -9,8 +9,8 @@ test("envia todos os campos do item estratégico ao plugin com nomes compreensí
     channelId: "channel-1",
     name: "Ângulos",
     fields: [
-      { id: "name", label: "Ângulo", type: "text", required: true },
-      { id: "description", label: "Descrição", type: "textarea", required: true },
+      { id: "name", label: "Ângulo", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" }, required: true },
+      { id: "description", label: "Descrição", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" }, required: true },
     ],
     createdAt: "2026-08-30T00:00:00.000Z",
   };
@@ -34,8 +34,8 @@ test("preserva todos os campos declarados mesmo quando um valor está vazio", ()
     channelId: "channel-1",
     name: "Ângulos",
     fields: [
-      { id: "name", label: "Ângulo", type: "text", required: true },
-      { id: "notes", label: "Observações", type: "textarea", required: false },
+      { id: "name", label: "Ângulo", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" }, required: true },
+      { id: "notes", label: "Observações", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" }, required: false },
     ],
     createdAt: "2026-08-30T00:00:00.000Z",
   };

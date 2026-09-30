@@ -1,6 +1,6 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "local.contentflow.text-file-builder",
   "name": "Construtor de Arquivo de Texto",
   "version": "1.0.0",
@@ -16,14 +16,17 @@
   },
   "minCoreVersion": "0.3.0",
   "entrypoint": "handler.mjs",
-  "permissions": ["filesystem:write"],
-  "deliveryTypes": ["text"],
+  "permissions": [
+    "filesystem:write"
+  ],
   "capabilities": [
     {
       "id": "build-text-file",
       "operator": "Código",
       "instructionUsage": "optional",
-      "blockTypes": ["CRIAR"],
+      "blockTypes": [
+        "CRIAR"
+      ],
       "processTypes": [
         "theme",
         "title",
@@ -40,20 +43,12 @@
           "label": "Conteúdo do arquivo",
           "description": "Uma ou mais entradas, preservadas com seus rótulos quando o bloco recebe múltiplas fontes.",
           "required": true,
-          "acceptedTypes": [
-            "text",
-            "textarea",
-            "number",
-            "boolean",
-            "list",
-            "records",
-            "select",
-            "multiselect",
-            "datetime",
-            "url",
-            "thumbnail_layout"
-          ],
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
       ],
       "outputPorts": [
@@ -62,34 +57,25 @@
           "label": "Arquivo de texto",
           "required": true,
           "presentation": {
-            "renderer": "file-list",
-            "itemType": "file",
-            "acceptedMimeTypes": ["text/markdown", "text/plain"]
+            "renderer": "file-list"
           },
-          "producedTypes": ["file"]
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "one",
+            "representation": "artifact"
+          }
         }
       ],
-      "acceptedInputTypes": [
-        "text",
-        "textarea",
-        "number",
-        "boolean",
-        "list",
-        "records",
-        "select",
-        "multiselect",
-        "datetime",
-        "url",
-        "thumbnail_layout"
-      ],
-      "producedOutputTypes": ["file"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 30000,
         "supportsCancellation": false,
         "maxConcurrency": 4
       },
-      "sideEffects": ["local_artifact"],
+      "sideEffects": [
+        "local_artifact"
+      ],
       "cost": {
         "model": "free",
         "estimateSupported": false
@@ -110,7 +96,10 @@
           "format": {
             "type": "string",
             "title": "Formato",
-            "enum": ["markdown", "plain"],
+            "enum": [
+              "markdown",
+              "plain"
+            ],
             "default": "markdown"
           }
         }
@@ -123,16 +112,41 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "id": { "type": "string", "minLength": 1 },
-              "name": { "type": "string", "minLength": 1 },
-              "mimeType": { "enum": ["text/markdown", "text/plain"] },
-              "size": { "type": "integer", "minimum": 1 },
-              "url": { "type": "string", "pattern": "^artifact://" }
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "mimeType": {
+                "enum": [
+                  "text/markdown",
+                  "text/plain"
+                ]
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^artifact://"
+              }
             },
-            "required": ["id", "name", "mimeType", "size", "url"]
+            "required": [
+              "id",
+              "name",
+              "mimeType",
+              "size",
+              "url"
+            ]
           }
         },
-        "required": ["document"]
+        "required": [
+          "document"
+        ]
       }
     }
   ]

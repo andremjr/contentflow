@@ -1,22 +1,35 @@
 {
-  "$schema": "../../../../docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "official-elevenlabs",
   "name": "ElevenLabs Audio",
   "version": "1.0.0",
   "description": "Gera narração, efeitos sonoros e música, transcreve mídia e consulta vozes pela API oficial da ElevenLabs.",
   "author": "ContentFlow",
   "license": "LicenseRef-ContentFlow-Source-Available-1.0",
-  "branding": { "iconPath": "assets/icon.png" },
+  "branding": {
+    "iconPath": "assets/icon.png"
+  },
   "homepage": "https://github.com/andremjr/contentflow",
   "repository": "https://github.com/andremjr/contentflow",
-  "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
+  "runtime": {
+    "kind": "node",
+    "version": ">=26 <27",
+    "module": "esm"
+  },
   "minCoreVersion": "0.3.0",
   "entrypoint": "handler.mjs",
-  "permissions": ["network", "filesystem:read", "filesystem:write"],
-  "networkHosts": ["api.elevenlabs.io"],
-  "secretKeys": ["ELEVENLABS_API_KEY"],
-  "deliveryTypes": ["text", "audio", "processing"],
+  "permissions": [
+    "network",
+    "filesystem:read",
+    "filesystem:write"
+  ],
+  "networkHosts": [
+    "api.elevenlabs.io"
+  ],
+  "secretKeys": [
+    "ELEVENLABS_API_KEY"
+  ],
   "settingsSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -50,38 +63,58 @@
     {
       "id": "list-voices",
       "operator": "Código",
-      "blockTypes": ["BUSCAR"],
-      "processTypes": ["narration"],
+      "blockTypes": [
+        "BUSCAR"
+      ],
+      "processTypes": [
+        "narration"
+      ],
       "inputPorts": [],
       "outputPorts": [
         {
           "key": "voices",
           "label": "Vozes disponíveis",
-          "producedTypes": ["records"],
           "required": true,
-          "presentation": { "renderer": "table", "itemType": "record" }
+          "presentation": {
+            "renderer": "table"
+          },
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
       ],
-      "acceptedInputTypes": [],
-      "producedOutputTypes": ["records"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 60000,
         "supportsCancellation": true,
         "maxConcurrency": 2
       },
-      "sideEffects": ["external_read"],
-      "cost": { "model": "free", "estimateSupported": false },
+      "sideEffects": [
+        "external_read"
+      ],
+      "cost": {
+        "model": "free",
+        "estimateSupported": false
+      },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["ElevenLabs"],
+        "providers": [
+          "ElevenLabs"
+        ],
         "retentionPolicyUrl": "https://elevenlabs.io/privacy-policy"
       },
       "blockConfigSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "search": { "type": "string", "title": "Pesquisar voz", "maxLength": 100, "default": "" },
+          "search": {
+            "type": "string",
+            "title": "Pesquisar voz",
+            "maxLength": 100,
+            "default": ""
+          },
           "page_size": {
             "type": "integer",
             "title": "Quantidade",
@@ -92,70 +125,118 @@
           "voice_type": {
             "type": "string",
             "title": "Tipo",
-            "enum": ["all", "default", "personal", "community", "workspace", "saved"],
+            "enum": [
+              "all",
+              "default",
+              "personal",
+              "community",
+              "workspace",
+              "saved"
+            ],
             "default": "all"
           },
           "category": {
             "type": "string",
             "title": "Categoria",
-            "enum": ["all", "premade", "cloned", "generated", "professional"],
+            "enum": [
+              "all",
+              "premade",
+              "cloned",
+              "generated",
+              "professional"
+            ],
             "default": "all"
           }
         }
       },
       "outputSchema": {
         "type": "object",
-        "properties": { "voices": { "type": "array" } },
-        "required": ["voices"]
+        "properties": {
+          "voices": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "voices"
+        ]
       }
     },
     {
       "id": "text-to-speech",
       "operator": "IA",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["narration"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "narration"
+      ],
       "inputPorts": [
         {
           "key": "text",
           "label": "Texto para narrar",
-          "acceptedTypes": ["text", "textarea", "list"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "audio",
+            "cardinality": "many",
+            "representation": "artifact"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "audio",
           "label": "Narração",
-          "producedTypes": ["audio"],
           "required": true,
           "presentation": {
-            "renderer": "audio-player",
-            "itemType": "audio",
-            "acceptedMimeTypes": ["audio/mpeg"]
+            "renderer": "audio-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "audio",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "audio/mpeg"
+              ]
+            }
           }
         },
         {
           "key": "metadata",
           "label": "Metadados da geração",
-          "producedTypes": ["records"],
           "required": false,
-          "presentation": { "renderer": "table", "itemType": "record" }
+          "presentation": {
+            "renderer": "table"
+          },
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "list"],
-      "producedOutputTypes": ["audio", "records"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 300000,
         "supportsCancellation": true,
         "maxConcurrency": 2
       },
-      "sideEffects": ["external_write", "local_artifact"],
-      "cost": { "model": "metered", "estimateSupported": true },
+      "sideEffects": [
+        "external_write",
+        "local_artifact"
+      ],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": true
+      },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["ElevenLabs"],
+        "providers": [
+          "ElevenLabs"
+        ],
         "retentionPolicyUrl": "https://elevenlabs.io/privacy-policy"
       },
       "blockConfigSchema": {
@@ -172,13 +253,22 @@
           "model_id": {
             "type": "string",
             "title": "Modelo",
-            "enum": ["eleven_multilingual_v2", "eleven_flash_v2_5", "eleven_v3"],
+            "enum": [
+              "eleven_multilingual_v2",
+              "eleven_flash_v2_5",
+              "eleven_v3"
+            ],
             "default": "eleven_multilingual_v2"
           },
           "output_format": {
             "type": "string",
             "title": "Formato",
-            "enum": ["mp3_22050_32", "mp3_44100_64", "mp3_44100_96", "mp3_44100_128"],
+            "enum": [
+              "mp3_22050_32",
+              "mp3_44100_64",
+              "mp3_44100_96",
+              "mp3_44100_128"
+            ],
             "default": "mp3_44100_128"
           },
           "stability": {
@@ -217,57 +307,97 @@
       },
       "outputSchema": {
         "type": "object",
-        "properties": { "audio": { "type": "object" }, "metadata": { "type": "array" } },
-        "required": ["audio"]
+        "properties": {
+          "audio": {
+            "type": "object"
+          },
+          "metadata": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "audio"
+        ]
       }
     },
     {
       "id": "generate-sound-effect",
       "operator": "IA",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["narration", "assets", "editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "narration",
+        "assets",
+        "editing"
+      ],
       "inputPorts": [
         {
           "key": "description",
           "label": "Descrição do efeito",
-          "acceptedTypes": ["text", "textarea"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "audio",
           "label": "Efeito sonoro",
-          "producedTypes": ["audio"],
           "required": true,
           "presentation": {
-            "renderer": "audio-player",
-            "itemType": "audio",
-            "acceptedMimeTypes": ["audio/mpeg"]
+            "renderer": "audio-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "audio",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "audio/mpeg"
+              ]
+            }
           }
         },
         {
           "key": "metadata",
           "label": "Metadados da geração",
-          "producedTypes": ["records"],
           "required": false,
-          "presentation": { "renderer": "table", "itemType": "record" }
+          "presentation": {
+            "renderer": "table"
+          },
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea"],
-      "producedOutputTypes": ["audio", "records"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 300000,
         "supportsCancellation": true,
         "maxConcurrency": 2
       },
-      "sideEffects": ["external_write", "local_artifact"],
-      "cost": { "model": "metered", "estimateSupported": true },
+      "sideEffects": [
+        "external_write",
+        "local_artifact"
+      ],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": true
+      },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["ElevenLabs"],
+        "providers": [
+          "ElevenLabs"
+        ],
         "retentionPolicyUrl": "https://elevenlabs.io/privacy-policy"
       },
       "blockConfigSchema": {
@@ -277,7 +407,9 @@
           "model_id": {
             "type": "string",
             "title": "Modelo",
-            "enum": ["eleven_text_to_sound_v2"],
+            "enum": [
+              "eleven_text_to_sound_v2"
+            ],
             "default": "eleven_text_to_sound_v2"
           },
           "duration_seconds": {
@@ -295,71 +427,123 @@
             "maximum": 1,
             "default": 0.3
           },
-          "loop": { "type": "boolean", "title": "Loop contínuo", "default": false },
+          "loop": {
+            "type": "boolean",
+            "title": "Loop contínuo",
+            "default": false
+          },
           "output_format": {
             "type": "string",
             "title": "Formato",
-            "enum": ["mp3_44100_128"],
+            "enum": [
+              "mp3_44100_128"
+            ],
             "default": "mp3_44100_128"
           }
         }
       },
       "outputSchema": {
         "type": "object",
-        "properties": { "audio": { "type": "object" }, "metadata": { "type": "array" } },
-        "required": ["audio"]
+        "properties": {
+          "audio": {
+            "type": "object"
+          },
+          "metadata": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "audio"
+        ]
       }
     },
     {
       "id": "transcribe-media",
       "operator": "IA",
-      "blockTypes": ["BUSCAR", "CRIAR"],
-      "processTypes": ["script", "narration", "assets", "editing"],
+      "blockTypes": [
+        "BUSCAR",
+        "CRIAR"
+      ],
+      "processTypes": [
+        "script",
+        "narration",
+        "assets",
+        "editing"
+      ],
       "inputPorts": [
         {
           "key": "media",
           "label": "Áudio ou vídeo",
-          "acceptedTypes": ["audio", "video", "file"],
           "required": true,
-          "multiple": false
+          "multiple": false,
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "one",
+            "representation": "artifact"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "transcript",
           "label": "Transcrição",
-          "producedTypes": ["textarea"],
           "required": true,
-          "presentation": { "renderer": "text-long", "itemType": "text" }
+          "presentation": {
+            "renderer": "text-long"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         },
         {
           "key": "segments",
           "label": "Palavras e eventos",
-          "producedTypes": ["records"],
           "required": false,
-          "presentation": { "renderer": "table", "itemType": "record" }
+          "presentation": {
+            "renderer": "table"
+          },
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         },
         {
           "key": "metadata",
           "label": "Metadados da transcrição",
-          "producedTypes": ["records"],
           "required": false,
-          "presentation": { "renderer": "table", "itemType": "record" }
+          "presentation": {
+            "renderer": "table"
+          },
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
       ],
-      "acceptedInputTypes": ["audio", "video", "file"],
-      "producedOutputTypes": ["textarea", "records"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 600000,
         "supportsCancellation": true,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_write"],
-      "cost": { "model": "metered", "estimateSupported": false },
+      "sideEffects": [
+        "external_write"
+      ],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": false
+      },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["ElevenLabs"],
+        "providers": [
+          "ElevenLabs"
+        ],
         "retentionPolicyUrl": "https://elevenlabs.io/privacy-policy"
       },
       "blockConfigSchema": {
@@ -369,7 +553,10 @@
           "model_id": {
             "type": "string",
             "title": "Modelo",
-            "enum": ["scribe_v2", "scribe_v1"],
+            "enum": [
+              "scribe_v2",
+              "scribe_v1"
+            ],
             "default": "scribe_v2"
           },
           "language_code": {
@@ -383,7 +570,11 @@
             "title": "Identificar eventos sonoros",
             "default": true
           },
-          "diarize": { "type": "boolean", "title": "Separar locutores", "default": true },
+          "diarize": {
+            "type": "boolean",
+            "title": "Separar locutores",
+            "default": true
+          },
           "num_speakers": {
             "type": "integer",
             "title": "Quantidade de locutores",
@@ -394,7 +585,10 @@
           "timestamps_granularity": {
             "type": "string",
             "title": "Granularidade",
-            "enum": ["word", "character"],
+            "enum": [
+              "word",
+              "character"
+            ],
             "default": "word"
           }
         }
@@ -402,60 +596,99 @@
       "outputSchema": {
         "type": "object",
         "properties": {
-          "transcript": { "type": "string" },
-          "segments": { "type": "array" },
-          "metadata": { "type": "array" }
+          "transcript": {
+            "type": "string"
+          },
+          "segments": {
+            "type": "array"
+          },
+          "metadata": {
+            "type": "array"
+          }
         },
-        "required": ["transcript"]
+        "required": [
+          "transcript"
+        ]
       }
     },
     {
       "id": "compose-music",
       "operator": "IA",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["narration", "assets", "editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "narration",
+        "assets",
+        "editing"
+      ],
       "inputPorts": [
         {
           "key": "prompt",
           "label": "Descrição da música",
-          "acceptedTypes": ["text", "textarea"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "audio",
           "label": "Música",
-          "producedTypes": ["audio"],
           "required": true,
           "presentation": {
-            "renderer": "audio-player",
-            "itemType": "audio",
-            "acceptedMimeTypes": ["audio/mpeg"]
+            "renderer": "audio-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "audio",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "audio/mpeg"
+              ]
+            }
           }
         },
         {
           "key": "metadata",
           "label": "Metadados da composição",
-          "producedTypes": ["records"],
           "required": false,
-          "presentation": { "renderer": "table", "itemType": "record" }
+          "presentation": {
+            "renderer": "table"
+          },
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea"],
-      "producedOutputTypes": ["audio", "records"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 600000,
         "supportsCancellation": true,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_write", "local_artifact"],
-      "cost": { "model": "metered", "estimateSupported": true },
+      "sideEffects": [
+        "external_write",
+        "local_artifact"
+      ],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": true
+      },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["ElevenLabs"],
+        "providers": [
+          "ElevenLabs"
+        ],
         "retentionPolicyUrl": "https://elevenlabs.io/privacy-policy"
       },
       "blockConfigSchema": {
@@ -465,7 +698,10 @@
           "model_id": {
             "type": "string",
             "title": "Modelo",
-            "enum": ["music_v1", "music_v2"],
+            "enum": [
+              "music_v1",
+              "music_v2"
+            ],
             "default": "music_v2"
           },
           "music_length_seconds": {
@@ -483,16 +719,32 @@
           "output_format": {
             "type": "string",
             "title": "Formato",
-            "enum": ["mp3_44100_128", "mp3_48000_192"],
+            "enum": [
+              "mp3_44100_128",
+              "mp3_48000_192"
+            ],
             "default": "mp3_44100_128"
           },
-          "sign_with_c2pa": { "type": "boolean", "title": "Assinar com C2PA", "default": false }
+          "sign_with_c2pa": {
+            "type": "boolean",
+            "title": "Assinar com C2PA",
+            "default": false
+          }
         }
       },
       "outputSchema": {
         "type": "object",
-        "properties": { "audio": { "type": "object" }, "metadata": { "type": "array" } },
-        "required": ["audio"]
+        "properties": {
+          "audio": {
+            "type": "object"
+          },
+          "metadata": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "audio"
+        ]
       }
     }
   ]

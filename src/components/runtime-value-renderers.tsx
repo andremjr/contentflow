@@ -20,15 +20,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import type {
   FieldPresentation,
-  HumanFieldType,
   PresentationRendererId,
   RuntimeValue,
   StoredFile,
   StructuredRecord,
+  ValueShape,
 } from "@/lib/domain";
+import { contentShape, controlShape, recordShape } from "@/lib/data-shape";
 
 export type PresentationRendererProps = {
-  type: HumanFieldType;
+  shape: ValueShape;
   value: RuntimeValue | StructuredRecord | undefined;
   compact: boolean;
   presentation?: FieldPresentation;
@@ -41,7 +42,7 @@ export type PresentationRendererDefinition = {
   group: "Automático" | "Texto e listas" | "Dados estruturados" | "Mídia" | "Decisão";
   icon: typeof Text;
   Renderer: ComponentType<PresentationRendererProps>;
-  preview: { type: HumanFieldType; value: RuntimeValue | StructuredRecord };
+  preview: { shape: ValueShape; value: RuntimeValue | StructuredRecord };
 };
 
 const previewImage = (name: string, color: string): StoredFile => ({
@@ -77,7 +78,10 @@ const definitions: PresentationRendererDefinition[] = [
     group: "Automático",
     icon: LayoutGrid,
     Renderer: TextShortRenderer,
-    preview: { type: "text", value: "A apresentação acompanha automaticamente o tipo do dado." },
+    preview: {
+      shape: contentShape("text"),
+      value: "A apresentação acompanha automaticamente o tipo do dado.",
+    },
   },
   {
     id: "text-short",
@@ -86,7 +90,10 @@ const definitions: PresentationRendererDefinition[] = [
     group: "Texto e listas",
     icon: Text,
     Renderer: TextShortRenderer,
-    preview: { type: "text", value: "Como criar uma rotina editorial sustentável" },
+    preview: {
+      shape: contentShape("text"),
+      value: "Como criar uma rotina editorial sustentável",
+    },
   },
   {
     id: "text-long",
@@ -96,7 +103,7 @@ const definitions: PresentationRendererDefinition[] = [
     icon: TextQuote,
     Renderer: TextLongRenderer,
     preview: {
-      type: "textarea",
+      shape: contentShape("text"),
       value:
         "Abertura com a promessa principal.\n\nEm seguida, apresente o contexto e desenvolva o argumento.",
     },
@@ -108,7 +115,10 @@ const definitions: PresentationRendererDefinition[] = [
     group: "Texto e listas",
     icon: List,
     Renderer: ListRenderer,
-    preview: { type: "list", value: ["Pesquisar referências", "Escrever roteiro", "Revisar"] },
+    preview: {
+      shape: contentShape("text", "many"),
+      value: ["Pesquisar referências", "Escrever roteiro", "Revisar"],
+    },
   },
   {
     id: "tags",
@@ -117,7 +127,10 @@ const definitions: PresentationRendererDefinition[] = [
     group: "Texto e listas",
     icon: Tags,
     Renderer: TagsRenderer,
-    preview: { type: "list", value: ["educação", "produtividade", "criadores"] },
+    preview: {
+      shape: contentShape("text", "many"),
+      value: ["educação", "produtividade", "criadores"],
+    },
   },
   {
     id: "table",
@@ -126,7 +139,7 @@ const definitions: PresentationRendererDefinition[] = [
     group: "Dados estruturados",
     icon: Table2,
     Renderer: TableRenderer,
-    preview: { type: "records", value: PREVIEW_RECORDS },
+    preview: { shape: recordShape("many", []), value: PREVIEW_RECORDS },
   },
   {
     id: "cards",
@@ -135,7 +148,7 @@ const definitions: PresentationRendererDefinition[] = [
     group: "Dados estruturados",
     icon: Rows3,
     Renderer: CardsRenderer,
-    preview: { type: "records", value: PREVIEW_RECORDS },
+    preview: { shape: recordShape("many", []), value: PREVIEW_RECORDS },
   },
   {
     id: "file-list",
@@ -144,7 +157,7 @@ const definitions: PresentationRendererDefinition[] = [
     group: "Mídia",
     icon: ListTree,
     Renderer: FileListRenderer,
-    preview: { type: "files", value: PREVIEW_FILES },
+    preview: { shape: contentShape("image", "many"), value: PREVIEW_FILES },
   },
   {
     id: "image-gallery",
@@ -153,7 +166,7 @@ const definitions: PresentationRendererDefinition[] = [
     group: "Mídia",
     icon: GalleryHorizontal,
     Renderer: ImageGalleryRenderer,
-    preview: { type: "files", value: PREVIEW_FILES.slice(0, 2) },
+    preview: { shape: contentShape("image", "many"), value: PREVIEW_FILES.slice(0, 2) },
   },
   {
     id: "audio-player",
@@ -163,7 +176,7 @@ const definitions: PresentationRendererDefinition[] = [
     icon: FileAudio,
     Renderer: AudioRenderer,
     preview: {
-      type: "audio",
+      shape: contentShape("audio"),
       value: {
         id: "audio",
         name: "narração-final.mp3",
@@ -181,7 +194,7 @@ const definitions: PresentationRendererDefinition[] = [
     icon: FileVideo,
     Renderer: VideoRenderer,
     preview: {
-      type: "video",
+      shape: contentShape("video"),
       value: {
         id: "video",
         name: "corte-final.mp4",
@@ -198,7 +211,7 @@ const definitions: PresentationRendererDefinition[] = [
     group: "Decisão",
     icon: CheckCircle2,
     Renderer: DecisionRenderer,
-    preview: { type: "approval", value: "approved" },
+    preview: { shape: controlShape("approval"), value: "approved" },
   },
 ];
 
@@ -207,9 +220,9 @@ export const PRESENTATION_RENDERER_REGISTRY = Object.fromEntries(
   definitions.map((definition) => [definition.id, definition]),
 ) as Record<PresentationRendererId, PresentationRendererDefinition>;
 
-function TextShortRenderer({ type, value, compact }: PresentationRendererProps) {
+function TextShortRenderer({ shape, value, compact }: PresentationRendererProps) {
   if (typeof value === "boolean") return <span className="text-sm">{value ? "Sim" : "Não"}</span>;
-  if (type === "datetime" && typeof value === "string") {
+  if (shape.kind === "control" && shape.control === "datetime" && typeof value === "string") {
     const date = new Date(value);
     return (
       <time dateTime={value} className={compact ? "text-xs" : "text-sm"}>
@@ -217,7 +230,7 @@ function TextShortRenderer({ type, value, compact }: PresentationRendererProps) 
       </time>
     );
   }
-  if (type === "url" && typeof value === "string") {
+  if (shape.kind === "control" && shape.control === "url" && typeof value === "string") {
     return (
       <a
         href={value}

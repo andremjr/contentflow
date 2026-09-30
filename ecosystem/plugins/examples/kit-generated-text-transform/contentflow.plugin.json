@@ -1,6 +1,6 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "com.contentflow.kit-text-demo",
   "name": "ContentFlow Kit Text Demo",
   "version": "0.1.0",
@@ -14,30 +14,39 @@
   },
   "entrypoint": "handler.mjs",
   "permissions": [],
-  "deliveryTypes": ["text"],
   "capabilities": [
     {
       "id": "demo",
       "operator": "Código",
-      "blockTypes": ["CRIAR"],
+      "blockTypes": [
+        "CRIAR"
+      ],
       "inputPorts": [
         {
           "key": "content",
           "label": "Texto",
-          "acceptedTypes": ["textarea"],
-          "required": true
+          "required": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "result",
           "label": "Resultado",
-          "producedTypes": ["textarea"],
-          "required": true
+          "required": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
-      "acceptedInputTypes": ["textarea"],
-      "producedOutputTypes": ["textarea"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 30000
@@ -61,7 +70,9 @@
             "type": "string"
           }
         },
-        "required": ["result"]
+        "required": [
+          "result"
+        ]
       }
     }
   ]

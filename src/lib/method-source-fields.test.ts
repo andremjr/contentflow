@@ -22,8 +22,18 @@ test("expõe os campos da coleção como saídas selecionáveis de ESCOLHER", ()
       channelId: "channel-a",
       name: "Layouts de thumbnail",
       fields: [
-        { id: "layout-name", label: "Nome do layout", type: "text", required: true },
-        { id: "layout", label: "Layout", type: "thumbnail_layout", required: true },
+        {
+          id: "layout-name",
+          label: "Nome do layout",
+          shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+          required: true,
+        },
+        {
+          id: "layout",
+          label: "Layout",
+          shape: { kind: "control", control: "thumbnail_layout", cardinality: "one" },
+          required: true,
+        },
       ],
       createdAt: "2026-09-11T00:00:00.000Z",
     },
@@ -33,11 +43,19 @@ test("expõe os campos da coleção como saídas selecionáveis de ESCOLHER", ()
     getBlockSourceFields(block, collections).map((field) => ({
       key: field.key,
       label: field.label,
-      type: field.type,
+      shape: field.shape,
     })),
     [
-      { key: "layout-name", label: "Nome do layout", type: "text" },
-      { key: "layout", label: "Layout", type: "thumbnail_layout" },
+      {
+        key: "layout-name",
+        label: "Nome do layout",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+      },
+      {
+        key: "layout",
+        label: "Layout",
+        shape: { kind: "control", control: "thumbnail_layout", cardinality: "one" },
+      },
     ],
   );
 });
@@ -49,7 +67,13 @@ test("preserva as saídas declaradas dos demais blocos", () => {
     operator: "IA",
     name: "Criar título",
     inputs: [],
-    outputs: [{ id: "title-output", label: "Título", key: "title", type: "text", required: true }],
+    outputs: [{
+      id: "title-output",
+      label: "Título",
+      key: "title",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+      required: true,
+    }],
     parameters: [],
     order: 0,
   };

@@ -52,7 +52,6 @@ import {
   type ProfileLaneExecutionProgress,
   type BlockItemRetryScope,
   type ChannelLibraryItem,
-  type HumanFieldType,
   type ProcessExecution,
   type ProcessId,
   type Project,
@@ -61,7 +60,9 @@ import {
   type StrategicCollection,
   type StructuredRecord,
   type ThumbnailLayout,
+  type ValueShape,
 } from "@/lib/domain";
+import { contentShape } from "@/lib/data-shape";
 import { projectProcessOrder } from "@/lib/process-order";
 import {
   createProcessOutputFields,
@@ -737,7 +738,7 @@ function ExecutionResults({
                       <ResultValue
                         key={field.id}
                         label={field.label}
-                        type={field.type}
+                        shape={field.shape}
                         value={selectedItem.values[field.id]}
                         showCharacterCount
                       />
@@ -756,7 +757,7 @@ function ExecutionResults({
                       <ResultValue
                         key={output.id}
                         label={output.label}
-                        type={output.type}
+                        shape={output.shape}
                         presentation={output.presentation}
                         value={blockExecution.values[output.key]}
                         showCharacterCount
@@ -779,14 +780,14 @@ function ExecutionResults({
 
 function ResultValue({
   label,
-  type,
+  shape,
   presentation,
   value,
   source,
   showCharacterCount = true,
 }: {
   label: string;
-  type: Parameters<typeof RuntimeValueViewer>[0]["type"];
+  shape: Parameters<typeof RuntimeValueViewer>[0]["shape"];
   presentation?: Parameters<typeof RuntimeValueViewer>[0]["presentation"];
   value: RuntimeValue | undefined;
   source?: string;
@@ -805,7 +806,7 @@ function ResultValue({
         )}
       </div>
       <RuntimeValueViewer
-        type={type}
+        shape={shape}
         presentation={presentation}
         value={value}
         compact
@@ -1044,7 +1045,7 @@ function ExecutionItemsWorkspace({
                       ) : output !== undefined ? (
                         <div className="min-h-40 flex-1 p-3">
                           <RuntimeValueViewer
-                            type={kind ?? "text"}
+                            shape={contentShape(kind ?? "text")}
                             value={output as RuntimeValue}
                             compact
                           />
@@ -1261,13 +1262,13 @@ function itemStatusLabel(status: BlockExecutionItem["status"]) {
 
 function CollapsibleResultValue({
   label,
-  type,
+  shape,
   presentation,
   value,
   source,
 }: {
   label: string;
-  type: Parameters<typeof RuntimeValueViewer>[0]["type"];
+  shape: Parameters<typeof RuntimeValueViewer>[0]["shape"];
   presentation?: Parameters<typeof RuntimeValueViewer>[0]["presentation"];
   value: RuntimeValue | undefined;
   source?: string;
@@ -1297,7 +1298,7 @@ function CollapsibleResultValue({
       </summary>
       <div className="border-t border-border/50 p-3">
         <RuntimeValueViewer
-          type={type}
+          shape={shape}
           presentation={presentation}
           value={value}
           compact
@@ -1459,7 +1460,7 @@ function HumanChoiceGate({
   const hasMissingInputs = resolvedInputs.some((item) => !item.resolved);
   const historicalChoiceCounts = new Map<string, number>();
   for (const resolved of resolvedInputs) {
-    if (resolved.input.source !== "channel_history" || !resolved.resolved) continue;
+    if (resolved.input.binding.kind !== "channel_history" || !resolved.resolved) continue;
     if (!Array.isArray(resolved.value)) continue;
     for (const record of resolved.value) {
       if (!record || typeof record !== "object" || !("value" in record)) continue;
@@ -1496,7 +1497,7 @@ function HumanChoiceGate({
                 <ResultValue
                   key={item.input.id}
                   label={item.input.label}
-                  type={item.input.type}
+                  shape={item.input.shape}
                   presentation={item.input.presentation}
                   value={item.value}
                   source={item.sourceLabel}
@@ -1551,7 +1552,7 @@ function HumanChoiceGate({
                           {field.label}
                         </dt>
                         <dd className="mt-1 text-sm">
-                          <RuntimeValueViewer type={field.type} value={value} compact />
+                          <RuntimeValueViewer shape={field.shape} value={value} compact />
                         </dd>
                       </div>
                     );
@@ -1620,12 +1621,12 @@ function validationOptions(value: RuntimeValue | undefined): ValidationOption[] 
   return value === undefined || value === null ? [] : [value];
 }
 
-function validationOptionType(value: ValidationOption, sourceType: HumanFieldType): HumanFieldType {
-  if (!isStoredFileOption(value)) return typeof value === "string" ? "text" : sourceType;
-  if (value.mimeType.startsWith("image/")) return "image";
-  if (value.mimeType.startsWith("audio/")) return "audio";
-  if (value.mimeType.startsWith("video/")) return "video";
-  return "file";
+function validationOptionShape(value: ValidationOption, sourceShape: ValueShape): ValueShape {
+  if (!isStoredFileOption(value)) return typeof value === "string" ? contentShape("text") : sourceShape;
+  if (value.mimeType.startsWith("image/")) return contentShape("image");
+  if (value.mimeType.startsWith("audio/")) return contentShape("audio");
+  if (value.mimeType.startsWith("video/")) return contentShape("video");
+  return contentShape("text", "one", "artifact");
 }
 
 function ValidationChoiceField({
@@ -1665,13 +1666,13 @@ function ValidationChoiceField({
   const fieldKey = field.key;
   const fieldLabel = field.label;
   const fieldRequired = field.required;
-  const targetOutputType = targetOutput.type;
+  const targetOutputShape = targetOutput.shape;
   const storedValue = values[fieldKey];
   const current: ValidationOption[] = multiple
     ? Array.isArray(storedValue)
       ? (storedValue as ValidationOption[])
       : []
-    : targetOutputType === "records" && Array.isArray(storedValue)
+    : targetOutputShape.kind === "record" && Array.isArray(storedValue)
       ? (storedValue.slice(0, 1) as ValidationOption[])
       : storedValue === undefined || storedValue === null
         ? []
@@ -1683,8 +1684,7 @@ function ValidationChoiceField({
     if (!multiple) {
       onChange({
         ...values,
-        [fieldKey]:
-          targetOutputType === "records" ? ([option] as RuntimeValue) : (option as RuntimeValue),
+        [fieldKey]: option as RuntimeValue,
       });
       return;
     }
@@ -1729,7 +1729,7 @@ function ValidationChoiceField({
                   </span>
                   <div className="min-w-0 flex-1">
                     <RuntimeValueViewer
-                      type={validationOptionType(option, targetOutputType)}
+                      shape={validationOptionShape(option, targetOutputShape)}
                       value={option}
                       compact
                     />
@@ -1786,7 +1786,7 @@ function HumanBlockGate({
   const missingInputs = resolvedInputs.filter((item) => !item.resolved);
   const context: Array<{
     label: string;
-    type: Parameters<typeof RuntimeValueViewer>[0]["type"];
+    shape: Parameters<typeof RuntimeValueViewer>[0]["shape"];
     presentation?: Parameters<typeof RuntimeValueViewer>[0]["presentation"];
     value: RuntimeValue;
     source?: string;
@@ -1821,7 +1821,7 @@ function HumanBlockGate({
       if (!isEmptyDisplayValue(value)) {
         context.push({
           label: output.label,
-          type: output.type,
+          shape: output.shape,
           value: value!,
           source: `Processo ${PROCESS_META[previousProcess.processType].label}`,
         });
@@ -1841,7 +1841,7 @@ function HumanBlockGate({
         if (value !== undefined) {
           context.push({
             label: field.label,
-            type: field.type,
+            shape: field.shape,
             value,
             source: previousBlock.name ?? "Escolher",
           });
@@ -1854,7 +1854,7 @@ function HumanBlockGate({
       if (!isEmptyDisplayValue(value)) {
         context.push({
           label: output.label,
-          type: output.type,
+          shape: output.shape,
           value: value!,
           source: previousBlock?.name ?? previousBlock?.type,
         });
@@ -1870,7 +1870,12 @@ function HumanBlockGate({
           (item) => item.id === previous.blockId,
         );
         return (definition?.outputs ?? [])
-          .filter((output) => output.type === "list")
+          .filter(
+            (output) =>
+              output.shape.kind === "content" &&
+              output.shape.family === "text" &&
+              output.shape.cardinality === "many",
+          )
           .flatMap((output) => valuesAsOptions(previous.values[output.key]));
       })
       .find((options) => options.length > 0) ?? [];
@@ -1972,7 +1977,7 @@ function HumanBlockGate({
               <CollapsibleResultValue
                 key={output.id}
                 label={output.label}
-                type={output.type}
+                shape={output.shape}
                 presentation={output.presentation}
                 value={validationTargetExecution.values[output.key]}
                 source={validationTargetBlock.name ?? validationTargetBlock.type}
@@ -1994,7 +1999,7 @@ function HumanBlockGate({
                   <CollapsibleResultValue
                     key={item.input.id}
                     label={item.input.label}
-                    type={item.input.type}
+                    shape={item.input.shape}
                     presentation={item.input.presentation}
                     value={item.value}
                     source={item.sourceLabel}
@@ -2003,7 +2008,7 @@ function HumanBlockGate({
                   <ResultValue
                     key={item.input.id}
                     label={item.input.label}
-                    type={item.input.type}
+                    shape={item.input.shape}
                     presentation={item.input.presentation}
                     value={item.value}
                     source={item.sourceLabel}
@@ -2166,14 +2171,13 @@ function PluginExecutionGate({
   const { t } = useAppPreferences();
   const plugin = block.plugin;
   const runtimeFields = (block.inputs ?? [])
-    .filter((input) => input.source === "runtime")
+    .filter((input) => input.binding.kind === "runtime")
     .map((input) => ({
       id: input.id,
       key: input.id,
       label: input.label,
-      type: input.type,
+      shape: input.shape,
       required: true,
-      recordFields: input.recordFields,
       presentation: input.presentation,
     }));
   const [values, setValues] = useState<Record<string, RuntimeValue>>(
@@ -2484,7 +2488,7 @@ function ProcessCompleted({
             <ResultValue
               key={field.id}
               label={field.label}
-              type={field.type}
+              shape={field.shape}
               value={output[field.key]}
               showCharacterCount
             />

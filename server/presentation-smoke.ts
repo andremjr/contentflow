@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { PRESENTATION_RENDERER_IDS } from "../src/lib/domain";
+import { PRESENTATION_RENDERER_IDS, type ValueShape } from "../src/lib/domain";
 import { parseMethodFile, serializeMethodFile } from "../src/lib/method-file";
 import {
   getCompatiblePresentationRenderers,
@@ -9,12 +9,13 @@ import {
   resolvePresentationRenderer,
 } from "../src/lib/presentation";
 
-const legacyMethod = {
+const canonicalMethod = {
   format: "contentflow-method",
-  version: 1,
-  name: "Método legado",
+  version: 3,
+  name: "Método canônico",
   exportedAt: "2026-08-10T00:00:00.000Z",
   method: {
+    contractVersion: 3,
     processType: "assets",
     blocks: [
       {
@@ -22,13 +23,13 @@ const legacyMethod = {
         type: "CRIAR",
         operator: "Humano",
         name: "Produzir assets",
-        inputs: [{ id: "input-1", label: "Referências", type: "files", source: "runtime" }],
+        inputs: [{ id: "input-1", label: "Referências", shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" }, binding: { kind: "runtime" } }],
         outputs: [
           {
             id: "output-1",
             label: "Assets",
             key: "assets",
-            type: "files",
+            shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
             required: true,
           },
         ],
@@ -39,38 +40,39 @@ const legacyMethod = {
   },
 };
 
-const parsedLegacy = parseMethodFile(JSON.stringify(legacyMethod));
-assert.equal(parsedLegacy.method.blocks[0].inputs?.[0].presentation?.renderer, "auto");
-assert.equal(parsedLegacy.method.blocks[0].outputs?.[0].presentation?.renderer, "auto");
+const parsedCanonical = parseMethodFile(JSON.stringify(canonicalMethod));
+assert.equal(parsedCanonical.method.blocks[0].inputs?.[0].presentation?.renderer, "auto");
+assert.equal(parsedCanonical.method.blocks[0].outputs?.[0].presentation?.renderer, "auto");
 
-const gallery = normalizeFieldPresentation("files", {
+const imageMany = { kind: "content", family: "image", cardinality: "many", representation: "artifact" } as const;
+const textOne = { kind: "content", family: "text", cardinality: "one", representation: "inline" } as const;
+const records: ValueShape = { kind: "record", cardinality: "many", fields: [] };
+const gallery = normalizeFieldPresentation(imageMany, {
   renderer: "image-gallery",
   itemType: "image",
-  acceptedMimeTypes: [" IMAGE/PNG ", "image/*", "image/*", "invalid"],
 });
 assert.deepEqual(gallery, {
   renderer: "image-gallery",
   itemType: "image",
-  acceptedMimeTypes: ["image/png", "image/*"],
 });
-assert.equal(resolvePresentationRenderer("files", gallery), "image-gallery");
-assert.equal(resolvePresentationRenderer("text", gallery), "text-short");
+assert.equal(resolvePresentationRenderer(imageMany, gallery), "image-gallery");
+assert.equal(resolvePresentationRenderer(textOne, gallery), "text-short");
 assert.equal(
-  resolvePresentationRenderer("files", { renderer: "auto" }, [
+  resolvePresentationRenderer(imageMany, { renderer: "auto" }, [
     { id: "image", name: "image.png", mimeType: "image/png", size: 1, url: "local" },
   ]),
   "image-gallery",
 );
-assert.deepEqual(getCompatiblePresentationRenderers("records"), ["auto", "table", "cards"]);
+assert.deepEqual(getCompatiblePresentationRenderers(records), ["auto", "table", "cards"]);
 assert.equal(new Set(PRESENTATION_RENDERER_IDS).size, PRESENTATION_RENDERER_IDS.length);
 assert.equal(
-  getPresentationRestrictionIssue(gallery, [
+  getPresentationRestrictionIssue(imageMany, gallery, [
     { id: "audio", name: "audio.mp3", mimeType: "audio/mpeg", size: 1, url: "local" },
   ]),
-  "deve conter apenas arquivos image",
+  "deve conter apenas image",
 );
 
-const exported = serializeMethodFile("Método normalizado", parsedLegacy.method);
+const exported = serializeMethodFile("Método normalizado", parsedCanonical.method);
 const reparsed = parseMethodFile(exported);
 assert.equal(reparsed.method.blocks[0].outputs?.[0].presentation?.renderer, "auto");
 

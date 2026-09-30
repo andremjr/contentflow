@@ -38,6 +38,7 @@ function execution(
   status: ProcessExecution["status"] = "awaiting_human",
 ): ProcessExecution {
   const methodSnapshot: ProcessMethod = {
+    contractVersion: 3,
     name: "TASK-012",
     processType: "theme",
     blocks: blocks.map((item, order) => ({ ...item, order })),

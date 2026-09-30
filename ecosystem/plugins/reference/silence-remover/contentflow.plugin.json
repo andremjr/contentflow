@@ -1,6 +1,6 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "official-silence-remover",
   "name": "Removedor de Silêncios",
   "version": "1.0.2",
@@ -16,38 +16,52 @@
   },
   "minCoreVersion": "0.2.0",
   "entrypoint": "handler.mjs",
-  "permissions": ["filesystem:read", "filesystem:write", "process"],
-  "deliveryTypes": ["audio", "video", "processing"],
+  "permissions": [
+    "filesystem:read",
+    "filesystem:write",
+    "process"
+  ],
   "capabilities": [
     {
       "id": "remove-silence-audio",
       "operator": "Código",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["narration", "editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "narration",
+        "editing"
+      ],
       "inputPorts": [
         {
           "key": "source",
           "label": "Áudio de origem",
           "description": "Arquivo de áudio que será analisado e recortado.",
-          "acceptedTypes": ["audio"],
           "required": true,
           "presentation": {
-            "renderer": "audio-player",
-            "itemType": "audio",
-            "acceptedMimeTypes": [
-              "audio/aac",
-              "audio/flac",
-              "audio/mp3",
-              "audio/mp4",
-              "audio/mpeg",
-              "audio/ogg",
-              "audio/opus",
-              "audio/wav",
-              "audio/webm",
-              "audio/x-flac",
-              "audio/x-m4a",
-              "audio/x-wav"
-            ]
+            "renderer": "audio-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "audio",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "audio/aac",
+                "audio/flac",
+                "audio/mp3",
+                "audio/mp4",
+                "audio/mpeg",
+                "audio/ogg",
+                "audio/opus",
+                "audio/wav",
+                "audio/webm",
+                "audio/x-flac",
+                "audio/x-m4a",
+                "audio/x-wav"
+              ]
+            }
           }
         }
       ],
@@ -56,24 +70,33 @@
           "key": "result",
           "label": "Áudio sem silêncios",
           "description": "Novo áudio com os intervalos silenciosos removidos.",
-          "producedTypes": ["audio"],
           "required": true,
           "presentation": {
-            "renderer": "audio-player",
-            "itemType": "audio",
-            "acceptedMimeTypes": ["audio/*"]
+            "renderer": "audio-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "audio",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "audio/*"
+              ]
+            }
           }
         }
       ],
-      "acceptedInputTypes": ["audio"],
-      "producedOutputTypes": ["audio"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 120000,
         "supportsCancellation": false,
         "maxConcurrency": 1
       },
-      "sideEffects": ["local_artifact", "subprocess"],
+      "sideEffects": [
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "free",
         "estimateSupported": false
@@ -110,7 +133,11 @@
             "default": 100
           }
         },
-        "required": ["minimumSilenceDurationMs", "silenceThresholdDb", "paddingMs"]
+        "required": [
+          "minimumSilenceDurationMs",
+          "silenceThresholdDb",
+          "paddingMs"
+        ]
       },
       "outputSchema": {
         "type": "object",
@@ -120,41 +147,72 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "id": { "type": "string" },
-              "name": { "type": "string" },
-              "mimeType": { "type": "string", "pattern": "^audio/" },
-              "size": { "type": "integer", "minimum": 1 },
-              "url": { "type": "string", "pattern": "^artifact://" }
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "mimeType": {
+                "type": "string",
+                "pattern": "^audio/"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^artifact://"
+              }
             },
-            "required": ["id", "name", "mimeType", "size", "url"]
+            "required": [
+              "id",
+              "name",
+              "mimeType",
+              "size",
+              "url"
+            ]
           }
         },
-        "required": ["result"]
+        "required": [
+          "result"
+        ]
       }
     },
     {
       "id": "remove-silence-video",
       "operator": "Código",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "editing"
+      ],
       "inputPorts": [
         {
           "key": "source",
           "label": "Vídeo de origem",
           "description": "Arquivo de vídeo com uma faixa de áudio que será usada para detectar os cortes.",
-          "acceptedTypes": ["video"],
           "required": true,
           "presentation": {
-            "renderer": "video-player",
-            "itemType": "video",
-            "acceptedMimeTypes": [
-              "video/avi",
-              "video/mp4",
-              "video/quicktime",
-              "video/webm",
-              "video/x-matroska",
-              "video/x-msvideo"
-            ]
+            "renderer": "video-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "video/avi",
+                "video/mp4",
+                "video/quicktime",
+                "video/webm",
+                "video/x-matroska",
+                "video/x-msvideo"
+              ]
+            }
           }
         }
       ],
@@ -163,24 +221,33 @@
           "key": "result",
           "label": "Vídeo sem silêncios",
           "description": "Novo vídeo com imagem e áudio recortados nos mesmos intervalos.",
-          "producedTypes": ["video"],
           "required": true,
           "presentation": {
-            "renderer": "video-player",
-            "itemType": "video",
-            "acceptedMimeTypes": ["video/*"]
+            "renderer": "video-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "video/*"
+              ]
+            }
           }
         }
       ],
-      "acceptedInputTypes": ["video"],
-      "producedOutputTypes": ["video"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 120000,
         "supportsCancellation": false,
         "maxConcurrency": 1
       },
-      "sideEffects": ["local_artifact", "subprocess"],
+      "sideEffects": [
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "free",
         "estimateSupported": false
@@ -217,7 +284,11 @@
             "default": 100
           }
         },
-        "required": ["minimumSilenceDurationMs", "silenceThresholdDb", "paddingMs"]
+        "required": [
+          "minimumSilenceDurationMs",
+          "silenceThresholdDb",
+          "paddingMs"
+        ]
       },
       "outputSchema": {
         "type": "object",
@@ -227,16 +298,37 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "id": { "type": "string" },
-              "name": { "type": "string" },
-              "mimeType": { "type": "string", "pattern": "^video/" },
-              "size": { "type": "integer", "minimum": 1 },
-              "url": { "type": "string", "pattern": "^artifact://" }
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "mimeType": {
+                "type": "string",
+                "pattern": "^video/"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^artifact://"
+              }
             },
-            "required": ["id", "name", "mimeType", "size", "url"]
+            "required": [
+              "id",
+              "name",
+              "mimeType",
+              "size",
+              "url"
+            ]
           }
         },
-        "required": ["result"]
+        "required": [
+          "result"
+        ]
       }
     }
   ]

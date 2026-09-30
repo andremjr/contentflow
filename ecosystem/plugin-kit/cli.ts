@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { format } from "prettier";
+import type { ContentFamily } from "../../src/lib/domain";
 import type { PluginExecutionRequest, PluginManifest } from "../../src/lib/plugin-contract";
 import {
   PluginValidationError,
@@ -15,8 +16,7 @@ import {
 } from "../../server/plugin-validation";
 
 type TemplateId = "text-transform" | "hosted-api" | "file-artifact";
-type DataType =
-  PluginManifest["capabilities"][number]["inputPorts"][number]["acceptedTypes"][number];
+type DataType = ContentFamily;
 export type Answers = {
   template: TemplateId;
   name: string;
@@ -43,7 +43,6 @@ type TemplateDefaults = {
   secretKeys?: string[];
   input: Answers["input"];
   output: Answers["output"];
-  deliveryTypes: PluginManifest["deliveryTypes"];
 };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -60,23 +59,19 @@ const permissions = [
 const blockTypes = ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"] as const;
 const dataTypes = [
   "text",
-  "textarea",
-  "number",
-  "boolean",
-  "list",
-  "records",
-  "select",
-  "multiselect",
-  "datetime",
-  "url",
-  "file",
-  "files",
   "image",
   "audio",
   "video",
-  "approval",
-  "thumbnail_layout",
 ] as const;
+
+function contentShape(family: ContentFamily) {
+  return {
+    kind: "content" as const,
+    family,
+    cardinality: "one" as const,
+    representation: family === "text" ? ("inline" as const) : ("artifact" as const),
+  };
+}
 
 function parseArgs(values: string[]) {
   const command = values[0] ?? "help";
@@ -231,8 +226,8 @@ function buildManifest(answers: Answers, defaults: TemplateDefaults): PluginMani
   const sends = answers.sendsDataToThirdParties;
   return {
     $schema:
-      "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-    apiVersion: "1",
+      "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+    apiVersion: "2",
     id: answers.id,
     name: answers.name,
     version: "0.1.0",
@@ -246,7 +241,6 @@ function buildManifest(answers: Answers, defaults: TemplateDefaults): PluginMani
       ? { networkHosts: answers.networkHosts }
       : {}),
     ...(answers.secretKeys.length ? { secretKeys: answers.secretKeys } : {}),
-    deliveryTypes: defaults.deliveryTypes,
     capabilities: [
       {
         id: capabilityId,
@@ -256,7 +250,7 @@ function buildManifest(answers: Answers, defaults: TemplateDefaults): PluginMani
           {
             key: answers.input.key,
             label: answers.input.label,
-            acceptedTypes: [answers.input.type],
+            shape: contentShape(answers.input.type),
             required: true,
           },
         ],
@@ -264,12 +258,10 @@ function buildManifest(answers: Answers, defaults: TemplateDefaults): PluginMani
           {
             key: answers.output.key,
             label: answers.output.label,
-            producedTypes: [answers.output.type],
+            shape: contentShape(answers.output.type),
             required: true,
           },
         ],
-        acceptedInputTypes: [answers.input.type],
-        producedOutputTypes: [answers.output.type],
         execution: { mode: "immediate", defaultTimeoutMs: 30_000 },
         sideEffects:
           answers.template === "hosted-api"
@@ -289,7 +281,7 @@ function buildManifest(answers: Answers, defaults: TemplateDefaults): PluginMani
         outputSchema: {
           type: "object",
           properties: {
-            [answers.output.key]: { type: answers.output.type === "file" ? "object" : "string" },
+            [answers.output.key]: { type: answers.output.type === "text" ? "string" : "object" },
           },
           required: [answers.output.key],
         },
@@ -349,7 +341,7 @@ function executionFixture(manifest: PluginManifest, answers: Answers) {
         id: "kit-input",
         portKey: answers.input.key,
         label: answers.input.label,
-        type: answers.input.type,
+        shape: contentShape(answers.input.type),
       },
     ],
     outputContract: [
@@ -357,7 +349,7 @@ function executionFixture(manifest: PluginManifest, answers: Answers) {
         portKey: answers.output.key,
         label: answers.output.label,
         key: answers.output.key,
-        type: answers.output.type,
+        shape: contentShape(answers.output.type),
         required: true,
       },
     ],
@@ -468,9 +460,9 @@ export async function fixtureCommand(directory: string, destination?: string) {
   const capability = result.manifest.capabilities[0]!;
   const inputPort = capability.inputPorts[0];
   const outputPort = capability.outputPorts[0]!;
-  const firstInputType = inputPort?.acceptedTypes[0] ?? "text";
+  const firstInputType = inputPort?.shape.kind === "content" ? inputPort.shape.family : "text";
   const inferredTemplate: TemplateId =
-    firstInputType === "file" || firstInputType === "files"
+    firstInputType !== "text"
       ? "file-artifact"
       : result.manifest.permissions.includes("network")
         ? "hosted-api"
@@ -482,7 +474,11 @@ export async function fixtureCommand(directory: string, destination?: string) {
       label: inputPort?.label ?? "Entrada",
       type: firstInputType,
     },
-    output: { key: outputPort.key, label: outputPort.label, type: outputPort.producedTypes[0] },
+    output: {
+      key: outputPort.key,
+      label: outputPort.label,
+      type: outputPort.shape.kind === "content" ? outputPort.shape.family : "text",
+    },
     blockTypes: capability.blockTypes,
   } as Answers;
   const target = path.resolve(

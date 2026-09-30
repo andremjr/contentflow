@@ -9,7 +9,6 @@ import type {
   ThumbnailLayout,
   UniversalProcess,
 } from "@/lib/domain";
-import { normalizeFieldPresentation } from "@/lib/presentation";
 import { instructionCollectionKey, instructionVariables } from "@/lib/instruction-template";
 import { parseProcessMethodV3, processMethodV3Schema } from "@/lib/method-contract-v3";
 import { valueShapeSchema } from "@/lib/value-shape-schema";
@@ -24,231 +23,6 @@ const universalProcessSchema = z.enum([
   "editing",
   "publishing",
 ]);
-
-const parameterSchema = z.object({
-  id: z.string(),
-  label: z.string().max(200),
-  key: z.string().max(200),
-  type: z.enum(["text", "number", "select", "boolean", "textarea"]),
-  value: z.union([z.string(), z.number(), z.boolean()]),
-  placeholder: z.string().max(500).optional(),
-  options: z.array(z.string().max(500)).max(100).optional(),
-});
-
-const recordFieldSchema = z.object({
-  id: z.string(),
-  label: z.string().max(200),
-  key: z.string().max(200),
-  type: z.enum([
-    "text",
-    "textarea",
-    "number",
-    "boolean",
-    "select",
-    "datetime",
-    "url",
-    "file",
-    "image",
-    "audio",
-    "video",
-  ]),
-  required: z.boolean(),
-  options: z.array(z.string().max(500)).max(100).optional(),
-});
-
-const presentationSchema = z.object({
-  renderer: z.enum([
-    "auto",
-    "text-short",
-    "text-long",
-    "list",
-    "tags",
-    "table",
-    "cards",
-    "file-list",
-    "image-gallery",
-    "audio-player",
-    "video-player",
-    "decision",
-  ]),
-  itemType: z.enum(["text", "record", "file", "image", "audio", "video"]).optional(),
-  acceptedMimeTypes: z.array(z.string().max(200)).max(50).optional(),
-});
-
-const inputSourceBindingSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("project"), key: z.enum(["title", "deadline"]) }).strict(),
-  z
-    .object({
-      kind: z.literal("previous_process"),
-      processType: universalProcessSchema,
-      outputKey: z.string().min(1).max(200),
-      blockId: z.string().min(1).optional(),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("previous_block"),
-      blockId: z.string().min(1),
-      outputKey: z.string().min(1).max(200),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("channel_history"),
-      processType: universalProcessSchema,
-      blockId: z.string().min(1),
-      outputKey: z.string().min(1).max(200),
-      limit: z.number().int().min(1).max(100),
-      eligibility: z.enum(["completed", "published"]),
-    })
-    .strict(),
-  z.object({ kind: z.literal("runtime") }).strict(),
-  z.object({ kind: z.literal("static"), value: z.string().max(10_000) }).strict(),
-]);
-
-const inputSchema = z
-  .object({
-    id: z.string(),
-    label: z.string().max(200),
-    type: z
-      .enum([
-        "text",
-        "number",
-        "select",
-        "boolean",
-        "textarea",
-        "multiselect",
-        "list",
-        "records",
-        "datetime",
-        "url",
-        "file",
-        "image",
-        "audio",
-        "video",
-        "files",
-        "approval",
-        "thumbnail_layout",
-      ])
-      .default("text"),
-    binding: inputSourceBindingSchema.optional(),
-    source: z.enum([
-      "project",
-      "previous_process",
-      "previous_block",
-      "channel_history",
-      "channel_library",
-      "runtime",
-      "static",
-    ]),
-    sourceKey: z.string().max(200).optional(),
-    sourceProcessType: z
-      .enum([
-        "theme",
-        "title",
-        "thumbnail",
-        "script",
-        "narration",
-        "assets",
-        "editing",
-        "publishing",
-      ])
-      .optional(),
-    blockId: z.string().optional(),
-    collection: z.string().max(200).optional(),
-    staticValue: z.string().max(10_000).optional(),
-    historyLimit: z.number().int().min(1).max(100).optional(),
-    historyEligibility: z.enum(["completed", "published"]).optional(),
-    recordFields: z.array(recordFieldSchema).max(100).optional(),
-    presentation: presentationSchema.optional(),
-    portKey: z.string().min(1).max(100).optional(),
-  })
-  .transform((input) => ({
-    ...input,
-    presentation: normalizeFieldPresentation(input.type, input.presentation),
-  }));
-
-const outputSchema = z
-  .object({
-    id: z.string(),
-    label: z.string().max(200),
-    key: z.string().max(200),
-    type: z.enum([
-      "text",
-      "number",
-      "select",
-      "boolean",
-      "textarea",
-      "multiselect",
-      "list",
-      "records",
-      "datetime",
-      "url",
-      "file",
-      "image",
-      "audio",
-      "video",
-      "files",
-      "approval",
-      "thumbnail_layout",
-    ]),
-    required: z.boolean(),
-    placeholder: z.string().max(500).optional(),
-    helpText: z.string().max(2_000).optional(),
-    options: z.array(z.string().max(500)).max(100).optional(),
-    optionsSourceBlockId: z.string().optional(),
-    optionsSourceKey: z.string().max(200).optional(),
-    recordFields: z.array(recordFieldSchema).max(100).optional(),
-    presentation: presentationSchema.optional(),
-    portKey: z.string().min(1).max(100).optional(),
-  })
-  .transform((output) => ({
-    ...output,
-    presentation: normalizeFieldPresentation(output.type, output.presentation),
-  }));
-
-const validationSchema = z.object({
-  targetBlockId: z.string().min(1).optional(),
-  targetOutputKey: z.string().max(200).optional(),
-  targetPortKey: z.string().min(1).max(100).optional(),
-  mode: z.enum(["approval", "select_one", "select_many"]),
-  onReject: z.enum(["retry_target", "pause"]),
-  maxAttempts: z.number().int().min(1).max(20),
-  retryMode: z.enum(["full", "conversation_feedback"]).optional(),
-});
-
-const sharedPluginBindingSchema = z.object({
-  pluginId: z.string().min(1).max(160),
-  pluginVersion: z.string().max(80).optional(),
-  capabilityId: z.string().min(1).max(100),
-  configuration: z.record(z.union([z.string(), z.number(), z.boolean()])),
-  connectionRequired: z.boolean().optional(),
-  conversation: z
-    .discriminatedUnion("mode", [
-      z.object({ mode: z.literal("new") }),
-      z.object({
-        mode: z.literal("reuse"),
-        sourceProcessType: universalProcessSchema,
-        sourceBlockId: z.string().min(1),
-      }),
-    ])
-    .optional(),
-});
-
-const actionBlockSchema = z.object({
-  id: z.string(),
-  type: z.enum(["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"]),
-  operator: z.enum(["IA", "Humano", "Código"]),
-  collectionId: z.string().optional(),
-  name: z.string().max(200).optional(),
-  instructions: z.string().max(20_000).optional(),
-  inputs: z.array(inputSchema).max(100).optional(),
-  outputs: z.array(outputSchema).max(100).optional(),
-  validation: validationSchema.optional(),
-  plugin: sharedPluginBindingSchema.optional(),
-  parameters: z.array(parameterSchema).max(100),
-  order: z.number().int().nonnegative(),
-});
 
 const collectionRequirementFieldSchema = z.object({
   label: z.string().max(200),
@@ -633,7 +407,16 @@ function createPortableMethodV2(
         inputs: block.inputs?.map((input, inputIndex) => ({
           ...input,
           id: `${blockKey}:input:${inputIndex + 1}`,
-          blockId: mapBlockReference(input.blockId, input.sourceProcessType ?? method.processType),
+          shape:
+            input.shape.kind === "record"
+              ? {
+                  ...input.shape,
+                  fields: input.shape.fields.map((field, fieldIndex) => ({
+                    ...field,
+                    id: `${blockKey}:input:${inputIndex + 1}:field:${fieldIndex + 1}`,
+                  })),
+                }
+              : input.shape,
           binding:
             input.binding?.kind === "previous_block"
               ? {
@@ -655,19 +438,21 @@ function createPortableMethodV2(
                         input.binding.blockId,
                     }
                   : input.binding,
-          recordFields: input.recordFields?.map((field, fieldIndex) => ({
-            ...field,
-            id: `${blockKey}:input:${inputIndex + 1}:field:${fieldIndex + 1}`,
-          })),
         })),
         outputs: block.outputs?.map((output, outputIndex) => ({
           ...output,
           id: `${blockKey}:output:${outputIndex + 1}`,
           optionsSourceBlockId: mapBlockReference(output.optionsSourceBlockId),
-          recordFields: output.recordFields?.map((field, fieldIndex) => ({
-            ...field,
-            id: `${blockKey}:output:${outputIndex + 1}:field:${fieldIndex + 1}`,
-          })),
+          shape:
+            output.shape.kind === "record"
+              ? {
+                  ...output.shape,
+                  fields: output.shape.fields.map((field, fieldIndex) => ({
+                    ...field,
+                    id: `${blockKey}:output:${outputIndex + 1}:field:${fieldIndex + 1}`,
+                  })),
+                }
+              : output.shape,
         })),
         validation: block.validation
           ? {
@@ -893,6 +678,17 @@ function parseMethodBundleV2(parsed: unknown): SharedMethodBundleV2 {
   } as SharedMethodBundleV2;
 }
 
+function isPortableMethodBundle(parsed: unknown) {
+  if (!parsed || typeof parsed !== "object") return false;
+  const methods = (parsed as { methods?: unknown }).methods;
+  return (
+    (parsed as { version?: unknown }).version === 3 &&
+    Array.isArray(methods) &&
+    methods.length > 0 &&
+    methods.every((entry) => Boolean(entry && typeof entry === "object" && "method" in entry))
+  );
+}
+
 function canonicalMethodForExport(method: ProcessMethod) {
   return parseProcessMethodV3({
     ...structuredClone(method),
@@ -985,10 +781,7 @@ export function parseMethodFile(contents: string): SharedMethodFile {
     throw new Error("O arquivo selecionado não contém um JSON válido.");
   }
 
-  if (
-    (parsed as { version?: unknown })?.version === 3 &&
-    Array.isArray((parsed as { methods?: unknown }).methods)
-  ) {
+  if (isPortableMethodBundle(parsed)) {
     const bundle = parseMethodBundleV2(parsed);
     if (bundle.format !== "contentflow-method" || !bundle.primaryProcessType) {
       throw new Error("Este não é um arquivo de método válido do ContentFlow.");
@@ -1029,10 +822,7 @@ export function parseMethodImportFile(contents: string): SharedMethodImport {
   } catch {
     throw new Error("O arquivo selecionado não contém um JSON válido.");
   }
-  if (
-    (parsed as { version?: unknown })?.version === 3 &&
-    Array.isArray((parsed as { methods?: unknown }).methods)
-  ) {
+  if (isPortableMethodBundle(parsed)) {
     return parseMethodBundleV2(parsed);
   }
   if ((parsed as { format?: unknown })?.format === "contentflow-method") {
@@ -1121,14 +911,16 @@ function copyBlocksWithIds(
     inputs: block.inputs?.map((input) => ({
       ...input,
       id: createId(`${processType}-input`),
-      recordFields: input.recordFields?.map((field) => ({
-        ...field,
-        id: createId(`${processType}-record-field`),
-      })),
-      blockId:
-        input.blockId && input.blockId !== "__process_output__"
-          ? (blockIds.get(input.blockId) ?? input.blockId)
-          : input.blockId,
+      shape:
+        input.shape.kind === "record"
+          ? {
+              ...input.shape,
+              fields: input.shape.fields.map((field) => ({
+                ...field,
+                id: createId(`${processType}-record-field`),
+              })),
+            }
+          : input.shape,
       binding:
         input.binding?.kind === "previous_block"
           ? {
@@ -1157,10 +949,16 @@ function copyBlocksWithIds(
     outputs: block.outputs?.map((output) => ({
       ...output,
       id: createId(`${processType}-output`),
-      recordFields: output.recordFields?.map((field) => ({
-        ...field,
-        id: createId(`${processType}-record-field`),
-      })),
+      shape:
+        output.shape.kind === "record"
+          ? {
+              ...output.shape,
+              fields: output.shape.fields.map((field) => ({
+                ...field,
+                id: createId(`${processType}-record-field`),
+              })),
+            }
+          : output.shape,
       optionsSourceBlockId: output.optionsSourceBlockId
         ? (blockIds.get(output.optionsSourceBlockId) ?? output.optionsSourceBlockId)
         : undefined,
@@ -1195,6 +993,7 @@ export function copyImportedMethods(
     }
   }
   return copied.map((method) => ({
+    contractVersion: 3 as const,
     name: method.name,
     imageUrl: method.imageUrl,
     processType: method.processType,

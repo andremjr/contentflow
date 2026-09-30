@@ -27,7 +27,6 @@ function humanBlock(
   id: string,
   order: number,
   outputKey = `value_${order}`,
-  outputType: NonNullable<ActionBlock["outputs"]>[number]["type"] = "text",
 ): ActionBlock {
   return {
     id,
@@ -40,7 +39,7 @@ function humanBlock(
         id: `${id}-output`,
         label: `Saída ${id}`,
         key: outputKey,
-        type: outputType,
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
         required: true,
       },
     ],
@@ -61,7 +60,7 @@ function automaticBlock(id: string, order: number, outputKey = `value_${order}`)
         id: `${id}-output`,
         label: `Saída ${id}`,
         key: outputKey,
-        type: "text",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
         required: true,
       },
     ],
@@ -78,6 +77,7 @@ function automaticBlock(id: string, order: number, outputKey = `value_${order}`)
 function fixture(blocks: ActionBlock[], processType: ProcessMethod["processType"] = "theme") {
   const methods = createEmptyMethods();
   methods[processType] = {
+    contractVersion: 3,
     name: "Método caracterizado",
     processType,
     blocks,
@@ -259,7 +259,7 @@ test("C04 — conclusão Humana ativa o próximo Bloco automático", () => {
 });
 
 test("C05 — último Bloco materializa output derivável e conclui o Processo", () => {
-  const { commands, project } = fixture([humanBlock("theme-output", 0, "theme", "textarea")]);
+  const { commands, project } = fixture([humanBlock("theme-output", 0, "theme")]);
   const execution = commands.startProcessExecution(project.id, "theme")!;
 
   const result = commands.completeHumanBlock(execution.id, "theme-output", {
@@ -281,7 +281,7 @@ test("C05 — último Bloco materializa output derivável e conclui o Processo",
 });
 
 test("C06 — output não derivável aguarda humano e completeProcessOutput conclui", () => {
-  const { commands, project } = fixture([humanBlock("notes-only", 0, "notes", "textarea")]);
+  const { commands, project } = fixture([humanBlock("notes-only", 0, "notes")]);
   const execution = commands.startProcessExecution(project.id, "theme")!;
 
   const blockResult = commands.completeHumanBlock(execution.id, "notes-only", {
@@ -377,10 +377,7 @@ test("C09 — input ausente impede conclusão humana e promoção de delivery", 
     {
       id: "missing-input",
       label: "Título anterior",
-      type: "text",
-      source: "previous_process",
-      sourceProcessType: "title",
-      sourceKey: "title",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
       binding: { kind: "previous_process", processType: "title", outputKey: "title" },
     },
   ];
@@ -578,9 +575,8 @@ test(
           {
             id: "plugin-input",
             label: "Texto",
-            type: "textarea",
-            source: "static",
-            staticValue: "plugin success",
+            shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+            binding: { kind: "static", value: "plugin success" },
             portKey: "content",
           },
         ],
@@ -589,7 +585,7 @@ test(
             id: "plugin-output",
             label: "Tema final",
             key: "theme",
-            type: "textarea",
+            shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
             required: true,
             portKey: "result",
           },
@@ -608,6 +604,7 @@ test(
         channelId: "plugin-channel",
         processType: "theme",
         methodSnapshot: {
+          contractVersion: 3,
           name: "Método plugin",
           processType: "theme",
           blocks: [pluginBlock],

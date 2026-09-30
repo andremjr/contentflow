@@ -14,13 +14,13 @@ test("preserva uma lista atribuída sozinha a uma porta de plugin", () => {
   assert.ok(Array.isArray(value));
 });
 
-test("mantém a composição textual para várias entradas atribuídas à mesma porta", () => {
+test("não compõe silenciosamente várias entradas na mesma porta", () => {
   const value = composePluginPortValue([
     { label: "Tema", value: "oceano" },
     { label: "Tom", value: "cinematográfico" },
   ]);
 
-  assert.equal(value, 'Tema: "oceano"\nTom: "cinematográfico"');
+  assert.equal(value, undefined);
 });
 
 test("não escolhe porta por apresentação ou MIME sem portKey explícita", () => {
@@ -28,37 +28,32 @@ test("não escolhe porta por apresentação ou MIME sem portKey explícita", () 
     {
       key: "images",
       label: "Imagens",
-      acceptedTypes: ["image", "files"],
+      shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
       required: true,
-      multiple: true,
       presentation: {
         renderer: "image-gallery",
         itemType: "image",
-        acceptedMimeTypes: ["image/jpeg", "image/png"],
       },
     },
     {
       key: "subtitles",
       label: "Legendas",
-      acceptedTypes: ["file", "files"],
+      shape: { kind: "content", family: "text", cardinality: "many", representation: "artifact" },
       required: false,
-      multiple: true,
       presentation: {
         renderer: "file-list",
         itemType: "file",
-        acceptedMimeTypes: ["application/x-subrip", "text/plain"],
       },
     },
   ];
   const subtitles: BlockInputBinding = {
     id: "srt",
     label: "English SRT",
-    type: "files",
-    source: "previous_process",
+    shape: { kind: "content", family: "text", cardinality: "many", representation: "artifact" },
+    binding: { kind: "previous_process", processType: "editing", outputKey: "subtitles" },
     presentation: {
       renderer: "file-list",
       itemType: "file",
-      acceptedMimeTypes: ["text/srt", "text/plain"],
     },
   };
 
@@ -70,24 +65,21 @@ test("não escolhe porta por sourceKey sem portKey explícita", () => {
     {
       key: "images",
       label: "Imagens",
-      acceptedTypes: ["files"],
+      shape: { kind: "content", family: "text", cardinality: "many", representation: "artifact" },
       required: true,
-      multiple: true,
     },
     {
       key: "subtitles",
       label: "Legendas",
-      acceptedTypes: ["files"],
+      shape: { kind: "content", family: "text", cardinality: "many", representation: "artifact" },
       required: false,
-      multiple: true,
     },
   ];
   const subtitles: BlockInputBinding = {
     id: "editing-subtitles-input",
     label: "English SRT",
-    type: "files",
-    source: "previous_process",
-    sourceKey: "subtitles",
+    shape: { kind: "content", family: "text", cardinality: "many", representation: "artifact" },
+    binding: { kind: "previous_process", processType: "editing", outputKey: "subtitles" },
     presentation: { renderer: "auto" },
   };
 
@@ -99,24 +91,21 @@ test("não escolhe porta por label mesmo com duas candidatas compatíveis", () =
     {
       key: "content",
       label: "Contexto para geração",
-      acceptedTypes: ["text", "textarea", "number"],
+      shape: { kind: "control", control: "number", cardinality: "one" },
       required: false,
-      multiple: true,
     },
     {
       key: "sections",
       label: "Quantidade de blocos",
-      acceptedTypes: ["number", "text", "textarea"],
+      shape: { kind: "control", control: "number", cardinality: "one" },
       required: false,
-      multiple: false,
     },
   ];
   const input: BlockInputBinding = {
     id: "section-count",
     label: "Quantidade de blocos",
-    type: "number",
-    source: "static",
-    staticValue: "1",
+    shape: { kind: "control", control: "number", cardinality: "one" },
+    binding: { kind: "static", value: "1" },
   };
 
   assert.equal(selectPluginInputPort(input, ports, new Set()), undefined);
@@ -127,17 +116,16 @@ test("não escolhe a única porta compatível sem portKey explícita", () => {
     {
       key: "additional_context",
       label: "Contexto adicional",
-      acceptedTypes: ["textarea"],
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
       required: false,
-      multiple: true,
     },
   ];
 
   const input: BlockInputBinding = {
     id: "context",
     label: "Contexto adicional",
-    type: "textarea",
-    source: "previous_block",
+    shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+    binding: { kind: "previous_block", blockId: "source", outputKey: "context" },
   };
 
   assert.equal(selectPluginInputPort(input, ports, new Set()), undefined);
@@ -147,22 +135,21 @@ test("respeita a porta explícita escolhida no editor mesmo quando outra aparece
   const input: BlockInputBinding = {
     id: "prompts",
     label: "Sequência de prompts",
-    type: "list",
-    source: "previous_block",
+    shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
+    binding: { kind: "previous_block", blockId: "source", outputKey: "prompts" },
     portKey: "outline",
   };
   const ports: PluginInputPort[] = [
     {
       key: "content",
       label: "Contexto",
-      acceptedTypes: ["list"],
+      shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
       required: false,
-      multiple: true,
     },
     {
       key: "outline",
       label: "Estrutura",
-      acceptedTypes: ["list"],
+      shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
       required: false,
     },
   ];
@@ -174,22 +161,21 @@ test("não mascara uma porta explícita inválida com binding automático", () =
   const input: BlockInputBinding = {
     id: "prompts",
     label: "Sequência de prompts",
-    type: "list",
-    source: "previous_block",
+    shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
+    binding: { kind: "previous_block", blockId: "source", outputKey: "prompts" },
     portKey: "sections",
   };
   const ports: PluginInputPort[] = [
     {
       key: "content",
       label: "Contexto",
-      acceptedTypes: ["list"],
+      shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
       required: false,
-      multiple: true,
     },
     {
       key: "sections",
       label: "Quantidade",
-      acceptedTypes: ["number"],
+      shape: { kind: "control", control: "number", cardinality: "one" },
       required: false,
     },
   ];
@@ -201,24 +187,22 @@ test("não remapeia a segunda entrada de uma porta explícita não-multiple", ()
   const input: BlockInputBinding = {
     id: "prompts",
     label: "Sequência de prompts",
-    type: "list",
-    source: "previous_block",
+    shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
+    binding: { kind: "previous_block", blockId: "source", outputKey: "prompts" },
     portKey: "outline",
   };
   const ports: PluginInputPort[] = [
     {
       key: "outline",
       label: "Estrutura",
-      acceptedTypes: ["list"],
+      shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
       required: false,
-      multiple: false,
     },
     {
       key: "fallback",
       label: "Alternativa",
-      acceptedTypes: ["list"],
+      shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
       required: false,
-      multiple: true,
     },
   ];
 

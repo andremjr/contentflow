@@ -1,13 +1,15 @@
 {
-  "$schema": "../../../../docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "official-anthropic-claude",
   "name": "Anthropic Claude",
   "version": "1.0.1",
   "description": "Executa ações baseadas em linguagem com modelos Claude disponíveis na API da Anthropic.",
   "author": "ContentFlow",
   "license": "LicenseRef-ContentFlow-Source-Available-1.0",
-  "branding": { "iconPath": "assets/icon.png" },
+  "branding": {
+    "iconPath": "assets/icon.png"
+  },
   "homepage": "https://github.com/andremjr/contentflow",
   "repository": "https://github.com/andremjr/contentflow",
   "runtime": {
@@ -16,10 +18,15 @@
     "module": "esm"
   },
   "entrypoint": "handler.ts",
-  "permissions": ["network"],
-  "networkHosts": ["api.anthropic.com"],
-  "secretKeys": ["ANTHROPIC_API_KEY"],
-  "deliveryTypes": ["text"],
+  "permissions": [
+    "network"
+  ],
+  "networkHosts": [
+    "api.anthropic.com"
+  ],
+  "secretKeys": [
+    "ANTHROPIC_API_KEY"
+  ],
   "capabilities": [
     {
       "id": "generate-or-validate-text",
@@ -28,7 +35,12 @@
       "promptPreview": {
         "template": "INSTRUÇÕES DO PROVEDOR:\n{{CONFIG:system_prompt}}\n\nMENSAGEM ENVIADA:\nCanal: {{CHANNEL_NAME}}\nNicho: {{NICHE}}\nProjeto: {{PROJECT_TITLE}}\nProcesso: {{PROCESS}}\nAção: {{BLOCK_NAME}}\nTipo de ação: {{BLOCK_TYPE}}\n\nInstruções da ação:\n{{BLOCK_INSTRUCTIONS}}\n\nEntradas resolvidas:\n{{ALL_INPUTS}}\n\n{{OUTPUT_CONTRACT}}"
       },
-      "blockTypes": ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
+      "blockTypes": [
+        "BUSCAR",
+        "ESCOLHER",
+        "CRIAR",
+        "VALIDAR"
+      ],
       "processTypes": [
         "theme",
         "title",
@@ -43,70 +55,26 @@
         {
           "key": "context",
           "label": "Contexto",
-          "acceptedTypes": [
-            "text",
-            "textarea",
-            "number",
-            "boolean",
-            "list",
-            "records",
-            "select",
-            "multiselect",
-            "datetime",
-            "url",
-            "approval",
-            "thumbnail_layout"
-          ],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "result",
           "label": "Resultado",
-          "producedTypes": [
-            "text",
-            "textarea",
-            "number",
-            "boolean",
-            "list",
-            "records",
-            "select",
-            "multiselect",
-            "datetime",
-            "url",
-            "approval"
-          ],
-          "required": true
+          "required": true,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
-      ],
-      "acceptedInputTypes": [
-        "text",
-        "textarea",
-        "number",
-        "boolean",
-        "list",
-        "records",
-        "select",
-        "multiselect",
-        "datetime",
-        "url",
-        "approval",
-        "thumbnail_layout"
-      ],
-      "producedOutputTypes": [
-        "text",
-        "textarea",
-        "number",
-        "boolean",
-        "list",
-        "records",
-        "select",
-        "multiselect",
-        "datetime",
-        "url",
-        "approval"
       ],
       "execution": {
         "mode": "immediate",
@@ -114,11 +82,19 @@
         "supportsCancellation": false,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_read", "external_write"],
-      "cost": { "model": "metered", "estimateSupported": false },
+      "sideEffects": [
+        "external_read",
+        "external_write"
+      ],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": false
+      },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["Anthropic"],
+        "providers": [
+          "Anthropic"
+        ],
         "retentionPolicyUrl": "https://privacy.anthropic.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data",
         "trainingPolicyUrl": "https://privacy.anthropic.com/en/articles/7996868-is-my-data-used-for-model-training"
       },
@@ -131,9 +107,18 @@
             "description": "A disponibilidade depende da sua conta Anthropic.",
             "default": "claude-sonnet-4-6",
             "oneOf": [
-              { "const": "claude-opus-4-6", "title": "Claude Opus 4.6" },
-              { "const": "claude-sonnet-4-6", "title": "Claude Sonnet 4.6" },
-              { "const": "claude-haiku-4-5", "title": "Claude Haiku 4.5" }
+              {
+                "const": "claude-opus-4-6",
+                "title": "Claude Opus 4.6"
+              },
+              {
+                "const": "claude-sonnet-4-6",
+                "title": "Claude Sonnet 4.6"
+              },
+              {
+                "const": "claude-haiku-4-5",
+                "title": "Claude Haiku 4.5"
+              }
             ]
           },
           "system_prompt": {
@@ -158,7 +143,9 @@
           }
         }
       },
-      "outputSchema": { "type": "object" }
+      "outputSchema": {
+        "type": "object"
+      }
     }
   ]
 }

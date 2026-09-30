@@ -3,236 +3,35 @@ import {
   PROCESS_META,
   PROCESS_ORDER,
   type Channel,
-  type HumanFieldType,
   type ProcessMethod,
   type StrategicCollection,
   type UniversalProcess,
 } from "../src/lib/domain";
 import { getMethodConfigurationIssue, normalizeMethodBlocks } from "../src/lib/human-workflow";
-import { legacyTypeListAccepts } from "../src/lib/data-shape";
+import { areValueShapesCompatible } from "../src/lib/data-shape";
+import { processMethodV3Schema } from "../src/lib/method-contract-v3";
 import { effectiveProcessOrder, validateProcessDependencies } from "../src/lib/process-order";
 import type { RegisteredPlugin } from "./plugin-runner";
 import { pluginConnectionRequired } from "../src/lib/plugin-contract";
 import { validateLocalProfileExecution } from "./profile-execution-policy";
-import { adaptLegacyMethod } from "../src/lib/legacy-method-adapter";
-
-const processSchema = z.enum(PROCESS_ORDER);
-const fieldTypeSchema = z.enum([
-  "text",
-  "number",
-  "select",
-  "boolean",
-  "textarea",
-  "multiselect",
-  "list",
-  "records",
-  "datetime",
-  "url",
-  "file",
-  "image",
-  "audio",
-  "video",
-  "files",
-  "approval",
-  "thumbnail_layout",
-]);
-const recordFieldSchema = z
-  .object({
-    id: z.string().min(1),
-    label: z.string().min(1),
-    key: z.string().min(1),
-    type: z.enum([
-      "text",
-      "textarea",
-      "number",
-      "boolean",
-      "select",
-      "datetime",
-      "url",
-      "file",
-      "image",
-      "audio",
-      "video",
-    ]),
-    required: z.boolean(),
-    options: z.array(z.string()).optional(),
-  })
-  .passthrough();
-const presentationSchema = z
-  .object({
-    renderer: z.enum([
-      "auto",
-      "text-short",
-      "text-long",
-      "list",
-      "tags",
-      "table",
-      "cards",
-      "file-list",
-      "image-gallery",
-      "audio-player",
-      "video-player",
-      "decision",
-    ]),
-    itemType: z.enum(["text", "record", "file", "image", "audio", "video"]).optional(),
-    acceptedMimeTypes: z.array(z.string()).optional(),
-  })
-  .passthrough();
-const inputSourceBindingSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("project"), key: z.enum(["title", "deadline"]) }).strict(),
-  z
-    .object({
-      kind: z.literal("previous_process"),
-      processType: processSchema,
-      outputKey: z.string().min(1),
-      blockId: z.string().min(1).optional(),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("previous_block"),
-      blockId: z.string().min(1),
-      outputKey: z.string().min(1),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("channel_history"),
-      processType: processSchema,
-      blockId: z.string().min(1),
-      outputKey: z.string().min(1),
-      limit: z.number().int().min(1).max(100),
-      eligibility: z.enum(["completed", "published"]),
-    })
-    .strict(),
-  z.object({ kind: z.literal("runtime") }).strict(),
-  z.object({ kind: z.literal("static"), value: z.string() }).strict(),
-]);
-const inputSchema = z
-  .object({
-    id: z.string().min(1),
-    label: z.string().min(1),
-    type: fieldTypeSchema,
-    binding: inputSourceBindingSchema.optional(),
-    source: z.enum([
-      "project",
-      "previous_process",
-      "previous_block",
-      "channel_history",
-      "channel_library",
-      "runtime",
-      "static",
-    ]),
-    sourceKey: z.string().optional(),
-    sourceProcessType: processSchema.optional(),
-    blockId: z.string().optional(),
-    collection: z.string().optional(),
-    staticValue: z.string().optional(),
-    historyLimit: z.number().int().min(1).max(100).optional(),
-    historyEligibility: z.enum(["completed", "published"]).optional(),
-    recordFields: z.array(recordFieldSchema).optional(),
-    presentation: presentationSchema.optional(),
-    portKey: z.string().optional(),
-  })
-  .passthrough();
-const outputSchema = z
-  .object({
-    id: z.string().min(1),
-    label: z.string().min(1),
-    key: z.string().min(1),
-    type: fieldTypeSchema,
-    required: z.boolean(),
-    placeholder: z.string().optional(),
-    helpText: z.string().optional(),
-    options: z.array(z.string()).optional(),
-    optionsSourceBlockId: z.string().optional(),
-    optionsSourceKey: z.string().optional(),
-    recordFields: z.array(recordFieldSchema).optional(),
-    presentation: presentationSchema.optional(),
-    portKey: z.string().optional(),
-  })
-  .passthrough();
-const parameterSchema = z
-  .object({
-    id: z.string().min(1),
-    label: z.string().min(1),
-    key: z.string().min(1),
-    type: z.enum(["text", "number", "select", "boolean", "textarea"]),
-    value: z.union([z.string(), z.number(), z.boolean()]),
-    placeholder: z.string().optional(),
-    options: z.array(z.string()).optional(),
-  })
-  .passthrough();
-const blockSchema = z
-  .object({
-    id: z.string().min(1),
-    type: z.enum(["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"]),
-    operator: z.enum(["IA", "Humano", "Código"]),
-    collectionId: z.string().optional(),
-    name: z.string().optional(),
-    instructions: z.string().optional(),
-    inputs: z.array(inputSchema).optional(),
-    outputs: z.array(outputSchema).optional(),
-    validation: z
-      .object({
-        targetBlockId: z.string().min(1).optional(),
-        targetOutputKey: z.string().optional(),
-        targetPortKey: z.string().min(1).optional(),
-        mode: z.enum(["approval", "select_one", "select_many"]),
-        onReject: z.enum(["retry_target", "pause"]),
-        maxAttempts: z.number().int().min(1).max(20),
-        retryMode: z.enum(["full", "conversation_feedback"]).optional(),
-      })
-      .passthrough()
-      .optional(),
-    plugin: z
-      .object({
-        pluginId: z.string().min(1),
-        pluginVersion: z.string().optional(),
-        capabilityId: z.string().min(1),
-        configuration: z.record(z.union([z.string(), z.number(), z.boolean()])),
-        connectionId: z.string().optional(),
-        connectionRequired: z.boolean().optional(),
-        conversation: z
-          .union([
-            z.object({ mode: z.literal("new") }),
-            z.object({
-              mode: z.literal("reuse"),
-              sourceProcessType: processSchema,
-              sourceBlockId: z.string().min(1),
-            }),
-          ])
-          .optional(),
-      })
-      .passthrough()
-      .optional(),
-    parameters: z.array(parameterSchema),
-    order: z.number().int().min(0),
-  })
-  .passthrough();
-const methodSchema = z
-  .object({
-    contractVersion: z.literal(2).optional(),
-    name: z.string().min(1).max(200),
-    imageUrl: z.string().optional(),
-    processType: processSchema,
-    blocks: z.array(blockSchema).min(1).max(200),
-  })
-  .passthrough();
+const methodSchema = processMethodV3Schema.refine((method) => method.blocks.length > 0, {
+  message: "O Método precisa ter pelo menos um bloco.",
+  path: ["blocks"],
+});
 
 export const BUILDER_METHOD_CONTRACT = {
   universalProcesses: PROCESS_ORDER.map((id) => ({ id, label: PROCESS_META[id].label })),
   blockTypes: ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
   operators: ["IA", "Humano", "Código"],
   processOutputs: {
-    theme: { key: "theme", type: "textarea" },
-    title: { key: "title", type: "text" },
-    thumbnail: { key: "thumbnail", type: "image" },
-    script: { key: "script", type: "textarea" },
-    narration: { key: "audio", type: "audio" },
-    assets: { key: "assets", type: "files" },
-    editing: { key: "video", type: "video" },
-    publishing: { key: "url", type: "url" },
+    theme: { key: "theme", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" } },
+    title: { key: "title", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" } },
+    thumbnail: { key: "thumbnail", shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" } },
+    script: { key: "script", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" } },
+    narration: { key: "audio", shape: { kind: "content", family: "audio", cardinality: "one", representation: "artifact" } },
+    assets: { key: "assets", shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" } },
+    editing: { key: "video", shape: { kind: "content", family: "video", cardinality: "one", representation: "artifact" } },
+    publishing: { key: "url", shape: { kind: "control", control: "url", cardinality: "one" } },
   },
   rules: [
     "Use somente os oito processos, quatro tipos de bloco e três operadores declarados.",
@@ -257,10 +56,6 @@ export type BuilderValidationResult = {
   errors: string[];
   warnings: string[];
 };
-
-function compatibleType(source: HumanFieldType, target: HumanFieldType) {
-  return source === target || (source === "text" && target === "textarea");
-}
 
 function validatePluginConfiguration(
   blockLabel: string,
@@ -315,27 +110,27 @@ function validatePluginConfiguration(
   const assignedInputPorts = new Set<string>();
   for (const input of block.inputs ?? []) {
     const compatible = capability.inputPorts.filter((port) =>
-      legacyTypeListAccepts(port.acceptedTypes, input.type),
+      areValueShapesCompatible(input.shape, port.shape),
     );
     if (input.portKey) {
       const selected = compatible.find((port) => port.key === input.portKey);
       if (!selected)
         errors.push(`${blockLabel}: porta da entrada “${input.label}” é incompatível.`);
-      else if (!selected.multiple && occupiedInputPorts.has(selected.key))
+      else if (occupiedInputPorts.has(selected.key))
         errors.push(`${blockLabel}: a porta da entrada “${input.label}” já está ocupada.`);
       else {
         assignedInputPorts.add(selected.key);
-        if (!selected.multiple) occupiedInputPorts.add(selected.key);
+        occupiedInputPorts.add(selected.key);
       }
     } else {
       const candidates = compatible.filter(
-        (port) => port.multiple || !occupiedInputPorts.has(port.key),
+        (port) => !occupiedInputPorts.has(port.key),
       );
       if (candidates.length === 1) {
         const selected = candidates[0];
         input.portKey = selected.key;
         assignedInputPorts.add(selected.key);
-        if (!selected.multiple) occupiedInputPorts.add(selected.key);
+        occupiedInputPorts.add(selected.key);
       } else if (candidates.length === 0)
         errors.push(`${blockLabel}: nenhuma porta aceita a entrada “${input.label}”.`);
       else errors.push(`${blockLabel}: informe portKey para a entrada ambígua “${input.label}”.`);
@@ -348,7 +143,7 @@ function validatePluginConfiguration(
     if (targetOutput) {
       const candidates = capability.inputPorts.filter(
         (port) =>
-          legacyTypeListAccepts(port.acceptedTypes, targetOutput.type) &&
+          areValueShapesCompatible(targetOutput.shape, port.shape) &&
           !assignedInputPorts.has(port.key),
       );
       if (block.validation?.targetPortKey) {
@@ -357,12 +152,12 @@ function validatePluginConfiguration(
           errors.push(`${blockLabel}: porta do alvo de validação é incompatível ou está ocupada.`);
         else {
           assignedInputPorts.add(selected.key);
-          if (!selected.multiple) occupiedInputPorts.add(selected.key);
+          occupiedInputPorts.add(selected.key);
         }
       } else if (candidates.length === 1) {
         block.validation!.targetPortKey = candidates[0].key;
         assignedInputPorts.add(candidates[0].key);
-        if (!candidates[0].multiple) occupiedInputPorts.add(candidates[0].key);
+        occupiedInputPorts.add(candidates[0].key);
       } else if (candidates.length === 0) {
         errors.push(`${blockLabel}: nenhuma porta aceita o alvo de validação.`);
       } else {
@@ -374,7 +169,7 @@ function validatePluginConfiguration(
   }
   for (const output of block.outputs ?? []) {
     const candidates = capability.outputPorts.filter((port) =>
-      legacyTypeListAccepts(port.producedTypes, output.type),
+      areValueShapesCompatible(port.shape, output.shape),
     );
     if (output.portKey) {
       if (!candidates.some((port) => port.key === output.portKey))
@@ -432,27 +227,8 @@ export function validateBuilderMethods(input: {
       errors.push(`${processType}: processType deve ser “${processType}”.`);
       continue;
     }
-    const adapted = adaptLegacyMethod({ ...rawMethod, processType } as ProcessMethod, {
-      source: "builder",
-      recoverHistoricalValidationTarget: false,
-      resolveCapability: (pluginId, capabilityId) => {
-        const entry = input.plugins.find((candidate) => candidate.plugin.id === pluginId);
-        const capability = entry?.plugin.manifest.capabilities.find(
-          (candidate) => candidate.id === capabilityId,
-        );
-        return capability
-          ? { pluginVersion: entry?.plugin.manifest.version, capability }
-          : undefined;
-      },
-    });
-    if (!adapted.ok || !adapted.complete) {
-      if (!adapted.ok)
-        errors.push(...adapted.diagnostics.map((item) => `${processType}: ${item.message}`));
-      else errors.push(`${processType}: o contrato do Método não pôde ser materializado.`);
-      continue;
-    }
-    const blocks = normalizeMethodBlocks(adapted.method.blocks, processType);
-    const method: ProcessMethod = { ...adapted.method, processType, blocks };
+    const blocks = normalizeMethodBlocks(rawMethod.blocks, processType);
+    const method: ProcessMethod = { ...rawMethod, processType, blocks };
     methods[processType] = method;
     const ids = new Set<string>();
     for (const [index, block] of blocks.entries()) {
@@ -472,7 +248,7 @@ export function validateBuilderMethods(input: {
         const sourceKind = source?.kind;
         if (
           sourceKind === "static" &&
-          (source?.kind === "static" ? !source.value.trim() : !binding.staticValue?.trim())
+          !source.value.trim()
         )
           errors.push(`${label}: a entrada estática “${binding.label}” não possui valor.`);
         if (sourceKind === "previous_block") {
@@ -484,7 +260,7 @@ export function validateBuilderMethods(input: {
           );
           if (sourceIndex < 0 || sourceIndex >= index || !sourceOutput)
             errors.push(`${label}: referência inválida na entrada “${binding.label}”.`);
-          else if (!compatibleType(sourceOutput.type, binding.type))
+          else if (!areValueShapesCompatible(sourceOutput.shape, binding.shape))
             errors.push(`${label}: tipo incompatível na entrada “${binding.label}”.`);
         }
       }
@@ -500,12 +276,14 @@ export function validateBuilderMethods(input: {
     if (
       !blocks.some((block) =>
         block.outputs?.some(
-          (output) => output.key === finalOutput.key && output.type === finalOutput.type,
+          (output) =>
+            output.key === finalOutput.key &&
+            areValueShapesCompatible(output.shape, finalOutput.shape),
         ),
       )
     ) {
       warnings.push(
-        `${processType}: nenhum bloco entrega diretamente ${finalOutput.key} (${finalOutput.type}); a saída final dependerá do preenchimento humano.`,
+        `${processType}: nenhum bloco entrega diretamente ${finalOutput.key} no shape canônico; a saída final dependerá do preenchimento humano.`,
       );
     }
   }

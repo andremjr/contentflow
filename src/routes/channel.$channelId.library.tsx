@@ -36,10 +36,12 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type {
+  RuntimeValue,
   StoredFile,
   StrategicCollection,
   StrategicCollectionField,
   ThumbnailLayout,
+  ValueShape,
 } from "@/lib/domain";
 import {
   createLibraryCollection,
@@ -53,7 +55,7 @@ import {
   updateLibraryCollection,
 } from "@/lib/store";
 
-type CollectionItemValue = string | number | StoredFile | ThumbnailLayout;
+type CollectionItemValue = RuntimeValue;
 
 function isStoredFile(value: CollectionItemValue | undefined): value is StoredFile {
   return typeof value === "object" && value !== null && "url" in value;
@@ -87,9 +89,40 @@ function newField(index: number): StrategicCollectionField {
   return {
     id: crypto.randomUUID(),
     label: index === 0 ? "Nome" : "",
-    type: index === 0 ? "text" : "textarea",
+    shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
     required: index === 0,
   };
+}
+
+function shapeOption(shape: ValueShape) {
+  if (shape.kind === "content" && shape.cardinality === "one") return `content:${shape.family}`;
+  if (shape.kind === "control" && shape.cardinality === "one") return `control:${shape.control}`;
+  return "content:text";
+}
+
+function shapeFromOption(option: string): ValueShape {
+  if (option.startsWith("content:")) {
+    const family = option.slice("content:".length) as "text" | "image" | "audio" | "video";
+    return {
+      kind: "content",
+      family,
+      cardinality: "one",
+      representation: family === "text" ? "inline" : "artifact",
+    };
+  }
+  return {
+    kind: "control",
+    control: option.slice("control:".length) as "number" | "url" | "thumbnail_layout",
+    cardinality: "one",
+  };
+}
+
+function isControl(field: StrategicCollectionField, control: string) {
+  return field.shape.kind === "control" && field.shape.control === control;
+}
+
+function isContent(field: StrategicCollectionField, family: string) {
+  return field.shape.kind === "content" && field.shape.family === family;
 }
 
 function ChannelLibraryPage() {
@@ -297,11 +330,11 @@ function CollectionValueCell({
     return <span className="text-muted-foreground">—</span>;
   }
 
-  if (field.type === "thumbnail_layout" && isThumbnailLayout(value)) {
+  if (isControl(field, "thumbnail_layout") && isThumbnailLayout(value)) {
     return <CompositionPreview boxes={value.boxes} className="w-44 min-w-44" />;
   }
 
-  if (field.type === "image" && isStoredFile(value)) {
+  if (isContent(field, "image") && isStoredFile(value)) {
     return (
       <img
         src={value.url}
@@ -311,7 +344,7 @@ function CollectionValueCell({
     );
   }
 
-  if (field.type === "url") {
+  if (isControl(field, "url")) {
     return (
       <a
         href={String(value)}
@@ -519,21 +552,20 @@ function NewCollection({ channelId }: { channelId: string }) {
                     placeholder={`Nome do campo ${index + 1}`}
                   />
                   <Select
-                    value={field.type}
-                    onValueChange={(type) =>
-                      updateField(field.id, { type: type as StrategicCollectionField["type"] })
-                    }
+                    value={shapeOption(field.shape)}
+                    onValueChange={(option) => updateField(field.id, { shape: shapeFromOption(option) })}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="text">Texto curto</SelectItem>
-                      <SelectItem value="textarea">Texto longo</SelectItem>
-                      <SelectItem value="number">Número</SelectItem>
-                      <SelectItem value="image">Imagem</SelectItem>
-                      <SelectItem value="url">Link</SelectItem>
-                      <SelectItem value="thumbnail_layout">Layout de thumbnail</SelectItem>
+                      <SelectItem value="content:text">Texto</SelectItem>
+                      <SelectItem value="content:image">Imagem</SelectItem>
+                      <SelectItem value="content:audio">Áudio</SelectItem>
+                      <SelectItem value="content:video">Vídeo</SelectItem>
+                      <SelectItem value="control:number">Número</SelectItem>
+                      <SelectItem value="control:url">Link</SelectItem>
+                      <SelectItem value="control:thumbnail_layout">Layout de thumbnail</SelectItem>
                     </SelectContent>
                   </Select>
                   <label className="flex items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
@@ -610,21 +642,20 @@ function CollectionFieldEditor({
               placeholder={`Nome do campo ${index + 1}`}
             />
             <Select
-              value={field.type}
-              onValueChange={(type) =>
-                onUpdate(field.id, { type: type as StrategicCollectionField["type"] })
-              }
+              value={shapeOption(field.shape)}
+              onValueChange={(option) => onUpdate(field.id, { shape: shapeFromOption(option) })}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="text">Texto curto</SelectItem>
-                <SelectItem value="textarea">Texto longo</SelectItem>
-                <SelectItem value="number">Número</SelectItem>
-                <SelectItem value="image">Imagem</SelectItem>
-                <SelectItem value="url">Link</SelectItem>
-                <SelectItem value="thumbnail_layout">Layout de thumbnail</SelectItem>
+                <SelectItem value="content:text">Texto</SelectItem>
+                <SelectItem value="content:image">Imagem</SelectItem>
+                <SelectItem value="content:audio">Áudio</SelectItem>
+                <SelectItem value="content:video">Vídeo</SelectItem>
+                <SelectItem value="control:number">Número</SelectItem>
+                <SelectItem value="control:url">Link</SelectItem>
+                <SelectItem value="control:thumbnail_layout">Layout de thumbnail</SelectItem>
               </SelectContent>
             </Select>
             <label className="flex items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
@@ -664,13 +695,13 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
           ? value.boxes.length > 0
           : value !== undefined;
     if (field.required && !hasValue) return false;
-    if (field.type === "url" && hasValue) {
+    if (isControl(field, "url") && hasValue) {
       return typeof value === "string" && isValidHttpUrl(value.trim());
     }
     return true;
   });
 
-  async function uploadImage(fieldId: string, file?: File) {
+  async function uploadMedia(fieldId: string, file?: File) {
     if (!file) return;
     setUploadingFieldId(fieldId);
     try {
@@ -678,7 +709,7 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
       setValues((current) => ({ ...current, [fieldId]: storedFile }));
       toast.success(`${file.name} salvo localmente.`);
     } catch (error) {
-      toast.error("Não foi possível salvar a imagem", {
+      toast.error("Não foi possível salvar o arquivo", {
         description: error instanceof Error ? error.message : undefined,
       });
     } finally {
@@ -699,7 +730,7 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
           collection.fields.map((field) => {
             const value = values[field.id];
             if (typeof value === "string") {
-              return [field.id, field.type === "number" && value ? Number(value) : value.trim()];
+              return [field.id, isControl(field, "number") && value ? Number(value) : value.trim()];
             }
             return [field.id, value ?? ""];
           }),
@@ -747,7 +778,7 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
                   {field.label}
                   {field.required && <span className="ml-1 text-destructive">*</span>}
                 </Label>
-                {field.type === "textarea" ? (
+                {isContent(field, "text") ? (
                   <Textarea
                     value={typeof fieldValue === "string" ? fieldValue : ""}
                     onChange={(event) =>
@@ -755,7 +786,7 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
                     }
                     rows={4}
                   />
-                ) : field.type === "thumbnail_layout" ? (
+                ) : isControl(field, "thumbnail_layout") ? (
                   <div className="rounded-xl border border-border/70 bg-background/30 p-3">
                     <CompositionCanvas
                       boxes={isThumbnailLayout(fieldValue) ? fieldValue.boxes : []}
@@ -771,7 +802,7 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
                       resolução 16:9.
                     </p>
                   </div>
-                ) : field.type === "image" ? (
+                ) : field.shape.kind === "content" && field.shape.family !== "text" ? (
                   <div className="rounded-xl border border-dashed border-input p-4">
                     {isStoredFile(fieldValue) ? (
                       <div className="space-y-3">
@@ -787,7 +818,7 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
                     ) : (
                       <div className="text-center text-xs text-muted-foreground">
                         <ImageIcon className="mx-auto mb-2 size-5" />
-                        Nenhuma imagem selecionada
+                        Nenhum arquivo selecionado
                       </div>
                     )}
                     <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm">
@@ -796,20 +827,20 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
                       ) : (
                         <ImageIcon className="size-4" />
                       )}
-                      {isStoredFile(fieldValue) ? "Substituir imagem" : "Selecionar imagem"}
+                      {isStoredFile(fieldValue) ? "Substituir arquivo" : "Selecionar arquivo"}
                       <input
                         type="file"
-                        accept="image/*"
+                        accept={`${field.shape.family}/*`}
                         className="hidden"
                         disabled={uploadingFieldId === field.id}
-                        onChange={(event) => void uploadImage(field.id, event.target.files?.[0])}
+                        onChange={(event) => void uploadMedia(field.id, event.target.files?.[0])}
                       />
                     </label>
                   </div>
                 ) : (
                   <Input
                     type={
-                      field.type === "number" ? "number" : field.type === "url" ? "url" : "text"
+                      isControl(field, "number") ? "number" : isControl(field, "url") ? "url" : "text"
                     }
                     value={
                       typeof fieldValue === "string" || typeof fieldValue === "number"
@@ -819,10 +850,10 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
                     onChange={(event) =>
                       setValues((current) => ({ ...current, [field.id]: event.target.value }))
                     }
-                    placeholder={field.type === "url" ? "https://..." : undefined}
+                    placeholder={isControl(field, "url") ? "https://..." : undefined}
                   />
                 )}
-                {field.type === "url" &&
+                {isControl(field, "url") &&
                   typeof fieldValue === "string" &&
                   fieldValue.trim() &&
                   !isValidHttpUrl(fieldValue.trim()) && (

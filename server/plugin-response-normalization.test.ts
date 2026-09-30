@@ -16,10 +16,10 @@ function contract(
     key: value.key,
     portKey: value.portKey,
     label: value.label ?? value.key,
-    type: value.type ?? "text",
+    shape:
+      value.shape ??
+      { kind: "content", family: "text", cardinality: "one", representation: "inline" },
     required: value.required ?? true,
-    options: value.options,
-    recordFields: value.recordFields,
     presentation: value.presentation,
   };
 }
@@ -30,7 +30,11 @@ test("maps each declared technical port to its strategic output key", () => {
     responseValues: { generated_text: "roteiro", score_port: 9 },
     outputContract: [
       contract({ key: "script", portKey: "generated_text" }),
-      contract({ key: "quality", portKey: "score_port", type: "number" }),
+      contract({
+        key: "quality",
+        portKey: "score_port",
+        shape: { kind: "control", control: "number", cardinality: "one" },
+      }),
     ],
     completion: "final",
   });
@@ -89,7 +93,7 @@ test("validates required only on final responses and validates present partial t
     completion: "partial",
   });
   assert.equal(invalidPartial.ok, false);
-  if (!invalidPartial.ok) assert.equal(invalidPartial.issues[0]?.code, "INCOMPATIBLE_OUTPUT_TYPE");
+  if (!invalidPartial.ok) assert.equal(invalidPartial.issues[0]?.code, "INCOMPATIBLE_OUTPUT_SHAPE");
 });
 
 test("allows a final response to complete from previously normalized partial values", () => {
@@ -111,7 +115,13 @@ test("preserves the allowed text-to-list shape normalization without guessing id
   const result = requireNormalizedPluginResponseValues({
     block,
     responseValues: { suggestions_port: "1. Um\n- Dois" },
-    outputContract: [contract({ key: "suggestions", portKey: "suggestions_port", type: "list" })],
+    outputContract: [
+      contract({
+        key: "suggestions",
+        portKey: "suggestions_port",
+        shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
+      }),
+    ],
     completion: "final",
   });
   assert.deepEqual(result.values, { suggestions: ["Um", "Dois"] });
@@ -125,21 +135,32 @@ test("rejects invalid media, records and ambiguous port bindings", () => {
       records_port: [{}],
     },
     outputContract: [
-      contract({ key: "cover", portKey: "image_port", type: "image" }),
+      contract({
+        key: "cover",
+        portKey: "image_port",
+        shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" },
+      }),
       contract({
         key: "scenes",
         portKey: "records_port",
-        type: "records",
-        recordFields: [
-          { id: "title", key: "title", label: "Título", type: "text", required: true },
-        ],
+        shape: {
+          kind: "record",
+          cardinality: "many",
+          fields: [{
+            id: "title",
+            key: "title",
+            label: "Título",
+            shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+            required: true,
+          }],
+        },
       }),
     ],
     completion: "final",
   });
   assert.equal(invalid.ok, false);
   if (!invalid.ok) {
-    assert.ok(invalid.issues.some((issue) => issue.code === "INCOMPATIBLE_OUTPUT_TYPE"));
+    assert.ok(invalid.issues.some((issue) => issue.code === "INCOMPATIBLE_OUTPUT_SHAPE"));
     assert.ok(invalid.issues.some((issue) => issue.code === "MISSING_REQUIRED_RECORD_FIELD"));
   }
 
@@ -156,8 +177,14 @@ test("rejects invalid media, records and ambiguous port bindings", () => {
   if (!ambiguous.ok) assert.equal(ambiguous.issues[0]?.code, "AMBIGUOUS_OUTPUT_PORT");
 });
 
-test("keeps ESCOLHER specialized while requiring its exact synthetic port", () => {
-  const outputContract = [contract({ key: "selectedItemId", portKey: "choice_result" })];
+test("keeps ESCOLHER on the canonical contract while requiring its exact synthetic port", () => {
+  const outputContract = [
+    contract({
+      key: "selectedItemId",
+      portKey: "choice_result",
+      shape: { kind: "control", control: "identifier", cardinality: "one" },
+    }),
+  ];
   const valid = normalizePluginResponseValues({
     block: { type: "ESCOLHER" },
     responseValues: { choice_result: "item-1" },
@@ -167,7 +194,7 @@ test("keeps ESCOLHER specialized while requiring its exact synthetic port", () =
   assert.deepEqual(valid, {
     ok: true,
     values: { selectedItemId: "item-1" },
-    compatibility: "historical_choose_contract",
+    compatibility: "canonical",
   });
 
   const alias = normalizePluginResponseValues({

@@ -1,6 +1,6 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "local.contentflow.meta-ai-browser-studio",
   "name": "Meta AI Browser Studio",
   "version": "1.0.5",
@@ -17,10 +17,21 @@
   },
   "minCoreVersion": "0.3.0",
   "entrypoint": "handler.mjs",
-  "browserRuntime": { "lifecycle": "core" },
-  "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
-  "networkHosts": ["meta.ai", "www.meta.ai", "facebook.com", "*.fbcdn.net"],
-  "deliveryTypes": ["text", "image", "video", "processing"],
+  "browserRuntime": {
+    "lifecycle": "core"
+  },
+  "permissions": [
+    "network",
+    "filesystem:read",
+    "filesystem:write",
+    "process"
+  ],
+  "networkHosts": [
+    "meta.ai",
+    "www.meta.ai",
+    "facebook.com",
+    "*.fbcdn.net"
+  ],
   "profileSetup": {
     "configurationKey": "accountProfile",
     "fallbackConfigurationKey": "fallbackAccountProfiles",
@@ -103,18 +114,30 @@
       "capabilities": {
         "generate-image-in-browser": {
           "outputPorts": {
-            "image": { "label": "Generated image" },
+            "image": {
+              "label": "Generated image"
+            },
             "images": {
               "label": "Generated images",
               "description": "All new image variants materialized from this generation."
             },
-            "description": { "label": "Description" }
+            "description": {
+              "label": "Description"
+            }
           },
           "itemActions": {
-            "regenerate": { "label": "Regenerate" },
-            "replace": { "label": "Replace" },
-            "select": { "label": "Select" },
-            "download": { "label": "Download" }
+            "regenerate": {
+              "label": "Regenerate"
+            },
+            "replace": {
+              "label": "Replace"
+            },
+            "select": {
+              "label": "Select"
+            },
+            "download": {
+              "label": "Download"
+            }
           },
           "blockConfigSchema": {
             "properties": {
@@ -122,9 +145,18 @@
                 "title": "Aspect ratio",
                 "description": "Requested image aspect ratio.",
                 "options": [
-                  { "value": "16:9", "label": "Landscape (16:9)" },
-                  { "value": "1:1", "label": "Square (1:1)" },
-                  { "value": "9:16", "label": "Portrait (9:16)" }
+                  {
+                    "value": "16:9",
+                    "label": "Landscape (16:9)"
+                  },
+                  {
+                    "value": "1:1",
+                    "label": "Square (1:1)"
+                  },
+                  {
+                    "value": "9:16",
+                    "label": "Portrait (9:16)"
+                  }
                 ]
               }
             }
@@ -132,22 +164,38 @@
         },
         "animate-image-in-browser": {
           "inputPorts": {
-            "image": { "label": "Base image" },
-            "prompt": { "label": "Motion prompt" }
+            "image": {
+              "label": "Base image"
+            },
+            "prompt": {
+              "label": "Motion prompt"
+            }
           },
           "outputPorts": {
-            "video": { "label": "Generated video" },
+            "video": {
+              "label": "Generated video"
+            },
             "videos": {
               "label": "Generated videos",
               "description": "One or two video variants generated from the same base image."
             },
-            "description": { "label": "Description" }
+            "description": {
+              "label": "Description"
+            }
           },
           "itemActions": {
-            "regenerate": { "label": "Regenerate" },
-            "replace": { "label": "Replace" },
-            "select": { "label": "Select" },
-            "download": { "label": "Download" }
+            "regenerate": {
+              "label": "Regenerate"
+            },
+            "replace": {
+              "label": "Replace"
+            },
+            "select": {
+              "label": "Select"
+            },
+            "download": {
+              "label": "Download"
+            }
           },
           "blockConfigSchema": {
             "properties": {
@@ -155,8 +203,14 @@
                 "title": "Video variants",
                 "description": "Generate one or two variants from the base image.",
                 "options": [
-                  { "value": 1, "label": "1 variant" },
-                  { "value": 2, "label": "2 variants" }
+                  {
+                    "value": 1,
+                    "label": "1 variant"
+                  },
+                  {
+                    "value": 2,
+                    "label": "2 variants"
+                  }
                 ]
               }
             }
@@ -168,18 +222,30 @@
       "capabilities": {
         "generate-image-in-browser": {
           "outputPorts": {
-            "image": { "label": "Imagen generada" },
+            "image": {
+              "label": "Imagen generada"
+            },
             "images": {
               "label": "Imágenes generadas",
               "description": "Todas las variantes nuevas materializadas de esta generación."
             },
-            "description": { "label": "Descripción" }
+            "description": {
+              "label": "Descripción"
+            }
           },
           "itemActions": {
-            "regenerate": { "label": "Regenerar" },
-            "replace": { "label": "Reemplazar" },
-            "select": { "label": "Seleccionar" },
-            "download": { "label": "Descargar" }
+            "regenerate": {
+              "label": "Regenerar"
+            },
+            "replace": {
+              "label": "Reemplazar"
+            },
+            "select": {
+              "label": "Seleccionar"
+            },
+            "download": {
+              "label": "Descargar"
+            }
           },
           "blockConfigSchema": {
             "properties": {
@@ -187,9 +253,18 @@
                 "title": "Proporción",
                 "description": "Proporción solicitada para la imagen.",
                 "options": [
-                  { "value": "16:9", "label": "Horizontal (16:9)" },
-                  { "value": "1:1", "label": "Cuadrada (1:1)" },
-                  { "value": "9:16", "label": "Vertical (9:16)" }
+                  {
+                    "value": "16:9",
+                    "label": "Horizontal (16:9)"
+                  },
+                  {
+                    "value": "1:1",
+                    "label": "Cuadrada (1:1)"
+                  },
+                  {
+                    "value": "9:16",
+                    "label": "Vertical (9:16)"
+                  }
                 ]
               }
             }
@@ -197,22 +272,38 @@
         },
         "animate-image-in-browser": {
           "inputPorts": {
-            "image": { "label": "Imagen base" },
-            "prompt": { "label": "Prompt de movimiento" }
+            "image": {
+              "label": "Imagen base"
+            },
+            "prompt": {
+              "label": "Prompt de movimiento"
+            }
           },
           "outputPorts": {
-            "video": { "label": "Vídeo generado" },
+            "video": {
+              "label": "Vídeo generado"
+            },
             "videos": {
               "label": "Vídeos generados",
               "description": "Una o dos variantes de vídeo generadas desde la misma imagen base."
             },
-            "description": { "label": "Descripción" }
+            "description": {
+              "label": "Descripción"
+            }
           },
           "itemActions": {
-            "regenerate": { "label": "Regenerar" },
-            "replace": { "label": "Reemplazar" },
-            "select": { "label": "Seleccionar" },
-            "download": { "label": "Descargar" }
+            "regenerate": {
+              "label": "Regenerar"
+            },
+            "replace": {
+              "label": "Reemplazar"
+            },
+            "select": {
+              "label": "Seleccionar"
+            },
+            "download": {
+              "label": "Descargar"
+            }
           },
           "blockConfigSchema": {
             "properties": {
@@ -220,8 +311,14 @@
                 "title": "Variantes de vídeo",
                 "description": "Genera una o dos variantes desde la imagen base.",
                 "options": [
-                  { "value": 1, "label": "1 variante" },
-                  { "value": 2, "label": "2 variantes" }
+                  {
+                    "value": 1,
+                    "label": "1 variante"
+                  },
+                  {
+                    "value": 2,
+                    "label": "2 variantes"
+                  }
                 ]
               }
             }
@@ -238,7 +335,9 @@
       "promptPreview": {
         "template": "INSTRUÇÕES DO BLOCO:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO DAS ENTRADAS:\n{{CONTEXT_INPUTS}}"
       },
-      "blockTypes": ["CRIAR"],
+      "blockTypes": [
+        "CRIAR"
+      ],
       "processTypes": [
         "theme",
         "title",
@@ -253,67 +352,57 @@
         {
           "key": "content",
           "label": "Contexto para geração",
-          "acceptedTypes": [
-            "text",
-            "textarea",
-            "number",
-            "boolean",
-            "list",
-            "records",
-            "select",
-            "multiselect",
-            "datetime",
-            "url",
-            "thumbnail_layout"
-          ],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         },
         {
           "key": "attachments",
           "label": "Referências anexas",
-          "acceptedTypes": ["image", "file", "files"],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "result",
           "label": "Texto gerado",
-          "producedTypes": ["text", "textarea"],
           "required": true,
           "presentation": {
             "renderer": "text-long"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
           "key": "parts",
           "label": "Respostas por etapa",
-          "producedTypes": ["list"],
           "required": false,
           "presentation": {
             "renderer": "list"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
           }
         }
       ],
-      "acceptedInputTypes": [
-        "text",
-        "textarea",
-        "number",
-        "boolean",
-        "list",
-        "records",
-        "select",
-        "multiselect",
-        "datetime",
-        "url",
-        "thumbnail_layout",
-        "image",
-        "file",
-        "files"
-      ],
-      "producedOutputTypes": ["text", "textarea", "list"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,
@@ -327,14 +416,19 @@
           "mode": "sequential"
         }
       },
-      "sideEffects": ["external_write", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["Meta AI web"]
+        "providers": [
+          "Meta AI web"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -369,7 +463,9 @@
             "type": "array"
           }
         },
-        "required": ["result"]
+        "required": [
+          "result"
+        ]
       }
     },
     {
@@ -378,32 +474,58 @@
       "promptPreview": {
         "template": "INSTRUÇÕES DO BLOCO:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO DAS ENTRADAS:\n{{CONTEXT_INPUTS}}\n\nPROPORÇÃO DA IMAGEM: {{CONFIG:aspectRatio}}"
       },
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["thumbnail", "assets"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "thumbnail",
+        "assets"
+      ],
       "itemActions": [
-        { "action": "regenerate" },
-        { "action": "replace" },
-        { "action": "select" },
-        { "action": "download" }
+        {
+          "action": "regenerate"
+        },
+        {
+          "action": "replace"
+        },
+        {
+          "action": "select"
+        },
+        {
+          "action": "download"
+        }
       ],
       "inputPorts": [
         {
           "key": "prompt",
           "label": "Prompt da imagem",
-          "acceptedTypes": ["text", "textarea"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "one",
+            "representation": "artifact"
+          }
         },
         {
           "key": "references",
           "label": "Imagens de referência",
-          "acceptedTypes": ["image", "file", "files"],
           "required": false,
           "multiple": true,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         }
       ],
@@ -411,35 +533,54 @@
         {
           "key": "image",
           "label": "Imagem gerada",
-          "producedTypes": ["image"],
           "required": true,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "images",
           "label": "Imagens geradas",
           "description": "Todas as variantes novas materializadas desta geração.",
-          "producedTypes": ["files"],
           "required": false,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "description",
           "label": "Descrição",
-          "producedTypes": ["textarea"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "image", "file", "files"],
-      "producedOutputTypes": ["image", "textarea"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,
@@ -451,14 +592,20 @@
           "mode": "sequential"
         }
       },
-      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["Meta AI / Muse Image web"]
+        "providers": [
+          "Meta AI / Muse Image web"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -487,9 +634,18 @@
             "description": "Proporção solicitada para a imagem.",
             "default": "1:1",
             "oneOf": [
-              { "const": "16:9", "title": "Paisagem (16:9)" },
-              { "const": "1:1", "title": "Quadrada (1:1)" },
-              { "const": "9:16", "title": "Retrato (9:16)" }
+              {
+                "const": "16:9",
+                "title": "Paisagem (16:9)"
+              },
+              {
+                "const": "1:1",
+                "title": "Quadrada (1:1)"
+              },
+              {
+                "const": "9:16",
+                "title": "Retrato (9:16)"
+              }
             ]
           }
         }
@@ -508,7 +664,9 @@
             "type": "string"
           }
         },
-        "required": ["image"]
+        "required": [
+          "image"
+        ]
       },
       "instructionUsage": "required"
     },
@@ -518,72 +676,117 @@
       "promptPreview": {
         "template": "INSTRUÇÕES DO BLOCO:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO DAS ENTRADAS:\n{{CONTEXT_INPUTS}}\n\nVARIANTES DE VÍDEO: {{CONFIG:videoVariants}}"
       },
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["assets", "editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "assets",
+        "editing"
+      ],
       "itemActions": [
-        { "action": "regenerate" },
-        { "action": "replace" },
-        { "action": "select" },
-        { "action": "download" }
+        {
+          "action": "regenerate"
+        },
+        {
+          "action": "replace"
+        },
+        {
+          "action": "select"
+        },
+        {
+          "action": "download"
+        }
       ],
       "inputPorts": [
         {
           "key": "image",
           "label": "Imagem base",
-          "acceptedTypes": ["image", "file"],
           "required": true,
           "multiple": false,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "prompt",
           "label": "Prompt de movimento",
-          "acceptedTypes": ["text", "textarea"],
           "required": true,
-          "multiple": false
+          "multiple": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "video",
           "label": "Vídeo gerado",
-          "producedTypes": ["video"],
-          "required": true
+          "required": true,
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "one",
+            "representation": "artifact"
+          }
         },
         {
           "key": "videos",
           "label": "Vídeos gerados",
           "description": "Uma ou duas variantes de vídeo geradas a partir da mesma imagem base.",
-          "producedTypes": ["files"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "many",
+            "representation": "artifact"
+          }
         },
         {
           "key": "description",
           "label": "Descrição",
-          "producedTypes": ["textarea"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "image", "file"],
-      "producedOutputTypes": ["video", "files", "textarea"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 3600000,
         "supportsCancellation": true,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["Meta AI / Vibes web"]
+        "providers": [
+          "Meta AI / Vibes web"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -612,8 +815,14 @@
             "description": "Gera uma ou duas variantes a partir da imagem base.",
             "default": 1,
             "oneOf": [
-              { "const": 1, "title": "1 variante" },
-              { "const": 2, "title": "2 variantes" }
+              {
+                "const": 1,
+                "title": "1 variante"
+              },
+              {
+                "const": 2,
+                "title": "2 variantes"
+              }
             ]
           }
         }
@@ -622,71 +831,116 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "video": { "type": "object" },
-          "videos": { "type": "array" },
-          "description": { "type": "string" }
+          "video": {
+            "type": "object"
+          },
+          "videos": {
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          }
         },
-        "required": ["video"]
+        "required": [
+          "video"
+        ]
       },
       "instructionUsage": "required"
     },
     {
       "id": "generate-video-in-browser",
       "operator": "IA",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["assets", "editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "assets",
+        "editing"
+      ],
       "itemActions": [
-        { "action": "regenerate" },
-        { "action": "replace" },
-        { "action": "select" },
-        { "action": "download" }
+        {
+          "action": "regenerate"
+        },
+        {
+          "action": "replace"
+        },
+        {
+          "action": "select"
+        },
+        {
+          "action": "download"
+        }
       ],
       "inputPorts": [
         {
           "key": "prompt",
           "label": "Prompt do vídeo",
-          "acceptedTypes": ["text", "textarea"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         },
         {
           "key": "references",
           "label": "Imagem ou vídeo de referência",
-          "acceptedTypes": ["image", "video", "file", "files"],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "video",
           "label": "Vídeo gerado",
-          "producedTypes": ["video"],
-          "required": true
+          "required": true,
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "one",
+            "representation": "artifact"
+          }
         },
         {
           "key": "description",
           "label": "Descrição",
-          "producedTypes": ["textarea"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "image", "video", "file", "files"],
-      "producedOutputTypes": ["video", "textarea"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 3600000,
         "supportsCancellation": true,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["Meta AI / Vibes web"]
+        "providers": [
+          "Meta AI / Vibes web"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -722,7 +976,9 @@
             "type": "string"
           }
         },
-        "required": ["video"]
+        "required": [
+          "video"
+        ]
       },
       "instructionUsage": "required"
     }

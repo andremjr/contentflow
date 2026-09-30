@@ -211,11 +211,12 @@ function matchesControl(shape: Extract<ValueShape, { kind: "control" }>, value: 
 
 function requiredRecordFieldIssues(contract: PluginFieldContract, value: RuntimeValue) {
   if (contract.shape.kind !== "record") return [];
+  const fields = contract.shape.fields;
   const recordValues = (Array.isArray(value) ? value : [value]) as unknown[];
   const issues: PluginResponseContractIssue[] = [];
   recordValues.forEach((record, index) => {
     if (!isPlainObject(record) || isStoredFile(record)) return;
-    for (const field of contract.shape.fields) {
+    for (const field of fields) {
       const fieldValue = record[field.key];
       if (field.required && isEmptyRuntimeValue(fieldValue as RuntimeValue | undefined)) {
         issues.push({

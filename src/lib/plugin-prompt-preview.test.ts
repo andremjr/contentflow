@@ -32,11 +32,8 @@ test("renders the declared prompt shape with Method variables and omits duplicat
       input: {
         id: "theme",
         label: "Tema do vídeo",
-        type: "text",
-        source: "previous_process",
-        sourceKey: "theme",
-        sourceProcessType: "theme",
-        blockId: "__process_output__",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+        binding: { kind: "previous_process", processType: "theme", outputKey: "theme" },
       },
     },
     {
@@ -44,10 +41,8 @@ test("renders the declared prompt shape with Method variables and omits duplicat
       input: {
         id: "rules",
         label: "Regras do canal",
-        type: "textarea",
-        source: "static",
-        sourceKey: "rules",
-        staticValue: "",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+        binding: { kind: "static", value: "" },
       },
     },
   ]);
@@ -78,11 +73,8 @@ test("uses a non-secret template configuration when declared by the plugin", () 
         input: {
           id: "theme",
           label: "Tema do vídeo",
-          type: "text",
-          source: "previous_process",
-          sourceKey: "theme",
-          sourceProcessType: "theme",
-          blockId: "__process_output__",
+          shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+          binding: { kind: "previous_process", processType: "theme", outputKey: "theme" },
         },
       },
     ],

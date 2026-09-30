@@ -41,7 +41,6 @@ import type {
   BlockExecutionItemValue,
   Channel,
   ChannelLibraryItem,
-  HumanFieldType,
   ProcessExecution,
   ProcessMethod,
   Project,
@@ -113,7 +112,6 @@ import {
 } from "../src/lib/instruction-template";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { normalizeItemReplacement } from "../src/lib/plugin-item-actions";
-import { adaptLegacyMethod, type LegacyMethodSource } from "../src/lib/legacy-method-adapter";
 import {
   activeProjectDeliveries,
   normalizeExecutionDeliveries,
@@ -127,7 +125,9 @@ import {
   type RegisteredPlugin,
 } from "./plugin-runner";
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
-import { legacyTypeListAccepts } from "../src/lib/data-shape";
+import { areValueShapesCompatible } from "../src/lib/data-shape";
+import { processMethodV3Schema } from "../src/lib/method-contract-v3";
+import { valueShapeSchema } from "../src/lib/value-shape-schema";
 import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
 import { validatePluginOutputContract } from "./plugin-output-contract";
 import { requireNormalizedPluginResponseValues } from "./plugin-response-normalization";
@@ -615,46 +615,12 @@ function parseRows(rows: { payload: string }[]) {
   return rows.map((row) => JSON.parse(row.payload));
 }
 
-const historicalMethodSnapshot = Symbol("historicalMethodSnapshot");
-type AdaptedStoredExecution = ProcessExecution & {
-  [historicalMethodSnapshot]?: ProcessMethod;
-};
-
-function legacyCapability(pluginId: string, capabilityId: string) {
-  initializePluginRunner();
-  const plugin = getRegisteredPlugin(pluginId);
-  const capability = plugin?.manifest.capabilities.find((item) => item.id === capabilityId);
-  return capability ? { pluginVersion: plugin?.manifest.version, capability } : undefined;
-}
-
-function adaptMethodForRuntime(
-  method: ProcessMethod,
-  source: LegacyMethodSource,
-  requireFrozenPluginVersionForPorts = false,
-) {
-  return adaptLegacyMethod(method, {
-    source,
-    recoverHistoricalValidationTarget: true,
-    requireFrozenPluginVersionForPorts,
-    resolveCapability: legacyCapability,
-  });
-}
-
 function parseStoredExecution(payload: string): ProcessExecution {
-  const execution = JSON.parse(payload) as AdaptedStoredExecution;
-  const adapted = adaptMethodForRuntime(execution.methodSnapshot, "execution_snapshot", true);
-  if (!adapted.ok || !adapted.complete || !adapted.adapted) return execution;
-  Object.defineProperty(execution, historicalMethodSnapshot, {
-    value: execution.methodSnapshot,
-    enumerable: false,
-  });
-  execution.methodSnapshot = adapted.method;
-  return execution;
+  return JSON.parse(payload) as ProcessExecution;
 }
 
 function serializeStoredExecution(execution: ProcessExecution) {
-  const historical = (execution as AdaptedStoredExecution)[historicalMethodSnapshot];
-  return JSON.stringify(historical ? { ...execution, methodSnapshot: historical } : execution);
+  return JSON.stringify(execution);
 }
 
 function readPayload<T>(table: string, id: string): T | undefined {
@@ -1445,26 +1411,20 @@ function startOrchestratedProcess(
   );
   const savedMethod =
     project.strategySnapshot?.methods[processType] ?? channel.methods?.[processType];
-  const adaptedMethod = savedMethod
-    ? adaptMethodForRuntime(
-        savedMethod,
-        project.strategySnapshot ? "strategy_snapshot" : "persisted_channel",
-      )
-    : undefined;
+  const parsedMethod = savedMethod ? processMethodV3Schema.safeParse(savedMethod) : undefined;
   const method =
-    adaptedMethod?.ok && adaptedMethod.complete
+    parsedMethod?.success
       ? {
-          contractVersion: adaptedMethod.method.contractVersion,
-          name: adaptedMethod.method.name || `Método de ${PROCESS_META[processType].label}`,
-          imageUrl: adaptedMethod.method.imageUrl,
+          contractVersion: parsedMethod.data.contractVersion,
+          name: parsedMethod.data.name || `Método de ${PROCESS_META[processType].label}`,
+          imageUrl: parsedMethod.data.imageUrl,
           processType,
-          blocks: normalizeMethodBlocks(adaptedMethod.method.blocks ?? [], processType),
+          blocks: normalizeMethodBlocks(parsedMethod.data.blocks, processType),
         }
       : undefined;
-  const issue =
-    adaptedMethod && !adaptedMethod.ok
-      ? adaptedMethod.diagnostics[0]?.message
-      : getMethodConfigurationIssue(method);
+  const issue = parsedMethod && !parsedMethod.success
+    ? parsedMethod.error.issues[0]?.message
+    : getMethodConfigurationIssue(method);
   if (!method || issue) return { issue: issue ?? "O método deste processo não está disponível." };
 
   const now = new Date().toISOString();
@@ -3490,27 +3450,14 @@ function isPluginManifest(manifest: Record<string, unknown>) {
       const cost = capability.cost as Record<string, unknown> | undefined;
       const dataPolicy = capability.dataPolicy as Record<string, unknown> | undefined;
       const capabilitySideEffects = capability.sideEffects;
-      const portsAreValid = (ports: unknown, typeKey: "acceptedTypes" | "producedTypes") =>
+      const portsAreValid = (ports: unknown) =>
         Array.isArray(ports) &&
         ports.every((portValue) => {
           if (!portValue || typeof portValue !== "object") return false;
           const port = portValue as Record<string, unknown>;
           const presentation = port.presentation as Record<string, unknown> | undefined;
-          const allowedPortKeys =
-            typeKey === "acceptedTypes"
-              ? [
-                  "key",
-                  "label",
-                  "description",
-                  "acceptedTypes",
-                  "required",
-                  "multiple",
-                  "presentation",
-                ]
-              : ["key", "label", "description", "producedTypes", "required", "presentation"];
-          const declaredTypes = Array.isArray(port[typeKey])
-            ? (port[typeKey] as HumanFieldType[])
-            : [];
+          const allowedPortKeys = ["key", "label", "description", "shape", "required", "presentation"];
+          const parsedShape = valueShapeSchema.safeParse(port.shape);
           const presentationIsValid =
             presentation === undefined ||
             (presentation !== null &&
@@ -3518,35 +3465,24 @@ function isPluginManifest(manifest: Record<string, unknown>) {
               presentationRenderers.includes(
                 String(presentation.renderer) as (typeof presentationRenderers)[number],
               ) &&
-              declaredTypes.some(
-                (type) =>
-                  dataTypes.includes(type) &&
-                  getCompatiblePresentationRenderers(type).includes(
-                    String(presentation.renderer) as (typeof presentationRenderers)[number],
-                  ),
+              parsedShape.success &&
+              getCompatiblePresentationRenderers(parsedShape.data).includes(
+                String(presentation.renderer) as (typeof presentationRenderers)[number],
               ) &&
               (presentation.itemType === undefined ||
                 presentationItemTypes.includes(
                   String(presentation.itemType) as (typeof presentationItemTypes)[number],
                 )) &&
-              (presentation.acceptedMimeTypes === undefined ||
-                (isUniqueStringArray(presentation.acceptedMimeTypes) &&
-                  presentation.acceptedMimeTypes.every((mime) =>
-                    /^[-\w.+]+\/[-\w.+*]+$/.test(mime),
-                  ))) &&
               Object.keys(presentation).every((key) =>
-                ["renderer", "itemType", "acceptedMimeTypes"].includes(key),
+                ["renderer", "itemType"].includes(key),
               ));
           return (
             isNonEmptyString(port.key) &&
             isNonEmptyString(port.label) &&
             typeof port.required === "boolean" &&
             (port.description === undefined || typeof port.description === "string") &&
-            (typeKey !== "acceptedTypes" ||
-              port.multiple === undefined ||
-              typeof port.multiple === "boolean") &&
             Object.keys(port).every((key) => allowedPortKeys.includes(key)) &&
-            isUniqueStringArray(port[typeKey], dataTypes) &&
+            parsedShape.success &&
             presentationIsValid
           );
         }) &&
@@ -3566,8 +3502,8 @@ function isPluginManifest(manifest: Record<string, unknown>) {
         capability.blockTypes.length > 0 &&
         (capability.processTypes === undefined ||
           isUniqueStringArray(capability.processTypes, processTypes)) &&
-        portsAreValid(capability.inputPorts, "acceptedTypes") &&
-        portsAreValid(capability.outputPorts, "producedTypes") &&
+        portsAreValid(capability.inputPorts) &&
+        portsAreValid(capability.outputPorts) &&
         (capability.outputPorts as unknown[]).length > 0 &&
         ["immediate", "async"].includes(String(execution?.mode)) &&
         (execution?.maxConcurrency === undefined ||
@@ -5477,7 +5413,7 @@ function channelLibraryItems(channelId: string) {
 const builderCollectionFieldSchema = z.object({
   id: z.string().min(1).max(200).optional(),
   label: z.string().trim().min(1).max(200),
-  type: z.enum(["text", "textarea", "number", "image", "url", "thumbnail_layout"]),
+  shape: valueShapeSchema,
   required: z.boolean(),
 });
 
@@ -5519,18 +5455,21 @@ function normalizeBuilderLibraryValues(
         candidate.label.trim().toLocaleLowerCase("pt-BR") === key.trim().toLocaleLowerCase("pt-BR"),
     );
     if (!field) return { ok: false, error: `Campo desconhecido na coleção: “${key}”.` };
-    if (field.type === "number") {
+    if (field.shape.kind === "control" && field.shape.control === "number") {
       if (typeof value !== "number" || !Number.isFinite(value)) {
         return { ok: false, error: `O campo “${field.label}” exige um número.` };
       }
       normalized[field.id] = value;
       continue;
     }
-    if (["text", "textarea", "url"].includes(field.type)) {
+    if (
+      (field.shape.kind === "content" && field.shape.family === "text") ||
+      (field.shape.kind === "control" && field.shape.control === "url")
+    ) {
       if (typeof value !== "string") {
         return { ok: false, error: `O campo “${field.label}” exige texto.` };
       }
-      if (field.type === "url" && value.trim()) {
+      if (field.shape.kind === "control" && field.shape.control === "url" && value.trim()) {
         try {
           const parsed = new URL(value);
           if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("invalid");
@@ -5544,7 +5483,7 @@ function normalizeBuilderLibraryValues(
     if (!value || typeof value !== "object") {
       return {
         ok: false,
-        error: `O campo “${field.label}” exige um valor estruturado compatível com ${field.type}.`,
+        error: `O campo “${field.label}” exige um valor estruturado compatível com seu shape.`,
       };
     }
     normalized[field.id] = value as StoredFile | ThumbnailLayout;
@@ -5556,7 +5495,7 @@ function normalizeBuilderLibraryValues(
     if (field.required && empty) {
       return { ok: false, error: `O campo obrigatório “${field.label}” está vazio.` };
     }
-    if (!empty && field.type === "image") {
+    if (!empty && field.shape.kind === "content" && field.shape.family !== "text") {
       const file = value as StoredFile;
       if (
         typeof file.id !== "string" ||
@@ -5565,10 +5504,17 @@ function normalizeBuilderLibraryValues(
         typeof file.size !== "number" ||
         typeof file.url !== "string"
       ) {
-        return { ok: false, error: `O campo “${field.label}” exige um arquivo de imagem válido.` };
+        return { ok: false, error: `O campo “${field.label}” exige um arquivo válido.` };
+      }
+      if (!file.mimeType.startsWith(`${field.shape.family}/`)) {
+        return { ok: false, error: `O campo “${field.label}” exige conteúdo ${field.shape.family}.` };
       }
     }
-    if (!empty && field.type === "thumbnail_layout") {
+    if (
+      !empty &&
+      field.shape.kind === "control" &&
+      field.shape.control === "thumbnail_layout"
+    ) {
       const layout = value as ThumbnailLayout;
       if (layout.aspectRatio !== "16:9" || !Array.isArray(layout.boxes)) {
         return {
@@ -5822,7 +5768,7 @@ app.put(
     );
     const changedTypes = existing.fields.filter((field) => {
       const next = fields.find((candidate) => candidate.id === field.id);
-      return next && next.type !== field.type;
+      return next && JSON.stringify(next.shape) !== JSON.stringify(field.shape);
     });
     if (references.length && (removed.length || changedTypes.length)) {
       response.status(422).json({
@@ -6258,7 +6204,7 @@ async function executePluginBlockInternal(
   const usedInputPorts = new Set<string>();
   const assignedInputs = resolvedInputs.map((item) => {
     const port = selectPluginInputPort(item.input, capability.inputPorts, usedInputPorts);
-    if (port && !port.multiple) usedInputPorts.add(port.key);
+    if (port) usedInputPorts.add(port.key);
     return { resolved: item, port };
   });
   const unsupportedInputs = assignedInputs.filter((item) => !item.port);
@@ -6276,8 +6222,7 @@ async function executePluginBlockInternal(
     id: item.input.id,
     portKey: item.input.portKey!,
     label: item.input.label,
-    type: item.input.type,
-    recordFields: item.input.recordFields,
+    shape: item.input.shape,
     presentation: item.input.presentation,
   }));
   const inputs = Object.fromEntries(
@@ -6350,7 +6295,7 @@ async function executePluginBlockInternal(
         ? capability.inputPorts.find(
             (port) =>
               port.key === validation.targetPortKey &&
-              legacyTypeListAccepts(port.acceptedTypes, targetOutput.type),
+              areValueShapesCompatible(targetOutput.shape, port.shape),
           )
         : undefined;
       if (!targetPort || inputs[targetPort.key] !== undefined) {
@@ -6370,11 +6315,10 @@ async function executePluginBlockInternal(
         id: `validation-${targetBlock.id}-${targetOutput.key}`,
         portKey: targetPort.key,
         label: targetOutput.label,
-        type: targetOutput.type,
-        recordFields: targetOutput.recordFields,
+        shape: targetOutput.shape,
         presentation: targetOutput.presentation,
       });
-      if (!targetPort.multiple) usedInputPorts.add(targetPort.key);
+      usedInputPorts.add(targetPort.key);
     }
   }
   // A plugin receives values only through bindings that are visible in the
@@ -6421,7 +6365,7 @@ async function executePluginBlockInternal(
           {
             label: "Item escolhido",
             key: "selectedItemId",
-            type: "text",
+            shape: { kind: "control", control: "identifier", cardinality: "one" },
             required: true,
             portKey: capability.outputPorts[0]?.key ?? "result",
           },
@@ -6446,7 +6390,7 @@ async function executePluginBlockInternal(
     inputs: assignedInputs.map(({ resolved, port }) => ({
       id: resolved.input.id,
       label: resolved.input.label,
-      sourceKey: resolved.resolvedSourceKey ?? resolved.input.sourceKey,
+      sourceKey: resolved.resolvedSourceKey ?? resolved.input.id,
       portKey: port!.key,
       value: resolved.value ?? null,
     })),
@@ -6878,9 +6822,9 @@ app.post("/api/commands", (request, response) => {
       }
       const engine = executionCommands({
         ...state,
-        adaptMethod: (method, source) => {
-          const adapted = adaptMethodForRuntime(method, source);
-          return adapted.ok && adapted.complete ? adapted.method : undefined;
+        adaptMethod: (method) => {
+          const parsed = processMethodV3Schema.safeParse(method);
+          return parsed.success ? parsed.data : undefined;
         },
       });
       let result: unknown;
@@ -7196,6 +7140,7 @@ app.put("/api/channels/:id/methods/:processType", (request, response) => {
     return;
   }
   const incomingMethod: ProcessMethod = {
+    contractVersion: 3,
     name:
       typeof request.body?.name === "string" && request.body.name.trim()
         ? request.body.name.trim().slice(0, 200)
@@ -7204,28 +7149,21 @@ app.put("/api/channels/:id/methods/:processType", (request, response) => {
     processType,
     blocks: request.body.blocks,
   };
-  const adapted = adaptLegacyMethod(incomingMethod, {
-    source: "editor_save",
-    recoverHistoricalValidationTarget: false,
-    resolveCapability: legacyCapability,
-    preferExplicitLegacyInputFields: true,
-  });
-  if (!adapted.ok || !adapted.complete) {
-    const errors = !adapted.ok
-      ? adapted.diagnostics.map((item) => item.message)
-      : ["O contrato do Método não pôde ser materializado."];
+  const parsedMethod = processMethodV3Schema.safeParse(incomingMethod);
+  if (!parsedMethod.success) {
+    const errors = parsedMethod.error.issues.map((issue) => issue.message);
     response.status(422).json({ error: errors[0], errors });
     return;
   }
   const localProfiles = persistLocalProfileExecution(
-    normalizeMethodBlocks(adapted.method.blocks, processType),
+    normalizeMethodBlocks(parsedMethod.data.blocks, processType),
   );
   if (localProfiles.errors.length) {
     response.status(422).json({ error: localProfiles.errors[0], errors: localProfiles.errors });
     return;
   }
   const nextMethod: ProcessMethod = {
-    contractVersion: 2,
+    contractVersion: 3,
     name:
       typeof request.body?.name === "string" && request.body.name.trim()
         ? request.body.name.trim().slice(0, 200)
@@ -7286,20 +7224,14 @@ app.put("/api/channels/:id/methods", (request, response) => {
   }
   const preparedEntries: Array<[UniversalProcess, ProcessMethod]> = [];
   for (const [processType, method] of entries) {
-    const adapted = adaptLegacyMethod(method, {
-      source: "editor_save",
-      recoverHistoricalValidationTarget: false,
-      resolveCapability: legacyCapability,
-    });
-    if (!adapted.ok || !adapted.complete) {
-      const errors = !adapted.ok
-        ? adapted.diagnostics.map((item) => item.message)
-        : ["O contrato do Método não pôde ser materializado."];
+    const parsedMethod = processMethodV3Schema.safeParse(method);
+    if (!parsedMethod.success) {
+      const errors = parsedMethod.error.issues.map((issue) => issue.message);
       response.status(422).json({ error: errors[0], errors });
       return;
     }
     const localProfiles = persistLocalProfileExecution(
-      normalizeMethodBlocks(adapted.method.blocks, processType),
+      normalizeMethodBlocks(parsedMethod.data.blocks, processType),
     );
     if (localProfiles.errors.length) {
       response.status(422).json({ error: localProfiles.errors[0], errors: localProfiles.errors });
@@ -7308,16 +7240,16 @@ app.put("/api/channels/:id/methods", (request, response) => {
     preparedEntries.push([
       processType,
       {
-        contractVersion: 2,
+        contractVersion: 3,
         name:
-          typeof adapted.method.name === "string" && adapted.method.name.trim()
-            ? adapted.method.name.trim().slice(0, 200)
+          typeof parsedMethod.data.name === "string" && parsedMethod.data.name.trim()
+            ? parsedMethod.data.name.trim().slice(0, 200)
             : `Método de ${PROCESS_META[processType].label}`,
         imageUrl:
-          typeof adapted.method.imageUrl === "string" &&
-          (/^data:image\/(webp|png|jpeg);base64,/.test(adapted.method.imageUrl) ||
-            /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(adapted.method.imageUrl))
-            ? adapted.method.imageUrl.slice(0, 1_500_000)
+          typeof parsedMethod.data.imageUrl === "string" &&
+          (/^data:image\/(webp|png|jpeg);base64,/.test(parsedMethod.data.imageUrl) ||
+            /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(parsedMethod.data.imageUrl))
+            ? parsedMethod.data.imageUrl.slice(0, 1_500_000)
             : undefined,
         processType,
         blocks: localProfiles.blocks,
@@ -7407,19 +7339,13 @@ app.post("/api/method-transfers/apply", (request, response) => {
 
   const adaptedSelected: ProcessMethod[] = [];
   for (const method of selected) {
-    const adapted = adaptLegacyMethod(method, {
-      source: "method_transfer",
-      recoverHistoricalValidationTarget: true,
-      resolveCapability: legacyCapability,
-    });
-    if (!adapted.ok || !adapted.complete) {
-      const errors = !adapted.ok
-        ? adapted.diagnostics.map((item) => item.message)
-        : ["O contrato histórico do Método não pôde ser materializado."];
+    const parsedMethod = processMethodV3Schema.safeParse(method);
+    if (!parsedMethod.success) {
+      const errors = parsedMethod.error.issues.map((issue) => issue.message);
       response.status(422).json({ error: errors[0], errors });
       return;
     }
-    adaptedSelected.push(adapted.method);
+    adaptedSelected.push(parsedMethod.data);
   }
 
   const existing = body.targetChannelId
@@ -7489,7 +7415,7 @@ app.post("/api/method-transfers/apply", (request, response) => {
         return {
           id: fieldId,
           label: field.label,
-          type: field.type,
+          shape: field.shape,
           required: field.required,
         };
       }),
@@ -8437,7 +8363,7 @@ app.patch("/api/executions/:id/blocks/:blockId/values", (request, response) => {
     .filter((field) => field.required && isEmptyRuntimeValue(values[field.key]))
     .map((field) => field.label);
   const restrictionIssues = (block.outputs ?? []).flatMap((field) => {
-    const issue = getPresentationRestrictionIssue(field.presentation, values[field.key]);
+    const issue = getPresentationRestrictionIssue(field.shape, field.presentation, values[field.key]);
     return issue ? [`${field.label}: ${issue}`] : [];
   });
   if (missing.length || restrictionIssues.length) {
@@ -8779,10 +8705,10 @@ app.post(
         response.status(422).json({ error: "O plugin não devolveu o item regenerado." });
         return;
       }
-      const outputType = job.request.outputContract.find(
+      const outputShape = job.request.outputContract.find(
         (field) => field.portKey === outputPort,
-      )?.type;
-      if (!outputType || !isCompatiblePluginItemValue(outputType, regenerated)) {
+      )?.shape;
+      if (!outputShape || !isCompatiblePluginItemValue(outputShape, regenerated)) {
         response.status(422).json({ error: "O plugin devolveu um tipo incompatível para o item." });
         return;
       }
@@ -8863,12 +8789,7 @@ app.put("/api/executions/:id", (request, response) => {
   const result = database
     .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
     .run(
-      (current as AdaptedStoredExecution)[historicalMethodSnapshot]
-        ? JSON.stringify({
-            ...execution,
-            methodSnapshot: (current as AdaptedStoredExecution)[historicalMethodSnapshot],
-          })
-        : serializeStoredExecution(execution),
+      serializeStoredExecution(execution),
       execution.updatedAt,
       execution.id,
     );

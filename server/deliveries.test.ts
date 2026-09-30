@@ -7,9 +7,16 @@ import {
   recordProcessOutputDelivery,
 } from "../src/lib/deliveries";
 import { deriveProcessOutput } from "../src/lib/process-output";
-import type { ActionBlock, ProcessExecution, Project } from "../src/lib/domain";
+import type { ActionBlock, ProcessExecution, Project, ValueShape } from "../src/lib/domain";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { projectThumbnail } from "../src/lib/project-thumbnail";
+
+const textShape = (cardinality: "one" | "many" = "one"): ValueShape => ({
+  kind: "content",
+  family: "text",
+  cardinality,
+  representation: "inline",
+});
 
 function executionFor(
   processType: ProcessExecution["processType"],
@@ -20,7 +27,7 @@ function executionFor(
     projectId: "project-1",
     channelId: "channel-1",
     processType,
-    methodSnapshot: { name: "Método de teste", processType, blocks: [block] },
+    methodSnapshot: { contractVersion: 3, name: "Método de teste", processType, blocks: [block] },
     blocks: [{ blockId: block.id, status: "completed", values: {}, attempt: 1 }],
     status: "completed",
     outputStatus: "completed",
@@ -66,7 +73,7 @@ test("materializa uma entrega e um ID universal por item", () => {
         id: "titles-output",
         label: "Opções de título",
         key: "title_options",
-        type: "list",
+        shape: textShape("many"),
         required: true,
       },
     ],
@@ -95,7 +102,7 @@ test("promove a entrega existente quando ela já é o resultado oficial do proce
     name: "Criar roteiro",
     inputs: [],
     outputs: [
-      { id: "script-output", label: "Roteiro", key: "script", type: "textarea", required: true },
+      { id: "script-output", label: "Roteiro", key: "script", shape: textShape(), required: true },
     ],
     parameters: [],
     order: 0,
@@ -137,7 +144,7 @@ test("preserva a identidade da entrega quando itens operacionais mudam de posiç
         id: "scenes-output",
         label: "Cenas",
         key: "scenes",
-        type: "list",
+        shape: textShape("many"),
         required: true,
       },
     ],
@@ -243,9 +250,12 @@ test("resolve uma entrega específica de bloco de processo anterior", () => {
         id: "cues-output",
         label: "Cues da legenda",
         key: "subtitle_cues",
-        type: "records",
+        shape: {
+          kind: "record",
+          cardinality: "many",
+          fields: [{ id: "text", label: "Texto", key: "text", shape: textShape() as Extract<ValueShape, { kind: "content" }>, required: true }],
+        },
         required: true,
-        recordFields: [{ id: "text", label: "Texto", key: "text", type: "text", required: true }],
       },
     ],
     parameters: [],
@@ -268,11 +278,7 @@ test("resolve uma entrega específica de bloco de processo anterior", () => {
       {
         id: "cues-input",
         label: "Cues",
-        type: "records",
-        source: "previous_process",
-        sourceProcessType: "narration",
-        blockId: "transcribe",
-        sourceKey: "subtitle_cues",
+        shape: sourceBlock.outputs![0].shape,
         binding: {
           kind: "previous_process",
           processType: "narration",
@@ -310,7 +316,7 @@ test("invalida a revisão anterior e cria novos IDs em outra tentativa", () => {
     type: "CRIAR",
     operator: "IA",
     outputs: [
-      { id: "script-output", label: "Roteiro", key: "script", type: "textarea", required: true },
+      { id: "script-output", label: "Roteiro", key: "script", shape: textShape(), required: true },
     ],
     parameters: [],
     order: 0,
@@ -347,19 +353,13 @@ test("permite resolver campos específicos do mesmo item escolhido", () => {
       {
         id: "angle-name",
         label: "Ângulo",
-        type: "text",
-        source: "previous_block",
-        blockId: chooseBlock.id,
-        sourceKey: "name",
+        shape: textShape(),
         binding: { kind: "previous_block", blockId: chooseBlock.id, outputKey: "name" },
       },
       {
         id: "angle-description",
         label: "Descrição",
-        type: "textarea",
-        source: "previous_block",
-        blockId: chooseBlock.id,
-        sourceKey: "description",
+        shape: textShape(),
         binding: {
           kind: "previous_block",
           blockId: chooseBlock.id,
@@ -387,8 +387,8 @@ test("permite resolver campos específicos do mesmo item escolhido", () => {
         channelId: "channel-1",
         name: "Ângulos",
         fields: [
-          { id: "name", label: "Ângulo", type: "text", required: true },
-          { id: "description", label: "Descrição", type: "textarea", required: true },
+          { id: "name", label: "Ângulo", shape: textShape(), required: true },
+          { id: "description", label: "Descrição", shape: textShape(), required: true },
         ],
         createdAt: "2026-08-30T00:00:00.000Z",
       },
@@ -443,16 +443,14 @@ test("não infere itens escolhidos completos quando sourceKey está ausente", ()
       {
         id: "category-input",
         label: "Nova entrada",
-        type: "text",
-        source: "previous_block",
-        blockId: chooseCategory.id,
+        shape: textShape(),
+        binding: { kind: "previous_block", blockId: chooseCategory.id, outputKey: "" },
       },
       {
         id: "angle-input",
         label: "Nova entrada",
-        type: "text",
-        source: "previous_block",
-        blockId: chooseAngle.id,
+        shape: textShape(),
+        binding: { kind: "previous_block", blockId: chooseAngle.id, outputKey: "" },
       },
     ],
     outputs: [],
@@ -483,9 +481,9 @@ test("não infere itens escolhidos completos quando sourceKey está ausente", ()
         channelId: "channel-1",
         name: "Linha Editorial",
         fields: [
-          { id: "category", label: "Categoria", type: "text", required: true },
-          { id: "description", label: "Descrição", type: "textarea", required: true },
-          { id: "period", label: "Período", type: "text", required: false },
+          { id: "category", label: "Categoria", shape: textShape(), required: true },
+          { id: "description", label: "Descrição", shape: textShape(), required: true },
+          { id: "period", label: "Período", shape: textShape(), required: false },
         ],
         createdAt: "2026-08-30T00:00:00.000Z",
       },
@@ -494,8 +492,8 @@ test("não infere itens escolhidos completos quando sourceKey está ausente", ()
         channelId: "channel-1",
         name: "Perspectiva do canal",
         fields: [
-          { id: "angle", label: "Ângulo", type: "text", required: true },
-          { id: "approach", label: "Abordagem", type: "textarea", required: true },
+          { id: "angle", label: "Ângulo", shape: textShape(), required: true },
+          { id: "approach", label: "Abordagem", shape: textShape(), required: true },
         ],
         createdAt: "2026-08-30T00:00:00.000Z",
       },
@@ -567,7 +565,7 @@ test("materializa itens individuais em saídas do tipo list", () => {
         id: "theme-options-output",
         label: "Opções de tema",
         key: "theme_options",
-        type: "list",
+        shape: textShape("many"),
         required: true,
       },
     ],
@@ -600,12 +598,12 @@ test("seleção de VALIDAR referencia somente a delivery do targetOutputKey expl
     type: "CRIAR",
     operator: "Humano",
     outputs: [
-      { id: "other", label: "Outra", key: "other", type: "list", required: true },
+      { id: "other", label: "Outra", key: "other", shape: textShape("many"), required: true },
       {
         id: "candidates",
         label: "Candidatos",
         key: "candidates",
-        type: "list",
+        shape: textShape("many"),
         required: true,
       },
     ],
@@ -621,7 +619,7 @@ test("seleção de VALIDAR referencia somente a delivery do targetOutputKey expl
         id: "selected",
         label: "Selecionado",
         key: "selected_value",
-        type: "text",
+        shape: textShape(),
         required: true,
       },
     ],

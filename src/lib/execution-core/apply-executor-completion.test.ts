@@ -38,6 +38,7 @@ function execution(
   status: ProcessExecution["status"] = "running",
 ): ProcessExecution {
   const methodSnapshot: ProcessMethod = {
+    contractVersion: 3,
     name: "TASK-013",
     processType: "theme",
     blocks: blocks.map((item, order) => ({ ...item, order })),

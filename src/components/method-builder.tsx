@@ -53,7 +53,12 @@ import {
   preparePluginConfigurationCommit,
 } from "@/lib/plugin-configuration-draft";
 import { localizePluginManifest } from "@/lib/plugin-localization";
-import { legacyTypeListAccepts } from "@/lib/data-shape";
+import {
+  areValueShapesCompatible,
+  contentShape,
+  controlShape,
+  recordShape,
+} from "@/lib/data-shape";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { PluginConfigurationRenderer } from "@/components/plugin-configuration-renderer";
 import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
@@ -103,15 +108,19 @@ import {
   type BlockType,
   type Channel,
   type FieldPresentation,
-  type HumanFieldType,
+  type AtomicValueShape,
+  type ContentCardinality,
+  type ContentFamily,
+  type ContentRepresentation,
+  type ControlKind,
   type PresentationRendererId,
   type ProfileExecutionPolicy,
   type ProcessMethod,
   type RecordFieldDefinition,
-  type RecordFieldType,
   type StrategicCollection,
   type UniversalProcess,
   type ValidationMode,
+  type ValueShape,
 } from "@/lib/domain";
 import {
   createProcessOutputFields,
@@ -241,47 +250,8 @@ const OPERATOR_META: Record<BlockOperator, { label: string; icon: typeof Bot }> 
   Código: { label: "Código", icon: Code2 },
 };
 
-const FIELD_TYPES: { value: HumanFieldType; label: string }[] = [
-  { value: "text", label: "Texto curto" },
-  { value: "textarea", label: "Texto longo" },
-  { value: "number", label: "Número" },
-  { value: "boolean", label: "Sim ou não" },
-  { value: "list", label: "Lista de textos" },
-  { value: "records", label: "Lista de registros" },
-  { value: "select", label: "Seleção" },
-  { value: "multiselect", label: "Seleção múltipla" },
-  { value: "datetime", label: "Data e hora" },
-  { value: "url", label: "URL" },
-  { value: "file", label: "Arquivo" },
-  { value: "files", label: "Vários arquivos" },
-  { value: "image", label: "Imagem" },
-  { value: "audio", label: "Áudio" },
-  { value: "video", label: "Vídeo" },
-  { value: "thumbnail_layout", label: "Layout de thumbnail" },
-  { value: "approval", label: "Decisão" },
-];
-
-const RECORD_FIELD_TYPES: { value: RecordFieldType; label: string }[] = [
-  { value: "text", label: "Texto curto" },
-  { value: "textarea", label: "Texto longo" },
-  { value: "number", label: "Número" },
-  { value: "boolean", label: "Sim ou não" },
-  { value: "select", label: "Seleção" },
-  { value: "datetime", label: "Data e hora" },
-  { value: "url", label: "URL" },
-  { value: "file", label: "Arquivo" },
-  { value: "image", label: "Imagem" },
-  { value: "audio", label: "Áudio" },
-  { value: "video", label: "Vídeo" },
-];
-
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function preferredRuntimePortType(port: PluginCapability["inputPorts"][number]): HumanFieldType {
-  if (port.multiple && port.acceptedTypes.includes("files")) return "files";
-  return port.acceptedTypes[0] ?? "text";
 }
 
 function newRecordField(index: number): RecordFieldDefinition {
@@ -289,9 +259,19 @@ function newRecordField(index: number): RecordFieldDefinition {
     id: uid("record-field"),
     label: index === 0 ? "Nome" : "Novo campo",
     key: index === 0 ? "name" : `field_${index + 1}`,
-    type: index === 0 ? "text" : "textarea",
+    shape: contentShape("text"),
     required: true,
   };
+}
+
+function shapeSummary(shape: ValueShape) {
+  const cardinality = shape.cardinality === "many" ? "vários" : "um";
+  if (shape.kind === "content") {
+    const representation = shape.representation === "artifact" ? "arquivo" : shape.representation;
+    return `${shape.family} · ${cardinality} · ${representation}`;
+  }
+  if (shape.kind === "record") return `registro · ${cardinality}`;
+  return `${shape.control} · ${cardinality}`;
 }
 
 export function MethodBuilder({
@@ -441,6 +421,7 @@ export function MethodBuilder({
             channel.id,
             savingProcess,
             {
+              contractVersion: 3,
               name: draftName.trim() || `Método de ${PROCESS_META[savingProcess].label}`,
               imageUrl: draftImageUrl,
               processType: savingProcess,
@@ -515,6 +496,7 @@ export function MethodBuilder({
   const saveBlocks = (nextBlocks: ActionBlock[]) => {
     editVersionRef.current += 1;
     rememberMethodDraft(channelId, processType, {
+      contractVersion: 3,
       name: draftName,
       imageUrl: draftImageUrl,
       processType,
@@ -586,7 +568,7 @@ export function MethodBuilder({
     const methodName = draftName.trim() || `Método de ${processLabel}`;
     const contents = serializeMethodFile(
       methodName,
-      { name: methodName, imageUrl: draftImageUrl, processType, blocks },
+      { contractVersion: 3, name: methodName, imageUrl: draftImageUrl, processType, blocks },
       collections,
     );
     const packageResponse = await fetch("/api/method-packages/export", {
@@ -654,19 +636,19 @@ export function MethodBuilder({
       ) {
         return;
       }
-      const isV2 = imported.version === 2;
-      const importedMethods = isV2
+      const isBundle = "methods" in imported;
+      const importedMethods = isBundle
         ? imported.methods.map((entry) => entry.method)
         : [imported.method];
-      const primaryProcess = isV2 ? imported.primaryProcessType : imported.method.processType;
+      const primaryProcess = isBundle ? imported.primaryProcessType : imported.method.processType;
       if (!primaryProcess) throw new Error(t("O Método principal não foi identificado."));
       setTransferPreview({
         name: imported.name,
         methods: importedMethods,
-        collections: isV2 ? imported.collections : [],
-        itemsIncluded: isV2 ? imported.itemsIncluded : false,
-        items: isV2 ? (imported.items ?? []) : [],
-        requirements: isV2
+        collections: isBundle ? imported.collections : [],
+        itemsIncluded: isBundle ? imported.itemsIncluded : false,
+        items: isBundle ? (imported.items ?? []) : [],
+        requirements: isBundle
           ? imported.methods.flatMap((entry) => entry.requirements)
           : (imported.requirements ?? []),
         preferredOrder: effectiveProcessOrder(channel),
@@ -779,6 +761,7 @@ export function MethodBuilder({
                   setDraftName(name);
                   editVersionRef.current += 1;
                   rememberMethodDraft(channelId, processType, {
+                    contractVersion: 3,
                     name,
                     imageUrl: draftImageUrl,
                     processType,
@@ -1512,16 +1495,14 @@ function BlockEditor({
     const used = new Set<string>();
     return (block.inputs ?? []).map((input) => {
       const compatible = selectedCapability.inputPorts.filter(
-        (port) =>
-          legacyTypeListAccepts(port.acceptedTypes, input.type) &&
-          (port.multiple || !used.has(port.key)),
+        (port) => areValueShapesCompatible(input.shape, port.shape) && !used.has(port.key),
       );
       const selected = input.portKey
         ? compatible.find((port) => port.key === input.portKey)
         : compatible.length === 1
           ? compatible[0]
           : undefined;
-      if (selected && !selected.multiple) used.add(selected.key);
+      if (selected) used.add(selected.key);
       return { input, compatible, selected, ambiguous: !input.portKey && compatible.length > 1 };
     });
   })();
@@ -1539,7 +1520,7 @@ function BlockEditor({
     );
     const compatible = selectedCapability.inputPorts.filter(
       (port) =>
-        legacyTypeListAccepts(port.acceptedTypes, validationTargetOutput.type) &&
+        areValueShapesCompatible(validationTargetOutput.shape, port.shape) &&
         !used.has(port.key),
     );
     const selected = block.validation?.targetPortKey
@@ -1558,7 +1539,7 @@ function BlockEditor({
     : (block.outputs ?? []).map((field) => {
         const compatible =
           selectedCapability?.outputPorts.filter((port) =>
-            legacyTypeListAccepts(port.producedTypes, field.type),
+            areValueShapesCompatible(port.shape, field.shape),
           ) ?? [];
         const selected = field.portKey
           ? compatible.find((port) => port.key === field.portKey)
@@ -1906,10 +1887,10 @@ function BlockEditor({
                     const requestedInputs = block.inputs?.map((input) => {
                       const compatiblePorts =
                         selection?.capability.inputPorts.filter((candidate) =>
-                          legacyTypeListAccepts(candidate.acceptedTypes, input.type),
+                          areValueShapesCompatible(input.shape, candidate.shape),
                         ) ?? [];
                       const port = compatiblePorts[0];
-                      const current = normalizeFieldPresentation(input.type, input.presentation);
+                      const current = normalizeFieldPresentation(input.shape, input.presentation);
                       return {
                         ...input,
                         portKey: compatiblePorts.length === 1 ? port?.key : undefined,
@@ -1919,10 +1900,10 @@ function BlockEditor({
                     const requestedOutputs = block.outputs?.map((output) => {
                       const compatiblePorts =
                         selection?.capability.outputPorts.filter((candidate) =>
-                          legacyTypeListAccepts(candidate.producedTypes, output.type),
+                          areValueShapesCompatible(candidate.shape, output.shape),
                         ) ?? [];
                       const port = compatiblePorts[0];
-                      const current = normalizeFieldPresentation(output.type, output.presentation);
+                      const current = normalizeFieldPresentation(output.shape, output.presentation);
                       return {
                         ...output,
                         portKey: compatiblePorts.length === 1 ? port?.key : undefined,
@@ -1948,8 +1929,8 @@ function BlockEditor({
                           const compatiblePorts =
                             selection?.capability.inputPorts.filter(
                               (port) =>
-                                legacyTypeListAccepts(port.acceptedTypes, targetOutput.type) &&
-                                (port.multiple || !usedPorts.has(port.key)),
+                                areValueShapesCompatible(targetOutput.shape, port.shape) &&
+                                !usedPorts.has(port.key),
                             ) ?? [];
                           return {
                             ...block.validation,
@@ -2213,7 +2194,7 @@ function BlockEditor({
                           )}
                           {!compatible.length && (
                             <p className="text-[10px] text-destructive">
-                              Nenhuma porta aceita o formato {input.type}.
+                              Nenhuma porta aceita o formato {shapeSummary(input.shape)}.
                             </p>
                           )}
                         </div>
@@ -2274,7 +2255,7 @@ function BlockEditor({
                               <p className="truncate text-[11px] font-medium">{port.label}</p>
                               <p className="text-[10px] text-muted-foreground">
                                 {port.required ? "Obrigatória" : "Opcional"} ·{" "}
-                                {port.acceptedTypes.join(", ")}
+                                {shapeSummary(port.shape)}
                               </p>
                             </div>
                             <Button
@@ -2283,14 +2264,13 @@ function BlockEditor({
                               variant="outline"
                               className="h-7 shrink-0 text-[10px]"
                               onClick={() => {
-                                const type = preferredRuntimePortType(port);
                                 const input: BlockInputBinding = {
                                   id: uid(`${block.id}-runtime-input`),
                                   label: port.label,
-                                  type,
-                                  source: "runtime",
+                                  shape: structuredClone(port.shape),
+                                  binding: { kind: "runtime" },
                                   portKey: port.key,
-                                  presentation: normalizeFieldPresentation(type, port.presentation),
+                                  presentation: normalizeFieldPresentation(port.shape, port.presentation),
                                 };
                                 onChange({ inputs: [...(block.inputs ?? []), input] });
                               }}
@@ -2765,16 +2745,12 @@ function InstructionEditor({
     label: collection.name,
     token: `{{collections.${instructionCollectionKey(collection)}}}`,
   }));
-  const acceptsInputType = (type: HumanFieldType) =>
+  const acceptsInputShape = (shape: ValueShape) =>
     !capability ||
-    capability.inputPorts.some((port) => legacyTypeListAccepts(port.acceptedTypes, type));
+    capability.inputPorts.some((port) => areValueShapesCompatible(shape, port.shape));
   const isAlreadyConnected = (candidate: BlockInputBinding) =>
     (block.inputs ?? []).some(
-      (input) =>
-        input.source === candidate.source &&
-        input.sourceProcessType === candidate.sourceProcessType &&
-        input.blockId === candidate.blockId &&
-        input.sourceKey === candidate.sourceKey,
+      (input) => JSON.stringify(input.binding) === JSON.stringify(candidate.binding),
     );
   const toAvailableInput = (input: Omit<BlockInputBinding, "id">, context: string, id: string) => {
     const normalizedInput: BlockInputBinding = { ...input, id };
@@ -2787,16 +2763,17 @@ function InstructionEditor({
   };
   const previousBlockInputs = methodBlocks.slice(0, blockIndex).flatMap((sourceBlock) =>
     getBlockSourceFields(sourceBlock, collections)
-      .filter((output) => acceptsInputType(output.type))
+      .filter((output) => acceptsInputShape(output.shape))
       .map((output) =>
         toAvailableInput(
           {
             label: instructionInputLabel(output),
-            type: output.type,
-            source: "previous_block",
-            sourceKey: output.key,
-            blockId: sourceBlock.id,
-            recordFields: output.recordFields,
+            shape: structuredClone(output.shape),
+            binding: {
+              kind: "previous_block",
+              blockId: sourceBlock.id,
+              outputKey: output.key,
+            },
             presentation: output.presentation,
           },
           `Neste processo · ${sourceBlock.name ?? sourceBlock.type}`,
@@ -2823,17 +2800,18 @@ function InstructionEditor({
         ),
       ];
       return sources
-        .filter(({ output }) => acceptsInputType(output.type))
+        .filter(({ output }) => acceptsInputShape(output.shape))
         .map(({ blockId, blockLabel, output }) =>
           toAvailableInput(
             {
               label: instructionInputLabel(output),
-              type: output.type,
-              source: "previous_process",
-              sourceKey: output.key,
-              sourceProcessType,
-              blockId,
-              recordFields: output.recordFields,
+              shape: structuredClone(output.shape),
+              binding: {
+                kind: "previous_process",
+                processType: sourceProcessType,
+                outputKey: output.key,
+                ...(blockId === "__process_output__" ? {} : { blockId }),
+              },
               presentation: output.presentation,
             },
             `${PROCESS_META[sourceProcessType].label} · ${blockLabel}`,
@@ -3521,7 +3499,7 @@ function ValidationEditor({
       );
       const compatiblePorts = capability.inputPorts.filter(
         (port) =>
-          legacyTypeListAccepts(port.acceptedTypes, sourceOutput.type) && !usedPorts.has(port.key),
+          areValueShapesCompatible(sourceOutput.shape, port.shape) && !usedPorts.has(port.key),
       );
       const configured = compatiblePorts.find((port) => port.key === nextValidation.targetPortKey);
       nextValidation.targetPortKey =
@@ -3533,7 +3511,7 @@ function ValidationEditor({
         nextMode,
         nextValidation.targetBlockId,
         nextValidation.targetOutputKey,
-        sourceOutput?.type,
+        sourceOutput?.shape,
       ),
     });
   }
@@ -3716,8 +3694,8 @@ function ChannelHistoryToggle({
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const inputs = block.inputs ?? [];
-  const historyInputs = inputs.filter((input) => input.source === "channel_history");
-  const regularInputs = inputs.filter((input) => input.source !== "channel_history");
+  const historyInputs = inputs.filter((input) => input.binding.kind === "channel_history");
+  const regularInputs = inputs.filter((input) => input.binding.kind !== "channel_history");
   const usesChoiceHistory = block.type === "ESCOLHER";
 
   const setEnabled = (enabled: boolean) => {
@@ -3730,25 +3708,31 @@ function ChannelHistoryToggle({
     const input: BlockInputBinding = {
       id: uid(`${block.id}-history`),
       label: usesChoiceHistory ? "Histórico de escolhas" : "Histórico de criações",
-      type: "records",
-      source: "channel_history",
-      sourceProcessType: processType,
-      blockId: usesChoiceHistory ? block.id : "__process_output__",
-      sourceKey: usesChoiceHistory ? "selectedItemId" : processOutput.key,
-      historyLimit: 10,
-      historyEligibility: "completed",
-      recordFields: createChannelHistoryRecordFields(
-        usesChoiceHistory ? "text" : processOutput.type,
+      shape: recordShape(
+        "many",
+        createChannelHistoryRecordFields(
+          usesChoiceHistory ? controlShape("identifier") : processOutput.shape,
+        ),
       ),
+      binding: {
+        kind: "channel_history",
+        processType,
+        blockId: usesChoiceHistory ? block.id : "__process_output__",
+        outputKey: usesChoiceHistory ? "selectedItemId" : processOutput.key,
+        limit: 10,
+        eligibility: "completed",
+      },
       presentation: { renderer: "table", itemType: "record" },
     };
     onChange({ inputs: [...regularInputs, input] });
   };
 
-  const setLimit = (historyLimit: number) => {
+  const setLimit = (limit: number) => {
     onChange({
       inputs: inputs.map((input) =>
-        input.source === "channel_history" ? { ...input, historyLimit } : input,
+        input.binding.kind === "channel_history"
+          ? { ...input, binding: { ...input.binding, limit } }
+          : input,
       ),
     });
   };
@@ -3785,7 +3769,11 @@ function ChannelHistoryToggle({
             max={100}
             integer
             className="h-8 text-xs"
-            value={historyInputs[0]?.historyLimit ?? 10}
+            value={
+              historyInputs[0]?.binding.kind === "channel_history"
+                ? historyInputs[0].binding.limit
+                : 10
+            }
             onValueChange={(historyLimit) => setLimit(historyLimit ?? 10)}
           />
         </div>
@@ -3814,13 +3802,13 @@ function ContextInputsEditor({
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const inputs = block.inputs ?? [];
-  const regularInputs = inputs.filter((input) => input.source !== "channel_history");
+  const regularInputs = inputs.filter((input) => input.binding.kind !== "channel_history");
   const addInput = () => {
     const input: BlockInputBinding = {
       id: uid(`${block.id}-input`),
       label: nextManualInputLabel(inputs),
-      type: "text",
-      source: "previous_block",
+      shape: contentShape("text"),
+      binding: { kind: "previous_block", blockId: "", outputKey: "" },
       presentation: { renderer: "auto" },
     };
     onChange({
@@ -3918,14 +3906,14 @@ function DataContractEditor({
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const inputs = block.inputs ?? [];
-  const regularInputs = inputs.filter((input) => input.source !== "channel_history");
+  const regularInputs = inputs.filter((input) => input.binding.kind !== "channel_history");
   const outputs = block.outputs ?? [];
   const addInput = () => {
     const input: BlockInputBinding = {
       id: uid(`${block.id}-input`),
       label: nextManualInputLabel(inputs),
-      type: "text",
-      source: "previous_block",
+      shape: contentShape("text"),
+      binding: { kind: "previous_block", blockId: "", outputKey: "" },
       presentation: { renderer: "auto" },
     };
     onChange({
@@ -3938,7 +3926,7 @@ function DataContractEditor({
       id: uid(`${block.id}-output`),
       label: "Nova entrega",
       key: `output_${outputs.length + 1}`,
-      type: "text",
+      shape: contentShape("text"),
       required: true,
       presentation: { renderer: "auto" },
     };
@@ -4084,7 +4072,11 @@ function InputBindingEditor({
   onRemove: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const sourceBlock = availableBlocks.find((block) => block.id === input.blockId);
+  const binding = input.binding;
+  const sourceBlock =
+    binding.kind === "previous_block"
+      ? availableBlocks.find((block) => block.id === binding.blockId)
+      : undefined;
   const sourceFields = getBlockSourceFields(sourceBlock, collections);
   const previousProcesses = processOrder.slice(0, processOrder.indexOf(processType));
   const previousDeliverySources = previousProcesses.flatMap((sourceProcessType) => {
@@ -4098,28 +4090,24 @@ function InputBindingEditor({
         output,
       })),
     );
-    const officialOutput = createProcessOutputFields(sourceProcessType)[0];
-    return [
-      {
-        id: `${sourceProcessType}::process::${officialOutput.key}`,
-        processType: sourceProcessType,
-        blockId: "__process_output__",
-        blockLabel: "Resultado oficial",
-        output: officialOutput,
-      },
-      ...blockOutputs,
-    ];
+    const officialOutputs = createProcessOutputFields(sourceProcessType).map((output) => ({
+      id: `${sourceProcessType}::process::${output.key}`,
+      processType: sourceProcessType,
+      blockId: undefined,
+      blockLabel: "Resultado oficial",
+      output,
+    }));
+    return [...officialOutputs, ...blockOutputs];
   });
   const selectedPreviousDelivery =
-    previousDeliverySources.find(
-      (source) =>
-        source.processType === input.sourceProcessType &&
-        source.blockId === input.blockId &&
-        source.output.key === input.sourceKey,
-    ) ??
-    previousDeliverySources.find(
-      (source) => !input.sourceProcessType && source.output.key === input.sourceKey,
-    );
+    binding.kind === "previous_process"
+      ? previousDeliverySources.find(
+          (source) =>
+            source.processType === binding.processType &&
+            source.blockId === binding.blockId &&
+            source.output.key === binding.outputKey,
+        )
+      : undefined;
   return (
     <div className="rounded-xl border border-border/70 bg-card p-3">
       <div className="flex items-center gap-2">
@@ -4137,7 +4125,7 @@ function InputBindingEditor({
           />
           <span className="truncate text-sm font-medium">{instructionInputLabel(input)}</span>
           <Badge variant="outline" className="ml-auto shrink-0 text-[9px] font-normal">
-            {FIELD_TYPES.find((type) => type.value === input.type)?.label ?? input.type}
+            {shapeSummary(input.shape)}
           </Badge>
         </button>
         <Button
@@ -4161,72 +4149,66 @@ function InputBindingEditor({
               className="h-8 text-xs"
             />
             <PresentationSelector
-              type={input.type}
+              shape={input.shape}
               value={input.presentation}
               onChange={(presentation) => onChange({ presentation })}
             />
           </div>
 
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground">Formato</Label>
-            <Select
-              value={input.type ?? "text"}
-              onValueChange={(type) => {
-                const nextType = type as HumanFieldType;
-                onChange({
-                  type: nextType,
-                  presentation: normalizeFieldPresentation(nextType, input.presentation),
-                  recordFields:
-                    type === "records" ? (input.recordFields ?? [newRecordField(0)]) : undefined,
-                });
-              }}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FIELD_TYPES.map((type) => (
-                  <SelectItem key={type.value} value={type.value}>
-                    {type.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <ShapeEditor
+            shape={input.shape}
+            onChange={(shape) =>
+              onChange({
+                shape,
+                presentation: normalizeFieldPresentation(shape, input.presentation),
+              })
+            }
+          />
 
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-[10px] text-muted-foreground">Origem</Label>
               <Select
-                value={input.source}
+                value={binding.kind}
                 onValueChange={(source) => {
                   if (source === "previous_process") {
                     const selected = previousDeliverySources.at(-1);
                     const output = selected?.output;
+                    if (!selected || !output) return;
                     onChange({
-                      source: "previous_process",
-                      label: output ? instructionInputLabel(output) : input.label,
-                      sourceKey: output?.key,
-                      sourceProcessType: selected?.processType,
-                      blockId: selected?.blockId,
-                      staticValue: undefined,
-                      historyLimit: undefined,
-                      historyEligibility: undefined,
-                      type: output?.type ?? input.type,
-                      presentation: output?.presentation ?? input.presentation,
-                      recordFields: output?.recordFields,
+                      label: instructionInputLabel(output),
+                      shape: structuredClone(output.shape),
+                      binding: {
+                        kind: "previous_process",
+                        processType: selected.processType,
+                        outputKey: output.key,
+                        ...(selected.blockId ? { blockId: selected.blockId } : {}),
+                      },
+                      presentation: output.presentation,
                     });
                     return;
                   }
-                  onChange({
-                    source: source as BlockInputBinding["source"],
-                    sourceKey: source === "project" ? "title" : undefined,
-                    sourceProcessType: undefined,
-                    blockId: undefined,
-                    staticValue: undefined,
-                    historyLimit: undefined,
-                    historyEligibility: undefined,
-                  });
+                  if (source === "project") onChange({ binding: { kind: "project", key: "title" } });
+                  if (source === "runtime") onChange({ binding: { kind: "runtime" } });
+                  if (source === "static") onChange({ binding: { kind: "static", value: "" } });
+                  if (source === "previous_block") {
+                    const candidate = availableBlocks.at(-1);
+                    const output = getBlockSourceFields(candidate, collections)[0];
+                    onChange({
+                      ...(output
+                        ? {
+                            label: instructionInputLabel(output),
+                            shape: structuredClone(output.shape),
+                            presentation: output.presentation,
+                          }
+                        : {}),
+                      binding: {
+                        kind: "previous_block",
+                        blockId: candidate?.id ?? "",
+                        outputKey: output?.key ?? "",
+                      },
+                    });
+                  }
                 }}
               >
                 <SelectTrigger className="h-8 text-xs">
@@ -4244,23 +4226,34 @@ function InputBindingEditor({
               </Select>
             </div>
 
-            {input.source === "previous_block" && (
+            {binding.kind === "previous_block" && (
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">Bloco</Label>
                 <Select
-                  value={input.blockId ?? "automatic"}
-                  onValueChange={(blockId) =>
+                  value={binding.blockId}
+                  onValueChange={(blockId) => {
+                    const candidate = availableBlocks.find((item) => item.id === blockId);
+                    const output = getBlockSourceFields(candidate, collections)[0];
                     onChange({
-                      blockId: blockId === "automatic" ? undefined : blockId,
-                      sourceKey: undefined,
-                    })
-                  }
+                      ...(output
+                        ? {
+                            label: instructionInputLabel(output),
+                            shape: structuredClone(output.shape),
+                            presentation: output.presentation,
+                          }
+                        : {}),
+                      binding: {
+                        kind: "previous_block",
+                        blockId,
+                        outputKey: output?.key ?? "",
+                      },
+                    });
+                  }}
                 >
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="automatic">Compatível mais recente</SelectItem>
                     {availableBlocks.map((candidate) => (
                       <SelectItem key={candidate.id} value={candidate.id}>
                         {candidate.order + 1}. {candidate.name ?? candidate.type}
@@ -4271,7 +4264,7 @@ function InputBindingEditor({
               </div>
             )}
 
-            {input.source === "previous_process" && (
+            {binding.kind === "previous_process" && (
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">
                   Processo, bloco e entrega
@@ -4283,14 +4276,17 @@ function InputBindingEditor({
                       (candidate) => candidate.id === sourceId,
                     );
                     const output = selected?.output;
+                    if (!selected || !output) return;
                     onChange({
-                      label: output ? instructionInputLabel(output) : input.label,
-                      sourceProcessType: selected?.processType,
-                      blockId: selected?.blockId,
-                      sourceKey: output?.key,
-                      type: output?.type ?? input.type,
-                      presentation: output?.presentation ?? input.presentation,
-                      recordFields: output?.recordFields,
+                      label: instructionInputLabel(output),
+                      shape: structuredClone(output.shape),
+                      binding: {
+                        kind: "previous_process",
+                        processType: selected.processType,
+                        outputKey: output.key,
+                        ...(selected.blockId ? { blockId: selected.blockId } : {}),
+                      },
+                      presentation: output.presentation,
                     });
                   }}
                 >
@@ -4309,12 +4305,14 @@ function InputBindingEditor({
               </div>
             )}
 
-            {input.source === "project" && (
+            {binding.kind === "project" && (
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">Dado</Label>
                 <Select
-                  value={input.sourceKey ?? "title"}
-                  onValueChange={(sourceKey) => onChange({ sourceKey })}
+                  value={binding.key}
+                  onValueChange={(key) =>
+                    onChange({ binding: { kind: "project", key: key as "title" | "deadline" } })
+                  }
                 >
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue />
@@ -4327,32 +4325,37 @@ function InputBindingEditor({
               </div>
             )}
 
-            {input.source === "static" && (
+            {binding.kind === "static" && (
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">Valor</Label>
                 <Input
                   className="h-8 text-xs"
-                  value={input.staticValue ?? ""}
-                  onChange={(event) => onChange({ staticValue: event.target.value })}
+                  value={binding.value}
+                  onChange={(event) =>
+                    onChange({ binding: { kind: "static", value: event.target.value } })
+                  }
                   placeholder="Valor usado nesta entrada"
                 />
               </div>
             )}
           </div>
 
-          {input.source === "previous_block" && input.blockId && (
+          {binding.kind === "previous_block" && binding.blockId && (
             <div className="space-y-1">
               <Label className="text-[10px] text-muted-foreground">Saída do bloco</Label>
               <Select
-                value={input.sourceKey ?? "automatic"}
-                onValueChange={(sourceKey) => {
-                  const output = sourceFields.find((candidate) => candidate.key === sourceKey);
+                value={binding.outputKey}
+                onValueChange={(outputKey) => {
+                  const output = sourceFields.find((candidate) => candidate.key === outputKey);
                   onChange({
-                    label: output ? instructionInputLabel(output) : input.label,
-                    sourceKey: sourceKey === "automatic" ? undefined : sourceKey,
-                    type: output?.type ?? input.type,
-                    presentation: output?.presentation ?? input.presentation,
-                    recordFields: output?.recordFields,
+                    ...(output
+                      ? {
+                          label: instructionInputLabel(output),
+                          shape: structuredClone(output.shape),
+                          presentation: output.presentation,
+                        }
+                      : {}),
+                    binding: { ...binding, outputKey },
                   });
                 }}
               >
@@ -4360,7 +4363,6 @@ function InputBindingEditor({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="automatic">Saída compatível</SelectItem>
                   {sourceFields.map((output) => (
                     <SelectItem key={output.id} value={output.key}>
                       {instructionInputLabel(output)}
@@ -4369,12 +4371,6 @@ function InputBindingEditor({
                 </SelectContent>
               </Select>
             </div>
-          )}
-          {input.type === "records" && input.source !== "channel_history" && (
-            <RecordFieldsEditor
-              fields={input.recordFields ?? []}
-              onChange={(recordFields) => onChange({ recordFields })}
-            />
           )}
         </div>
       )}
@@ -4392,7 +4388,7 @@ function OutputFieldEditor({
   onRemove: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const usesOptions = field.type === "select" || field.type === "multiselect";
+  const usesOptions = field.shape.kind === "control" && field.shape.control === "selection";
   return (
     <div className="rounded-xl border border-border/70 bg-card p-3">
       <div className="flex items-center gap-2">
@@ -4410,7 +4406,7 @@ function OutputFieldEditor({
           />
           <span className="truncate text-sm font-medium">{instructionInputLabel(field)}</span>
           <Badge variant="outline" className="ml-auto shrink-0 text-[9px] font-normal">
-            {FIELD_TYPES.find((type) => type.value === field.type)?.label ?? field.type}
+            {shapeSummary(field.shape)}
           </Badge>
         </button>
         <Button
@@ -4433,42 +4429,28 @@ function OutputFieldEditor({
               className="h-8 text-xs"
             />
             <PresentationSelector
-              type={field.type}
+              shape={field.shape}
               value={field.presentation}
               onChange={(presentation) => onChange({ presentation })}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground">Formato</Label>
-            <Select
-              value={field.type}
-              onValueChange={(type) => {
-                const nextType = type as HumanFieldType;
-                onChange({
-                  type: nextType,
-                  presentation: normalizeFieldPresentation(nextType, field.presentation),
-                  recordFields:
-                    type === "records" ? (field.recordFields ?? [newRecordField(0)]) : undefined,
-                });
-              }}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FIELD_TYPES.map((type) => (
-                  <SelectItem key={type.value} value={type.value}>
-                    {type.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <ShapeEditor
+            shape={field.shape}
+            onChange={(shape) =>
+              onChange({
+                shape,
+                presentation: normalizeFieldPresentation(shape, field.presentation),
+              })
+            }
+          />
           {usesOptions && (
             <div>
               <LineListTextarea
-                value={field.options ?? []}
-                onChange={(options) => onChange({ options })}
+                value={field.shape.kind === "control" ? (field.shape.options ?? []) : []}
+                onChange={(options) =>
+                  field.shape.kind === "control" &&
+                  onChange({ shape: { ...field.shape, options } })
+                }
                 placeholder="Opções fixas, uma por linha (opcional)"
                 rows={3}
                 className="text-xs"
@@ -4479,32 +4461,165 @@ function OutputFieldEditor({
               </p>
             </div>
           )}
-          {field.type === "records" && (
-            <RecordFieldsEditor
-              fields={field.recordFields ?? []}
-              onChange={(recordFields) => onChange({ recordFields })}
-            />
-          )}
         </div>
       )}
     </div>
   );
 }
 
-function PresentationSelector({
-  type,
+function ShapeEditor({
+  shape,
+  onChange,
+  allowRecord = true,
+}: {
+  shape: ValueShape;
+  onChange: (shape: ValueShape) => void;
+  allowRecord?: boolean;
+}) {
+  return (
+    <div className="space-y-2 rounded-lg border border-border/70 bg-background/30 p-3">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="space-y-1">
+          <Label className="text-[10px] text-muted-foreground">Formato</Label>
+          <Select
+            value={shape.kind}
+            onValueChange={(kind) => {
+              if (kind === "content") onChange(contentShape("text"));
+              if (kind === "control") onChange(controlShape("selection"));
+              if (kind === "record") onChange(recordShape("many", [newRecordField(0)]));
+            }}
+          >
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="content">Conteúdo</SelectItem>
+              <SelectItem value="control">Controle</SelectItem>
+              {allowRecord && <SelectItem value="record">Registros</SelectItem>}
+            </SelectContent>
+          </Select>
+        </div>
+        {shape.kind === "content" && (
+          <>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Família</Label>
+              <Select
+                value={shape.family}
+                onValueChange={(family) =>
+                  onChange(contentShape(family as ContentFamily, shape.cardinality))
+                }
+              >
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Texto</SelectItem>
+                  <SelectItem value="image">Imagem</SelectItem>
+                  <SelectItem value="audio">Áudio</SelectItem>
+                  <SelectItem value="video">Vídeo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <CardinalityEditor
+              value={shape.cardinality}
+              onChange={(cardinality) => onChange({ ...shape, cardinality })}
+            />
+          </>
+        )}
+        {shape.kind === "control" && (
+          <>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Controle</Label>
+              <Select
+                value={shape.control}
+                onValueChange={(control) =>
+                  onChange(controlShape(control as ControlKind, shape.cardinality))
+                }
+              >
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="identifier">Identificador</SelectItem>
+                  <SelectItem value="number">Número</SelectItem>
+                  <SelectItem value="boolean">Sim ou não</SelectItem>
+                  <SelectItem value="selection">Seleção</SelectItem>
+                  <SelectItem value="datetime">Data e hora</SelectItem>
+                  <SelectItem value="url">URL</SelectItem>
+                  <SelectItem value="approval">Decisão</SelectItem>
+                  <SelectItem value="thumbnail_layout">Layout de thumbnail</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <CardinalityEditor
+              value={shape.cardinality}
+              onChange={(cardinality) => onChange({ ...shape, cardinality })}
+            />
+          </>
+        )}
+        {shape.kind === "record" && (
+          <CardinalityEditor
+            value={shape.cardinality}
+            onChange={(cardinality) => onChange({ ...shape, cardinality })}
+          />
+        )}
+      </div>
+      {shape.kind === "content" && shape.family === "text" && (
+        <div className="space-y-1">
+          <Label className="text-[10px] text-muted-foreground">Representação</Label>
+          <Select
+            value={shape.representation}
+            onValueChange={(representation) =>
+              onChange({ ...shape, representation: representation as ContentRepresentation })
+            }
+          >
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="inline">Direto</SelectItem>
+              <SelectItem value="artifact">Arquivo</SelectItem>
+              <SelectItem value="either">Direto ou arquivo</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {shape.kind === "record" && (
+        <RecordFieldsEditor
+          fields={shape.fields}
+          onChange={(fields) => onChange({ ...shape, fields })}
+        />
+      )}
+    </div>
+  );
+}
+
+function CardinalityEditor({
   value,
   onChange,
 }: {
-  type: HumanFieldType;
+  value: ContentCardinality;
+  onChange: (value: ContentCardinality) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-[10px] text-muted-foreground">Quantidade</Label>
+      <Select value={value} onValueChange={(next) => onChange(next as ContentCardinality)}>
+        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="one">Um</SelectItem>
+          <SelectItem value="many">Vários</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function PresentationSelector({
+  shape,
+  value,
+  onChange,
+}: {
+  shape: ValueShape;
   value?: FieldPresentation;
   onChange: (presentation: FieldPresentation) => void;
 }) {
-  const normalized = normalizeFieldPresentation(type, value);
-  const compatible = getCompatiblePresentationRenderers(type);
+  const normalized = normalizeFieldPresentation(shape, value);
+  const compatible = getCompatiblePresentationRenderers(shape);
   const selected = compatible.includes(normalized.renderer) ? normalized.renderer : "auto";
   const [previewId, setPreviewId] = useState<PresentationRendererId>(selected);
-  const [mimeDraft, setMimeDraft] = useState((normalized.acceptedMimeTypes ?? []).join(", "));
   const groups = PRESENTATION_RENDERERS.filter((renderer) =>
     compatible.includes(renderer.id),
   ).reduce((result, renderer) => {
@@ -4516,27 +4631,19 @@ function PresentationSelector({
   const preview = PRESENTATION_RENDERER_REGISTRY[previewId] ?? PRESENTATION_RENDERER_REGISTRY.auto;
   const selectedDefinition = PRESENTATION_RENDERER_REGISTRY[selected];
   const SelectedIcon = selectedDefinition.icon;
-  const supportsRestrictions = [
-    "file",
-    "files",
-    "image",
-    "audio",
-    "video",
-    "list",
-    "records",
-  ].includes(type);
+  const supportsRestrictions = shape.kind === "content" || shape.kind === "record";
   const itemTypeOptions =
-    type === "list" || type === "multiselect"
+    shape.kind === "record"
+      ? (["record"] as const)
+      : shape.kind === "content" && shape.family === "text" && shape.representation !== "artifact"
       ? (["text"] as const)
-      : type === "records"
-        ? (["record"] as const)
-        : type === "image"
+      : shape.kind === "content" && shape.family === "image"
           ? (["image"] as const)
-          : type === "audio"
+        : shape.kind === "content" && shape.family === "audio"
             ? (["audio"] as const)
-            : type === "video"
+          : shape.kind === "content" && shape.family === "video"
               ? (["video"] as const)
-              : (["file", "image", "audio", "video"] as const);
+            : (["file"] as const);
   const itemTypeLabels = {
     text: "Texto",
     record: "Registro",
@@ -4551,7 +4658,6 @@ function PresentationSelector({
       onOpenChange={(open) => {
         if (!open) return;
         setPreviewId(selected);
-        setMimeDraft((normalized.acceptedMimeTypes ?? []).join(", "));
       }}
     >
       <DialogTrigger asChild>
@@ -4620,7 +4726,7 @@ function PresentationSelector({
                     value={normalized.itemType ?? "any"}
                     onValueChange={(itemType) =>
                       onChange(
-                        normalizeFieldPresentation(type, {
+                        normalizeFieldPresentation(shape, {
                           ...normalized,
                           itemType:
                             itemType === "any"
@@ -4643,27 +4749,6 @@ function PresentationSelector({
                     </SelectContent>
                   </Select>
                 </div>
-                {["file", "files", "image", "audio", "video"].includes(type) && (
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-muted-foreground">
-                      MIME aceitos (opcional)
-                    </Label>
-                    <Input
-                      className="h-8 text-xs"
-                      value={mimeDraft}
-                      onChange={(event) => setMimeDraft(event.target.value)}
-                      onBlur={() =>
-                        onChange(
-                          normalizeFieldPresentation(type, {
-                            ...normalized,
-                            acceptedMimeTypes: mimeDraft.split(","),
-                          }),
-                        )
-                      }
-                      placeholder="image/*, image/png"
-                    />
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -4674,7 +4759,7 @@ function PresentationSelector({
             <div className="min-h-56 rounded-xl border border-border/70 bg-card p-4">
               <p className="mb-3 text-xs font-semibold">{preview.label}</p>
               <RuntimeValueViewer
-                type={preview.preview.type}
+                shape={preview.preview.shape}
                 value={preview.preview.value}
                 presentation={{ renderer: preview.id }}
                 compact
@@ -4723,7 +4808,7 @@ function RecordFieldsEditor({
         {fields.map((recordField, index) => (
           <div
             key={recordField.id}
-            className="grid gap-2 rounded-lg border border-border/60 p-2 sm:grid-cols-[minmax(0,1fr)_120px_32px]"
+            className="grid gap-2 rounded-lg border border-border/60 p-2 sm:grid-cols-[minmax(0,1fr)_32px]"
           >
             <div className="grid gap-2 sm:grid-cols-2">
               <Input
@@ -4739,21 +4824,6 @@ function RecordFieldsEditor({
                 placeholder="chave_tecnica"
               />
             </div>
-            <Select
-              value={recordField.type}
-              onValueChange={(type) => update(recordField.id, { type: type as RecordFieldType })}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {RECORD_FIELD_TYPES.map((type) => (
-                  <SelectItem key={type.value} value={type.value}>
-                    {type.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Button
               size="icon"
               variant="ghost"
@@ -4764,7 +4834,12 @@ function RecordFieldsEditor({
             >
               <Trash2 className="size-3" />
             </Button>
-            <label className="flex items-center gap-2 text-[10px] text-muted-foreground sm:col-span-3">
+            <ShapeEditor
+              shape={recordField.shape}
+              allowRecord={false}
+              onChange={(shape) => update(recordField.id, { shape: shape as AtomicValueShape })}
+            />
+            <label className="flex items-center gap-2 text-[10px] text-muted-foreground sm:col-span-2">
               <Checkbox
                 checked={recordField.required}
                 onCheckedChange={(checked) =>
@@ -4773,11 +4848,19 @@ function RecordFieldsEditor({
               />
               Obrigatório
             </label>
-            {recordField.type === "select" && (
+            {recordField.shape.kind === "control" && recordField.shape.control === "selection" && (
               <LineListTextarea
-                className="min-h-20 text-xs sm:col-span-3"
-                value={recordField.options ?? []}
-                onChange={(options) => update(recordField.id, { options })}
+                className="min-h-20 text-xs sm:col-span-2"
+                value={recordField.shape.options ?? []}
+                onChange={(options) => {
+                  if (
+                    recordField.shape.kind !== "control" ||
+                    recordField.shape.control !== "selection"
+                  ) {
+                    return;
+                  }
+                  update(recordField.id, { shape: { ...recordField.shape, options } });
+                }}
                 placeholder="Uma opção por linha"
               />
             )}

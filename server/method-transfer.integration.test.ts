@@ -102,12 +102,13 @@ test(
         id: "source-collection",
         channelId: "source-channel",
         name: "Referências visuais",
-        fields: [{ id: "source-image", label: "Imagem", type: "image", required: true }],
+        fields: [{ id: "source-image", label: "Imagem", shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" }, required: true }],
         createdAt: new Date().toISOString(),
       };
       const methods = createEmptyMethods();
       const titleOutput = createProcessOutputFields("title")[0];
       methods.title = {
+        contractVersion: 3,
         name: "Título portátil controlado",
         processType: "title",
         blocks: [
@@ -202,8 +203,8 @@ test(
       assert.equal(importResponse.status, 200);
       const importedPayload = (await importResponse.json()) as { manifest: string };
       const imported = parseMethodImportFile(importedPayload.manifest);
-      assert.equal(imported.version, 2);
-      if (imported.version !== 2) return;
+      assert.equal(imported.version, 3);
+      if (!("methods" in imported) || !("items" in imported)) return;
       const importedItems = imported.items ?? [];
       assert.equal(imported.itemsIncluded, true);
       assert.equal(importedItems.length, 1);

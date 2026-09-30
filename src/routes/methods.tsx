@@ -284,48 +284,54 @@ function MethodsLibraryPage() {
         contents = await file.text();
       }
       const imported = parseMethodImportFile(contents);
-      const isV2 = imported.version === 2;
-      const methods = isV2
-        ? imported.methods.map((entry) => entry.method)
-        : imported.format === "contentflow-method"
-          ? [imported.method]
-          : imported.methods;
-      const channelName = isV2
-        ? (imported.channelName ?? imported.name)
-        : imported.format === "contentflow-method"
-          ? imported.name
-          : imported.channelName;
-      const requirements = isV2
-        ? Object.fromEntries(
-            imported.methods.map((entry) => [entry.method.processType, entry.requirements]),
-          )
-        : imported.format === "contentflow-method"
-          ? { [imported.method.processType]: imported.requirements ?? [] }
-          : (imported.requirements ?? {});
+      let methods: ProcessMethod[];
+      let channelName: string;
+      let channelImageUrl: string | undefined;
+      let requirements: Partial<Record<UniversalProcess, MethodRequirement[]>>;
+      let roles: Partial<Record<UniversalProcess, PortableMethodRole>>;
+      let portableCollections: PortableCollectionV2[] | undefined;
+      let processOrder: UniversalProcess[] | undefined;
+      let itemsIncluded = false;
+      let items: PortableLibraryItemV2[] | undefined;
+
+      if ("method" in imported) {
+        methods = [imported.method];
+        channelName = imported.name;
+        requirements = { [imported.method.processType]: imported.requirements ?? [] };
+        roles = { [imported.method.processType]: "primary" };
+      } else if ("collections" in imported) {
+        methods = imported.methods.map((entry) => entry.method);
+        channelName = imported.channelName ?? imported.name;
+        channelImageUrl = imported.channelImageUrl;
+        requirements = Object.fromEntries(
+          imported.methods.map((entry) => [entry.method.processType, entry.requirements]),
+        );
+        roles = Object.fromEntries(
+          imported.methods.map((entry) => [entry.method.processType, entry.role]),
+        );
+        portableCollections = imported.collections;
+        processOrder = imported.processOrder;
+        itemsIncluded = imported.itemsIncluded;
+        items = imported.items;
+      } else {
+        methods = imported.methods;
+        channelName = imported.channelName;
+        channelImageUrl = imported.channelImageUrl;
+        requirements = imported.requirements ?? {};
+        roles = Object.fromEntries(methods.map((method) => [method.processType, "set"]));
+      }
       setTransfer({
         mode: "import",
         name: imported.name,
         channelName,
-        channelImageUrl:
-          imported.format === "contentflow-method-pack" || isV2
-            ? imported.channelImageUrl
-            : undefined,
+        channelImageUrl,
         methods,
         requirements,
-        roles: isV2
-          ? Object.fromEntries(
-              imported.methods.map((entry) => [entry.method.processType, entry.role]),
-            )
-          : Object.fromEntries(
-              methods.map((method) => [
-                method.processType,
-                imported.format === "contentflow-method" ? "primary" : "set",
-              ]),
-            ),
-        portableCollections: isV2 ? imported.collections : undefined,
-        processOrder: isV2 ? imported.processOrder : undefined,
-        itemsIncluded: isV2 ? imported.itemsIncluded : false,
-        items: isV2 ? imported.items : [],
+        roles,
+        portableCollections,
+        processOrder,
+        itemsIncluded,
+        items,
         isPack: imported.format === "contentflow-method-pack",
       });
       setNewChannelName(channelName);
@@ -1019,7 +1025,7 @@ function DependencyWarnings({
                 <ul className="mt-1 list-inside list-disc text-muted-foreground">
                   {requirement.fields.map((field) => (
                     <li key={field.key}>
-                      {field.label} — {field.type}
+                      {field.label} — {field.shape.kind}
                       {field.required ? " (obrigatório)" : " (opcional)"}
                     </li>
                   ))}

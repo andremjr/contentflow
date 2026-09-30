@@ -1,5 +1,5 @@
 {
-  "apiVersion": "1",
+  "apiVersion": "2",
   "id": "com.contentflow.test.deterministic-fault",
   "name": "Deterministic Fault Injection",
   "version": "0.1.0",
@@ -15,10 +15,14 @@
           "name": "Cenário determinístico de falha",
           "description": "Executa um cenário controlado sem provider externo.",
           "inputPorts": {
-            "content": { "label": "Conteúdo" }
+            "content": {
+              "label": "Conteúdo"
+            }
           },
           "outputPorts": {
-            "result": { "label": "Resultado" }
+            "result": {
+              "label": "Resultado"
+            }
           },
           "blockConfigSchema": {
             "properties": {
@@ -26,17 +30,38 @@
                 "title": "Cenário",
                 "description": "Resultado determinístico que a fixture deve produzir.",
                 "options": [
-                  { "value": "success", "label": "Sucesso" },
-                  { "value": "technical_retryable", "label": "Falha técnica recuperável" },
-                  { "value": "timeout", "label": "Timeout" },
-                  { "value": "rate_limit", "label": "Limite de taxa" },
-                  { "value": "intervention", "label": "Intervenção humana" },
-                  { "value": "external_effect_uncertain", "label": "Efeito externo incerto" },
+                  {
+                    "value": "success",
+                    "label": "Sucesso"
+                  },
+                  {
+                    "value": "technical_retryable",
+                    "label": "Falha técnica recuperável"
+                  },
+                  {
+                    "value": "timeout",
+                    "label": "Timeout"
+                  },
+                  {
+                    "value": "rate_limit",
+                    "label": "Limite de taxa"
+                  },
+                  {
+                    "value": "intervention",
+                    "label": "Intervenção humana"
+                  },
+                  {
+                    "value": "external_effect_uncertain",
+                    "label": "Efeito externo incerto"
+                  },
                   {
                     "value": "external_effect_confirmed_failure",
                     "label": "Falha após efeito confirmado"
                   },
-                  { "value": "cancel_aware", "label": "Aguardando cancelamento" }
+                  {
+                    "value": "cancel_aware",
+                    "label": "Aguardando cancelamento"
+                  }
                 ]
               }
             }
@@ -52,10 +77,14 @@
           "name": "Deterministic fault scenario",
           "description": "Runs a controlled scenario without an external provider.",
           "inputPorts": {
-            "content": { "label": "Content" }
+            "content": {
+              "label": "Content"
+            }
           },
           "outputPorts": {
-            "result": { "label": "Result" }
+            "result": {
+              "label": "Result"
+            }
           },
           "blockConfigSchema": {
             "properties": {
@@ -63,17 +92,38 @@
                 "title": "Scenario",
                 "description": "Deterministic outcome produced by the fixture.",
                 "options": [
-                  { "value": "success", "label": "Success" },
-                  { "value": "technical_retryable", "label": "Retryable technical failure" },
-                  { "value": "timeout", "label": "Timeout" },
-                  { "value": "rate_limit", "label": "Rate limit" },
-                  { "value": "intervention", "label": "Human intervention" },
-                  { "value": "external_effect_uncertain", "label": "Uncertain external effect" },
+                  {
+                    "value": "success",
+                    "label": "Success"
+                  },
+                  {
+                    "value": "technical_retryable",
+                    "label": "Retryable technical failure"
+                  },
+                  {
+                    "value": "timeout",
+                    "label": "Timeout"
+                  },
+                  {
+                    "value": "rate_limit",
+                    "label": "Rate limit"
+                  },
+                  {
+                    "value": "intervention",
+                    "label": "Human intervention"
+                  },
+                  {
+                    "value": "external_effect_uncertain",
+                    "label": "Uncertain external effect"
+                  },
                   {
                     "value": "external_effect_confirmed_failure",
                     "label": "Failure after confirmed effect"
                   },
-                  { "value": "cancel_aware", "label": "Waiting for cancellation" }
+                  {
+                    "value": "cancel_aware",
+                    "label": "Waiting for cancellation"
+                  }
                 ]
               }
             }
@@ -89,10 +139,14 @@
           "name": "Escenario determinista de fallo",
           "description": "Ejecuta un escenario controlado sin proveedor externo.",
           "inputPorts": {
-            "content": { "label": "Contenido" }
+            "content": {
+              "label": "Contenido"
+            }
           },
           "outputPorts": {
-            "result": { "label": "Resultado" }
+            "result": {
+              "label": "Resultado"
+            }
           },
           "blockConfigSchema": {
             "properties": {
@@ -100,17 +154,38 @@
                 "title": "Escenario",
                 "description": "Resultado determinista que debe producir la fixture.",
                 "options": [
-                  { "value": "success", "label": "Éxito" },
-                  { "value": "technical_retryable", "label": "Fallo técnico reintentable" },
-                  { "value": "timeout", "label": "Tiempo de espera agotado" },
-                  { "value": "rate_limit", "label": "Límite de frecuencia" },
-                  { "value": "intervention", "label": "Intervención humana" },
-                  { "value": "external_effect_uncertain", "label": "Efecto externo incierto" },
+                  {
+                    "value": "success",
+                    "label": "Éxito"
+                  },
+                  {
+                    "value": "technical_retryable",
+                    "label": "Fallo técnico reintentable"
+                  },
+                  {
+                    "value": "timeout",
+                    "label": "Tiempo de espera agotado"
+                  },
+                  {
+                    "value": "rate_limit",
+                    "label": "Límite de frecuencia"
+                  },
+                  {
+                    "value": "intervention",
+                    "label": "Intervención humana"
+                  },
+                  {
+                    "value": "external_effect_uncertain",
+                    "label": "Efecto externo incierto"
+                  },
                   {
                     "value": "external_effect_confirmed_failure",
                     "label": "Fallo tras efecto confirmado"
                   },
-                  { "value": "cancel_aware", "label": "Esperando cancelación" }
+                  {
+                    "value": "cancel_aware",
+                    "label": "Esperando cancelación"
+                  }
                 ]
               }
             }
@@ -126,7 +201,6 @@
   },
   "entrypoint": "handler.mjs",
   "permissions": [],
-  "deliveryTypes": ["text"],
   "capabilities": [
     {
       "id": "fault",
@@ -134,25 +208,35 @@
       "description": "Runs a controlled scenario without an external provider.",
       "operator": "Código",
       "instructionUsage": "not_applicable",
-      "blockTypes": ["CRIAR"],
+      "blockTypes": [
+        "CRIAR"
+      ],
       "inputPorts": [
         {
           "key": "content",
           "label": "Content",
-          "acceptedTypes": ["textarea"],
-          "required": true
+          "required": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "result",
           "label": "Result",
-          "producedTypes": ["textarea"],
-          "required": true
+          "required": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
-      "acceptedInputTypes": ["textarea"],
-      "producedOutputTypes": ["textarea"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 1000,
@@ -187,17 +271,24 @@
             "default": "success"
           }
         },
-        "required": ["scenario"],
+        "required": [
+          "scenario"
+        ],
         "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
         "properties": {
-          "result": { "type": "string" }
+          "result": {
+            "type": "string"
+          }
         },
-        "required": ["result"],
+        "required": [
+          "result"
+        ],
         "additionalProperties": false
       }
     }
-  ]
+  ],
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json"
 }

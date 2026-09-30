@@ -1,13 +1,15 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "com.andremjr.assemblyai-srt",
   "name": "AssemblyAI SRT Studio",
   "version": "1.0.1",
   "description": "Transcreve uma ou várias mídias com rotação circular de chaves AssemblyAI e compila legendas SRT configuráveis.",
   "author": "André Marinho Jr.",
   "license": "Proprietary",
-  "branding": { "iconPath": "assets/icon.png" },
+  "branding": {
+    "iconPath": "assets/icon.png"
+  },
   "runtime": {
     "kind": "node",
     "version": ">=26 <27",
@@ -15,24 +17,43 @@
   },
   "minCoreVersion": "0.2.0",
   "entrypoint": "handler.mjs",
-  "permissions": ["network", "filesystem:read", "filesystem:write"],
-  "networkHosts": ["api.assemblyai.com", "api.eu.assemblyai.com"],
-  "secretKeys": ["ASSEMBLYAI_API_KEYS"],
-  "deliveryTypes": ["text", "processing"],
+  "permissions": [
+    "network",
+    "filesystem:read",
+    "filesystem:write"
+  ],
+  "networkHosts": [
+    "api.assemblyai.com",
+    "api.eu.assemblyai.com"
+  ],
+  "secretKeys": [
+    "ASSEMBLYAI_API_KEYS"
+  ],
   "capabilities": [
     {
       "id": "transcribe-to-srt",
       "operator": "Código",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["narration", "assets", "editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "narration",
+        "assets",
+        "editing"
+      ],
       "inputPorts": [
         {
           "key": "media_files",
           "label": "Áudios ou vídeos",
           "description": "Uma ou várias mídias, processadas na ordem recebida.",
-          "acceptedTypes": ["audio", "video", "file", "files"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact"
+          }
         }
       ],
       "outputPorts": [
@@ -40,31 +61,43 @@
           "key": "subtitles",
           "label": "Legendas SRT",
           "description": "Um arquivo SRT para cada mídia de entrada, preservando a ordem.",
-          "producedTypes": ["files"],
           "required": true,
           "presentation": {
-            "renderer": "file-list",
-            "itemType": "file",
-            "acceptedMimeTypes": ["application/x-subrip", "text/plain"]
+            "renderer": "file-list"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "application/x-subrip",
+                "text/plain"
+              ]
+            }
           }
         }
       ],
-      "acceptedInputTypes": ["audio", "video", "file", "files"],
-      "producedOutputTypes": ["files"],
       "execution": {
         "mode": "async",
         "defaultTimeoutMs": 120000,
         "supportsCancellation": false,
         "maxConcurrency": 2
       },
-      "sideEffects": ["external_write", "local_artifact"],
+      "sideEffects": [
+        "external_write",
+        "local_artifact"
+      ],
       "cost": {
         "model": "metered",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["AssemblyAI"],
+        "providers": [
+          "AssemblyAI"
+        ],
         "retentionPolicyUrl": "https://www.assemblyai.com/docs/data-retention-and-model-training"
       },
       "blockConfigSchema": {
@@ -75,14 +108,23 @@
             "type": "string",
             "title": "Região da AssemblyAI",
             "description": "Use Europa somente com chaves e requisitos de residência de dados compatíveis.",
-            "enum": ["us", "eu"],
+            "enum": [
+              "us",
+              "eu"
+            ],
             "default": "us"
           },
           "segmentationMode": {
             "type": "string",
             "title": "Como dividir as entradas do SRT",
             "description": "Por frases mantém exatamente a lógica original do script.",
-            "enum": ["sentence", "max_words", "max_duration", "combined_limits", "target_cues"],
+            "enum": [
+              "sentence",
+              "max_words",
+              "max_duration",
+              "combined_limits",
+              "target_cues"
+            ],
             "enumNames": [
               "Por frases (lógica original)",
               "Máximo de palavras",
@@ -136,17 +178,41 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "id": { "type": "string" },
-                "name": { "type": "string", "pattern": "\\.srt$" },
-                "mimeType": { "type": "string", "enum": ["application/x-subrip"] },
-                "size": { "type": "integer", "minimum": 1 },
-                "url": { "type": "string", "pattern": "^artifact://" }
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string",
+                  "pattern": "\\.srt$"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "enum": [
+                    "application/x-subrip"
+                  ]
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string",
+                  "pattern": "^artifact://"
+                }
               },
-              "required": ["id", "name", "mimeType", "size", "url"]
+              "required": [
+                "id",
+                "name",
+                "mimeType",
+                "size",
+                "url"
+              ]
             }
           }
         },
-        "required": ["subtitles"]
+        "required": [
+          "subtitles"
+        ]
       }
     }
   ]

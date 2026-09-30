@@ -33,7 +33,10 @@ export function validationOutcomeFromValues(
   const rejected =
     block.type === "VALIDAR" &&
     (block.outputs ?? []).some(
-      (output) => output.type === "approval" && values[output.key] === "rejected",
+      (output) =>
+        output.shape.kind === "control" &&
+        output.shape.control === "approval" &&
+        values[output.key] === "rejected",
     );
   return rejected
     ? { decision: "rejected", values: structuredClone(values) }

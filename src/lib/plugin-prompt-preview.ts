@@ -1,4 +1,4 @@
-import type { ActionBlock, BlockInputBinding } from "@/lib/domain";
+import type { ActionBlock, BlockInputBinding, ValueShape } from "@/lib/domain";
 import { instructionInputKey, instructionReferencesInput } from "@/lib/instruction-template";
 import type { PluginCapability } from "@/lib/plugin-contract";
 
@@ -8,6 +8,14 @@ type MappedInput = {
 };
 
 const DEFAULT_TEMPLATE = "{{BLOCK_INSTRUCTIONS}}\n\n{{CONTEXT_INPUTS}}";
+
+function shapeContract(shape: ValueShape) {
+  if (shape.kind === "content") {
+    return `${shape.family}/${shape.cardinality}/${shape.representation}`;
+  }
+  if (shape.kind === "control") return `${shape.control}/${shape.cardinality}`;
+  return `record/${shape.cardinality}`;
+}
 
 function valueForInput(input: BlockInputBinding) {
   return `{{inputs.${instructionInputKey(input)}}}`;
@@ -34,14 +42,14 @@ function outputContractValue(block: ActionBlock) {
   const outputs = block.outputs ?? [];
   if (outputs.length === 1) {
     const output = outputs[0];
-    return `Entregue somente ${output.label} no formato ${output.type}, sem explicações adicionais.`;
+    return `Entregue somente ${output.label} no formato ${shapeContract(output.shape)}, sem explicações adicionais.`;
   }
   if (!outputs.length) return "{{output.contract}}";
   return [
     "Retorne somente um objeto JSON válido, sem markdown, usando exatamente estas chaves:",
     ...outputs.map(
       (output) =>
-        `- ${output.key}: ${output.label} (${output.type})${output.required ? ", obrigatório" : ""}`,
+        `- ${output.key}: ${output.label} (${shapeContract(output.shape)})${output.required ? ", obrigatório" : ""}`,
     ),
   ].join("\n");
 }

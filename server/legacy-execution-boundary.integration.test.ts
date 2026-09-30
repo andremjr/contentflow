@@ -65,7 +65,7 @@ function humanBlock(id: string): ActionBlock {
         id: `${id}-output`,
         label: "Tema",
         key: "theme",
-        type: "textarea",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
         required: true,
       },
     ],
@@ -76,7 +76,7 @@ function humanBlock(id: string): ActionBlock {
 
 function channelFixture(id: string, block: ActionBlock): Channel {
   const methods = createEmptyMethods();
-  methods.theme = { name: "Método vivo", processType: "theme", blocks: [block] };
+  methods.theme = { contractVersion: 3, name: "Método vivo", processType: "theme", blocks: [block] };
   return {
     id,
     name: "Canal legado",
@@ -132,6 +132,7 @@ function legacyExecution(
     channelId,
     processType: "theme",
     methodSnapshot: {
+      contractVersion: 3,
       name: "Método histórico",
       processType: "theme",
       blocks: [structuredClone(block)],

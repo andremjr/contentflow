@@ -32,6 +32,7 @@ const method = (
   processType: UniversalProcess,
   inputs: ProcessMethod["blocks"][number]["inputs"] = [],
 ): ProcessMethod => ({
+  contractVersion: 3,
   name: processType,
   processType,
   blocks: [
@@ -47,7 +48,7 @@ const method = (
           id: `${processType}-output`,
           label: processType,
           key: processType,
-          type: "textarea",
+          shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
           required: true,
         },
       ],
@@ -71,11 +72,7 @@ test("script output can feed thumbnail only after script moves ahead", () => {
       {
         id: "from-script",
         label: "Roteiro",
-        type: "textarea",
-        source: "previous_process",
-        sourceProcessType: "script",
-        blockId: "__process_output__",
-        sourceKey: "script",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
         binding: { kind: "previous_process", processType: "script", outputKey: "script" },
       },
     ]),
@@ -85,7 +82,6 @@ test("script output can feed thumbnail only after script moves ahead", () => {
     /processo anterior inválido/,
   );
   assert.deepEqual(validateProcessDependencies(reordered, methods), []);
-  methods.thumbnail.blocks[0].inputs![0].sourceKey = "missing";
   methods.thumbnail.blocks[0].inputs![0].binding = {
     kind: "previous_process",
     processType: "script",
@@ -103,11 +99,7 @@ test("cross process cycles and incompatible source types are rejected", () => {
       {
         id: "from-thumb",
         label: "Miniatura",
-        type: "image",
-        source: "previous_process",
-        sourceProcessType: "thumbnail",
-        blockId: "__process_output__",
-        sourceKey: "thumbnail",
+        shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" },
         binding: {
           kind: "previous_process",
           processType: "thumbnail",
@@ -119,11 +111,7 @@ test("cross process cycles and incompatible source types are rejected", () => {
       {
         id: "from-script",
         label: "Roteiro",
-        type: "image",
-        source: "previous_process",
-        sourceProcessType: "script",
-        blockId: "__process_output__",
-        sourceKey: "script",
+        shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" },
         binding: { kind: "previous_process", processType: "script", outputKey: "script" },
       },
     ]),
@@ -140,11 +128,7 @@ test("resolved import order moves required dependencies ahead", () => {
       {
         id: "from-script",
         label: "Roteiro",
-        type: "textarea",
-        source: "previous_process",
-        sourceProcessType: "script",
-        blockId: "__process_output__",
-        sourceKey: "script",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
         binding: { kind: "previous_process", processType: "script", outputKey: "script" },
       },
     ]),
@@ -157,11 +141,7 @@ test("resolved import order rejects dependency cycles", () => {
     {
       id: "from-thumbnail",
       label: "Thumbnail",
-      type: "textarea",
-      source: "previous_process",
-      sourceProcessType: "thumbnail",
-      blockId: "thumbnail-block",
-      sourceKey: "thumbnail",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
       binding: {
         kind: "previous_process",
         processType: "thumbnail",
@@ -174,11 +154,7 @@ test("resolved import order rejects dependency cycles", () => {
     {
       id: "from-script",
       label: "Roteiro",
-      type: "textarea",
-      source: "previous_process",
-      sourceProcessType: "script",
-      blockId: "script-block",
-      sourceKey: "script",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
       binding: {
         kind: "previous_process",
         processType: "script",

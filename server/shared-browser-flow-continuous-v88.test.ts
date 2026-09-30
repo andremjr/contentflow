@@ -27,7 +27,7 @@ function request(): PluginExecutionRequest {
     inputs: { prompts: ["um", "dois", "tres"] },
     inputContract: [],
     outputContract: [
-      { key: "images", portKey: "images", label: "Imagens", type: "files", required: true },
+      { key: "images", portKey: "images", label: "Imagens", shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" }, required: true },
     ],
     context: {
       locale: "pt-BR",

@@ -19,7 +19,7 @@ export function getBlockSourceFields(
       id: `collection-field:${field.id}`,
       label: field.label,
       key: field.id,
-      type: field.type,
+      shape: structuredClone(field.shape),
       required: field.required,
       presentation: { renderer: "auto" },
     }));

@@ -26,7 +26,7 @@ function request(): PluginExecutionRequest {
         key: "images",
         portKey: "images",
         label: "Imagens",
-        type: "files",
+        shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
         required: true,
       },
     ],

@@ -55,6 +55,7 @@ function fixtureChannel(order: UniversalProcess[]): Channel {
   const methods = createEmptyMethods();
   for (const processType of PROCESS_ORDER) {
     methods[processType] = {
+      contractVersion: 3,
       name: `Congelado ${processType}`,
       processType,
       blocks: [
@@ -105,9 +106,9 @@ function outputValue(processType: UniversalProcess) {
           : "video/mp4",
     url: "/api/files/synthetic",
   };
-  const value = ["image", "audio", "video"].includes(field.type)
+  const value = field.shape.kind === "content" && ["image", "audio", "video"].includes(field.shape.family)
     ? file
-    : field.type === "files"
+    : field.shape.cardinality === "many"
       ? [file]
       : processType === "publishing"
         ? "https://example.com/video"

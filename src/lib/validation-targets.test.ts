@@ -18,7 +18,12 @@ function createBlock(id: string, order: number, outputs = ["value"]): ActionBloc
       id: `${id}-${key}`,
       label: key,
       key,
-      type: index === 0 ? "list" : "text",
+      shape: {
+        kind: "content",
+        family: "text",
+        cardinality: index === 0 ? "many" : "one",
+        representation: "inline",
+      },
       required: true,
     })),
     parameters: [],
@@ -39,7 +44,12 @@ function validateBlock(
     operator: "Humano",
     name: id,
     inputs: [],
-    outputs: createValidationFields(mode, targetBlockId, targetOutputKey, "list"),
+    outputs: createValidationFields(mode, targetBlockId, targetOutputKey, {
+      kind: "content",
+      family: "text",
+      cardinality: "many",
+      representation: "inline",
+    }),
     validation: {
       targetBlockId,
       targetOutputKey,
@@ -54,7 +64,7 @@ function validateBlock(
 }
 
 function method(blocks: ActionBlock[]): ProcessMethod {
-  return { name: "Explicit validation", processType: "theme", blocks };
+  return { contractVersion: 3, name: "Explicit validation", processType: "theme", blocks };
 }
 
 test("explicit target remains authoritative when another block is immediately before VALIDAR", () => {

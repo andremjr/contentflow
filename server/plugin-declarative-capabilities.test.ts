@@ -6,7 +6,7 @@ import { validatePluginManifest, PluginValidationError } from "./plugin-validati
 
 function manifest(): PluginManifest {
   return {
-    apiVersion: "1",
+    apiVersion: "2",
     id: "com.example.dynamic-media",
     name: "Dynamic Media",
     version: "1.0.0",
@@ -23,7 +23,7 @@ function manifest(): PluginManifest {
         operator: "IA",
         blockTypes: ["CRIAR"],
         inputPorts: [],
-        outputPorts: [{ key: "media", label: "Mídia", producedTypes: ["files"], required: true }],
+        outputPorts: [{ key: "media", label: "Mídia", shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" }, required: true }],
         execution: { mode: "immediate" },
         sideEffects: [],
         cost: { model: "free", estimateSupported: false },

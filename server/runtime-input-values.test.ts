@@ -6,14 +6,18 @@ import { runtimeInputsReady, validateRuntimeInputValues } from "./runtime-input-
 const imageInput: BlockInputBinding = {
   id: "references",
   label: "Referências",
-  type: "files",
-  source: "runtime",
+  shape: {
+    kind: "content",
+    family: "image",
+    cardinality: "many",
+    representation: "artifact",
+    formats: { mimeTypes: ["image/*"] },
+  },
   binding: { kind: "runtime" },
   portKey: "reference_images",
   presentation: {
     renderer: "image-gallery",
     itemType: "image",
-    acceptedMimeTypes: ["image/*"],
   },
 };
 

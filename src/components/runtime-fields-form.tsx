@@ -28,7 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type {
   BlockFieldDefinition,
-  FieldPresentation,
+  AtomicValueShape,
   RecordFieldDefinition,
   RuntimeValue,
   StoredFile,
@@ -64,19 +64,16 @@ function toDatetimeLocalValue(value: unknown) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function acceptFor(type: BlockFieldDefinition["type"], presentation?: FieldPresentation) {
-  if (presentation?.acceptedMimeTypes?.length) return presentation.acceptedMimeTypes.join(",");
-  if (presentation?.itemType === "image") return "image/*";
-  if (presentation?.itemType === "audio") return "audio/*";
-  if (presentation?.itemType === "video") return "video/*";
-  if (type === "image") return "image/*";
-  if (type === "audio") return "audio/*";
-  if (type === "video") return "video/*";
+function acceptFor(shape: AtomicValueShape) {
+  if (shape.kind !== "content" || shape.representation === "inline") return undefined;
+  if (shape.formats?.mimeTypes?.length) return shape.formats.mimeTypes.join(",");
+  if (shape.family !== "text") return `${shape.family}/*`;
   return undefined;
 }
 
 function acceptsFile(field: BlockFieldDefinition, file: File) {
-  const accepted = acceptFor(field.type, field.presentation)
+  if (field.shape.kind !== "content") return false;
+  const accepted = acceptFor(field.shape)
     ?.split(",")
     .map((item) => item.trim());
   if (!accepted?.length) return true;
@@ -129,7 +126,7 @@ export function RuntimeFieldsForm({
     setUploadingKey(field.key);
     try {
       const uploaded = await Promise.all(Array.from(files).map(uploadFile));
-      update(field.key, field.type === "files" ? uploaded : uploaded[0]);
+      update(field.key, field.shape.cardinality === "many" ? uploaded : uploaded[0]);
     } catch (error) {
       toast.error(t("Não foi possível salvar o arquivo"), {
         description: error instanceof Error ? error.message : undefined,
@@ -144,9 +141,16 @@ export function RuntimeFieldsForm({
       {fields.map((field) => {
         const value = values[field.key];
         const showTextCharacterCount =
-          showTextareaCharacterCount && (field.type === "text" || field.type === "textarea");
+          showTextareaCharacterCount &&
+          field.shape.kind === "content" &&
+          field.shape.family === "text" &&
+          field.shape.representation !== "artifact" &&
+          field.shape.cardinality === "one";
         const options = [
-          ...new Set([...(field.options ?? []), ...(dynamicOptions[field.id] ?? [])]),
+          ...new Set([
+            ...(field.shape.kind === "control" ? (field.shape.options ?? []) : []),
+            ...(dynamicOptions[field.id] ?? []),
+          ]),
         ];
         const fileValues = Array.isArray(value)
           ? value.filter((item): item is StoredFile => typeof item !== "string")
@@ -160,7 +164,11 @@ export function RuntimeFieldsForm({
               {field.required && <span className="ml-1 text-destructive">*</span>}
             </Label>
 
-            {field.type === "textarea" ? (
+            {field.shape.kind === "content" &&
+            field.shape.family === "text" &&
+            field.shape.cardinality === "one" &&
+            field.shape.representation !== "artifact" &&
+            field.presentation?.renderer === "text-long" ? (
               <div className="relative">
                 <Textarea
                   id={field.id}
@@ -177,14 +185,17 @@ export function RuntimeFieldsForm({
                   />
                 )}
               </div>
-            ) : field.type === "records" ? (
+            ) : field.shape.kind === "record" ? (
               <StructuredRecordsInput
                 field={field}
                 value={value}
                 showTextareaCharacterCount={showTextareaCharacterCount}
                 onChange={(records) => update(field.key, records)}
               />
-            ) : field.type === "list" ? (
+            ) : field.shape.kind === "content" &&
+              field.shape.family === "text" &&
+              field.shape.cardinality === "many" &&
+              field.shape.representation !== "artifact" ? (
               <LineListTextarea
                 id={field.id}
                 rows={6}
@@ -196,14 +207,14 @@ export function RuntimeFieldsForm({
                 placeholder={field.placeholder ?? "Um item por linha"}
                 onChange={(nextValue) => update(field.key, nextValue)}
               />
-            ) : field.type === "datetime" ? (
+            ) : field.shape.kind === "control" && field.shape.control === "datetime" ? (
               <Input
                 id={field.id}
                 type="datetime-local"
                 value={toDatetimeLocalValue(value)}
                 onChange={(event) => update(field.key, toIsoDatetime(event.target.value))}
               />
-            ) : field.type === "number" ? (
+            ) : field.shape.kind === "control" && field.shape.control === "number" ? (
               <NumberInput
                 id={field.id}
                 value={typeof value === "number" ? value : null}
@@ -211,7 +222,7 @@ export function RuntimeFieldsForm({
                 placeholder={field.placeholder}
                 onValueChange={(nextValue) => update(field.key, nextValue)}
               />
-            ) : field.type === "boolean" ? (
+            ) : field.shape.kind === "control" && field.shape.control === "boolean" ? (
               <label className="flex items-center gap-2 rounded-lg border border-border/70 p-3 text-sm">
                 <Checkbox
                   checked={value === true}
@@ -219,7 +230,7 @@ export function RuntimeFieldsForm({
                 />
                 Confirmar
               </label>
-            ) : field.type === "approval" ? (
+            ) : field.shape.kind === "control" && field.shape.control === "approval" ? (
               <Select
                 value={typeof value === "string" ? value : ""}
                 onValueChange={(next) => update(field.key, next)}
@@ -232,7 +243,9 @@ export function RuntimeFieldsForm({
                   <SelectItem value="rejected">Reprovar</SelectItem>
                 </SelectContent>
               </Select>
-            ) : field.type === "select" ? (
+            ) : field.shape.kind === "control" &&
+              field.shape.control === "selection" &&
+              field.shape.cardinality === "one" ? (
               <Select
                 value={typeof value === "string" ? value : ""}
                 onValueChange={(next) => update(field.key, next)}
@@ -248,7 +261,9 @@ export function RuntimeFieldsForm({
                   ))}
                 </SelectContent>
               </Select>
-            ) : field.type === "multiselect" ? (
+            ) : field.shape.kind === "control" &&
+              field.shape.control === "selection" &&
+              field.shape.cardinality === "many" ? (
               <div className="space-y-2 rounded-lg border border-border/70 p-3">
                 {options.map((option) => {
                   const current = Array.isArray(value)
@@ -276,14 +291,15 @@ export function RuntimeFieldsForm({
                   <p className="text-xs text-muted-foreground">Nenhuma opção disponível.</p>
                 )}
               </div>
-            ) : field.type === "thumbnail_layout" ? (
+            ) : field.shape.kind === "control" && field.shape.control === "thumbnail_layout" ? (
               <div className="rounded-xl border border-border/70 bg-background/30 p-3">
                 <CompositionCanvas
                   boxes={isThumbnailLayout(value) ? value.boxes : []}
                   onChange={(boxes) => update(field.key, { aspectRatio: "16:9", boxes })}
                 />
               </div>
-            ) : ["file", "image", "audio", "video", "files"].includes(field.type) ? (
+            ) : field.shape.kind === "content" &&
+              field.shape.representation !== "inline" ? (
               <div className="space-y-2 rounded-lg border border-dashed border-border p-3">
                 {fileValues.map((file) => (
                   <div
@@ -300,7 +316,7 @@ export function RuntimeFieldsForm({
                       onClick={() =>
                         update(
                           field.key,
-                          field.type === "files"
+                          field.shape.cardinality === "many"
                             ? fileValues.filter((candidate) => candidate.id !== file.id)
                             : null,
                         )
@@ -318,14 +334,14 @@ export function RuntimeFieldsForm({
                   )}
                   {uploadingKey === field.key
                     ? t("Salvando...")
-                    : field.type === "files"
+                    : field.shape.cardinality === "many"
                       ? t("Selecionar arquivos")
                       : t("Selecionar arquivo")}
                   <input
                     id={field.id}
                     type="file"
-                    multiple={field.type === "files"}
-                    accept={acceptFor(field.type, field.presentation)}
+                    multiple={field.shape.cardinality === "many"}
+                    accept={acceptFor(field.shape)}
                     className="hidden"
                     disabled={uploadingKey === field.key}
                     onChange={(event) => void upload(field, event.target.files)}
@@ -336,7 +352,11 @@ export function RuntimeFieldsForm({
               <div className={showTextCharacterCount ? "relative" : undefined}>
                 <Input
                   id={field.id}
-                  type={field.type === "url" ? "url" : "text"}
+                  type={
+                    field.shape.kind === "control" && field.shape.control === "url"
+                      ? "url"
+                      : "text"
+                  }
                   className={showTextCharacterCount ? "pr-10" : undefined}
                   value={typeof value === "string" ? value : ""}
                   placeholder={field.placeholder}
@@ -366,20 +386,28 @@ function StructuredRecordsInput({
   field: BlockFieldDefinition;
   value: RuntimeValue | undefined;
   showTextareaCharacterCount: boolean;
-  onChange: (records: StructuredRecord[]) => void;
+  onChange: (records: StructuredRecord | StructuredRecord[]) => void;
 }) {
-  const schema = field.recordFields ?? [];
-  const records = Array.isArray(value) ? value.filter(isStructuredRecord) : [];
+  const schema = field.shape.kind === "record" ? field.shape.fields : [];
+  const records = Array.isArray(value)
+    ? value.filter(isStructuredRecord)
+    : isStructuredRecord(value)
+      ? [value]
+      : [];
+
+  const emit = (nextRecords: StructuredRecord[]) => {
+    onChange(field.shape.cardinality === "many" ? nextRecords : (nextRecords[0] ?? {}));
+  };
 
   function addRecord() {
-    onChange([
+    emit([
       ...records,
       Object.fromEntries(schema.map((recordField) => [recordField.key, null])) as StructuredRecord,
     ]);
   }
 
   function updateRecord(index: number, key: string, nextValue: StructuredRecord[string]) {
-    onChange(
+    emit(
       records.map((record, recordIndex) =>
         recordIndex === index ? { ...record, [key]: nextValue } : record,
       ),
@@ -397,7 +425,7 @@ function StructuredRecordsInput({
               size="icon"
               variant="ghost"
               className="size-7 text-muted-foreground hover:text-destructive"
-              onClick={() => onChange(records.filter((_, recordIndex) => recordIndex !== index))}
+              onClick={() => emit(records.filter((_, recordIndex) => recordIndex !== index))}
               aria-label={`Remover registro ${index + 1}`}
             >
               <Trash2 className="size-3.5" />
@@ -408,7 +436,7 @@ function StructuredRecordsInput({
               <RecordValueInput
                 key={recordField.id}
                 field={recordField}
-                value={record[recordField.key]}
+                value={(record as StructuredRecord)[recordField.key]}
                 showTextareaCharacterCount={showTextareaCharacterCount}
                 onChange={(nextValue) => updateRecord(index, recordField.key, nextValue)}
               />
@@ -426,7 +454,7 @@ function StructuredRecordsInput({
         size="sm"
         variant="outline"
         className="w-full gap-1.5"
-        disabled={!schema.length}
+        disabled={!schema.length || field.shape.cardinality === "one" && records.length > 0}
         onClick={addRecord}
       >
         <Plus className="size-3.5" /> Adicionar registro
@@ -448,7 +476,10 @@ function RecordValueInput({
 }) {
   const [uploading, setUploading] = useState(false);
   const showTextCharacterCount =
-    showTextareaCharacterCount && (field.type === "text" || field.type === "textarea");
+    showTextareaCharacterCount &&
+    field.shape.kind === "content" &&
+    field.shape.family === "text" &&
+    field.shape.representation !== "artifact";
 
   async function uploadRecordFile(file?: File) {
     if (!file) return;
@@ -465,12 +496,22 @@ function RecordValueInput({
   }
 
   return (
-    <div className={field.type === "textarea" ? "space-y-1.5 md:col-span-2" : "space-y-1.5"}>
+    <div
+      className={
+        field.shape.kind === "content" &&
+        field.shape.family === "text" &&
+        field.shape.representation !== "artifact"
+          ? "space-y-1.5 md:col-span-2"
+          : "space-y-1.5"
+      }
+    >
       <Label>
         {field.label}
         {field.required && <span className="ml-1 text-destructive">*</span>}
       </Label>
-      {field.type === "textarea" ? (
+      {field.shape.kind === "content" &&
+      field.shape.family === "text" &&
+      field.shape.representation !== "artifact" ? (
         <div className="relative">
           <Textarea
             rows={4}
@@ -485,13 +526,13 @@ function RecordValueInput({
             />
           )}
         </div>
-      ) : field.type === "number" ? (
+      ) : field.shape.kind === "control" && field.shape.control === "number" ? (
         <NumberInput
           value={typeof value === "number" ? value : null}
           nullable
           onValueChange={onChange}
         />
-      ) : field.type === "boolean" ? (
+      ) : field.shape.kind === "control" && field.shape.control === "boolean" ? (
         <label className="flex items-center gap-2 rounded-lg border border-border/70 p-3 text-sm">
           <Checkbox
             checked={value === true}
@@ -499,26 +540,26 @@ function RecordValueInput({
           />
           Confirmar
         </label>
-      ) : field.type === "select" ? (
+      ) : field.shape.kind === "control" && field.shape.control === "selection" ? (
         <Select value={typeof value === "string" ? value : ""} onValueChange={onChange}>
           <SelectTrigger>
             <SelectValue placeholder="Selecione uma opção" />
           </SelectTrigger>
           <SelectContent>
-            {(field.options ?? []).map((option) => (
+            {(field.shape.options ?? []).map((option) => (
               <SelectItem key={option} value={option}>
                 {option}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-      ) : field.type === "datetime" ? (
+      ) : field.shape.kind === "control" && field.shape.control === "datetime" ? (
         <Input
           type="datetime-local"
           value={toDatetimeLocalValue(value)}
           onChange={(event) => onChange(toIsoDatetime(event.target.value))}
         />
-      ) : ["file", "image", "audio", "video"].includes(field.type) ? (
+      ) : field.shape.kind === "content" && field.shape.representation !== "inline" ? (
         <div className="rounded-lg border border-dashed border-border p-3">
           {value && typeof value === "object" && "url" in value && (
             <p className="mb-2 truncate text-xs text-muted-foreground">{value.name}</p>
@@ -532,7 +573,7 @@ function RecordValueInput({
             {uploading ? "Salvando..." : "Selecionar arquivo"}
             <input
               type="file"
-              accept={acceptFor(field.type)}
+              accept={acceptFor(field.shape)}
               className="hidden"
               disabled={uploading}
               onChange={(event) => void uploadRecordFile(event.target.files?.[0])}
@@ -542,7 +583,9 @@ function RecordValueInput({
       ) : (
         <div className={showTextCharacterCount ? "relative" : undefined}>
           <Input
-            type={field.type === "url" ? "url" : "text"}
+            type={
+              field.shape.kind === "control" && field.shape.control === "url" ? "url" : "text"
+            }
             className={showTextCharacterCount ? "pr-10" : undefined}
             value={typeof value === "string" ? value : ""}
             onChange={(event) => onChange(event.target.value)}

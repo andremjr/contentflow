@@ -39,6 +39,7 @@ function execution(
   statuses: ProcessExecution["blocks"][number]["status"][],
 ): ProcessExecution {
   const methodSnapshot: ProcessMethod = {
+    contractVersion: 3,
     name: "TASK-011",
     processType: "theme",
     blocks: blocks.map((item, order) => ({ ...item, order })),
@@ -80,8 +81,7 @@ function dependencies(output?: ProcessOutput) {
           blockId: "__process_output__",
           outputKey: "final_theme",
           label: "output",
-          type: "text",
-          cardinality: "one",
+          shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
           attempt: 1,
           status: "completed",
           items: [{ id: "item", order: 0, value: values.final_theme }],

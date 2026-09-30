@@ -1,9 +1,8 @@
 {
   "id": "file-artifact",
-  "label": "Arquivo de entrada para novo artefato",
-  "description": "Lê um arquivo armazenado e produz outro artefato local.",
+  "label": "Imagem de entrada para novo artefato",
+  "description": "Lê uma imagem armazenada e produz outro artefato de imagem local.",
   "permissions": ["filesystem:read", "filesystem:write"],
-  "input": { "key": "source", "label": "Arquivo de origem", "type": "file" },
-  "output": { "key": "result", "label": "Arquivo gerado", "type": "file" },
-  "deliveryTypes": ["processing"]
+  "input": { "key": "source", "label": "Imagem de origem", "type": "image" },
+  "output": { "key": "result", "label": "Imagem gerada", "type": "image" }
 }

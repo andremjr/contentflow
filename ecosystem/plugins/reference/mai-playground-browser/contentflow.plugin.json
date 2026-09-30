@@ -1,6 +1,6 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "local.contentflow.mai-playground-browser",
   "name": "MAI Playground Browser",
   "version": "1.0.4",
@@ -17,8 +17,15 @@
   },
   "minCoreVersion": "0.3.0",
   "entrypoint": "handler.mjs",
-  "browserRuntime": { "lifecycle": "core" },
-  "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
+  "browserRuntime": {
+    "lifecycle": "core"
+  },
+  "permissions": [
+    "network",
+    "filesystem:read",
+    "filesystem:write",
+    "process"
+  ],
   "networkHosts": [
     "playground.microsoft.ai",
     "msi-playground-pme-app.azurewebsites.net",
@@ -26,7 +33,6 @@
     "microsoft.com",
     "azure.com"
   ],
-  "deliveryTypes": ["audio", "text", "processing"],
   "profileSetup": {
     "configurationKey": "accountProfile",
     "fallbackConfigurationKey": "fallbackAccountProfiles",
@@ -95,50 +101,72 @@
       "promptPreview": {
         "template": "{{INPUT:text}}"
       },
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["narration"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "narration"
+      ],
       "inputPorts": [
         {
           "key": "text",
           "label": "Texto da narração",
-          "acceptedTypes": ["text", "textarea"],
           "required": true,
-          "multiple": false
+          "multiple": false,
+          "shape": {
+            "kind": "content",
+            "family": "audio",
+            "cardinality": "one",
+            "representation": "artifact"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "audio",
           "label": "Áudio narrado",
-          "producedTypes": ["audio"],
           "required": true,
           "presentation": {
             "renderer": "audio-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "audio",
+            "cardinality": "one",
+            "representation": "artifact"
           }
         },
         {
           "key": "transcript",
           "label": "Texto falado",
-          "producedTypes": ["text", "textarea"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea"],
-      "producedOutputTypes": ["audio", "text", "textarea"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 600000,
         "supportsCancellation": true,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_write", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "subprocess"
+      ],
       "cost": {
         "model": "free",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["Microsoft AI Playground (Voice)"]
+        "providers": [
+          "Microsoft AI Playground (Voice)"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -147,7 +175,10 @@
           "model": {
             "type": "string",
             "title": "Modelo de voz",
-            "enum": ["mai-voice-2", "mai-voice-2-flash"],
+            "enum": [
+              "mai-voice-2",
+              "mai-voice-2-flash"
+            ],
             "default": "mai-voice-2"
           },
           "voice": {
@@ -252,7 +283,9 @@
             "type": "string"
           }
         },
-        "required": ["audio"]
+        "required": [
+          "audio"
+        ]
       }
     },
     {
@@ -263,7 +296,9 @@
         "template": "{{BLOCK_INSTRUCTIONS}}\n\n{{CONTENT}}",
         "templateConfigurationKey": "promptTemplate"
       },
-      "blockTypes": ["CRIAR"],
+      "blockTypes": [
+        "CRIAR"
+      ],
       "processTypes": [
         "theme",
         "title",
@@ -278,64 +313,54 @@
         {
           "key": "content",
           "label": "Contexto para geração",
-          "acceptedTypes": [
-            "text",
-            "textarea",
-            "number",
-            "boolean",
-            "list",
-            "records",
-            "select",
-            "multiselect",
-            "datetime",
-            "url",
-            "thumbnail_layout"
-          ],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         },
         {
           "key": "attachments",
           "label": "Referências anexas",
-          "acceptedTypes": ["image", "file", "files"],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "result",
           "label": "Texto gerado",
-          "producedTypes": ["text", "textarea"],
           "required": true,
           "presentation": {
             "renderer": "text-long"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
           "key": "parts",
           "label": "Partes individuais",
-          "producedTypes": ["list"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          }
         }
       ],
-      "acceptedInputTypes": [
-        "text",
-        "textarea",
-        "number",
-        "boolean",
-        "list",
-        "records",
-        "select",
-        "multiselect",
-        "datetime",
-        "url",
-        "thumbnail_layout",
-        "image",
-        "file",
-        "files"
-      ],
-      "producedOutputTypes": ["text", "textarea", "list"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 600000,
@@ -349,14 +374,19 @@
           "mode": "sequential"
         }
       },
-      "sideEffects": ["external_write", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "subprocess"
+      ],
       "cost": {
         "model": "free",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["Microsoft AI Playground (Thinking)"]
+        "providers": [
+          "Microsoft AI Playground (Thinking)"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -407,7 +437,9 @@
             }
           }
         },
-        "required": ["result"]
+        "required": [
+          "result"
+        ]
       }
     }
   ]

@@ -35,7 +35,7 @@ function execution(overrides: Partial<ProcessExecution> = {}): ProcessExecution 
     projectId: project.id,
     channelId: project.channelId,
     processType: "title",
-    methodSnapshot: { name: "Título", processType: "title", blocks: [] },
+    methodSnapshot: { contractVersion: 3, name: "Título", processType: "title", blocks: [] },
     blocks: [],
     status: "completed",
     outputStatus: "completed",

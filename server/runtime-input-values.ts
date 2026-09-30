@@ -1,8 +1,8 @@
 import type {
   BlockInputBinding,
-  HumanFieldType,
   RuntimeValue,
   StoredFile,
+  ValueShape,
 } from "../src/lib/domain";
 import { isEmptyRuntimeValue } from "../src/lib/human-workflow";
 import { getPresentationRestrictionIssue } from "../src/lib/presentation";
@@ -25,47 +25,24 @@ function isStoredFile(value: unknown): value is StoredFile {
   );
 }
 
-function typeMatches(type: HumanFieldType, value: RuntimeValue) {
+function typeMatches(shape: ValueShape, value: RuntimeValue) {
   if (value === null) return false;
-  if (["text", "textarea", "select", "datetime", "url", "approval"].includes(type)) {
-    return typeof value === "string";
+  const values = shape.cardinality === "many" ? (Array.isArray(value) ? value : []) : [value];
+  if (!values.length || (shape.cardinality === "one" && Array.isArray(value))) return false;
+  if (shape.kind === "content") {
+    return values.every((item) => typeof item === "string" || isStoredFile(item));
   }
-  if (type === "number") return typeof value === "number" && Number.isFinite(value);
-  if (type === "boolean") return typeof value === "boolean";
-  if (type === "list" || type === "multiselect") {
-    return Array.isArray(value) && value.every((item) => typeof item === "string");
-  }
-  if (type === "records") {
-    return (
-      Array.isArray(value) &&
-      value.every(
-        (item) => item && typeof item === "object" && !Array.isArray(item) && !isStoredFile(item),
-      )
+  if (shape.kind === "record") {
+    return values.every(
+      (item) => item && typeof item === "object" && !Array.isArray(item) && !isStoredFile(item),
     );
   }
-  if (type === "files") return Array.isArray(value) && value.every(isStoredFile);
-  if (["file", "image", "audio", "video"].includes(type)) return isStoredFile(value);
-  if (type === "thumbnail_layout") {
-    return Boolean(value && typeof value === "object" && !Array.isArray(value) && "boxes" in value);
+  if (shape.control === "number") return values.every((item) => typeof item === "number" && Number.isFinite(item));
+  if (shape.control === "boolean") return values.every((item) => typeof item === "boolean");
+  if (shape.control === "thumbnail_layout") {
+    return values.every((item) => Boolean(item && typeof item === "object" && !Array.isArray(item) && "boxes" in item));
   }
-  return false;
-}
-
-function mediaTypeIssue(input: BlockInputBinding, value: RuntimeValue) {
-  const values = Array.isArray(value) ? value : [value];
-  const files = values.filter(isStoredFile);
-  const prefix =
-    input.type === "image"
-      ? "image/"
-      : input.type === "audio"
-        ? "audio/"
-        : input.type === "video"
-          ? "video/"
-          : undefined;
-  if (prefix && files.some((file) => !file.mimeType.toLowerCase().startsWith(prefix))) {
-    return `deve conter apenas arquivos ${input.type}`;
-  }
-  return getPresentationRestrictionIssue(input.presentation, value);
+  return values.every((item) => typeof item === "string");
 }
 
 export function runtimeInputBindings(inputs: BlockInputBinding[] | undefined) {
@@ -104,10 +81,10 @@ export function validateRuntimeInputValues(
   }
   for (const input of bindings) {
     const value = normalized[input.id];
-    if (!typeMatches(input.type, value)) {
-      return { error: `${input.label}: valor incompatível com o formato ${input.type}.` } as const;
+    if (!typeMatches(input.shape, value)) {
+      return { error: `${input.label}: valor incompatível com o shape declarado.` } as const;
     }
-    const restriction = mediaTypeIssue(input, value);
+    const restriction = getPresentationRestrictionIssue(input.shape, input.presentation, value);
     if (restriction) return { error: `${input.label}: ${restriction}.` } as const;
   }
   return { values: structuredClone(normalized) } as const;

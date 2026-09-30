@@ -21,7 +21,6 @@ import {
   RefreshCw,
   Search,
   Sparkles,
-  SlidersHorizontal,
   ShieldCheck,
   SquareArrowOutUpRight,
   Trash2,
@@ -49,10 +48,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PROCESS_META, type BlockType, type UniversalProcess } from "@/lib/domain";
+import {
+  PROCESS_META,
+  type BlockType,
+  type ContentFamily,
+  type UniversalProcess,
+} from "@/lib/domain";
 import { ECOSYSTEM_DOWNLOADS } from "@/lib/ecosystem-downloads";
 import { pluginCapabilityDescription, pluginCapabilityLabel } from "@/lib/plugin-capability-label";
-import type { PluginDeliveryType, PluginManifest } from "@/lib/plugin-contract";
+import type { PluginManifest } from "@/lib/plugin-contract";
 import { localizePluginManifest } from "@/lib/plugin-localization";
 import { useAppPreferences } from "@/lib/app-preferences";
 
@@ -173,24 +177,25 @@ const PERMISSION_LABEL: Record<string, string> = {
 };
 
 const DELIVERY_META: Record<
-  PluginDeliveryType,
+  ContentFamily,
   { label: string; icon: typeof FileText; className: string }
 > = {
   text: { label: "Texto", icon: FileText, className: "bg-sky-500/10 text-sky-600" },
   image: { label: "Imagem", icon: Image, className: "bg-violet-500/10 text-violet-600" },
   audio: { label: "Áudio", icon: AudioLines, className: "bg-amber-500/10 text-amber-600" },
   video: { label: "Vídeo", icon: Video, className: "bg-rose-500/10 text-rose-600" },
-  processing: {
-    label: "Processamento",
-    icon: SlidersHorizontal,
-    className: "bg-emerald-500/10 text-emerald-600",
-  },
 };
 
 function deliveryTypes(plugin: DiscoveredPlugin) {
-  return plugin.manifest.deliveryTypes?.length
-    ? plugin.manifest.deliveryTypes
-    : (["processing"] satisfies PluginDeliveryType[]);
+  return Array.from(
+    new Set(
+      plugin.manifest.capabilities.flatMap((capability) =>
+        capability.outputPorts.flatMap((port) =>
+          port.shape.kind === "content" ? [port.shape.family] : [],
+        ),
+      ),
+    ),
+  );
 }
 
 function PluginsPage() {
@@ -200,7 +205,7 @@ function PluginsPage() {
   const [updates, setUpdates] = useState<Record<string, PluginUpdate>>({});
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [search, setSearch] = useState("");
-  const [deliveryFilter, setDeliveryFilter] = useState<"all" | PluginDeliveryType>("all");
+  const [deliveryFilter, setDeliveryFilter] = useState<"all" | ContentFamily>("all");
   const [blockFilter, setBlockFilter] = useState<"all" | BlockType>("all");
   const [processFilter, setProcessFilter] = useState<"all" | UniversalProcess>("all");
 
@@ -396,7 +401,7 @@ function PluginsPage() {
             </div>
             <Select
               value={deliveryFilter}
-              onValueChange={(value) => setDeliveryFilter(value as "all" | PluginDeliveryType)}
+              onValueChange={(value) => setDeliveryFilter(value as "all" | ContentFamily)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Capacidade" />

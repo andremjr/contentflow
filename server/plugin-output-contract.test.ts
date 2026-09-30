@@ -8,7 +8,7 @@ const ports: PluginOutputPort[] = [
   {
     key: "generated_text",
     label: "Generated text",
-    producedTypes: ["textarea"],
+    shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
     required: true,
   },
 ];
@@ -18,7 +18,7 @@ function output(overrides: Partial<BlockFieldDefinition> = {}): BlockFieldDefini
     id: "script-output",
     label: "Roteiro",
     key: "script",
-    type: "textarea",
+    shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
     required: true,
     portKey: "generated_text",
     ...overrides,
@@ -33,10 +33,8 @@ test("preserves the Block output key while binding an explicit capability output
     {
       label: "Roteiro",
       key: "script",
-      type: "textarea",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
       required: true,
-      options: undefined,
-      recordFields: undefined,
       presentation: undefined,
       portKey: "generated_text",
     },
@@ -61,7 +59,7 @@ test("rejects an explicit portKey that does not exist without selecting an alter
 });
 
 test("rejects an explicit port with an incompatible type without selecting an alternative", () => {
-  const field = output({ type: "number" });
+  const field = output({ shape: { kind: "control", control: "number", cardinality: "one" } });
   const result = validatePluginOutputContract([field], ports);
 
   assert.deepEqual(result.outputContract, []);

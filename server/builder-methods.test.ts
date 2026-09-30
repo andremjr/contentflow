@@ -15,6 +15,7 @@ const channel = {
 
 function manualThemeMethod(): ProcessMethod {
   return {
+    contractVersion: 3,
     name: "Tema manual",
     processType: "theme",
     blocks: [
@@ -30,7 +31,7 @@ function manualThemeMethod(): ProcessMethod {
             id: "theme-output",
             label: "Tema final",
             key: "theme",
-            type: "textarea",
+            shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
             required: true,
           },
         ],
@@ -53,7 +54,7 @@ function pluginContext(
     entrypoint: "index.mjs",
     executable: true,
     manifest: {
-      apiVersion: "1",
+      apiVersion: "2",
       id: "dev.contentflow.port-test",
       name: "Port test",
       version: "1.0.0",
@@ -72,13 +73,13 @@ function pluginContext(
           inputPorts: inputPortKeys.map((key) => ({
             key,
             label: key,
-            acceptedTypes: ["number"],
+            shape: { kind: "control", control: "number", cardinality: "one" },
             required: false,
           })),
           outputPorts: outputPortKeys.map((key) => ({
             key,
             label: key,
-            producedTypes: ["textarea"],
+            shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
             required: key === "theme",
           })),
           execution: { mode: "immediate" },
@@ -103,9 +104,8 @@ function pluginThemeMethod(): ProcessMethod {
       {
         id: "section-count",
         label: "Quantidade de blocos",
-        type: "number",
-        source: "static",
-        staticValue: "1",
+        shape: { kind: "control", control: "number", cardinality: "one" },
+        binding: { kind: "static", value: "1" },
       },
     ],
     outputs: method.blocks[0].outputs?.map((output) => ({ ...output, portKey: "theme" })),
@@ -129,14 +129,14 @@ function validationPluginContext(inputPortKeys: string[]): BuilderPluginContext 
       inputPorts: inputPortKeys.map((key) => ({
         key,
         label: key,
-        acceptedTypes: ["textarea"],
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
         required: inputPortKeys.length === 1,
       })),
       outputPorts: [
         {
           key: "decision",
           label: "Decisão",
-          producedTypes: ["approval"],
+          shape: { kind: "control", control: "approval", cardinality: "one" },
           required: true,
         },
       ],
@@ -164,7 +164,7 @@ function pluginValidationMethod(): ProcessMethod {
         id: "decision-output",
         label: "Decisão",
         key: "decision",
-        type: "approval",
+        shape: { kind: "control", control: "approval", cardinality: "one" },
         required: true,
         portKey: "decision",
       },
@@ -216,10 +216,8 @@ test("rejects a previous_block reference to a later block", () => {
     {
       id: "future-input",
       label: "Resultado futuro",
-      type: "text",
-      source: "previous_block",
-      blockId: "future-block",
-      sourceKey: "future",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+      binding: { kind: "previous_block", blockId: "future-block", outputKey: "future" },
     },
   ];
   method.blocks.push({
@@ -227,7 +225,13 @@ test("rejects a previous_block reference to a later block", () => {
     type: "CRIAR",
     operator: "Humano",
     outputs: [
-      { id: "future-output", label: "Futuro", key: "future", type: "text", required: true },
+      {
+        id: "future-output",
+        label: "Futuro",
+        key: "future",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+        required: true,
+      },
     ],
     parameters: [],
     order: 1,
@@ -255,7 +259,7 @@ test("builder validates cross process references against the channel sequence", 
             id: "script-output",
             label: "Roteiro",
             key: "script",
-            type: "textarea",
+            shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
             required: true,
           },
         ],
@@ -273,11 +277,8 @@ test("builder validates cross process references against the channel sequence", 
           {
             id: "script-reference",
             label: "Roteiro",
-            type: "textarea",
-            source: "previous_process",
-            sourceProcessType: "script",
-            blockId: "__process_output__",
-            sourceKey: "script",
+            shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+            binding: { kind: "previous_process", processType: "script", outputKey: "script" },
           },
         ],
       },
@@ -308,7 +309,7 @@ test("builder validates cross process references against the channel sequence", 
   assert.equal(reordered.ok, true, reordered.errors.join("\n"));
 });
 
-test("builder materializes a canonical binding only from an explicit legacy reference", () => {
+test("builder preserves an explicit canonical binding", () => {
   const method = manualThemeMethod();
   method.blocks.push({
     id: "use-theme",
@@ -318,10 +319,8 @@ test("builder materializes a canonical binding only from an explicit legacy refe
       {
         id: "theme-reference",
         label: "Tema",
-        type: "textarea",
-        source: "previous_block",
-        blockId: "theme-input",
-        sourceKey: "theme",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+        binding: { kind: "previous_block", blockId: "theme-input", outputKey: "theme" },
       },
     ],
     outputs: [],

@@ -1,13 +1,15 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "official-ffmpeg-image-sequence-video",
   "name": "Vídeo por Sequência de Imagens (FFmpeg)",
   "version": "1.1.0",
   "description": "Monta um vídeo MP4 local com imagens ordenadas, sincronizadas pela duração do áudio ou pelos intervalos de um SRT.",
   "author": "ContentFlow",
   "license": "LicenseRef-ContentFlow-Source-Available-1.0",
-  "branding": { "iconPath": "assets/icon.png" },
+  "branding": {
+    "iconPath": "assets/icon.png"
+  },
   "homepage": "https://github.com/andremjr/contentflow",
   "repository": "https://github.com/andremjr/contentflow",
   "runtime": {
@@ -17,62 +19,96 @@
   },
   "minCoreVersion": "0.4.1",
   "entrypoint": "handler.mjs",
-  "permissions": ["filesystem:read", "filesystem:write", "process"],
-  "deliveryTypes": ["video", "processing"],
+  "permissions": [
+    "filesystem:read",
+    "filesystem:write",
+    "process"
+  ],
   "capabilities": [
     {
       "id": "compose-image-sequence-with-audio",
       "operator": "Código",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "editing"
+      ],
       "inputPorts": [
         {
           "key": "images",
           "label": "Imagens ordenadas",
           "description": "Imagens exibidas na ordem recebida e distribuídas igualmente pela duração total do áudio.",
-          "acceptedTypes": ["image", "files"],
           "required": true,
           "multiple": true,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/jpeg", "image/png", "image/webp"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/jpeg",
+                "image/png",
+                "image/webp"
+              ]
+            }
           }
         },
         {
           "key": "audio",
           "label": "Áudio final",
           "description": "Faixa de áudio que determina a duração exata do vídeo.",
-          "acceptedTypes": ["audio"],
           "required": true,
           "multiple": false,
           "presentation": {
-            "renderer": "audio-player",
-            "itemType": "audio",
-            "acceptedMimeTypes": [
-              "audio/aac",
-              "audio/flac",
-              "audio/mp4",
-              "audio/mpeg",
-              "audio/ogg",
-              "audio/opus",
-              "audio/wav",
-              "audio/webm",
-              "audio/x-m4a"
-            ]
+            "renderer": "audio-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "audio",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "audio/aac",
+                "audio/flac",
+                "audio/mp4",
+                "audio/mpeg",
+                "audio/ogg",
+                "audio/opus",
+                "audio/wav",
+                "audio/webm",
+                "audio/x-m4a"
+              ]
+            }
           }
         },
         {
           "key": "subtitles",
           "label": "Legendas SRT",
           "description": "Arquivo SRT opcional cujos cues determinam a troca das imagens quando o modo SRT está ativo.",
-          "acceptedTypes": ["file", "files"],
           "required": false,
           "multiple": true,
           "presentation": {
-            "renderer": "file-list",
-            "itemType": "file",
-            "acceptedMimeTypes": ["application/x-subrip", "text/plain", "text/srt", "text/x-srt"]
+            "renderer": "file-list"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "application/x-subrip",
+                "text/plain",
+                "text/srt",
+                "text/x-srt"
+              ]
+            }
           }
         }
       ],
@@ -81,24 +117,33 @@
           "key": "video",
           "label": "Vídeo final",
           "description": "Vídeo MP4 H.264 16:9 com o áudio sincronizado.",
-          "producedTypes": ["video"],
           "required": true,
           "presentation": {
-            "renderer": "video-player",
-            "itemType": "video",
-            "acceptedMimeTypes": ["video/mp4"]
+            "renderer": "video-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "video/mp4"
+              ]
+            }
           }
         }
       ],
-      "acceptedInputTypes": ["image", "files", "audio", "file"],
-      "producedOutputTypes": ["video"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 600000,
         "supportsCancellation": false,
         "maxConcurrency": 1
       },
-      "sideEffects": ["local_artifact", "subprocess"],
+      "sideEffects": [
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "free",
         "estimateSupported": false
@@ -127,13 +172,22 @@
           "fps": {
             "type": "integer",
             "title": "Quadros por segundo",
-            "enum": [24, 25, 30, 50, 60],
+            "enum": [
+              24,
+              25,
+              30,
+              50,
+              60
+            ],
             "default": 30
           },
           "imageFit": {
             "type": "string",
             "title": "Enquadramento",
-            "enum": ["cover", "contain"],
+            "enum": [
+              "cover",
+              "contain"
+            ],
             "default": "cover"
           },
           "backgroundColor": {
@@ -154,11 +208,21 @@
             "type": "string",
             "title": "Distribuição das imagens",
             "description": "Use SRT para trocar as imagens nos finais dos cues de legenda.",
-            "enum": ["equal", "srt"],
+            "enum": [
+              "equal",
+              "srt"
+            ],
             "default": "equal"
           }
         },
-        "required": ["width", "height", "fps", "imageFit", "backgroundColor", "videoQuality"]
+        "required": [
+          "width",
+          "height",
+          "fps",
+          "imageFit",
+          "backgroundColor",
+          "videoQuality"
+        ]
       },
       "outputSchema": {
         "type": "object",
@@ -168,16 +232,36 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "id": { "type": "string" },
-              "name": { "type": "string" },
-              "mimeType": { "const": "video/mp4" },
-              "size": { "type": "integer", "minimum": 1 },
-              "url": { "type": "string", "pattern": "^artifact://" }
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "mimeType": {
+                "const": "video/mp4"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^artifact://"
+              }
             },
-            "required": ["id", "name", "mimeType", "size", "url"]
+            "required": [
+              "id",
+              "name",
+              "mimeType",
+              "size",
+              "url"
+            ]
           }
         },
-        "required": ["video"]
+        "required": [
+          "video"
+        ]
       }
     }
   ]

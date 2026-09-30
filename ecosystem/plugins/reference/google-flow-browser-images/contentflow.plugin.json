@@ -1,6 +1,6 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "local.contentflow.google-flow-batch-images",
   "name": "Google Flow Browser Images",
   "version": "1.3.8",
@@ -56,11 +56,15 @@
               "label": "Final videos",
               "description": "Videos animated from the selected images."
             },
-            "project_url": { "label": "Project URL" }
+            "project_url": {
+              "label": "Project URL"
+            }
           },
           "blockConfigSchema": {
             "properties": {
-              "accountProfile": { "title": "Account profile" },
+              "accountProfile": {
+                "title": "Account profile"
+              },
               "fallbackAccountProfiles": {
                 "title": "Fallback profiles",
                 "description": "Additional aliases, one per line, in usage order."
@@ -68,47 +72,99 @@
               "projectMode": {
                 "title": "Project mode",
                 "options": [
-                  { "value": "auto", "label": "Automatic" },
-                  { "value": "new", "label": "Always create a new project" },
-                  { "value": "existing", "label": "Use a specific project" }
+                  {
+                    "value": "auto",
+                    "label": "Automatic"
+                  },
+                  {
+                    "value": "new",
+                    "label": "Always create a new project"
+                  },
+                  {
+                    "value": "existing",
+                    "label": "Use a specific project"
+                  }
                 ]
               },
-              "projectUrl": { "title": "Project URL" },
+              "projectUrl": {
+                "title": "Project URL"
+              },
               "productionMode": {
                 "title": "What should this block produce?",
                 "description": "Choose the visual workflow before adjusting its details.",
                 "options": [
-                  { "value": "images_only", "label": "Images only" },
-                  { "value": "text_to_video", "label": "Text directly to video" },
+                  {
+                    "value": "images_only",
+                    "label": "Images only"
+                  },
+                  {
+                    "value": "text_to_video",
+                    "label": "Text directly to video"
+                  },
                   {
                     "value": "images_then_selected_videos",
                     "label": "Images, then animate selected ones"
                   },
-                  { "value": "images_to_video_all", "label": "Images, then animate all" }
+                  {
+                    "value": "images_to_video_all",
+                    "label": "Images, then animate all"
+                  }
                 ]
               },
               "imageModel": {
                 "title": "Image model",
                 "options": [
-                  { "value": "flow_auto", "label": "Automatic: Pro → 2 → 2 Lite" },
-                  { "value": "nano_banana_2", "label": "Nano Banana 2" },
-                  { "value": "nano_banana_pro", "label": "Nano Banana Pro" },
-                  { "value": "nano_banana_2_lite", "label": "Nano Banana 2 Lite" }
+                  {
+                    "value": "flow_auto",
+                    "label": "Automatic: Pro → 2 → 2 Lite"
+                  },
+                  {
+                    "value": "nano_banana_2",
+                    "label": "Nano Banana 2"
+                  },
+                  {
+                    "value": "nano_banana_pro",
+                    "label": "Nano Banana Pro"
+                  },
+                  {
+                    "value": "nano_banana_2_lite",
+                    "label": "Nano Banana 2 Lite"
+                  }
                 ]
               },
-              "imageModelLabel": { "title": "Other image model" },
-              "fallbackOnModelLimit": { "title": "Use fallback when the image limit is reached" },
+              "imageModelLabel": {
+                "title": "Other image model"
+              },
+              "fallbackOnModelLimit": {
+                "title": "Use fallback when the image limit is reached"
+              },
               "aspectRatio": {
                 "title": "Aspect ratio",
                 "options": [
-                  { "value": "flow_current", "label": "Current Flow setting" },
-                  { "value": "landscape", "label": "Landscape (16:9)" },
-                  { "value": "portrait", "label": "Portrait (9:16)" },
-                  { "value": "square", "label": "Square (1:1)" }
+                  {
+                    "value": "flow_current",
+                    "label": "Current Flow setting"
+                  },
+                  {
+                    "value": "landscape",
+                    "label": "Landscape (16:9)"
+                  },
+                  {
+                    "value": "portrait",
+                    "label": "Portrait (9:16)"
+                  },
+                  {
+                    "value": "square",
+                    "label": "Square (1:1)"
+                  }
                 ]
               },
-              "maxImagesPerPrompt": { "title": "Images per prompt" },
-              "maxConcurrentGenerations": { "title": "Concurrent image generations" },
+              "maxImagesPerPrompt": {
+                "title": "Images per prompt"
+              },
+              "maxConcurrentGenerations": {
+                "title": "Concurrent image generations"
+              },
               "enableCharacterConsistency": {
                 "title": "Keep characters consistent",
                 "description": "Generates visual references before the scenes and attaches them to the entire production."
@@ -117,7 +173,9 @@
                 "title": "Character prompts",
                 "description": "One prompt per line to create visual references before the scenes."
               },
-              "maxReferenceImages": { "title": "Maximum references" },
+              "maxReferenceImages": {
+                "title": "Maximum references"
+              },
               "maxCharacterReferences": {
                 "title": "Character references to use",
                 "description": "Limits how many images generated from character prompts are used as scene references."
@@ -128,35 +186,76 @@
               "videoModel": {
                 "title": "Video model",
                 "options": [
-                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
-                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
-                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
-                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                  {
+                    "value": "veo_3_1_quality",
+                    "label": "Veo 3.1 - Quality"
+                  },
+                  {
+                    "value": "veo_3_1_fast",
+                    "label": "Veo 3.1 - Fast"
+                  },
+                  {
+                    "value": "veo_3_1_lite",
+                    "label": "Veo 3.1 - Lite"
+                  },
+                  {
+                    "value": "omni_1_1_flash",
+                    "label": "Omni 1.1 Flash"
+                  }
                 ]
               },
-              "videoModelLabel": { "title": "Other video model" },
+              "videoModelLabel": {
+                "title": "Other video model"
+              },
               "videoReferenceMode": {
                 "title": "Use image in video as",
                 "options": [
-                  { "value": "frames", "label": "Frame" },
-                  { "value": "elements", "label": "Reference element" }
+                  {
+                    "value": "frames",
+                    "label": "Frame"
+                  },
+                  {
+                    "value": "elements",
+                    "label": "Reference element"
+                  }
                 ]
               },
               "videoDurationSeconds": {
                 "title": "Video duration",
                 "options": [
-                  { "value": 4, "label": "4 seconds" },
-                  { "value": 6, "label": "6 seconds" },
-                  { "value": 8, "label": "8 seconds" },
-                  { "value": 10, "label": "10 seconds" }
+                  {
+                    "value": 4,
+                    "label": "4 seconds"
+                  },
+                  {
+                    "value": 6,
+                    "label": "6 seconds"
+                  },
+                  {
+                    "value": 8,
+                    "label": "8 seconds"
+                  },
+                  {
+                    "value": 10,
+                    "label": "10 seconds"
+                  }
                 ]
               },
               "videoResolution": {
                 "title": "Video resolution",
                 "options": [
-                  { "value": "flow_current", "label": "Flow default" },
-                  { "value": "res_720p", "label": "720p" },
-                  { "value": "res_1080p", "label": "1080p" }
+                  {
+                    "value": "flow_current",
+                    "label": "Flow default"
+                  },
+                  {
+                    "value": "res_720p",
+                    "label": "720p"
+                  },
+                  {
+                    "value": "res_1080p",
+                    "label": "1080p"
+                  }
                 ]
               },
               "maxVideosToAnimate": {
@@ -166,10 +265,22 @@
               "animationSelection": {
                 "title": "Image selection rule",
                 "options": [
-                  { "value": "first", "label": "First in the queue" },
-                  { "value": "last", "label": "Last in the queue" },
-                  { "value": "evenly_spaced", "label": "Evenly distributed" },
-                  { "value": "manual_indexes", "label": "Manually entered indexes" }
+                  {
+                    "value": "first",
+                    "label": "First in the queue"
+                  },
+                  {
+                    "value": "last",
+                    "label": "Last in the queue"
+                  },
+                  {
+                    "value": "evenly_spaced",
+                    "label": "Evenly distributed"
+                  },
+                  {
+                    "value": "manual_indexes",
+                    "label": "Manually entered indexes"
+                  }
                 ]
               },
               "animationIndexes": {
@@ -179,14 +290,29 @@
               "imageRetention": {
                 "title": "Save images in the final delivery",
                 "options": [
-                  { "value": "keep_all", "label": "All images" },
-                  { "value": "keep_animated_only", "label": "Animated images only" },
-                  { "value": "omit_from_final_delivery", "label": "Do not save final images" }
+                  {
+                    "value": "keep_all",
+                    "label": "All images"
+                  },
+                  {
+                    "value": "keep_animated_only",
+                    "label": "Animated images only"
+                  },
+                  {
+                    "value": "omit_from_final_delivery",
+                    "label": "Do not save final images"
+                  }
                 ]
               },
-              "delayBetweenPromptsMs": { "title": "Delay between prompts (ms)" },
-              "retryAttempts": { "title": "Attempts per item" },
-              "startMinimized": { "title": "Start Chrome minimized" }
+              "delayBetweenPromptsMs": {
+                "title": "Delay between prompts (ms)"
+              },
+              "retryAttempts": {
+                "title": "Attempts per item"
+              },
+              "startMinimized": {
+                "title": "Start Chrome minimized"
+              }
             }
           }
         },
@@ -231,9 +357,18 @@
                 "title": "Project mode",
                 "description": "Defines whether the block creates a new Google Flow project or continues an existing one.",
                 "options": [
-                  { "value": "auto", "label": "Automatic (new project or entry point)" },
-                  { "value": "new", "label": "Always create a new project" },
-                  { "value": "existing", "label": "Use a specific project" }
+                  {
+                    "value": "auto",
+                    "label": "Automatic (new project or entry point)"
+                  },
+                  {
+                    "value": "new",
+                    "label": "Always create a new project"
+                  },
+                  {
+                    "value": "existing",
+                    "label": "Use a specific project"
+                  }
                 ]
               },
               "projectUrl": {
@@ -244,10 +379,22 @@
                 "title": "Image model",
                 "description": "Image generation model selected in the Google Flow interface.",
                 "options": [
-                  { "value": "flow_auto", "label": "Automatic: Pro → 2 → 2 Lite (recommended)" },
-                  { "value": "nano_banana_2", "label": "Nano Banana 2" },
-                  { "value": "nano_banana_pro", "label": "Nano Banana Pro" },
-                  { "value": "nano_banana_2_lite", "label": "Nano Banana 2 Lite" }
+                  {
+                    "value": "flow_auto",
+                    "label": "Automatic: Pro → 2 → 2 Lite (recommended)"
+                  },
+                  {
+                    "value": "nano_banana_2",
+                    "label": "Nano Banana 2"
+                  },
+                  {
+                    "value": "nano_banana_pro",
+                    "label": "Nano Banana Pro"
+                  },
+                  {
+                    "value": "nano_banana_2_lite",
+                    "label": "Nano Banana 2 Lite"
+                  }
                 ]
               },
               "imageModelLabel": {
@@ -261,12 +408,30 @@
               "aspectRatio": {
                 "title": "Aspect ratio",
                 "options": [
-                  { "value": "flow_current", "label": "Current Flow setting" },
-                  { "value": "landscape", "label": "Landscape (16:9)" },
-                  { "value": "landscape_4_3", "label": "Landscape (4:3)" },
-                  { "value": "portrait", "label": "Portrait (9:16)" },
-                  { "value": "portrait_3_4", "label": "Portrait (3:4)" },
-                  { "value": "square", "label": "Square (1:1)" }
+                  {
+                    "value": "flow_current",
+                    "label": "Current Flow setting"
+                  },
+                  {
+                    "value": "landscape",
+                    "label": "Landscape (16:9)"
+                  },
+                  {
+                    "value": "landscape_4_3",
+                    "label": "Landscape (4:3)"
+                  },
+                  {
+                    "value": "portrait",
+                    "label": "Portrait (9:16)"
+                  },
+                  {
+                    "value": "portrait_3_4",
+                    "label": "Portrait (3:4)"
+                  },
+                  {
+                    "value": "square",
+                    "label": "Square (1:1)"
+                  }
                 ]
               },
               "delayBetweenPromptsMs": {
@@ -293,7 +458,9 @@
                 "title": "Images per prompt",
                 "description": "Amount requested from Flow per prompt: x1, x2, x3, or x4. The plugin confirms this option before generating."
               },
-              "startMinimized": { "title": "Start Chrome minimized" }
+              "startMinimized": {
+                "title": "Start Chrome minimized"
+              }
             }
           }
         },
@@ -326,15 +493,28 @@
           },
           "blockConfigSchema": {
             "properties": {
-              "accountProfile": { "title": "Account profile" },
-              "fallbackAccountProfiles": { "title": "Fallback profiles" },
+              "accountProfile": {
+                "title": "Account profile"
+              },
+              "fallbackAccountProfiles": {
+                "title": "Fallback profiles"
+              },
               "projectMode": {
                 "title": "Project mode",
                 "description": "Defines whether the block creates a new Google Flow project or continues an existing one.",
                 "options": [
-                  { "value": "auto", "label": "Automatic (new project or entry point)" },
-                  { "value": "new", "label": "Always create a new project" },
-                  { "value": "existing", "label": "Use a specific project" }
+                  {
+                    "value": "auto",
+                    "label": "Automatic (new project or entry point)"
+                  },
+                  {
+                    "value": "new",
+                    "label": "Always create a new project"
+                  },
+                  {
+                    "value": "existing",
+                    "label": "Use a specific project"
+                  }
                 ]
               },
               "projectUrl": {
@@ -345,10 +525,22 @@
                 "title": "Video model",
                 "description": "Video generation model used for the animation.",
                 "options": [
-                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
-                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
-                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
-                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                  {
+                    "value": "veo_3_1_quality",
+                    "label": "Veo 3.1 - Quality"
+                  },
+                  {
+                    "value": "veo_3_1_fast",
+                    "label": "Veo 3.1 - Fast"
+                  },
+                  {
+                    "value": "veo_3_1_lite",
+                    "label": "Veo 3.1 - Lite"
+                  },
+                  {
+                    "value": "omni_1_1_flash",
+                    "label": "Omni 1.1 Flash"
+                  }
                 ]
               },
               "videoModelLabel": {
@@ -358,38 +550,78 @@
               "aspectRatio": {
                 "title": "Video aspect ratio",
                 "options": [
-                  { "value": "flow_current", "label": "Current Flow setting" },
-                  { "value": "landscape", "label": "Landscape (16:9)" },
-                  { "value": "portrait", "label": "Portrait (9:16)" }
+                  {
+                    "value": "flow_current",
+                    "label": "Current Flow setting"
+                  },
+                  {
+                    "value": "landscape",
+                    "label": "Landscape (16:9)"
+                  },
+                  {
+                    "value": "portrait",
+                    "label": "Portrait (9:16)"
+                  }
                 ]
               },
               "videoReferenceMode": {
                 "title": "Use image as",
                 "description": "Defines whether the animated image is used in the video as a frame or a reference element.",
                 "options": [
-                  { "value": "frames", "label": "Frame" },
-                  { "value": "elements", "label": "Reference element" }
+                  {
+                    "value": "frames",
+                    "label": "Frame"
+                  },
+                  {
+                    "value": "elements",
+                    "label": "Reference element"
+                  }
                 ]
               },
               "videoDurationSeconds": {
                 "title": "Duration",
                 "options": [
-                  { "value": 4, "label": "4 seconds" },
-                  { "value": 6, "label": "6 seconds" },
-                  { "value": 8, "label": "8 seconds" },
-                  { "value": 10, "label": "10 seconds (compatible models only)" }
+                  {
+                    "value": 4,
+                    "label": "4 seconds"
+                  },
+                  {
+                    "value": 6,
+                    "label": "6 seconds"
+                  },
+                  {
+                    "value": 8,
+                    "label": "8 seconds"
+                  },
+                  {
+                    "value": 10,
+                    "label": "10 seconds (compatible models only)"
+                  }
                 ]
               },
               "videoResolution": {
                 "title": "Video resolution",
                 "options": [
-                  { "value": "flow_current", "label": "Flow default" },
-                  { "value": "res_720p", "label": "720p" },
-                  { "value": "res_1080p", "label": "1080p" }
+                  {
+                    "value": "flow_current",
+                    "label": "Flow default"
+                  },
+                  {
+                    "value": "res_720p",
+                    "label": "720p"
+                  },
+                  {
+                    "value": "res_1080p",
+                    "label": "1080p"
+                  }
                 ]
               },
-              "retryAttempts": { "title": "Attempts per item" },
-              "startMinimized": { "title": "Start Chrome minimized" }
+              "retryAttempts": {
+                "title": "Attempts per item"
+              },
+              "startMinimized": {
+                "title": "Start Chrome minimized"
+              }
             }
           }
         },
@@ -422,15 +654,28 @@
           },
           "blockConfigSchema": {
             "properties": {
-              "accountProfile": { "title": "Account profile" },
-              "fallbackAccountProfiles": { "title": "Fallback profiles" },
+              "accountProfile": {
+                "title": "Account profile"
+              },
+              "fallbackAccountProfiles": {
+                "title": "Fallback profiles"
+              },
               "projectMode": {
                 "title": "Project mode",
                 "description": "Defines whether the block creates a new Google Flow project or continues an existing one.",
                 "options": [
-                  { "value": "auto", "label": "Automatic (new project or entry point)" },
-                  { "value": "new", "label": "Always create a new project" },
-                  { "value": "existing", "label": "Use a specific project" }
+                  {
+                    "value": "auto",
+                    "label": "Automatic (new project or entry point)"
+                  },
+                  {
+                    "value": "new",
+                    "label": "Always create a new project"
+                  },
+                  {
+                    "value": "existing",
+                    "label": "Use a specific project"
+                  }
                 ]
               },
               "projectUrl": {
@@ -440,10 +685,22 @@
               "videoModel": {
                 "title": "Video model",
                 "options": [
-                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
-                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
-                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
-                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                  {
+                    "value": "veo_3_1_quality",
+                    "label": "Veo 3.1 - Quality"
+                  },
+                  {
+                    "value": "veo_3_1_fast",
+                    "label": "Veo 3.1 - Fast"
+                  },
+                  {
+                    "value": "veo_3_1_lite",
+                    "label": "Veo 3.1 - Lite"
+                  },
+                  {
+                    "value": "omni_1_1_flash",
+                    "label": "Omni 1.1 Flash"
+                  }
                 ]
               },
               "videoModelLabel": {
@@ -453,38 +710,80 @@
               "aspectRatio": {
                 "title": "Aspect ratio",
                 "options": [
-                  { "value": "flow_current", "label": "Current Flow setting" },
-                  { "value": "landscape", "label": "Landscape (16:9)" },
-                  { "value": "portrait", "label": "Portrait (9:16)" }
+                  {
+                    "value": "flow_current",
+                    "label": "Current Flow setting"
+                  },
+                  {
+                    "value": "landscape",
+                    "label": "Landscape (16:9)"
+                  },
+                  {
+                    "value": "portrait",
+                    "label": "Portrait (9:16)"
+                  }
                 ]
               },
               "videoReferenceMode": {
                 "title": "Use references as",
                 "options": [
-                  { "value": "frames", "label": "Frames" },
-                  { "value": "elements", "label": "Reference elements" }
+                  {
+                    "value": "frames",
+                    "label": "Frames"
+                  },
+                  {
+                    "value": "elements",
+                    "label": "Reference elements"
+                  }
                 ]
               },
               "videoDurationSeconds": {
                 "title": "Duration",
                 "options": [
-                  { "value": 4, "label": "4 seconds" },
-                  { "value": 6, "label": "6 seconds" },
-                  { "value": 8, "label": "8 seconds" },
-                  { "value": 10, "label": "10 seconds (compatible models only)" }
+                  {
+                    "value": 4,
+                    "label": "4 seconds"
+                  },
+                  {
+                    "value": 6,
+                    "label": "6 seconds"
+                  },
+                  {
+                    "value": 8,
+                    "label": "8 seconds"
+                  },
+                  {
+                    "value": 10,
+                    "label": "10 seconds (compatible models only)"
+                  }
                 ]
               },
               "videoResolution": {
                 "title": "Video resolution",
                 "options": [
-                  { "value": "flow_current", "label": "Flow default" },
-                  { "value": "res_720p", "label": "720p" },
-                  { "value": "res_1080p", "label": "1080p" }
+                  {
+                    "value": "flow_current",
+                    "label": "Flow default"
+                  },
+                  {
+                    "value": "res_720p",
+                    "label": "720p"
+                  },
+                  {
+                    "value": "res_1080p",
+                    "label": "1080p"
+                  }
                 ]
               },
-              "delayBetweenPromptsMs": { "title": "Delay between prompts (ms)" },
-              "retryAttempts": { "title": "Attempts per item" },
-              "startMinimized": { "title": "Start Chrome minimized" }
+              "delayBetweenPromptsMs": {
+                "title": "Delay between prompts (ms)"
+              },
+              "retryAttempts": {
+                "title": "Attempts per item"
+              },
+              "startMinimized": {
+                "title": "Start Chrome minimized"
+              }
             }
           }
         }
@@ -540,11 +839,15 @@
               "label": "Videos finales",
               "description": "Videos animados a partir de las imágenes seleccionadas."
             },
-            "project_url": { "label": "URL del proyecto" }
+            "project_url": {
+              "label": "URL del proyecto"
+            }
           },
           "blockConfigSchema": {
             "properties": {
-              "accountProfile": { "title": "Perfil de cuenta" },
+              "accountProfile": {
+                "title": "Perfil de cuenta"
+              },
               "fallbackAccountProfiles": {
                 "title": "Perfiles alternativos",
                 "description": "Alias adicionales, uno por línea, en orden de uso."
@@ -552,49 +855,99 @@
               "projectMode": {
                 "title": "Modo del proyecto",
                 "options": [
-                  { "value": "auto", "label": "Automático" },
-                  { "value": "new", "label": "Crear siempre un proyecto nuevo" },
-                  { "value": "existing", "label": "Usar un proyecto específico" }
+                  {
+                    "value": "auto",
+                    "label": "Automático"
+                  },
+                  {
+                    "value": "new",
+                    "label": "Crear siempre un proyecto nuevo"
+                  },
+                  {
+                    "value": "existing",
+                    "label": "Usar un proyecto específico"
+                  }
                 ]
               },
-              "projectUrl": { "title": "URL del proyecto" },
+              "projectUrl": {
+                "title": "URL del proyecto"
+              },
               "productionMode": {
                 "title": "¿Qué debe producir este bloque?",
                 "description": "Elige el flujo visual antes de ajustar sus detalles.",
                 "options": [
-                  { "value": "images_only", "label": "Solo imágenes" },
-                  { "value": "text_to_video", "label": "Texto directamente a video" },
+                  {
+                    "value": "images_only",
+                    "label": "Solo imágenes"
+                  },
+                  {
+                    "value": "text_to_video",
+                    "label": "Texto directamente a video"
+                  },
                   {
                     "value": "images_then_selected_videos",
                     "label": "Imágenes y animar solo algunas"
                   },
-                  { "value": "images_to_video_all", "label": "Imágenes y animar todas" }
+                  {
+                    "value": "images_to_video_all",
+                    "label": "Imágenes y animar todas"
+                  }
                 ]
               },
               "imageModel": {
                 "title": "Modelo de imagen",
                 "options": [
-                  { "value": "flow_auto", "label": "Automático: Pro → 2 → 2 Lite" },
-                  { "value": "nano_banana_2", "label": "Nano Banana 2" },
-                  { "value": "nano_banana_pro", "label": "Nano Banana Pro" },
-                  { "value": "nano_banana_2_lite", "label": "Nano Banana 2 Lite" }
+                  {
+                    "value": "flow_auto",
+                    "label": "Automático: Pro → 2 → 2 Lite"
+                  },
+                  {
+                    "value": "nano_banana_2",
+                    "label": "Nano Banana 2"
+                  },
+                  {
+                    "value": "nano_banana_pro",
+                    "label": "Nano Banana Pro"
+                  },
+                  {
+                    "value": "nano_banana_2_lite",
+                    "label": "Nano Banana 2 Lite"
+                  }
                 ]
               },
-              "imageModelLabel": { "title": "Otro modelo de imagen" },
+              "imageModelLabel": {
+                "title": "Otro modelo de imagen"
+              },
               "fallbackOnModelLimit": {
                 "title": "Usar alternativa al alcanzar el límite de imágenes"
               },
               "aspectRatio": {
                 "title": "Proporción",
                 "options": [
-                  { "value": "flow_current", "label": "Actual de Flow" },
-                  { "value": "landscape", "label": "Horizontal (16:9)" },
-                  { "value": "portrait", "label": "Vertical (9:16)" },
-                  { "value": "square", "label": "Cuadrada (1:1)" }
+                  {
+                    "value": "flow_current",
+                    "label": "Actual de Flow"
+                  },
+                  {
+                    "value": "landscape",
+                    "label": "Horizontal (16:9)"
+                  },
+                  {
+                    "value": "portrait",
+                    "label": "Vertical (9:16)"
+                  },
+                  {
+                    "value": "square",
+                    "label": "Cuadrada (1:1)"
+                  }
                 ]
               },
-              "maxImagesPerPrompt": { "title": "Imágenes por prompt" },
-              "maxConcurrentGenerations": { "title": "Generaciones de imagen simultáneas" },
+              "maxImagesPerPrompt": {
+                "title": "Imágenes por prompt"
+              },
+              "maxConcurrentGenerations": {
+                "title": "Generaciones de imagen simultáneas"
+              },
               "enableCharacterConsistency": {
                 "title": "Mantener el personaje consistente",
                 "description": "Genera referencias visuales antes de las escenas y las adjunta a toda la producción."
@@ -603,7 +956,9 @@
                 "title": "Prompts de personaje",
                 "description": "Un prompt por línea para crear referencias visuales antes de las escenas."
               },
-              "maxReferenceImages": { "title": "Máximo de referencias" },
+              "maxReferenceImages": {
+                "title": "Máximo de referencias"
+              },
               "maxCharacterReferences": {
                 "title": "Referencias de personaje que se usarán",
                 "description": "Limita cuántas imágenes generadas por los prompts de personaje se usan como referencia en las escenas."
@@ -614,35 +969,76 @@
               "videoModel": {
                 "title": "Modelo de video",
                 "options": [
-                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
-                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
-                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
-                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                  {
+                    "value": "veo_3_1_quality",
+                    "label": "Veo 3.1 - Quality"
+                  },
+                  {
+                    "value": "veo_3_1_fast",
+                    "label": "Veo 3.1 - Fast"
+                  },
+                  {
+                    "value": "veo_3_1_lite",
+                    "label": "Veo 3.1 - Lite"
+                  },
+                  {
+                    "value": "omni_1_1_flash",
+                    "label": "Omni 1.1 Flash"
+                  }
                 ]
               },
-              "videoModelLabel": { "title": "Otro modelo de video" },
+              "videoModelLabel": {
+                "title": "Otro modelo de video"
+              },
               "videoReferenceMode": {
                 "title": "Usar la imagen en el video como",
                 "options": [
-                  { "value": "frames", "label": "Fotograma" },
-                  { "value": "elements", "label": "Elemento de referencia" }
+                  {
+                    "value": "frames",
+                    "label": "Fotograma"
+                  },
+                  {
+                    "value": "elements",
+                    "label": "Elemento de referencia"
+                  }
                 ]
               },
               "videoDurationSeconds": {
                 "title": "Duración del video",
                 "options": [
-                  { "value": 4, "label": "4 segundos" },
-                  { "value": 6, "label": "6 segundos" },
-                  { "value": 8, "label": "8 segundos" },
-                  { "value": 10, "label": "10 segundos" }
+                  {
+                    "value": 4,
+                    "label": "4 segundos"
+                  },
+                  {
+                    "value": 6,
+                    "label": "6 segundos"
+                  },
+                  {
+                    "value": 8,
+                    "label": "8 segundos"
+                  },
+                  {
+                    "value": 10,
+                    "label": "10 segundos"
+                  }
                 ]
               },
               "videoResolution": {
                 "title": "Resolución del video",
                 "options": [
-                  { "value": "flow_current", "label": "Predeterminada de Flow" },
-                  { "value": "res_720p", "label": "720p" },
-                  { "value": "res_1080p", "label": "1080p" }
+                  {
+                    "value": "flow_current",
+                    "label": "Predeterminada de Flow"
+                  },
+                  {
+                    "value": "res_720p",
+                    "label": "720p"
+                  },
+                  {
+                    "value": "res_1080p",
+                    "label": "1080p"
+                  }
                 ]
               },
               "maxVideosToAnimate": {
@@ -652,10 +1048,22 @@
               "animationSelection": {
                 "title": "Criterio para elegir imágenes",
                 "options": [
-                  { "value": "first", "label": "Primeras de la cola" },
-                  { "value": "last", "label": "Últimas de la cola" },
-                  { "value": "evenly_spaced", "label": "Distribuidas en la cola" },
-                  { "value": "manual_indexes", "label": "Índices introducidos manualmente" }
+                  {
+                    "value": "first",
+                    "label": "Primeras de la cola"
+                  },
+                  {
+                    "value": "last",
+                    "label": "Últimas de la cola"
+                  },
+                  {
+                    "value": "evenly_spaced",
+                    "label": "Distribuidas en la cola"
+                  },
+                  {
+                    "value": "manual_indexes",
+                    "label": "Índices introducidos manualmente"
+                  }
                 ]
               },
               "animationIndexes": {
@@ -665,14 +1073,29 @@
               "imageRetention": {
                 "title": "Guardar imágenes en la entrega final",
                 "options": [
-                  { "value": "keep_all", "label": "Todas las imágenes" },
-                  { "value": "keep_animated_only", "label": "Solo las imágenes animadas" },
-                  { "value": "omit_from_final_delivery", "label": "No guardar imágenes finales" }
+                  {
+                    "value": "keep_all",
+                    "label": "Todas las imágenes"
+                  },
+                  {
+                    "value": "keep_animated_only",
+                    "label": "Solo las imágenes animadas"
+                  },
+                  {
+                    "value": "omit_from_final_delivery",
+                    "label": "No guardar imágenes finales"
+                  }
                 ]
               },
-              "delayBetweenPromptsMs": { "title": "Pausa entre prompts (ms)" },
-              "retryAttempts": { "title": "Intentos por elemento" },
-              "startMinimized": { "title": "Iniciar Chrome minimizado" }
+              "delayBetweenPromptsMs": {
+                "title": "Pausa entre prompts (ms)"
+              },
+              "retryAttempts": {
+                "title": "Intentos por elemento"
+              },
+              "startMinimized": {
+                "title": "Iniciar Chrome minimizado"
+              }
             }
           }
         },
@@ -717,9 +1140,18 @@
                 "title": "Modo del proyecto",
                 "description": "Define si el bloque crea un proyecto nuevo de Google Flow o continúa uno existente.",
                 "options": [
-                  { "value": "auto", "label": "Automático (proyecto nuevo o punto de entrada)" },
-                  { "value": "new", "label": "Crear siempre un proyecto nuevo" },
-                  { "value": "existing", "label": "Usar un proyecto específico" }
+                  {
+                    "value": "auto",
+                    "label": "Automático (proyecto nuevo o punto de entrada)"
+                  },
+                  {
+                    "value": "new",
+                    "label": "Crear siempre un proyecto nuevo"
+                  },
+                  {
+                    "value": "existing",
+                    "label": "Usar un proyecto específico"
+                  }
                 ]
               },
               "projectUrl": {
@@ -730,10 +1162,22 @@
                 "title": "Modelo de imagen",
                 "description": "Modelo de generación de imagen seleccionado en la interfaz de Google Flow.",
                 "options": [
-                  { "value": "flow_auto", "label": "Automático: Pro → 2 → 2 Lite (recomendado)" },
-                  { "value": "nano_banana_2", "label": "Nano Banana 2" },
-                  { "value": "nano_banana_pro", "label": "Nano Banana Pro" },
-                  { "value": "nano_banana_2_lite", "label": "Nano Banana 2 Lite" }
+                  {
+                    "value": "flow_auto",
+                    "label": "Automático: Pro → 2 → 2 Lite (recomendado)"
+                  },
+                  {
+                    "value": "nano_banana_2",
+                    "label": "Nano Banana 2"
+                  },
+                  {
+                    "value": "nano_banana_pro",
+                    "label": "Nano Banana Pro"
+                  },
+                  {
+                    "value": "nano_banana_2_lite",
+                    "label": "Nano Banana 2 Lite"
+                  }
                 ]
               },
               "imageModelLabel": {
@@ -747,12 +1191,30 @@
               "aspectRatio": {
                 "title": "Proporción",
                 "options": [
-                  { "value": "flow_current", "label": "Actual de Flow" },
-                  { "value": "landscape", "label": "Horizontal (16:9)" },
-                  { "value": "landscape_4_3", "label": "Horizontal (4:3)" },
-                  { "value": "portrait", "label": "Vertical (9:16)" },
-                  { "value": "portrait_3_4", "label": "Vertical (3:4)" },
-                  { "value": "square", "label": "Cuadrada (1:1)" }
+                  {
+                    "value": "flow_current",
+                    "label": "Actual de Flow"
+                  },
+                  {
+                    "value": "landscape",
+                    "label": "Horizontal (16:9)"
+                  },
+                  {
+                    "value": "landscape_4_3",
+                    "label": "Horizontal (4:3)"
+                  },
+                  {
+                    "value": "portrait",
+                    "label": "Vertical (9:16)"
+                  },
+                  {
+                    "value": "portrait_3_4",
+                    "label": "Vertical (3:4)"
+                  },
+                  {
+                    "value": "square",
+                    "label": "Cuadrada (1:1)"
+                  }
                 ]
               },
               "delayBetweenPromptsMs": {
@@ -779,7 +1241,9 @@
                 "title": "Imágenes por prompt",
                 "description": "Cantidad solicitada a Flow por prompt: x1, x2, x3 o x4. El plugin confirma esta opción antes de generar."
               },
-              "startMinimized": { "title": "Iniciar Chrome minimizado" }
+              "startMinimized": {
+                "title": "Iniciar Chrome minimizado"
+              }
             }
           }
         },
@@ -812,15 +1276,28 @@
           },
           "blockConfigSchema": {
             "properties": {
-              "accountProfile": { "title": "Perfil de cuenta" },
-              "fallbackAccountProfiles": { "title": "Perfiles alternativos" },
+              "accountProfile": {
+                "title": "Perfil de cuenta"
+              },
+              "fallbackAccountProfiles": {
+                "title": "Perfiles alternativos"
+              },
               "projectMode": {
                 "title": "Modo del proyecto",
                 "description": "Define si el bloque crea un proyecto nuevo de Google Flow o continúa uno existente.",
                 "options": [
-                  { "value": "auto", "label": "Automático (proyecto nuevo o punto de entrada)" },
-                  { "value": "new", "label": "Crear siempre un proyecto nuevo" },
-                  { "value": "existing", "label": "Usar un proyecto específico" }
+                  {
+                    "value": "auto",
+                    "label": "Automático (proyecto nuevo o punto de entrada)"
+                  },
+                  {
+                    "value": "new",
+                    "label": "Crear siempre un proyecto nuevo"
+                  },
+                  {
+                    "value": "existing",
+                    "label": "Usar un proyecto específico"
+                  }
                 ]
               },
               "projectUrl": {
@@ -831,10 +1308,22 @@
                 "title": "Modelo de video",
                 "description": "Modelo de generación de video utilizado en la animación.",
                 "options": [
-                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
-                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
-                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
-                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                  {
+                    "value": "veo_3_1_quality",
+                    "label": "Veo 3.1 - Quality"
+                  },
+                  {
+                    "value": "veo_3_1_fast",
+                    "label": "Veo 3.1 - Fast"
+                  },
+                  {
+                    "value": "veo_3_1_lite",
+                    "label": "Veo 3.1 - Lite"
+                  },
+                  {
+                    "value": "omni_1_1_flash",
+                    "label": "Omni 1.1 Flash"
+                  }
                 ]
               },
               "videoModelLabel": {
@@ -844,38 +1333,78 @@
               "aspectRatio": {
                 "title": "Proporción del video",
                 "options": [
-                  { "value": "flow_current", "label": "Actual de Flow" },
-                  { "value": "landscape", "label": "Horizontal (16:9)" },
-                  { "value": "portrait", "label": "Vertical (9:16)" }
+                  {
+                    "value": "flow_current",
+                    "label": "Actual de Flow"
+                  },
+                  {
+                    "value": "landscape",
+                    "label": "Horizontal (16:9)"
+                  },
+                  {
+                    "value": "portrait",
+                    "label": "Vertical (9:16)"
+                  }
                 ]
               },
               "videoReferenceMode": {
                 "title": "Usar la imagen como",
                 "description": "Define si la imagen animada se usa en el video como fotograma o elemento de referencia.",
                 "options": [
-                  { "value": "frames", "label": "Fotograma" },
-                  { "value": "elements", "label": "Elemento de referencia" }
+                  {
+                    "value": "frames",
+                    "label": "Fotograma"
+                  },
+                  {
+                    "value": "elements",
+                    "label": "Elemento de referencia"
+                  }
                 ]
               },
               "videoDurationSeconds": {
                 "title": "Duración",
                 "options": [
-                  { "value": 4, "label": "4 segundos" },
-                  { "value": 6, "label": "6 segundos" },
-                  { "value": 8, "label": "8 segundos" },
-                  { "value": 10, "label": "10 segundos (solo modelos compatibles)" }
+                  {
+                    "value": 4,
+                    "label": "4 segundos"
+                  },
+                  {
+                    "value": 6,
+                    "label": "6 segundos"
+                  },
+                  {
+                    "value": 8,
+                    "label": "8 segundos"
+                  },
+                  {
+                    "value": 10,
+                    "label": "10 segundos (solo modelos compatibles)"
+                  }
                 ]
               },
               "videoResolution": {
                 "title": "Resolución del video",
                 "options": [
-                  { "value": "flow_current", "label": "Predeterminada de Flow" },
-                  { "value": "res_720p", "label": "720p" },
-                  { "value": "res_1080p", "label": "1080p" }
+                  {
+                    "value": "flow_current",
+                    "label": "Predeterminada de Flow"
+                  },
+                  {
+                    "value": "res_720p",
+                    "label": "720p"
+                  },
+                  {
+                    "value": "res_1080p",
+                    "label": "1080p"
+                  }
                 ]
               },
-              "retryAttempts": { "title": "Intentos por elemento" },
-              "startMinimized": { "title": "Iniciar Chrome minimizado" }
+              "retryAttempts": {
+                "title": "Intentos por elemento"
+              },
+              "startMinimized": {
+                "title": "Iniciar Chrome minimizado"
+              }
             }
           }
         },
@@ -908,15 +1437,28 @@
           },
           "blockConfigSchema": {
             "properties": {
-              "accountProfile": { "title": "Perfil de cuenta" },
-              "fallbackAccountProfiles": { "title": "Perfiles alternativos" },
+              "accountProfile": {
+                "title": "Perfil de cuenta"
+              },
+              "fallbackAccountProfiles": {
+                "title": "Perfiles alternativos"
+              },
               "projectMode": {
                 "title": "Modo del proyecto",
                 "description": "Define si el bloque crea un proyecto nuevo de Google Flow o continúa uno existente.",
                 "options": [
-                  { "value": "auto", "label": "Automático (proyecto nuevo o punto de entrada)" },
-                  { "value": "new", "label": "Crear siempre un proyecto nuevo" },
-                  { "value": "existing", "label": "Usar un proyecto específico" }
+                  {
+                    "value": "auto",
+                    "label": "Automático (proyecto nuevo o punto de entrada)"
+                  },
+                  {
+                    "value": "new",
+                    "label": "Crear siempre un proyecto nuevo"
+                  },
+                  {
+                    "value": "existing",
+                    "label": "Usar un proyecto específico"
+                  }
                 ]
               },
               "projectUrl": {
@@ -926,10 +1468,22 @@
               "videoModel": {
                 "title": "Modelo de video",
                 "options": [
-                  { "value": "veo_3_1_quality", "label": "Veo 3.1 - Quality" },
-                  { "value": "veo_3_1_fast", "label": "Veo 3.1 - Fast" },
-                  { "value": "veo_3_1_lite", "label": "Veo 3.1 - Lite" },
-                  { "value": "omni_1_1_flash", "label": "Omni 1.1 Flash" }
+                  {
+                    "value": "veo_3_1_quality",
+                    "label": "Veo 3.1 - Quality"
+                  },
+                  {
+                    "value": "veo_3_1_fast",
+                    "label": "Veo 3.1 - Fast"
+                  },
+                  {
+                    "value": "veo_3_1_lite",
+                    "label": "Veo 3.1 - Lite"
+                  },
+                  {
+                    "value": "omni_1_1_flash",
+                    "label": "Omni 1.1 Flash"
+                  }
                 ]
               },
               "videoModelLabel": {
@@ -939,38 +1493,80 @@
               "aspectRatio": {
                 "title": "Proporción",
                 "options": [
-                  { "value": "flow_current", "label": "Actual de Flow" },
-                  { "value": "landscape", "label": "Horizontal (16:9)" },
-                  { "value": "portrait", "label": "Vertical (9:16)" }
+                  {
+                    "value": "flow_current",
+                    "label": "Actual de Flow"
+                  },
+                  {
+                    "value": "landscape",
+                    "label": "Horizontal (16:9)"
+                  },
+                  {
+                    "value": "portrait",
+                    "label": "Vertical (9:16)"
+                  }
                 ]
               },
               "videoReferenceMode": {
                 "title": "Usar las referencias como",
                 "options": [
-                  { "value": "frames", "label": "Fotogramas" },
-                  { "value": "elements", "label": "Elementos de referencia" }
+                  {
+                    "value": "frames",
+                    "label": "Fotogramas"
+                  },
+                  {
+                    "value": "elements",
+                    "label": "Elementos de referencia"
+                  }
                 ]
               },
               "videoDurationSeconds": {
                 "title": "Duración",
                 "options": [
-                  { "value": 4, "label": "4 segundos" },
-                  { "value": 6, "label": "6 segundos" },
-                  { "value": 8, "label": "8 segundos" },
-                  { "value": 10, "label": "10 segundos (solo modelos compatibles)" }
+                  {
+                    "value": 4,
+                    "label": "4 segundos"
+                  },
+                  {
+                    "value": 6,
+                    "label": "6 segundos"
+                  },
+                  {
+                    "value": 8,
+                    "label": "8 segundos"
+                  },
+                  {
+                    "value": 10,
+                    "label": "10 segundos (solo modelos compatibles)"
+                  }
                 ]
               },
               "videoResolution": {
                 "title": "Resolución del video",
                 "options": [
-                  { "value": "flow_current", "label": "Predeterminada de Flow" },
-                  { "value": "res_720p", "label": "720p" },
-                  { "value": "res_1080p", "label": "1080p" }
+                  {
+                    "value": "flow_current",
+                    "label": "Predeterminada de Flow"
+                  },
+                  {
+                    "value": "res_720p",
+                    "label": "720p"
+                  },
+                  {
+                    "value": "res_1080p",
+                    "label": "1080p"
+                  }
                 ]
               },
-              "delayBetweenPromptsMs": { "title": "Pausa entre prompts (ms)" },
-              "retryAttempts": { "title": "Intentos por elemento" },
-              "startMinimized": { "title": "Iniciar Chrome minimizado" }
+              "delayBetweenPromptsMs": {
+                "title": "Pausa entre prompts (ms)"
+              },
+              "retryAttempts": {
+                "title": "Intentos por elemento"
+              },
+              "startMinimized": {
+                "title": "Iniciar Chrome minimizado"
+              }
             }
           }
         }
@@ -989,21 +1585,27 @@
   },
   "minCoreVersion": "0.3.0",
   "entrypoint": "handler.mjs",
-  "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
+  "permissions": [
+    "network",
+    "filesystem:read",
+    "filesystem:write",
+    "process"
+  ],
   "networkHosts": [
     "flow.google.com",
     "labs.google",
     "flow-content.google",
     "aisandbox-pa.googleapis.com"
   ],
-  "deliveryTypes": ["image", "video"],
   "profileSetup": {
     "configurationKey": "accountProfile",
     "label": "Adicionar conta",
     "description": "Abre o Chrome dedicado. Instale manualmente a ContentFlow Browser Bridge no perfil e conclua o login do Google Flow.",
     "fallbackConfigurationKey": "fallbackAccountProfiles"
   },
-  "browserRuntime": { "lifecycle": "core" },
+  "browserRuntime": {
+    "lifecycle": "core"
+  },
   "settingsSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -1090,54 +1692,87 @@
       "name": "Produção visual completa",
       "description": "Cria imagens, vídeos ou uma combinação dos dois a partir dos prompts das cenas.",
       "operator": "IA",
-      "promptPreview": { "template": "{{INPUT:prompts}}" },
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["assets"],
+      "promptPreview": {
+        "template": "{{INPUT:prompts}}"
+      },
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "assets"
+      ],
       "inputPorts": [
         {
           "key": "prompts",
           "label": "Prompts das cenas",
           "description": "Lista ordenada de prompts das cenas. Cada prompt gera uma imagem antes de qualquer animação.",
-          "acceptedTypes": ["text", "textarea", "list"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          }
         },
         {
           "key": "character_prompts",
           "label": "Prompts de personagens",
           "description": "Lista opcional para criar referências visuais antes das cenas. As referências geradas são anexadas a toda a produção para manter a consistência.",
-          "acceptedTypes": ["text", "textarea", "list"],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          }
         },
         {
           "key": "animation_prompts",
           "label": "Prompts de animação",
           "description": "Lista opcional, na mesma ordem das cenas, para descrever movimento e câmera. Sem esta entrada, o prompt da própria cena é reutilizado.",
-          "acceptedTypes": ["text", "textarea", "list"],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          }
         },
         {
           "key": "reference_images",
           "label": "Referências de personagem e estilo",
           "description": "Imagens reutilizadas em toda a fila para manter personagem, produto, cenário e direção de arte consistentes.",
-          "acceptedTypes": ["image", "file", "files"],
           "required": false,
           "multiple": true,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "project_url",
           "label": "URL do projeto",
           "description": "Projeto do Google Flow opcional para preservar a sala, as referências e o histórico.",
-          "acceptedTypes": ["url"],
           "required": false,
-          "multiple": false
+          "multiple": false,
+          "shape": {
+            "kind": "control",
+            "control": "url",
+            "cardinality": "one"
+          }
         }
       ],
       "outputPorts": [
@@ -1145,63 +1780,106 @@
           "key": "assets",
           "label": "Ativos por item",
           "description": "Imagens e vídeos produzidos para cada cena orquestrada individualmente pelo ContentFlow.",
-          "producedTypes": ["files"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact"
+          }
         },
         {
           "key": "images",
           "label": "Imagens finais",
           "description": "Imagens preservadas pela política de retenção configurada.",
-          "producedTypes": ["files"],
           "required": false,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "character_references",
           "label": "Referências de personagem",
           "description": "Referências geradas no início da produção, quando a opção de salvamento estiver ativada.",
-          "producedTypes": ["files"],
           "required": false,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "videos",
           "label": "Vídeos finais",
           "description": "Vídeos animados a partir das imagens selecionadas.",
-          "producedTypes": ["files"],
           "required": false,
           "presentation": {
-            "renderer": "video-player",
-            "itemType": "video",
-            "acceptedMimeTypes": ["video/mp4"]
+            "renderer": "video-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "video/mp4"
+              ]
+            }
           }
         },
         {
           "key": "project_url",
           "label": "URL do projeto",
-          "producedTypes": ["text", "url"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "control",
+            "control": "url",
+            "cardinality": "one"
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "list", "image", "file", "files", "url"],
-      "producedOutputTypes": ["files", "text", "url"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 86400000,
         "supportsCancellation": true,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_write", "local_artifact", "subprocess"],
-      "cost": { "model": "unknown", "estimateSupported": false },
-      "dataPolicy": { "sendsDataToThirdParties": true, "providers": ["Google Labs / Flow"] },
+      "sideEffects": [
+        "external_write",
+        "local_artifact",
+        "subprocess"
+      ],
+      "cost": {
+        "model": "unknown",
+        "estimateSupported": false
+      },
+      "dataPolicy": {
+        "sendsDataToThirdParties": true,
+        "providers": [
+          "Google Labs / Flow"
+        ]
+      },
       "blockConfigSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1225,16 +1903,30 @@
             "title": "Modo do projeto",
             "default": "auto",
             "oneOf": [
-              { "const": "auto", "title": "Automático" },
-              { "const": "new", "title": "Sempre criar novo projeto" },
-              { "const": "existing", "title": "Usar projeto específico" }
+              {
+                "const": "auto",
+                "title": "Automático"
+              },
+              {
+                "const": "new",
+                "title": "Sempre criar novo projeto"
+              },
+              {
+                "const": "existing",
+                "title": "Usar projeto específico"
+              }
             ]
           },
           "projectUrl": {
             "type": "string",
             "title": "URL do projeto",
             "default": "",
-            "visibleWhen": { "property": "projectMode", "values": ["existing"] }
+            "visibleWhen": {
+              "property": "projectMode",
+              "values": [
+                "existing"
+              ]
+            }
           },
           "productionMode": {
             "type": "string",
@@ -1242,13 +1934,22 @@
             "description": "Escolha o fluxo visual antes de ajustar detalhes técnicos.",
             "default": "images_only",
             "oneOf": [
-              { "const": "images_only", "title": "Somente imagens" },
-              { "const": "text_to_video", "title": "Texto direto para vídeo" },
+              {
+                "const": "images_only",
+                "title": "Somente imagens"
+              },
+              {
+                "const": "text_to_video",
+                "title": "Texto direto para vídeo"
+              },
               {
                 "const": "images_then_selected_videos",
                 "title": "Imagens e animar apenas algumas"
               },
-              { "const": "images_to_video_all", "title": "Imagens e animar todas" }
+              {
+                "const": "images_to_video_all",
+                "title": "Imagens e animar todas"
+              }
             ]
           },
           "imageModel": {
@@ -1256,15 +1957,34 @@
             "title": "Modelo de imagem",
             "default": "flow_auto",
             "oneOf": [
-              { "const": "flow_auto", "title": "Automático: Pro → 2 → 2 Lite" },
-              { "const": "nano_banana_2", "title": "Nano Banana 2" },
-              { "const": "nano_banana_pro", "title": "Nano Banana Pro" },
-              { "const": "nano_banana_2_lite", "title": "Nano Banana 2 Lite" },
-              { "type": "string", "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$" }
+              {
+                "const": "flow_auto",
+                "title": "Automático: Pro → 2 → 2 Lite"
+              },
+              {
+                "const": "nano_banana_2",
+                "title": "Nano Banana 2"
+              },
+              {
+                "const": "nano_banana_pro",
+                "title": "Nano Banana Pro"
+              },
+              {
+                "const": "nano_banana_2_lite",
+                "title": "Nano Banana 2 Lite"
+              },
+              {
+                "type": "string",
+                "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$"
+              }
             ],
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "images_only",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "imageModelLabel": {
@@ -1274,7 +1994,11 @@
             "maxLength": 120,
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "images_only",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "fallbackOnModelLimit": {
@@ -1283,7 +2007,11 @@
             "default": true,
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "images_only",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "aspectRatio": {
@@ -1291,10 +2019,22 @@
             "title": "Proporção",
             "default": "flow_current",
             "oneOf": [
-              { "const": "flow_current", "title": "Atual do Flow" },
-              { "const": "landscape", "title": "Paisagem (16:9)" },
-              { "const": "portrait", "title": "Retrato (9:16)" },
-              { "const": "square", "title": "Quadrada (1:1)" }
+              {
+                "const": "flow_current",
+                "title": "Atual do Flow"
+              },
+              {
+                "const": "landscape",
+                "title": "Paisagem (16:9)"
+              },
+              {
+                "const": "portrait",
+                "title": "Retrato (9:16)"
+              },
+              {
+                "const": "square",
+                "title": "Quadrada (1:1)"
+              }
             ]
           },
           "maxImagesPerPrompt": {
@@ -1305,7 +2045,11 @@
             "default": 1,
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "images_only",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "maxConcurrentGenerations": {
@@ -1316,7 +2060,11 @@
             "default": 3,
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "images_only",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "enableCharacterConsistency": {
@@ -1326,7 +2074,11 @@
             "default": false,
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "images_only",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "characterPrompts": {
@@ -1336,7 +2088,12 @@
             "format": "textarea",
             "default": "",
             "maxLength": 12000,
-            "visibleWhen": { "property": "enableCharacterConsistency", "values": [true] }
+            "visibleWhen": {
+              "property": "enableCharacterConsistency",
+              "values": [
+                true
+              ]
+            }
           },
           "maxReferenceImages": {
             "type": "integer",
@@ -1346,7 +2103,11 @@
             "default": 10,
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "images_only",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "maxCharacterReferences": {
@@ -1356,28 +2117,57 @@
             "minimum": 1,
             "maximum": 10,
             "default": 1,
-            "visibleWhen": { "property": "enableCharacterConsistency", "values": [true] }
+            "visibleWhen": {
+              "property": "enableCharacterConsistency",
+              "values": [
+                true
+              ]
+            }
           },
           "saveCharacterReferences": {
             "type": "boolean",
             "title": "Salvar referências de personagem na entrega final",
             "default": true,
-            "visibleWhen": { "property": "enableCharacterConsistency", "values": [true] }
+            "visibleWhen": {
+              "property": "enableCharacterConsistency",
+              "values": [
+                true
+              ]
+            }
           },
           "videoModel": {
             "type": "string",
             "title": "Modelo de vídeo",
             "default": "veo_3_1_fast",
             "oneOf": [
-              { "const": "veo_3_1_quality", "title": "Veo 3.1 - Quality" },
-              { "const": "veo_3_1_fast", "title": "Veo 3.1 - Fast" },
-              { "const": "veo_3_1_lite", "title": "Veo 3.1 - Lite" },
-              { "const": "omni_1_1_flash", "title": "Omni 1.1 Flash" },
-              { "type": "string", "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$" }
+              {
+                "const": "veo_3_1_quality",
+                "title": "Veo 3.1 - Quality"
+              },
+              {
+                "const": "veo_3_1_fast",
+                "title": "Veo 3.1 - Fast"
+              },
+              {
+                "const": "veo_3_1_lite",
+                "title": "Veo 3.1 - Lite"
+              },
+              {
+                "const": "omni_1_1_flash",
+                "title": "Omni 1.1 Flash"
+              },
+              {
+                "type": "string",
+                "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$"
+              }
             ],
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["text_to_video", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "text_to_video",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "videoModelLabel": {
@@ -1387,7 +2177,11 @@
             "maxLength": 120,
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["text_to_video", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "text_to_video",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "videoReferenceMode": {
@@ -1395,12 +2189,21 @@
             "title": "Usar imagem no vídeo como",
             "default": "frames",
             "oneOf": [
-              { "const": "frames", "title": "Frame" },
-              { "const": "elements", "title": "Elemento de referência" }
+              {
+                "const": "frames",
+                "title": "Frame"
+              },
+              {
+                "const": "elements",
+                "title": "Elemento de referência"
+              }
             ],
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "videoDurationSeconds": {
@@ -1408,14 +2211,30 @@
             "title": "Duração do vídeo",
             "default": 8,
             "oneOf": [
-              { "const": 4, "title": "4 segundos" },
-              { "const": 6, "title": "6 segundos" },
-              { "const": 8, "title": "8 segundos" },
-              { "const": 10, "title": "10 segundos" }
+              {
+                "const": 4,
+                "title": "4 segundos"
+              },
+              {
+                "const": 6,
+                "title": "6 segundos"
+              },
+              {
+                "const": 8,
+                "title": "8 segundos"
+              },
+              {
+                "const": 10,
+                "title": "10 segundos"
+              }
             ],
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["text_to_video", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "text_to_video",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "videoResolution": {
@@ -1423,13 +2242,26 @@
             "title": "Resolução do vídeo",
             "default": "flow_current",
             "oneOf": [
-              { "const": "flow_current", "title": "Padrão do Flow" },
-              { "const": "res_720p", "title": "720p" },
-              { "const": "res_1080p", "title": "1080p" }
+              {
+                "const": "flow_current",
+                "title": "Padrão do Flow"
+              },
+              {
+                "const": "res_720p",
+                "title": "720p"
+              },
+              {
+                "const": "res_1080p",
+                "title": "1080p"
+              }
             ],
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["text_to_video", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "text_to_video",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "maxVideosToAnimate": {
@@ -1441,7 +2273,9 @@
             "default": 3,
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_then_selected_videos"]
+              "values": [
+                "images_then_selected_videos"
+              ]
             }
           },
           "animationSelection": {
@@ -1449,14 +2283,28 @@
             "title": "Critério para escolher imagens",
             "default": "first",
             "oneOf": [
-              { "const": "first", "title": "Primeiras da fila" },
-              { "const": "last", "title": "Últimas da fila" },
-              { "const": "evenly_spaced", "title": "Distribuídas pela fila" },
-              { "const": "manual_indexes", "title": "Índices informados manualmente" }
+              {
+                "const": "first",
+                "title": "Primeiras da fila"
+              },
+              {
+                "const": "last",
+                "title": "Últimas da fila"
+              },
+              {
+                "const": "evenly_spaced",
+                "title": "Distribuídas pela fila"
+              },
+              {
+                "const": "manual_indexes",
+                "title": "Índices informados manualmente"
+              }
             ],
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_then_selected_videos"]
+              "values": [
+                "images_then_selected_videos"
+              ]
             }
           },
           "animationIndexes": {
@@ -1466,20 +2314,38 @@
             "default": "",
             "maxLength": 2048,
             "description": "Usado no critério manual. Informe posições 1-baseadas: 1, 7, 10-14.",
-            "visibleWhen": { "property": "animationSelection", "values": ["manual_indexes"] }
+            "visibleWhen": {
+              "property": "animationSelection",
+              "values": [
+                "manual_indexes"
+              ]
+            }
           },
           "imageRetention": {
             "type": "string",
             "title": "Salvar imagens na entrega final",
             "default": "keep_all",
             "oneOf": [
-              { "const": "keep_all", "title": "Todas as imagens" },
-              { "const": "keep_animated_only", "title": "Somente as imagens animadas" },
-              { "const": "omit_from_final_delivery", "title": "Não salvar imagens finais" }
+              {
+                "const": "keep_all",
+                "title": "Todas as imagens"
+              },
+              {
+                "const": "keep_animated_only",
+                "title": "Somente as imagens animadas"
+              },
+              {
+                "const": "omit_from_final_delivery",
+                "title": "Não salvar imagens finais"
+              }
             ],
             "visibleWhen": {
               "property": "productionMode",
-              "values": ["images_only", "images_then_selected_videos", "images_to_video_all"]
+              "values": [
+                "images_only",
+                "images_then_selected_videos",
+                "images_to_video_all"
+              ]
             }
           },
           "delayBetweenPromptsMs": {
@@ -1507,13 +2373,17 @@
         {
           "property": "imageModel",
           "providerId": "flow-image-models",
-          "dependsOn": ["accountProfile"],
+          "dependsOn": [
+            "accountProfile"
+          ],
           "cacheTtlMs": 300000
         },
         {
           "property": "videoModel",
           "providerId": "flow-video-models",
-          "dependsOn": ["accountProfile"],
+          "dependsOn": [
+            "accountProfile"
+          ],
           "cacheTtlMs": 300000
         }
       ],
@@ -1521,11 +2391,21 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "assets": { "type": "array" },
-          "images": { "type": "array" },
-          "character_references": { "type": "array" },
-          "videos": { "type": "array" },
-          "project_url": { "type": "string" }
+          "assets": {
+            "type": "array"
+          },
+          "images": {
+            "type": "array"
+          },
+          "character_references": {
+            "type": "array"
+          },
+          "videos": {
+            "type": "array"
+          },
+          "project_url": {
+            "type": "string"
+          }
         }
       }
     },
@@ -1537,43 +2417,73 @@
       "promptPreview": {
         "template": "{{INPUT:prompts}}"
       },
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["thumbnail", "assets"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "thumbnail",
+        "assets"
+      ],
       "itemActions": [
-        { "action": "regenerate" },
-        { "action": "replace" },
-        { "action": "select" },
-        { "action": "download" }
+        {
+          "action": "regenerate"
+        },
+        {
+          "action": "replace"
+        },
+        {
+          "action": "select"
+        },
+        {
+          "action": "download"
+        }
       ],
       "inputPorts": [
         {
           "key": "prompts",
           "label": "Prompts",
           "description": "Um prompt ou uma lista de prompts. No primeiro uso, a execução pode aguardar o login no Chrome dedicado antes de gerar.",
-          "acceptedTypes": ["text", "textarea", "list"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          }
         },
         {
           "key": "reference_images",
           "label": "Imagens de referência",
           "description": "Imagens opcionais compartilhadas pela execução para preservar personagem, avatar, produto, cenário ou estilo.",
-          "acceptedTypes": ["image", "file", "files"],
           "required": false,
           "multiple": true,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "project_url",
           "label": "URL do projeto",
           "description": "URL opcional de um projeto do Flow para continuar na mesma sala/chat preservando personagens e histórico.",
-          "acceptedTypes": ["url"],
           "required": false,
-          "multiple": false
+          "multiple": false,
+          "shape": {
+            "kind": "control",
+            "control": "url",
+            "cardinality": "one"
+          }
         }
       ],
       "outputPorts": [
@@ -1581,24 +2491,34 @@
           "key": "images",
           "label": "Imagens geradas",
           "description": "Imagens geradas no projeto real do Google Flow e importadas pelo ContentFlow.",
-          "producedTypes": ["image", "files"],
           "required": true,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "project_url",
           "label": "URL do projeto",
           "description": "URL do projeto ativo no Google Flow para reaproveitar em blocos seguintes do método.",
-          "producedTypes": ["text", "url"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "control",
+            "control": "url",
+            "cardinality": "one"
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "list", "image", "file", "files", "url"],
-      "producedOutputTypes": ["image", "files", "text", "url"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 86400000,
@@ -1608,18 +2528,27 @@
           "mode": "sequential",
           "inputPort": "prompts",
           "outputPort": "images",
-          "strategies": ["continuous_session", "per_item"],
+          "strategies": [
+            "continuous_session",
+            "per_item"
+          ],
           "preferredStrategy": "continuous_session"
         }
       },
-      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["Google Labs / Flow"]
+        "providers": [
+          "Google Labs / Flow"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -1665,7 +2594,12 @@
             "title": "URL do projeto (opcional)",
             "default": "",
             "description": "URL de um projeto em https://flow.google.com/project/... Usado quando o modo for 'Usar projeto específico' ou para fixar um projeto manual.",
-            "visibleWhen": { "property": "projectMode", "values": ["existing"] }
+            "visibleWhen": {
+              "property": "projectMode",
+              "values": [
+                "existing"
+              ]
+            }
           },
           "imageModel": {
             "type": "string",
@@ -1798,7 +2732,9 @@
         {
           "property": "imageModel",
           "providerId": "flow-image-models",
-          "dependsOn": ["accountProfile"],
+          "dependsOn": [
+            "accountProfile"
+          ],
           "cacheTtlMs": 300000
         }
       ],
@@ -1821,7 +2757,9 @@
             "type": "string"
           }
         },
-        "required": ["images"]
+        "required": [
+          "images"
+        ]
       }
     },
     {
@@ -1832,43 +2770,73 @@
       "promptPreview": {
         "template": "{{INPUT:prompts}}"
       },
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["assets", "editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "assets",
+        "editing"
+      ],
       "itemActions": [
-        { "action": "regenerate" },
-        { "action": "replace" },
-        { "action": "select" },
-        { "action": "download" }
+        {
+          "action": "regenerate"
+        },
+        {
+          "action": "replace"
+        },
+        {
+          "action": "select"
+        },
+        {
+          "action": "download"
+        }
       ],
       "inputPorts": [
         {
           "key": "images",
           "label": "Imagem para animar",
           "description": "Imagem base que será animada no Google Flow com o modelo Veo selecionado.",
-          "acceptedTypes": ["image", "file", "files"],
           "required": true,
           "multiple": false,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "prompts",
           "label": "Instrução de movimento",
           "description": "Prompt ou instrução opcional para guiar o movimento e a câmera da animação.",
-          "acceptedTypes": ["text", "textarea", "list"],
           "required": false,
-          "multiple": false
+          "multiple": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          }
         },
         {
           "key": "project_url",
           "label": "URL do projeto",
           "description": "URL opcional do projeto/chat do Flow onde a imagem já reside.",
-          "acceptedTypes": ["url"],
           "required": false,
-          "multiple": false
+          "multiple": false,
+          "shape": {
+            "kind": "control",
+            "control": "url",
+            "cardinality": "one"
+          }
         }
       ],
       "outputPorts": [
@@ -1876,24 +2844,34 @@
           "key": "video",
           "label": "Vídeo animado",
           "description": "Vídeo MP4 gerado no Google Flow a partir da imagem animada.",
-          "producedTypes": ["video", "file", "files"],
           "required": true,
           "presentation": {
-            "renderer": "video-player",
-            "itemType": "video",
-            "acceptedMimeTypes": ["video/mp4"]
+            "renderer": "video-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "video/mp4"
+              ]
+            }
           }
         },
         {
           "key": "project_url",
           "label": "URL do projeto",
           "description": "URL do projeto ativo no Google Flow para encadear em blocos seguintes.",
-          "producedTypes": ["text", "url"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "control",
+            "control": "url",
+            "cardinality": "one"
+          }
         }
       ],
-      "acceptedInputTypes": ["image", "file", "files", "text", "textarea", "list", "url"],
-      "producedOutputTypes": ["video", "file", "files", "text", "url"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 900000,
@@ -1903,18 +2881,26 @@
           "mode": "sequential",
           "inputPort": "images",
           "outputPort": "video",
-          "strategies": ["per_item"],
+          "strategies": [
+            "per_item"
+          ],
           "preferredStrategy": "per_item"
         }
       },
-      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["Google Labs / Flow"]
+        "providers": [
+          "Google Labs / Flow"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -1958,7 +2944,12 @@
             "title": "URL do projeto (opcional)",
             "default": "",
             "description": "URL de um projeto em https://flow.google.com/project/... Usado quando o modo for 'Usar projeto específico' ou para fixar um projeto manual.",
-            "visibleWhen": { "property": "projectMode", "values": ["existing"] }
+            "visibleWhen": {
+              "property": "projectMode",
+              "values": [
+                "existing"
+              ]
+            }
           },
           "videoModel": {
             "type": "string",
@@ -2090,7 +3081,9 @@
         {
           "property": "videoModel",
           "providerId": "flow-video-models",
-          "dependsOn": ["accountProfile"],
+          "dependsOn": [
+            "accountProfile"
+          ],
           "cacheTtlMs": 300000
         }
       ],
@@ -2113,7 +3106,9 @@
             "type": "string"
           }
         },
-        "required": ["video"]
+        "required": [
+          "video"
+        ]
       }
     },
     {
@@ -2124,43 +3119,73 @@
       "promptPreview": {
         "template": "{{INPUT:prompts}}"
       },
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["assets", "editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "assets",
+        "editing"
+      ],
       "itemActions": [
-        { "action": "regenerate" },
-        { "action": "replace" },
-        { "action": "select" },
-        { "action": "download" }
+        {
+          "action": "regenerate"
+        },
+        {
+          "action": "replace"
+        },
+        {
+          "action": "select"
+        },
+        {
+          "action": "download"
+        }
       ],
       "inputPorts": [
         {
           "key": "prompts",
           "label": "Prompts de vídeo",
           "description": "Um prompt ou lista de prompts para geração de vídeo com Veo no Google Flow.",
-          "acceptedTypes": ["text", "textarea", "list"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          }
         },
         {
           "key": "reference_images",
           "label": "Imagens ou elementos de referência",
           "description": "Imagens opcionais usadas como elementos de referência nos vídeos do mesmo projeto.",
-          "acceptedTypes": ["image", "file", "files"],
           "required": false,
           "multiple": true,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "project_url",
           "label": "URL do projeto",
           "description": "URL opcional do projeto do Flow para gerar o vídeo dentro da mesma sala.",
-          "acceptedTypes": ["url"],
           "required": false,
-          "multiple": false
+          "multiple": false,
+          "shape": {
+            "kind": "control",
+            "control": "url",
+            "cardinality": "one"
+          }
         }
       ],
       "outputPorts": [
@@ -2168,24 +3193,34 @@
           "key": "video",
           "label": "Vídeo gerado",
           "description": "Vídeo MP4 gerado no Google Flow a partir do prompt.",
-          "producedTypes": ["video", "file", "files"],
           "required": true,
           "presentation": {
-            "renderer": "video-player",
-            "itemType": "video",
-            "acceptedMimeTypes": ["video/mp4"]
+            "renderer": "video-player"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "video/mp4"
+              ]
+            }
           }
         },
         {
           "key": "project_url",
           "label": "URL do projeto",
           "description": "URL do projeto ativo no Google Flow.",
-          "producedTypes": ["text", "url"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "control",
+            "control": "url",
+            "cardinality": "one"
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "list", "image", "file", "files", "url"],
-      "producedOutputTypes": ["video", "file", "files", "text", "url"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 900000,
@@ -2195,18 +3230,27 @@
           "mode": "sequential",
           "inputPort": "prompts",
           "outputPort": "video",
-          "strategies": ["continuous_session", "per_item"],
+          "strategies": [
+            "continuous_session",
+            "per_item"
+          ],
           "preferredStrategy": "continuous_session"
         }
       },
-      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["Google Labs / Flow"]
+        "providers": [
+          "Google Labs / Flow"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -2250,7 +3294,12 @@
             "title": "URL do projeto (opcional)",
             "default": "",
             "description": "URL de um projeto em https://flow.google.com/project/... Usado quando o modo for 'Usar projeto específico' ou para fixar um projeto manual.",
-            "visibleWhen": { "property": "projectMode", "values": ["existing"] }
+            "visibleWhen": {
+              "property": "projectMode",
+              "values": [
+                "existing"
+              ]
+            }
           },
           "videoModel": {
             "type": "string",
@@ -2387,7 +3436,9 @@
         {
           "property": "videoModel",
           "providerId": "flow-video-models",
-          "dependsOn": ["accountProfile"],
+          "dependsOn": [
+            "accountProfile"
+          ],
           "cacheTtlMs": 300000
         }
       ],
@@ -2410,7 +3461,9 @@
             "type": "string"
           }
         },
-        "required": ["video"]
+        "required": [
+          "video"
+        ]
       }
     }
   ]

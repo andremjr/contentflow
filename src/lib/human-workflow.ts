@@ -31,7 +31,7 @@ export function getMethodConfigurationIssue(method?: ProcessMethod) {
     for (const input of block.inputs ?? []) {
       const source = input.binding;
       const sourceKind = source?.kind;
-      if (!source && input.source !== "channel_library") {
+      if (!source) {
         return `Selecione a origem explícita da entrada “${input.label}”.`;
       }
       if (sourceKind === "runtime" && (!block.plugin || block.operator === "Humano")) {
@@ -269,24 +269,10 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
     name: block.name || `${block.type.charAt(0)}${block.type.slice(1).toLowerCase()}`,
     instructions: block.instructions ?? "",
     inputs: (block.inputs ?? []).map((input) => {
-      const binding = input.binding;
-      const sourceKind = binding?.kind;
       const shape = input.shape;
       return {
         ...input,
         shape,
-        historyLimit:
-          sourceKind === "channel_history"
-            ? binding?.kind === "channel_history"
-              ? binding.limit
-              : Math.min(100, Math.max(1, input.historyLimit ?? 10))
-            : undefined,
-        historyEligibility:
-          sourceKind === "channel_history"
-            ? binding?.kind === "channel_history"
-              ? binding.eligibility
-              : (input.historyEligibility ?? "completed")
-            : undefined,
         presentation: normalizeFieldPresentation(shape, input.presentation),
       };
     }),

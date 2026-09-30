@@ -5,7 +5,6 @@
   "permissions": ["network"],
   "networkHosts": ["api.example.com"],
   "secretKeys": ["API_TOKEN"],
-  "input": { "key": "content", "label": "Texto", "type": "textarea" },
-  "output": { "key": "result", "label": "Resposta", "type": "textarea" },
-  "deliveryTypes": ["text"]
+  "input": { "key": "content", "label": "Texto", "type": "text" },
+  "output": { "key": "result", "label": "Resposta", "type": "text" }
 }

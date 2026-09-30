@@ -14,7 +14,7 @@ function plugin(capabilityIds: string[], withProfiles = true): RegisteredPlugin 
     entrypoint: "handler.mjs",
     executable: true,
     manifest: {
-      apiVersion: "1",
+      apiVersion: "2",
       id: "local.browser",
       name: "Browser",
       version: "1.0.0",

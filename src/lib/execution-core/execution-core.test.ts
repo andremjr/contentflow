@@ -34,6 +34,7 @@ function execution(
   status: ProcessExecution["status"] = "not_started",
 ): ProcessExecution {
   const methodSnapshot: ProcessMethod = {
+    contractVersion: 3,
     name: "Core test",
     processType: "theme",
     blocks: methodBlocks.map((item, order) => ({ ...item, order })),
@@ -59,6 +60,7 @@ function execution(
 
 test("C01 — snapshot sovereignty ignores later changes to a live Method", () => {
   const liveMethod: ProcessMethod = {
+    contractVersion: 3,
     name: "Live",
     processType: "theme",
     blocks: [block("snapshot-human")],

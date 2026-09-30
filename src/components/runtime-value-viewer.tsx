@@ -3,21 +3,21 @@ import { OutputCharacterCount } from "@/components/output-character-count";
 import { PRESENTATION_RENDERER_REGISTRY } from "@/components/runtime-value-renderers";
 import type {
   FieldPresentation,
-  HumanFieldType,
   RuntimeValue,
   StructuredRecord,
   ThumbnailLayout,
+  ValueShape,
 } from "@/lib/domain";
 import { resolvePresentationRenderer } from "@/lib/presentation";
 
 export function RuntimeValueViewer({
-  type,
+  shape,
   value,
   presentation,
   compact = false,
   showCharacterCount = false,
 }: {
-  type: HumanFieldType;
+  shape: ValueShape;
   value: RuntimeValue | StructuredRecord | undefined;
   presentation?: FieldPresentation;
   compact?: boolean;
@@ -27,21 +27,26 @@ export function RuntimeValueViewer({
     return <span className="text-xs text-muted-foreground">Não informado</span>;
   }
 
-  if (type === "thumbnail_layout" && isThumbnailLayout(value)) {
+  if (shape.kind === "control" && shape.control === "thumbnail_layout" && isThumbnailLayout(value)) {
     return <CompositionPreview boxes={value.boxes} className={compact ? "max-w-72" : undefined} />;
   }
 
   const renderer =
-    PRESENTATION_RENDERER_REGISTRY[resolvePresentationRenderer(type, presentation, value)];
+    PRESENTATION_RENDERER_REGISTRY[resolvePresentationRenderer(shape, presentation, value)];
   if (!renderer) {
     return <span className="text-xs text-muted-foreground">Visualização indisponível</span>;
   }
   const Renderer = renderer.Renderer;
   const content = (
-    <Renderer type={type} value={value} compact={compact} presentation={presentation} />
+    <Renderer shape={shape} value={value} compact={compact} presentation={presentation} />
   );
 
-  if (showCharacterCount && (type === "text" || type === "textarea") && typeof value === "string") {
+  if (
+    showCharacterCount &&
+    shape.kind === "content" &&
+    shape.family === "text" &&
+    typeof value === "string"
+  ) {
     return (
       <div className="relative pb-5">
         {content}

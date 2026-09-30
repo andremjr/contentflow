@@ -30,6 +30,7 @@ function block(id: string, operator: ActionBlock["operator"] = "Humano"): Action
 
 function method(blocks: ActionBlock[], processType: ProcessMethod["processType"] = "theme") {
   return {
+    contractVersion: 3,
     name: "Creation test",
     processType,
     blocks: blocks.map((item, order) => ({ ...item, order })),
@@ -146,8 +147,7 @@ test("E06 — methodSnapshot is a defensive clone", () => {
     {
       id: "project-title",
       label: "Título",
-      type: "text",
-      source: "project",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
       binding: { kind: "project", key: "title" },
     },
   ];

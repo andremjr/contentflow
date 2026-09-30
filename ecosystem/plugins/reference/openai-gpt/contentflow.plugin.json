@@ -1,13 +1,15 @@
 {
-  "$schema": "../../../../docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "official-openai-gpt",
   "name": "OpenAI Models",
   "version": "1.1.1",
   "description": "Executa qualquer bloco baseado em linguagem com um modelo de texto compatível com a Responses API da OpenAI.",
   "author": "ContentFlow",
   "license": "LicenseRef-ContentFlow-Source-Available-1.0",
-  "branding": { "iconPath": "assets/icon.png" },
+  "branding": {
+    "iconPath": "assets/icon.png"
+  },
   "homepage": "https://github.com/andremjr/contentflow",
   "repository": "https://github.com/andremjr/contentflow",
   "runtime": {
@@ -16,10 +18,15 @@
     "module": "esm"
   },
   "entrypoint": "handler.ts",
-  "permissions": ["network"],
-  "networkHosts": ["api.openai.com"],
-  "secretKeys": ["OPENAI_API_KEY"],
-  "deliveryTypes": ["text"],
+  "permissions": [
+    "network"
+  ],
+  "networkHosts": [
+    "api.openai.com"
+  ],
+  "secretKeys": [
+    "OPENAI_API_KEY"
+  ],
   "capabilities": [
     {
       "id": "generate-or-validate-text",
@@ -28,7 +35,12 @@
       "promptPreview": {
         "template": "INSTRUÇÕES DO PROVEDOR:\n{{CONFIG:system_prompt}}\n\nMENSAGEM ENVIADA:\nCanal: {{CHANNEL_NAME}}\nNicho: {{NICHE}}\nProjeto: {{PROJECT_TITLE}}\nProcesso: {{PROCESS}}\nAção: {{BLOCK_NAME}}\nTipo de ação: {{BLOCK_TYPE}}\n\nInstruções da ação:\n{{BLOCK_INSTRUCTIONS}}\n\nEntradas resolvidas:\n{{ALL_INPUTS}}\n\n{{OUTPUT_CONTRACT}}"
       },
-      "blockTypes": ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
+      "blockTypes": [
+        "BUSCAR",
+        "ESCOLHER",
+        "CRIAR",
+        "VALIDAR"
+      ],
       "processTypes": [
         "theme",
         "title",
@@ -43,70 +55,26 @@
         {
           "key": "context",
           "label": "Contexto",
-          "acceptedTypes": [
-            "text",
-            "textarea",
-            "number",
-            "boolean",
-            "list",
-            "records",
-            "select",
-            "multiselect",
-            "datetime",
-            "url",
-            "approval",
-            "thumbnail_layout"
-          ],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "result",
           "label": "Resultado",
-          "producedTypes": [
-            "text",
-            "textarea",
-            "number",
-            "boolean",
-            "list",
-            "records",
-            "select",
-            "multiselect",
-            "datetime",
-            "url",
-            "approval"
-          ],
-          "required": true
+          "required": true,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
-      ],
-      "acceptedInputTypes": [
-        "text",
-        "textarea",
-        "number",
-        "boolean",
-        "list",
-        "records",
-        "select",
-        "multiselect",
-        "datetime",
-        "url",
-        "approval",
-        "thumbnail_layout"
-      ],
-      "producedOutputTypes": [
-        "text",
-        "textarea",
-        "number",
-        "boolean",
-        "list",
-        "records",
-        "select",
-        "multiselect",
-        "datetime",
-        "url",
-        "approval"
       ],
       "execution": {
         "mode": "immediate",
@@ -114,11 +82,19 @@
         "supportsCancellation": false,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_read", "external_write"],
-      "cost": { "model": "metered", "estimateSupported": false },
+      "sideEffects": [
+        "external_read",
+        "external_write"
+      ],
+      "cost": {
+        "model": "metered",
+        "estimateSupported": false
+      },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["OpenAI"],
+        "providers": [
+          "OpenAI"
+        ],
         "retentionPolicyUrl": "https://platform.openai.com/docs/guides/your-data",
         "trainingPolicyUrl": "https://platform.openai.com/docs/guides/your-data"
       },
@@ -131,14 +107,38 @@
             "description": "Escolha o equilíbrio desejado entre qualidade e custo. A disponibilidade depende da sua conta OpenAI.",
             "default": "gpt-5.6-terra",
             "oneOf": [
-              { "const": "gpt-5.6-sol", "title": "GPT-5.6 Sol — máxima qualidade" },
-              { "const": "gpt-5.6-terra", "title": "GPT-5.6 Terra — equilibrado" },
-              { "const": "gpt-5.6-luna", "title": "GPT-5.6 Luna — econômico" },
-              { "const": "gpt-5.5", "title": "GPT-5.5" },
-              { "const": "gpt-5.4", "title": "GPT-5.4" },
-              { "const": "gpt-5.4-mini", "title": "GPT-5.4 mini" },
-              { "const": "gpt-5.4-nano", "title": "GPT-5.4 nano" },
-              { "const": "gpt-5-mini", "title": "GPT-5 mini — geração anterior" }
+              {
+                "const": "gpt-5.6-sol",
+                "title": "GPT-5.6 Sol — máxima qualidade"
+              },
+              {
+                "const": "gpt-5.6-terra",
+                "title": "GPT-5.6 Terra — equilibrado"
+              },
+              {
+                "const": "gpt-5.6-luna",
+                "title": "GPT-5.6 Luna — econômico"
+              },
+              {
+                "const": "gpt-5.5",
+                "title": "GPT-5.5"
+              },
+              {
+                "const": "gpt-5.4",
+                "title": "GPT-5.4"
+              },
+              {
+                "const": "gpt-5.4-mini",
+                "title": "GPT-5.4 mini"
+              },
+              {
+                "const": "gpt-5.4-nano",
+                "title": "GPT-5.4 nano"
+              },
+              {
+                "const": "gpt-5-mini",
+                "title": "GPT-5 mini — geração anterior"
+              }
             ]
           },
           "system_prompt": {
@@ -157,7 +157,9 @@
           }
         }
       },
-      "outputSchema": { "type": "object" }
+      "outputSchema": {
+        "type": "object"
+      }
     }
   ]
 }

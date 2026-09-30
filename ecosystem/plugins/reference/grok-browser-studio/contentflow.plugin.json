@@ -1,6 +1,6 @@
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "apiVersion": "2",
   "id": "local.contentflow.grok-browser-studio",
   "name": "Grok Browser Studio",
   "version": "1.0.5",
@@ -17,10 +17,22 @@
   },
   "minCoreVersion": "0.3.0",
   "entrypoint": "handler.mjs",
-  "browserRuntime": { "lifecycle": "core" },
-  "permissions": ["network", "filesystem:read", "filesystem:write", "process"],
-  "networkHosts": ["grok.com", "cdn.grok.com", "x.ai", "assets.grok.com", "imagine-public.x.ai"],
-  "deliveryTypes": ["text", "image", "video", "processing"],
+  "browserRuntime": {
+    "lifecycle": "core"
+  },
+  "permissions": [
+    "network",
+    "filesystem:read",
+    "filesystem:write",
+    "process"
+  ],
+  "networkHosts": [
+    "grok.com",
+    "cdn.grok.com",
+    "x.ai",
+    "assets.grok.com",
+    "imagine-public.x.ai"
+  ],
   "profileSetup": {
     "configurationKey": "accountProfile",
     "fallbackConfigurationKey": "fallbackAccountProfiles",
@@ -100,7 +112,9 @@
       "promptPreview": {
         "template": "INSTRUÇÕES DO BLOCO:\n{{BLOCK_INSTRUCTIONS}}\n\nCONTEXTO DAS ENTRADAS:\n{{CONTEXT_INPUTS}}"
       },
-      "blockTypes": ["CRIAR"],
+      "blockTypes": [
+        "CRIAR"
+      ],
       "processTypes": [
         "theme",
         "title",
@@ -115,67 +129,57 @@
         {
           "key": "content",
           "label": "Contexto para geração",
-          "acceptedTypes": [
-            "text",
-            "textarea",
-            "number",
-            "boolean",
-            "list",
-            "records",
-            "select",
-            "multiselect",
-            "datetime",
-            "url",
-            "thumbnail_layout"
-          ],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         },
         {
           "key": "attachments",
           "label": "Referências anexas",
-          "acceptedTypes": ["image", "file", "files"],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "result",
           "label": "Texto gerado",
-          "producedTypes": ["text", "textarea"],
           "required": true,
           "presentation": {
             "renderer": "text-long"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
           "key": "parts",
           "label": "Respostas por etapa",
-          "producedTypes": ["list"],
           "required": false,
           "presentation": {
             "renderer": "list"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
           }
         }
       ],
-      "acceptedInputTypes": [
-        "text",
-        "textarea",
-        "number",
-        "boolean",
-        "list",
-        "records",
-        "select",
-        "multiselect",
-        "datetime",
-        "url",
-        "thumbnail_layout",
-        "image",
-        "file",
-        "files"
-      ],
-      "producedOutputTypes": ["text", "textarea", "list"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,
@@ -189,14 +193,19 @@
           "mode": "sequential"
         }
       },
-      "sideEffects": ["external_write", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["xAI / Grok web"]
+        "providers": [
+          "xAI / Grok web"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -231,13 +240,17 @@
             "type": "array"
           }
         },
-        "required": ["result"]
+        "required": [
+          "result"
+        ]
       }
     },
     {
       "id": "search-web-in-browser",
       "operator": "IA",
-      "blockTypes": ["BUSCAR"],
+      "blockTypes": [
+        "BUSCAR"
+      ],
       "processTypes": [
         "theme",
         "title",
@@ -252,54 +265,78 @@
         {
           "key": "query",
           "label": "Consulta",
-          "acceptedTypes": ["text", "textarea", "list"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          }
         },
         {
           "key": "context",
           "label": "Contexto",
-          "acceptedTypes": ["text", "textarea", "list", "records", "url"],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "result",
           "label": "Resultado",
-          "producedTypes": ["textarea"],
           "required": true,
           "presentation": {
             "renderer": "text-long"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
           "key": "sources",
           "label": "Fontes",
-          "producedTypes": ["list"],
           "required": false,
           "presentation": {
             "renderer": "list"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
           }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "list", "records", "url"],
-      "producedOutputTypes": ["textarea", "list"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,
         "supportsCancellation": true,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_read", "external_write", "subprocess"],
+      "sideEffects": [
+        "external_read",
+        "external_write",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["xAI / Grok web", "Fontes públicas"]
+        "providers": [
+          "xAI / Grok web",
+          "Fontes públicas"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -332,26 +369,44 @@
     {
       "id": "generate-image-in-browser",
       "operator": "IA",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["thumbnail", "assets"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "thumbnail",
+        "assets"
+      ],
       "inputPorts": [
         {
           "key": "prompt",
           "label": "Prompt da imagem",
-          "acceptedTypes": ["text", "textarea"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "one",
+            "representation": "artifact"
+          }
         },
         {
           "key": "references",
           "label": "Imagens de referência",
-          "acceptedTypes": ["image", "file", "files"],
           "required": false,
           "multiple": true,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         }
       ],
@@ -359,37 +414,54 @@
         {
           "key": "image",
           "label": "Imagem gerada",
-          "producedTypes": ["image"],
           "required": true,
           "presentation": {
-            "renderer": "image-gallery",
-            "itemType": "image",
-            "acceptedMimeTypes": ["image/*"]
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
           }
         },
         {
           "key": "description",
           "label": "Descrição",
-          "producedTypes": ["textarea"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "image", "file", "files"],
-      "producedOutputTypes": ["image", "textarea"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,
         "supportsCancellation": true,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["xAI / Grok Imagine web"]
+        "providers": [
+          "xAI / Grok Imagine web"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -425,61 +497,92 @@
             "type": "string"
           }
         },
-        "required": ["image"]
+        "required": [
+          "image"
+        ]
       },
       "instructionUsage": "required"
     },
     {
       "id": "generate-video-in-browser",
       "operator": "IA",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["assets", "editing"],
+      "blockTypes": [
+        "CRIAR"
+      ],
+      "processTypes": [
+        "assets",
+        "editing"
+      ],
       "inputPorts": [
         {
           "key": "prompt",
           "label": "Prompt do vídeo",
-          "acceptedTypes": ["text", "textarea"],
           "required": true,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         },
         {
           "key": "references",
           "label": "Imagem ou vídeo de referência",
-          "acceptedTypes": ["image", "video", "file", "files"],
           "required": false,
-          "multiple": true
+          "multiple": true,
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact"
+          }
         }
       ],
       "outputPorts": [
         {
           "key": "video",
           "label": "Vídeo gerado",
-          "producedTypes": ["video"],
-          "required": true
+          "required": true,
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "one",
+            "representation": "artifact"
+          }
         },
         {
           "key": "description",
           "label": "Descrição",
-          "producedTypes": ["textarea"],
-          "required": false
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
         }
       ],
-      "acceptedInputTypes": ["text", "textarea", "image", "video", "file", "files"],
-      "producedOutputTypes": ["video", "textarea"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 3600000,
         "supportsCancellation": true,
         "maxConcurrency": 1
       },
-      "sideEffects": ["external_write", "local_artifact", "subprocess"],
+      "sideEffects": [
+        "external_write",
+        "local_artifact",
+        "subprocess"
+      ],
       "cost": {
         "model": "unknown",
         "estimateSupported": false
       },
       "dataPolicy": {
         "sendsDataToThirdParties": true,
-        "providers": ["xAI / Grok Imagine web"]
+        "providers": [
+          "xAI / Grok Imagine web"
+        ]
       },
       "blockConfigSchema": {
         "type": "object",
@@ -515,7 +618,9 @@
             "type": "string"
           }
         },
-        "required": ["video"]
+        "required": [
+          "video"
+        ]
       },
       "instructionUsage": "required"
     }

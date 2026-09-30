@@ -47,7 +47,7 @@ test("tentativas técnicas não esgotam as rodadas da validação humana", () =>
       name: "Review",
       inputs: [],
       outputs: [
-        { id: "decision", key: "decision", label: "Decision", type: "approval", required: true },
+        { id: "decision", key: "decision", label: "Decision", shape: { kind: "control", control: "approval", cardinality: "one" }, required: true },
       ],
       parameters: [],
       instructions: "",
@@ -303,7 +303,7 @@ test("aceita a entrega persistida de um bloco cancelado sem refazer blocos anter
       operator: "Código",
       name: "Criar SRT",
       inputs: [],
-      outputs: [{ id: "srt-output", key: "srt", label: "SRT", type: "text", required: true }],
+      outputs: [{ id: "srt-output", key: "srt", label: "SRT", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" }, required: true }],
       parameters: [],
       instructions: "",
       order: 0,
@@ -315,7 +315,7 @@ test("aceita a entrega persistida de um bloco cancelado sem refazer blocos anter
       name: "Criar prompts",
       inputs: [],
       outputs: [
-        { id: "prompts-output", key: "prompts", label: "Prompts", type: "list", required: true },
+        { id: "prompts-output", key: "prompts", label: "Prompts", shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" }, required: true },
       ],
       parameters: [],
       instructions: "",
@@ -328,7 +328,7 @@ test("aceita a entrega persistida de um bloco cancelado sem refazer blocos anter
       name: "Criar imagens",
       inputs: [],
       outputs: [
-        { id: "assets-output", key: "assets", label: "Assets", type: "files", required: true },
+        { id: "assets-output", key: "assets", label: "Assets", shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" }, required: true },
       ],
       parameters: [],
       instructions: "",
