@@ -77,6 +77,12 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 
 Deterministic Contracts está encerrada. Nenhuma task da fase Universal Recovery está autorizada ou pronta por consequência automática desse encerramento.
 
+### Extensão autorizada de contratos — TASK-028A
+
+| Task      | Missão                                  | Estado        |
+| --------- | --------------------------------------- | ------------- |
+| TASK-028A | Contrato canônico de conteúdo e entrega | `in_progress` |
+
 ### Universal Recovery — TASK-029 a TASK-038
 
 | Task     | Missão                                       | Estado    |

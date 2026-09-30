@@ -4,7 +4,7 @@
 
 Valide nesta ordem:
 
-1. ZIP seguro com `manifest.json` parseável, ou JSON legado; `format` = `contentflow-method` ou `contentflow-method-pack`; `version` = 1; `exportedAt` ISO 8601.
+1. JSON ou pacote seguro com manifesto parseável; `format` = `contentflow-method` ou `contentflow-method-pack`; `version` = 3; `exportedAt` ISO 8601. Formatos anteriores são inválidos.
 2. `processType` pertence aos oito processos e há 1–200 blocos.
 3. IDs são únicos; `order` é 0, 1, 2…; `parameters` existe em todos os blocos.
 4. Types, operators, parameter types, field types, renderers e validation modes são enums válidos.

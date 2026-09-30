@@ -2,17 +2,15 @@ import type {
   ActionBlock,
   BlockFieldDefinition,
   DeliveryItem,
-  HumanFieldType,
   ProcessExecution,
   ProjectDelivery,
   RuntimeValue,
   StoredFile,
   StructuredRecord,
+  ValueShape,
 } from "@/lib/domain";
 import { createProcessOutputFields } from "@/lib/human-workflow";
-import { areHumanFieldTypesCompatible } from "@/lib/data-shape";
-
-const MANY_TYPES = new Set<HumanFieldType>(["list", "multiselect", "records", "files"]);
+import { areValueShapesCompatible, controlShape } from "@/lib/data-shape";
 
 export function deliveryIdFor(
   execution: Pick<ProcessExecution, "id">,
@@ -48,7 +46,7 @@ export function materializeBlockDeliveries({
             id: `${block.id}-selected-item`,
             label: "Item estratégico escolhido",
             key: "selectedItemId",
-            type: "text",
+            shape: controlShape("selection"),
             required: true,
           },
         ]
@@ -60,13 +58,14 @@ export function materializeBlockDeliveries({
     }
     const id = deliveryIdFor(execution, block.id, output.key, attempt);
     const previous = execution.deliveries?.find((item) => item.id === id);
-    const rawItems = MANY_TYPES.has(output.type) && Array.isArray(value) ? value : [value];
+    const shape = fieldValueShape(output);
+    const rawItems = shape.cardinality === "many" && Array.isArray(value) ? value : [value];
     const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
     const outputExecutionItems = (blockExecution?.items ?? []).filter(
       (item) => !item.pluginCorrelation || item.pluginCorrelation.outputKey === output.key,
     );
     const executionItems =
-      MANY_TYPES.has(output.type) && outputExecutionItems.length === rawItems.length
+      shape.cardinality === "many" && outputExecutionItems.length === rawItems.length
         ? [...outputExecutionItems].sort((left, right) => left.order - right.order)
         : undefined;
     const usedIdentities = new Set<string>();
@@ -111,8 +110,7 @@ export function materializeBlockDeliveries({
         blockId: block.id,
         outputKey: output.key,
         label: output.label,
-        type: output.type,
-        cardinality: MANY_TYPES.has(output.type) ? "many" : "one",
+        shape,
         attempt,
         status,
         items,
@@ -210,15 +208,19 @@ function promotedProcessOutputDeliveries(
         (candidate) =>
           candidate.blockId === sourceBlockId &&
           candidate.status !== "invalidated" &&
-          areDeliveryTypesCompatible(candidate.type, output.type) &&
+          areDeliveryShapesCompatible(candidate.shape, fieldValueShape(output)) &&
           deepEqual(deliveryRuntimeValue(candidate), value),
       );
     return delivery ? [delivery] : [];
   });
 }
 
-function areDeliveryTypesCompatible(output: HumanFieldType, input: HumanFieldType) {
-  return areHumanFieldTypesCompatible(output, input);
+function fieldValueShape(field: Pick<BlockFieldDefinition, "shape">): ValueShape {
+  return field.shape;
+}
+
+function areDeliveryShapesCompatible(output: ValueShape, input: ValueShape) {
+  return areValueShapesCompatible(output, input);
 }
 
 export function invalidateBlockDeliveries(
@@ -277,7 +279,7 @@ export function activeProjectDeliveries(executions: ProcessExecution[]) {
 }
 
 export function deliveryRuntimeValue(delivery: ProjectDelivery): RuntimeValue {
-  if (delivery.cardinality === "many") {
+  if (delivery.shape.cardinality === "many") {
     return delivery.items.map((item) => structuredClone(item.value)) as RuntimeValue;
   }
   return structuredClone(delivery.items[0]?.value ?? null) as RuntimeValue;

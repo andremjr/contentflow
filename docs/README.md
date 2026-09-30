@@ -8,7 +8,7 @@ As categorias abaixo evitam que planejamento ou evidência histórica seja inter
 
 | Classe | Uso | Documentos |
 | --- | --- | --- |
-| **A — Normativo vigente** | Define o produto, contratos e regras atuais. | [`ARCHITECTURE.md`](ARCHITECTURE.md), [`PLUGIN_INTERFACE.md`](PLUGIN_INTERFACE.md), [`ecosystem/protocol.md`](ecosystem/protocol.md), [`ecosystem/schemas/contentflow-plugin-v1.schema.json`](ecosystem/schemas/contentflow-plugin-v1.schema.json), [`ecosystem/security.md`](ecosystem/security.md), [`ecosystem/browser-automation.md`](ecosystem/browser-automation.md), [`ecosystem/automation-media-conventions.md`](ecosystem/automation-media-conventions.md) e [`ecosystem/distribution.md`](ecosystem/distribution.md). |
+| **A — Normativo vigente** | Define o produto, contratos e regras atuais. | [`ARCHITECTURE.md`](ARCHITECTURE.md), [`CONTENT_CONTRACT.md`](CONTENT_CONTRACT.md), [`PLUGIN_INTERFACE.md`](PLUGIN_INTERFACE.md), [`ecosystem/protocol.md`](ecosystem/protocol.md), [`ecosystem/schemas/contentflow-plugin-v2.schema.json`](ecosystem/schemas/contentflow-plugin-v2.schema.json), [`ecosystem/security.md`](ecosystem/security.md), [`ecosystem/browser-automation.md`](ecosystem/browser-automation.md), [`ecosystem/automation-media-conventions.md`](ecosystem/automation-media-conventions.md) e [`ecosystem/distribution.md`](ecosystem/distribution.md). |
 | **B — Operacional vigente** | Orienta desenvolvimento, distribuição, uso ou ensino do produto atual. | [`DESKTOP.md`](DESKTOP.md), [`LEGAL_AND_LICENSING.md`](LEGAL_AND_LICENSING.md), [`ecosystem/README.md`](ecosystem/README.md), quickstart, development, tutorial, guia de IA, exemplos, proveniência de ícones e guias conceituais. |
 | **C — Evidência histórica útil** | Registra compatibilidade, reprodução, baseline ou validação; não define o comportamento atual. | [`releases/`](releases/), [`ecosystem/asset-generation-evidence/`](ecosystem/asset-generation-evidence/), [`SHARED_BROWSER_PROFILES_AND_PLUGIN_CONFIGURATION_ROADMAP.md`](SHARED_BROWSER_PROFILES_AND_PLUGIN_CONFIGURATION_ROADMAP.md) e os inventários/baselines `SHARED_BROWSER_*`. |
 | **D — Planejamento ativo** | Contém trabalho real ainda não concluído; não substitui fontes normativas. | [`ecosystem/roadmap.md`](ecosystem/roadmap.md), [`FLOW_VISUAL_ASSET_METHOD_CATALOG.md`](FLOW_VISUAL_ASSET_METHOD_CATALOG.md) e planos operacionais de demonstração ainda identificados como tal. |
@@ -23,7 +23,7 @@ Para extensões e integrações, use a documentação do ecossistema em [`docs/e
 
 ## Regra de leitura
 
-Para arquitetura e domínio, leia primeiro `ARCHITECTURE.md`. Para a segunda superfície de configuração aberta a partir de um Bloco, leia `PLUGIN_INTERFACE.md`. Para integrações externas, use o protocolo e os documentos normativos do ecossistema.
+Para arquitetura e domínio, leia primeiro `ARCHITECTURE.md` e `CONTENT_CONTRACT.md`. Para a segunda superfície de configuração aberta a partir de um Bloco, leia `PLUGIN_INTERFACE.md`. Para integrações externas, use o protocolo e os documentos normativos do ecossistema.
 
 Planejamentos ativos devem declarar estado e pendências. Evidências, inventários, baselines e notas de release preservam fatos do momento em que foram produzidos, mas nunca prevalecem sobre uma fonte normativa atual.
 

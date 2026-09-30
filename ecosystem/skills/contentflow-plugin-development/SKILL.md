@@ -1,6 +1,6 @@
 ---
 name: contentflow-plugin-development
-description: Criação, revisão, teste e distribuição de plugins compatíveis com a ContentFlow Plugin API v1 atual.
+description: Criação, revisão, teste e distribuição de plugins compatíveis com a ContentFlow Plugin API v2 atual.
 ---
 
 # Desenvolvimento de Plugins no ContentFlow
@@ -9,7 +9,7 @@ Um **Plugin executa uma capability**. Ele não decide estratégia, próximo Bloc
 
 ## Antes de desenvolver
 
-Leia no checkout atual `AGENTS.md`, `docs/ARCHITECTURE.md`, `src/lib/plugin-contract.ts`, `server/plugin-validation.ts`, `server/plugin-runner.ts` e `ecosystem/plugin-kit/`. Para navegador, leia também `ecosystem/browser-bridge/`, `server/plugin-profiles.ts`, `server/browser-profile-readiness.ts`, `server/browser-profile-leases.ts` e os contratos vivos de lanes/work units. O contrato vivo prevalece sobre esta skill e seus exemplos.
+Leia no checkout atual `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/CONTENT_CONTRACT.md`, `src/lib/plugin-contract.ts`, `server/plugin-validation.ts`, `server/plugin-runner.ts` e `ecosystem/plugin-kit/`. Para navegador, leia também `ecosystem/browser-bridge/`, `server/plugin-profiles.ts`, `server/browser-profile-readiness.ts`, `server/browser-profile-leases.ts` e os contratos vivos de lanes/work units. O contrato vivo prevalece sobre esta skill e seus exemplos.
 
 ## Fronteiras
 
@@ -23,12 +23,12 @@ Plugins nunca inventam IDs universais de item/delivery, nem gerenciam diretament
 
 ## Manifesto atual
 
-Use `contentflow.plugin.json`, `apiVersion: "1"` e valide com `server/plugin-validation.ts`/Plugin Kit. Declare somente campos existentes no schema vivo.
+Use `contentflow.plugin.json`, `apiVersion: "2"` e valide com `server/plugin-validation.ts`/Plugin Kit. Declare somente campos existentes no schema vivo.
 
 Entre os contratos atuais estão:
 
 - `capabilities[]`: `id`, `operator`, `blockTypes`, portas, `execution`, `sideEffects`, `cost`, `dataPolicy`, schemas e metadados opcionais suportados;
-- `inputPorts[].acceptedTypes` e `outputPorts[].producedTypes`, associados pelo Core aos `portKey` dos Blocos;
+- `inputPorts[].shape` e `outputPorts[].shape`, associados pelo Core aos `portKey` dos Blocos; cada porta declara família/controle/registro e cardinalidade diretamente;
 - `permissions`, `networkHosts`, `secretKeys`/`optionalSecretKeys` quando realmente necessários;
 - `sideEffects`, `cost` e `dataPolicy` como declaração factual de efeitos, custo e transferência de dados;
 - `profileSetup`/`browserRuntime` somente para capacidades que realmente usam o fluxo de navegador suportado;

@@ -1,72 +1,50 @@
 import {
   type BlockInputSourceBinding,
-  type HumanFieldType,
   type ProcessExecution,
   type Project,
   type RecordFieldDefinition,
-  type RecordFieldType,
   type RuntimeValue,
   type StoredFile,
   type StructuredRecord,
+  type ValueShape,
 } from "@/lib/domain";
 import { normalizeExecutionDeliveries, processOutputDeliveryFor } from "@/lib/deliveries";
-
-const HISTORY_VALUE_TYPES = new Set<HumanFieldType>([
-  "text",
-  "textarea",
-  "number",
-  "boolean",
-  "select",
-  "datetime",
-  "url",
-  "file",
-  "image",
-  "audio",
-  "video",
-]);
-
-export function isChannelHistoryValueType(type: HumanFieldType): type is RecordFieldType {
-  return HISTORY_VALUE_TYPES.has(type);
-}
+import { contentShape, controlShape } from "@/lib/data-shape";
 
 export function createChannelHistoryRecordFields(
-  valueType: HumanFieldType,
+  valueShape: ValueShape,
 ): RecordFieldDefinition[] {
-  const normalizedValueType: RecordFieldType =
-    valueType === "files"
-      ? "file"
-      : valueType === "list" || valueType === "multiselect"
-        ? "text"
-        : isChannelHistoryValueType(valueType)
-          ? valueType
-          : "text";
+  const normalizedValueShape =
+    valueShape.kind === "record"
+      ? contentShape("text")
+      : { ...structuredClone(valueShape), cardinality: "one" as const };
   return [
     {
       id: "channel-history-value",
       label: "Valor",
       key: "value",
-      type: normalizedValueType,
+      shape: normalizedValueShape,
       required: true,
     },
     {
       id: "channel-history-project-id",
       label: "ID do projeto",
       key: "project_id",
-      type: "text",
+      shape: controlShape("identifier"),
       required: true,
     },
     {
       id: "channel-history-project-title",
       label: "Projeto",
       key: "project_title",
-      type: "text",
+      shape: contentShape("text"),
       required: true,
     },
     {
       id: "channel-history-recorded-at",
       label: "Registrado em",
       key: "recorded_at",
-      type: "datetime",
+      shape: controlShape("datetime"),
       required: true,
     },
   ];

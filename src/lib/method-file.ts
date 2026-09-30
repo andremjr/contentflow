@@ -11,7 +11,8 @@ import type {
 } from "@/lib/domain";
 import { normalizeFieldPresentation } from "@/lib/presentation";
 import { instructionCollectionKey, instructionVariables } from "@/lib/instruction-template";
-import { adaptLegacyMethod } from "@/lib/legacy-method-adapter";
+import { parseProcessMethodV3, processMethodV3Schema } from "@/lib/method-contract-v3";
+import { valueShapeSchema } from "@/lib/value-shape-schema";
 
 const universalProcessSchema = z.enum([
   "theme",
@@ -252,7 +253,7 @@ const actionBlockSchema = z.object({
 const collectionRequirementFieldSchema = z.object({
   label: z.string().max(200),
   key: z.string().max(200),
-  type: z.enum(["text", "textarea", "number", "image", "url", "thumbnail_layout"]),
+  shape: valueShapeSchema,
   required: z.boolean(),
 });
 
@@ -287,17 +288,11 @@ const portableImageSchema = z
     "Capa inválida.",
   );
 
-const portableMethodSchema = z.object({
-  contractVersion: z.literal(2).optional(),
-  name: z.string().max(200).optional(),
-  imageUrl: portableImageSchema.optional(),
-  processType: universalProcessSchema,
-  blocks: z.array(actionBlockSchema).min(1).max(200),
-});
+const portableMethodSchema = processMethodV3Schema;
 
 const sharedMethodSchema = z.object({
   format: z.literal("contentflow-method"),
-  version: z.literal(1),
+  version: z.literal(3),
   name: z.string().max(200),
   exportedAt: z.string(),
   requirements: z.array(methodRequirementSchema).max(300).optional(),
@@ -307,7 +302,7 @@ const sharedMethodSchema = z.object({
 const sharedMethodPackSchema = z
   .object({
     format: z.literal("contentflow-method-pack"),
-    version: z.literal(1),
+    version: z.literal(3),
     name: z.string().min(1).max(200),
     channelName: z.string().min(1).max(200),
     channelImageUrl: portableImageSchema.optional(),
@@ -354,11 +349,25 @@ const portableThumbnailLayoutSchema = z.object({
     .max(200),
 });
 
-const portableLibraryValueSchema = z.union([
+const portableLibraryAtomicValueSchema = z.union([
   z.string().max(2_000_000),
   z.number(),
+  z.boolean(),
+  z.null(),
   portableStoredFileSchema,
   portableThumbnailLayoutSchema,
+]);
+
+const portableLibraryRecordSchema = z.record(
+  z.union([z.string(), z.number(), z.boolean(), z.null(), portableStoredFileSchema]),
+);
+
+const portableLibraryValueSchema = z.union([
+  portableLibraryAtomicValueSchema,
+  z.array(z.string()),
+  z.array(portableStoredFileSchema),
+  portableLibraryRecordSchema,
+  z.array(portableLibraryRecordSchema),
 ]);
 
 const portableLibraryItemV2Schema = z.object({
@@ -376,7 +385,7 @@ const portableCollectionV2Schema = z.object({
       z.object({
         key: z.string().min(1).max(160),
         label: z.string().max(200),
-        type: z.enum(["text", "textarea", "number", "image", "url", "thumbnail_layout"]),
+        shape: valueShapeSchema,
         required: z.boolean(),
       }),
     )
@@ -400,7 +409,7 @@ const portableMethodEntryV2Schema = z.object({
 const sharedMethodBundleV2Schema = z
   .object({
     format: z.enum(["contentflow-method", "contentflow-method-pack"]),
-    version: z.literal(2),
+    version: z.literal(3),
     name: z.string().min(1).max(200),
     channelName: z.string().min(1).max(200).optional(),
     channelImageUrl: portableImageSchema.optional(),
@@ -486,10 +495,10 @@ export function collectMethodRequirements(
         kind: "collection",
         name: collection.name,
         blockName: block.name ?? block.type,
-        fields: collection.fields.map(({ id, label, type, required }) => ({
+        fields: collection.fields.map(({ id, label, shape, required }) => ({
           label,
           key: id,
-          type,
+          shape,
           required,
         })),
       });
@@ -501,10 +510,10 @@ export function collectMethodRequirements(
         name: collection?.name ?? "Coleção estratégica não identificada",
         blockName: block.name ?? block.type,
         fields:
-          collection?.fields.map(({ id, label, type, required }) => ({
+          collection?.fields.map(({ id, label, shape, required }) => ({
             label,
             key: id,
-            type,
+            shape,
             required,
           })) ?? [],
       });
@@ -695,15 +704,7 @@ export function planPortableMethodTransfer(input: {
 }): PortableTransferPlan {
   const collections = input.collections ?? [];
   const sourceItems = input.items ?? [];
-  const adaptedSourceMethods = input.sourceMethods.map((method) => {
-    const result = adaptLegacyMethod(method, {
-      source: "method_transfer",
-      recoverHistoricalValidationTarget: true,
-      allowDeferredPluginPorts: true,
-    });
-    if (!result.ok) throw new Error(result.diagnostics.map((item) => item.message).join(" "));
-    return result.method;
-  });
+  const adaptedSourceMethods = input.sourceMethods.map((method) => parseProcessMethodV3(method));
   const byProcess = new Map(adaptedSourceMethods.map((method) => [method.processType, method]));
   const primary = new Set(input.primaryProcessTypes ?? []);
   const included = new Set<UniversalProcess>();
@@ -816,7 +817,7 @@ export function planPortableMethodTransfer(input: {
           portableCollectionFields.get(`${collection.id}:${field.id}`) ??
           `field:${portableSlug(field.label, "value")}:${index + 1}`,
         label: field.label,
-        type: field.type,
+        shape: field.shape,
         required: field.required,
       })),
       referencedBy,
@@ -868,7 +869,7 @@ export function planPortableMethodTransfer(input: {
 export function serializePortableMethodTransfer(plan: PortableTransferPlan) {
   const file = sharedMethodBundleV2Schema.parse({
     ...plan,
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
   });
   return JSON.stringify(file, null, 2);
@@ -883,40 +884,33 @@ function parseMethodBundleV2(parsed: unknown): SharedMethodBundleV2 {
     ...result.data,
     items: result.data.items ?? [],
     methods: result.data.methods.map((entry) => {
-      const method = adaptPortableMethod({
+      const method = parseProcessMethodV3({
         ...entry.method,
         name: entry.method.name?.trim() || `Método de ${entry.method.processType}`,
-      } as ProcessMethod);
+      });
       return { ...entry, method };
     }),
   } as SharedMethodBundleV2;
 }
 
-function adaptPortableMethod(method: ProcessMethod) {
-  const adapted = adaptLegacyMethod(method, {
-    source: "portable_file",
-    recoverHistoricalValidationTarget: true,
-    allowDeferredPluginPorts: true,
-  });
-  if (!adapted.ok) {
-    throw new Error(adapted.diagnostics[0]?.message ?? "Método histórico incompatível.");
-  }
-  return adapted.method;
-}
-
 function canonicalMethodForExport(method: ProcessMethod) {
-  const adapted = adaptLegacyMethod(method, {
-    source: "editor_save",
-    recoverHistoricalValidationTarget: false,
+  return parseProcessMethodV3({
+    ...structuredClone(method),
+    blocks: method.blocks.map((block) => ({
+      ...structuredClone(block),
+      plugin: block.plugin
+        ? {
+            pluginId: block.plugin.pluginId,
+            pluginVersion: block.plugin.pluginVersion,
+            capabilityId: block.plugin.capabilityId,
+            configuration: structuredClone(block.plugin.configuration),
+            connectionId: block.plugin.connectionId,
+            connectionRequired: block.plugin.connectionRequired,
+            conversation: block.plugin.conversation,
+          }
+        : undefined,
+    })),
   });
-  if (!adapted.ok || !adapted.complete) {
-    throw new Error(
-      !adapted.ok
-        ? (adapted.diagnostics[0]?.message ?? "Método inválido.")
-        : "O Método não possui contrato canônico completo.",
-    );
-  }
-  return adapted.method;
 }
 
 function createPortableMethod(method: ProcessMethod) {
@@ -950,7 +944,7 @@ export function serializeMethodFile(
   );
   const file = sharedMethodSchema.parse({
     format: "contentflow-method",
-    version: 1,
+    version: 3,
     name,
     exportedAt: new Date().toISOString(),
     requirements: collectMethodRequirements(method, collections),
@@ -972,7 +966,7 @@ export function serializeMethodPackFile(
   );
   const file = sharedMethodPackSchema.parse({
     format: "contentflow-method-pack",
-    version: 1,
+    version: 3,
     name,
     channelName,
     channelImageUrl,
@@ -991,7 +985,10 @@ export function parseMethodFile(contents: string): SharedMethodFile {
     throw new Error("O arquivo selecionado não contém um JSON válido.");
   }
 
-  if ((parsed as { version?: unknown })?.version === 2) {
+  if (
+    (parsed as { version?: unknown })?.version === 3 &&
+    Array.isArray((parsed as { methods?: unknown }).methods)
+  ) {
     const bundle = parseMethodBundleV2(parsed);
     if (bundle.format !== "contentflow-method" || !bundle.primaryProcessType) {
       throw new Error("Este não é um arquivo de método válido do ContentFlow.");
@@ -1002,7 +999,7 @@ export function parseMethodFile(contents: string): SharedMethodFile {
     if (!primary) throw new Error("O Método principal não foi encontrado no pacote.");
     return {
       format: "contentflow-method",
-      version: 1,
+      version: 3,
       name: bundle.name,
       exportedAt: bundle.exportedAt,
       requirements: primary.requirements,
@@ -1018,10 +1015,10 @@ export function parseMethodFile(contents: string): SharedMethodFile {
     ...result.data,
     requirements:
       result.data.requirements ?? collectMethodRequirements(result.data.method as ProcessMethod),
-    method: adaptPortableMethod({
+    method: parseProcessMethodV3({
       ...result.data.method,
       name: result.data.method.name?.trim() || result.data.name,
-    } as ProcessMethod),
+    }),
   } as SharedMethodFile;
 }
 
@@ -1032,7 +1029,10 @@ export function parseMethodImportFile(contents: string): SharedMethodImport {
   } catch {
     throw new Error("O arquivo selecionado não contém um JSON válido.");
   }
-  if ((parsed as { version?: unknown })?.version === 2) {
+  if (
+    (parsed as { version?: unknown })?.version === 3 &&
+    Array.isArray((parsed as { methods?: unknown }).methods)
+  ) {
     return parseMethodBundleV2(parsed);
   }
   if ((parsed as { format?: unknown })?.format === "contentflow-method") {
@@ -1046,10 +1046,10 @@ export function parseMethodImportFile(contents: string): SharedMethodImport {
     ...result.data,
     requirements: result.data.requirements ?? {},
     methods: result.data.methods.map((method) =>
-      adaptPortableMethod({
+      parseProcessMethodV3({
         ...method,
         name: method.name?.trim() || `Método de ${method.processType}`,
-      } as ProcessMethod),
+      }),
     ),
   } as SharedMethodPackFile;
 }

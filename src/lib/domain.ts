@@ -42,20 +42,61 @@ export type BlockOperator = (typeof BLOCK_OPERATORS)[number];
 export type BlockType = (typeof BLOCK_TYPES)[number];
 export type BlockParameterType = "text" | "number" | "select" | "boolean" | "textarea";
 
-export type HumanFieldType =
-  | BlockParameterType
-  | "multiselect"
-  | "list"
-  | "records"
+export const CONTENT_FAMILIES = ["text", "image", "audio", "video"] as const;
+export const CONTENT_CARDINALITIES = ["one", "many"] as const;
+export const CONTENT_REPRESENTATIONS = ["inline", "artifact", "either"] as const;
+
+export type ContentFamily = (typeof CONTENT_FAMILIES)[number];
+export type ContentCardinality = (typeof CONTENT_CARDINALITIES)[number];
+export type ContentRepresentation = (typeof CONTENT_REPRESENTATIONS)[number];
+
+export type ContentFormatConstraints = {
+  mimeTypes?: string[];
+  extensions?: string[];
+};
+
+export type ContentShape = {
+  kind: "content";
+  family: ContentFamily;
+  cardinality: ContentCardinality;
+  representation: ContentRepresentation;
+  formats?: ContentFormatConstraints;
+};
+
+export type ControlKind =
+  | "identifier"
+  | "number"
+  | "boolean"
+  | "selection"
   | "datetime"
   | "url"
-  | "file"
-  | "image"
-  | "audio"
-  | "video"
-  | "files"
   | "approval"
   | "thumbnail_layout";
+
+export type ControlShape = {
+  kind: "control";
+  control: ControlKind;
+  cardinality: ContentCardinality;
+  options?: string[];
+};
+
+export type AtomicValueShape = ContentShape | ControlShape;
+
+export type ShapeRecordFieldDefinition = {
+  id: string;
+  label: string;
+  key: string;
+  shape: AtomicValueShape;
+  required: boolean;
+};
+
+export type RecordShape = {
+  kind: "record";
+  cardinality: ContentCardinality;
+  fields: ShapeRecordFieldDefinition[];
+};
+
+export type ValueShape = ContentShape | ControlShape | RecordShape;
 
 export const PRESENTATION_RENDERER_IDS = [
   "auto",
@@ -79,39 +120,9 @@ export type PresentationItemType = "text" | "record" | "file" | "image" | "audio
 export type FieldPresentation = {
   renderer: PresentationRendererId;
   itemType?: PresentationItemType;
-  acceptedMimeTypes?: string[];
 };
 
-export type RecordFieldType =
-  | "text"
-  | "textarea"
-  | "number"
-  | "boolean"
-  | "select"
-  | "datetime"
-  | "url"
-  | "file"
-  | "image"
-  | "audio"
-  | "video";
-
-export type RecordFieldDefinition = {
-  id: string;
-  label: string;
-  key: string;
-  type: RecordFieldType;
-  required: boolean;
-  options?: string[];
-};
-
-export type BlockInputSource =
-  | "project"
-  | "previous_process"
-  | "previous_block"
-  | "channel_history"
-  | "channel_library"
-  | "runtime"
-  | "static";
+export type RecordFieldDefinition = ShapeRecordFieldDefinition;
 
 export type ChannelHistoryEligibility = "completed" | "published";
 
@@ -140,6 +151,11 @@ export type BlockInputSourceBinding =
       eligibility: ChannelHistoryEligibility;
     }
   | {
+      kind: "channel_library";
+      collectionId: string;
+      fieldId: string;
+    }
+  | {
       kind: "runtime";
     }
   | {
@@ -150,19 +166,8 @@ export type BlockInputSourceBinding =
 export type BlockInputBinding = {
   id: string;
   label: string;
-  type: HumanFieldType;
-  /** Canonical strategic origin. Authoritative when present. */
-  binding?: BlockInputSourceBinding;
-  /** Temporary compatibility representation retained until TASK-027. */
-  source: BlockInputSource;
-  sourceKey?: string;
-  sourceProcessType?: UniversalProcess;
-  blockId?: string;
-  collection?: string;
-  staticValue?: string;
-  historyLimit?: number;
-  historyEligibility?: ChannelHistoryEligibility;
-  recordFields?: RecordFieldDefinition[];
+  shape: ValueShape;
+  binding: BlockInputSourceBinding;
   presentation?: FieldPresentation;
   /** Stable semantic input port selected from the plugin capability. */
   portKey?: string;
@@ -172,14 +177,12 @@ export type BlockFieldDefinition = {
   id: string;
   label: string;
   key: string;
-  type: HumanFieldType;
+  shape: ValueShape;
   required: boolean;
   placeholder?: string;
   helpText?: string;
-  options?: string[];
   optionsSourceBlockId?: string;
   optionsSourceKey?: string;
-  recordFields?: RecordFieldDefinition[];
   presentation?: FieldPresentation;
   /** Stable semantic output port selected from the plugin capability. */
   portKey?: string;
@@ -248,8 +251,8 @@ export type ActionBlock = {
 };
 
 export type ProcessMethod = {
-  /** Version of the canonical Method contract. Absent means a historical representation. */
-  contractVersion?: 2;
+  /** Version of the only supported Method contract. */
+  contractVersion: 3;
   name: string;
   imageUrl?: string;
   processType: UniversalProcess;
@@ -346,8 +349,7 @@ export type ProjectDelivery = {
   blockId: string;
   outputKey: string;
   label: string;
-  type: HumanFieldType;
-  cardinality: "one" | "many";
+  shape: ValueShape;
   attempt: number;
   status: DeliveryStatus;
   items: DeliveryItem[];
@@ -379,6 +381,7 @@ export type RuntimeValue =
   | string[]
   | StoredFile
   | StoredFile[]
+  | StructuredRecord
   | StructuredRecord[]
   | ThumbnailLayout
   | null;
@@ -605,7 +608,7 @@ export type ProcessExecution = {
 export type StrategicCollectionField = {
   id: string;
   label: string;
-  type: "text" | "textarea" | "number" | "image" | "url" | "thumbnail_layout";
+  shape: ValueShape;
   required: boolean;
 };
 
@@ -621,7 +624,7 @@ export type ChannelLibraryItem = {
   id: string;
   channelId: string;
   collectionId: string;
-  values: Record<string, string | number | StoredFile | ThumbnailLayout>;
+  values: Record<string, RuntimeValue>;
   createdAt: string;
 };
 
@@ -659,7 +662,7 @@ export function createEmptyMethods(): Record<UniversalProcess, ProcessMethod> {
     PROCESS_ORDER.map((processType) => [
       processType,
       {
-        contractVersion: 2,
+        contractVersion: 3,
         name: `Método de ${PROCESS_META[processType].label}`,
         processType,
         blocks: [],

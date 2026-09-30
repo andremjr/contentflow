@@ -2,14 +2,13 @@ import { randomUUID } from "node:crypto";
 import type {
   BlockExecutionItem,
   BlockExecutionItemStatus,
-  HumanFieldType,
   RuntimeValue,
+  ValueShape,
 } from "../src/lib/domain";
 import type { PluginFieldContract, PluginIncrementalItemUpdate } from "../src/lib/plugin-contract";
 import type { PersistentPluginJob } from "./plugin-job-store";
 import { workUnitAttemptIdFor } from "../src/lib/work-units";
 
-const MANY_TYPES = new Set<HumanFieldType>(["list", "multiselect", "records", "files"]);
 const TERMINAL_STATUSES = new Set<BlockExecutionItemStatus>(["completed", "failed", "cancelled"]);
 
 export function applyPluginIncrementalItemUpdates(input: {
@@ -62,7 +61,7 @@ export function applyPluginIncrementalItemUpdates(input: {
     if (status === "completed" && update.value === undefined && existing?.output === undefined) {
       throw new Error(`O item incremental ${update.key} foi concluído sem valor.`);
     }
-    if (update.value !== undefined && !isCompatiblePluginItemValue(contract.type, update.value)) {
+    if (update.value !== undefined && !isCompatiblePluginItemValue(contract.shape, update.value)) {
       throw new Error(
         `O item incremental ${update.key} é incompatível com a saída ${contract.label}.`,
       );
@@ -160,7 +159,7 @@ export function incrementalItemValues(
       .sort((left, right) => left.order - right.order)
       .map((item) => structuredClone(item.output!));
     if (!completed.length) continue;
-    if (MANY_TYPES.has(contract.type)) {
+    if (contract.shape.cardinality === "many") {
       values[contract.key] = completed as RuntimeValue;
       continue;
     }
@@ -228,35 +227,38 @@ function safeDiagnostic(value: string | undefined) {
   return normalized ? normalized.slice(0, 1_000) : undefined;
 }
 
-export function isCompatiblePluginItemValue(type: HumanFieldType, value: unknown) {
+export function isCompatiblePluginItemValue(shape: ValueShape, value: unknown) {
   if (value === null || value === undefined) return false;
-  if (
-    ["text", "textarea", "select", "multiselect", "list", "datetime", "url", "approval"].includes(
-      type,
-    )
-  ) {
-    return typeof value === "string";
-  }
-  if (type === "number") return typeof value === "number" && Number.isFinite(value);
-  if (type === "boolean") return typeof value === "boolean";
-  if (["file", "files", "image", "audio", "video"].includes(type)) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (shape.kind === "content") {
+    if (
+      shape.family === "text" &&
+      shape.representation !== "artifact" &&
+      typeof value === "string"
+    ) {
+      return true;
+    }
+    if (shape.representation === "inline" || typeof value !== "object" || Array.isArray(value)) {
+      return false;
+    }
     const file = value as Record<string, unknown>;
     return (
       typeof file.id === "string" &&
       typeof file.name === "string" &&
       typeof file.mimeType === "string" &&
+      (shape.family === "text" || String(file.mimeType).startsWith(`${shape.family}/`)) &&
       typeof file.size === "number" &&
       Number.isFinite(file.size) &&
       typeof file.url === "string"
     );
   }
-  if (type === "records") {
+  if (shape.kind === "record") {
     return Boolean(
       value && typeof value === "object" && !Array.isArray(value) && !("url" in value),
     );
   }
-  if (type === "thumbnail_layout") {
+  if (shape.control === "number") return typeof value === "number" && Number.isFinite(value);
+  if (shape.control === "boolean") return typeof value === "boolean";
+  if (shape.control === "thumbnail_layout") {
     return Boolean(
       value &&
       typeof value === "object" &&
@@ -265,5 +267,5 @@ export function isCompatiblePluginItemValue(type: HumanFieldType, value: unknown
       Array.isArray((value as { boxes?: unknown }).boxes),
     );
   }
-  return false;
+  return typeof value === "string";
 }

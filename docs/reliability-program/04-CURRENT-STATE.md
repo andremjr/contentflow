@@ -9,8 +9,8 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422`  |
 | Versão                      | `1.2.1`                                     |
 | Task concluída              | TASK-028                                    |
-| Task ativa                  | Nenhuma                                     |
-| Próxima                     | Nenhuma autorizada; TASK-029 está `pending` |
+| Task ativa                  | TASK-028A                                   |
+| Próxima                     | TASK-029 permanece `pending`                |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -30,6 +30,8 @@ Consequentemente, o produto não é apenas conceitual e o início do pipeline j�
 ## Architecture currently present
 
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) continua sendo a fonte normativa do domínio atual: 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores e 3 interfaces de domínio.
+- [`../CONTENT_CONTRACT.md`](../CONTENT_CONTRACT.md) é a fonte normativa exclusiva de entradas, saídas, portas e deliveries. O contrato vigente usa somente as famílias `text`, `image`, `audio` e `video`, com cardinalidade e representação explícitas, e separa controle e registros. Métodos v3 e Plugin API v2 não adaptam a taxonomia anterior.
+- A boundary canônica, os parsers e os testes focais já usam esse contrato. Builder, telas, executores, Plugin Kit, plugins e fixtures que ainda referenciam a taxonomia removida estão deliberadamente inválidos e aguardam conversão; o checkout não volta a compilar até essa etapa. Essa condição não autoriza reintroduzir aliases ou adapters.
 - Projetos podem congelar a ordem e os Métodos do Canal em `strategySnapshot`; cada `ProcessExecution` também conserva seu `methodSnapshot`.
 - A máquina de execução atual está dividida entre `server/execution-commands.ts`, funções e rotas de `server/index.ts`, scheduler de jobs de plugin e reconciliação do Orchestrator.
 - O auto-agendamento de Blocos de plugin não usa mais HTTP loopback. A boundary HTTP `POST /api/execute-block` e `scheduleAutomaticPluginBlock()` convergem em `executePluginBlockInternal()`, uma operação da camada server/application sem dependência de Request/Response. Scheduling continua assíncrono e pós-commit; o Execution Core permanece independente de HTTP e infraestrutura de plugins.
@@ -97,21 +99,17 @@ A boundary continua validando required outputs, restrições de apresentação e
 
 ### Resolução determinística de inputs
 
-Inputs de Métodos modernos possuem `BlockInputSourceBinding`, uma representação canônica e discriminada da origem estratégica. As variantes explícitas cobrem Projeto, Processo anterior, Bloco anterior, Histórico do Canal, valor fornecido na execução e valor estático. A referência canônica usa identificadores estruturais, não contém porta ou identidade de plugin e tem precedência sobre os campos planos históricos. O Builder materializa essa forma somente quando a representação legada já contém todos os identificadores necessários; snapshots e arquivos/pacotes de Método a preservam.
+Inputs de Método possuem obrigatoriamente um `BlockInputSourceBinding`, representação discriminada da origem estratégica. As variantes explícitas cobrem Projeto, Processo anterior, Bloco anterior, Histórico do Canal, Biblioteca do Canal, valor fornecido na execução e valor estático. A referência usa identificadores estruturais e não contém porta ou identidade de plugin. Não existem campos planos históricos alternativos.
 
-`resolveBlockInputs()` resolve o binding canônico diretamente. Uma referência canônica inválida ou cuja origem não existe permanece não resolvida e não cai nos campos legados. `previous_process` sem `blockId` designa exatamente o output oficial do Processo declarado; `previous_block` exige bloco e output explícitos. `channel_library` continua fora do binding canônico normal, incluindo o filtro em `normalizeActionBlock()`.
+`resolveBlockInputs()` resolve exclusivamente o binding canônico. Uma referência inválida ou cuja origem não existe permanece não resolvida. `previous_process` sem `blockId` designa exatamente o output oficial do Processo declarado; `previous_block` exige bloco e output explícitos; `channel_library` exige coleção e campo explícitos.
 
-Métodos históricos sem binding canônico são aceitos somente pela boundary explícita de compatibilidade. `previous_block` legado exige `blockId + sourceKey`; `previous_process` exige `sourceProcessType + sourceKey`, com `blockId` opcional quando a referência aponta para uma delivery específica. Projeto, runtime, estático e Histórico do Canal também são materializados antes do caminho normal. Representações incompletas ou ambíguas produzem diagnóstico e não chegam ao runtime canônico.
+Métodos sem binding canônico são inválidos. Não há boundary de adaptação ou inferência a partir de `source`, `sourceKey`, `sourceProcessType`, `collection`, `staticValue`, `historyLimit` ou campos equivalentes.
 
-Inputs destinados a plugins só entram em portas explicitamente declaradas pelo Método. `selectPluginInputPort()` exige `input.portKey`, faz lookup exato na capability e valida tipo e multiplicidade; ausência, porta inexistente, incompatibilidade ou segunda ocupação de porta não-multiple permanecem sem vínculo e causam `422` antes da criação do job. Label, ID, `sourceKey`, presentation, MIME e ordem não escolhem mais input ports no runtime. O adapter/Builder materializa `portKey` somente quando existe exatamente uma candidata compatível antes da execução e exige configuração explícita quando há ambiguidade.
+Inputs destinados a plugins só entram em portas explicitamente declaradas pelo Método. `selectPluginInputPort()` exige `input.portKey`, faz lookup exato na capability e valida o `ValueShape`; ausência, porta inexistente, incompatibilidade ou segunda ocupação da mesma porta permanecem sem vínculo. Label, ID, `sourceKey`, presentation, MIME e ordem não escolhem portas no runtime.
 
-### Adapter de Métodos históricos
+### Contrato definitivo de Método e plugin
 
-`ProcessMethod.contractVersion: 2` identifica a representação canônica. A ausência da versão identifica dados históricos; um contrato moderno inválido nunca recebe fallback legado. `adaptLegacyMethod()` materializa bindings estratégicos, outputs históricos, targets recuperáveis de `VALIDAR` e portas técnicas somente a partir de evidência estrutural única. Zero ou várias candidatas geram diagnóstico estável. `ESCOLHER` mantém seu contrato especializado com a Biblioteca Estratégica.
-
-Builder, salvamento de Método, importação/transferência, criação de execução e leitura de snapshots históricos usam essa boundary antes do caminho normal. Novos snapshots são canônicos. Leituras de execuções antigas podem expor uma visão adaptada sem substituir o JSON persistido apenas por leitura; reconstrução de portas em snapshot exige versão congelada do plugin. O Execution Core, a resolução normal de inputs e a ordenação de Processos não conhecem campos planos históricos nem o adapter.
-
-`selectPluginImplicitContextPort()` foi removida: não havia caller de produção e o runtime não injeta contexto oculto. O source binding continua separado do port binding. Métodos históricos que chegam diretamente ao runtime sem `portKey` falham de forma segura até o adapter da TASK-027.
+`ProcessMethod.contractVersion: 3` identifica a única representação aceita. Campos carregam `ValueShape`; a Plugin API v2 usa o mesmo shape em cada porta. Não existem adapters de taxonomia v1/v2 no caminho canônico. Métodos e plugins anteriores permanecem inválidos até conversão explícita posterior.
 
 Outputs declarados normais destinados a plugins também entram no executor somente por `BlockFieldDefinition.portKey` explícita. Ausência de binding, porta inexistente ou tipo incompatível falham antes da criação do job; compatibilidade de tipo apenas valida a porta escolhida pelo Método. O Builder materializa `portKey` quando existe exatamente uma candidata compatível e exige configuração explícita quando há ambiguidade. O Execution Core continua sem conhecimento de labels, manifestos, portas ou respostas de plugin.
 
@@ -123,11 +121,11 @@ Respostas de executor cruzam uma única boundary explícita em `server/plugin-re
 
 Chaves estratégicas, labels, ordem do objeto e `result` genérico não são aliases. `result` só é válido quando é literalmente a porta declarada. Chaves desconhecidas, tipos incompatíveis, required ausente e bindings ambíguos falham antes de sucesso ou mutação parcial observável. `BlockExecution.values` e `Delivery.outputKey` permanecem estratégicos.
 
-O contrato sintético histórico de `ESCOLHER` ainda usa a primeira output port da capability ou `result`. Ele está delimitado por guardrail como compatibilidade especializada da seleção de coleção, não como semântica universal de output binding; a resposta precisa usar exatamente a porta sintética enviada.
+`ESCOLHER` usa output canônico de controle `selection`, com cardinalidade explícita. Quando executado por plugin, o Método deve declarar `portKey` exato; primeira porta e chave implícita `result` não possuem semântica especial.
 
 `VALIDAR` possui alvo estratégico explícito no Método e no snapshot. `targetBlockId` identifica sempre um Bloco anterior não-`VALIDAR`; `select_one` e `select_many` exigem `targetOutputKey`, enquanto `approval` continua aprovando o Bloco inteiro e só transporta um valor material quando uma saída foi declarada. Para execução por plugin, `targetPortKey` correlaciona esse valor com uma porta técnica da capability antes do runtime. Normalização e execução não escolhem alvo, saída ou porta por proximidade, tipo ou ordem. Inputs adicionais permanecem contexto complementar e não substituem o target.
 
-Guardrails focais protegem a boundary canônica, os bindings normais e `VALIDAR` contra seleção por tipo, primeira porta, primeira saída ou `field.key`, e impedem que a compatibilidade especializada de `ESCOLHER` se expanda para o Core ou para novas boundaries.
+Guardrails focais protegem a boundary canônica, todos os bindings, `ESCOLHER` e `VALIDAR` contra seleção por tipo, primeira porta, primeira saída ou `field.key`.
 
 ### Recovery decidido de forma mais rica do que é aplicado
 
@@ -173,6 +171,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Deterministic Contracts foi encerrada com a TASK-028. Não há próxima missão autorizada: TASK-029 permanece `pending` e deve receber especificação just-in-time e autorização explícita antes de iniciar Universal Recovery.
+Deterministic Contracts foi encerrada com a TASK-028. A extensão explicitamente autorizada TASK-028A substitui o contrato de conteúdo; TASK-029 permanece `pending` e não foi iniciada.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

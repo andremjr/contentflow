@@ -4,17 +4,16 @@ import type {
   BlockExecutionItemValue,
   BlockType,
   BlockValidationConfig,
-  HumanFieldType,
   FieldPresentation,
   ProcessOutput,
   ProjectDelivery,
   RuntimeValue,
   StoredFile,
   UniversalProcess,
+  ValueShape,
 } from "@/lib/domain";
-import type { DataShape } from "@/lib/data-shape";
 
-export const CONTENTFLOW_PLUGIN_API_VERSION = "1" as const;
+export const CONTENTFLOW_PLUGIN_API_VERSION = "2" as const;
 
 export type PluginOperator = "Humano" | "IA" | "Código";
 export type PluginPermission =
@@ -61,17 +60,12 @@ export type JsonSchema = {
   };
 };
 
-/** Canonical semantic descriptor; API v1 manifests keep HumanFieldType strings as their legacy wire form. */
-export type PluginDataType = DataShape;
-export type LegacyPluginDataType = HumanFieldType;
-
 export type PluginInputPort = {
   key: string;
   label: string;
   description?: string;
-  acceptedTypes: LegacyPluginDataType[];
+  shape: ValueShape;
   required: boolean;
-  multiple?: boolean;
   /** Optional request for a renderer owned and validated by the core. */
   presentation?: FieldPresentation;
 };
@@ -80,7 +74,7 @@ export type PluginOutputPort = {
   key: string;
   label: string;
   description?: string;
-  producedTypes: LegacyPluginDataType[];
+  shape: ValueShape;
   required: boolean;
   /** Optional request for a renderer owned and validated by the core. */
   presentation?: FieldPresentation;
@@ -99,7 +93,7 @@ export type PluginExecutionPolicy = {
     /** Optional text output rebuilt from the accumulated list after each item. */
     combinedOutputPort?: string;
     separator?: string;
-    /** Additive API v1 declaration. Omitted means the legacy per-item behavior. */
+    /** Optional API v2 strategies for core-owned item orchestration. */
     strategies?: Array<"continuous_session" | "per_item">;
     /** Must reference one of `strategies` when present. */
     preferredStrategy?: "continuous_session" | "per_item";
@@ -166,7 +160,7 @@ export type PluginDataPolicy = {
 
 export type PluginFieldContract = Pick<
   BlockFieldDefinition,
-  "label" | "key" | "type" | "required" | "options" | "recordFields" | "presentation"
+  "label" | "key" | "shape" | "required" | "presentation"
 > & {
   portKey: string;
 };
@@ -178,7 +172,7 @@ export type PluginCapability = {
   /** Short user-facing explanation of what this capability accomplishes. */
   description?: string;
   operator: PluginOperator;
-  /** Optional in API v1 for backwards compatibility; omitted means `optional`. */
+  /** Omitted means `optional`. */
   instructionUsage?: PluginInstructionUsage;
   /** Exact structural prompt shape declared by the plugin; it never includes secrets. */
   promptPreview?: PluginPromptPreview;
@@ -186,8 +180,6 @@ export type PluginCapability = {
   processTypes?: UniversalProcess[];
   inputPorts: PluginInputPort[];
   outputPorts: PluginOutputPort[];
-  acceptedInputTypes?: LegacyPluginDataType[];
-  producedOutputTypes?: LegacyPluginDataType[];
   execution: PluginExecutionPolicy;
   sideEffects: PluginSideEffect[];
   cost: PluginCostPolicy;
@@ -208,8 +200,6 @@ export type PluginProfileSetup = {
   description?: string;
   prepareTimeoutMs?: number;
 };
-
-export type PluginDeliveryType = "text" | "image" | "audio" | "video" | "processing";
 
 export type PluginBranding = {
   /** Relative PNG/WebP path inside the plugin package. The core validates and serves the asset. */
@@ -276,7 +266,6 @@ export type PluginManifest = {
   secretKeys?: string[];
   /** Declared secrets that unlock optional functionality but are not required to execute the plugin. */
   optionalSecretKeys?: string[];
-  deliveryTypes?: PluginDeliveryType[];
   /** Optional interactive preparation for a dedicated browser profile referenced by block configuration. */
   profileSetup?: PluginProfileSetup;
   /** Core opens and closes the physical browser; the plugin only controls the authorized page. */
@@ -335,7 +324,7 @@ export type PluginInvocation =
 
 export type PluginInputContract = Pick<
   BlockInputBinding,
-  "id" | "label" | "type" | "recordFields" | "presentation"
+  "id" | "label" | "shape" | "presentation"
 > & {
   portKey: string;
 };

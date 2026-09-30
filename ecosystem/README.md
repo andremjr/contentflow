@@ -9,7 +9,7 @@ Esta pasta reúne tudo que interoperabiliza com o ContentFlow sem fazer parte do
 | [`browser-bridge`](browser-bridge/)       | Extensão companheira Manifest V3 usada por plugins de navegador |
 | [`plugin-kit`](plugin-kit/)               | CLI, templates e fixtures para autores                          |
 | [`skills`](skills/)                       | Instruções portáteis para agentes criarem plugins e Métodos     |
-| [`../docs/ecosystem`](../docs/ecosystem/) | Plugin API v1, segurança, automação e distribuição              |
+| [`../docs/ecosystem`](../docs/ecosystem/) | Plugin API v2, segurança, automação e distribuição              |
 
 ## Fronteira de responsabilidade
 

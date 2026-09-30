@@ -1,6 +1,6 @@
 import type { BlockInputBinding, RuntimeValue } from "../src/lib/domain";
 import type { PluginInputPort } from "../src/lib/plugin-contract";
-import { legacyTypeListAccepts } from "../src/lib/data-shape";
+import { areValueShapesCompatible } from "../src/lib/data-shape";
 
 type AssignedPluginInput = {
   label: string;
@@ -14,11 +14,7 @@ export function selectPluginInputPort(
 ) {
   if (!input.portKey) return undefined;
   const port = ports.find((candidate) => candidate.key === input.portKey);
-  if (
-    !port ||
-    !legacyTypeListAccepts(port.acceptedTypes, input.type) ||
-    (!port.multiple && usedInputPorts.has(port.key))
-  ) {
+  if (!port || !areValueShapesCompatible(input.shape, port.shape) || usedInputPorts.has(port.key)) {
     return undefined;
   }
   return port;
@@ -28,9 +24,5 @@ export function composePluginPortValue(
   assignedInputs: AssignedPluginInput[],
 ): RuntimeValue | undefined {
   if (!assignedInputs.length) return undefined;
-  if (assignedInputs.length === 1) return assignedInputs[0].value ?? null;
-
-  return assignedInputs
-    .map(({ label, value }) => `${label}: ${JSON.stringify(value ?? null)}`)
-    .join("\n");
+  return assignedInputs.length === 1 ? (assignedInputs[0].value ?? null) : undefined;
 }

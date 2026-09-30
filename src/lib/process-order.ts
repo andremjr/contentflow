@@ -1,14 +1,13 @@
 import {
   PROCESS_ORDER,
   type Channel,
-  type HumanFieldType,
   type ProcessMethod,
   type ProcessState,
   type Project,
   type UniversalProcess,
 } from "./domain";
 import { createProcessOutputFields } from "./human-workflow";
-import { areHumanFieldTypesCompatible } from "./data-shape";
+import { areValueShapesCompatible } from "./data-shape";
 
 export function isProcessOrder(value: unknown): value is UniversalProcess[] {
   return (
@@ -89,10 +88,6 @@ export function refreshProjectProcessStrategy(
   };
 }
 
-function compatible(source: HumanFieldType, target: HumanFieldType) {
-  return areHumanFieldTypesCompatible(source, target);
-}
-
 /** Inspect only the final channel definition; never mutate an old reference. */
 export function validateProcessDependencies(
   order: readonly UniversalProcess[],
@@ -123,7 +118,7 @@ export function validateProcessDependencies(
                 .find((candidate) => candidate.id === blockId)
                 ?.outputs?.find((field) => field.key === outputKey);
         if (!output) errors.push(`${label}: saída anterior não encontrada para “${input.label}”.`);
-        else if (!compatible(output.type, input.type))
+        else if (!areValueShapesCompatible(output.shape, input.shape))
           errors.push(`${label}: tipo incompatível na entrada “${input.label}”.`);
       }
       const reuse = block.plugin?.conversation;

@@ -2,6 +2,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSyn
 import path from "node:path";
 import { z } from "zod";
 import type { PluginManifest } from "../src/lib/plugin-contract";
+import { valueShapeSchema } from "../src/lib/value-shape-schema";
 import { isValidPluginLocale } from "../src/lib/plugin-localization";
 
 const semver =
@@ -15,25 +16,6 @@ const entrypoint = /^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$)).+$/;
 const httpsUrl = z.string().url().startsWith("https://");
 const unique = <T>(values: T[]) => new Set(values).size === values.length;
 
-const dataTypeSchema = z.enum([
-  "text",
-  "textarea",
-  "number",
-  "boolean",
-  "list",
-  "records",
-  "select",
-  "multiselect",
-  "datetime",
-  "url",
-  "file",
-  "files",
-  "image",
-  "audio",
-  "video",
-  "approval",
-  "thumbnail_layout",
-]);
 const presentationSchema = z
   .object({
     renderer: z.enum([
@@ -51,16 +33,6 @@ const presentationSchema = z
       "decision",
     ]),
     itemType: z.enum(["text", "record", "file", "image", "audio", "video"]).optional(),
-    acceptedMimeTypes: z
-      .array(
-        z
-          .string()
-          .max(200)
-          .regex(/^[-A-Za-z0-9_.+]+\/[-A-Za-z0-9_.+*]+$/),
-      )
-      .max(50)
-      .refine(unique, "não pode conter duplicatas")
-      .optional(),
   })
   .strict();
 const jsonSchema = z.record(z.unknown());
@@ -74,14 +46,13 @@ const portBase = {
 const inputPortSchema = z
   .object({
     ...portBase,
-    acceptedTypes: z.array(dataTypeSchema).min(1).refine(unique, "não pode conter duplicatas"),
-    multiple: z.boolean().optional(),
+    shape: valueShapeSchema,
   })
   .strict();
 const outputPortSchema = z
   .object({
     ...portBase,
-    producedTypes: z.array(dataTypeSchema).min(1).refine(unique, "não pode conter duplicatas"),
+    shape: valueShapeSchema,
   })
   .strict();
 const profileSetupSchema = z
@@ -208,15 +179,6 @@ const capabilitySchema = z
       .optional(),
     inputPorts: z.array(inputPortSchema),
     outputPorts: z.array(outputPortSchema).min(1),
-    acceptedInputTypes: z
-      .array(dataTypeSchema)
-      .refine(unique, "não pode conter duplicatas")
-      .optional(),
-    producedOutputTypes: z
-      .array(dataTypeSchema)
-      .min(1)
-      .refine(unique, "não pode conter duplicatas")
-      .optional(),
     execution: z
       .object({
         mode: z.enum(["immediate", "async"]),
@@ -322,7 +284,7 @@ const capabilitySchema = z
 export const pluginManifestSchema = z
   .object({
     $schema: z.string().optional(),
-    apiVersion: z.literal("1"),
+    apiVersion: z.literal("2"),
     id: z.string().min(3).max(160).regex(pluginId),
     name: z.string().min(1).max(100),
     version: z.string().regex(semver),
@@ -387,11 +349,6 @@ export const pluginManifestSchema = z
           .max(100)
           .regex(/^[A-Z][A-Z0-9_]*$/),
       )
-      .refine(unique, "não pode conter duplicatas")
-      .optional(),
-    deliveryTypes: z
-      .array(z.enum(["text", "image", "audio", "video", "processing"]))
-      .min(1)
       .refine(unique, "não pode conter duplicatas")
       .optional(),
     profileSetup: profileSetupSchema.optional(),

@@ -125,7 +125,7 @@ A lista e a grade de Projetos permanecem no Canal. A criação de novas filas n�
 
 O Gerenciador de Plugins organiza o catálogo em cards quadrados, compactos e pesquisáveis. Em telas grandes, a galeria apresenta quatro cards por linha; cada card exibe somente o ícone local validado e o nome do plugin, além de uma sinalização mínima de erro ou desativação. Versão, origem, permissões, capacidades e ações de ciclo de vida aparecem nos detalhes abertos pelo card.
 
-Cada manifesto pode declarar uma ou mais capacidades de entrega entre `text`, `image`, `audio`, `video` e `processing`; esses metadados, somados aos blocos e Processos Universais compatíveis, alimentam os filtros da galeria sem alterar o contrato universal de dados dos blocos. O manifesto também pode declarar `branding.iconPath`, um caminho relativo para PNG ou WebP empacotado, com até 512 KiB. O núcleo valida caminho, assinatura, MIME e tamanho, nunca busca favicon remoto e usa fallback local quando o campo ou asset estiver ausente ou inválido. O autor responde pelos direitos de uso do ícone. Como `branding` é opcional, manifestos API v1 existentes permanecem compatíveis.
+Cada capability declara o `ValueShape` de cada porta. A galeria deriva as famílias oferecidas das `outputPorts`, sem um resumo paralelo como `deliveryTypes`. O manifesto também pode declarar `branding.iconPath`, um caminho relativo para PNG ou WebP empacotado, com até 512 KiB. O núcleo valida caminho, assinatura, MIME e tamanho, nunca busca favicon remoto e usa fallback local quando o campo ou asset estiver ausente ou inválido. O autor responde pelos direitos de uso do ícone.
 
 ---
 
@@ -196,15 +196,13 @@ Entradas e saídas pertencem ao bloco e não ao operador. Na definição do Mét
 - Dados de saída, definidos visualmente apenas por nome e formato.
 - O operador responsável pela execução.
 
-As chaves técnicas, a persistência e a conexão padrão com resultados anteriores são administradas internamente pelo núcleo. Para o usuário, os formatos universais são: texto curto, texto longo, número, sim ou não, lista de textos, lista de registros, seleção, seleção múltipla, data e hora, URL, arquivo, vários arquivos, imagem, áudio, vídeo, decisão e layout de thumbnail.
+As chaves técnicas, a persistência e a conexão com resultados anteriores são administradas internamente pelo núcleo. O contrato normativo está em [`docs/CONTENT_CONTRACT.md`](CONTENT_CONTRACT.md). Conteúdo possui somente quatro famílias: `text`, `image`, `audio` e `video`. `one`/`many` e `inline`/`artifact`/`either` são dimensões explícitas do mesmo `ContentShape`; arquivo, lista, textarea, records e renderer não são famílias nem tipos de conteúdo.
 
-- `Lista de registros` representa uma coleção ordenada de objetos com esquema próprio, como cenas de roteiro, CTAs ou planos de edição. Cada campo interno tem chave, formato e obrigatoriedade.
-- `Data e hora` é persistida e trocada com plugins em ISO 8601, incluindo o instante normalizado em UTC.
-- `Layout de thumbnail` transporta a composição 16:9 do canvas — caixas, posições, dimensões, ordem e cores — sem converter o layout em imagem.
+Número, booleano, seleção, data/hora, URL, approval, IDs e layout de thumbnail usam contratos de controle. Registros usam contrato estrutural com campos tipados. Apresentação escolhe somente o renderer e não altera a semântica. Métodos usam `contractVersion: 3`, plugins usam `apiVersion: "2"` e contratos anteriores não são adaptados pelo caminho canônico.
 
-Cada entrada declarada possui um binding explícito para uma saída compatível já produzida ou para um valor fornecido na execução. O editor pode sugerir uma origem usando tipo, cardinalidade, proximidade e nome, mas a sugestão precisa ser materializada como binding antes da execução. Métodos legados sem binding explícito passam por adapter de compatibilidade; se a origem não for inequívoca, o bloco permanece pausado e informa a ambiguidade em vez de escolher silenciosamente.
+Cada entrada declarada possui um binding explícito para uma saída compatível já produzida ou para um valor fornecido na execução. O editor pode sugerir uma origem usando shape, proximidade e nome, mas a sugestão precisa ser materializada como binding antes da execução. Contratos anteriores não entram no runtime canônico e precisam ser convertidos numa tarefa separada.
 
-Uma entrada também pode ter origem **Fornecido na execução**. Nesse caso, o Método guarda somente o contrato portátil — nome, tipo, apresentação e porta semântica — enquanto o valor real pertence ao `BlockExecution`. O núcleo pausa o bloco automático, renderiza o campo universal correspondente, armazena arquivos como referências gerenciadas, valida tipo/MIME e só então inicia o plugin. Isso vale igualmente para texto, documentos, imagens, áudio, vídeo e coleções de arquivos; o plugin nunca injeta componentes de interface.
+Uma entrada também pode ter origem **Fornecido na execução**. Nesse caso, o Método guarda somente o contrato portátil — nome, `ValueShape`, apresentação e porta semântica — enquanto o valor real pertence ao `BlockExecution`. O núcleo pausa o bloco automático, renderiza o campo derivado do mesmo shape usado pela porta, armazena artifacts como referências gerenciadas, valida família, cardinalidade, representação e formato e só então inicia o plugin. O plugin nunca injeta componentes de interface.
 
 Todos os quatro tipos de bloco podem declarar zero ou mais entradas de contexto vindas de blocos anteriores ou Processos Universais anteriores. O editor começa sem campos opcionais e oferece somente a ação discreta **Adicionar entrada**; assim, um bloco simples permanece visualmente leve, mas `BUSCAR`, `ESCOLHER`, `CRIAR` e `VALIDAR` podem consumir qualquer entrega anterior compatível quando o Método exigir. No `ESCOLHER`, essas entradas apenas orientam a decisão e não substituem a coleção vinculada. No `VALIDAR`, elas complementam e não substituem o bloco-alvo obrigatório da validação.
 
@@ -262,9 +260,9 @@ Exemplos universais:
 
 - **Escalar:** um Bloco `CRIAR` produz um único texto de título. A `BlockExecution` possui uma unidade escalar; a porta `title` materializa uma entrega `one` com um item de entrega textual. Nenhum conceito de fornecedor é necessário.
 - **Lista de cenas:** uma entrega anterior contém N registros de cena. O Bloco seguinte recebe N itens identificados pelo núcleo e materializa N unidades de trabalho relacionadas aos respectivos `sourceItemId`. Execução, retry ou distribuição podem ocorrer por unidade sem perder a ordem nem repetir as cenas já concluídas.
-- **Lista de assets:** um Bloco produz N imagens, vídeos ou arquivos. A porta correspondente materializa uma entrega `many` com N itens; cada arquivo importado é um artifact ligado ao item de entrega que o referencia. Reordenar ou regenerar um item não muda a identidade dos irmãos concluídos.
+- **Coleções de mídia:** um Bloco usa portas separadas para `image/many`, `audio/many` e `video/many`. Cada porta materializa uma delivery com N itens; cada artifact importado fica ligado ao item correspondente. Reordenar ou regenerar um item não muda a identidade dos irmãos concluídos.
 
-A página do processo mantém um painel expansível de resultados concluídos. O tipo técnico do campo continua sendo a autoridade para validação e compatibilidade, enquanto `presentation` pode solicitar, de forma opcional, um renderer padronizado do núcleo. O registro central oferece modo automático, texto curto ou longo, lista ou etiquetas, tabela ou cartões, lista de arquivos, galeria de imagens, players de áudio e vídeo e decisão/aprovação. Assim, por exemplo, um mesmo valor `files` pode aparecer como lista de arquivos ou galeria sem alterar seu contrato técnico. Métodos e snapshots antigos, sem `presentation`, são normalizados para `auto`.
+A página do processo mantém um painel expansível de resultados concluídos. O `ValueShape` é a autoridade de validação e compatibilidade, enquanto `presentation` pode solicitar um renderer padronizado do núcleo. O mesmo shape governa formulário humano, resposta de plugin, delivery e viewer; renderer nunca define família, cardinalidade ou representação.
 
 Renderers são componentes internos do ContentFlow. Plugins podem apenas indicar um identificador permitido e restrições declarativas de item ou MIME; nunca fornecem React, HTML, scripts ou outra interface arbitrária. Preferências incompatíveis ou desconhecidas são ignoradas pelo núcleo e recaem no modo automático.
 
@@ -327,7 +325,7 @@ Durante a migração, a etapa agregada pode usar um adaptador de compatibilidade
 
 O ContentFlow apoia-se em dois tipos de compartilhamento comunitário:
 
-1. **Templates de Métodos (Caixa-Aberta)**: Exportação e importação de sequências de blocos com prompts e regras prontas, individualmente ou como pacote dos Métodos configurados em um Canal. O compartilhável principal é uma pasta ZIP com `manifest.json` e `assets/` para capas; JSONs individuais legados continuam importáveis. Cada Método do manifesto continua pertencendo a exatamente um Processo Universal. Referências de processos anteriores, plugins, conexões e coleções estratégicas permanecem explícitas como requisitos; coleções informam nome e schema esperado quando disponíveis. IDs locais e secrets são removidos, e instalação, consentimento, criação de coleções e associação a vínculos locais são ações separadas do usuário.
+1. **Templates de Métodos (Caixa-Aberta)**: Exportação e importação de sequências de blocos com prompts e regras prontas, individualmente ou como pacote dos Métodos configurados em um Canal. Todo arquivo usa envelope v3 e `ProcessMethod.contractVersion: 3`; formatos anteriores são inválidos e não são adaptados. Cada Método do manifesto pertence a exatamente um Processo Universal. Referências de processos anteriores, plugins, conexões e coleções estratégicas permanecem explícitas como requisitos; coleções informam nome e `ValueShape` esperado quando disponíveis. IDs locais e secrets são removidos, e instalação, consentimento, criação de coleções e associação a vínculos locais são ações separadas do usuário.
 
 Métodos e Canais podem possuir uma capa própria para a Biblioteca de Métodos. Na ausência dela, a interface usa o símbolo local do ContentFlow. A capa do Canal nessa biblioteca é independente do avatar ou banner sincronizado do YouTube. Pacotes de Canal carregam a capa do conjunto e as capas de seus Métodos dentro de `assets/`, sem exportar outras propriedades ou conteúdos do Canal.
 
@@ -376,7 +374,7 @@ No `ESCOLHER`, o núcleo consulta automaticamente as decisões concluídas deste
 
 Métodos anteriores que já possuam uma entrada `channel_history` continuam legíveis. A interface os apresenta pelo mesmo controle simplificado e preserva seus metadados internos enquanto o histórico permanecer ativo; ao desligar, remove a entrada de memória. Entradas normais entre blocos e Processos continuam independentes do Histórico do Canal.
 
-Na versão inicial, o Histórico aceita entregas escalares: texto curto ou longo, número, booleano, seleção, data, URL, arquivo, imagem, áudio e vídeo. Listas, decisões de aprovação, records aninhados, múltiplos arquivos e layouts não entram diretamente nessa consulta; um bloco pode antes produzir um resumo escalar apropriado.
+O Histórico aceita shapes escalares compatíveis. Shapes `many`, decisões de approval, registros e layouts não entram diretamente nessa consulta; um Bloco pode antes produzir um resumo `text/one` apropriado.
 
 Toda conclusão de `ESCOLHER`, por Humano, IA ou Código, materializa `selectedItemId` como entrega universal. Assim, o mesmo bloco pode consultar suas escolhas anteriores e aplicar por instrução ou plugin regras como rodízio, cooldown, pesos ou não repetição. O núcleo não possui catálogo de regras editoriais: Humano e IA seguem `instructions`; plugins de Código declaram suas estratégias e configurações no próprio manifesto.
 
@@ -388,7 +386,7 @@ Quando a origem é outra decisão `ESCOLHER`, o valor histórico é o ID persist
 
 ## 11. Resultados Intermediários e Outputs Universais
 
-Cada saída concluída de um bloco torna-se uma **entrega universal do Projeto**. A entrega pertence à execução, conserva processo, bloco, chave de saída, tentativa, tipo, ordem e estado, e recebe um ID técnico estável. Valores escalares geram um item; listas, registros e coleções de arquivos geram um item identificado para cada elemento. Assim, três opções de título possuem uma entrega e três IDs de item distintos.
+Cada saída concluída de um bloco torna-se uma **entrega universal do Projeto**. A entrega pertence à execução, conserva processo, bloco, chave de saída, tentativa, `ValueShape`, ordem e estado, e recebe um ID técnico estável. Shapes `one` geram um item; shapes `many` geram um item identificado para cada elemento. Assim, três opções de título em `text/many` possuem uma entrega e três IDs de item distintos.
 
 O Método não grava IDs de execução. No construtor, o usuário escolhe estruturalmente `Processo / Bloco / Entrega`; o motor resolve essa referência para a entrega e os itens reais quando o Projeto é executado. Plugins recebem os valores tipados junto com os IDs de proveniência, podendo sincronizar SRT, cenas, áudio, assets e cortes sem depender de posição visual ou nome de arquivo.
 
@@ -396,14 +394,14 @@ As entregas são persistidas no snapshot da execução, sem criar uma segunda ba
 
 Separadamente, cada Processo Universal possui um output oficial, independente do método e do executor utilizado:
 
-1. `Tema`: texto.
-2. `Título`: texto.
-3. `Thumbnail`: imagem.
-4. `Roteiro`: texto.
-5. `Narração e Áudio`: áudio.
-6. `Assets Visuais`: lista de imagens e vídeos.
-7. `Edição`: vídeo.
-8. `Publicação`: URL ou registro da publicação.
+1. `Tema`: `text/one/inline`.
+2. `Título`: `text/one/inline`.
+3. `Thumbnail`: `image/one/artifact`.
+4. `Roteiro`: `text/one/inline`.
+5. `Narração e Áudio`: `audio/one/artifact`.
+6. `Assets Visuais`: portas separadas `images: image/many/artifact` e `videos: video/many/artifact`.
+7. `Edição`: `video/one/artifact`.
+8. `Publicação`: controle `url/one` ou registro estruturado da publicação.
 
 Quando um bloco `CRIAR` entrega o campo universal esperado, o motor promove esse valor automaticamente a output do processo após o término e a eventual validação. Se nenhum bloco entregar um valor compatível, o processo pausa para que o operador humano registre o resultado final.
 

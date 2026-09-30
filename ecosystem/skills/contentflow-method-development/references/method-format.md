@@ -1,130 +1,31 @@
-# Contrato de Método — referência normativa
+# Contrato de Método v3
 
-## Envelope
+O envelope usa `format: "contentflow-method"`, `version: 3` e um `method` com `contractVersion: 3`, um Processo Universal e 1–200 Blocos.
 
-```json
-{
-  "format": "contentflow-method",
-  "version": 1,
-  "name": "Nome do Método",
-  "exportedAt": "2026-08-12T12:00:00.000Z",
-  "method": {
-    "processType": "theme",
-    "blocks": []
-  }
-}
-```
+Cada input e output declara `shape: ValueShape`; nunca declara `type`. Veja [`docs/CONTENT_CONTRACT.md`](../../../../docs/CONTENT_CONTRACT.md).
 
-`format` é sempre `contentflow-method`; `version` é `1`; `name` tem até 200 caracteres; `exportedAt` é ISO 8601; `processType` é `theme`, `title`, `thumbnail`, `script`, `narration`, `assets`, `editing` ou `publishing`; `blocks` contém 1–200 blocos.
-
-O compartilhável principal é `.contentflow-method.zip`, uma pasta compactada com `manifest.json` e, quando houver capa, `assets/method-<processType>.webp`. O JSON acima continua sendo aceito diretamente por compatibilidade.
-
-## Pacote de Métodos do Canal
-
-`contentflow-method-pack`, versão `1`, reúne de 1 a 8 Métodos individuais com `processType` único. O ZIP contém `manifest.json`, `assets/channel-cover.webp` opcional e uma capa opcional por Método. Não contém Projetos, Histórico, itens da Biblioteca Estratégica, credenciais, `connectionId` ou `collectionId`.
-
-Cada Método ou pacote pode declarar requisitos portáteis para `previous_process`, plugin/capacidade/conexão e coleção estratégica. O requisito de coleção informa nome e, quando a coleção ainda estiver disponível na origem, seus campos com label, key, type e obrigatoriedade. Esses metadados servem para a prévia; não criam nem vinculam a coleção automaticamente.
-
-## Bloco
+Exemplo:
 
 ```json
 {
-  "id": "theme-search",
-  "type": "BUSCAR",
-  "operator": "IA",
-  "name": "Pesquisar candidatos",
-  "instructions": "Recupere fontes e liste candidatos com seus ângulos.",
-  "inputs": [],
-  "outputs": [],
-  "parameters": [],
-  "order": 0
+  "id": "drafts",
+  "label": "Rascunhos",
+  "key": "drafts",
+  "shape": {
+    "kind": "content",
+    "family": "text",
+    "cardinality": "many",
+    "representation": "inline"
+  },
+  "required": true,
+  "portKey": "drafts"
 }
 ```
 
-`id` deve ser string única e estável; minúsculas com hífens são recomendadas para legibilidade. `type` é `BUSCAR`, `ESCOLHER`, `CRIAR` ou `VALIDAR`. `operator` é `IA`, `Humano` ou `Código`. `name` tem até 200 caracteres; `instructions`, até 20.000. `parameters` é obrigatória. `validation` só deve aparecer em `VALIDAR`. `order` começa em 0 e segue sem saltos.
+Texto como TXT, Markdown ou SRT usa `family: "text"` e `representation: "artifact"`, com MIME/extensões opcionais em `formats`. Imagem, áudio e vídeo usam `artifact`. Número, booleano, seleção, data, URL, approval, IDs e layout usam `ControlShape`. Estrutura tabular usa `RecordShape`.
 
-## Parameters
+`presentation` contém apenas `renderer` e `itemType`; não contém MIME nem altera o shape.
 
-```json
-{
-  "id": "candidate-limit",
-  "label": "Quantidade",
-  "key": "candidate_limit",
-  "type": "number",
-  "value": 10,
-  "placeholder": "Ex.: 10",
-  "options": []
-}
-```
+Bindings estratégicos, plugin/capability, validação, parâmetros, conversa e regras de `ESCOLHER` mantêm os contratos vigentes. `VALIDAR` opera sobre o shape do alvo e produz controle de approval ou seleção com cardinalidade explícita.
 
-Tipos: `text`, `number`, `select`, `boolean`, `textarea`. `value` é string, number ou boolean. `placeholder` tem até 500 caracteres. `options` só existe em `select` e suporta no máximo 100 strings.
-
-## Inputs
-
-A forma mínima é `{id, label, type, source}`. As fontes são:
-
-| Fonte              | Campos adicionais                                                                                                     |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `project`          | `sourceKey`: `title` ou `deadline`.                                                                                   |
-| `previous_process` | `sourceProcessType`, `sourceKey` e opcionalmente `blockId`.                                                           |
-| `previous_block`   | `blockId` e `sourceKey` quando necessário.                                                                            |
-| `channel_history`  | `records` com `sourceProcessType`, `blockId`, `sourceKey` e `historyLimit` de 1 a 100; somente em `ESCOLHER`/`CRIAR`. |
-| `channel_library`  | Coleção do canal; o vínculo local precisa ser reassociado após importar.                                              |
-| `static`           | `staticValue`.                                                                                                        |
-
-Tipos de input: `text`, `number`, `select`, `boolean`, `textarea`, `multiselect`, `list`, `records`, `datetime`, `url`, `file`, `image`, `audio`, `video`, `files`, `approval`, `thumbnail_layout`.
-
-Nunca gravar IDs de execução. Use referências estruturais; o runtime resolve `deliveryId` e `itemIds`.
-
-## Outputs
-
-Toda saída contém `id`, `label`, `key`, `type` e `required`. Pode conter `placeholder`, `helpText`, `options`, `optionsSourceBlockId`, `optionsSourceKey`, `recordFields`, `presentation` e `portKey`. `key` deve ser única no bloco.
-
-Entradas e saídas podem salvar `portKey`, a chave semântica da porta declarada pela capability do plugin. Use-a sempre que duas ou mais portas aceitam o mesmo tipo. O editor mostra essa escolha dentro do painel do plugin e a preserva na exportação; não tente reproduzir esse vínculo renomeando labels.
-
-`optionsSourceBlockId`/`optionsSourceKey` permitem que `select` ou `multiselect` use opções de uma saída anterior. Para VALIDAR, use convencionalmente `decision`, `selected_value`, `selected_values` e `feedback`.
-
-Quando um bloco usa plugin com continuidade declarada, `plugin.conversation` pode ser `{ "mode": "new" }` ou `{ "mode": "reuse", "sourceProcessType": "script", "sourceBlockId": "draft-script" }`. A referência é estrutural e só pode apontar para bloco anterior que use o mesmo plugin. IDs de conversa do provedor e IDs de conexão local nunca pertencem ao arquivo portátil.
-
-O binding portátil de plugin contém `pluginId`, `pluginVersion` opcional, `capabilityId`, `configuration`, `connectionRequired` opcional e `conversation` opcional. `configuration` aceita somente valores string, number ou boolean. A exportação remove `connectionId`; a importação exige associação local quando `connectionRequired` for verdadeiro.
-
-## Records
-
-Para `type: "records"`, declare `recordFields` com `id`, `label`, `key`, `type` e `required`. Tipos de record field: `text`, `textarea`, `number`, `boolean`, `select`, `datetime`, `url`, `file`, `image`, `audio`, `video`. Keys internas devem ser únicas e não vazias.
-
-## Presentation
-
-`presentation` não muda o tipo técnico. Renderers: `auto`, `text-short`, `text-long`, `list`, `tags`, `table`, `cards`, `file-list`, `image-gallery`, `audio-player`, `video-player`, `decision`. `itemType` pode ser `text`, `record`, `file`, `image`, `audio` ou `video`. `acceptedMimeTypes` é opcional. Não aceitar HTML, scripts ou componentes de interface.
-
-## Validation
-
-```json
-{
-  "validation": {
-    "targetBlockId": "theme-search",
-    "targetOutputKey": "candidates",
-    "mode": "select_one",
-    "onReject": "retry_target",
-    "maxAttempts": 2
-  }
-}
-```
-
-`targetBlockId` deve identificar bloco anterior não-VALIDAR. `targetOutputKey` deve existir para `select_one`/`select_many`. `mode` é `approval`, `select_one` ou `select_many`; `onReject` é `retry_target` ou `pause`; `maxAttempts` é inteiro de 1 a 20.
-
-## Regra especial de ESCOLHER
-
-`ESCOLHER` seleciona somente item pré-existente de coleção estratégica do mesmo canal. Ele pode aparecer em JSON portátil para preservar a estrutura, mas a exportação remove `collectionId`; depois da importação, o usuário deve associar uma coleção local antes de executar. Para selecionar resultado recém-gerado, use `VALIDAR`.
-
-## Outputs oficiais
-
-| Processo     | Key         | Type       |
-| ------------ | ----------- | ---------- |
-| `theme`      | `theme`     | `textarea` |
-| `title`      | `title`     | `text`     |
-| `thumbnail`  | `thumbnail` | `image`    |
-| `script`     | `script`    | `textarea` |
-| `narration`  | `audio`     | `audio`    |
-| `assets`     | `assets`    | `files`    |
-| `editing`    | `video`     | `video`    |
-| `publishing` | `url`       | `url`      |
+O arquivo não contém IDs de execução, delivery/item IDs, secrets, cookies, caminhos físicos ou contas locais.

@@ -9,8 +9,9 @@
 
 ## Normativo vigente
 
-- [`protocol.md`](protocol.md) — contrato normativo da Plugin API v1.
-- [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json) — schema do manifesto.
+- [`../CONTENT_CONTRACT.md`](../CONTENT_CONTRACT.md) — contrato único de valores transportados no produto.
+- [`protocol.md`](protocol.md) — contrato normativo da Plugin API v2.
+- [`schemas/contentflow-plugin-v2.schema.json`](schemas/contentflow-plugin-v2.schema.json) — schema do manifesto.
 - [`security.md`](security.md) — permissões, sandbox e modelo de ameaças.
 - [`browser-automation.md`](browser-automation.md) — requisitos adicionais para interfaces web.
 

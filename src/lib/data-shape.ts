@@ -1,60 +1,179 @@
-import type { FieldPresentation, HumanFieldType } from "@/lib/domain";
+import type {
+  ContentCardinality,
+  ContentFamily,
+  ContentRepresentation,
+  ContentShape,
+  ControlKind,
+  ControlShape,
+  RecordShape,
+  ValueShape,
+} from "@/lib/domain";
 
-export type DataValueKind = "text" | "number" | "boolean" | "record" | "artifact";
-export type DataCardinality = "one" | "many";
-export type DataVisualFamily = "text" | "image" | "audio" | "video" | "file";
+export type DataShape = ValueShape;
+export type DataCardinality = ContentCardinality;
 
-export type DataShape = {
-  kind: DataValueKind;
-  cardinality: DataCardinality;
-  visualFamily: DataVisualFamily;
-  inputControl?: HumanFieldType;
-  acceptedMimeTypes?: string[];
+export type ValueShapeIssue = {
+  path: string;
+  code:
+    | "INVALID_REPRESENTATION"
+    | "INVALID_FORMAT_CONSTRAINT"
+    | "INVALID_CONTROL_OPTIONS"
+    | "DUPLICATE_RECORD_FIELD"
+    | "EMPTY_RECORD_FIELD";
+  message: string;
 };
 
-const MANY_TYPES = new Set<HumanFieldType>(["list", "multiselect", "records", "files"]);
-
-export function normalizeDataShape(
-  type: HumanFieldType,
-  presentation?: FieldPresentation,
-): DataShape {
-  const cardinality: DataCardinality = MANY_TYPES.has(type) ? "many" : "one";
-  if (type === "number")
-    return { kind: "number", cardinality, visualFamily: "text", inputControl: type };
-  if (type === "boolean" || type === "approval")
-    return { kind: "boolean", cardinality, visualFamily: "text", inputControl: type };
-  if (type === "records" || type === "thumbnail_layout")
-    return { kind: "record", cardinality, visualFamily: "text", inputControl: type };
-  if (["file", "files", "image", "audio", "video"].includes(type)) {
-    const presentationFamily =
-      presentation?.itemType === "image" ||
-      presentation?.itemType === "audio" ||
-      presentation?.itemType === "video"
-        ? presentation.itemType
-        : undefined;
-    const visualFamily: DataVisualFamily =
-      presentationFamily ??
-      (type === "image" || type === "audio" || type === "video" ? type : "file");
-    return {
-      kind: "artifact",
-      cardinality,
-      visualFamily,
-      inputControl: type,
-      ...(presentation?.acceptedMimeTypes?.length
-        ? { acceptedMimeTypes: [...presentation.acceptedMimeTypes] }
-        : {}),
-    };
-  }
-  return { kind: "text", cardinality, visualFamily: "text", inputControl: type };
+export function contentShape(
+  family: ContentFamily,
+  cardinality: ContentCardinality = "one",
+  representation: ContentRepresentation = family === "text" ? "inline" : "artifact",
+  formats?: ContentShape["formats"],
+): ContentShape {
+  const shape: ContentShape = {
+    kind: "content",
+    family,
+    cardinality,
+    representation,
+    ...(formats && (formats.mimeTypes?.length || formats.extensions?.length)
+      ? {
+          formats: {
+            ...(formats.mimeTypes?.length
+              ? { mimeTypes: normalizeMimeTypes(formats.mimeTypes) }
+              : {}),
+            ...(formats.extensions?.length
+              ? { extensions: normalizeExtensions(formats.extensions) }
+              : {}),
+          },
+        }
+      : {}),
+  };
+  const issue = validateValueShape(shape)[0];
+  if (issue) throw new Error(issue.message);
+  return shape;
 }
 
-export function areDataShapesCompatible(source: DataShape, target: DataShape) {
-  if (source.cardinality !== target.cardinality || source.kind !== target.kind) return false;
-  if (source.kind !== "artifact") return true;
-  if (target.visualFamily !== "file" && source.visualFamily !== target.visualFamily) return false;
-  if (!target.acceptedMimeTypes?.length || !source.acceptedMimeTypes?.length) return true;
-  return source.acceptedMimeTypes.some((sourceMime) =>
-    target.acceptedMimeTypes!.some((targetMime) => mimePatternsOverlap(sourceMime, targetMime)),
+export function controlShape(
+  control: ControlKind,
+  cardinality: ContentCardinality = "one",
+  options?: string[],
+): ControlShape {
+  const shape: ControlShape = {
+    kind: "control",
+    control,
+    cardinality,
+    ...(options?.length ? { options: [...options] } : {}),
+  };
+  const issue = validateValueShape(shape)[0];
+  if (issue) throw new Error(issue.message);
+  return shape;
+}
+
+export function recordShape(
+  cardinality: ContentCardinality,
+  fields: RecordShape["fields"],
+): RecordShape {
+  return { kind: "record", cardinality, fields: fields.map((field) => structuredClone(field)) };
+}
+
+export function areValueShapesCompatible(source: ValueShape, target: ValueShape): boolean {
+  if (validateValueShape(source).length || validateValueShape(target).length) return false;
+  if (source.kind !== target.kind || source.cardinality !== target.cardinality) return false;
+  if (source.kind === "content" && target.kind === "content") {
+    if (source.family !== target.family) return false;
+    if (!representationsCompatible(source.representation, target.representation)) return false;
+    return formatConstraintsOverlap(source, target);
+  }
+  if (source.kind === "control" && target.kind === "control") {
+    if (source.control !== target.control) return false;
+    if (source.control !== "selection" || !target.options?.length || !source.options?.length) {
+      return true;
+    }
+    return source.options.every((option) => target.options!.includes(option));
+  }
+  if (source.kind === "record" && target.kind === "record") {
+    return target.fields.every((targetField) => {
+      const sourceField = source.fields.find((field) => field.key === targetField.key);
+      return Boolean(
+        sourceField &&
+        (!targetField.required || sourceField.required) &&
+        areValueShapesCompatible(sourceField.shape, targetField.shape),
+      );
+    });
+  }
+  return false;
+}
+
+export function validateValueShape(shape: ValueShape, path = "shape"): ValueShapeIssue[] {
+  const issues: ValueShapeIssue[] = [];
+  if (shape.kind === "content") {
+    if (shape.family !== "text" && shape.representation !== "artifact") {
+      issues.push({
+        path: `${path}.representation`,
+        code: "INVALID_REPRESENTATION",
+        message: `${shape.family} deve usar representação artifact.`,
+      });
+    }
+    if (shape.representation === "inline" && shape.formats) {
+      issues.push({
+        path: `${path}.formats`,
+        code: "INVALID_FORMAT_CONSTRAINT",
+        message: "Conteúdo inline não declara MIME ou extensão de artifact.",
+      });
+    }
+    return issues;
+  }
+  if (shape.kind === "control") {
+    if (shape.control !== "selection" && shape.options?.length) {
+      issues.push({
+        path: `${path}.options`,
+        code: "INVALID_CONTROL_OPTIONS",
+        message: "Somente controles de seleção declaram opções.",
+      });
+    }
+    return issues;
+  }
+  const keys = new Set<string>();
+  for (const [index, field] of shape.fields.entries()) {
+    const fieldPath = `${path}.fields.${index}`;
+    if (!field.key.trim()) {
+      issues.push({
+        path: `${fieldPath}.key`,
+        code: "EMPTY_RECORD_FIELD",
+        message: "Campo de registro precisa de uma chave.",
+      });
+    } else if (keys.has(field.key)) {
+      issues.push({
+        path: `${fieldPath}.key`,
+        code: "DUPLICATE_RECORD_FIELD",
+        message: `A chave ${field.key} está duplicada.`,
+      });
+    }
+    keys.add(field.key);
+    issues.push(...validateValueShape(field.shape, `${fieldPath}.shape`));
+  }
+  return issues;
+}
+
+function representationsCompatible(source: ContentRepresentation, target: ContentRepresentation) {
+  return target === "either" || source === target;
+}
+
+function formatConstraintsOverlap(source: ContentShape, target: ContentShape) {
+  const sourceMimes = source.formats?.mimeTypes ?? [];
+  const targetMimes = target.formats?.mimeTypes ?? [];
+  if (sourceMimes.length && targetMimes.length) {
+    if (
+      !sourceMimes.some((left) => targetMimes.some((right) => mimePatternsOverlap(left, right)))
+    ) {
+      return false;
+    }
+  }
+  const sourceExtensions = source.formats?.extensions ?? [];
+  const targetExtensions = target.formats?.extensions ?? [];
+  return (
+    !sourceExtensions.length ||
+    !targetExtensions.length ||
+    sourceExtensions.some((extension) => targetExtensions.includes(extension))
   );
 }
 
@@ -62,26 +181,27 @@ function mimePatternsOverlap(left: string, right: string) {
   if (left === right || left === "*/*" || right === "*/*") return true;
   const [leftType, leftSubtype] = left.split("/");
   const [rightType, rightSubtype] = right.split("/");
-  if (!leftType || !leftSubtype || !rightType || !rightSubtype || leftType !== rightType)
-    return false;
-  return leftSubtype === "*" || rightSubtype === "*";
-}
-
-export function areHumanFieldTypesCompatible(
-  source: HumanFieldType,
-  target: HumanFieldType,
-  sourcePresentation?: FieldPresentation,
-  targetPresentation?: FieldPresentation,
-) {
-  return areDataShapesCompatible(
-    normalizeDataShape(source, sourcePresentation),
-    normalizeDataShape(target, targetPresentation),
+  return (
+    Boolean(leftType && leftSubtype && rightType && rightSubtype) &&
+    leftType === rightType &&
+    (leftSubtype === "*" || rightSubtype === "*")
   );
 }
 
-export function legacyTypeListAccepts(
-  declaredTypes: readonly HumanFieldType[],
-  fieldType: HumanFieldType,
-) {
-  return declaredTypes.some((declared) => areHumanFieldTypesCompatible(fieldType, declared));
+function normalizeMimeTypes(values: string[]) {
+  return Array.from(
+    new Set(
+      values.map((value) => value.trim().toLowerCase()).filter((value) => value.includes("/")),
+    ),
+  );
+}
+
+function normalizeExtensions(values: string[]) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => value.trim().toLowerCase().replace(/^\./, ""))
+        .filter((value) => /^[a-z0-9][a-z0-9._+-]*$/.test(value)),
+    ),
+  );
 }

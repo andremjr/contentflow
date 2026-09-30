@@ -3,14 +3,14 @@
 Este documento é o contexto compacto para criar ou adaptar um plugin com um agente de código sem compartilhar o repositório inteiro. Envie ao agente:
 
 1. este arquivo;
-2. [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json);
+2. [`schemas/contentflow-plugin-v2.schema.json`](schemas/contentflow-plugin-v2.schema.json);
 3. opcionalmente, um handler de [`ecosystem/plugin-kit/templates`](../../ecosystem/plugin-kit/templates) e os arquivos da automação existente.
 
-Compatibilidade: Plugin API v1 e Node 26. O contrato normativo continua em [`protocol.md`](protocol.md).
+Compatibilidade: Plugin API v2 e Node 26. O contrato normativo continua em [`protocol.md`](protocol.md) e [`../CONTENT_CONTRACT.md`](../CONTENT_CONTRACT.md).
 
 ## Prompt sugerido
 
-> Crie ou adapte um plugin independente para a ContentFlow Plugin API v1. Preserve a lógica da automação existente e implemente somente o adapter necessário para `execute(request, services)`. Use o contrato e o schema anexos. Não importe arquivos internos do aplicativo, não injete React/HTML, não grave credenciais e não execute instaladores. Entregue `contentflow.plugin.json`, o entrypoint ESM, `README.md`, `test.mjs` e uma fixture. Declare dados enviados a terceiros, permissões, dependências empacotadas, custos e riscos. Valide todos os itens deste documento antes de concluir.
+> Crie ou adapte um plugin independente para a ContentFlow Plugin API v2. Preserve a lógica da automação existente e implemente `execute(request, services)` usando exclusivamente os `ValueShape` declarados nas portas. Use o contrato e o schema anexos. Não importe arquivos internos do aplicativo, não injete React/HTML, não grave credenciais e não execute instaladores. Entregue `contentflow.plugin.json`, o entrypoint ESM, `README.md`, `test.mjs` e uma fixture. Declare dados enviados a terceiros, permissões, dependências empacotadas, custos e riscos. Valide todos os itens deste documento antes de concluir.
 
 Inclua no pedido o objetivo observável, operador, blocos compatíveis, entradas, saídas, tipos, hosts externos, nomes de credenciais, política de dados do provedor e se a implementação usa API, programa local, navegador ou job assíncrono.
 
@@ -37,9 +37,9 @@ Declare apenas as permissões necessárias entre `network`, `filesystem:read`, `
 
 ## Checklist
 
-- [ ] `apiVersion` é `1`, o ID é reverso e estável e a versão é semântica.
+- [ ] `apiVersion` é `2`, o ID é reverso e estável e a versão é semântica.
 - [ ] O runtime declara Node `>=26 <27`; o entrypoint existe e exporta `execute`.
-- [ ] Portas usam chaves semânticas, tipos públicos e outputs obrigatórios.
+- [ ] Portas usam chaves semânticas, um `shape` canônico por porta e outputs obrigatórios.
 - [ ] Permissões, efeitos, custos, provedores e política de dados descrevem o comportamento real.
 - [ ] `networkHosts` e `secretKeys` estão declarados quando aplicáveis.
 - [ ] O pacote não contém secrets, cookies, tokens, dados pessoais ou `.env`.

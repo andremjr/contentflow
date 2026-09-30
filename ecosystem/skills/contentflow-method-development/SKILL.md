@@ -9,7 +9,7 @@ Use esta skill para criar ou revisar a estratégia de um Processo Universal. Um 
 
 ## Antes de desenvolver
 
-Leia no checkout atual `AGENTS.md`, `docs/ARCHITECTURE.md`, `src/lib/domain.ts` e `src/lib/method-file.ts`. Quando a tarefa tocar execução, leia também os contratos vivos de deliveries/work units e o estado vigente do Reliability Program. Esses arquivos prevalecem sobre exemplos congelados desta skill.
+Leia no checkout atual `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/CONTENT_CONTRACT.md`, `src/lib/domain.ts` e `src/lib/method-file.ts`. Quando a tarefa tocar execução, leia também os contratos vivos de deliveries/work units e o estado vigente do Reliability Program. Esses arquivos prevalecem sobre exemplos congelados desta skill.
 
 Modelo atual:
 
@@ -31,13 +31,13 @@ O Method é congelado em `methodSnapshot` dentro da execução e pode integrar o
 
 ## Workflow
 
-1. Identifique qual dos 8 Processos está sendo modelado. Um arquivo `contentflow-method` v1 contém um único `processType`.
+1. Identifique qual dos 8 Processos está sendo modelado. Um arquivo `contentflow-method` v3 contém um único `processType`.
 2. Modele a estratégia com os quatro Blocos existentes e operadores compatíveis.
 3. Declare `inputs` e `outputs` no próprio Bloco. Use bindings estruturais (`project`, `previous_process`, `previous_block`, `channel_history`, `channel_library`, `runtime`, `static`) conforme o schema vivo.
-4. Trate contexto implícito/deprecated do executor apenas como **legacy compatibility**. Novos Métodos devem preferir bindings explícitos.
+4. Use exclusivamente bindings estruturais explícitos. Contexto implícito e campos planos antigos são inválidos.
 5. Ligue plugin/capability ao Bloco somente quando necessário. O binding escolhe capacidade; não transfere ao plugin autoridade sobre o fluxo.
 6. Valide tipo, schema, cardinalidade, `portKey`, proveniência e ordem antes de conectar uma saída a uma entrada.
-7. Para listas/coleções, trate items/work units como estado operacional criado e persistido pelo Core. O Method não inventa `itemId`, delivery ID ou identidade intermediária.
+7. Para shapes `many`, trate items/work units como estado operacional criado e persistido pelo Core. O Método não inventa `itemId`, delivery ID ou identidade intermediária.
 8. Valide o JSON com o parser real de `src/lib/method-file.ts` antes de entregar.
 
 ## VALIDAR e retry editorial

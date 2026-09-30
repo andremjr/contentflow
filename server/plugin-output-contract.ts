@@ -1,6 +1,6 @@
 import type { BlockFieldDefinition } from "../src/lib/domain";
 import type { PluginFieldContract, PluginOutputPort } from "../src/lib/plugin-contract";
-import { legacyTypeListAccepts } from "../src/lib/data-shape";
+import { areValueShapesCompatible } from "../src/lib/data-shape";
 
 export type PluginOutputContractValidation = {
   outputContract: PluginFieldContract[];
@@ -18,7 +18,7 @@ export function validatePluginOutputContract(
   const unsupportedFields = fields.filter((field) => {
     if (!field.portKey) return true;
     const port = ports.find((candidate) => candidate.key === field.portKey);
-    return !port || !legacyTypeListAccepts(port.producedTypes, field.type);
+    return !port || !areValueShapesCompatible(port.shape, field.shape);
   });
 
   if (unsupportedFields.length) return { outputContract: [], unsupportedFields };
@@ -28,10 +28,8 @@ export function validatePluginOutputContract(
     outputContract: fields.map((field) => ({
       label: field.label,
       key: field.key,
-      type: field.type,
+      shape: field.shape,
       required: field.required,
-      options: field.options,
-      recordFields: field.recordFields,
       presentation: field.presentation,
       portKey: field.portKey!,
     })),

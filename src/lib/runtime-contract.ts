@@ -4,24 +4,24 @@ import {
   type BlockInputBinding,
   type BlockInputSourceBinding,
   type ChannelLibraryItem,
-  type HumanFieldType,
   type ProcessExecution,
   type ProjectDelivery,
   type Project,
   type RuntimeValue,
   type StrategicCollection,
+  type ValueShape,
 } from "@/lib/domain";
 import { projectProcessOrder } from "@/lib/process-order";
 import { createProcessOutputFields, isEmptyRuntimeValue } from "@/lib/human-workflow";
 import { normalizeExecutionDeliveries, processOutputDeliveryFor } from "@/lib/deliveries";
 import { resolveChannelHistory } from "@/lib/channel-history";
-import { areHumanFieldTypesCompatible } from "@/lib/data-shape";
+import { areValueShapesCompatible } from "@/lib/data-shape";
 
 type RuntimeCandidate = {
   id: string;
   label: string;
   key: string;
-  type: HumanFieldType;
+  shape: ValueShape;
   value: RuntimeValue;
   sourceLabel: string;
   sourceBlockId?: string;
@@ -41,10 +41,6 @@ export type ResolvedBlockInput = {
   sourceDeliveryId?: string;
   sourceDeliveryItemIds?: string[];
 };
-
-function areRuntimeTypesCompatible(output: HumanFieldType, input: HumanFieldType) {
-  return areHumanFieldTypesCompatible(output, input);
-}
 
 export function resolveBlockInputs({
   block,
@@ -147,7 +143,7 @@ function collectCandidates({
             id: `${completed.blockId}:${field.id}`,
             label: field.label,
             key: field.id,
-            type: field.type,
+            shape: field.shape,
             value,
             sourceLabel: definition.name ?? "Escolher",
             sourceBlockId: completed.blockId,
@@ -169,7 +165,7 @@ function collectCandidates({
         id: `${completed.blockId}:${output.key}`,
         label: output.label,
         key: output.key,
-        type: output.type,
+        shape: output.shape,
         value,
         sourceLabel: definition.name ?? definition.type,
         sourceBlockId: completed.blockId,
@@ -203,9 +199,9 @@ function collectCandidates({
         id: delivery.id,
         label: delivery.label,
         key: delivery.outputKey,
-        type: delivery.type,
+        shape: delivery.shape,
         value:
-          delivery.cardinality === "many"
+          delivery.shape.cardinality === "many"
             ? (delivery.items.map((item) => item.value) as RuntimeValue)
             : ((delivery.items[0]?.value ?? null) as RuntimeValue),
         sourceLabel: `${PROCESS_META[processExecution.processType].label} / ${sourceBlock?.name ?? sourceBlock?.type ?? "Entrega"}`,
@@ -223,7 +219,7 @@ function collectCandidates({
         id: `process:${processExecution.processType}:${output.key}`,
         label: output.label,
         key: output.key,
-        type: output.type,
+        shape: output.shape,
         value,
         sourceLabel: `Processo ${PROCESS_META[processExecution.processType].label}`,
         sourceBlockId: "__process_output__",
@@ -309,7 +305,7 @@ function resolveCanonicalInput(
           item.sourceProcessType === undefined &&
           item.sourceBlockId === binding.blockId &&
           item.key === binding.outputKey &&
-          areRuntimeTypesCompatible(item.type, input.type),
+          areValueShapesCompatible(item.shape, input.shape),
       );
       return candidate ? resultForCandidate(candidate) : { result: { resolved: false } };
     }
@@ -320,7 +316,7 @@ function resolveCanonicalInput(
           item.sourceProcessType === binding.processType &&
           item.sourceBlockId === (binding.blockId ?? "__process_output__") &&
           item.key === binding.outputKey &&
-          areRuntimeTypesCompatible(item.type, input.type),
+          areValueShapesCompatible(item.shape, input.shape),
       );
       return candidate ? resultForCandidate(candidate) : { result: { resolved: false } };
     }

@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "title": "ContentFlow Plugin API v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "id", "name", "version", "description", "author", "license", "runtime", "entrypoint", "permissions", "capabilities"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "apiVersion": { "const": "2" },
+    "id": { "type": "string", "minLength": 3 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "version": { "type": "string" },
+    "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "author": { "type": "string", "minLength": 1 },
+    "license": { "type": "string", "minLength": 1 },
+    "entrypoint": { "type": "string", "minLength": 1 },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "version", "module"],
+      "properties": {
+        "kind": { "const": "node" },
+        "version": { "type": "string" },
+        "module": { "const": "esm" }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["network", "filesystem:read", "filesystem:write", "process", "worker", "native"] }
+    },
+    "networkHosts": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "secretKeys": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "optionalSecretKeys": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "minCoreVersion": { "type": "string" },
+    "homepage": { "type": "string", "format": "uri" },
+    "repository": { "type": "string", "format": "uri" },
+    "branding": { "type": "object" },
+    "localizations": { "type": "object" },
+    "settingsSchema": { "type": "object" },
+    "profileSetup": { "type": "object" },
+    "browserRuntime": { "type": "object" },
+    "supportsConversationContinuation": { "type": "boolean" },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/capability" }
+    }
+  },
+  "$defs": {
+    "cardinality": { "enum": ["one", "many"] },
+    "formats": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mimeTypes": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "extensions": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+      }
+    },
+    "contentShape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "family", "cardinality", "representation"],
+      "properties": {
+        "kind": { "const": "content" },
+        "family": { "enum": ["text", "image", "audio", "video"] },
+        "cardinality": { "$ref": "#/$defs/cardinality" },
+        "representation": { "enum": ["inline", "artifact", "either"] },
+        "formats": { "$ref": "#/$defs/formats" }
+      }
+    },
+    "controlShape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "control", "cardinality"],
+      "properties": {
+        "kind": { "const": "control" },
+        "control": { "enum": ["identifier", "number", "boolean", "selection", "datetime", "url", "approval", "thumbnail_layout"] },
+        "cardinality": { "$ref": "#/$defs/cardinality" },
+        "options": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "atomicShape": { "oneOf": [{ "$ref": "#/$defs/contentShape" }, { "$ref": "#/$defs/controlShape" }] },
+    "recordField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "key", "shape", "required"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "key": { "type": "string", "minLength": 1 },
+        "shape": { "$ref": "#/$defs/atomicShape" },
+        "required": { "type": "boolean" }
+      }
+    },
+    "recordShape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "cardinality", "fields"],
+      "properties": {
+        "kind": { "const": "record" },
+        "cardinality": { "$ref": "#/$defs/cardinality" },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/recordField" } }
+      }
+    },
+    "valueShape": {
+      "oneOf": [
+        { "$ref": "#/$defs/contentShape" },
+        { "$ref": "#/$defs/controlShape" },
+        { "$ref": "#/$defs/recordShape" }
+      ]
+    },
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["renderer"],
+      "properties": {
+        "renderer": { "enum": ["auto", "text-short", "text-long", "list", "tags", "table", "cards", "file-list", "image-gallery", "audio-player", "video-player", "decision"] },
+        "itemType": { "enum": ["text", "record", "file", "image", "audio", "video"] }
+      }
+    },
+    "port": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "shape", "required"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "shape": { "$ref": "#/$defs/valueShape" },
+        "required": { "type": "boolean" },
+        "presentation": { "$ref": "#/$defs/presentation" }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "operator", "blockTypes", "inputPorts", "outputPorts", "execution", "sideEffects", "cost", "dataPolicy", "blockConfigSchema", "outputSchema"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "operator": { "enum": ["Humano", "IA", "Código"] },
+        "blockTypes": { "type": "array", "items": { "enum": ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"] } },
+        "processTypes": { "type": "array", "items": { "enum": ["theme", "title", "thumbnail", "script", "narration", "assets", "editing", "publishing"] } },
+        "inputPorts": { "type": "array", "items": { "$ref": "#/$defs/port" } },
+        "outputPorts": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/port" } },
+        "execution": { "type": "object" },
+        "sideEffects": { "type": "array" },
+        "cost": { "type": "object" },
+        "dataPolicy": { "type": "object" },
+        "blockConfigSchema": { "type": "object" },
+        "outputSchema": { "type": "object" }
+      }
+    }
+  }
+}

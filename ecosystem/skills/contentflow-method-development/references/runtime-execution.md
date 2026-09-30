@@ -1,55 +1,11 @@
-# Runtime, binding e entregas
+# Runtime, binding e deliveries
 
-## Estados
+O Método v3 armazena bindings estruturais e `ValueShape`. O runtime resolve a origem, valida compatibilidade exata de shape e transporta o valor junto da identidade de delivery/item.
 
-Um Processo pode estar em `not_started`, `configuring`, `processing`, `awaiting_human`, `awaiting_review`, `approved`, `done`, `error` ou `blocked`. `awaiting_human` é espera legítima por entrega/decisão; `blocked` indica executor ou requisito não resolvido; `error` é falha técnica.
+Humano, IA e Código usam o mesmo contrato. O executor não altera família, cardinalidade ou representação. Uma delivery copia o shape da saída; `one` materializa um item e `many` materializa um item por elemento.
 
-## Resolução de inputs
+Item orchestration só expande uma porta cujo shape declara `cardinality: "many"`. O fato de um valor JavaScript ser array nunca cria cardinalidade nem autoriza loop.
 
-O Método armazena referências estruturais. O runtime resolve a referência para entregas e itens reais durante a execução. Use:
+`VALIDAR` preserva approval, `select_one`, `select_many`, feedback e retry editorial. `ESCOLHER` permanece ligado à Biblioteca Estratégica. Nenhum deles cria família de conteúdo.
 
-- `project` para `title` ou `deadline`;
-- `previous_process` para output de processo anterior, com `sourceProcessType` e `sourceKey`;
-- `previous_block` para output de bloco anterior do mesmo Método;
-- `channel_history` para memória derivada de Projetos anteriores, somente em `ESCOLHER` e `CRIAR`;
-- `channel_library` para coleção dependente do Canal;
-- `static` para contexto fixo com `staticValue`.
-
-Algumas bordas legadas ainda conseguem inferir candidatos por proximidade, tipo ou semelhança de nome. Isso é **legacy compatibility**, não contrato recomendado para novos Métodos. Declare bindings e `portKey` explicitamente e trate ambiguidade como diagnóstico. O mesmo output não deve ser usado duas vezes como entrada do mesmo bloco quando isso criar ambiguidade.
-
-Listas não implicam sozinhas um loop. O comportamento depende da porta e do contrato do plugin: uma porta de contexto pode receber a lista inteira; uma porta de estrutura pode conduzir uma sequência interna; `execution.itemOrchestration` pode solicitar chamadas atômicas do núcleo. O painel do plugin deve informar qual desses comportamentos será usado antes da execução.
-
-## Execução de blocos
-
-O executor materializa inputs, aplica parâmetros e configuração do executor, executa IA/Humano/Código, valida outputs pelo schema e registra entregas. Um bloco só deve ser considerado concluído quando seus outputs obrigatórios estiverem preenchidos e compatíveis. O Método não contém valores de projeto nem IDs transitórios.
-
-Quando um plugin declara continuidade de conversa, o runtime pode reutilizar o ID opaco produzido por um bloco anterior do mesmo projeto. A origem deve ser anterior na ordem dos processos/blocos e usar o mesmo plugin e a mesma conexão; retries que invalidam o resultado também invalidam esse metadado. O Método guarda apenas a referência estrutural ao bloco de origem.
-
-`channel_history` sempre chega ao executor como `records` e histórico vazio é válido. Em `ESCOLHER`, consulta as decisões concluídas do mesmo bloco em Projetos anteriores; em `CRIAR`, consulta os outputs oficiais anteriores do mesmo Processo. O limite é de 1 a 100 itens, o Projeto atual é excluído e `BUSCAR`/`VALIDAR` não usam essa memória. O lote inteligente cria vários Projetos no Orquestrador e não deve ser modelado como um Método multivídeo.
-
-## Outputs oficiais
-
-| Processo     | Campo oficial | Type       |
-| ------------ | ------------- | ---------- |
-| `theme`      | `theme`       | `textarea` |
-| `title`      | `title`       | `text`     |
-| `thumbnail`  | `thumbnail`   | `image`    |
-| `script`     | `script`      | `textarea` |
-| `narration`  | `audio`       | `audio`    |
-| `assets`     | `assets`      | `files`    |
-| `editing`    | `video`       | `video`    |
-| `publishing` | `url`         | `url`      |
-
-Se a cadeia não produzir o output oficial, o Processo deve aguardar uma entrega humana ou um bloco adicional que transforme o valor para o tipo correto. Não promover `thumbnail_layout` para `image` sem renderização.
-
-## Human-in-the-loop
-
-Blocos `Humano` pausam em `awaiting_human` e devem mostrar inputs tipados, instruções, critérios e outputs esperados. `VALIDAR` diferencia aprovação (`approval`), seleção singular (`select_one`) e seleção múltipla (`select_many`). O resultado deve ser persistido como output tipado e feedback separado quando necessário.
-
-## Retry
-
-`VALIDAR` pode usar `onReject: retry_target` para reexecutar o bloco alvo/trecho permitidos, ou `onReject: pause` para aguardar intervenção. `maxAttempts` limita tentativas. Uma reprovação não é erro técnico; é uma decisão de processo com proveniência e feedback.
-
-## Entregas
-
-Entregas são registros derivados/persistidos da execução, com IDs e arquivos reais. Nunca coloque `deliveryId` ou `itemId` no arquivo do Método. Snapshot de execução pode guardar o Método utilizado, estados, drafts e entregas para auditoria e reprodutibilidade.
+Outputs oficiais seguem a tabela de [`data-compatibility.md`](data-compatibility.md). Assets visuais usam portas separadas de imagens e vídeos.

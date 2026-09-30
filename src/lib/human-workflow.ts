@@ -3,13 +3,14 @@ import {
   type ActionBlock,
   type BlockFieldDefinition,
   type BlockType,
-  type HumanFieldType,
   type ProcessId,
   type ProcessMethod,
   type RuntimeValue,
+  type ValueShape,
   type ValidationMode,
 } from "@/lib/domain";
 import { normalizeFieldPresentation } from "@/lib/presentation";
+import { contentShape, controlShape } from "@/lib/data-shape";
 
 export function getMethodConfigurationIssue(method?: ProcessMethod) {
   if (!method?.blocks.length) return "O processo ainda não possui um método.";
@@ -42,17 +43,18 @@ export function getMethodConfigurationIssue(method?: ProcessMethod) {
       if (sourceKind === "channel_history" && source?.kind !== "channel_history") {
         return `Selecione a origem do histórico do canal na entrada “${input.label}”.`;
       }
-      if (sourceKind === "channel_history" && input.type !== "records") {
+      if (sourceKind === "channel_history" && input.shape.kind !== "record") {
         return `A entrada de histórico “${input.label}” precisa usar Lista de registros.`;
       }
     }
     for (const structuredField of [...(block.inputs ?? []), ...(block.outputs ?? [])].filter(
-      (field) => field.type === "records",
+      (field) => field.shape.kind === "record",
     )) {
-      const recordKeys = (structuredField.recordFields ?? [])
+      const recordFields = structuredField.shape.kind === "record" ? structuredField.shape.fields : [];
+      const recordKeys = recordFields
         .map((field) => field.key.trim())
         .filter(Boolean);
-      if (!recordKeys.length || recordKeys.length !== structuredField.recordFields?.length) {
+      if (!recordKeys.length || recordKeys.length !== recordFields.length) {
         return `Defina a chave de todos os campos da lista de registros “${structuredField.label}”.`;
       }
       if (new Set(recordKeys).size !== recordKeys.length) {
@@ -101,15 +103,14 @@ export const PROCESS_ROUTE_SEGMENT: Record<ProcessId, string> = {
   publishing: "publish",
 };
 
-const FINAL_FIELD_TYPE: Record<ProcessId, HumanFieldType> = {
-  theme: "textarea",
-  title: "text",
-  thumbnail: "image",
-  script: "textarea",
-  narration: "audio",
-  assets: "files",
-  editing: "video",
-  publishing: "url",
+const FINAL_FIELD_SHAPE: Record<Exclude<ProcessId, "assets">, ValueShape> = {
+  theme: contentShape("text"),
+  title: contentShape("text"),
+  thumbnail: contentShape("image"),
+  script: contentShape("text"),
+  narration: contentShape("audio"),
+  editing: contentShape("video"),
+  publishing: controlShape("url"),
 };
 
 const FINAL_FIELD_KEY: Record<ProcessId, string> = {
@@ -135,12 +136,32 @@ const FINAL_FIELD_LABEL: Record<ProcessId, string> = {
 };
 
 export function createProcessOutputFields(processType: ProcessId): BlockFieldDefinition[] {
+  if (processType === "assets") {
+    return [
+      {
+        id: "process-output-assets-images",
+        label: "Imagens finais",
+        key: "images",
+        shape: contentShape("image", "many"),
+        required: false,
+        placeholder: "Adicione as imagens finais",
+      },
+      {
+        id: "process-output-assets-videos",
+        label: "Vídeos finais",
+        key: "videos",
+        shape: contentShape("video", "many"),
+        required: false,
+        placeholder: "Adicione os vídeos finais",
+      },
+    ];
+  }
   return [
     {
       id: `process-output-${processType}`,
       label: FINAL_FIELD_LABEL[processType],
       key: FINAL_FIELD_KEY[processType],
-      type: FINAL_FIELD_TYPE[processType],
+      shape: FINAL_FIELD_SHAPE[processType],
       required: true,
       placeholder:
         processType === "publishing"
@@ -154,14 +175,14 @@ function field(
   prefix: string,
   label: string,
   key: string,
-  type: HumanFieldType,
+  shape: ValueShape,
   placeholder?: string,
 ): BlockFieldDefinition {
   return {
     id: `${prefix}-${crypto.randomUUID()}`,
     label,
     key,
-    type,
+    shape,
     required: true,
     placeholder,
   };
@@ -174,9 +195,21 @@ export function createSuggestedHumanFields(
   const prefix = `${processType}-${blockType.toLowerCase()}`;
   if (blockType === "BUSCAR") {
     return [
-      field(prefix, "Itens encontrados", "items_found", "list", "Adicione um item por linha"),
+      field(
+        prefix,
+        "Itens encontrados",
+        "items_found",
+        contentShape("text", "many"),
+        "Adicione um item por linha",
+      ),
       {
-        ...field(prefix, "Fontes consultadas", "sources", "list", "Cole URLs ou referências"),
+        ...field(
+          prefix,
+          "Fontes consultadas",
+          "sources",
+          contentShape("text", "many"),
+          "Cole URLs ou referências",
+        ),
         required: false,
       },
     ];
@@ -192,7 +225,7 @@ export function createSuggestedHumanFields(
       prefix,
       `${PROCESS_META[processType].label} produzido`,
       FINAL_FIELD_KEY[processType],
-      FINAL_FIELD_TYPE[processType],
+      processType === "assets" ? contentShape("image", "many") : FINAL_FIELD_SHAPE[processType],
       "Entregue o resultado deste bloco",
     ),
   ];
@@ -202,33 +235,26 @@ export function createValidationFields(
   mode: ValidationMode,
   targetBlockId?: string,
   targetOutputKey?: string,
-  targetOutputType?: HumanFieldType,
+  targetOutputShape?: ValueShape,
 ): BlockFieldDefinition[] {
   const prefix = `validation-${mode}`;
   const feedback = {
-    ...field(prefix, "Observações", "feedback", "textarea", "Explique sua decisão"),
+    ...field(prefix, "Observações", "feedback", contentShape("text"), "Explique sua decisão"),
     required: false,
   };
   if (mode === "approval") {
-    return [field(prefix, "Decisão", "decision", "approval"), feedback];
+    return [field(prefix, "Decisão", "decision", controlShape("approval")), feedback];
   }
-  const selectedType: HumanFieldType =
-    mode === "select_many"
-      ? targetOutputType === "files"
-        ? "files"
-        : "list"
-      : targetOutputType === "files"
-        ? "file"
-        : targetOutputType === "list" || targetOutputType === "multiselect"
-          ? "text"
-          : (targetOutputType ?? "text");
+  const selectedShape: ValueShape = targetOutputShape
+    ? { ...structuredClone(targetOutputShape), cardinality: mode === "select_many" ? "many" : "one" }
+    : contentShape("text", mode === "select_many" ? "many" : "one");
   return [
     {
       ...field(
         prefix,
         mode === "select_many" ? "Opções escolhidas" : "Opção escolhida",
         mode === "select_many" ? "selected_values" : "selected_value",
-        selectedType,
+        selectedShape,
       ),
       optionsSourceBlockId: targetBlockId,
       optionsSourceKey: targetOutputKey,
@@ -245,10 +271,10 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
     inputs: (block.inputs ?? []).map((input) => {
       const binding = input.binding;
       const sourceKind = binding?.kind;
-      const type = sourceKind === "channel_history" ? "records" : (input.type ?? "text");
+      const shape = input.shape;
       return {
         ...input,
-        type,
+        shape,
         historyLimit:
           sourceKind === "channel_history"
             ? binding?.kind === "channel_history"
@@ -261,7 +287,7 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
               ? binding.eligibility
               : (input.historyEligibility ?? "completed")
             : undefined,
-        presentation: normalizeFieldPresentation(type, input.presentation),
+        presentation: normalizeFieldPresentation(shape, input.presentation),
       };
     }),
     outputs:
@@ -270,11 +296,11 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
         : block.outputs?.length
           ? block.outputs.map((output) => ({
               ...output,
-              presentation: normalizeFieldPresentation(output.type, output.presentation),
+              presentation: normalizeFieldPresentation(output.shape, output.presentation),
             }))
           : createSuggestedHumanFields(processType, block.type).map((output) => ({
               ...output,
-              presentation: normalizeFieldPresentation(output.type, output.presentation),
+              presentation: normalizeFieldPresentation(output.shape, output.presentation),
             })),
     validation:
       block.type === "VALIDAR"
@@ -324,7 +350,7 @@ export function normalizeMethodBlocks(blocks: ActionBlock[], processType: Proces
           mode,
           block.validation.targetBlockId,
           block.validation.targetOutputKey,
-          targetOutput?.type,
+          targetOutput?.shape,
         );
       } else if (mode !== "approval") {
         block.outputs = (block.outputs ?? []).map((output) =>

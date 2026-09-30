@@ -1,561 +1,86 @@
-# Protocolo de Plugins do ContentFlow — API v1
+# ContentFlow Plugin API v2
 
-Este documento é o contrato normativo entre o núcleo do ContentFlow e plugins dos operadores `IA` e `Código`. Em caso de divergência, a tipagem em [`src/lib/plugin-contract.ts`](../../src/lib/plugin-contract.ts) e este documento devem ser atualizados juntos.
+Este é o protocolo público vigente de plugins. O contrato de dados normativo está em [`../CONTENT_CONTRACT.md`](../CONTENT_CONTRACT.md).
 
-O executor isolado atende todos os plugins externos da mesma forma. Cada pacote é validado automaticamente, exige consentimento local por versão/permissões e executa em processo separado sob a sandbox do Node 26. Não existe plugin embutido ou confiança implícita, nem aprovação central para criar, compartilhar, instalar ou ativar um plugin. A API v1 já é pública; qualquer alteração futura incompatível exige uma nova `apiVersion`.
+## Manifesto
 
-Documentos relacionados:
-
-- [`ai-development.md`](ai-development.md): prompt, resumo e checklist para criação assistida por IA.
-- [`quickstart.md`](quickstart.md): entrada rápida para criar ou converter uma automação.
-- [`tutorial.md`](tutorial.md): aula prática com o kit oficial.
-- [`development.md`](development.md): tutorial de implementação.
-- [`roadmap.md`](roadmap.md): ordem estratégica e catálogo por processo.
-- [`security.md`](security.md): modelo de ameaças e requisitos do executor.
-- [`browser-automation.md`](browser-automation.md): requisitos para plugins que automatizam interfaces web.
-- [`distribution.md`](distribution.md): publicação, revisão e governança do catálogo.
-- [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json): schema validável do manifesto v1.
-- [`ARCHITECTURE.md`](../ARCHITECTURE.md): domínio, processos, blocos e operadores.
-- [`LEGAL_AND_LICENSING.md`](../LEGAL_AND_LICENSING.md): limites jurídicos e política de licenciamento.
-
-## 1. Objetivos do protocolo
-
-O protocolo deve permitir que um plugin:
-
-- declare capacidades atômicas e compatibilidade;
-- receba entradas já resolvidas e tipadas;
-- produza saídas aderentes ao bloco;
-- execute operações imediatas ou demoradas;
-- reporte progresso, uso e erros operacionais;
-- gere arquivos sem obter acesso ao armazenamento interno;
-- seja cancelado e retomado com segurança;
-- funcione sem conhecer SQLite, rotas, componentes ou estado da interface.
-
-Não fazem parte da API v1:
-
-- novos Processos Universais, blocos ou operadores;
-- ramificações, loops ou paralelismo definidos pelo plugin;
-- acesso direto ao banco;
-- componentes React injetados pelo plugin;
-- instalação arbitrária de dependências durante a execução;
-- execução de plugins do operador `Humano`.
-- navegador, perfil autenticado ou extração de sessão fornecidos automaticamente pelo núcleo. Um plugin pode implementar sua própria automação com permissões genéricas e autenticação explícita do usuário.
-
-## 2. Vocabulário
-
-- **Plugin:** pacote instalável com manifesto e entrypoint.
-- **Capacidade:** operação atômica oferecida pelo plugin para combinações de bloco, operador e processo.
-- **Porta:** papel semântico de uma entrada ou saída, como `audio`, `script` ou `timeline`.
-- **Binding:** conexão entre uma entrada/saída do Método e uma porta da capacidade.
-- **Configuração do bloco:** parâmetros da capacidade salvos naquela instância do bloco.
-- **Conexão local:** conta, sessão ou conjunto de credenciais nomeado e identificado por `connectionId`, armazenado pelo núcleo e referenciado por um Bloco sem expor seus secrets.
-- **Requisito de conexão:** descrição portátil do plugin e dos recursos de autenticação exigidos, usada quando um Método é exportado sem o `connectionId` local.
-- **Setting:** preferência local global do plugin, compartilhada por blocos.
-- **Secret:** credencial local declarada por nome e nunca serializada no Método.
-- **Artifact:** arquivo produzido pelo plugin e importado pelo núcleo.
-- **Job:** execução externa demorada que pode ser consultada ou cancelada.
-- **Tentativa:** número de execução do bloco dentro da política de validação/repetição.
-- **Entrega:** registro universal de uma saída produzida em um Projeto, identificado por execução, bloco, chave e tentativa.
-- **Item de entrega:** subentrega identificada e ordenada dentro de uma entrega escalar ou múltipla.
-
-## 3. Fronteira de responsabilidades
-
-### Núcleo
-
-O ContentFlow controla:
-
-- canais, projetos e Métodos;
-- ordem e estado dos blocos;
-- resolução e binding das entradas;
-- Biblioteca Estratégica;
-- snapshot e persistência da execução;
-- tentativas, validações e repetição de trechos;
-- staging e armazenamento definitivo de arquivos;
-- credenciais, permissões e consentimento;
-- timeout, polling, cancelamento e limites de recursos;
-- validação de manifestos, configurações, requisições e respostas;
-- promoção para outputs universais e notificações humanas.
-
-### Plugin
-
-O plugin:
-
-- executa somente a capacidade solicitada;
-- interpreta as portas semânticas que declarou;
-- respeita configuração, contrato de saída e permissões;
-- devolve sucesso, pendência ou erro;
-- não altera a ordem dos blocos;
-- não inicia sozinho outra capacidade;
-- não acessa diretamente SQLite, interface ou diretórios internos;
-- não decide repetição, aprovação humana ou publicação pública fora do contrato.
-
-Todo dado interno do ContentFlow que o plugin pode ler chega na requisição, por secrets declarados ou pelos serviços controlados `resolveInputFile()` e `getWorkspacePath()`. Resultados para outros blocos voltam na resposta e em artifacts declarados; o workspace guarda apenas estado próprio/checkpoints autorizados.
-
-## 4. Pacote e runtime
-
-A API v1 começa com um único runtime para reduzir superfície de segurança:
-
-```text
-runtime.kind     node
-runtime.module   esm
-runtime.version  faixa compatível com o runtime empacotado pelo aplicativo
-```
-
-Estrutura mínima:
-
-```text
-meu-plugin/
-├── contentflow.plugin.json
-├── dist/
-│   └── index.js
-├── README.md
-└── LICENSE
-```
-
-Regras:
-
-- `entrypoint` é relativo à raiz e não pode conter travessia (`..`).
-- O entrypoint exporta uma função assíncrona chamada `execute(request, services)`.
-- O pacote distribuído contém o build e todas as dependências de runtime necessárias.
-- Um plugin pronto precisa ser autossuficiente na plataforma declarada: não pode exigir que o usuário instale Python, FFmpeg, bibliotecas, CLIs, navegadores ou qualquer outro software além do ContentFlow. Binários e runtimes adicionais necessários ficam dentro da pasta do plugin, com plataforma, arquitetura, versão, integridade e licenças documentadas; o handler os resolve por caminho relativo ao próprio pacote e nunca pelo `PATH` da máquina.
-- Scripts de instalação não são executados automaticamente.
-- Arquivos `.env`, caches, credenciais e dados de usuário são proibidos.
-- Symlinks que escapem da pasta do plugin são rejeitados.
-- O carregador pode impor limite de tamanho e quantidade de arquivos.
-
-O segundo argumento contém serviços controlados pelo executor:
-
-```ts
-type PluginExecutionServices = {
-  signal: AbortSignal;
-  getSecret(key: string): Promise<string | undefined>;
-  resolveInputFile(file: StoredFile): Promise<string>;
-  getOutputPath(relativePath: string): string;
-  getWorkspacePath(relativePath: string): string;
-  getProfilePath?(relativePath: string): string;
-  publishPartial(update: {
-    values: Record<string, RuntimeValue>;
-    artifacts?: PluginArtifact[];
-    itemUpdates?: Array<{
-      key: string;
-      variantKey?: string;
-      outputPort: string;
-      state: "created" | "running" | "completed" | "failed";
-      input?: RuntimeValue | StructuredRecord;
-      value?: RuntimeValue | StructuredRecord;
-      message?: string;
-      errorCode?: string;
-      retryable?: boolean;
-    }>;
-    progress?: number;
-    message?: string;
-    logs?: string[];
-  }): Promise<void>;
-  registerItems?(
-    parentItemId: string,
-    plannedItems: Array<{
-      key: string;
-      order: number;
-      input: RuntimeValue | StructuredRecord;
-    }>,
-  ): Promise<PluginClaimedWorkItem[]>;
-  claimItems?(limit: number): Promise<PluginClaimedWorkItem[]>;
-  publishItemUpdate?(update: PluginWorkItemUpdate): Promise<{
-    itemId: string;
-    revision: number;
-  }>;
-};
-```
-
-O plugin encaminha `signal` a operações abortáveis. `getSecret` aceita apenas chaves declaradas pelo próprio manifesto. `resolveInputFile` abre uma entrada, `getOutputPath` cria um artifact temporário e `getWorkspacePath` aponta para arquivos/checkpoints privados do plugin. `getProfilePath` é o nome reservado para a raiz do perfil global de navegador selecionado pelo núcleo; ele só existe numa invocação com vínculo explícito e válido entre aquele plugin e o perfil. O handler não recebe a raiz de outros perfis e não pode enumerá-los. `publishPartial` continua sendo o serviço de compatibilidade para snapshots agregados e eventos incrementais do modelo atual. Os serviços retornam caminhos dentro das raízes concedidas, nunca um caminho arbitrário escolhido pelo código do plugin.
-
-O identificador canônico local do perfil é `profileId`; a política local do Bloco usa `profileExecution` com os modos canônicos `fallback` ou `parallel`, `profileIds: string[]` e `maxParallel?: number`. Fallback ordenado é o padrão mesmo com um único perfil; a ausência de um segundo perfil apenas significa que não há próximo candidato. O valor histórico `single` continua aceito na leitura e é normalizado para `fallback`. Esses IDs são opacos, pertencem à instalação local e nunca são enviados ao plugin em `request`. O núcleo resolve o `profileId`, valida vínculo/readiness/revogação e então concede somente `getProfilePath` e o alias ativo exigido pelo contrato legado do plugin. `profileExecution` não faz parte do manifesto e sua persistência no Método pertence a uma fase posterior do núcleo.
-
-`registerItems`, `claimItems` e `publishItemUpdate` são extensões aditivas da API v1 para o contrato de coleção contínua. Elas permanecem opcionais no tipo porque o runtime negocia cada serviço conforme a estratégia ativa. Em jobs de Projeto compatíveis, `registerItems` recebe um plano de filhos sem IDs universais, valida `parentItemId`, ordem, entrada e chave semântica, persiste as identidades no núcleo e só então devolve os descritores. Repetir o mesmo `parent + key` com a mesma ordem e entrada dentro da mesma tentativa lógica devolve o mesmo `itemId`; tentar alterar esse plano é rejeitado. Quando `continuous_session` é a estratégia preferida, `claimItems` concede unidades já persistidas à mesma invocação, com `itemId`, índice, total e tentativa, e o núcleo mantém a concessão associada àquela invocação e ao perfil físico selecionado até conclusão, erro, cancelamento ou expiração. O request inicial preserva a coleção materializada inteira e não usa `batch` unitário. `publishItemUpdate` permanece reservado para a persistência incremental por item e só deve resolver depois que a transição material for persistida. O plugin nunca escolhe `itemId`.
-
-O descritor concedido contém `itemId`, índice, total, ordem, tentativa, revisão, input e proveniência opcional (`sourceDeliveryId`, `sourceItemId`, `parentItemId`). O ciclo durável aceita os estados `planned`, `pending`, `leased`, `submitted`, `awaiting_result`, `completed`, `failed`, `awaiting_human` e `cancelled`. `submitted` significa que um efeito externo pode ter ocorrido e, portanto, impede retry cego. Uma atualização material usa `expectedRevision`; uma revisão obsoleta ou um `itemId` não concedido àquela invocação é rejeitado.
-
-Webhooks e runtimes adicionais podem ser oferecidos depois por adapters oficiais, sem tornar a API v1 genérica demais.
-
-## 5. Manifesto
-
-Cada plugin possui `contentflow.plugin.json` na raiz:
+O pacote contém `contentflow.plugin.json` na raiz:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json",
-  "apiVersion": "1",
-  "id": "com.exemplo.gerador-texto",
-  "name": "Gerador de texto",
+  "apiVersion": "2",
+  "id": "com.example.plugin",
+  "name": "Plugin",
   "version": "1.0.0",
-  "description": "Cria textos usando um provedor externo.",
-  "author": "Exemplo",
-  "license": "MIT",
-  "homepage": "https://example.com/contentflow-plugin",
-  "repository": "https://github.com/example/contentflow-plugin",
-  "branding": {
-    "iconPath": "assets/icon.png"
-  },
-  "runtime": {
-    "kind": "node",
-    "version": ">=26 <27",
-    "module": "esm"
-  },
-  "minCoreVersion": "0.2.0",
-  "entrypoint": "dist/index.js",
-  "permissions": ["network"],
-  "secretKeys": ["EXEMPLO_API_KEY"],
-  "deliveryTypes": ["text"],
-  "settingsSchema": {
-    "type": "object",
-    "properties": {
-      "baseUrl": { "type": "string", "format": "uri" }
-    }
-  },
-  "capabilities": [
-    {
-      "id": "generate-text",
-      "operator": "IA",
-      "blockTypes": ["CRIAR"],
-      "processTypes": ["theme", "title", "script"],
-      "inputPorts": [
-        {
-          "key": "prompt",
-          "label": "Contexto",
-          "acceptedTypes": ["text", "textarea", "list", "records"],
-          "required": true,
-          "multiple": true
-        }
-      ],
-      "outputPorts": [
-        {
-          "key": "result",
-          "label": "Resultado",
-          "producedTypes": ["text", "textarea", "list", "records"],
-          "required": true
-        }
-      ],
-      "acceptedInputTypes": ["text", "textarea", "list", "records"],
-      "producedOutputTypes": ["text", "textarea", "list", "records"],
-      "execution": {
-        "mode": "immediate",
-        "defaultTimeoutMs": 60000,
-        "supportsCancellation": false,
-        "maxConcurrency": 2
-      },
-      "sideEffects": ["external_write"],
-      "cost": {
-        "model": "metered",
-        "estimateSupported": true
-      },
-      "dataPolicy": {
-        "sendsDataToThirdParties": true,
-        "providers": ["Exemplo AI"],
-        "retentionPolicyUrl": "https://example.com/retention",
-        "trainingPolicyUrl": "https://example.com/training"
-      },
-      "blockConfigSchema": {
-        "type": "object",
-        "properties": {
-          "model": { "type": "string" },
-          "temperature": { "type": "number", "minimum": 0, "maximum": 2, "default": 0.7 }
-        },
-        "required": ["model"]
-      },
-      "outputSchema": { "type": "object" }
-    }
-  ]
+  "description": "Descrição",
+  "author": "Autor",
+  "license": "Proprietary",
+  "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
+  "entrypoint": "handler.mjs",
+  "permissions": [],
+  "capabilities": []
 }
 ```
 
-`secretKeys` declara todos os nomes que o handler pode solicitar ao cofre. Por padrão, a presença de ao menos uma chave declarada torna uma conexão local obrigatória. Quando uma chave apenas habilita uma fonte ou recurso opcional, inclua-a também em `optionalSecretKeys`; esse campo precisa ser subconjunto de `secretKeys`. Se todas as chaves forem opcionais, o bloco pode executar sem conexão e `getSecret()` devolve `undefined`, enquanto uma conexão escolhida continua disponibilizando apenas os valores nela armazenados. A descoberta por `configurationOptions` usa a mesma conexão local selecionada e nunca envia seus valores à interface ou à configuração do Método.
+IDs de plugin, capability e porta são estáveis. Mudá-los, remover porta ou alterar seu shape exige nova major do plugin.
 
-### Identidade e versão
+## Capabilities e portas
 
-- `apiVersion` deve ser `"1"`.
-- `id` é global, imutável e usa domínio reverso em minúsculas.
-- `version` segue SemVer.
-- `minCoreVersion` declara a versão mínima pretendida. Na versão atual ele é metadado de compatibilidade; o autor ainda deve testar e informar a versão suportada no README.
-- `capability.id` é único dentro do plugin e não muda depois de publicado.
-- `capability.name` e `capability.description` são opcionais, exibidos ao usuário para explicar a entrega da capability. O identificador técnico permanece interno ao contrato e pode ser consultado nos detalhes técnicos.
-- `license` identifica a licença do pacote com expressão SPDX quando existir; licenças personalizadas usam um identificador estável e incluem o arquivo integral no pacote.
-- `homepage` e `repository`, quando informados, usam URLs HTTPS e apontam para páginas controladas pelo publicador.
-- Nome, descrição, autor, licença e URLs são metadados não confiáveis: a interface escapa o conteúdo e nunca renderiza HTML fornecido pelo manifesto.
-
-### Localização portátil
-
-O manifesto pode declarar `localizations`, um mapa opcional por locale BCP 47. O texto-base continua obrigatório e é a fonte de compatibilidade para plugins existentes. O mapa traduz somente a moldura visual fornecida pelo plugin:
-
-- `name` e `description` do plugin;
-- `profileSetup.label` e `profileSetup.description`;
-- `name` e `description` de capabilities;
-- `label` e `description` de portas;
-- `label` de `itemActions`;
-- `title`, `description` e labels de opções estáticas em `blockConfigSchema.properties`.
-
-Exemplo:
+Uma capability declara operador, Blocos/Processos compatíveis, portas, execução, efeitos, custo, política de dados e schema de configuração.
 
 ```json
 {
-  "name": "Estúdio neutro",
-  "description": "Cria um resultado.",
-  "localizations": {
-    "en": {
-      "name": "Neutral Studio",
-      "description": "Creates a result.",
-      "capabilities": {
-        "generate": {
-          "name": "Generate media",
-          "outputPorts": {
-            "media": { "label": "Media" }
-          },
-          "blockConfigSchema": {
-            "properties": {
-              "quality": {
-                "title": "Quality",
-                "options": [
-                  { "value": "fast", "label": "Fast" },
-                  { "value": "best", "label": "Best" }
-                ]
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-O fallback é determinístico: `locale exato → idioma-base → texto-base`. Assim, `en-US` usa primeiro `en-US`, depois `en`, e por fim o texto original do manifesto. Locales BCP 47 adicionais são permitidos.
-
-As chaves dentro de `capabilities`, `inputPorts`, `outputPorts`, `itemActions` e `blockConfigSchema.properties` referenciam alvos já existentes. O validador rejeita locale malformado, capability/porta/ação/propriedade inexistente e tradução de opção cujo `value` não exista no schema original. A tradução nunca altera `id`, `key`, `value`, enum técnico, binding, configuração salva, conteúdo criado pelo usuário ou qualquer outro dado operacional.
-
-Manifestos sem `localizations` continuam válidos e são apresentados exatamente pelo texto-base.
-
-### Branding opcional
-
-`branding.iconPath`, quando presente, aponta para um PNG ou WebP empacotado dentro da pasta do plugin. O caminho é relativo, normalizado e não aceita URL, caminho absoluto, `..`, symlink para fora do pacote ou formato executável. O arquivo pode ter no máximo 512 KiB; recomenda-se imagem quadrada de 256 × 256 pixels.
-
-O núcleo valida assinatura, MIME, tamanho e confinamento antes de exibir o asset. Arquivo ausente ou inválido não impede a instalação de um manifesto API v1 existente: a interface usa um fallback local. O aplicativo nunca busca favicon ou logo remoto automaticamente. O publicador é responsável por possuir autorização para distribuir e exibir o asset e não pode sugerir endosso inexistente nem imitar a marca do ContentFlow.
-
-### Runtime
-
-- `runtime.kind` é `node` na API v1.
-- `runtime.module` é `esm`.
-- use `runtime.version: ">=26 <27"` para plugins comunitários da API v1. Na versão atual, essa faixa é informativa; o gate executável verifica que o runtime ativo é Node 26.
-
-### Capacidades
-
-No nível do manifesto, `deliveryTypes` classifica o plugin para descoberta na galeria. Um plugin pode declarar qualquer combinação de `text`, `image`, `audio`, `video` e `processing`. O campo descreve a natureza das entregas e transformações do pacote inteiro; não substitui portas, formatos universais ou capacidades executáveis. Plugins legados sem o campo permanecem compatíveis e são apresentados como `processing` até atualizarem o manifesto.
-
-- `operator` aceita somente `IA` ou `Código`.
-- `instructionUsage` pode ser `required`, `optional` ou `not_applicable` e declara se a capability consome a instrução resolvida do bloco. A ausência preserva plugins v1 existentes e equivale a `optional`.
-- `promptPreview`, quando presente, declara o formato textual completo que a capability envia ao provedor, sem valores reais ou secrets. Seu `template` aceita `{{BLOCK_INSTRUCTIONS}}`, `{{CONTENT}}`, `{{CONTEXT_INPUTS}}`, `{{ALL_INPUTS}}`, `{{INPUT:portKey}}`, metadados estruturais (`{{CHANNEL_NAME}}`, `{{NICHE}}`, `{{PROJECT_TITLE}}`, `{{PROCESS}}`, `{{BLOCK_NAME}}`, `{{BLOCK_TYPE}}`), `{{OUTPUT_CONTRACT}}` e `{{CONFIG:chave}}` somente para configuração não secreta. `templateConfigurationKey` pode apontar somente para uma configuração não secreta que substitui o template. O editor preserva as variáveis do Método na prévia e a execução resolve os valores reais antes de chamar o plugin.
-- `blockTypes` contém um ou mais dos quatro blocos.
-- `processTypes` restringe a capacidade; ausência significa todos os processos.
-- `inputPorts` e `outputPorts` descrevem os papéis semânticos.
-- `acceptedInputTypes` e `producedOutputTypes` são resumos para descoberta rápida; portas são a autoridade para binding.
-- O plugin apenas declara tipos, multiplicidade, apresentação e restrições MIME. Quando o Método vincula uma porta à origem `runtime`, o ContentFlow renderiza o campo, persiste o valor no snapshot da execução e só chama o plugin depois da validação. Nenhum componente visual vem do pacote do plugin.
-- `execution` declara comportamento imediato ou assíncrono.
-- `execution.maxConcurrency` informa o teto seguro declarado pelo autor; o núcleo pode impor um valor menor.
-- `execution.itemOrchestration`, quando presente, declara a correlação entre uma coleção de entrada e sua saída acumulada. O contrato legado `mode: "sequential"` continua válido; `strategies` pode declarar `per_item`, `continuous_session` ou ambas, e a ausência de `strategies` preserva o comportamento legado por item.
-- `sideEffects` declara todos os efeitos observáveis fora da resposta do bloco.
-- `cost` informa se a capacidade é gratuita, tarifada ou de custo desconhecido e se consegue estimar o uso antes da confirmação.
-- `dataPolicy` informa se dados deixam a máquina, para quais provedores e onde consultar retenção e uso para treinamento.
-- `blockConfigSchema` declara a interface funcional da capability no Bloco. Cada propriedade visível aparece na área principal da interface do plugin, na ordem declarada, usando somente componentes e estilos permitidos pelo núcleo. `title`, `description`, tipo, opções, default, limites e `visibleWhen` permitem ao autor decidir o que o usuário configura sem injetar React, HTML ou CSS. Chaves gerenciadas pelo núcleo, como aliases de perfil, não são renderizadas como campos genéricos.
-- `configurationOptions` declara campos do `blockConfigSchema` cujas opções são descobertas dinamicamente pelo próprio plugin. Cada entrada aponta para um `property`, um `providerId` estável, dependências opcionais de outros campos e um TTL de cache. O núcleo nunca conhece catálogo de modelos, vozes, resoluções ou qualquer lista específica de fornecedor.
-- `itemActions` declara quais ações padronizadas podem aparecer sobre cada item produzido pela capability: `regenerate`, `replace`, `select` e `download`. A declaração informa capacidade da interface; identidade, persistência e histórico do item continuam pertencendo ao núcleo.
-- `profileSetup`, quando presente, identifica uma chave de configuração de perfil dedicado e permite que o Gerenciador de Plugins cadastre e prepare perfis antes da execução. O Bloco seleciona um perfil já cadastrado; `fallbackConfigurationKey` pode preservar internamente uma lista textual ordenada de aliases adicionais escolhidos no inventário. O plugin continua responsável pelo navegador, pela validação da sessão e pelo estado local de cada perfil.
-- `outputSchema` adiciona validação específica da capacidade sem substituir `outputContract`.
-
-## 6. Portas e binding
-
-Somente comparar tipos não é suficiente. Dois campos `audio` podem representar voz principal e música; dois campos `video` podem representar A-roll e B-roll. Por isso, cada capacidade declara portas semânticas.
-
-Exemplo:
-
-```json
-{
+  "id": "generate-titles",
+  "operator": "IA",
+  "blockTypes": ["CRIAR"],
+  "processTypes": ["title"],
   "inputPorts": [
-    { "key": "voice", "label": "Voz", "acceptedTypes": ["audio"], "required": true },
-    { "key": "music", "label": "Música", "acceptedTypes": ["audio"], "required": false }
-  ]
+    {
+      "key": "briefing",
+      "label": "Briefing",
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      },
+      "required": true
+    }
+  ],
+  "outputPorts": [
+    {
+      "key": "titles",
+      "label": "Títulos",
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "many",
+        "representation": "inline"
+      },
+      "required": true,
+      "presentation": { "renderer": "list" }
+    }
+  ],
+  "execution": { "mode": "immediate" },
+  "sideEffects": ["external_read"],
+  "cost": { "model": "metered", "estimateSupported": false },
+  "dataPolicy": { "sendsDataToThirdParties": true, "providers": ["Example"] },
+  "blockConfigSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+  "outputSchema": { "type": "object" }
 }
 ```
 
-Regras de binding:
+Cada porta possui exatamente um `shape`. Não existem `acceptedTypes`, `producedTypes`, `acceptedInputTypes`, `producedOutputTypes`, `multiple` ou `deliveryTypes`. Cardinalidade está no shape. A descoberta de famílias do plugin é derivada das output ports.
 
-1. O núcleo filtra por operador, bloco e processo.
-2. Confirma que todas as portas obrigatórias podem receber campos compatíveis.
-3. Faz binding automático somente quando houver correspondência inequívoca.
-4. Quando houver ambiguidade, a configuração do bloco solicita o mapeamento.
-5. O binding salvo referencia o campo do Método e a `portKey` da capacidade.
-6. Na execução, `inputs` é indexado por `portKey`, nunca por label traduzível.
-7. A mesma entrada só atende várias portas quando a capacidade permite e o usuário confirma.
+Múltiplas famílias usam múltiplas portas. Uma capability que produz imagens e vídeos declara, por exemplo, `images: image/many/artifact` e `videos: video/many/artifact`.
 
-`multiple: true` significa que a porta pode agregar mais de um campo compatível. Isso não transforma automaticamente valores escalares em listas; o contrato enviado informa a forma efetiva.
+## Binding
 
-Saídas seguem a mesma lógica. `outputContract` contém a chave estratégica do bloco e a `portKey` correspondente. `values`, `partialValues` de `pending`/`error` e `services.publishPartial().values` aceitam exclusivamente as `portKey` declaradas; o núcleo valida o tipo e traduz cada valor uma única vez para a chave estratégica do bloco. Chaves estratégicas, aliases genéricos como `result` quando essa porta não foi declarada e campos desconhecidos são violações de contrato, não fallbacks.
+O Método materializa `portKey` explicitamente. O runtime procura essa chave exata e valida `ValueShape`; não escolhe por label, ordem, alias, tipo aproximado ou primeira porta compatível.
 
-### Apresentação declarativa
+O handler lê `request.inputs[portKey]` e devolve `values[portKey]`. A chave estratégica do Bloco permanece interna ao núcleo.
 
-Uma porta pode incluir `presentation` para solicitar uma forma padronizada de exibição, sem alterar `acceptedTypes` ou `producedTypes`:
-
-```json
-{
-  "key": "assets",
-  "label": "Assets visuais",
-  "producedTypes": ["files"],
-  "required": true,
-  "presentation": {
-    "renderer": "image-gallery",
-    "itemType": "image",
-    "acceptedMimeTypes": ["image/*"]
-  }
-}
-```
-
-Os identificadores v1 são `auto`, `text-short`, `text-long`, `list`, `tags`, `table`, `cards`, `file-list`, `image-gallery`, `audio-player`, `video-player` e `decision`. O núcleo valida compatibilidade, normaliza valores inválidos para `auto` e implementa toda a interface. Plugins não podem registrar renderers, injetar React ou HTML, nem fornecer scripts ou componentes arbitrários. A ausência de `presentation` preserva o comportamento legado.
-
-## 7. Configuração, conexões, settings e secrets
-
-Há cinco categorias distintas:
-
-| Categoria            | Escopo                          | Exemplo                                      | Portátil no Método?        |
-| -------------------- | ------------------------------- | -------------------------------------------- | -------------------------- |
-| `configuration`      | Instância do bloco              | modelo, formato, proporção, qualidade        | Sim                        |
-| `connectionId`       | Referência local estável        | conta OpenAI “Canal principal”               | Não; a exportação o remove |
-| requisito de conexão | Template exportado              | plugin, capability e secrets/perfil exigidos | Sim, sem valor secreto     |
-| `settings`           | Instalação local do plugin      | URL base, região, workspace, executável      | Não                        |
-| `secrets`            | Cofre local associado à conexão | API key, OAuth refresh token                 | Nunca                      |
-
-Regras:
-
-- Campo obrigatório sem valor ou default impede salvar/executar o bloco.
-- Defaults do JSON Schema são materializados de forma visível; não ficam implícitos no plugin.
-- Parâmetros como proporção de vídeo permanecem no plugin/bloco que os utiliza, não viram parâmetros globais do Projeto.
-- A configuração funcional e a seleção de uma conexão ou perfil já cadastrado são apresentadas no Bloco do Método. Cadastro, preparação, estado e mapa de uso dos vínculos locais pertencem aos detalhes do plugin na galeria de Plugins.
-- Uma conexão possui ID opaco e estável, nome editável, `pluginId`, estado e referências aos secrets/perfis que o núcleo controla. Renomear não altera o ID.
-- O mesmo plugin pode possuir várias conexões, e blocos diferentes podem selecionar conexões diferentes.
-- O Método persistido localmente pode referenciar `connectionId`; uma exportação substitui essa referência por um requisito de conexão. A importação exige associação explícita a uma conexão local antes da execução.
-- O núcleo nunca escolhe entre várias conexões elegíveis por nome, ordem de criação ou conteúdo secreto. Ambiguidade gera bloqueio, não fallback silencioso.
-- Fallback entre perfis ou conexões só ocorre quando declarado e a política central comprova que a falha pode ser redistribuída sem repetir efeito externo. Erros associados ao perfil podem avançar para outro perfil preparado; intervenção humana e efeito externo incerto permanecem bloqueados até ação ou reconciliação. Cancelamento solicitado e lista esgotada encerram a tentativa.
-- Configurações exportadas não podem conter secrets.
-- Secrets são disponibilizados apenas à execução que declarou a chave, por `services.getSecret()`.
-- O plugin não pode enumerar secrets de outros plugins.
-- OAuth ou login interativo são implementados pelo plugin quando necessários. Tokens persistentes devem usar secrets declarados e consentidos; o núcleo não extrai sessões do navegador.
-
-## 8. Permissões
-
-Permissões da API v1:
-
-| Permissão          | Autoriza                                                                             |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| `network`          | Conexões de rede sob políticas do executor.                                          |
-| `filesystem:read`  | Leitura do diretório de staging e arquivos liberados.                                |
-| `filesystem:write` | Escrita apenas no diretório de saída temporário.                                     |
-| `process`          | Subprocessos como FFmpeg; permissão avançada, pois o filho não herda toda a sandbox. |
-| `worker`           | Workers locais para processamento paralelo declarado.                                |
-| `native`           | Addons nativos empacotados, como codecs ou bibliotecas de imagem.                    |
-
-Uma permissão declarada não significa acesso irrestrito. Na implementação atual, o executor aplica:
-
-- diretórios permitidos;
-- bloqueio de travessia e symlink escape;
-- timeout e cancelamento;
-- limites de resposta, streams, artifacts e downloads mediados;
-- proteção SSRF, DNS e redirects nos downloads mediados pelo núcleo;
-- redaction de secrets em logs.
-
-`process` e `native` são permissões deliberadamente amplas. Allowlist de executáveis e quotas fortes de CPU/memória permanecem hardening futuro e não devem ser prometidas pelo autor como isolamento já disponível.
-
-Instalação e atualização exibem qualquer aumento de permissões e exigem novo consentimento.
-
-Plugins com `network` podem declarar `networkHosts`, com hosts exatos (`api.example.com`) ou curingas de subdomínio (`*.cdn.example.com`). A lista é opcional para preservar plugins v1 existentes. Quando presente, ela integra o snapshot de consentimento e é aplicada pelo núcleo a downloads de artifacts; redirects precisam continuar dentro da lista. Quando ausente, a tela de consentimento alerta que o plugin comunitário pediu rede irrestrita.
-
-O Permission Model do Node 26 oferece apenas `--allow-net` como chave binária, sem allowlist por host. Portanto, `networkHosts` não restringe tecnicamente sockets abertos diretamente pelo código do plugin nesta versão. A lista expressa intenção auditável e controla clientes de rede mediados pelo núcleo. Um proxy/SDK obrigatório será necessário para egress por domínio de todo o processo.
-
-Essas permissões podem conceder capacidades amplas sem conceder a máquina inteira. Quando o usuário escolhe uma pasta de trabalho persistente, o núcleo a monta como raiz autorizada para aquele plugin. Dentro dessa raiz, um plugin com leitura/escrita pode criar arquivos, manter checkpoints e reabrir seu próprio estado. O vínculo não autoriza outras pastas nem substitui artifacts quando o resultado precisa entrar no contrato de outro bloco.
-
-## 9. Ciclo de execução
-
-### 9.1 Preparação
-
-1. O núcleo valida plugin, capacidade, runtime e versão.
-2. Valida `configuration` contra `blockConfigSchema`.
-3. Resolve todas as entradas do bloco.
-4. Aplica os bindings de portas.
-5. Se uma entrada obrigatória estiver ausente ou incompatível, pausa sem chamar o plugin.
-6. Cria staging, diretório de saída e contexto mínimo.
-7. Injeta somente settings e secrets autorizados.
-
-### 9.2 Execução imediata
-
-O núcleo chama `execute()` com `invocation.mode = "start"`. A capacidade devolve `success` ou `error` dentro do timeout declarado. A API v1 aceita timeout de até 24 horas; duração longa não torna a capacidade inválida.
-
-Plugins que declaram `profileSetup` também podem receber `invocation.mode = "configure"` com `action = "status"` ou `"prepare"`. Essas chamadas não pertencem a uma execução de Projeto, não recebem inputs e devem devolver `success` com `values.ready` booleano ou um erro seguro. `prepare` abre a superfície interativa necessária e valida login/onboarding, mas a instância permanece aberta após sucesso ou falha até o usuário fechá-la; `status` apenas consulta o estado mantido pelo próprio plugin e não abre navegador.
-
-Capabilities com `configurationOptions` podem receber `invocation.mode = "configure"`, `action = "options"`, `providerId` e `property`. A chamada recebe a configuração não secreta atual do bloco, incluindo o alias do perfil quando aplicável. O plugin devolve `success` com `values.options` como lista de registros `{ value, label, description?, disabled? }`. O núcleo valida os valores, aplica cache conforme `cacheTtlMs` — cinco minutos quando omitido, zero para desativar — e invalida quando qualquer campo listado em `dependsOn` mudar. O perfil selecionado também participa sempre da chave de cache, evitando reaproveitar catálogos entre contas. Uma atualização explícita ignora o cache. Secrets continuam disponíveis somente por `services.getSecret()`.
-
-Quando uma capability declara `itemActions`, uma ação que exigir nova execução chega como `invocation.mode = "item_action"` com `action`, `itemId` e `outputPort`. O núcleo só envia IDs que já possui, valida que a ação foi declarada e inclui `request.itemAction` com a chave de correlação opcional, a `variantKey` opcional, a entrada original, a saída atual e o número da nova tentativa. Uma regeneração deve concluir na própria chamada e devolver o novo valor na mesma `outputPort`; o núcleo preserva o ID e a posição, acrescenta a tentativa ao histórico e substitui apenas o valor materializado. `replace` é validado pelo núcleo e ações puramente locais como `select` ou `download` não invocam o plugin.
-
-Quando `fallbackConfigurationKey` estiver declarado, o usuário prepara explicitamente cada alias. O núcleo preserva a ordem configurada e consulta a política central antes de avançar. Falhas seguras e associadas ao perfil podem trocar de perfil; autenticação/CAPTCHA/permissão/cota/upgrade/bloqueio sem alternativa segura viram intervenção; submissão ou efeito externo possível exige reconciliação. `retryable` legado sozinho não autoriza repetição. `CANCELLED`, cancelamento já solicitado e esgotamento da lista nunca avançam o cursor. Respostas pendentes continuam no perfil atual.
-
-Para compatibilidade com Métodos API v1 já existentes, aliases gravados em `profileSetup.configurationKey` e `fallbackConfigurationKey` continuam sendo resolvidos por `pluginId + alias`. Depois da migração, essa chave localiza o vínculo criado para o perfil legado correspondente; aliases iguais em plugins diferentes não são fundidos. Um Método novo usa a política local `profileExecution` como autoridade de seleção, e o núcleo injeta na configuração do handler apenas o alias ativo esperado pelo plugin. Salvar ou executar um Método antigo não exige reescrever snapshots históricos.
-
-Vincular um perfil global a outro plugin exige consentimento explícito do usuário. Revogar o vínculo impede novas invocações desse plugin naquele perfil e remove seu readiness específico, sem apagar automaticamente a pasta física nem vínculos de outros plugins. Desinstalar um plugin revoga somente seus vínculos/readiness. A sandbox concede no máximo a raiz física do perfil selecionado para a invocação atual; `getWorkspacePath` continua separado para estado privado do plugin.
-
-Cookies, storage de sessão, tokens, secrets, caminho absoluto, `storage_key`, `profileId`, IDs de vínculo/readiness/lease e o objeto `profileExecution` nunca entram em `request`, configuração funcional entregue ao plugin, snapshot portátil ou exportação de Método. Snapshots locais de execução podem registrar somente identidade operacional não secreta necessária à auditoria e retomada, sem serializar a pasta física ou material autenticado.
-
-`execution.itemOrchestration` conserva `inputPort`, `outputPort` e `mode: "sequential"` para compatibilidade com manifestos API v1 existentes. `mode` é o marcador do executor legado atual; ele não limita a declaração futura de estratégias. O campo opcional `strategies` aceita `per_item` e `continuous_session`, `preferredStrategy` precisa estar contido nessa lista e a ausência dos dois equivale ao comportamento legado `per_item`.
-
-Em `per_item`, o núcleo chama o plugin uma vez por unidade, inclui `request.batch` com `itemId`, índice e total, acumula a saída indicada e confirma a persistência antes da próxima unidade. Em `continuous_session`, uma única invocação pode manter navegador, conexão ou processo aberto, reivindicar várias unidades com `claimItems` e publicar cada transição por `publishItemUpdate`. A invocação não conclui o Bloco por simplesmente retornar: o núcleo conclui pela situação durável de todas as unidades obrigatórias.
-
-`profileParallelism` declara apenas elegibilidade técnica futura. `supported: true` informa que a capability aceita que o núcleo execute sessões contínuas independentes em perfis físicos distintos; `maxProfiles` limita o número declarado pelo plugin. Esta declaração não cria perfis, não seleciona contas e não habilita paralelismo por si só.
-
-O par principal `inputPort`/`outputPort` continua sendo a associação padrão. Quando houver mais de uma coleção estruturalmente válida, `collectionAssociations` pode declarar pares adicionais com `key`, porta de entrada, porta de saída e, opcionalmente, `combinedOutputPort`/`separator`. A configuração do Método escolhe uma associação declarada; o núcleo nunca infere pareamento apenas por posição. A escolha persistida pertence ao Método, não ao estado privado do plugin.
-
-Para texto, `combinedOutputPort` pode apontar para a saída consolidada e `separator` define como os itens acumulados são unidos. Em qualquer estratégia, ordem e identidade vêm do núcleo. Cada atualização correlaciona o `itemId` concedido, a tentativa e a revisão. O plugin pode registrar filhos derivados com `registerItems`, mas só começa efeitos externos depois de receber os IDs criados pelo núcleo.
-
-Depois de uma falha com entregas parciais, uma nova tentativa pode recomeçar todo o lote ou continuar somente os itens pendentes. A retomada reutiliza valores e artifacts apenas quando o núcleo confirma a mesma identidade de entrada. Unidades `completed` não são repetidas silenciosamente; unidades `submitted` exigem reconciliação antes de redistribuição; uma nova tentativa acrescenta histórico e preserva o mesmo ID lógico. Handlers agregados legados, sem `itemOrchestration`, continuam recebendo a coleção inteira como hoje e não ganham correlação incremental automaticamente. Quando a resposta final permite um pareamento unívoco entre uma única coleção de entrada e uma única coleção de saída de mesma cardinalidade, o núcleo pode materializar as unidades somente depois da conclusão para histórico e ações editoriais. Esse modo é marcado como compatibilidade agregada e não habilita updates tardios, atualização em tempo real nem paralelismo por perfil.
-
-### 9.3 Execução assíncrona
-
-Geradores de vídeo, avatares, renderizações e uploads podem durar minutos ou horas. Uma resposta `pending` encerra a requisição HTTP atual. O núcleo persiste o job no SQLite, agenda `resume` e publica snapshots curtos para a interface; nenhuma conexão HTTP permanece aberta durante o intervalo de processamento.
-
-1. `start` inicia o job externo ou um worker local supervisionado.
-2. O plugin devolve `pending`, `jobId` e `pollAfterMs`.
-3. O núcleo persiste o estado e agenda nova chamada.
-4. `resume` consulta o mesmo job.
-5. O plugin retorna novamente `pending`, ou finaliza com `success`/`error`.
-6. Se o usuário cancelar e a capacidade suportar, o núcleo chama `cancel`.
-
-O `jobId` é opaco para o núcleo, mas não pode conter secrets. O plugin deve conseguir retomar usando `jobId`, settings e secrets declarados, sem memória global do processo anterior.
-
-O registro persistente contém plugin e versão, capacidade, `executionId`, `blockId`, tentativa, `traceId`, `jobId`, deadline, próxima consulta, progresso, mensagem, valores/artifacts parciais, cancelamento, erro e contador de novas tentativas. Um lease transacional impede duas chamadas `resume` simultâneas. Ao reiniciar, leases interrompidos são liberados e jobs voltam ao agendamento original.
-
-O núcleo interrompe com erro explícito um job cujo plugin tenha sido removido, atualizado, desativado, perdido consentimento ou removido a capacidade. Registros terminais expiram após sete dias; artifacts parciais de jobs falhos, cancelados ou abandonados são removidos nessa limpeza. Artifacts promovidos por jobs concluídos permanecem no armazenamento normal.
-
-Workers locais contínuos ainda precisam persistir seu próprio checkpoint em workspace e ser reiniciáveis por `jobId`. O núcleo v1 não conserva PID nem processo filho entre invocações ou reinicializações.
-
-### 9.4 Idempotência
-
-A chave lógica de idempotência é:
-
-```text
-executionId + blockId + capabilityId + attempt + invocation.mode
-```
-
-Chamadas `start` repetidas para a mesma tentativa não devem criar cobranças ou jobs duplicados. Quando o provedor suportar idempotency keys, o plugin deve encaminhar uma chave derivada. O núcleo nunca executa dois `start` concorrentes para a mesma chave.
-
-`resume` pode ser repetido. `cancel` deve ser idempotente.
-
-Operações com efeito externo também seguem o recibo persistente e a reconciliação definidos em [`automation-media-conventions.md`](automation-media-conventions.md). Um timeout ou resposta perdida deixa a submissão em estado incerto; não autoriza repetir custo, job ou conteúdo sem antes localizar ou excluir o efeito anterior.
-
-## 10. Requisição
-
-Forma canônica simplificada:
+## Request
 
 ```ts
 type PluginExecutionRequest = {
@@ -564,634 +89,97 @@ type PluginExecutionRequest = {
   blockId: string;
   capabilityId: string;
   attempt: number;
-  invocation:
-    { mode: "start" } | { mode: "resume"; jobId: string } | { mode: "cancel"; jobId: string };
+  invocation: PluginInvocation;
   configuration: Record<string, unknown>;
   settings: Record<string, unknown>;
-  inputs: Record<string, RuntimeValue>; // chave = portKey
-  instructionContextInputs?: Record<string, RuntimeValue>; // exclui entradas já interpoladas
-  inputContract: Array<{
-    id: string;
-    portKey: string;
-    label: string;
-    type: HumanFieldType;
-    recordFields?: RecordFieldDefinition[];
-  }>;
-  inputDeliveries?: Array<{
-    inputId: string;
-    portKey: string;
-    deliveryId?: string;
-    itemIds: string[];
-  }>;
-  outputContract: Array<{
-    portKey: string;
-    key: string;
-    label: string;
-    type: HumanFieldType;
-    required: boolean;
-    options?: string[];
-    recordFields?: RecordFieldDefinition[];
-  }>;
-  validation?: BlockValidationConfig;
-  retryFeedback?: Record<string, RuntimeValue>;
+  inputs: Record<string, RuntimeValue>;
+  inputContract: PluginInputContract[];
+  inputDeliveries?: PluginInputDelivery[];
+  outputContract: PluginFieldContract[];
   resolvedInstruction?: string;
   unresolvedInstructionVariables?: string[];
-  conversation?:
-    | {
-        mode: "new";
-        fallbackContext?: string;
-        continuationMessage?: string;
-        fallbackAttachments?: StoredFile[];
-      }
-    | {
-        mode: "reuse";
-        id: string;
-        sourceProfile?: string;
-        fallbackContext?: string;
-        continuationMessage?: string;
-        fallbackAttachments?: StoredFile[];
-      };
+  batch?: { itemId: string; index: number; total: number };
   context: PluginExecutionContext;
 };
 ```
 
-O plugin usa `inputs[portKey]` e nunca procura entradas por label. `inputContract` serve para conhecer tipo e schema dos registros recebidos. `inputDeliveries` é metadado paralelo e opcional de proveniência; plugins v1 que leem somente `inputs` continuam compatíveis. `resolvedInstruction` contém a instrução do Método após o núcleo resolver variáveis declaradas; capabilities que consomem instrução devem preferi-la ao template cru em `context.block.instructions`. Ao compor contexto textual adicional, o plugin deve preferir `instructionContextInputs` a `inputs`: o núcleo remove desse mapa as entradas que já foram interpoladas em `resolvedInstruction`, evitando enviar o mesmo conteúdo duas vezes. A ausência do campo preserva o comportamento de plugins v1 existentes. `unresolvedInstructionVariables` informa placeholders preservados por compatibilidade. `settings` contém somente preferências não secretas validadas por `settingsSchema`; secrets declarados são acessados por `services.getSecret()` e não aparecem no envelope serializável.
+O request não contém secrets, cookies, storage, caminho físico, token ou ID interno de perfil. Secrets são resolvidos por `services.getSecret()` somente quando declarados e autorizados.
 
-Um manifesto pode declarar `supportsConversationContinuation: true`. Nesse caso, o request informa se o plugin deve iniciar ou reutilizar uma conversa, e uma resposta bem-sucedida pode devolver `conversation: { id }`. O ID é opaco para o núcleo: o plugin valida origem e formato antes de usá-lo. O núcleo só resolve referências produzidas por bloco anterior do mesmo Projeto, plugin e conexão local; cookies, tokens e o histórico integral nunca entram nesse campo.
+## Respostas
 
-Quando uma reprovação refaz um bloco que produziu imagens, o núcleo pode incluir essas referências autorizadas em `conversation.fallbackAttachments`. O plugin só deve anexá-las se efetivamente abrir uma conversa nova; se conseguir reutilizar a conversa anterior, não deve reenviar a mídia. Os arquivos continuam sujeitos a `resolveInputFile`, permissões, MIME, tamanho e limites da capability.
+Sucesso:
 
-## 11. Contexto permitido
+```js
+{ status: "success", values: { titles: ["A", "B"] }, artifacts: [] }
+```
 
-`context` contém:
+Pending:
 
-- localidade (`locale`) e fuso horário IANA (`timeZone`) da execução;
-- canal: `id`, nome, idioma e nicho;
-- projeto: `id` e título;
-- Processo Universal atual;
-- outputs universais de processos anteriores;
-- resultados concluídos de blocos anteriores;
-- entregas anteriores autorizadas, com IDs universais, itens, ordem e referências;
-- coleção vinculada, quando aplicável.
+```js
+{ status: "pending", jobId: "opaque", pollAfterMs: 5000, progress: 0.4 }
+```
 
-Princípios:
+Erro:
 
-- menor contexto necessário;
-- objetos tratados como não confiáveis;
-- nenhum caminho de banco ou implementação interna;
-- nenhum secret dentro do objeto serializável;
-- conteúdo de outros canais nunca é incluído;
-- logs não devem repetir contexto sensível integralmente.
-
-`traceId` correlaciona uma chamada entre núcleo, plugin e provedor sem revelar dados do usuário. Ele permanece o mesmo em `start`, `resume` e `cancel` do mesmo job; uma nova tentativa editorial recebe novo `traceId`. Datas continuam sendo transmitidas em ISO 8601: `timeZone` serve apenas para apresentação ou regras explicitamente dependentes do calendário local.
-
-## 12. Formatos universais
-
-| ID                 | Valor JSON                   | Uso principal                                |
-| ------------------ | ---------------------------- | -------------------------------------------- |
-| `text`             | string                       | Nome, título ou texto curto.                 |
-| `textarea`         | string                       | Roteiro, instrução ou texto longo.           |
-| `number`           | number finito                | Quantidade, nota, duração ou coordenada.     |
-| `boolean`          | boolean                      | Estado binário sem semântica de aprovação.   |
-| `list`             | string[]                     | Lista homogênea de textos.                   |
-| `records`          | object[]                     | Lista ordenada com schema em `recordFields`. |
-| `select`           | string                       | Uma opção de `options`.                      |
-| `multiselect`      | string[]                     | Opções únicas de `options`.                  |
-| `datetime`         | string ISO 8601              | Instante com data, hora e fuso.              |
-| `url`              | string URI absoluta          | Link navegável.                              |
-| `file`             | `StoredFile`                 | Referência gerenciada a arquivo genérico.    |
-| `files`            | `StoredFile[]`               | Referências gerenciadas a vários arquivos.   |
-| `image`            | `StoredFile` ou URL          | Imagem; prefira referência gerenciada.       |
-| `audio`            | `StoredFile` ou URL          | Áudio; prefira referência gerenciada.        |
-| `video`            | `StoredFile` ou URL          | Vídeo; prefira referência gerenciada.        |
-| `approval`         | `"approved"` ou `"rejected"` | Decisão formal.                              |
-| `thumbnail_layout` | `ThumbnailLayout`            | Composição 16:9 editável.                    |
-
-### Regras gerais
-
-- Strings usam UTF-8 e preservam quebras de linha quando o formato permitir.
-- Números devem ser finitos; `NaN` e infinito são inválidos.
-- Datas usam ISO 8601, preferencialmente UTC.
-- Listas preservam ordem.
-- Valores extras não declarados são rejeitados.
-- Saídas obrigatórias não podem ser vazias.
-- O núcleo aplica limites de tamanho por configuração do executor.
-
-### Records
-
-- Cada registro contém apenas chaves declaradas.
-- Chaves obrigatórias não podem estar vazias.
-- Tipos internos obedecem a `RecordFieldDefinition`.
-- A ordem dos registros possui significado.
-- IDs de domínio, quando necessários, são campos explícitos como `segment_id` ou `asset_id`.
-- Relações entre listas usam IDs, não posição do array.
-- Tempo de mídia usa milissegundos inteiros em campos terminados por `_ms`.
-- Records não são aninhados na API v1.
-
-### Thumbnail layout
-
-```json
+```js
 {
-  "aspectRatio": "16:9",
-  "boxes": [
-    {
-      "id": "headline",
-      "label": "Título",
-      "color": "#2563eb",
-      "x": 6,
-      "y": 8,
-      "w": 55,
-      "h": 24
-    }
-  ]
+  status: "error",
+  code: "RATE_LIMIT",
+  message: "Limite temporário.",
+  retryable: true,
+  retryAfterMs: 30000
 }
 ```
 
-Coordenadas são percentuais. `x`, `y`, `w` e `h` ficam entre 0 e 100 e a caixa não ultrapassa o quadro.
+Outputs usam exclusivamente port keys declaradas. Shape incompatível, cardinalidade incorreta, porta desconhecida ou output obrigatório ausente falham antes da conclusão.
 
-## 13. Arquivos e artifacts
+## Artifacts
 
-Plugins não gravam diretamente no armazenamento definitivo.
+Artifact é representação material de `text`, `image`, `audio` ou `video`, nunca uma família. O plugin grava somente em `services.getOutputPath()` e devolve referências `artifact://...`; o núcleo valida, importa e cria `StoredFile`.
 
-### Arquivos de entrada
+Conteúdo textual em TXT, Markdown ou SRT continua sendo `family: "text", representation: "artifact"`. MIME e extensões pertencem a `ContentShape.formats`.
 
-- O núcleo disponibiliza arquivos autorizados no staging somente leitura.
-- `StoredFile.url` é uma referência controlada, não um caminho arbitrário.
-- `services.resolveInputFile()` fornece resolução segura dessa referência.
-- Arquivos escolhidos em uma entrada `runtime` são importados primeiro pelo núcleo. O Método preserva somente o binding; `StoredFile` e `StoredFile[]` ficam no `BlockExecution` e chegam ao plugin pela porta correspondente em `request.inputs`.
-- A permissão `filesystem:read` não libera outras pastas da máquina.
+## Item orchestration
 
-### Arquivos de saída
+`execution.itemOrchestration` pode apontar uma input port `many` e uma output port compatível. O núcleo cria work units e chama a capability por item. O plugin não infere lote pela presença de array, não inventa item IDs e não reprocessa concluídos.
 
-O plugin obtém destinos com `services.getOutputPath()`, escreve no diretório temporário de saída ou declara uma URL remota. Em `success`, inclui `artifacts`:
+Execução multiperfil distribui work units exclusivas entre perfis físicos distintos. Uma pasta física possui no máximo uma execução de navegador ativa.
 
-```json
-{
-  "id": "final-video",
-  "name": "final.mp4",
-  "mimeType": "video/mp4",
-  "size": 10485760,
-  "source": { "kind": "path", "path": "final.mp4" }
-}
-```
+## Jobs, idempotência e recovery
 
-Regras:
+Invocações usam `start`, `resume` e `cancel`. A chave lógica é `executionId + blockId + capabilityId + attempt + invocation.mode`. `start` repetido não pode criar efeito ou cobrança duplicada; `resume` e `cancel` são idempotentes.
 
-- `source.path` é relativo ao diretório de saída e não contém `..`.
-- `source.url` exige `network` e passa por download controlado do núcleo.
-- URLs remotas usam HTTPS, não aceitam credenciais embutidas e precisam corresponder a `networkHosts` quando a lista existir.
-- Antes de cada conexão e redirect, o núcleo resolve todos os endereços DNS, bloqueia qualquer resultado local, privado, link-local, reservado ou multicast e fixa a conexão a um dos IPs já validados. Uma nova resolução não ocorre dentro do socket, mitigando DNS rebinding.
-- O downloader não encaminha cookies ou autorização, limita redirects, tempo e bytes, compara o MIME HTTP ao MIME declarado e confere `Content-Length`/`size` quando disponíveis.
-- O valor de mídia correspondente usa um `StoredFile` com mesmo `id` e URL temporária `artifact://final-video`.
-- O núcleo transmite o corpo diretamente para um arquivo parcial exclusivo, calcula SHA-256 durante o stream, valida o arquivo final e promove por rename. O `StoredFile` definitivo registra `size`, `mimeType`, URL local e `sha256`.
-- O núcleo substitui tanto um valor `artifact://id` quanto a propriedade `url` de um `StoredFile` temporário pelo `StoredFile` local definitivo.
-- Artifacts não referenciados por uma saída podem ser descartados.
-- Arquivos `.partial` que não foram promovidos são removidos no erro; resíduos de queda abrupta expiram em 24 horas. Artifacts progressivos já promovidos permanecem disponíveis no snapshot do job e são removidos com a retenção do job se ele terminar em erro, cancelamento ou abandono.
-- O plugin nunca retorna bytes em base64 dentro de `values`.
+Timeout ou reconnect após possível efeito externo exige reconciliação. O plugin relata fatos e receipts; não escolhe retry, troca de perfil nem avanço estratégico.
 
-### 13.1. Registro universal de entregas
+## Services
 
-O protocolo v1 de valores e artifacts permanece compatível. Depois de validar a resposta, o núcleo materializa cada saída como uma entrega universal do Projeto:
+- `signal`: cancelamento abortável.
+- `getSecret(key)`: secret declarado e autorizado.
+- `resolveInputFile(file)`: abre `StoredFile` concedido em staging.
+- `getOutputPath(relativePath)`: saída temporária exclusiva.
+- `getWorkspacePath(relativePath)`: checkpoint privado autorizado.
+- `getProfilePath(relativePath)`: raiz opcional do perfil ativo, após vínculo explícito.
+- `publishPartial(update)`: partial durável validado pelo mesmo output contract.
+- `registerItems`, `claimItems`, `publishItemUpdate`: serviços reservados de work units.
 
-- valores escalares geram um item;
-- `list`, `multiselect`, `records` e coleções de arquivos geram um item por elemento, preservando ordem;
-- a identidade inclui execução, bloco, chave de saída e tentativa;
-- retries invalidam os registros afetados e produzem uma nova identidade de tentativa;
-- o output oficial de cada Processo Universal também é uma entrega.
+## Segurança e permissões
 
-`request.inputDeliveries` informa, para cada porta resolvida, o ID da entrega e os IDs dos itens fornecidos. Um plugin recebe valores de entregas anteriores exclusivamente quando o Método conecta explicitamente essa entrega a uma porta de entrada do bloco; o núcleo não preenche portas nem serializa contexto histórico de forma implícita. Uma entrada `channel_history` chega em `request.inputs` como `records` com valor, projeto e instante de entregas de outros Projetos do mesmo Canal. Em `ESCOLHER`, ela contém escolhas anteriores do próprio bloco; em `CRIAR`, contém os resultados oficiais anteriores do mesmo Processo. `BUSCAR` e `VALIDAR` não usam Histórico do Canal.
+Permissões são negadas por padrão e declaradas entre `network`, `filesystem:read`, `filesystem:write`, `process`, `worker` e `native`. Declare hosts, provedores, retenção, treinamento, custo e efeitos externos honestamente.
 
-No Método, uma referência explícita guarda `sourceProcessType`, `blockId` e `sourceKey`. IDs concretos pertencem somente à execução e não são serializados no template. Plugins podem devolver relações entre itens quando a capacidade precisar de proveniência, mas não devem inventar IDs do núcleo nem depender da forma textual desses identificadores.
+O plugin não acessa SQLite, cofre, diretórios arbitrários, outros perfis ou arquivos fora das raízes concedidas. Caminhos absolutos, traversal e symlinks externos são inválidos.
 
-## 14. Semântica dos quatro blocos
+## Browser Bridge e perfis
 
-### BUSCAR
+Perfis são identidades locais globais. O vínculo plugin + perfil e o readiness são explícitos e independentes. Cookies, sessão e credenciais nunca entram em Método, snapshot portátil ou request.
 
-Consulta fonte externa e devolve dados ou mídia. Deve preservar origem, licença e identificadores quando aplicável.
-
-### ESCOLHER
+A Browser Bridge negocia versão/capabilities antes do primeiro efeito, usa comandos idempotentes, eventos sequenciados, snapshots sob demanda, observers limitados e backpressure. Recarga não é fallback universal e fica bloqueada diante de efeito incerto.
 
-Recebe do núcleo a coleção estratégica vinculada. Seleciona itens preexistentes, nunca resultados criados na execução. A saída canônica contém `selectedItemId` ou uma chave explicitamente mapeada para esse papel.
+## Apresentação e configuração
 
-O operador Humano continua sendo a forma padrão de escolha manual; plugins de IA/Código podem automatizar a seleção quando o Método solicitar.
+`presentation` solicita apenas renderer seguro do núcleo. Ele não altera shape. A interface funcional da capability vem de `blockConfigSchema`; plugins não injetam React, HTML, CSS ou scripts.
 
-### CRIAR
+Localizações podem traduzir nome, descrição, labels, ajuda e opções. IDs técnicos, port keys e valores não são traduzidos.
 
-Produz novo texto, dado, layout ou arquivo. Não consulta fonte externa como responsabilidade principal, embora possa chamar o provedor necessário à criação.
+## Versionamento
 
-### VALIDAR
-
-Avalia um bloco anterior e respeita `validation.mode`:
-
-- `approval`: devolve `decision` com `approved` ou `rejected` e feedback opcional;
-- `select_one`: devolve `selected_value`;
-- `select_many`: devolve `selected_values`.
-
-O plugin não reinicia o bloco validado. O núcleo interpreta a decisão e aplica `onReject` e `maxAttempts`.
-
-## 15. Respostas
-
-### Sucesso
-
-```ts
-{
-  status: "success";
-  values: Record<string, RuntimeValue>; // chave = output portKey
-  artifacts?: PluginArtifact[];
-  usage?: PluginUsage;
-  logs?: string[];
-}
-```
-
-O núcleo valida:
-
-- porta conhecida;
-- binding para saída do bloco;
-- tipo e schema;
-- obrigatoriedade;
-- ausência de chaves adicionais;
-- artifacts referenciados e seguros.
-
-### Pendência
-
-```ts
-{
-  status: "pending";
-  jobId: string;
-  pollAfterMs: number;
-  progress?: number; // 0 a 1
-  message?: string;
-  partialValues?: Record<string, RuntimeValue>;
-  partialArtifacts?: PluginArtifact[];
-  usage?: PluginUsage;
-  logs?: string[];
-}
-```
-
-`pollAfterMs` respeita mínimo e máximo impostos pelo núcleo. `progress` deve ser monotônico quando conhecido; ausência é preferível a um valor inventado. `partialValues` usa exatamente o mesmo namespace técnico e a mesma validação de tipos de `values`. Ele é um snapshot por porta: uma chave presente substitui o snapshot anterior daquela porta, o que torna repetições de `resume` idempotentes. Listas, cartões, tabelas e galerias devem devolver a coleção acumulada até aquele instante.
-
-`partialArtifacts` usa exatamente o contrato e o importador de `artifacts`: path/URL, permissões, HTTPS, SSRF, MIME, tamanho, streaming e SHA-256 são revalidados. IDs já importados são reutilizados e tornam retries seguros; mudar nome, MIME ou tamanho de um mesmo ID é erro. O núcleo troca `artifact://` por `StoredFile` antes de persistir e expor o snapshot.
-
-Durante uma invocação imediata, `services.publishPartial()` também pode transportar `itemUpdates`. Cada atualização contém `key`, `outputPort`, `state` (`created`, `running`, `completed` ou `failed`), `input` e valor opcionais, além de diagnóstico seguro. `input` preserva a entrada editorial que originou o slot. `key` é apenas uma correlação estável dentro da tentativa; `variantKey`, quando presente, identifica uma variante local daquele mesmo slot. Em uma execução `batch`, o núcleo associa cada atualização ao `batch.itemId` ativo; o plugin não o cria nem precisa incorporá-lo em `key`. A identidade incremental é, portanto, `batch.itemId` atribuído pelo núcleo + `variantKey` local (ou `key` nos plugins v1 legados) + `outputPort`. O núcleo mapeia essa identidade para seu próprio `itemId`, persiste cada transição e pode atualizar a interface assim que uma imagem, vídeo ou outro item existir, sem aguardar o término do job completo.
-
-### Erro
-
-```ts
-{
-  status: "error";
-  code: string;
-  message: string;
-  retryable: boolean;
-  retryAfterMs?: number;
-  usage?: PluginUsage;
-  logs?: string[];
-}
-```
-
-Códigos recomendados:
-
-| Código                     | Repetível normalmente? | Uso                                                 |
-| -------------------------- | ---------------------- | --------------------------------------------------- |
-| `INVALID_INPUT`            | Não                    | Valor incompatível com a porta.                     |
-| `INVALID_CONFIGURATION`    | Não                    | Parâmetro ausente ou inválido.                      |
-| `AUTHENTICATION_FAILED`    | Não                    | Credencial inválida ou expirada.                    |
-| `PERMISSION_DENIED`        | Não                    | Permissão não concedida.                            |
-| `NOT_FOUND`                | Não                    | Recurso solicitado não existe.                      |
-| `RATE_LIMIT`               | Sim                    | Limite temporário do provedor.                      |
-| `UPSTREAM_UNAVAILABLE`     | Sim                    | Provedor indisponível.                              |
-| `TIMEOUT`                  | Sim                    | Prazo excedido.                                     |
-| `OUTPUT_VALIDATION_FAILED` | Depende                | Provedor devolveu formato incorreto.                |
-| `JOB_FAILED`               | Depende                | Job assíncrono terminou com falha.                  |
-| `CANCELLED`                | Não                    | Execução cancelada.                                 |
-| `QUOTA_EXCEEDED`           | Não                    | Cota disponível foi esgotada.                       |
-| `UPGRADE_REQUIRED`         | Não                    | Operação exige decisão de upgrade.                  |
-| `ACCOUNT_BLOCKED`          | Não                    | Conta ou projeto está bloqueado.                    |
-| `CONTENT_REFUSED`          | Depende                | Provedor recusou executar o pedido.                 |
-| `DOM_INCOMPATIBLE`         | Não                    | Interface não corresponde ao contrato automatizado. |
-
-`retryable` informa possibilidade técnica; a política final pertence ao núcleo.
-
-A matriz comum de login, CAPTCHA, cota, rate limit, upgrade, bloqueio, recusa, ausência de mídia, DOM incompatível e fallback está em [`automation-media-conventions.md`](automation-media-conventions.md). Uma condição ainda aguardando intervenção no perfil atual permanece ativa ou `pending`; somente `error` encerra a tentativa e permite ao núcleo avançar o fallback.
-
-## 16. Validação e novas tentativas
-
-`attempt` começa em 1. Quando um bloco é refeito após reprovação:
-
-- o núcleo incrementa `attempt`;
-- invalida o trecho linear necessário;
-- envia `retryFeedback` do bloco `VALIDAR`;
-- preserva imagens da tentativa reprovada em `conversation.fallbackAttachments` quando outra conversa precisar ser aberta;
-- cria nova chave de idempotência;
-- preserva histórico das tentativas anteriores.
-
-O plugin usa feedback para mudar o resultado. Não cria loop interno para contornar `maxAttempts`.
-
-Erro técnico e reprovação editorial são diferentes:
-
-- erro técnico usa resposta `error`;
-- reprovação é um `success` válido de uma capacidade `VALIDAR` com `decision = rejected`.
-
-## 17. Logs, progresso e uso
-
-Logs são mensagens curtas para diagnóstico. Não devem conter:
-
-- secrets ou headers de autorização;
-- prompts privados completos;
-- conteúdo integral de arquivos;
-- caminhos privados da máquina;
-- payloads inteiros de provedores;
-- dados de outros usuários.
-
-Quando disponível, `usage` registra provedor, modelo, unidades e custo estimado. Valores de custo são informativos e identificam moeda. O núcleo pode agregar uso por canal, projeto, processo, bloco, plugin e tentativa.
-
-O plugin deve propagar IDs seguros do provedor para diagnóstico, como `request_id`, sem expor credenciais.
-
-## 18. Segurança do executor
-
-Requisitos mínimos antes de executar plugins comunitários:
-
-- validação integral do manifesto e JSON Schemas;
-- verificação de runtime e entrypoint;
-- isolamento do processo principal;
-- ambiente limpo com variáveis permitidas;
-- staging separado por execução;
-- permissões mínimas e consentimento;
-- timeout, limites de recursos e encerramento da árvore de processos;
-- cancelamento recuperável;
-- validação de artifacts e URLs;
-- proteção contra SSRF, path traversal e symlink escape;
-- redaction de secrets;
-- hash do pacote instalado;
-- registro de versão usada em cada snapshot de Método/execução.
-
-Plugins mantidos pelo autor seguem exatamente as mesmas regras e são distribuídos separadamente da release do núcleo.
-
-## 19. Instalação, atualização e remoção
-
-```text
-data/plugins/installed/   plugins instalados apenas na máquina do usuário
-data/plugins/local/       pastas locais opcionais, externas ao núcleo
-```
-
-O gerenciador descobre manifestos somente em subpastas diretas autorizadas e expõe caminhos relativos.
-
-### Instalação
-
-1. Extrair em pasta temporária. A raiz pode conter um plugin ou várias subpastas de plugins.
-2. Validar estrutura, manifesto, runtime, IDs únicos e integridade de todo o conjunto antes de copiar.
-3. Exibir autor, versão, permissões, settings e secrets.
-4. Obter consentimento.
-5. Mover atomicamente cada plugin novo para a pasta instalada; uma falha reverte todo o lote novo e nunca sobrescreve plugins existentes.
-6. Executar teste de saúde sem secrets, quando declarado.
-
-### Atualização
-
-- Validar compatibilidade antes de substituir.
-- Exigir consentimento se permissões aumentarem.
-- Manter versão anterior até a nova passar na validação.
-- Execuções em andamento continuam associadas à versão do snapshot.
-
-### Remoção
-
-- Bloquear nova seleção.
-- Não apagar outputs já produzidos.
-- Informar Métodos que dependem do plugin.
-- Remover settings e secrets somente com confirmação explícita.
-
-## 20. Compatibilidade e versionamento
-
-Alterações compatíveis em uma versão de plugin:
-
-- adicionar capacidade;
-- ampliar processo ou tipo aceito;
-- adicionar configuração opcional com default;
-- melhorar implementação sem mudar semântica.
-
-Alterações que exigem major do plugin:
-
-- remover ou renomear capacidade/porta;
-- tornar campo opcional obrigatório;
-- mudar tipo ou significado de output;
-- remover processo ou formato suportado;
-- alterar efeitos colaterais ou permissões de forma significativa.
-
-Alterações que exigem nova `apiVersion` do ContentFlow:
-
-- mudar envelopes de manifesto, requisição ou resposta de forma incompatível;
-- alterar semântica dos estados de execução;
-- mudar representação universal de valores;
-- mudar regras obrigatórias de artifacts, bindings ou segurança.
-
-O Método local deve salvar `pluginId`, `pluginVersion`, `capabilityId`, configuração, bindings e `connectionId` quando necessário. A exportação remove o ID local e conserva somente o requisito de conexão. A execução salva um snapshot da identidade do executor e da conexão usada, nunca do secret, para ser auditável e reproduzível dentro daquele ambiente.
-
-## 21. Subconjunto de JSON Schema e validação
-
-`settingsSchema`, `blockConfigSchema` e `outputSchema` usam JSON Schema Draft 2020-12, limitado aos recursos que o núcleo consegue validar e renderizar de forma idêntica em todas as plataformas.
-
-O schema canônico do manifesto fica versionado em [`schemas/contentflow-plugin-v1.schema.json`](schemas/contentflow-plugin-v1.schema.json). Durante o desenvolvimento, `$schema` pode apontar para a cópia local ou para `https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v1.schema.json`; esse campo ajuda editores, mas não substitui a validação feita pelo núcleo.
-
-Recursos aceitos na API v1:
-
-- `type`, `properties`, `required`, `additionalProperties`;
-- `title`, `description`, `default`, `examples`;
-- `enum`, `const`;
-- `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`;
-- `minLength`, `maxLength`, `pattern`, `format`;
-- `minItems`, `maxItems`, `uniqueItems`, `items`;
-- `allOf`, `anyOf`, `oneOf` e `not`, desde que a interface consiga representar o resultado sem código customizado.
-
-Regras adicionais:
-
-- o schema raiz de configurações é sempre `object`;
-- `additionalProperties` deve ser `false`, salvo justificativa expressa no protocolo de uma versão futura;
-- referências remotas (`$ref` por HTTP), schemas recursivos, funções, expressões e código embutido são proibidos;
-- `format` é validado, não apenas exibido; os formatos inicialmente suportados são `uri`, `email`, `date`, `date-time` e `duration`;
-- defaults precisam satisfazer o próprio schema;
-- valores desconhecidos são rejeitados antes de chamar o plugin;
-- limites do executor prevalecem sobre limites mais permissivos do manifesto.
-
-O manifesto é validado em duas etapas: primeiro contra o schema estrutural da `apiVersion`; depois por regras semânticas, como unicidade de IDs, compatibilidade entre portas e tipos, coerência entre permissões e efeitos colaterais e existência do entrypoint.
-
-## 22. Concorrência, isolamento e limpeza
-
-Cada invocação deve ser tratada como independente. Plugins não podem depender de variáveis globais mutáveis, arquivos temporários compartilhados ou ordem entre execuções diferentes.
-
-- `maxConcurrency` declara quantas invocações da capacidade podem coexistir com segurança. Ausência não significa ilimitado: o núcleo escolhe um padrão conservador.
-- O núcleo aplica limites globais, por plugin, capacidade, provedor e usuário. O menor limite vence.
-- Duas invocações com chaves de idempotência diferentes podem executar ao mesmo tempo; a mesma chave nunca recebe dois `start` concorrentes.
-- O diretório de staging e saída é exclusivo por invocação e tentativa.
-- Ao terminar, falhar ou cancelar, o plugin fecha streams, sockets, processos filhos e handles. O executor elimina recursos restantes após o prazo de encerramento.
-- Cache só pode existir em área concedida pelo núcleo, deve ser descartável, não pode conter secrets e nunca substitui persistência do job.
-- Estado necessário para `resume` deve estar no provedor externo, no `jobId` opaco ou no workspace obtido por `services.getWorkspacePath()`.
-
-Uma capacidade não deve implementar mutex global para serializar silenciosamente todo o aplicativo. Se o provedor só permite uma operação por vez, declare `maxConcurrency: 1` e documente o limite.
-
-Automação de navegador usa adicionalmente o contrato de Browser Bridge definido em [`browser-automation.md`](browser-automation.md). Esse transporte negocia versão e capabilities antes do primeiro efeito, usa `commandId` idempotente, sequência monotônica de eventos, snapshot sob demanda, observers limitados e backpressure por aba. A referência usada no handshake da Bridge é limitada à sessão e não expõe o `profileId` local persistente ao handler.
-
-Timeout, reconnect, worker reiniciado, perda do debugger ou resposta ausente depois de uma ação potencialmente mutável não provam que o efeito falhou. Nessas situações o plugin reconcilia recibo/job/resultado antes de qualquer replay. `reload` só pode ocorrer como ação allowlisted e controlada; enquanto houver efeito externo incerto, a recarga é bloqueada até reconciliação ou decisão explícita de recuperação segura.
-
-## 23. Efeitos externos, custos e confirmação
-
-`sideEffects` usa os seguintes valores:
-
-| Valor            | Significado                                                 |
-| ---------------- | ----------------------------------------------------------- |
-| `external_read`  | Consulta ou download em serviço externo.                    |
-| `external_write` | Criação, alteração ou exclusão em conta/serviço externo.    |
-| `public_publish` | Conteúdo pode se tornar público ou ser enviado a audiência. |
-| `local_artifact` | Geração de arquivo importado pelo ContentFlow.              |
-| `subprocess`     | Execução de programa permitido pelo executor.               |
-
-O array vazio significa que a capacidade é computacional e não produz efeitos fora de `values`. Permissões e efeitos são complementares: `network` autoriza o meio técnico; `external_write` declara a consequência.
-
-Regras:
-
-- todo efeito precisa ser declarado, descrito no README e coerente com as permissões;
-- `public_publish`, exclusão remota, compra, contratação, cobrança ou alteração irreversível exigem confirmação humana imediatamente antes do primeiro efeito, com destino e resumo visíveis;
-- confirmação não pode ser escondida em termos gerais de instalação nem reutilizada para outro destino;
-- simulação ou estimativa deve ocorrer antes da confirmação quando o provedor permitir;
-- retries automáticos não podem repetir efeitos não idempotentes;
-- o plugin registra identificadores externos necessários à reconciliação e deixa claro quando uma operação ficou em estado incerto;
-- `cancel` não promete desfazer um efeito já concluído; deve informar o que permaneceu externo.
-
-`cost.model` aceita:
-
-- `free`: a capacidade não cobra por uso, sem contar infraestrutura própria do usuário;
-- `metered`: o provedor cobra por unidade, operação, tempo ou assinatura;
-- `unknown`: o plugin não consegue afirmar o modelo de cobrança.
-
-`estimateSupported: true` obriga o plugin a fornecer uma estimativa pelo mecanismo que o SDK definir antes de iniciar operações tarifadas. Estimativas são informativas, incluem moeda/unidade e nunca são apresentadas como preço garantido. Mudança de custo ou efeito externo significativo exige major version do plugin e novo consentimento.
-
-## 24. Privacidade, dados externos e conteúdo não confiável
-
-`dataPolicy.sendsDataToThirdParties` é `true` quando qualquer entrada, contexto, metadado ou arquivo pode sair da máquina do usuário. Nesse caso:
-
-- `providers` lista empresas ou serviços que recebem dados diretamente;
-- URLs de retenção e treinamento devem apontar para políticas públicas atuais quando existirem;
-- a instalação e a configuração do bloco exibem quais dados podem sair e para qual finalidade;
-- o plugin envia somente os campos necessários para a capacidade;
-- dados de um canal não podem ser combinados com outro canal;
-- secrets de provedor nunca são encaminhados a outro provedor;
-- o plugin não pode usar conteúdo do usuário para treinamento, analytics de conteúdo ou finalidade secundária sem consentimento separado e explícito;
-- mudança de provedor ou finalidade exige atualização do manifesto e novo consentimento.
-
-Todo conteúdo externo e todo conteúdo gerado por IA são não confiáveis. O plugin deve tratar páginas, legendas, documentos, prompts, nomes de arquivos e metadados como dados, nunca como instruções do sistema. Em especial:
-
-- instruções encontradas dentro de uma entrada não ampliam permissões;
-- URLs são validadas contra SSRF, esquemas inseguros, redirecionamentos e destinos locais;
-- HTML é sanitizado e scripts não são executados;
-- arquivos são verificados por tipo real, tamanho, descompressão excessiva e conteúdo ativo;
-- valores externos não são interpolados em shell, SQL, caminhos ou templates executáveis;
-- logs e mensagens de erro minimizam dados pessoais e permitem redaction.
-
-O núcleo deve oferecer ao usuário uma forma de inspecionar e revogar consentimentos, apagar settings/secrets locais e identificar o provedor que processou cada execução.
-
-## 25. Proveniência, direitos e mídia gerada
-
-Capacidades que buscam ou geram mídia preservam, quando disponíveis:
-
-- URL e identificador da fonte;
-- autor ou titular informado;
-- licença e URL da licença;
-- data de obtenção;
-- termos ou restrições relevantes;
-- provedor, modelo e parâmetros necessários à rastreabilidade;
-- indicação de conteúdo sintético quando fornecida pelo provedor;
-- hash do arquivo importado.
-
-Um resultado tecnicamente válido não implica autorização jurídica de uso. O plugin não deve rotular um asset como “livre” ou “comercial” sem base verificável. Quando a licença estiver ausente ou ambígua, deve marcar a condição como desconhecida para decisão humana.
-
-O README do plugin informa quem é responsável por contas, termos do provedor, direitos de imagem, voz, música, marcas, dados pessoais e publicação. Metadados de proveniência devem acompanhar `records` ou artifacts por campos definidos na capacidade; o núcleo poderá padronizar um envelope de proveniência em versão compatível futura.
-
-Plugins e conteúdos de terceiros possuem suas próprias licenças. A licença do ContentFlow não relicencia automaticamente plugins independentes, e a licença de um plugin não concede direito de copiar o núcleo.
-
-## 26. Dependências, snapshots e ausência de plugin
-
-Um Método local referencia exatamente `pluginId`, `pluginVersion`, `capabilityId`, configuração, bindings e, quando exigido, `connectionId`. Na execução, o snapshot registra também hash do pacote, `apiVersion` e identidade não secreta da conexão. Templates exportados não levam o ID local: levam um requisito que precisa ser associado no destino.
-
-- Um plugin não pode importar código ou chamar capacidades de outro plugin diretamente.
-- Composição entre capacidades ocorre no Método, por blocos e contratos universais, mantendo dependências visíveis.
-- Se a versão exata não estiver instalada, o núcleo não substitui silenciosamente por outra versão.
-- Uma versão patch ou minor compatível pode ser proposta ao usuário; a decisão e a versão efetiva ficam no snapshot.
-- Plugin ausente, desativado pelo usuário, bloqueado por política técnica local ou incompatível gera `blocked_executor` com instrução de resolução, nunca sucesso fictício.
-- Conexão ausente, revogada, incompatível ou ambígua também gera `blocked_executor` e exige escolha explícita antes de uma nova execução.
-- Outputs já produzidos continuam acessíveis após remoção do plugin.
-- Importação de Método apresenta dependências, permissões, provedores, custos e versões antes de instalar qualquer pacote.
-
-Para reprodutibilidade, o catálogo deve manter o pacote ou hash das versões usadas durante o período de suporte. Se um provedor remoto mudar o comportamento do modelo, o plugin registra a versão/modelo efetivamente usados sempre que a API permitir.
-
-## 27. Atualização, migração e descontinuação
-
-O plugin pode declarar futuramente migrações de configuração, mas a API v1 não executa scripts arbitrários de migração. Alterações de schema devem ser compatíveis ou exigir uma nova major com migração mediada pelo núcleo e confirmação do usuário.
-
-Política mínima de descontinuação:
-
-- marcar a versão/capacidade como `deprecated` no catálogo sem removê-la imediatamente;
-- explicar substituto e prazo de suporte;
-- preservar documentação e verificação de integridade das versões ainda referenciadas;
-- impedir novas seleções somente após aviso adequado;
-- não alterar um pacote publicado sob o mesmo número de versão;
-- remover imediatamente do catálogo apenas para malware, credencial comprometida, violação grave ou risco material, sem apagar cópias locais.
-
-Atualizações são instaladas lado a lado ou de modo atomicamente reversível. Falha de validação mantém a versão anterior. Jobs assíncronos continuam presos à versão que iniciou a operação.
-
-## 28. Diagnóstico, telemetria e suporte
-
-O executor associa logs, métricas e eventos a `traceId`, `executionId`, bloco, tentativa, plugin, capacidade e versão, sem incluir secrets ou conteúdo integral.
-
-Telemetria do plugin:
-
-- é desativada por padrão quando não for indispensável ao serviço contratado;
-- requer declaração de provedor e finalidade;
-- não pode capturar prompts, arquivos ou outputs para analytics sem consentimento separado;
-- respeita exclusão e preferências locais;
-- não envia identificadores estáveis desnecessários.
-
-O pacote deve documentar canal de suporte e de vulnerabilidades. Diagnósticos exportáveis passam por redaction, mostram previamente o que será compartilhado e dependem de ação humana. Health checks não usam secrets nem realizam cobrança, publicação ou escrita externa.
-
-## 29. Governança e distribuição do ecossistema
-
-Plugins podem ser distribuídos por arquivo, repositório, organização ou catálogo. Na versão atual, o usuário obtém a pasta do pacote e escolhe **Instalar uma cópia** ou **Usar pasta ao vivo**; instalação direta por URL ainda não faz parte da interface. A execução local de um pacote compatível não exige submissão nem aprovação do mantenedor. Catálogos são superfícies opcionais de descoberta e confiança.
-
-Quando houver catálogo, ele diferencia plugins `reference`, `verified`, `community` e `private`:
-
-- `reference`: publicado como exemplo ou ponto de partida, sem promessa implícita de suporte contínuo;
-- `verified`: identidade, pacote e requisitos mínimos revisados, sem garantia de ausência de falhas;
-- `community`: distribuído pelo autor e ainda não verificado pelo projeto.
-- `private`: instalado diretamente pelo usuário ou por uma organização, fora do catálogo público.
-
-Todo anúncio exibe autor, licença, versão, origem, hash/assinatura quando disponível, permissões, efeitos externos, provedores, política de dados, custos, suporte e histórico de segurança. “Verified” não equivale a endosso do conteúdo gerado ou dos termos do provedor.
-
-O processo opcional de publicação, revisão, denúncia, remoção de catálogo e recurso está detalhado em [`distribution.md`](distribution.md). Requisitos técnicos automáticos de instalação e execução estão em [`security.md`](security.md).
-
-Plugins podem ser gratuitos, pagos, proprietários ou de código aberto conforme a licença de cada autor, desde que sejam integrações independentes construídas sobre o protocolo público. Não podem incorporar código protegido do núcleo nem se apresentar como clone, edição white-label ou substituto rebatizado do ContentFlow. A exceção para plugins e os limites de uso do código principal estão no [`LICENSE`](../../LICENSE).
-
-## 30. Conformidade mínima
-
-Antes de publicar um plugin:
-
-- [ ] Manifesto válido e IDs estáveis.
-- [ ] Licença, autoria, origem e suporte documentados.
-- [ ] Runtime e entrypoint compatíveis.
-- [ ] Portas obrigatórias e opcionais declaradas.
-- [ ] Configuração validada e defaults visíveis.
-- [ ] Permissões mínimas.
-- [ ] Efeitos externos, custos, provedores e políticas de dados declarados.
-- [ ] Confirmação humana testada para publicação e ações irreversíveis.
-- [ ] Concorrência, idempotência e limpeza de recursos testadas.
-- [ ] Secrets ausentes de método, resposta e logs.
-- [ ] Sucesso validado para todos os formatos declarados.
-- [ ] Entrada ausente e tipo incorreto testados.
-- [ ] Idempotência testada.
-- [ ] Timeout e cancelamento testados.
-- [ ] `pending`/`resume` testados quando assíncrono.
-- [ ] Artifacts inválidos e grandes demais rejeitados.
-- [ ] Rate limit e falha do provedor tratados.
-- [ ] Retry com `retryFeedback` testado.
-- [ ] Uso e logs não expõem conteúdo sensível.
-- [ ] Conteúdo externo tratado como não confiável e resistência a prompt injection testada.
-- [ ] Proveniência e situação de licença de mídia preservadas quando disponíveis.
-- [ ] Ausência, atualização e descontinuação do plugin não corrompem Métodos ou outputs.
-- [ ] README documenta custos, limites, licenças e efeitos externos.
-
-O plugin em [`ecosystem/plugins/examples/community-reference`](../../ecosystem/plugins/examples/community-reference) é a referência executável mínima. O Plugin Kit acrescenta validação, testes de contrato, execução no sandbox, fixtures e relatório de compatibilidade.
+Plugin API v2 e Método v3 são os únicos contratos aceitos pelo caminho canônico. API v1 e Métodos v1/v2 não recebem adapter automático. Conversão de pacotes anteriores é trabalho explícito e separado.
