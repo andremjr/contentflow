@@ -9,11 +9,17 @@ test("as duas skills oficiais existem, têm metadata e apontam para contratos vi
   for (const skill of skills) {
     const canonical = `ecosystem/skills/${skill}/SKILL.md`;
     const local = `.agents/skills/${skill}/SKILL.md`;
+    const boundaries = `ecosystem/skills/${skill}/references/layer-boundaries.md`;
     await access(canonical);
     await access(local);
+    await access(boundaries);
     const contents = await readFile(canonical, "utf8");
     assert.match(contents, new RegExp(`name: ${skill}`));
     assert.match(contents, /docs\/ARCHITECTURE\.md/);
+    if (skill === "contentflow-method-development") {
+      assert.match(contents, /Desenho estratégico e granularidade dos Blocos/);
+      assert.match(contents, /gerar imagens e depois animá-las/i);
+    }
   }
 });
 

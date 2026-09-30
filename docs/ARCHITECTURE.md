@@ -31,6 +31,20 @@ Sempre que uma necessidade recorrente surgir, a primeira pergunta arquitetural d
 
 Esse princípio vale também para UX: uma função universal pode aparecer de forma simples na execução, sem introduzir um novo Processo Universal, tipo de Bloco, Operador ou fluxo especializado. O produto cresce preferencialmente pela ampliação de primitivas reutilizáveis, não pelo acúmulo de modos de trabalho codificados.
 
+### 1.2.1. Fronteira eficiente entre estratégia e execução
+
+Tudo que afeta significado, identidade, segurança e continuidade passa pelo núcleo, mas nem toda operação técnica vira um Bloco. O ContentFlow trabalha em três escalas complementares:
+
+1. **Bloco do Método — transformação estratégica observável.** Existe quando o usuário precisa conectar, validar, substituir, reutilizar, preservar ou compreender uma entrega separadamente.
+2. **Unidade operacional do Core — execução endereçável.** Itens, tentativas, deliveries, artifacts, fallback, distribuição multiperfil, leases, retomada e recovery dão robustez ao mesmo Bloco sem aumentar o Método.
+3. **Subtarefa interna da capability — implementação da ferramenta.** Login, navegação, upload, polling, download, parsing, checkpoints e outras operações necessárias podem permanecer dentro do plugin e da Browser Bridge quando não produzem uma decisão ou entrega estratégica independente.
+
+Separe Blocos quando o resultado intermediário tiver valor próprio: for consumido depois, exigir `VALIDAR`, puder trocar de operador/plugin sem refazer o anterior, possuir efeito ou confirmação independente, ou precisar sobreviver ao retry da etapa seguinte. Mantenha as operações juntas quando formarem uma única intenção e uma única entrega observável, e os intermediários forem descartáveis ou puramente técnicos.
+
+Quantidade de itens, perfis, tentativas, páginas visitadas ou chamadas ao provedor não determina quantidade de Blocos. Um Bloco pode processar centenas de work units e usar fallback ou paralelismo entre perfis físicos distintos sob controle do Core. Da mesma forma, validação técnica de página, arquivo ou resposta pertence ao plugin e ao contrato; somente julgamento editorial ou decisão estratégica vira `VALIDAR`.
+
+Uma capability combinada é válida quando entrega atomicamente o contrato estratégico do Bloco. Ela não pode esconder um Método inteiro, decisões editoriais distintas ou efeitos externos que precisem de consentimento separado. Por exemplo, gerar imagens e animá-las usa dois Blocos quando as imagens devem ser preservadas, revisadas ou reutilizadas; pode usar um único Bloco de vídeo quando as imagens forem intermediários internos descartáveis e somente o vídeo final tiver significado para o Método.
+
 ### 1.3. Leis do ContentFlow
 
 Estas invariantes orientam mudanças no Método, no motor de execução, nos plugins e na interface:

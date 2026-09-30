@@ -21,6 +21,14 @@ Leia no checkout atual `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/CONTENT_CONTRA
 
 Plugins nunca inventam IDs universais de item/delivery, nem gerenciam diretamente identidade ou proveniência pertencente ao Core.
 
+## Capability, Bloco e eficiência
+
+Projete a capability para uma entrega estratégica observável, não para cada operação técnica. Ela pode conter navegação, upload, polling, download, parsing, checkpoints e vários jobs quando tudo servir a uma única intenção do Bloco. O Core continua responsável por work units, perfis, leases, tentativas, distribuição, deliveries e recovery; a Browser Bridge apenas transporta operações autorizadas de navegador.
+
+Separe capabilities quando o intermediário precisar ser conectado, validado editorialmente, substituído, reutilizado ou preservado de forma independente. Não crie capabilities ou exija Blocos distintos por item, tentativa, perfil, página ou clique. Use portas `many`, item orchestration e política de perfil do Core para escala operacional. Validação técnica fica no plugin; decisão editorial fica em `VALIDAR`.
+
+Leia [layer-boundaries.md](references/layer-boundaries.md) ao definir a superfície da capability e [browser-automation.md](references/browser-automation.md) quando houver navegador.
+
 ## Manifesto atual
 
 Use `contentflow.plugin.json`, `apiVersion: "2"` e valide com `server/plugin-validation.ts`/Plugin Kit. Declare somente campos existentes no schema vivo.
@@ -59,12 +67,13 @@ O Core cria/persiste identidade, ordem, tentativa e proveniência. O plugin só 
 ## Workflow
 
 1. Escolha a capability mínima e a entrega observável.
-2. Gere/parta dos templates atuais do Plugin Kit quando disponíveis.
-3. Declare manifesto, portas, permissões e metadados honestamente.
-4. Implemente handler sem estratégia de projeto embutida.
-5. Teste erro, cancelamento, idempotência, artifacts, secrets e efeitos externos relevantes.
-6. Para browser, teste preparação/readiness, lease, reconciliação e comportamento sem sessão pronta.
-7. Rode `npm run plugin:kit -- check <plugin>` e `test-contract`; use sandbox test quando aplicável.
+2. Confirme se os passos internos pertencem à mesma entrega ou se algum intermediário exige capability separada.
+3. Gere/parta dos templates atuais do Plugin Kit quando disponíveis.
+4. Declare manifesto, portas, permissões e metadados honestamente.
+5. Implemente handler sem estratégia de projeto embutida.
+6. Teste erro, cancelamento, idempotência, artifacts, secrets e efeitos externos relevantes.
+7. Para browser, teste preparação/readiness, lease, reconciliação e comportamento sem sessão pronta.
+8. Rode `npm run plugin:kit -- check <plugin>` e `test-contract`; use sandbox test quando aplicável.
 
 ## Exemplo oficial
 
@@ -85,6 +94,7 @@ O Core cria/persiste identidade, ordem, tentativa e proveniência. O plugin só 
 ## Checklist
 
 - plugin executa capability; estratégia/progressão ficam fora dele;
+- capability representa uma entrega observável sem expor subtarefas técnicas como Blocos;
 - manifesto e portas passam no validator atual;
 - efeitos, custo, dados e permissões estão declarados conforme contrato vivo;
 - Browser Bridge/perfis respeitam binding, readiness e lease do Core;

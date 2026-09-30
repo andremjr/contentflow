@@ -81,6 +81,20 @@ O plugin não injeta uma interface arbitrária. O núcleo interpreta um schema d
 
 O preview usado durante o desenvolvimento do plugin deve renderizar esse mesmo schema com o mesmo renderer do editor de Método. Assim, o autor desenvolve e testa a interface funcional junto do plugin, e o que aprovar no preview é o que o usuário verá depois de selecionar aquela capability no Bloco.
 
+## Granularidade da capability e do Bloco
+
+A interface do plugin configura **uma capability ligada a um Bloco**; ela não decide quantos Blocos o Método deve possuir. Uma capability pode executar várias operações técnicas para produzir sua entrega, e essas operações não aparecem como Blocos apenas por existirem na ferramenta externa.
+
+Use a fronteira observável:
+
+- resultado que o usuário precisa conectar, validar, substituir, reutilizar ou preservar separadamente é candidato a outro Bloco;
+- quantidade de itens, tentativas, perfis, uploads, páginas, polls ou downloads permanece dentro da execução do mesmo Bloco, administrada pelo Core e pela capability;
+- preparação de perfil, autenticação, lease, fallback e paralelismo são recursos operacionais do núcleo, não etapas do Método;
+- navegação, seletores e comandos da Browser Bridge são implementação do plugin, não opções estratégicas por si só;
+- validação técnica de página, arquivo ou resposta permanece interna; decisão editorial pertence a `VALIDAR`.
+
+Quando um modo combinado esconder um intermediário com valor próprio, a interface deve permitir capabilities/portas que mantenham esse valor explícito e deixar o Método compor os Blocos. Quando os intermediários forem descartáveis e somente a entrega final importar, a capability pode mantê-los internos. Essa regra evita tanto uma caixa-preta que apaga a estratégia quanto dezenas de Blocos que apenas reproduzem detalhes da ferramenta.
+
 ## Exemplo genérico: geração de assets visuais
 
 Considere um Bloco humano anterior que produziu uma lista ordenada de prompts. O Bloco seguinte usa uma capability de geração visual e recebe esses itens.

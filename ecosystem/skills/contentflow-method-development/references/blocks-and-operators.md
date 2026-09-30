@@ -30,6 +30,13 @@ Use `IA` para geração ou análise por modelo; `Humano` para julgamento, escrit
 - Aplicação de layout já salvo: `ESCOLHER/Humano` com coleção do canal.
 - Aprovação de thumbnail recém-criada: `CRIAR/IA` → `VALIDAR/Humano` com `approval`.
 - Renderização de vídeo: `CRIAR/Código` com output `video`.
+- Geração de imagens seguida de animação: `CRIAR/IA` com `image/many/artifact` → opcional `VALIDAR` → `CRIAR/IA` com `video/many/artifact`.
+
+## Granularidade estratégica
+
+Não copie automaticamente para um Bloco o agrupamento oferecido pela interface de um plugin. Separe duas operações quando o resultado intermediário tiver valor estratégico: puder ser validado, reutilizado, encaminhado a outro Bloco, produzido por outro executor ou preservado enquanto a etapa seguinte é refeita. Mudança de família ou significado — por exemplo, imagem para vídeo — é um forte sinal de fronteira entre Blocos.
+
+Agrupe somente detalhes internos inseparáveis da mesma ação, sem entrega intermediária útil nem decisão própria. O objetivo não é criar o maior número de Blocos, mas tornar explícitas as decisões, entregas e fronteiras de retry que dão ao ContentFlow sua vantagem estrutural.
 
 ## Biblioteca Estratégica
 

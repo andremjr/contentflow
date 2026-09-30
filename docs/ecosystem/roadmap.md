@@ -8,7 +8,7 @@ O protocolo normativo está em [`protocol.md`](protocol.md) e o guia prático em
 
 A fundação atual inclui plugin comunitário de referência, sandbox Node 26, jobs retomáveis, artifacts, Plugin Kit e IDs universais de entregas. O trabalho ativo é ampliar capacidades reais com a comunidade e comprovar esteiras verticais de vídeo completo.
 
-Um plugin deve oferecer capacidades atômicas para `BUSCAR`, `ESCOLHER`, `CRIAR` ou `VALIDAR`. Ele não deve esconder um método inteiro dentro de uma integração. Sequência, conexões, repetição e pausas humanas continuam pertencendo ao núcleo.
+Um plugin deve oferecer capacidades atômicas **no nível da entrega estratégica** para `BUSCAR`, `ESCOLHER`, `CRIAR` ou `VALIDAR`. Isso não exige uma capability por chamada, clique, item ou perfil: subtarefas técnicas podem permanecer internas e repetição operacional usa work units do Core. O plugin não deve esconder um Método inteiro dentro de uma integração. Sequência estratégica, identidades, perfis, repetição, recovery e pausas humanas continuam pertencendo ao núcleo.
 
 Plugins podem ter parâmetros locais como modelo, formato, proporção, resolução, voz ou qualidade. Esses parâmetros não devem se tornar configurações globais do Projeto. Quando obrigatórios, são validados no bloco antes da execução; quando opcionais, devem possuir padrões seguros e explícitos.
 

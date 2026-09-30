@@ -62,10 +62,10 @@ function channelId(value?: string) {
 }
 
 const server = new McpServer(
-  { name: "contentflow-method-builder", version: "1.0.0" },
+  { name: "contentflow-method-builder", version: "1.2.0" },
   {
     instructions:
-      "Configure Methods, process order, and the Strategic Library only for channels that already exist in ContentFlow. Inspect the channel context and method contract first, use only installed plugins and local connection/profile identifiers exposed by the context, validate Methods before applying, and never request or store secrets. Do not create channels or plugins. Production execution remains inside ContentFlow.",
+      "Configure Methods, process order, and the Strategic Library only for channels that already exist in ContentFlow. Inspect the channel context and method contract first. Design the strategy and observable Block boundaries before selecting plugins: split stages that have reusable intermediate outputs, editorial validation, different result families, independent effects, or meaningful partial recovery; never collapse stages only because a plugin offers a combined mode. Do not create Blocks for collection items, attempts, profiles, lanes, leases, login, navigation, upload, polling, download, parsing, or technical validation: those belong to Core work units/profile policy or internal plugin/Browser Bridge execution. Use only installed plugins and local connection/profile identifiers exposed by the context, validate Methods before applying, and never request or store secrets. Do not create channels or plugins. Production execution remains inside ContentFlow.",
   },
 );
 
@@ -103,7 +103,7 @@ server.registerTool(
   {
     title: "Get ContentFlow Method contract",
     description:
-      "Returns the canonical eight processes, four block types, three operators, process outputs, and portability rules.",
+      "Returns the canonical eight processes, four block types, three operators, process output ports, strategic Block-granularity guidance, and portability rules.",
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   async () => result(await api("/api/builder/method-contract")),

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Channel, ProcessMethod } from "../src/lib/domain";
 import type { RegisteredPlugin } from "./plugin-runner";
-import { type BuilderPluginContext, validateBuilderMethods } from "./builder-methods";
+import {
+  BUILDER_METHOD_CONTRACT,
+  type BuilderPluginContext,
+  validateBuilderMethods,
+} from "./builder-methods";
 
 const channel = {
   id: "channel-1",
@@ -12,6 +16,20 @@ const channel = {
   language: "pt-BR",
   methods: {},
 } as Channel;
+
+test("builder contract exposes separate canonical image and video asset outputs", () => {
+  assert.deepEqual(
+    BUILDER_METHOD_CONTRACT.processOutputs.assets.map((output) => output.key),
+    ["images", "videos"],
+  );
+  assert.match(BUILDER_METHOD_CONTRACT.strategyGuidance.example, /CRIAR images/);
+  assert.match(BUILDER_METHOD_CONTRACT.strategyGuidance.layerResponsibilities.core, /work units/);
+  assert.ok(
+    BUILDER_METHOD_CONTRACT.strategyGuidance.avoidExtraBlocksFor.some((item) =>
+      item.includes("perfis"),
+    ),
+  );
+});
 
 function manualThemeMethod(): ProcessMethod {
   return {

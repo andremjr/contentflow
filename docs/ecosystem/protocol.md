@@ -74,6 +74,24 @@ Cada porta possui exatamente um `shape`. Não existem `acceptedTypes`, `produced
 
 Múltiplas famílias usam múltiplas portas. Uma capability que produz imagens e vídeos declara, por exemplo, `images: image/many/artifact` e `videos: video/many/artifact`.
 
+## Fronteira da capability e papéis das camadas
+
+Uma capability implementa o contrato observável de um Bloco; ela não precisa corresponder a uma única chamada, clique ou job do provedor. O desenho eficiente separa responsabilidades:
+
+| Camada         | Responsabilidade                                                                                           |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| Método/Bloco   | intenção, composição, bindings e entregas que possuem valor estratégico próprio                            |
+| Core           | identidade, estado, work units, deliveries, artifacts, perfis, leases, tentativas, distribuição e recovery |
+| Plugin         | particularidade do provedor e subtarefas necessárias para cumprir a capability                             |
+| Browser Bridge | transporte versionado e privilegiado de operações de navegador já autorizadas                              |
+| Perfil         | recurso físico local pertencente ao Core, acessível ao plugin somente por vínculo explícito                |
+
+Separe capabilities e Blocos quando um intermediário precisar ser conectado, validado editorialmente, substituído, reutilizado ou preservado sem repetir a etapa anterior. Mantenha internas operações como autenticação já preparada, navegação, upload, polling, download, parsing e checkpoints quando elas servirem somente para produzir uma única entrega estratégica.
+
+Não crie uma capability ou Bloco por item, tentativa ou perfil. Uma porta `many` com `execution.itemOrchestration` permite que o Core materialize work units; `profileExecution` permite fallback ou distribuição entre perfis físicos distintos; ambos preservam um único Bloco. Validação técnica de resposta faz parte do plugin e do contrato, enquanto decisão editorial explícita pertence a `VALIDAR`.
+
+Uma capability combinada pode encadear operações internas se houver uma única intenção e entrega observável. Ela não pode esconder um Método completo, escolher o próximo Bloco/Processo, realizar decisões editoriais internas nem absorver efeitos que exijam consentimentos independentes.
+
 ## Binding
 
 O Método materializa `portKey` explicitamente. O runtime procura essa chave exata e valida `ValueShape`; não escolhe por label, ordem, alias, tipo aproximado ou primeira porta compatível.

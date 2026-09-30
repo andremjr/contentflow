@@ -104,6 +104,29 @@ test(
         "validate_contentflow_methods",
       ]);
 
+      const contractResult = await client.callTool({
+        name: "get_contentflow_method_contract",
+        arguments: {},
+      });
+      const contract = JSON.parse(
+        (contractResult.content as Array<{ type: "text"; text: string }>)[0].text,
+      ) as {
+        processOutputs: { assets: Array<{ key: string }> };
+        strategyGuidance: {
+          example: string;
+          layerResponsibilities: { core: string; browserBridge: string };
+          avoidExtraBlocksFor: string[];
+        };
+      };
+      assert.deepEqual(
+        contract.processOutputs.assets.map((output) => output.key),
+        ["images", "videos"],
+      );
+      assert.match(contract.strategyGuidance.example, /CRIAR images/);
+      assert.match(contract.strategyGuidance.layerResponsibilities.core, /work units/);
+      assert.match(contract.strategyGuidance.layerResponsibilities.browserBridge, /Transporta/);
+      assert.ok(contract.strategyGuidance.avoidExtraBlocksFor.some((item) => /perfis/.test(item)));
+
       const inspected = await client.callTool({
         name: "inspect_contentflow_channel",
         arguments: {},

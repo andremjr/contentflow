@@ -82,6 +82,10 @@ Uma capacidade continua representando uma entrega observável de um bloco, mas p
 
 O plugin pode manter sua própria fila interna, checkpoints e subtarefas necessárias para produzir aquela entrega. A sequência externa entre blocos e Processos Universais, aprovações humanas e repetição editorial continuam visíveis no Método.
 
+Não transforme cada navegação, clique, upload, espera, download, item, tentativa ou perfil em Bloco. A Browser Bridge transporta operações da capability; ela não define estratégia. O Core mantém identidade, work units, leases, perfis, distribuição e recovery, permitindo que um único Bloco processe lotes grandes e use vários perfis sem duplicar o canvas.
+
+Separe a capability quando um resultado intermediário precisar ser conectado, validado editorialmente, substituído, reutilizado ou preservado como delivery independente. Mantenha-o interno quando for descartável e existir apenas para obter a entrega final. Validação de URL, conta, página, arquivo e resposta é técnica e interna; julgamento sobre qualidade ou escolha de resultado continua em `VALIDAR`.
+
 ## 6. Arquitetura de navegador gerenciada pelo núcleo
 
 A automação do navegador é uma implementação interna da capacidade do plugin:
@@ -362,7 +366,7 @@ Além dos testes gerais do protocolo, cubra:
 
 - [ ] O provedor e o plano permitem a automação proposta.
 - [ ] API ou OAuth oficiais foram avaliados primeiro.
-- [ ] A capacidade é atômica e cabe em um bloco existente.
+- [ ] A capacidade possui uma entrega estratégica observável, sem esconder um Método inteiro nem expor cliques, itens ou perfis como Blocos.
 - [ ] Domínios, conta, dados enviados, retenção, custos e efeitos estão documentados.
 - [ ] Cookies, tokens ou perfis, se indispensáveis, são conectados explicitamente e nunca extraídos silenciosamente.
 - [ ] Cotas e serialização do provedor são preservadas.

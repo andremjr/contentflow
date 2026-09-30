@@ -98,7 +98,7 @@ Revisão pode pedir escopo menor, documentação adicional ou correção para aq
 ## 7. Critérios mínimos de aceitação
 
 - manifesto e pacote conformes à API suportada;
-- capacidade atômica, sem reimplementar o orquestrador;
+- capacidade atômica no nível da entrega estratégica, sem reimplementar o orquestrador nem exigir Blocos para subtarefas técnicas;
 - permissões mínimas e efeitos completos;
 - secrets fora do pacote;
 - política de dados e provedores coerentes com o tráfego observado;

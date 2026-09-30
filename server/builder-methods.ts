@@ -24,38 +24,101 @@ export const BUILDER_METHOD_CONTRACT = {
   blockTypes: ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
   operators: ["IA", "Humano", "Código"],
   processOutputs: {
-    theme: {
-      key: "theme",
-      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+    theme: [
+      {
+        key: "theme",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+      },
+    ],
+    title: [
+      {
+        key: "title",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+      },
+    ],
+    thumbnail: [
+      {
+        key: "thumbnail",
+        shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" },
+      },
+    ],
+    script: [
+      {
+        key: "script",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+      },
+    ],
+    narration: [
+      {
+        key: "audio",
+        shape: { kind: "content", family: "audio", cardinality: "one", representation: "artifact" },
+      },
+    ],
+    assets: [
+      {
+        key: "images",
+        shape: {
+          kind: "content",
+          family: "image",
+          cardinality: "many",
+          representation: "artifact",
+        },
+      },
+      {
+        key: "videos",
+        shape: {
+          kind: "content",
+          family: "video",
+          cardinality: "many",
+          representation: "artifact",
+        },
+      },
+    ],
+    editing: [
+      {
+        key: "video",
+        shape: { kind: "content", family: "video", cardinality: "one", representation: "artifact" },
+      },
+    ],
+    publishing: [{ key: "url", shape: { kind: "control", control: "url", cardinality: "one" } }],
+  },
+  strategyGuidance: {
+    blockGranularity:
+      "Cada Bloco representa uma transformação estratégica observável, não uma tela ou modo conveniente de plugin.",
+    layerResponsibilities: {
+      method:
+        "Define intenção, composição, bindings e entregas que possuem valor estratégico próprio.",
+      core: "Possui identidade, estado, work units, deliveries, artifacts, perfis, leases, tentativas, distribuição e recovery.",
+      plugin:
+        "Executa a particularidade do provedor e pode manter subtarefas internas necessárias para cumprir uma capability.",
+      browserBridge:
+        "Transporta operações de navegador autorizadas e versionadas; não define estratégia nem recovery.",
+      profile:
+        "É recurso físico local do Core, reutilizável somente por vínculos explícitos e nunca vira etapa do Método.",
     },
-    title: {
-      key: "title",
-      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
-    },
-    thumbnail: {
-      key: "thumbnail",
-      shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" },
-    },
-    script: {
-      key: "script",
-      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
-    },
-    narration: {
-      key: "audio",
-      shape: { kind: "content", family: "audio", cardinality: "one", representation: "artifact" },
-    },
-    assets: {
-      key: "assets",
-      shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
-    },
-    editing: {
-      key: "video",
-      shape: { kind: "content", family: "video", cardinality: "one", representation: "artifact" },
-    },
-    publishing: { key: "url", shape: { kind: "control", control: "url", cardinality: "one" } },
+    splitWhen: [
+      "A etapa produz uma entrega intermediária útil, reutilizável ou inspecionável.",
+      "A etapa muda a família, a representação ou o significado do resultado.",
+      "A etapa possui validação, retry, executor, configuração, custo ou falha independentes.",
+      "Preservar a etapa evita repetir trabalho concluído e melhora proveniência ou recuperação parcial.",
+    ],
+    combineWhen:
+      "Combine somente detalhes internos inseparáveis da mesma ação, sem entrega intermediária estrategicamente útil nem decisão própria.",
+    avoidExtraBlocksFor: [
+      "itens de uma coleção many",
+      "tentativas, retry, fallback ou reconciliação",
+      "perfis, lanes e leases",
+      "login já preparado, navegação, upload, polling, download ou parsing",
+      "validação técnica de página, arquivo ou resposta",
+    ],
+    example:
+      "Gerar imagens e animá-las deve ser, por padrão, CRIAR images → VALIDAR opcional → CRIAR videos; use um único Bloco apenas se as imagens forem detalhe interno descartável e o contrato exigir somente o vídeo final.",
   },
   rules: [
     "Use somente os oito processos, quatro tipos de bloco e três operadores declarados.",
+    "Defina a estratégia e as fronteiras dos Blocos antes de escolher plugin ou capability.",
+    "Não colapse etapas estratégicas apenas porque uma capability oferece um modo combinado.",
+    "Não crie Blocos para itens, perfis, tentativas ou operações técnicas internas da capability.",
     "Referências previous_block devem apontar para um bloco anterior do mesmo Método.",
     "Referências previous_process devem apontar para um processo universal anterior.",
     "Nunca inclua segredos, tokens, IDs de execução, projeto, entrega ou item no Método.",
@@ -288,18 +351,20 @@ export function validateBuilderMethods(input: {
     }
     const issue = getMethodConfigurationIssue(method);
     if (issue) errors.push(`${processType}: ${issue}`);
-    const finalOutput = BUILDER_METHOD_CONTRACT.processOutputs[processType];
+    const finalOutputs = BUILDER_METHOD_CONTRACT.processOutputs[processType];
     if (
-      !blocks.some((block) =>
-        block.outputs?.some(
-          (output) =>
-            output.key === finalOutput.key &&
-            areValueShapesCompatible(output.shape, finalOutput.shape),
+      !finalOutputs.some((finalOutput) =>
+        blocks.some((block) =>
+          block.outputs?.some(
+            (output) =>
+              output.key === finalOutput.key &&
+              areValueShapesCompatible(output.shape, finalOutput.shape),
+          ),
         ),
       )
     ) {
       warnings.push(
-        `${processType}: nenhum bloco entrega diretamente ${finalOutput.key} no shape canônico; a saída final dependerá do preenchimento humano.`,
+        `${processType}: nenhum bloco entrega diretamente um dos outputs canônicos (${finalOutputs.map((output) => output.key).join(", ")}); a saída final dependerá do preenchimento humano.`,
       );
     }
   }
