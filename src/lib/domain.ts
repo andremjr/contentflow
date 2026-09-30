@@ -248,6 +248,8 @@ export type ActionBlock = {
 };
 
 export type ProcessMethod = {
+  /** Version of the canonical Method contract. Absent means a historical representation. */
+  contractVersion?: 2;
   name: string;
   imageUrl?: string;
   processType: UniversalProcess;
@@ -656,7 +658,12 @@ export function createEmptyMethods(): Record<UniversalProcess, ProcessMethod> {
   return Object.fromEntries(
     PROCESS_ORDER.map((processType) => [
       processType,
-      { name: `Método de ${PROCESS_META[processType].label}`, processType, blocks: [] },
+      {
+        contractVersion: 2,
+        name: `Método de ${PROCESS_META[processType].label}`,
+        processType,
+        blocks: [],
+      },
     ]),
   ) as unknown as Record<UniversalProcess, ProcessMethod>;
 }

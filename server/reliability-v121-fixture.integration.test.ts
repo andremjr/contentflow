@@ -273,6 +273,12 @@ function assertExpectedState(state: Awaited<ReturnType<typeof semanticState>>) {
     ["completed", "awaiting_human", "pending"],
   );
   assert.equal(state.scriptState.execution.methodSnapshot.name, "Fixture Script Method");
+  assert.equal(state.scriptState.execution.methodSnapshot.contractVersion, 2);
+  assert.deepEqual(state.scriptState.execution.methodSnapshot.blocks[1].inputs?.[0].binding, {
+    kind: "previous_block",
+    blockId: "script-research",
+    outputKey: "findings",
+  });
   assert.equal(state.scriptState.execution.blocks[0].items?.length, 2);
   assert.deepEqual(
     state.scriptState.execution.blocks[0].items?.map((item) => item.status),

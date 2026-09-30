@@ -41,6 +41,10 @@ export function executionCommands(db: {
   executions: ProcessExecution[];
   libraryItems: ChannelLibraryItem[];
   libraryCollections: StrategicCollection[];
+  adaptMethod?: (
+    method: ProcessMethod,
+    source: "strategy_snapshot" | "persisted_channel",
+  ) => ProcessMethod | undefined;
 }) {
   const touchExecution = (execution: ProcessExecution) => {
     execution.updatedAt = new Date().toISOString();
@@ -58,9 +62,16 @@ export function executionCommands(db: {
         channel,
         db.executions.some((item) => item.projectId === projectId),
       );
-    const method = project?.strategySnapshot?.methods[processType] ?? channel?.methods[processType];
+    const snapshotMethod = project?.strategySnapshot?.methods[processType];
+    const storedMethod = snapshotMethod ?? channel?.methods[processType];
+    const method = storedMethod
+      ? db.adaptMethod
+        ? db.adaptMethod(storedMethod, snapshotMethod ? "strategy_snapshot" : "persisted_channel")
+        : storedMethod
+      : undefined;
     const normalizedMethod = method
       ? {
+          contractVersion: method.contractVersion,
           name: method.name || `Método de ${PROCESS_META[processType].label}`,
           imageUrl: method.imageUrl,
           processType,
@@ -77,6 +88,7 @@ export function executionCommands(db: {
     }
     const now = new Date().toISOString();
     const methodSnapshot: ProcessMethod = {
+      contractVersion: normalizedMethod.contractVersion,
       name: normalizedMethod.name,
       imageUrl: normalizedMethod.imageUrl,
       processType,

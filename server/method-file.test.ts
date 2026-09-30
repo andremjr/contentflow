@@ -28,6 +28,16 @@ const method: ProcessMethod = {
       operator: "IA",
       name: "Escrever roteiro",
       parameters: [],
+      outputs: [
+        {
+          id: "script-output",
+          label: "Roteiro",
+          key: "script",
+          type: "textarea",
+          required: true,
+          portKey: "generated_text",
+        },
+      ],
       order: 0,
       plugin: {
         pluginId: "official-openai-gpt",

@@ -76,6 +76,7 @@ test("script output can feed thumbnail only after script moves ahead", () => {
         sourceProcessType: "script",
         blockId: "__process_output__",
         sourceKey: "script",
+        binding: { kind: "previous_process", processType: "script", outputKey: "script" },
       },
     ]),
   };
@@ -85,6 +86,11 @@ test("script output can feed thumbnail only after script moves ahead", () => {
   );
   assert.deepEqual(validateProcessDependencies(reordered, methods), []);
   methods.thumbnail.blocks[0].inputs![0].sourceKey = "missing";
+  methods.thumbnail.blocks[0].inputs![0].binding = {
+    kind: "previous_process",
+    processType: "script",
+    outputKey: "missing",
+  };
   assert.match(
     validateProcessDependencies(reordered, methods).join("\n"),
     /saída anterior não encontrada/,
@@ -102,6 +108,11 @@ test("cross process cycles and incompatible source types are rejected", () => {
         sourceProcessType: "thumbnail",
         blockId: "__process_output__",
         sourceKey: "thumbnail",
+        binding: {
+          kind: "previous_process",
+          processType: "thumbnail",
+          outputKey: "thumbnail",
+        },
       },
     ]),
     thumbnail: method("thumbnail", [
@@ -113,6 +124,7 @@ test("cross process cycles and incompatible source types are rejected", () => {
         sourceProcessType: "script",
         blockId: "__process_output__",
         sourceKey: "script",
+        binding: { kind: "previous_process", processType: "script", outputKey: "script" },
       },
     ]),
   };
@@ -133,6 +145,7 @@ test("resolved import order moves required dependencies ahead", () => {
         sourceProcessType: "script",
         blockId: "__process_output__",
         sourceKey: "script",
+        binding: { kind: "previous_process", processType: "script", outputKey: "script" },
       },
     ]),
   };
@@ -149,6 +162,12 @@ test("resolved import order rejects dependency cycles", () => {
       sourceProcessType: "thumbnail",
       blockId: "thumbnail-block",
       sourceKey: "thumbnail",
+      binding: {
+        kind: "previous_process",
+        processType: "thumbnail",
+        blockId: "thumbnail-block",
+        outputKey: "thumbnail",
+      },
     },
   ]);
   const thumbnail = method("thumbnail", [
@@ -160,6 +179,12 @@ test("resolved import order rejects dependency cycles", () => {
       sourceProcessType: "script",
       blockId: "script-block",
       sourceKey: "script",
+      binding: {
+        kind: "previous_process",
+        processType: "script",
+        blockId: "script-block",
+        outputKey: "script",
+      },
     },
   ]);
   assert.equal(resolveProcessOrderForMethods(PROCESS_ORDER, { script, thumbnail }), undefined);

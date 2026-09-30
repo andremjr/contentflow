@@ -130,7 +130,8 @@ test("keeps the Reliability Program connected and bounded", () => {
   for (const taskId of expectedTaskIds.slice(0, 26)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `done`\\s+\\|"));
   }
-  assert.match(roadmap, /\| TASK-027 \|[^\n]+\| `ready`\s+\|/);
+  assert.match(roadmap, /\| TASK-027 \|[^\n]+\| `done`\s+\|/);
+  assert.match(roadmap, /\| TASK-028 \|[^\n]+\| `ready`\s+\|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
@@ -473,7 +474,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   );
   assert.doesNotMatch(server, /function updateProjectAfterPluginBlock/);
 
-  for (const taskId of expectedTaskIds.slice(27)) {
+  for (const taskId of expectedTaskIds.slice(28)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

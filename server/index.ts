@@ -113,6 +113,7 @@ import {
 } from "../src/lib/instruction-template";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { normalizeItemReplacement } from "../src/lib/plugin-item-actions";
+import { adaptLegacyMethod, type LegacyMethodSource } from "../src/lib/legacy-method-adapter";
 import {
   activeProjectDeliveries,
   normalizeExecutionDeliveries,
@@ -613,6 +614,48 @@ function parseRows(rows: { payload: string }[]) {
   return rows.map((row) => JSON.parse(row.payload));
 }
 
+const historicalMethodSnapshot = Symbol("historicalMethodSnapshot");
+type AdaptedStoredExecution = ProcessExecution & {
+  [historicalMethodSnapshot]?: ProcessMethod;
+};
+
+function legacyCapability(pluginId: string, capabilityId: string) {
+  initializePluginRunner();
+  const plugin = getRegisteredPlugin(pluginId);
+  const capability = plugin?.manifest.capabilities.find((item) => item.id === capabilityId);
+  return capability ? { pluginVersion: plugin?.manifest.version, capability } : undefined;
+}
+
+function adaptMethodForRuntime(
+  method: ProcessMethod,
+  source: LegacyMethodSource,
+  requireFrozenPluginVersionForPorts = false,
+) {
+  return adaptLegacyMethod(method, {
+    source,
+    recoverHistoricalValidationTarget: true,
+    requireFrozenPluginVersionForPorts,
+    resolveCapability: legacyCapability,
+  });
+}
+
+function parseStoredExecution(payload: string): ProcessExecution {
+  const execution = JSON.parse(payload) as AdaptedStoredExecution;
+  const adapted = adaptMethodForRuntime(execution.methodSnapshot, "execution_snapshot", true);
+  if (!adapted.ok || !adapted.complete || !adapted.adapted) return execution;
+  Object.defineProperty(execution, historicalMethodSnapshot, {
+    value: execution.methodSnapshot,
+    enumerable: false,
+  });
+  execution.methodSnapshot = adapted.method;
+  return execution;
+}
+
+function serializeStoredExecution(execution: ProcessExecution) {
+  const historical = (execution as AdaptedStoredExecution)[historicalMethodSnapshot];
+  return JSON.stringify(historical ? { ...execution, methodSnapshot: historical } : execution);
+}
+
 function readPayload<T>(table: string, id: string): T | undefined {
   const allowedTables = new Set(["channels", "projects", "process_executions"]);
   if (!allowedTables.has(table)) throw new Error("Tabela de leitura não permitida.");
@@ -702,7 +745,7 @@ function reconcileStoredExecutionItems() {
           break;
         }
       }
-      if (changed) updateExecution.run(JSON.stringify(execution), execution.id);
+      if (changed) updateExecution.run(serializeStoredExecution(execution), execution.id);
     }
   })();
 }
@@ -741,7 +784,7 @@ function normalizeStoredExecutionWorkUnits() {
         }
         changed = true;
       }
-      if (changed) updateExecution.run(JSON.stringify(execution), execution.id);
+      if (changed) updateExecution.run(serializeStoredExecution(execution), execution.id);
     }
   })();
 }
@@ -1048,7 +1091,7 @@ function executionFor(projectId: string, processType: string) {
   const row = database
     .prepare("SELECT payload FROM process_executions WHERE project_id = ? AND process_type = ?")
     .get(projectId, processType) as { payload: string } | undefined;
-  return row ? (JSON.parse(row.payload) as ProcessExecution) : undefined;
+  return row ? parseStoredExecution(row.payload) : undefined;
 }
 
 function normalizePluginListValue(value: unknown): string[] {
@@ -1155,7 +1198,7 @@ function executionById(executionId: string) {
   const row = database
     .prepare("SELECT payload FROM process_executions WHERE id = ?")
     .get(executionId) as { payload: string } | undefined;
-  return row ? (JSON.parse(row.payload) as ProcessExecution) : undefined;
+  return row ? parseStoredExecution(row.payload) : undefined;
 }
 
 class PersistenceCommitError extends Error {
@@ -1175,7 +1218,7 @@ function persistPluginExecution(execution: ProcessExecution, project: Project) {
   const persist = () => {
     database
       .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
-      .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+      .run(serializeStoredExecution(execution), execution.updatedAt, execution.id);
     database
       .prepare("UPDATE projects SET payload = ? WHERE id = ?")
       .run(JSON.stringify(project), project.id);
@@ -1445,15 +1488,26 @@ function startOrchestratedProcess(
   );
   const savedMethod =
     project.strategySnapshot?.methods[processType] ?? channel.methods?.[processType];
-  const method = savedMethod
-    ? {
-        name: savedMethod.name || `Método de ${PROCESS_META[processType].label}`,
-        imageUrl: savedMethod.imageUrl,
-        processType,
-        blocks: normalizeMethodBlocks(savedMethod.blocks ?? [], processType),
-      }
+  const adaptedMethod = savedMethod
+    ? adaptMethodForRuntime(
+        savedMethod,
+        project.strategySnapshot ? "strategy_snapshot" : "persisted_channel",
+      )
     : undefined;
-  const issue = getMethodConfigurationIssue(method);
+  const method =
+    adaptedMethod?.ok && adaptedMethod.complete
+      ? {
+          contractVersion: adaptedMethod.method.contractVersion,
+          name: adaptedMethod.method.name || `Método de ${PROCESS_META[processType].label}`,
+          imageUrl: adaptedMethod.method.imageUrl,
+          processType,
+          blocks: normalizeMethodBlocks(adaptedMethod.method.blocks ?? [], processType),
+        }
+      : undefined;
+  const issue =
+    adaptedMethod && !adaptedMethod.ok
+      ? adaptedMethod.diagnostics[0]?.message
+      : getMethodConfigurationIssue(method);
   if (!method || issue) return { issue: issue ?? "O método deste processo não está disponível." };
 
   const now = new Date().toISOString();
@@ -1476,7 +1530,13 @@ function startOrchestratedProcess(
         `INSERT INTO process_executions (id, project_id, process_type, payload, updated_at)
          VALUES (?, ?, ?, ?, ?)`,
       )
-      .run(execution.id, execution.projectId, processType, JSON.stringify(execution), now);
+      .run(
+        execution.id,
+        execution.projectId,
+        processType,
+        serializeStoredExecution(execution),
+        now,
+      );
     database
       .prepare("UPDATE projects SET payload = ? WHERE id = ?")
       .run(JSON.stringify(project), project.id);
@@ -1876,7 +1936,7 @@ function cancelStoredProcessExecution(execution: ProcessExecution, project: Proj
     pluginJobs.requestCancellation(execution.id);
     database
       .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
-      .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+      .run(serializeStoredExecution(execution), execution.updatedAt, execution.id);
     database
       .prepare("UPDATE projects SET payload = ? WHERE id = ?")
       .run(JSON.stringify(project), project.id);
@@ -6144,7 +6204,7 @@ async function executePluginBlockInternal(
     database
       .prepare("SELECT payload FROM process_executions WHERE project_id = ?")
       .all(project.id) as { payload: string }[]
-  ).map((row) => normalizeExecutionDeliveries(JSON.parse(row.payload) as ProcessExecution));
+  ).map((row) => normalizeExecutionDeliveries(parseStoredExecution(row.payload)));
   let conversation: PluginExecutionRequest["conversation"];
   let resolvedProfileExecution: ReturnType<typeof resolvedProfileExecutionForBlock>;
   try {
@@ -6194,7 +6254,7 @@ async function executePluginBlockInternal(
          WHERE projects.channel_id = ?`,
       )
       .all(channel.id) as { payload: string }[]
-  ).map((row) => normalizeExecutionDeliveries(JSON.parse(row.payload) as ProcessExecution));
+  ).map((row) => normalizeExecutionDeliveries(parseStoredExecution(row.payload)));
   const collections = (
     database
       .prepare("SELECT payload FROM library_collections WHERE channel_id = ?")
@@ -6773,7 +6833,11 @@ function stateSnapshot() {
         return channel;
       }),
       projects: read<Project>("projects"),
-      executions: read<ProcessExecution>("process_executions"),
+      executions: (
+        database.prepare("SELECT payload FROM process_executions ORDER BY rowid DESC").all() as {
+          payload: string;
+        }[]
+      ).map((row) => parseStoredExecution(row.payload)),
       orchestrators: read<ExecutionOrchestrator>("execution_orchestrators"),
       libraryItems: read<ChannelLibraryItem>("library_items"),
       libraryCollections: read<StrategicCollection>("library_collections"),
@@ -6842,7 +6906,13 @@ app.post("/api/commands", (request, response) => {
         if (!block || command.attempt !== (block.attempt ?? 1))
           throw new Error("Esta etapa mudou. Atualize a tela antes de continuar.");
       }
-      const engine = executionCommands(state);
+      const engine = executionCommands({
+        ...state,
+        adaptMethod: (method, source) => {
+          const adapted = adaptMethodForRuntime(method, source);
+          return adapted.ok && adapted.complete ? adapted.method : undefined;
+        },
+      });
       let result: unknown;
       let updated = execution;
       const values = (command.values ?? {}) as Record<string, RuntimeValue>;
@@ -6931,7 +7001,7 @@ app.post("/api/commands", (request, response) => {
             updated.id,
             project.id,
             updated.processType,
-            JSON.stringify(updated),
+            serializeStoredExecution(updated),
             updated.updatedAt,
           );
       }
@@ -6953,7 +7023,7 @@ app.post("/api/commands", (request, response) => {
       for (const row of database
         .prepare("SELECT payload FROM process_executions WHERE project_id = ?")
         .all(projectId) as { payload: string }[])
-        scheduleAutomaticPluginBlock(JSON.parse(row.payload));
+        scheduleAutomaticPluginBlock(parseStoredExecution(row.payload));
       queueOrchestratorReconciliationForProject(projectId);
     }
     reconcileStandaloneProcesses();
@@ -7155,14 +7225,37 @@ app.put("/api/channels/:id/methods/:processType", (request, response) => {
     });
     return;
   }
+  const incomingMethod: ProcessMethod = {
+    name:
+      typeof request.body?.name === "string" && request.body.name.trim()
+        ? request.body.name.trim().slice(0, 200)
+        : channel.methods[processType]?.name || `Método de ${PROCESS_META[processType].label}`,
+    imageUrl: request.body?.imageUrl,
+    processType,
+    blocks: request.body.blocks,
+  };
+  const adapted = adaptLegacyMethod(incomingMethod, {
+    source: "editor_save",
+    recoverHistoricalValidationTarget: false,
+    resolveCapability: legacyCapability,
+    preferExplicitLegacyInputFields: true,
+  });
+  if (!adapted.ok || !adapted.complete) {
+    const errors = !adapted.ok
+      ? adapted.diagnostics.map((item) => item.message)
+      : ["O contrato do Método não pôde ser materializado."];
+    response.status(422).json({ error: errors[0], errors });
+    return;
+  }
   const localProfiles = persistLocalProfileExecution(
-    normalizeMethodBlocks(request.body.blocks, processType),
+    normalizeMethodBlocks(adapted.method.blocks, processType),
   );
   if (localProfiles.errors.length) {
     response.status(422).json({ error: localProfiles.errors[0], errors: localProfiles.errors });
     return;
   }
   const nextMethod: ProcessMethod = {
+    contractVersion: 2,
     name:
       typeof request.body?.name === "string" && request.body.name.trim()
         ? request.body.name.trim().slice(0, 200)
@@ -7223,8 +7316,20 @@ app.put("/api/channels/:id/methods", (request, response) => {
   }
   const preparedEntries: Array<[UniversalProcess, ProcessMethod]> = [];
   for (const [processType, method] of entries) {
+    const adapted = adaptLegacyMethod(method, {
+      source: "editor_save",
+      recoverHistoricalValidationTarget: false,
+      resolveCapability: legacyCapability,
+    });
+    if (!adapted.ok || !adapted.complete) {
+      const errors = !adapted.ok
+        ? adapted.diagnostics.map((item) => item.message)
+        : ["O contrato do Método não pôde ser materializado."];
+      response.status(422).json({ error: errors[0], errors });
+      return;
+    }
     const localProfiles = persistLocalProfileExecution(
-      normalizeMethodBlocks(method.blocks, processType),
+      normalizeMethodBlocks(adapted.method.blocks, processType),
     );
     if (localProfiles.errors.length) {
       response.status(422).json({ error: localProfiles.errors[0], errors: localProfiles.errors });
@@ -7233,15 +7338,16 @@ app.put("/api/channels/:id/methods", (request, response) => {
     preparedEntries.push([
       processType,
       {
+        contractVersion: 2,
         name:
-          typeof method.name === "string" && method.name.trim()
-            ? method.name.trim().slice(0, 200)
+          typeof adapted.method.name === "string" && adapted.method.name.trim()
+            ? adapted.method.name.trim().slice(0, 200)
             : `Método de ${PROCESS_META[processType].label}`,
         imageUrl:
-          typeof method.imageUrl === "string" &&
-          (/^data:image\/(webp|png|jpeg);base64,/.test(method.imageUrl) ||
-            /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(method.imageUrl))
-            ? method.imageUrl.slice(0, 1_500_000)
+          typeof adapted.method.imageUrl === "string" &&
+          (/^data:image\/(webp|png|jpeg);base64,/.test(adapted.method.imageUrl) ||
+            /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(adapted.method.imageUrl))
+            ? adapted.method.imageUrl.slice(0, 1_500_000)
             : undefined,
         processType,
         blocks: localProfiles.blocks,
@@ -7329,6 +7435,23 @@ app.post("/api/method-transfers/apply", (request, response) => {
     return;
   }
 
+  const adaptedSelected: ProcessMethod[] = [];
+  for (const method of selected) {
+    const adapted = adaptLegacyMethod(method, {
+      source: "method_transfer",
+      recoverHistoricalValidationTarget: true,
+      resolveCapability: legacyCapability,
+    });
+    if (!adapted.ok || !adapted.complete) {
+      const errors = !adapted.ok
+        ? adapted.diagnostics.map((item) => item.message)
+        : ["O contrato histórico do Método não pôde ser materializado."];
+      response.status(422).json({ error: errors[0], errors });
+      return;
+    }
+    adaptedSelected.push(adapted.method);
+  }
+
   const existing = body.targetChannelId
     ? readPayload<Channel>("channels", body.targetChannelId)
     : undefined;
@@ -7406,7 +7529,7 @@ app.post("/api/method-transfers/apply", (request, response) => {
 
   const localCopy = Boolean(body.sourceChannelId);
   const copied: ProcessMethod[] = copyImportedMethods(
-    selected,
+    adaptedSelected,
     (prefix) => `${prefix}-${randomUUID()}`,
     {
       collectionIds,
@@ -7434,7 +7557,7 @@ app.post("/api/method-transfers/apply", (request, response) => {
     }
   } else {
     for (const method of copied) {
-      const sourceMethod = selected.find(
+      const sourceMethod = adaptedSelected.find(
         (candidate) => candidate.processType === method.processType,
       );
       method.blocks = method.blocks.map((block, index) => {
@@ -7755,15 +7878,14 @@ function executionOrchestratorState(orchestrator: ExecutionOrchestrator) {
   const projects = orchestrator.projectIds
     .map((id) => readPayload<Project>("projects", id))
     .filter((project): project is Project => !!project);
-  const executions = orchestrator.projectIds.flatMap(
-    (projectId) =>
-      parseRows(
-        database
-          .prepare(
-            "SELECT payload FROM process_executions WHERE project_id = ? ORDER BY updated_at DESC",
-          )
-          .all(projectId) as { payload: string }[],
-      ) as ProcessExecution[],
+  const executions = orchestrator.projectIds.flatMap((projectId) =>
+    (
+      database
+        .prepare(
+          "SELECT payload FROM process_executions WHERE project_id = ? ORDER BY updated_at DESC",
+        )
+        .all(projectId) as { payload: string }[]
+    ).map((row) => parseStoredExecution(row.payload)),
   );
   return {
     orchestrator,
@@ -7861,7 +7983,7 @@ app.post("/api/orchestrators/:id/stop", (request, response) => {
       for (const row of database
         .prepare("SELECT payload FROM process_executions WHERE project_id = ?")
         .all(projectId) as { payload: string }[]) {
-        const execution = JSON.parse(row.payload) as ProcessExecution;
+        const execution = parseStoredExecution(row.payload);
         if (execution.status === "completed" || execution.status === "cancelled") continue;
         cancelStoredProcessExecution(execution, project);
       }
@@ -8106,7 +8228,7 @@ app.get("/api/projects/:id/deliveries", (request, response) => {
         "SELECT payload FROM process_executions WHERE project_id = ? ORDER BY updated_at ASC",
       )
       .all(request.params.id) as { payload: string }[]
-  ).map((row) => normalizeExecutionDeliveries(JSON.parse(row.payload) as ProcessExecution));
+  ).map((row) => normalizeExecutionDeliveries(parseStoredExecution(row.payload)));
   const includeHistory = request.query.history === "true";
   const deliveries = includeHistory
     ? executions.flatMap((execution) => execution.deliveries ?? [])
@@ -8119,7 +8241,7 @@ app.get("/api/deliveries/:deliveryId", (request, response) => {
     payload: string;
   }[];
   for (const row of rows) {
-    const execution = JSON.parse(row.payload) as ProcessExecution;
+    const execution = parseStoredExecution(row.payload);
     const delivery = activeProjectDeliveries([execution]).find(
       (item) => item.id === request.params.deliveryId,
     );
@@ -8136,7 +8258,7 @@ app.get("/api/delivery-items/:itemId", (request, response) => {
     payload: string;
   }[];
   for (const row of rows) {
-    const execution = JSON.parse(row.payload) as ProcessExecution;
+    const execution = parseStoredExecution(row.payload);
     for (const delivery of activeProjectDeliveries([execution])) {
       const item = delivery.items.find((candidate) => candidate.id === request.params.itemId);
       if (item) {
@@ -8250,7 +8372,7 @@ app.post("/api/executions", (request, response) => {
       execution.id,
       execution.projectId,
       execution.processType,
-      JSON.stringify(execution),
+      serializeStoredExecution(execution),
       execution.updatedAt,
     );
   scheduleAutomaticPluginBlock(execution);
@@ -8770,7 +8892,16 @@ app.put("/api/executions/:id", (request, response) => {
   execution.revision = (current.revision ?? 0) + 1;
   const result = database
     .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
-    .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+    .run(
+      (current as AdaptedStoredExecution)[historicalMethodSnapshot]
+        ? JSON.stringify({
+            ...execution,
+            methodSnapshot: (current as AdaptedStoredExecution)[historicalMethodSnapshot],
+          })
+        : serializeStoredExecution(execution),
+      execution.updatedAt,
+      execution.id,
+    );
   if (result.changes) {
     scheduleAutomaticPluginBlock(execution as unknown as ProcessExecution);
     if (execution.projectId) queueOrchestratorReconciliationForProject(execution.projectId);

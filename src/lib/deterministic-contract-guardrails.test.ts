@@ -79,12 +79,9 @@ test("keeps runtime input sources deterministic and canonical bindings authorita
     "export function resolveBlockInputs",
     "function collectCandidates",
   );
-  assert.match(inputResolution, /authoritativeInputSource\(input\)/);
-  assert.match(inputResolution, /resolveCanonicalInput[\s\S]*resolveLegacyExplicitInput/);
-  assert.match(
-    inputResolution,
-    /if \(explicit\)[\s\S]*return \{ input, \.\.\.explicit\.result \};[\s\S]*return \{ input, resolved: false \};/,
-  );
+  assert.match(inputResolution, /const binding = input\.binding/);
+  assert.match(inputResolution, /if \(!binding\) return \{ input, resolved: false \}/);
+  assert.doesNotMatch(inputResolution, /authoritativeInputSource|resolveLegacyExplicitInput/);
   assert.doesNotMatch(inputResolution, /labelScore|normalizeLabel|\.sort\(|available\[0\]/);
   assert.doesNotMatch(
     inputResolution,
@@ -114,6 +111,17 @@ test("keeps runtime input sources deterministic and canonical bindings authorita
 
   const bindingMaterialization = read("src/lib/input-source-binding.ts");
   assert.doesNotMatch(bindingMaterialization, /\.label\b|portKey|pluginId|capabilityId/);
+  assert.deepEqual(filesMentioning("canonicalInputBindingFromLegacy("), [
+    "src/lib/input-source-binding.ts",
+    "src/lib/legacy-method-adapter.ts",
+  ]);
+  const legacyAdapter = read("src/lib/legacy-method-adapter.ts");
+  assert.match(
+    legacyAdapter,
+    /Explicit compatibility boundary for historical Method representations/,
+  );
+  assert.match(legacyAdapter, /candidates\.length !== 1/);
+  assert.doesNotMatch(legacyAdapter, /labelScore|normalizeLabel|\.sort\(/);
 
   const pluginInputs = read("server/plugin-input-values.ts");
   const portSelection = sourceBetween(

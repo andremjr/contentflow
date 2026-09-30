@@ -9,7 +9,6 @@ import {
 } from "./domain";
 import { createProcessOutputFields } from "./human-workflow";
 import { areHumanFieldTypesCompatible } from "./data-shape";
-import { authoritativeInputSource } from "./input-source-binding";
 
 export function isProcessOrder(value: unknown): value is UniversalProcess[] {
   return (
@@ -107,14 +106,12 @@ export function validateProcessDependencies(
     for (const [index, block] of blocks.entries()) {
       const label = `${processType}/${block.name ?? block.type}`;
       for (const input of block.inputs ?? []) {
-        const binding = authoritativeInputSource(input).binding;
-        const sourceKind = binding?.kind ?? input.source;
+        const binding = input.binding;
+        const sourceKind = binding?.kind;
         if (sourceKind !== "previous_process") continue;
-        const source =
-          binding?.kind === "previous_process" ? binding.processType : input.sourceProcessType;
-        const outputKey =
-          binding?.kind === "previous_process" ? binding.outputKey : input.sourceKey;
-        const blockId = binding?.kind === "previous_process" ? binding.blockId : input.blockId;
+        const source = binding?.kind === "previous_process" ? binding.processType : undefined;
+        const outputKey = binding?.kind === "previous_process" ? binding.outputKey : undefined;
+        const blockId = binding?.kind === "previous_process" ? binding.blockId : undefined;
         if (!source || (positions.get(source) ?? Infinity) >= (positions.get(processType) ?? -1)) {
           errors.push(`${label}: processo anterior inválido na entrada “${input.label}”.`);
           continue;
@@ -177,12 +174,9 @@ export function resolveProcessOrderForMethods(
   for (const processType of PROCESS_ORDER) {
     for (const block of methods[processType]?.blocks ?? []) {
       for (const input of block.inputs ?? []) {
-        const binding = authoritativeInputSource(input).binding;
-        if ((binding?.kind ?? input.source) === "previous_process") {
-          addEdge(
-            binding?.kind === "previous_process" ? binding.processType : input.sourceProcessType,
-            processType,
-          );
+        const binding = input.binding;
+        if (binding?.kind === "previous_process") {
+          addEdge(binding.processType, processType);
         }
       }
       const conversation = block.plugin?.conversation;

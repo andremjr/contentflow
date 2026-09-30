@@ -16,7 +16,6 @@ import { createProcessOutputFields, isEmptyRuntimeValue } from "@/lib/human-work
 import { normalizeExecutionDeliveries, processOutputDeliveryFor } from "@/lib/deliveries";
 import { resolveChannelHistory } from "@/lib/channel-history";
 import { areHumanFieldTypesCompatible } from "@/lib/data-shape";
-import { authoritativeInputSource } from "@/lib/input-source-binding";
 
 type RuntimeCandidate = {
   id: string;
@@ -77,8 +76,9 @@ export function resolveBlockInputs({
   const usedCandidateIds = new Set<string>();
 
   return (block.inputs ?? []).map((input) => {
-    const authority = authoritativeInputSource(input);
-    const sourceKind = authority.binding?.kind ?? input.source;
+    const binding = input.binding;
+    const sourceKind = binding?.kind;
+    if (!binding) return { input, resolved: false };
     if (sourceKind === "channel_history" && block.type !== "ESCOLHER" && block.type !== "CRIAR") {
       return { input, resolved: false };
     }
@@ -88,16 +88,14 @@ export function resolveBlockInputs({
       channelExecutions,
       channelProjects,
     };
-    const explicit = authority.binding
-      ? resolveCanonicalInput(
-          input,
-          authority.binding,
-          project,
-          candidates,
-          usedCandidateIds,
-          context,
-        )
-      : resolveLegacyExplicitInput(input, project, context);
+    const explicit = resolveCanonicalInput(
+      input,
+      binding,
+      project,
+      candidates,
+      usedCandidateIds,
+      context,
+    );
     if (explicit) {
       if (explicit.candidateId) usedCandidateIds.add(explicit.candidateId);
       return { input, ...explicit.result };
@@ -329,68 +327,6 @@ function resolveCanonicalInput(
     default:
       return { result: { resolved: false } };
   }
-}
-
-function resolveLegacyExplicitInput(
-  input: BlockInputBinding,
-  project: Project,
-  historyContext: InputResolutionContext,
-): ExplicitResolution | undefined {
-  if (input.source === "channel_history") {
-    if (!input.sourceProcessType || !input.blockId || !input.sourceKey) return undefined;
-    const value = resolveChannelHistory({
-      binding: {
-        kind: "channel_history",
-        processType: input.sourceProcessType,
-        blockId: input.blockId,
-        outputKey: input.sourceKey,
-        limit: input.historyLimit ?? 10,
-        eligibility: input.historyEligibility ?? "completed",
-      },
-      currentExecution: historyContext.execution,
-      channelExecutions: historyContext.channelExecutions,
-      channelProjects: historyContext.channelProjects,
-    });
-    return value
-      ? {
-          result: {
-            resolved: true,
-            value,
-            sourceLabel: "Histórico do canal",
-          },
-        }
-      : { result: { resolved: false } };
-  }
-  if (input.source === "static") {
-    return input.staticValue
-      ? { result: { resolved: true, value: input.staticValue, sourceLabel: "Valor fixo" } }
-      : { result: { resolved: false } };
-  }
-  if (input.source === "runtime") {
-    const resolvedValue = historyContext.execution.blocks.find(
-      (block) => block.blockId === historyContext.blockId,
-    )?.runtimeInputs?.[input.id];
-    return resolvedValue === undefined || isEmptyRuntimeValue(resolvedValue)
-      ? { result: { resolved: false } }
-      : {
-          result: {
-            resolved: true,
-            value: resolvedValue,
-            sourceLabel: "Fornecido na execução",
-          },
-        };
-  }
-  if (input.source === "project") {
-    const value = input.sourceKey === "deadline" ? project.deadline : project.title;
-    return { result: { resolved: true, value, sourceLabel: "Projeto" } };
-  }
-  if (input.source === "previous_block") {
-    return { result: { resolved: false } };
-  }
-  if (input.source === "previous_process") {
-    return { result: { resolved: false } };
-  }
-  return undefined;
 }
 
 function activeDeliveryFor(

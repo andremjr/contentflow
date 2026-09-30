@@ -119,6 +119,7 @@ test("runtime requires explicit output bindings before creating a plugin job", a
             type: "textarea",
             source: "static",
             staticValue: "explicit output",
+            binding: { kind: "static", value: "explicit output" },
             portKey: "content",
           },
         ],

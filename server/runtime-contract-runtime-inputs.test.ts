@@ -40,6 +40,7 @@ test("resolves runtime files from the active execution without storing them in t
     label: "Referências",
     type: "files",
     source: "runtime",
+    binding: { kind: "runtime" },
     portKey: "reference_images",
   } as const;
   const block = {
@@ -328,7 +329,7 @@ test("an unresolved canonical binding never falls back to legacy fields", () => 
   assert.equal(resolved.value, undefined);
 });
 
-test("legacy previous_block with complete identifiers resolves exactly", () => {
+test("runtime rejects a flat legacy previous_block until boundary adaptation", () => {
   const source: ActionBlock = {
     id: "legacy-explicit-source",
     type: "CRIAR",
@@ -392,10 +393,8 @@ test("legacy previous_block with complete identifiers resolves exactly", () => {
     libraryItems: [],
   });
 
-  assert.equal(resolved.resolved, true);
-  assert.equal(resolved.value, "explicit legacy value");
-  assert.equal(resolved.sourceBlockId, source.id);
-  assert.equal(resolved.resolvedSourceKey, "script");
+  assert.equal(resolved.resolved, false);
+  assert.equal(resolved.value, undefined);
 });
 
 test("ambiguous legacy input stays unresolved regardless of candidate order or matching label", () => {

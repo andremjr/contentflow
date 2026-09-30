@@ -8,6 +8,7 @@ const imageInput: BlockInputBinding = {
   label: "Referências",
   type: "files",
   source: "runtime",
+  binding: { kind: "runtime" },
   portKey: "reference_images",
   presentation: {
     renderer: "image-gallery",

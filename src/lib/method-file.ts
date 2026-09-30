@@ -11,7 +11,7 @@ import type {
 } from "@/lib/domain";
 import { normalizeFieldPresentation } from "@/lib/presentation";
 import { instructionCollectionKey, instructionVariables } from "@/lib/instruction-template";
-import { authoritativeInputSource } from "@/lib/input-source-binding";
+import { adaptLegacyMethod } from "@/lib/legacy-method-adapter";
 
 const universalProcessSchema = z.enum([
   "theme",
@@ -207,7 +207,7 @@ const outputSchema = z
   }));
 
 const validationSchema = z.object({
-  targetBlockId: z.string().min(1),
+  targetBlockId: z.string().min(1).optional(),
   targetOutputKey: z.string().max(200).optional(),
   targetPortKey: z.string().min(1).max(100).optional(),
   mode: z.enum(["approval", "select_one", "select_many"]),
@@ -288,6 +288,7 @@ const portableImageSchema = z
   );
 
 const portableMethodSchema = z.object({
+  contractVersion: z.literal(2).optional(),
   name: z.string().max(200).optional(),
   imageUrl: portableImageSchema.optional(),
   processType: universalProcessSchema,
@@ -509,36 +510,17 @@ export function collectMethodRequirements(
       });
     }
     for (const input of block.inputs ?? []) {
-      const binding = authoritativeInputSource(input).binding;
-      const sourceKind = binding?.kind ?? input.source;
+      const binding = input.binding;
+      const sourceKind = binding?.kind;
       const sourceProcessType =
-        binding?.kind === "previous_process" ? binding.processType : input.sourceProcessType;
-      const sourceKey = binding?.kind === "previous_process" ? binding.outputKey : input.sourceKey;
+        binding?.kind === "previous_process" ? binding.processType : undefined;
+      const sourceKey = binding?.kind === "previous_process" ? binding.outputKey : undefined;
       if (sourceKind === "previous_process" && sourceProcessType) {
         requirements.push({
           kind: "previous_process",
           processType: sourceProcessType,
           sourceKey,
           blockName: block.name ?? block.type,
-        });
-      }
-      if (sourceKind === "channel_library") {
-        requirements.push({
-          kind: "collection",
-          name: input.collection?.trim() || "Coleção estratégica não identificada",
-          blockName: block.name ?? block.type,
-          fields: (input.recordFields ?? []).flatMap((field) =>
-            ["text", "textarea", "number", "image", "url"].includes(field.type)
-              ? [
-                  {
-                    label: field.label,
-                    key: field.key,
-                    type: field.type as "text" | "textarea" | "number" | "image" | "url",
-                    required: field.required,
-                  },
-                ]
-              : [],
-          ),
         });
       }
     }
@@ -713,7 +695,16 @@ export function planPortableMethodTransfer(input: {
 }): PortableTransferPlan {
   const collections = input.collections ?? [];
   const sourceItems = input.items ?? [];
-  const byProcess = new Map(input.sourceMethods.map((method) => [method.processType, method]));
+  const adaptedSourceMethods = input.sourceMethods.map((method) => {
+    const result = adaptLegacyMethod(method, {
+      source: "method_transfer",
+      recoverHistoricalValidationTarget: true,
+      allowDeferredPluginPorts: true,
+    });
+    if (!result.ok) throw new Error(result.diagnostics.map((item) => item.message).join(" "));
+    return result.method;
+  });
+  const byProcess = new Map(adaptedSourceMethods.map((method) => [method.processType, method]));
   const primary = new Set(input.primaryProcessTypes ?? []);
   const included = new Set<UniversalProcess>();
 
@@ -891,14 +882,41 @@ function parseMethodBundleV2(parsed: unknown): SharedMethodBundleV2 {
   return {
     ...result.data,
     items: result.data.items ?? [],
-    methods: result.data.methods.map((entry) => ({
-      ...entry,
-      method: {
+    methods: result.data.methods.map((entry) => {
+      const method = adaptPortableMethod({
         ...entry.method,
         name: entry.method.name?.trim() || `Método de ${entry.method.processType}`,
-      },
-    })),
+      } as ProcessMethod);
+      return { ...entry, method };
+    }),
   } as SharedMethodBundleV2;
+}
+
+function adaptPortableMethod(method: ProcessMethod) {
+  const adapted = adaptLegacyMethod(method, {
+    source: "portable_file",
+    recoverHistoricalValidationTarget: true,
+    allowDeferredPluginPorts: true,
+  });
+  if (!adapted.ok) {
+    throw new Error(adapted.diagnostics[0]?.message ?? "Método histórico incompatível.");
+  }
+  return adapted.method;
+}
+
+function canonicalMethodForExport(method: ProcessMethod) {
+  const adapted = adaptLegacyMethod(method, {
+    source: "editor_save",
+    recoverHistoricalValidationTarget: false,
+  });
+  if (!adapted.ok || !adapted.complete) {
+    throw new Error(
+      !adapted.ok
+        ? (adapted.diagnostics[0]?.message ?? "Método inválido.")
+        : "O Método não possui contrato canônico completo.",
+    );
+  }
+  return adapted.method;
 }
 
 function createPortableMethod(method: ProcessMethod) {
@@ -927,7 +945,9 @@ export function serializeMethodFile(
   method: ProcessMethod,
   collections: StrategicCollection[] = [],
 ) {
-  const portableMethod = createPortableMethod({ ...method, name: method.name || name });
+  const portableMethod = createPortableMethod(
+    canonicalMethodForExport({ ...method, name: method.name || name }),
+  );
   const file = sharedMethodSchema.parse({
     format: "contentflow-method",
     version: 1,
@@ -957,7 +977,7 @@ export function serializeMethodPackFile(
     channelName,
     channelImageUrl,
     exportedAt: new Date().toISOString(),
-    methods: included.map(createPortableMethod),
+    methods: included.map((method) => createPortableMethod(canonicalMethodForExport(method))),
     requirements,
   });
   return JSON.stringify(file, null, 2);
@@ -998,10 +1018,10 @@ export function parseMethodFile(contents: string): SharedMethodFile {
     ...result.data,
     requirements:
       result.data.requirements ?? collectMethodRequirements(result.data.method as ProcessMethod),
-    method: {
+    method: adaptPortableMethod({
       ...result.data.method,
       name: result.data.method.name?.trim() || result.data.name,
-    },
+    } as ProcessMethod),
   } as SharedMethodFile;
 }
 
@@ -1025,10 +1045,12 @@ export function parseMethodImportFile(contents: string): SharedMethodImport {
   return {
     ...result.data,
     requirements: result.data.requirements ?? {},
-    methods: result.data.methods.map((method) => ({
-      ...method,
-      name: method.name?.trim() || `Método de ${method.processType}`,
-    })),
+    methods: result.data.methods.map((method) =>
+      adaptPortableMethod({
+        ...method,
+        name: method.name?.trim() || `Método de ${method.processType}`,
+      } as ProcessMethod),
+    ),
   } as SharedMethodPackFile;
 }
 

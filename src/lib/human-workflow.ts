@@ -10,7 +10,6 @@ import {
   type ValidationMode,
 } from "@/lib/domain";
 import { normalizeFieldPresentation } from "@/lib/presentation";
-import { authoritativeInputSource } from "@/lib/input-source-binding";
 
 export function getMethodConfigurationIssue(method?: ProcessMethod) {
   if (!method?.blocks.length) return "O processo ainda não possui um método.";
@@ -29,8 +28,11 @@ export function getMethodConfigurationIssue(method?: ProcessMethod) {
       return `As chaves das entregas do bloco “${block.name ?? block.type}” precisam ser únicas.`;
     }
     for (const input of block.inputs ?? []) {
-      const source = authoritativeInputSource(input).binding;
-      const sourceKind = source?.kind ?? input.source;
+      const source = input.binding;
+      const sourceKind = source?.kind;
+      if (!source && input.source !== "channel_library") {
+        return `Selecione a origem explícita da entrada “${input.label}”.`;
+      }
       if (sourceKind === "runtime" && (!block.plugin || block.operator === "Humano")) {
         return `A entrada “${input.label}” fornecida na execução exige um plugin de IA ou Código.`;
       }
@@ -236,53 +238,37 @@ export function createValidationFields(
 }
 
 export function normalizeActionBlock(block: ActionBlock, processType: ProcessId): ActionBlock {
-  const legacyOutputs = (block.parameters ?? []).map<BlockFieldDefinition>((parameter) => ({
-    id: parameter.id,
-    label: parameter.label,
-    key: parameter.key,
-    type: parameter.type,
-    required: false,
-    placeholder: parameter.placeholder,
-    options: parameter.options,
-  }));
   return {
     ...block,
     name: block.name || `${block.type.charAt(0)}${block.type.slice(1).toLowerCase()}`,
     instructions: block.instructions ?? "",
-    inputs: (block.inputs ?? [])
-      .filter((input) => {
-        const authority = authoritativeInputSource(input);
-        return authority.representation === "canonical" || input.source !== "channel_library";
-      })
-      .map((input) => {
-        const authority = authoritativeInputSource(input);
-        const binding = authority.binding;
-        const sourceKind = binding?.kind ?? input.source;
-        const type = sourceKind === "channel_history" ? "records" : (input.type ?? "text");
-        return {
-          ...input,
-          binding,
-          type,
-          historyLimit:
-            sourceKind === "channel_history"
-              ? binding?.kind === "channel_history"
-                ? binding.limit
-                : Math.min(100, Math.max(1, input.historyLimit ?? 10))
-              : undefined,
-          historyEligibility:
-            sourceKind === "channel_history"
-              ? binding?.kind === "channel_history"
-                ? binding.eligibility
-                : (input.historyEligibility ?? "completed")
-              : undefined,
-          presentation: normalizeFieldPresentation(type, input.presentation),
-        };
-      }),
+    inputs: (block.inputs ?? []).map((input) => {
+      const binding = input.binding;
+      const sourceKind = binding?.kind;
+      const type = sourceKind === "channel_history" ? "records" : (input.type ?? "text");
+      return {
+        ...input,
+        type,
+        historyLimit:
+          sourceKind === "channel_history"
+            ? binding?.kind === "channel_history"
+              ? binding.limit
+              : Math.min(100, Math.max(1, input.historyLimit ?? 10))
+            : undefined,
+        historyEligibility:
+          sourceKind === "channel_history"
+            ? binding?.kind === "channel_history"
+              ? binding.eligibility
+              : (input.historyEligibility ?? "completed")
+            : undefined,
+        presentation: normalizeFieldPresentation(type, input.presentation),
+      };
+    }),
     outputs:
       block.type === "ESCOLHER"
         ? []
-        : block.outputs?.length || legacyOutputs.length
-          ? (block.outputs ?? legacyOutputs).map((output) => ({
+        : block.outputs?.length
+          ? block.outputs.map((output) => ({
               ...output,
               presentation: normalizeFieldPresentation(output.type, output.presentation),
             }))

@@ -101,9 +101,15 @@ Inputs de Métodos modernos possuem `BlockInputSourceBinding`, uma representaç�
 
 `resolveBlockInputs()` resolve o binding canônico diretamente. Uma referência canônica inválida ou cuja origem não existe permanece não resolvida e não cai nos campos legados. `previous_process` sem `blockId` designa exatamente o output oficial do Processo declarado; `previous_block` exige bloco e output explícitos. `channel_library` continua fora do binding canônico normal, incluindo o filtro em `normalizeActionBlock()`.
 
-Métodos antigos sem binding canônico continuam temporariamente aceitos somente quando seus campos planos identificam deterministicamente a origem. `previous_block` legado exige `blockId + sourceKey`; `previous_process` exige `sourceProcessType + sourceKey`, com `blockId` opcional quando a referência aponta para uma delivery específica. Projeto, runtime, estático e Histórico do Canal preservam suas resoluções explícitas. Representações incompletas ou ambíguas permanecem `unresolved`, mesmo quando existe candidato de mesmo tipo e label idêntico.
+Métodos históricos sem binding canônico são aceitos somente pela boundary explícita de compatibilidade. `previous_block` legado exige `blockId + sourceKey`; `previous_process` exige `sourceProcessType + sourceKey`, com `blockId` opcional quando a referência aponta para uma delivery específica. Projeto, runtime, estático e Histórico do Canal também são materializados antes do caminho normal. Representações incompletas ou ambíguas produzem diagnóstico e não chegam ao runtime canônico.
 
-Inputs destinados a plugins só entram em portas explicitamente declaradas pelo Método. `selectPluginInputPort()` exige `input.portKey`, faz lookup exato na capability e valida tipo e multiplicidade; ausência, porta inexistente, incompatibilidade ou segunda ocupação de porta não-multiple permanecem sem vínculo e causam `422` antes da criação do job. Label, ID, `sourceKey`, presentation, MIME e ordem não escolhem mais input ports no runtime. O Builder continua materializando `portKey` quando existe exatamente uma candidata compatível antes da execução e exige configuração explícita quando há ambiguidade.
+Inputs destinados a plugins só entram em portas explicitamente declaradas pelo Método. `selectPluginInputPort()` exige `input.portKey`, faz lookup exato na capability e valida tipo e multiplicidade; ausência, porta inexistente, incompatibilidade ou segunda ocupação de porta não-multiple permanecem sem vínculo e causam `422` antes da criação do job. Label, ID, `sourceKey`, presentation, MIME e ordem não escolhem mais input ports no runtime. O adapter/Builder materializa `portKey` somente quando existe exatamente uma candidata compatível antes da execução e exige configuração explícita quando há ambiguidade.
+
+### Adapter de Métodos históricos
+
+`ProcessMethod.contractVersion: 2` identifica a representação canônica. A ausência da versão identifica dados históricos; um contrato moderno inválido nunca recebe fallback legado. `adaptLegacyMethod()` materializa bindings estratégicos, outputs históricos, targets recuperáveis de `VALIDAR` e portas técnicas somente a partir de evidência estrutural única. Zero ou várias candidatas geram diagnóstico estável. `ESCOLHER` mantém seu contrato especializado com a Biblioteca Estratégica.
+
+Builder, salvamento de Método, importação/transferência, criação de execução e leitura de snapshots históricos usam essa boundary antes do caminho normal. Novos snapshots são canônicos. Leituras de execuções antigas podem expor uma visão adaptada sem substituir o JSON persistido apenas por leitura; reconstrução de portas em snapshot exige versão congelada do plugin. O Execution Core, a resolução normal de inputs e a ordenação de Processos não conhecem campos planos históricos nem o adapter.
 
 `selectPluginImplicitContextPort()` foi removida: não havia caller de produção e o runtime não injeta contexto oculto. O source binding continua separado do port binding. Métodos históricos que chegam diretamente ao runtime sem `portKey` falham de forma segura até o adapter da TASK-027.
 
@@ -165,6 +171,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para iniciar a TASK-027. Origem estratégica, portas de input, portas de outputs declarados normais e o alvo de `VALIDAR` agora são determinísticos. A próxima missão concentra a adaptação de Métodos legados na boundary, sem antecipar a normalização ampla da resposta reservada à TASK-028.
+Não há blocker externo confirmado para iniciar a TASK-028. A TASK-027 concentrou a adaptação de Métodos históricos em uma boundary explícita, sem alterar a interpretação permissiva de respostas. A próxima missão é a normalização/validação canônica da resposta do executor.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

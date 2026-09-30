@@ -1,15 +1,5 @@
 import type { BlockInputBinding, BlockInputSourceBinding } from "@/lib/domain";
 
-export type AuthoritativeInputSource =
-  | {
-      representation: "canonical";
-      binding: BlockInputSourceBinding;
-    }
-  | {
-      representation: "legacy";
-      binding?: BlockInputSourceBinding;
-    };
-
 function nonEmpty(value: string | undefined) {
   return value?.trim() ? value : undefined;
 }
@@ -61,15 +51,4 @@ export function canonicalInputBindingFromLegacy(
     case "channel_library":
       return undefined;
   }
-}
-
-/** Centralizes canonical authority without erasing whether compatibility fallback is allowed. */
-export function authoritativeInputSource(input: BlockInputBinding): AuthoritativeInputSource {
-  if (input.binding !== undefined) {
-    return { representation: "canonical", binding: input.binding };
-  }
-  return {
-    representation: "legacy",
-    binding: canonicalInputBindingFromLegacy(input),
-  };
 }

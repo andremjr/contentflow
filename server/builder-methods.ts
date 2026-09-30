@@ -14,7 +14,7 @@ import { effectiveProcessOrder, validateProcessDependencies } from "../src/lib/p
 import type { RegisteredPlugin } from "./plugin-runner";
 import { pluginConnectionRequired } from "../src/lib/plugin-contract";
 import { validateLocalProfileExecution } from "./profile-execution-policy";
-import { authoritativeInputSource } from "../src/lib/input-source-binding";
+import { adaptLegacyMethod } from "../src/lib/legacy-method-adapter";
 
 const processSchema = z.enum(PROCESS_ORDER);
 const fieldTypeSchema = z.enum([
@@ -175,7 +175,7 @@ const blockSchema = z
     outputs: z.array(outputSchema).optional(),
     validation: z
       .object({
-        targetBlockId: z.string().min(1),
+        targetBlockId: z.string().min(1).optional(),
         targetOutputKey: z.string().optional(),
         targetPortKey: z.string().min(1).optional(),
         mode: z.enum(["approval", "select_one", "select_many"]),
@@ -212,6 +212,7 @@ const blockSchema = z
   .passthrough();
 const methodSchema = z
   .object({
+    contractVersion: z.literal(2).optional(),
     name: z.string().min(1).max(200),
     imageUrl: z.string().optional(),
     processType: processSchema,
@@ -431,8 +432,27 @@ export function validateBuilderMethods(input: {
       errors.push(`${processType}: processType deve ser “${processType}”.`);
       continue;
     }
-    const blocks = normalizeMethodBlocks(rawMethod.blocks, processType);
-    const method: ProcessMethod = { ...rawMethod, processType, blocks };
+    const adapted = adaptLegacyMethod({ ...rawMethod, processType } as ProcessMethod, {
+      source: "builder",
+      recoverHistoricalValidationTarget: false,
+      resolveCapability: (pluginId, capabilityId) => {
+        const entry = input.plugins.find((candidate) => candidate.plugin.id === pluginId);
+        const capability = entry?.plugin.manifest.capabilities.find(
+          (candidate) => candidate.id === capabilityId,
+        );
+        return capability
+          ? { pluginVersion: entry?.plugin.manifest.version, capability }
+          : undefined;
+      },
+    });
+    if (!adapted.ok || !adapted.complete) {
+      if (!adapted.ok)
+        errors.push(...adapted.diagnostics.map((item) => `${processType}: ${item.message}`));
+      else errors.push(`${processType}: o contrato do Método não pôde ser materializado.`);
+      continue;
+    }
+    const blocks = normalizeMethodBlocks(adapted.method.blocks, processType);
+    const method: ProcessMethod = { ...adapted.method, processType, blocks };
     methods[processType] = method;
     const ids = new Set<string>();
     for (const [index, block] of blocks.entries()) {
@@ -448,18 +468,16 @@ export function validateBuilderMethods(input: {
         errors.push(`${label}: coleção estratégica não encontrada.`);
       }
       for (const binding of block.inputs ?? []) {
-        const source = authoritativeInputSource(binding).binding;
-        const sourceKind = source?.kind ?? binding.source;
+        const source = binding.binding;
+        const sourceKind = source?.kind;
         if (
           sourceKind === "static" &&
           (source?.kind === "static" ? !source.value.trim() : !binding.staticValue?.trim())
         )
           errors.push(`${label}: a entrada estática “${binding.label}” não possui valor.`);
         if (sourceKind === "previous_block") {
-          const sourceBlockId =
-            source?.kind === "previous_block" ? source.blockId : binding.blockId;
-          const sourceOutputKey =
-            source?.kind === "previous_block" ? source.outputKey : binding.sourceKey;
+          const sourceBlockId = source?.kind === "previous_block" ? source.blockId : undefined;
+          const sourceOutputKey = source?.kind === "previous_block" ? source.outputKey : undefined;
           const sourceIndex = blocks.findIndex((candidate) => candidate.id === sourceBlockId);
           const sourceOutput = blocks[sourceIndex]?.outputs?.find(
             (item) => item.key === sourceOutputKey,
