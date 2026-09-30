@@ -56,11 +56,11 @@
           "key": "context",
           "label": "Contexto",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -70,9 +70,10 @@
           "label": "Resultado",
           "required": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],

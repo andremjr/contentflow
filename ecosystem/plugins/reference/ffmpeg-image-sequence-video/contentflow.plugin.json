@@ -40,7 +40,6 @@
           "label": "Imagens ordenadas",
           "description": "Imagens exibidas na ordem recebida e distribuídas igualmente pela duração total do áudio.",
           "required": true,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -63,7 +62,6 @@
           "label": "Áudio final",
           "description": "Faixa de áudio que determina a duração exata do vídeo.",
           "required": true,
-          "multiple": false,
           "presentation": {
             "renderer": "audio-player"
           },
@@ -92,7 +90,6 @@
           "label": "Legendas SRT",
           "description": "Arquivo SRT opcional cujos cues determinam a troca das imagens quando o modo SRT está ativo.",
           "required": false,
-          "multiple": true,
           "presentation": {
             "renderer": "file-list"
           },

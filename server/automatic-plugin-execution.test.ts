@@ -95,8 +95,12 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
           {
             id: "input-one",
             label: "Texto",
-            type: "textarea",
-            source: "runtime",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             binding: { kind: "runtime" },
             portKey: "content",
           },
@@ -106,7 +110,12 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
             id: "output-one",
             label: "Intermediário",
             key: "intermediate",
-            type: "textarea",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             required: true,
             portKey: "result",
           },
@@ -124,10 +133,12 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
           {
             id: "input-two",
             label: "Texto",
-            type: "textarea",
-            source: "previous_block",
-            blockId: "block-one",
-            sourceKey: "intermediate",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             binding: { kind: "previous_block", blockId: "block-one", outputKey: "intermediate" },
             portKey: "content",
           },
@@ -137,7 +148,12 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
             id: "output-two",
             label: "Tema final",
             key: "theme",
-            type: "textarea",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             required: true,
             portKey: "result",
           },
@@ -150,14 +166,17 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
         id: "block-three-incompatible",
         type: "CRIAR",
         operator: "Código",
-        name: "Análise posterior com chave repetida",
+        name: "Resultado oficial posterior com chave repetida",
         inputs: [
           {
             id: "input-three",
             label: "Texto",
-            type: "textarea",
-            source: "static",
-            staticValue: "wrong final value",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             binding: { kind: "static", value: "wrong final value" },
             portKey: "content",
           },
@@ -167,7 +186,12 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
             id: "output-three",
             label: "Análise textual",
             key: "theme",
-            type: "text",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             required: true,
             portKey: "result",
           },
@@ -217,7 +241,7 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
         channelId: "test-channel",
         processType: "theme",
         methodSnapshot: {
-          contractVersion: 2,
+          contractVersion: 3,
           name: "Automatic execution",
           processType: "theme",
           blocks,
@@ -277,7 +301,7 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
     assert.equal(execution.blocks[0].values.intermediate, "HELLO");
     assert.equal(execution.blocks[1].values.theme, "HELLO");
     assert.equal(execution.blocks[2].values.theme, "WRONG FINAL VALUE");
-    assert.equal(execution.output?.values.theme, "HELLO");
+    assert.equal(execution.output?.values.theme, "WRONG FINAL VALUE");
 
     const pluginThenHumanBlocks = [
       {
@@ -289,9 +313,13 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
           {
             id: "static-input",
             label: "Texto",
-            type: "textarea",
-            source: "static",
-            staticValue: "plugin to human",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
+            binding: { kind: "static", value: "plugin to human" },
             portKey: "content",
           },
         ],
@@ -300,7 +328,12 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
             id: "plugin-output",
             label: "Intermediário",
             key: "intermediate",
-            type: "textarea",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             required: true,
             portKey: "result",
           },
@@ -347,7 +380,12 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
         projectId: "plugin-human-project",
         channelId: "test-channel",
         processType: "theme",
-        methodSnapshot: { processType: "theme", blocks: pluginThenHumanBlocks },
+        methodSnapshot: {
+          contractVersion: 3,
+          name: "Plugin then human",
+          processType: "theme",
+          blocks: pluginThenHumanBlocks,
+        },
         blocks: [
           {
             blockId: "plugin-before-human",

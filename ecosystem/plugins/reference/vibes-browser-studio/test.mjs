@@ -145,6 +145,7 @@ function fakeAutomation(overrides = {}) {
 
 test("manifesto declara B3, B4 e B5 com permissões, lotes, actions e prompt preview", () => {
   assert.equal(manifest.id, PLUGIN_ID);
+  assert.equal(manifest.apiVersion, "2");
   assert.equal(manifest.version, "0.1.0-dev.0");
   assert.deepEqual(manifest.permissions, [
     "network",
@@ -153,7 +154,10 @@ test("manifesto declara B3, B4 e B5 com permissões, lotes, actions e prompt pre
     "process",
   ]);
   assert.deepEqual(manifest.networkHosts, ["vibes.ai", "*.fbcdn.net"]);
-  assert.deepEqual(manifest.deliveryTypes, ["image", "video", "processing"]);
+  assert.deepEqual(
+    manifest.capabilities.map((capability) => capability.outputPorts[0].shape.family),
+    ["image", "video", "video"],
+  );
   assert.deepEqual(
     manifest.capabilities.map((capability) => capability.id),
     [CAPABILITY_ID, FRAME_VIDEO_CAPABILITY_ID, ELEMENT_VIDEO_CAPABILITY_ID],
@@ -210,8 +214,8 @@ test("manifesto declara B3, B4 e B5 com permissões, lotes, actions e prompt pre
     maxItems: 4,
   });
   assert.equal(
-    elements.inputPorts.find((port) => port.key === "character_reference").multiple,
-    false,
+    elements.inputPorts.find((port) => port.key === "character_reference").shape.cardinality,
+    "one",
   );
 });
 

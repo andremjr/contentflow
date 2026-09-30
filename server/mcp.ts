@@ -3,6 +3,7 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { valueShapeSchema } from "../src/lib/value-shape-schema";
 
 type BuilderSession = {
   version: 1;
@@ -82,7 +83,7 @@ const universalProcessSchema = z.enum([
 const strategicFieldSchema = z.object({
   id: z.string().optional().describe("Existing field ID when updating; omit for a new field"),
   label: z.string().min(1),
-  type: z.enum(["text", "textarea", "number", "image", "url", "thumbnail_layout"]),
+  shape: valueShapeSchema,
   required: z.boolean(),
 });
 

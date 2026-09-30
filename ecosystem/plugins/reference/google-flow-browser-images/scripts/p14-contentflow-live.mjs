@@ -74,7 +74,6 @@ if (!liveEnabled) {
         ? {
             presentation: {
               renderer: "image-gallery",
-              itemType: "image",
               acceptedMimeTypes: ["image/*"],
             },
             portKey: "images",
@@ -87,7 +86,6 @@ if (!liveEnabled) {
         : {
             presentation: {
               renderer: "video-player",
-              itemType: "video",
               acceptedMimeTypes: ["video/mp4"],
             },
             portKey: "video",
@@ -115,7 +113,6 @@ if (!liveEnabled) {
             {
               presentation: {
                 renderer: "image-gallery",
-                itemType: "image",
                 acceptedMimeTypes: ["image/*"],
               },
               id: referenceInputId,

@@ -11,9 +11,7 @@ import {
 import { normalizeExecutionDeliveries, processOutputDeliveryFor } from "@/lib/deliveries";
 import { contentShape, controlShape } from "@/lib/data-shape";
 
-export function createChannelHistoryRecordFields(
-  valueShape: ValueShape,
-): RecordFieldDefinition[] {
+export function createChannelHistoryRecordFields(valueShape: ValueShape): RecordFieldDefinition[] {
   const normalizedValueShape =
     valueShape.kind === "record"
       ? contentShape("text")

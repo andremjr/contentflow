@@ -23,11 +23,7 @@ const initialStages = () =>
     PROCESS_ORDER.map((processType) => [processType, "not_started"]),
   ) as Project["stages"];
 
-function humanBlock(
-  id: string,
-  order: number,
-  outputKey = `value_${order}`,
-): ActionBlock {
+function humanBlock(id: string, order: number, outputKey = `value_${order}`): ActionBlock {
   return {
     id,
     type: "CRIAR",
@@ -575,7 +571,12 @@ test(
           {
             id: "plugin-input",
             label: "Texto",
-            shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             binding: { kind: "static", value: "plugin success" },
             portKey: "content",
           },
@@ -585,7 +586,12 @@ test(
             id: "plugin-output",
             label: "Tema final",
             key: "theme",
-            shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             required: true,
             portKey: "result",
           },

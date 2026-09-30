@@ -43,7 +43,7 @@
           "required": true,
           "shape": {
             "kind": "content",
-            "family": "image",
+            "family": "text",
             "cardinality": "one",
             "representation": "artifact"
           }

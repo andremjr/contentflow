@@ -49,14 +49,14 @@ test("arquitetura, protocolo, segurança, skill e AGENTS concordam com o contrat
     assert.match(source, /reload|recarga/i);
   }
   assert.ok(architecture.includes("Recarga é uma primitiva allowlisted e controlada"));
-  assert.ok(protocol.includes("não expõe o `profileId` local persistente"));
+  assert.ok(protocol.includes("os IDs nunca são enviados ao plugin"));
   assert.ok(security.includes("backpressure"));
   assert.ok(skill.includes("sequência monotônica"));
   assert.ok(agents.includes("recarga nunca é fallback universal"));
 });
 
-test("schema v1 continua sem transformar a Bridge em configuração portátil do manifesto", async () => {
-  const schema = JSON.parse(await read("docs/ecosystem/schemas/contentflow-plugin-v1.schema.json"));
+test("schema v2 não transforma a Bridge em configuração portátil do manifesto", async () => {
+  const schema = JSON.parse(await read("docs/ecosystem/schemas/contentflow-plugin-v2.schema.json"));
   const serialized = JSON.stringify(schema);
   assert.equal(serialized.includes("profileExecution"), false);
   assert.equal(serialized.includes("profileIds"), false);

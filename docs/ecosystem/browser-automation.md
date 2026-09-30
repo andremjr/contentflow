@@ -143,9 +143,9 @@ O canal entre handler, service worker e content script usa mensagens versionadas
 
 Plugins com vários perfis podem declarar `profileSetup.fallbackConfigurationKey`. O Bloco escolhe e ordena perfis já cadastrados; o campo interno contém somente seus aliases ordenados, nunca cookies ou credenciais. O núcleo valida cada alias separadamente, registra qual perfil foi usado e preserva o cursor e as entregas parciais. Uma resposta de erro só move o cursor quando a política central classifica a troca como segura.
 
-No contrato alvo, a pasta física é um perfil global do ContentFlow e o acesso do plugin nasce de um vínculo explícito. A política local do Bloco chama-se `profileExecution` e usa `profileIds` opacos com os modos canônicos `fallback` e `parallel`. Fallback ordenado é o padrão mesmo quando a lista contém um único perfil; `single` é apenas um valor histórico aceito e normalizado durante a leitura. O handler nunca recebe esses IDs: depois de validar vínculo, readiness e revogação, o núcleo concede apenas `services.getProfilePath(relativePath)` para o perfil ativo e injeta o alias exigido por `profileSetup.configurationKey` para compatibilidade API v1.
+No contrato alvo, a pasta física é um perfil global do ContentFlow e o acesso do plugin nasce de um vínculo explícito. A política local do Bloco chama-se `profileExecution` e usa `profileIds` opacos com os modos canônicos `fallback` e `parallel`. Fallback ordenado é o padrão mesmo quando a lista contém um único perfil; `single` é apenas um valor histórico aceito e normalizado durante a leitura da persistência de perfis. O handler nunca recebe esses IDs: depois de validar vínculo, readiness e revogação, o núcleo concede apenas `services.getProfilePath(relativePath)` para o perfil ativo e injeta o alias exigido por `profileSetup.configurationKey` da Plugin API v2.
 
-Métodos antigos continuam resolvendo o perfil por `pluginId + alias`; a migração cria um perfil global distinto para cada registro legado e não funde aliases iguais de plugins diferentes. Métodos novos podem persistir `profileExecution` localmente, mas pacotes portáteis removem `profileExecution`, `profileIds` e qualquer outra referência local. No destino, o usuário associa novamente um perfil/vínculo compatível.
+Registros físicos legados de perfil são migrados de forma recuperável para uma identidade global distinta por registro e não fundem aliases iguais de plugins diferentes. Essa migração de storage não aceita nem adapta Métodos v1/v2 ou Plugin API v1. O Método v3 pode persistir `profileExecution` localmente, mas pacotes portáteis removem `profileExecution`, `profileIds` e qualquer outra referência local. No destino, o usuário associa novamente um perfil/vínculo compatível.
 
 Requisitos:
 
@@ -203,13 +203,13 @@ O adapter usa instruções fixas e operações estruturadas. Conteúdo recuperad
 
 ## 12. Manifesto e permissões
 
-A API v1 não possui nem precisa de uma permissão especial de navegador. O manifesto declara os recursos genéricos realmente usados: `network` e `networkHosts`, secrets, `filesystem:read`, `filesystem:write`, `process`, `worker` ou `native`. Permissões amplas como `process` e `native` mudam o nível de confiança e devem ser justificadas no README e no consentimento.
+A Plugin API v2 não possui nem precisa de uma permissão especial de navegador. O manifesto declara os recursos genéricos realmente usados: `network` e `networkHosts`, secrets, `filesystem:read`, `filesystem:write`, `process`, `worker` ou `native`. Permissões amplas como `process` e `native` mudam o nível de confiança e devem ser justificadas no README e no consentimento.
 
 O núcleo não promete isolar uma pasta de perfil além dos limites efetivos da sandbox concedida. Mudança de domínio, conta, efeito, secret ou conjunto de permissões exige configuração ou consentimento renovado quando aplicável.
 
 ## 13. Contrato da Browser Bridge
 
-A Browser Bridge é um protocolo independente da API de plugins. A API v1 descreve a capability e a invocação; a Bridge transporta operações genéricas entre o cliente do plugin, a extensão companheira e uma aba explicitamente autorizada. Seletores, estados do provedor e decisões como “pronto”, “enviado”, “gerando” ou “concluído” permanecem no adapter do plugin.
+A Browser Bridge é um protocolo independente da API de plugins. A Plugin API v2 descreve a capability e a invocação; a Bridge transporta operações genéricas entre o cliente do plugin, a extensão companheira e uma aba explicitamente autorizada. Seletores, estados do provedor e decisões como “pronto”, “enviado”, “gerando” ou “concluído” permanecem no adapter do plugin.
 
 O contrato alvo usa quatro identidades separadas:
 

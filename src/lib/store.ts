@@ -25,7 +25,7 @@ import {
 } from "@/lib/human-workflow";
 import { normalizeExecutionDeliveries } from "@/lib/deliveries";
 import { effectiveProcessOrder } from "@/lib/process-order";
-import type { PortableCollectionV2, PortableLibraryItemV2 } from "@/lib/method-file";
+import type { PortableCollection, PortableLibraryItem } from "@/lib/method-file";
 import {
   executionOrchestratorIsActive,
   type ExecutionOrchestrator,
@@ -87,6 +87,7 @@ function normalizeChannel(channel: Channel): Channel {
       return [
         processType,
         {
+          contractVersion: saved.contractVersion,
           name: saved.name?.trim() || `Método de ${PROCESS_META[processType].label}`,
           imageUrl: saved.imageUrl,
           processType,
@@ -547,9 +548,9 @@ export async function applyMethodTransfer(input: {
   newChannel?: { id: string; name: string; methodsImageUrl?: string };
   expectedDefinitionRevision?: number;
   methods: ProcessMethod[];
-  collections: PortableCollectionV2[];
+  collections: PortableCollection[];
   itemsIncluded?: boolean;
-  items?: PortableLibraryItemV2[];
+  items?: PortableLibraryItem[];
   preferredOrder: UniversalProcess[];
   selectedProcesses: UniversalProcess[];
   preserveLocalConnections?: boolean;

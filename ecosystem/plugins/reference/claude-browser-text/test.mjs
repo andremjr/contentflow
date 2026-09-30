@@ -104,7 +104,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 });
 
 test("manifesto declara as seis capabilities do Claude Browser Studio", () => {
-  assert.equal(manifest.apiVersion, "1");
+  assert.equal(manifest.apiVersion, "2");
   assert.equal(manifest.id, "local.contentflow.claude-browser-text");
   const capability = manifest.capabilities.find((item) => item.id === "generate-text-in-browser");
   assert.ok(capability);
@@ -122,9 +122,11 @@ test("manifesto declara as seis capabilities do Claude Browser Studio", () => {
     capability.outputPorts.map((item) => item.key),
     ["result", "parts", "document"],
   );
-  assert.deepEqual(capability.inputPorts.find((item) => item.key === "sections").acceptedTypes, [
-    "number",
-  ]);
+  assert.deepEqual(capability.inputPorts.find((item) => item.key === "sections").shape, {
+    kind: "control",
+    control: "number",
+    cardinality: "one",
+  });
   assert.deepEqual(
     manifest.capabilities.map((item) => item.id),
     [

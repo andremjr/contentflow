@@ -56,7 +56,7 @@ test("documents the domain identity hierarchy, shared profiles, and exactly thre
 
   assert.match(architecture, /\*\*Escalar:\*\*/);
   assert.match(architecture, /\*\*Lista de cenas:\*\*/);
-  assert.match(architecture, /\*\*Lista de assets:\*\*/);
+  assert.match(architecture, /\*\*Coleções de mídia:\*\*/);
   assert.equal((architecture.match(/INTERFACE [123]:/g) ?? []).length, 3);
 });
 

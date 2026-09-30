@@ -133,8 +133,26 @@ test(
         arguments: {
           name: "CTAs",
           fields: [
-            { label: "Nome", type: "text", required: true },
-            { label: "Texto", type: "textarea", required: true },
+            {
+              label: "Nome",
+              shape: {
+                kind: "content",
+                family: "text",
+                cardinality: "one",
+                representation: "inline",
+              },
+              required: true,
+            },
+            {
+              label: "Texto",
+              shape: {
+                kind: "content",
+                family: "text",
+                cardinality: "one",
+                representation: "inline",
+              },
+              required: true,
+            },
           ],
         },
       });
@@ -181,7 +199,12 @@ test(
           fields: collectionPayload.collection.fields.map((field) => ({
             id: field.id,
             label: field.label,
-            type: field.label === "Nome" ? "text" : "textarea",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             required: true,
           })),
         },
@@ -206,6 +229,7 @@ test(
 
       const methods = {
         theme: {
+          contractVersion: 3,
           name: "Tema manual",
           processType: "theme",
           blocks: [
@@ -221,7 +245,12 @@ test(
                   id: "theme-output",
                   label: "Tema final",
                   key: "theme",
-                  type: "textarea",
+                  shape: {
+                    kind: "content",
+                    family: "text",
+                    cardinality: "one",
+                    representation: "inline",
+                  },
                   required: true,
                 },
               ],

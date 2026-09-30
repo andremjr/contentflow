@@ -298,8 +298,7 @@ export function RuntimeFieldsForm({
                   onChange={(boxes) => update(field.key, { aspectRatio: "16:9", boxes })}
                 />
               </div>
-            ) : field.shape.kind === "content" &&
-              field.shape.representation !== "inline" ? (
+            ) : field.shape.kind === "content" && field.shape.representation !== "inline" ? (
               <div className="space-y-2 rounded-lg border border-dashed border-border p-3">
                 {fileValues.map((file) => (
                   <div
@@ -353,9 +352,7 @@ export function RuntimeFieldsForm({
                 <Input
                   id={field.id}
                   type={
-                    field.shape.kind === "control" && field.shape.control === "url"
-                      ? "url"
-                      : "text"
+                    field.shape.kind === "control" && field.shape.control === "url" ? "url" : "text"
                   }
                   className={showTextCharacterCount ? "pr-10" : undefined}
                   value={typeof value === "string" ? value : ""}
@@ -454,7 +451,7 @@ function StructuredRecordsInput({
         size="sm"
         variant="outline"
         className="w-full gap-1.5"
-        disabled={!schema.length || field.shape.cardinality === "one" && records.length > 0}
+        disabled={!schema.length || (field.shape.cardinality === "one" && records.length > 0)}
         onClick={addRecord}
       >
         <Plus className="size-3.5" /> Adicionar registro
@@ -583,9 +580,7 @@ function RecordValueInput({
       ) : (
         <div className={showTextCharacterCount ? "relative" : undefined}>
           <Input
-            type={
-              field.shape.kind === "control" && field.shape.control === "url" ? "url" : "text"
-            }
+            type={field.shape.kind === "control" && field.shape.control === "url" ? "url" : "text"}
             className={showTextCharacterCount ? "pr-10" : undefined}
             value={typeof value === "string" ? value : ""}
             onChange={(event) => onChange(event.target.value)}

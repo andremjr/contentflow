@@ -1,5 +1,5 @@
 {
-  "apiVersion": "1",
+  "apiVersion": "2",
   "id": "com.example.continuous-items",
   "name": "Continuous Items Fixture",
   "version": "1.0.0",
@@ -15,12 +15,12 @@
       "operator": "Código",
       "blockTypes": ["CRIAR"],
       "inputPorts": [
-        { "key": "prompts", "label": "Prompts", "acceptedTypes": ["list"], "required": true },
-        { "key": "briefs", "label": "Briefs", "acceptedTypes": ["records"], "required": false }
+        { "key": "prompts", "label": "Prompts", "shape": { "kind": "content", "family": "text", "cardinality": "many", "representation": "inline" }, "required": true },
+        { "key": "briefs", "label": "Briefs", "shape": { "kind": "record", "cardinality": "many", "fields": [] }, "required": false }
       ],
       "outputPorts": [
-        { "key": "images", "label": "Images", "producedTypes": ["files"], "required": true },
-        { "key": "summaries", "label": "Summaries", "producedTypes": ["list"], "required": false }
+        { "key": "images", "label": "Images", "shape": { "kind": "content", "family": "image", "cardinality": "many", "representation": "artifact" }, "required": true },
+        { "key": "summaries", "label": "Summaries", "shape": { "kind": "content", "family": "text", "cardinality": "many", "representation": "inline" }, "required": false }
       ],
       "execution": {
         "mode": "immediate",

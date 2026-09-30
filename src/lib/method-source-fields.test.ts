@@ -67,13 +67,15 @@ test("preserva as saídas declaradas dos demais blocos", () => {
     operator: "IA",
     name: "Criar título",
     inputs: [],
-    outputs: [{
-      id: "title-output",
-      label: "Título",
-      key: "title",
-      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
-      required: true,
-    }],
+    outputs: [
+      {
+        id: "title-output",
+        label: "Título",
+        key: "title",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+        required: true,
+      },
+    ],
     parameters: [],
     order: 0,
   };

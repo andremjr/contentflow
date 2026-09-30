@@ -32,7 +32,6 @@ const presentationSchema = z
       "video-player",
       "decision",
     ]),
-    itemType: z.enum(["text", "record", "file", "image", "audio", "video"]).optional(),
   })
   .strict();
 const jsonSchema = z.record(z.unknown());

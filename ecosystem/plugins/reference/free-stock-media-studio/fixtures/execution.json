@@ -4,8 +4,13 @@
   "blockId": "fixture-search-images",
   "capabilityId": "search-stock-images",
   "attempt": 1,
-  "invocation": { "mode": "start", "attempt": 1 },
-  "inputs": { "query": "fitness workout" },
+  "invocation": {
+    "mode": "start",
+    "attempt": 1
+  },
+  "inputs": {
+    "query": "fitness workout"
+  },
   "configuration": {
     "provider": "all",
     "resultLimitMode": "custom",
@@ -14,24 +19,45 @@
     "orientation": "landscape",
     "safeSearch": true
   },
-  "settings": { "diagnosticFixture": true },
+  "settings": {
+    "diagnosticFixture": true
+  },
   "inputContract": [
-    { "id": "fixture-query", "portKey": "query", "label": "Termos de busca", "type": "text" }
+    {
+      "id": "fixture-query",
+      "portKey": "query",
+      "label": "Termos de busca",
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
+    }
   ],
   "outputContract": [
     {
       "portKey": "results",
       "label": "Imagens encontradas",
       "key": "results",
-      "type": "records",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "record",
+        "cardinality": "many",
+        "fields": []
+      }
     },
     {
       "portKey": "warnings",
       "label": "Avisos dos provedores",
       "key": "warnings",
-      "type": "list",
-      "required": false
+      "required": false,
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "many",
+        "representation": "inline"
+      }
     }
   ],
   "context": {
@@ -43,7 +69,10 @@
       "language": "pt-BR",
       "niche": "Fitness"
     },
-    "project": { "id": "fixture-project", "title": "Projeto de teste" },
+    "project": {
+      "id": "fixture-project",
+      "title": "Projeto de teste"
+    },
     "processType": "thumbnail",
     "block": {
       "type": "BUSCAR",

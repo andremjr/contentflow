@@ -76,7 +76,12 @@ function humanBlock(id: string): ActionBlock {
 
 function channelFixture(id: string, block: ActionBlock): Channel {
   const methods = createEmptyMethods();
-  methods.theme = { contractVersion: 3, name: "Método vivo", processType: "theme", blocks: [block] };
+  methods.theme = {
+    contractVersion: 3,
+    name: "Método vivo",
+    processType: "theme",
+    blocks: [block],
+  };
   return {
     id,
     name: "Canal legado",

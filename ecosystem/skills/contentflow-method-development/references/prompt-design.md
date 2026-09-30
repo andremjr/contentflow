@@ -11,7 +11,7 @@ Não selecione o tema final; a escolha ocorrerá em VALIDAR.
 Responda apenas com dados compatíveis com o output `theme_candidates`.
 ```
 
-O prompt não substitui o schema. O `type` do output e `recordFields` são a autoridade para validar o resultado.
+O prompt não substitui o schema. O `ValueShape` do output e os campos do `RecordShape` são a autoridade para validar o resultado.
 
 ## Camadas
 
@@ -33,11 +33,11 @@ Quando a capability de plugin declarar `promptPreview`, confira a prévia antes 
 
 ## IA
 
-Declare idioma, contexto, limites, formato e o que não fazer. Se o resultado for `records`, especifique cada campo e tipo no prompt. Se o resultado for `list`, não descreva-o como tabela ou objeto. Separe geração de seleção: IA produz candidatos; Humano valida.
+Declare idioma, contexto, limites, formato e o que não fazer. Se o resultado for `RecordShape`, especifique cada campo no prompt. Se for conteúdo textual com `cardinality: "many"`, não o descreva como tabela ou objeto. Separe geração de seleção: IA produz candidatos; Humano valida.
 
 ## Código
 
-Declare operação determinística, inputs, formato recebido, artefato produzido, MIME esperado e comportamento de erro. Se uma transformação for necessária para compatibilizar output e input, modele-a como bloco Código com output no tipo destino.
+Declare operação determinística, inputs, formato recebido, artefato produzido, MIME esperado e comportamento de erro. Se uma transformação for necessária para compatibilizar output e input, modele-a como bloco Código com output no shape de destino.
 
 ## Humano
 

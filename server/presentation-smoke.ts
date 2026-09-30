@@ -16,6 +16,7 @@ const canonicalMethod = {
   exportedAt: "2026-08-10T00:00:00.000Z",
   method: {
     contractVersion: 3,
+    name: "Método canônico",
     processType: "assets",
     blocks: [
       {
@@ -23,13 +24,30 @@ const canonicalMethod = {
         type: "CRIAR",
         operator: "Humano",
         name: "Produzir assets",
-        inputs: [{ id: "input-1", label: "Referências", shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" }, binding: { kind: "runtime" } }],
+        inputs: [
+          {
+            id: "input-1",
+            label: "Referências",
+            shape: {
+              kind: "content",
+              family: "image",
+              cardinality: "many",
+              representation: "artifact",
+            },
+            binding: { kind: "runtime" },
+          },
+        ],
         outputs: [
           {
             id: "output-1",
             label: "Assets",
             key: "assets",
-            shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
+            shape: {
+              kind: "content",
+              family: "image",
+              cardinality: "many",
+              representation: "artifact",
+            },
             required: true,
           },
         ],
@@ -41,19 +59,27 @@ const canonicalMethod = {
 };
 
 const parsedCanonical = parseMethodFile(JSON.stringify(canonicalMethod));
-assert.equal(parsedCanonical.method.blocks[0].inputs?.[0].presentation?.renderer, "auto");
-assert.equal(parsedCanonical.method.blocks[0].outputs?.[0].presentation?.renderer, "auto");
+assert.equal(parsedCanonical.method.blocks[0].inputs?.[0].presentation, undefined);
+assert.equal(parsedCanonical.method.blocks[0].outputs?.[0].presentation, undefined);
 
-const imageMany = { kind: "content", family: "image", cardinality: "many", representation: "artifact" } as const;
-const textOne = { kind: "content", family: "text", cardinality: "one", representation: "inline" } as const;
+const imageMany = {
+  kind: "content",
+  family: "image",
+  cardinality: "many",
+  representation: "artifact",
+} as const;
+const textOne = {
+  kind: "content",
+  family: "text",
+  cardinality: "one",
+  representation: "inline",
+} as const;
 const records: ValueShape = { kind: "record", cardinality: "many", fields: [] };
 const gallery = normalizeFieldPresentation(imageMany, {
   renderer: "image-gallery",
-  itemType: "image",
 });
 assert.deepEqual(gallery, {
   renderer: "image-gallery",
-  itemType: "image",
 });
 assert.equal(resolvePresentationRenderer(imageMany, gallery), "image-gallery");
 assert.equal(resolvePresentationRenderer(textOne, gallery), "text-short");
@@ -74,7 +100,7 @@ assert.equal(
 
 const exported = serializeMethodFile("Método normalizado", parsedCanonical.method);
 const reparsed = parseMethodFile(exported);
-assert.equal(reparsed.method.blocks[0].outputs?.[0].presentation?.renderer, "auto");
+assert.equal(reparsed.method.blocks[0].outputs?.[0].presentation, undefined);
 
 const processRunnerSource = readFileSync(
   new URL("../src/components/process-runner.tsx", import.meta.url),

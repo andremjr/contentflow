@@ -1707,7 +1707,6 @@
           "label": "Prompts das cenas",
           "description": "Lista ordenada de prompts das cenas. Cada prompt gera uma imagem antes de qualquer animação.",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -1720,7 +1719,6 @@
           "label": "Prompts de personagens",
           "description": "Lista opcional para criar referências visuais antes das cenas. As referências geradas são anexadas a toda a produção para manter a consistência.",
           "required": false,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -1733,7 +1731,6 @@
           "label": "Prompts de animação",
           "description": "Lista opcional, na mesma ordem das cenas, para descrever movimento e câmera. Sem esta entrada, o prompt da própria cena é reutilizado.",
           "required": false,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -1746,7 +1743,6 @@
           "label": "Referências de personagem e estilo",
           "description": "Imagens reutilizadas em toda a fila para manter personagem, produto, cenário e direção de arte consistentes.",
           "required": false,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -1767,7 +1763,6 @@
           "label": "URL do projeto",
           "description": "Projeto do Google Flow opcional para preservar a sala, as referências e o histórico.",
           "required": false,
-          "multiple": false,
           "shape": {
             "kind": "control",
             "control": "url",
@@ -2444,7 +2439,6 @@
           "label": "Prompts",
           "description": "Um prompt ou uma lista de prompts. No primeiro uso, a execução pode aguardar o login no Chrome dedicado antes de gerar.",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -2457,7 +2451,6 @@
           "label": "Imagens de referência",
           "description": "Imagens opcionais compartilhadas pela execução para preservar personagem, avatar, produto, cenário ou estilo.",
           "required": false,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -2478,7 +2471,6 @@
           "label": "URL do projeto",
           "description": "URL opcional de um projeto do Flow para continuar na mesma sala/chat preservando personagens e histórico.",
           "required": false,
-          "multiple": false,
           "shape": {
             "kind": "control",
             "control": "url",
@@ -2797,7 +2789,6 @@
           "label": "Imagem para animar",
           "description": "Imagem base que será animada no Google Flow com o modelo Veo selecionado.",
           "required": true,
-          "multiple": false,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -2818,7 +2809,6 @@
           "label": "Instrução de movimento",
           "description": "Prompt ou instrução opcional para guiar o movimento e a câmera da animação.",
           "required": false,
-          "multiple": false,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -2831,7 +2821,6 @@
           "label": "URL do projeto",
           "description": "URL opcional do projeto/chat do Flow onde a imagem já reside.",
           "required": false,
-          "multiple": false,
           "shape": {
             "kind": "control",
             "control": "url",
@@ -3146,7 +3135,6 @@
           "label": "Prompts de vídeo",
           "description": "Um prompt ou lista de prompts para geração de vídeo com Veo no Google Flow.",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -3159,7 +3147,6 @@
           "label": "Imagens ou elementos de referência",
           "description": "Imagens opcionais usadas como elementos de referência nos vídeos do mesmo projeto.",
           "required": false,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -3180,7 +3167,6 @@
           "label": "URL do projeto",
           "description": "URL opcional do projeto do Flow para gerar o vídeo dentro da mesma sala.",
           "required": false,
-          "multiple": false,
           "shape": {
             "kind": "control",
             "control": "url",

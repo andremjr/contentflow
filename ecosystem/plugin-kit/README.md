@@ -1,6 +1,6 @@
 # ContentFlow Plugin Kit
 
-CLI e templates para criar, validar, testar e gerar relatórios de compatibilidade de plugins da API v1.
+CLI e templates para criar, validar, testar e gerar relatórios de compatibilidade de plugins da API v2.
 
 Execute a partir da raiz do repositório:
 

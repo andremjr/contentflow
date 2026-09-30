@@ -138,7 +138,11 @@ export function executionCommands(db: {
       .filter((output) => output.required && isEmptyRuntimeValue(values[output.key]))
       .map((output) => output.label);
     for (const output of block.outputs ?? []) {
-      const issue = getPresentationRestrictionIssue(output.shape, output.presentation, values[output.key]);
+      const issue = getPresentationRestrictionIssue(
+        output.shape,
+        output.presentation,
+        values[output.key],
+      );
       if (issue) issues.push(`${output.label}: ${issue}`);
     }
     for (const output of (block.outputs ?? []).filter((field) => field.shape.kind === "record")) {

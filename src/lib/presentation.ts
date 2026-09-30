@@ -1,7 +1,6 @@
 import {
   PRESENTATION_RENDERER_IDS,
   type FieldPresentation,
-  type PresentationItemType,
   type PresentationRendererId,
   type RuntimeValue,
   type StoredFile,
@@ -67,27 +66,14 @@ export function normalizeFieldPresentation(
   const renderer = PRESENTATION_RENDERER_IDS.includes(value?.renderer as PresentationRendererId)
     ? (value?.renderer as PresentationRendererId)
     : "auto";
-  const itemType = compatibleItemTypes(shape).includes(value?.itemType as PresentationItemType)
-    ? (value?.itemType as PresentationItemType)
-    : undefined;
   return {
     renderer: getCompatiblePresentationRenderers(shape).includes(renderer) ? renderer : "auto",
-    ...(itemType ? { itemType } : {}),
   };
-}
-
-function compatibleItemTypes(shape: ValueShape): PresentationItemType[] {
-  if (shape.kind === "record") return ["record"];
-  if (shape.kind !== "content") return shape.control === "selection" ? ["text"] : [];
-  if (shape.family === "text") {
-    return shape.representation === "artifact" ? ["file"] : ["text"];
-  }
-  return ["file", shape.family];
 }
 
 export function getPresentationRestrictionIssue(
   shape: ValueShape,
-  presentation: FieldPresentation | undefined,
+  _presentation: FieldPresentation | undefined,
   value: RuntimeValue | undefined,
 ) {
   if (value == null) return undefined;
@@ -102,9 +88,6 @@ export function getPresentationRestrictionIssue(
     if (values.some((item) => !item || typeof item !== "object" || isStoredFile(item))) {
       return "deve conter apenas registros";
     }
-  }
-  if (presentation?.itemType === "text" && values.some((item) => typeof item !== "string")) {
-    return "deve conter apenas textos";
   }
   return undefined;
 }

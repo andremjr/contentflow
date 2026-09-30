@@ -43,11 +43,11 @@
           "label": "Conteúdo do arquivo",
           "description": "Uma ou mais entradas, preservadas com seus rótulos quando o bloco recebe múltiplas fontes.",
           "required": true,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -61,9 +61,15 @@
           },
           "shape": {
             "kind": "content",
-            "family": "image",
+            "family": "text",
             "cardinality": "one",
-            "representation": "artifact"
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "text/markdown",
+                "text/plain"
+              ]
+            }
           }
         }
       ],

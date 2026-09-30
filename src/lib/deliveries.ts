@@ -238,6 +238,7 @@ export function invalidateBlockDeliveries(
 
 export function normalizeExecutionDeliveries(execution: ProcessExecution): ProcessExecution {
   const normalized = { ...execution, deliveries: [...(execution.deliveries ?? [])] };
+  if (execution.methodSnapshot.contractVersion !== 3) return normalized;
   for (const blockExecution of normalized.blocks) {
     if (
       blockExecution.status !== "completed" &&

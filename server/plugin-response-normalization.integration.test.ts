@@ -50,7 +50,7 @@ test("executor responses cross one technical-to-strategic boundary before Core c
   await writeFile(
     path.join(pluginDirectory, "contentflow.plugin.json"),
     JSON.stringify({
-      apiVersion: "1",
+      apiVersion: "2",
       id: pluginId,
       name: "Response contract test",
       version: "1.0.0",
@@ -60,7 +60,6 @@ test("executor responses cross one technical-to-strategic boundary before Core c
       runtime: { kind: "node", version: ">=26 <27", module: "esm" },
       entrypoint: "handler.mjs",
       permissions: [],
-      deliveryTypes: ["text"],
       capabilities: [
         {
           id: "respond",
@@ -71,11 +70,15 @@ test("executor responses cross one technical-to-strategic boundary before Core c
             {
               key: "generated_text",
               label: "Generated text",
-              producedTypes: ["textarea"],
+              shape: {
+                kind: "content",
+                family: "text",
+                cardinality: "one",
+                representation: "inline",
+              },
               required: true,
             },
           ],
-          producedOutputTypes: ["textarea"],
           execution: { mode: "immediate", defaultTimeoutMs: 30_000 },
           sideEffects: [],
           cost: { model: "free", estimateSupported: false },
@@ -92,11 +95,15 @@ test("executor responses cross one technical-to-strategic boundary before Core c
             {
               key: "generated_text",
               label: "Generated text",
-              producedTypes: ["textarea"],
+              shape: {
+                kind: "content",
+                family: "text",
+                cardinality: "one",
+                representation: "inline",
+              },
               required: true,
             },
           ],
-          producedOutputTypes: ["textarea"],
           execution: {
             mode: "async",
             defaultTimeoutMs: 30_000,
@@ -194,7 +201,12 @@ test("executor responses cross one technical-to-strategic boundary before Core c
             label: "Roteiro",
             key: "script",
             portKey: "generated_text",
-            type: "textarea",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             required: true,
           },
         ],
@@ -230,7 +242,7 @@ test("executor responses cross one technical-to-strategic boundary before Core c
           channelId: "response-contract-channel",
           processType: "theme",
           methodSnapshot: {
-            contractVersion: 2,
+            contractVersion: 3,
             name: "Response",
             processType: "theme",
             blocks: [block],

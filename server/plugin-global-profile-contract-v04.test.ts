@@ -13,15 +13,16 @@ test("pacote 0.4 fecha os nomes do contrato de perfil global", () => {
   assert.match(protocol, /single.*fallback.*parallel/s);
 });
 
-test("matriz mantém API v1 e Método antigo por alias", () => {
-  assert.match(protocol, /pluginId \+ alias/);
+test("migração de perfil legado não reintroduz contrato antigo de Método ou plugin", () => {
+  assert.match(protocol, /Plugin API v2 e Método v3 são os únicos contratos aceitos/);
   assert.match(protocol, /configurationKey/);
   assert.match(protocol, /fallbackConfigurationKey/);
-  assert.match(browser, /Métodos antigos continuam resolvendo o perfil por `pluginId \+ alias`/);
+  assert.match(browser, /registros físicos legados de perfil/);
+  assert.doesNotMatch(browser, /Métodos antigos continuam resolvendo/);
 });
 
-test("Método novo usa política local sem expor IDs ao handler", () => {
-  assert.match(protocol, /Método novo usa a política local `profileExecution`/);
+test("Método v3 usa política local sem expor IDs ao handler", () => {
+  assert.match(protocol, /Método v3 usa a política local `profileExecution`/);
   assert.match(protocol, /nunca são enviados ao plugin em `request`/);
   assert.match(browser, /handler nunca recebe esses IDs/);
 });

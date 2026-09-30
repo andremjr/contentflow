@@ -175,12 +175,11 @@
           "key": "text",
           "label": "Texto para narrar",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
-            "family": "audio",
-            "cardinality": "many",
-            "representation": "artifact"
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -336,7 +335,6 @@
           "key": "description",
           "label": "Descrição do efeito",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -472,13 +470,23 @@
       ],
       "inputPorts": [
         {
-          "key": "media",
-          "label": "Áudio ou vídeo",
-          "required": true,
-          "multiple": false,
+          "key": "audio",
+          "label": "Áudio",
+          "required": false,
           "shape": {
             "kind": "content",
-            "family": "image",
+            "family": "audio",
+            "cardinality": "one",
+            "representation": "artifact"
+          }
+        },
+        {
+          "key": "video",
+          "label": "Vídeo",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "video",
             "cardinality": "one",
             "representation": "artifact"
           }
@@ -627,7 +635,6 @@
           "key": "prompt",
           "label": "Descrição da música",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",

@@ -338,33 +338,37 @@ test("manifesto declara oito capabilities modulares", () => {
     "accountProfile",
     "startMinimized",
   ]);
-  assert.deepEqual(generation.outputPorts.find((port) => port.key === "result").producedTypes, [
-    "text",
-    "textarea",
-    "number",
-    "list",
-  ]);
-  assert.equal(generation.execution.itemOrchestration, undefined);
+  assert.deepEqual(generation.outputPorts.find((port) => port.key === "result").shape, {
+    kind: "content",
+    family: "text",
+    cardinality: "one",
+    representation: "inline",
+  });
+  assert.deepEqual(generation.execution.itemOrchestration, {
+    inputPort: "content",
+    outputPort: "parts",
+    combinedOutputPort: "result",
+    separator: "\n\n",
+    mode: "sequential",
+    strategies: ["per_item"],
+    preferredStrategy: "per_item",
+  });
   const imageGeneration = manifest.capabilities.find(
     (item) => item.id === "generate-image-in-browser",
   );
-  assert.deepEqual(imageGeneration.inputPorts.find((port) => port.key === "prompt").acceptedTypes, [
-    "text",
-    "textarea",
-    "number",
-    "boolean",
-    "list",
-    "records",
-    "select",
-    "multiselect",
-    "datetime",
-    "url",
-    "thumbnail_layout",
-  ]);
-  assert.deepEqual(
-    imageGeneration.outputPorts.find((port) => port.key === "images").producedTypes,
-    ["files"],
-  );
+  assert.deepEqual(imageGeneration.inputPorts.find((port) => port.key === "prompt").shape, {
+    kind: "content",
+    family: "text",
+    cardinality: "one",
+    representation: "inline",
+  });
+  assert.deepEqual(imageGeneration.outputPorts.find((port) => port.key === "images").shape, {
+    kind: "content",
+    family: "image",
+    cardinality: "many",
+    representation: "artifact",
+    formats: { mimeTypes: ["image/*"] },
+  });
   assert.deepEqual(
     manifest.capabilities.map((item) => item.id),
     [

@@ -254,29 +254,28 @@
           "key": "content",
           "label": "Contexto para geração",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
+            "kind": "content",
+            "family": "text",
             "cardinality": "many",
-            "fields": []
+            "representation": "inline"
           }
         },
         {
           "key": "outline",
           "label": "Outline / estrutura",
           "required": false,
-          "multiple": false,
           "shape": {
-            "kind": "record",
+            "kind": "content",
+            "family": "text",
             "cardinality": "many",
-            "fields": []
+            "representation": "inline"
           }
         },
         {
           "key": "attachments",
           "label": "Referências anexas",
           "required": false,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "image",
@@ -294,9 +293,10 @@
             "renderer": "text-long"
           },
           "shape": {
-            "kind": "control",
-            "control": "number",
-            "cardinality": "one"
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
@@ -318,7 +318,18 @@
         "mode": "immediate",
         "defaultTimeoutMs": 1800000,
         "supportsCancellation": true,
-        "maxConcurrency": 1
+        "maxConcurrency": 1,
+        "itemOrchestration": {
+          "inputPort": "content",
+          "outputPort": "parts",
+          "combinedOutputPort": "result",
+          "separator": "\n\n",
+          "mode": "sequential",
+          "strategies": [
+            "per_item"
+          ],
+          "preferredStrategy": "per_item"
+        }
       },
       "sideEffects": [
         "external_write",
@@ -400,11 +411,10 @@
           "key": "query",
           "label": "Consulta",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
-            "cardinality": "many",
+            "cardinality": "one",
             "representation": "inline"
           }
         },
@@ -412,11 +422,11 @@
           "key": "context",
           "label": "Contexto",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -521,11 +531,10 @@
           "key": "query",
           "label": "Tema da pesquisa aprofundada",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
-            "cardinality": "many",
+            "cardinality": "one",
             "representation": "inline"
           }
         },
@@ -533,11 +542,11 @@
           "key": "context",
           "label": "Contexto",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -642,11 +651,11 @@
           "key": "context",
           "label": "Contexto da escolha",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -656,10 +665,9 @@
           "label": "ID escolhido",
           "required": true,
           "shape": {
-            "kind": "content",
-            "family": "text",
-            "cardinality": "one",
-            "representation": "inline"
+            "kind": "control",
+            "control": "identifier",
+            "cardinality": "one"
           }
         }
       ],
@@ -742,22 +750,22 @@
           "key": "content",
           "label": "Conteúdo a validar",
           "required": true,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
           "key": "criteria",
           "label": "Critérios",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
+            "kind": "content",
+            "family": "text",
             "cardinality": "many",
-            "fields": []
+            "representation": "inline"
           }
         }
       ],
@@ -876,7 +884,6 @@
           "key": "images",
           "label": "Imagens",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "image",
@@ -888,11 +895,11 @@
           "key": "context",
           "label": "Contexto",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -991,7 +998,6 @@
           "key": "documents",
           "label": "Documentos",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -1003,11 +1009,11 @@
           "key": "context",
           "label": "Contexto",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -1105,18 +1111,17 @@
           "key": "prompt",
           "label": "Prompt da imagem",
           "required": true,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
           "key": "references",
           "label": "Imagens de referência",
           "required": false,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "image",

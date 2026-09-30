@@ -289,11 +289,11 @@ export type PluginExecutionContext = {
   project: { id: string; title: string };
   processType: UniversalProcess;
   block: { type: BlockType; name: string; instructions: string };
-  /** @deprecated Desde a API v1 atual, o núcleo não popula histórico implícito. Use bindings em `inputs`. */
+  /** @deprecated Na API v2, o núcleo não popula histórico implícito. Use bindings em `inputs`. */
   previousProcessOutputs?: ProcessOutput[];
-  /** @deprecated Desde a API v1 atual, o núcleo não popula histórico implícito. Use bindings em `inputs`. */
+  /** @deprecated Na API v2, o núcleo não popula histórico implícito. Use bindings em `inputs`. */
   previousBlockOutputs?: Array<{ blockId: string; values: Record<string, RuntimeValue> }>;
-  /** @deprecated Desde a API v1 atual, o núcleo não popula histórico implícito. Use `inputDeliveries`. */
+  /** @deprecated Na API v2, o núcleo não popula histórico implícito. Use `inputDeliveries`. */
   previousDeliveries?: ProjectDelivery[];
   selectedCollection?: {
     collectionId: string;
@@ -496,7 +496,7 @@ export type PluginIncrementalItemUpdate = {
   key: string;
   /**
    * Chave local da variante dentro do mesmo item de lote. Quando ausente,
-   * `key` preserva a identidade dos plugins API v1 existentes.
+   * `key` preserva a correlação local de plugins que ainda não declaram variantes.
    */
   variantKey?: string;
   outputPort: string;
@@ -577,16 +577,16 @@ export type PluginExecutionServices = {
   resolveInputFile: (file: StoredFile) => Promise<string>;
   getOutputPath: (relativePath: string) => string;
   getWorkspacePath: (relativePath: string) => string;
-  /** Reserved additive API v1 service for a core-selected global browser profile. */
+  /** Serviço opcional da API v2 para o perfil global selecionado pelo núcleo. */
   getProfilePath?: (relativePath: string) => string;
   /** Makes completed intermediate work durable before execute() returns. */
   publishPartial: (update: PluginPartialUpdate) => Promise<void>;
-  /** Reserved additive API v1 service; runtime support is negotiated before use. */
+  /** Serviço opcional da API v2; o suporte do runtime é negociado antes do uso. */
   registerItems?: (
     parentItemId: string,
     plannedItems: PluginPlannedWorkItem[],
   ) => Promise<PluginClaimedWorkItem[]>;
-  /** Reserved additive API v1 service for continuous sessions. */
+  /** Serviço opcional da API v2 para sessões contínuas. */
   claimItems?: (limit: number) => Promise<PluginClaimedWorkItem[]>;
   /** Resolves only after the core durably persists the material state transition. */
   publishItemUpdate?: (update: PluginWorkItemUpdate) => Promise<PluginWorkItemUpdateReceipt>;

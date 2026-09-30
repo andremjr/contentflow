@@ -97,7 +97,7 @@ test("start sem credencial falha de modo seguro", async () => {
         configuration: { ...__test.CONFIG_DEFAULTS },
         settings: {},
         inputs: {
-          media_files: { url: "stored://1", name: "audio.mp3", mimeType: "audio/mpeg", size: 10 },
+          audio_files: [{ url: "stored://1", name: "audio.mp3", mimeType: "audio/mpeg", size: 10 }],
         },
       },
       {
@@ -155,7 +155,7 @@ test("job assíncrono preserva a rotação circular entre duas mídias", async (
     attempt: 1,
     configuration: { ...__test.CONFIG_DEFAULTS },
     settings: {},
-    inputs: { media_files: media },
+    inputs: { audio_files: media },
   };
   const services = {
     signal: new AbortController().signal,

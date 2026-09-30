@@ -1,5 +1,5 @@
 {
-  "apiVersion": "1",
+  "apiVersion": "2",
   "id": "com.contentflow.e2e-contract",
   "name": "Plugin de Contrato E2E",
   "version": "1.0.0",
@@ -9,7 +9,6 @@
   "runtime": { "kind": "node", "version": ">=26 <27", "module": "esm" },
   "entrypoint": "handler.mjs",
   "permissions": [],
-  "deliveryTypes": ["text"],
   "capabilities": [
     {
       "id": "generate",
@@ -21,28 +20,25 @@
         {
           "key": "content",
           "label": "Contexto",
-          "acceptedTypes": ["list", "number"],
-          "required": false,
-          "multiple": true
+          "shape": { "kind": "content", "family": "text", "cardinality": "many", "representation": "inline" },
+          "required": false
         },
         {
           "key": "outline",
           "label": "Outline / estrutura",
-          "acceptedTypes": ["list"],
+          "shape": { "kind": "content", "family": "text", "cardinality": "many", "representation": "inline" },
           "required": false
         },
         {
           "key": "sections",
           "label": "Quantidade de blocos",
-          "acceptedTypes": ["number"],
+          "shape": { "kind": "control", "control": "number", "cardinality": "one" },
           "required": false
         }
       ],
       "outputPorts": [
-        { "key": "result", "label": "Resultado", "producedTypes": ["textarea"], "required": true }
+        { "key": "result", "label": "Resultado", "shape": { "kind": "content", "family": "text", "cardinality": "one", "representation": "inline" }, "required": true }
       ],
-      "acceptedInputTypes": ["list", "number"],
-      "producedOutputTypes": ["textarea"],
       "execution": { "mode": "immediate", "defaultTimeoutMs": 30000, "maxConcurrency": 1 },
       "sideEffects": [],
       "cost": { "model": "free", "estimateSupported": false },

@@ -102,7 +102,19 @@ test(
         id: "source-collection",
         channelId: "source-channel",
         name: "Referências visuais",
-        fields: [{ id: "source-image", label: "Imagem", shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" }, required: true }],
+        fields: [
+          {
+            id: "source-image",
+            label: "Imagem",
+            shape: {
+              kind: "content",
+              family: "image",
+              cardinality: "one",
+              representation: "artifact",
+            },
+            required: true,
+          },
+        ],
         createdAt: new Date().toISOString(),
       };
       const methods = createEmptyMethods();

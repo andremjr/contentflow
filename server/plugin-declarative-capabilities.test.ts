@@ -23,7 +23,19 @@ function manifest(): PluginManifest {
         operator: "IA",
         blockTypes: ["CRIAR"],
         inputPorts: [],
-        outputPorts: [{ key: "media", label: "Mídia", shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" }, required: true }],
+        outputPorts: [
+          {
+            key: "media",
+            label: "Mídia",
+            shape: {
+              kind: "content",
+              family: "image",
+              cardinality: "many",
+              representation: "artifact",
+            },
+            required: true,
+          },
+        ],
         execution: { mode: "immediate" },
         sideEffects: [],
         cost: { model: "free", estimateSupported: false },
@@ -119,9 +131,9 @@ test("valida a fixture neutra de localização em PT-BR, inglês e espanhol", ()
     readFileSync("docs/ecosystem/examples/plugin-localization.example.json", "utf8"),
   ) as unknown;
   const parsed = validatePluginManifest(fixture);
-  assert.equal(parsed.name, "Estúdio neutro");
-  assert.equal(parsed.localizations?.en?.name, "Neutral Studio");
-  assert.equal(parsed.localizations?.es?.name, "Estudio neutro");
+  assert.equal(parsed.name, "Transformador localizado");
+  assert.equal(parsed.localizations?.en?.name, "Localized transformer");
+  assert.equal(parsed.localizations?.es?.name, "Transformador localizado");
 });
 
 test("rejeita locale malformado e alvo de tradução inexistente", () => {

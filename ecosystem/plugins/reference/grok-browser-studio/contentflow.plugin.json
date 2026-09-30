@@ -130,18 +130,17 @@
           "key": "content",
           "label": "Contexto para geração",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
           "key": "attachments",
           "label": "Referências anexas",
           "required": false,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "image",
@@ -266,11 +265,10 @@
           "key": "query",
           "label": "Consulta",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
-            "cardinality": "many",
+            "cardinality": "one",
             "representation": "inline"
           }
         },
@@ -278,11 +276,11 @@
           "key": "context",
           "label": "Contexto",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -381,19 +379,17 @@
           "key": "prompt",
           "label": "Prompt da imagem",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
-            "family": "image",
+            "family": "text",
             "cardinality": "one",
-            "representation": "artifact"
+            "representation": "inline"
           }
         },
         {
           "key": "references",
           "label": "Imagens de referência",
           "required": false,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -518,7 +514,6 @@
           "key": "prompt",
           "label": "Prompt do vídeo",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -530,7 +525,6 @@
           "key": "references",
           "label": "Imagem ou vídeo de referência",
           "required": false,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "image",

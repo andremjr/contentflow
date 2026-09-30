@@ -553,7 +553,7 @@ async function transcribe(request, services) {
       usage: { provider: "diagnostic", outputUnits: 1, unit: "items" },
     };
   }
-  const file = storedFile(request.inputs?.media);
+  const file = storedFile(request.inputs?.audio ?? request.inputs?.video);
   const maximum = Math.trunc(clamp(request.settings?.maxInputBytes, 1048576, 524288000, 104857600));
   if (Number(file.size) > maximum)
     throw new PluginFailure(

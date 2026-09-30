@@ -1,5 +1,5 @@
 {
-  "apiVersion": "1",
+  "apiVersion": "2",
   "id": "com.contentflow.e2e-profile",
   "name": "Plugin de Perfis E2E",
   "version": "1.0.0",
@@ -13,7 +13,6 @@
   },
   "entrypoint": "handler.mjs",
   "permissions": ["filesystem:read", "filesystem:write"],
-  "deliveryTypes": ["text"],
   "profileSetup": {
     "configurationKey": "accountProfile",
     "fallbackConfigurationKey": "fallbackAccountProfiles",
@@ -32,12 +31,10 @@
         {
           "key": "result",
           "label": "Resultado",
-          "producedTypes": ["text"],
+          "shape": { "kind": "content", "family": "text", "cardinality": "one", "representation": "inline" },
           "required": true
         }
       ],
-      "acceptedInputTypes": [],
-      "producedOutputTypes": ["text"],
       "execution": {
         "mode": "immediate",
         "defaultTimeoutMs": 30000,

@@ -23,18 +23,32 @@ function manifest(): PluginManifest {
         description: "Gera um resultado.",
         operator: "IA",
         blockTypes: ["CRIAR"],
-        inputPorts: [{
-          key: "prompt",
-          label: "Prompt",
-          shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
-          required: true,
-        }],
-        outputPorts: [{
-          key: "media",
-          label: "Mídia",
-          shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" },
-          required: true,
-        }],
+        inputPorts: [
+          {
+            key: "prompt",
+            label: "Prompt",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
+            required: true,
+          },
+        ],
+        outputPorts: [
+          {
+            key: "media",
+            label: "Mídia",
+            shape: {
+              kind: "content",
+              family: "image",
+              cardinality: "one",
+              representation: "artifact",
+            },
+            required: true,
+          },
+        ],
         execution: { mode: "immediate" },
         sideEffects: [],
         cost: { model: "free", estimateSupported: false },

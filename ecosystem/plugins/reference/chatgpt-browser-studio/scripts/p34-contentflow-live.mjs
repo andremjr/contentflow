@@ -88,7 +88,6 @@ if (process.env[LIVE_FLAG] !== "1") {
               source: "runtime",
               presentation: {
                 renderer: "image-gallery",
-                itemType: "image",
                 acceptedMimeTypes: ["image/*"],
               },
             },
@@ -105,7 +104,6 @@ if (process.env[LIVE_FLAG] !== "1") {
         required: true,
         presentation: {
           renderer: "image-gallery",
-          itemType: "image",
           acceptedMimeTypes: ["image/*"],
         },
       },
@@ -118,7 +116,6 @@ if (process.env[LIVE_FLAG] !== "1") {
         required: false,
         presentation: {
           renderer: "image-gallery",
-          itemType: "image",
           acceptedMimeTypes: ["image/*"],
         },
       },

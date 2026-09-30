@@ -25,8 +25,20 @@ function request(): PluginExecutionRequest {
     inputs: { content: ["primeiro", "segundo", "terceiro"] },
     inputContract: [],
     outputContract: [
-      { key: "result", portKey: "result", label: "Texto", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" }, required: true },
-      { key: "parts", portKey: "parts", label: "Partes", shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" }, required: false },
+      {
+        key: "result",
+        portKey: "result",
+        label: "Texto",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+        required: true,
+      },
+      {
+        key: "parts",
+        portKey: "parts",
+        label: "Partes",
+        shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
+        required: false,
+      },
     ],
     context: {
       locale: "pt-BR",

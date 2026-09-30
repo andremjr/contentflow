@@ -116,8 +116,7 @@
       "additionalProperties": false,
       "required": ["renderer"],
       "properties": {
-        "renderer": { "enum": ["auto", "text-short", "text-long", "list", "tags", "table", "cards", "file-list", "image-gallery", "audio-player", "video-player", "decision"] },
-        "itemType": { "enum": ["text", "record", "file", "image", "audio", "video"] }
+        "renderer": { "enum": ["auto", "text-short", "text-long", "list", "tags", "table", "cards", "file-list", "image-gallery", "audio-player", "video-player", "decision"] }
       }
     },
     "port": {

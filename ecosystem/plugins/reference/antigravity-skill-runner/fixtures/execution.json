@@ -4,7 +4,9 @@
   "blockId": "fixture-create-script",
   "capabilityId": "run-production-skill",
   "attempt": 1,
-  "invocation": { "mode": "start" },
+  "invocation": {
+    "mode": "start"
+  },
   "configuration": {
     "skill_name": "",
     "task_prompt": "Execute a etapa de diagnóstico.",
@@ -16,13 +18,20 @@
     "diagnostic_mode": true
   },
   "settings": {},
-  "inputs": { "context": "Contexto fictício para validar o contrato." },
+  "inputs": {
+    "context": "Contexto fictício para validar o contrato."
+  },
   "inputContract": [
     {
       "id": "fixture-context",
       "portKey": "context",
       "label": "Contexto",
-      "type": "textarea"
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "outputContract": [
@@ -30,8 +39,13 @@
       "portKey": "result",
       "label": "Roteiro",
       "key": "script",
-      "type": "textarea",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "context": {
@@ -43,7 +57,10 @@
       "language": "pt-BR",
       "niche": "Educação"
     },
-    "project": { "id": "fixture-project", "title": "Projeto fictício" },
+    "project": {
+      "id": "fixture-project",
+      "title": "Projeto fictício"
+    },
     "processType": "script",
     "block": {
       "type": "CRIAR",

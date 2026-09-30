@@ -32,7 +32,6 @@ test("não escolhe porta por apresentação ou MIME sem portKey explícita", () 
       required: true,
       presentation: {
         renderer: "image-gallery",
-        itemType: "image",
       },
     },
     {
@@ -42,7 +41,6 @@ test("não escolhe porta por apresentação ou MIME sem portKey explícita", () 
       required: false,
       presentation: {
         renderer: "file-list",
-        itemType: "file",
       },
     },
   ];
@@ -53,7 +51,6 @@ test("não escolhe porta por apresentação ou MIME sem portKey explícita", () 
     binding: { kind: "previous_process", processType: "editing", outputKey: "subtitles" },
     presentation: {
       renderer: "file-list",
-      itemType: "file",
     },
   };
 

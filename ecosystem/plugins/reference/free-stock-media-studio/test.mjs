@@ -94,8 +94,11 @@ test("P24 fornece Método BUSCAR → VALIDAR → CRIAR executável nos três idi
   assert.equal(validation.validation.targetOutputKey, "candidates");
   assert.equal(validation.validation.mode, "select_one");
   assert.equal(download.plugin.capabilityId, "download-selected-stock-assets");
-  assert.equal(download.inputs[0].blockId, validation.id);
-  assert.equal(download.inputs[0].sourceKey, "selected_value");
+  assert.deepEqual(download.inputs[0].binding, {
+    kind: "previous_block",
+    blockId: validation.id,
+    outputKey: "selected_value",
+  });
   assert.equal(download.inputs[0].portKey, "selected_assets");
   assert.deepEqual(manifest.permissions, ["network", "filesystem:read", "filesystem:write"]);
 });

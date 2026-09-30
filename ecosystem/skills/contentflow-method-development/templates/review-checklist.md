@@ -3,7 +3,7 @@
 ## Estrutura
 
 - [ ] O JSON é parseável.
-- [ ] `format` é `contentflow-method` e `version` é `1`.
+- [ ] `format` é `contentflow-method`, `version` é `3` e o Método usa `contractVersion: 3`.
 - [ ] Há exatamente um `processType` válido.
 - [ ] `order` é sequencial e `parameters` existe em todos os blocos.
 
@@ -16,15 +16,15 @@
 
 ## Contratos
 
-- [ ] Toda saída tem `key` única, type e required.
-- [ ] Todo input tem source válida e proveniência explícita.
-- [ ] `channel_history` é `records`, está em `ESCOLHER`/`CRIAR` e usa origem/limite válidos.
-- [ ] Cada output conectado tem type compatível com o input.
-- [ ] Schema de `records` tem recordFields compatíveis e keys únicas.
-- [ ] `select`/`multiselect` têm options compatíveis.
-- [ ] Cardinalidade singular/coleção é preservada.
-- [ ] `file`/`image`/`audio`/`video` e MIME foram validados.
-- [ ] `thumbnail_layout` só chega a `image` depois de renderização explícita.
+- [ ] Toda saída tem `key` única, `shape` canônico e `required`.
+- [ ] Todo input tem `binding` canônico e proveniência explícita.
+- [ ] `channel_history` usa `shape` de registro, está em `ESCOLHER`/`CRIAR` e possui origem/limite válidos.
+- [ ] Cada output conectado possui `ValueShape` compatível com o input.
+- [ ] `shape.kind: "record"` declara campos compatíveis e chaves únicas.
+- [ ] Contratos de controle declaram `kind: "control"`; opções continuam metadados do campo.
+- [ ] A cardinalidade `one`/`many` é preservada explicitamente.
+- [ ] Arquivos são representação de `image`/`audio`/`video`, com MIME validado.
+- [ ] `thumbnail_layout` continua controle e só chega a conteúdo `image` depois de renderização explícita.
 - [ ] Nenhuma coerção silenciosa foi usada.
 
 ## Execução
@@ -32,7 +32,7 @@
 - [ ] `VALIDAR` aponta para bloco anterior não-VALIDAR.
 - [ ] `targetOutputKey` existe nos modos de seleção.
 - [ ] `onReject` e `maxAttempts` foram escolhidos conscientemente.
-- [ ] Output oficial do processo é alcançável e está no tipo correto.
+- [ ] Output oficial do processo é alcançável e está no `ContentShape` correto.
 - [ ] Reutilização de conversa aponta para bloco anterior do mesmo plugin.
 - [ ] O arquivo portátil não contém `connectionId`, `collectionId`, ID real de conversa ou secret.
 - [ ] Dependências locais de plugin/conta/coleção estão documentadas para reassociação.
@@ -42,5 +42,5 @@
 
 - [ ] O validador automático foi executado.
 - [ ] Foi testado um caminho válido.
-- [ ] Foi testado um conflito intencional de tipo e o validador o rejeitou.
+- [ ] Foi testado um conflito intencional de shape/cardinalidade e o validador o rejeitou.
 - [ ] O Método foi importado em Canal de teste e executado com Projeto de teste.

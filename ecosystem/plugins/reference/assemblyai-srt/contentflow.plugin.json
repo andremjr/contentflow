@@ -43,14 +43,25 @@
       ],
       "inputPorts": [
         {
-          "key": "media_files",
-          "label": "Áudios ou vídeos",
-          "description": "Uma ou várias mídias, processadas na ordem recebida.",
-          "required": true,
-          "multiple": true,
+          "key": "audio_files",
+          "label": "Áudios",
+          "description": "Um ou vários áudios, processados na ordem recebida.",
+          "required": false,
           "shape": {
             "kind": "content",
-            "family": "image",
+            "family": "audio",
+            "cardinality": "many",
+            "representation": "artifact"
+          }
+        },
+        {
+          "key": "video_files",
+          "label": "Vídeos",
+          "description": "Um ou vários vídeos, processados na ordem recebida.",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "video",
             "cardinality": "many",
             "representation": "artifact"
           }

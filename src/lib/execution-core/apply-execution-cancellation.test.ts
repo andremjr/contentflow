@@ -68,7 +68,12 @@ function cancellableExecution(status: ProcessExecution["status"] = "running"): P
         blockId: "active",
         outputKey: "assets",
         label: "Assets",
-        shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
+        shape: {
+          kind: "content",
+          family: "image",
+          cardinality: "many",
+          representation: "artifact",
+        },
         attempt: 4,
         status: "partial",
         items: [{ id: "delivery-item", order: 0, value: "partial" }],

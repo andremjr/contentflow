@@ -4,7 +4,9 @@
   "blockId": "text-file-builder-fixture-block",
   "capabilityId": "build-text-file",
   "attempt": 1,
-  "invocation": { "mode": "start" },
+  "invocation": {
+    "mode": "start"
+  },
   "configuration": {
     "fileName": "contexto.md",
     "format": "markdown"
@@ -18,7 +20,12 @@
       "id": "fixture-content",
       "portKey": "content",
       "label": "Contexto",
-      "type": "textarea"
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "outputContract": [
@@ -26,12 +33,25 @@
       "portKey": "document",
       "label": "Arquivo de contexto",
       "key": "document",
-      "type": "file",
       "required": true,
       "presentation": {
         "renderer": "file-list",
-        "itemType": "file",
-        "acceptedMimeTypes": ["text/markdown", "text/plain"]
+        "acceptedMimeTypes": [
+          "text/markdown",
+          "text/plain"
+        ]
+      },
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "artifact",
+        "formats": {
+          "mimeTypes": [
+            "text/markdown",
+            "text/plain"
+          ]
+        }
       }
     }
   ],

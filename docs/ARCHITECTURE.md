@@ -264,7 +264,7 @@ Exemplos universais:
 
 A página do processo mantém um painel expansível de resultados concluídos. O `ValueShape` é a autoridade de validação e compatibilidade, enquanto `presentation` pode solicitar um renderer padronizado do núcleo. O mesmo shape governa formulário humano, resposta de plugin, delivery e viewer; renderer nunca define família, cardinalidade ou representação.
 
-Renderers são componentes internos do ContentFlow. Plugins podem apenas indicar um identificador permitido e restrições declarativas de item ou MIME; nunca fornecem React, HTML, scripts ou outra interface arbitrária. Preferências incompatíveis ou desconhecidas são ignoradas pelo núcleo e recaem no modo automático.
+Renderers são componentes internos do ContentFlow. Plugins podem apenas indicar um identificador permitido; MIME e extensão permanecem em `ContentShape.formats`. Plugins nunca fornecem React, HTML, scripts ou outra interface arbitrária. Preferências incompatíveis ou desconhecidas são ignoradas pelo núcleo e recaem no modo automático.
 
 ### 7.2. Itens operacionais universais
 

@@ -4,7 +4,9 @@
   "blockId": "edge-tts-fixture-block",
   "capabilityId": "text-to-speech",
   "attempt": 1,
-  "invocation": { "mode": "start" },
+  "invocation": {
+    "mode": "start"
+  },
   "configuration": {
     "voice": "en-US-GuyNeural",
     "ratePercent": 0,
@@ -12,17 +14,39 @@
     "pitchHz": 0
   },
   "settings": {},
-  "inputs": { "text": "This is a short ContentFlow Edge TTS integration test." },
+  "inputs": {
+    "text": "This is a short ContentFlow Edge TTS integration test."
+  },
   "inputContract": [
-    { "id": "text", "portKey": "text", "label": "Texto da narração", "type": "textarea" }
+    {
+      "id": "text",
+      "portKey": "text",
+      "label": "Texto da narração",
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
+    }
   ],
   "outputContract": [
     {
       "portKey": "audio",
       "label": "Narração Edge TTS",
       "key": "audio",
-      "type": "audio",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "audio",
+        "cardinality": "one",
+        "representation": "artifact",
+        "formats": {
+          "mimeTypes": [
+            "audio/mpeg"
+          ]
+        }
+      }
     }
   ],
   "context": {
@@ -34,7 +58,10 @@
       "language": "EN-US",
       "niche": "Fitness"
     },
-    "project": { "id": "fixture-project", "title": "Edge TTS test" },
+    "project": {
+      "id": "fixture-project",
+      "title": "Edge TTS test"
+    },
     "processType": "narration",
     "block": {
       "type": "CRIAR",

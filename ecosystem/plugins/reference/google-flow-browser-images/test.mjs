@@ -26,11 +26,15 @@ assert.deepEqual(
 assert.equal(manifest.version, "1.3.8");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
+assert.equal(manifest.apiVersion, "2");
 assert.ok(manifest.permissions.includes("filesystem:read"));
 assert.ok(manifest.permissions.includes("filesystem:write"));
 assert.ok(manifest.permissions.includes("network"));
 assert.ok(manifest.permissions.includes("process"));
-assert.deepEqual(manifest.deliveryTypes, ["image", "video"]);
+assert.deepEqual(
+  manifest.capabilities[0].outputPorts.map((port) => port.shape.family ?? port.shape.control),
+  ["image", "image", "image", "video", "url"],
+);
 
 const emptyContinuousResult = await execute(
   {
@@ -131,8 +135,14 @@ assert.deepEqual(
   cap.outputPorts.map((port) => port.key),
   ["images", "project_url"],
 );
-assert.deepEqual(cap.outputPorts[0].producedTypes, ["image", "files"]);
-assert.deepEqual(cap.producedOutputTypes, ["image", "files", "text", "url"]);
+assert.deepEqual(cap.outputPorts[0].shape, {
+  kind: "content",
+  family: "image",
+  cardinality: "many",
+  representation: "artifact",
+  formats: { mimeTypes: ["image/*"] },
+});
+assert.equal(cap.outputPorts.find((port) => port.key === "project_url").shape.control, "url");
 assert.equal(cap.blockConfigSchema.properties.accountProfile.default, "default");
 assert.equal(cap.blockConfigSchema.properties.imageModel.default, "flow_auto");
 assert.equal(cap.blockConfigSchema.properties.fallbackOnModelLimit.default, true);

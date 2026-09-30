@@ -31,7 +31,7 @@ Consequentemente, o produto não é apenas conceitual e o início do pipeline j�
 
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) continua sendo a fonte normativa do domínio atual: 8 Processos Universais, 4 Blocos Essenciais, 3 Operadores e 3 interfaces de domínio.
 - [`../CONTENT_CONTRACT.md`](../CONTENT_CONTRACT.md) é a fonte normativa exclusiva de entradas, saídas, portas e deliveries. O contrato vigente usa somente as famílias `text`, `image`, `audio` e `video`, com cardinalidade e representação explícitas, e separa controle e registros. Métodos v3 e Plugin API v2 não adaptam a taxonomia anterior.
-- A boundary canônica, os parsers e os testes focais já usam esse contrato. Builder, telas, executores, Plugin Kit, plugins e fixtures que ainda referenciam a taxonomia removida estão deliberadamente inválidos e aguardam conversão; o checkout não volta a compilar até essa etapa. Essa condição não autoriza reintroduzir aliases ou adapters.
+- A boundary canônica, parsers, Method Builder, telas humanas, executores, Plugin Kit, plugins oficiais e fixtures usam o mesmo `ValueShape`. O checkout compila sem aliases ou adapters para a taxonomia removida; Métodos v1/v2 e Plugin API v1 permanecem inválidos.
 - Projetos podem congelar a ordem e os Métodos do Canal em `strategySnapshot`; cada `ProcessExecution` também conserva seu `methodSnapshot`.
 - A máquina de execução atual está dividida entre `server/execution-commands.ts`, funções e rotas de `server/index.ts`, scheduler de jobs de plugin e reconciliação do Orchestrator.
 - O auto-agendamento de Blocos de plugin não usa mais HTTP loopback. A boundary HTTP `POST /api/execute-block` e `scheduleAutomaticPluginBlock()` convergem em `executePluginBlockInternal()`, uma operação da camada server/application sem dependência de Request/Response. Scheduling continua assíncrono e pós-commit; o Execution Core permanece independente de HTTP e infraestrutura de plugins.
@@ -163,7 +163,7 @@ Existem suites importantes para arquitetura, máquina básica de execução, `VA
 
 Testes parciais de restart e efeito incerto existem, especialmente em jobs, Orchestrator e Browser Bridge. Eles não substituem o Reliability Gate integrado definido para TASK-052.
 
-O baseline da TASK-001 confirmou inicialmente 135 erros de Prettier e um warning de Fast Refresh. Em limpeza posterior explicitamente autorizada, esses 136 diagnósticos foram eliminados e `npm run lint` e `npm run typecheck` passaram. O `npm run check` agora avança até `test:shared-browser-v89`, onde falha porque a capability textual do ChatGPT não declara `incrementalStrategies: ["per_item"]`; a falha isolada reproduz 3 testes passando e 1 falhando. A evidência detalhada está em [`tasks/TASK-001.md`](tasks/TASK-001.md).
+O baseline da TASK-001 confirmou inicialmente 135 erros de Prettier e um warning de Fast Refresh. Em limpeza posterior explicitamente autorizada, esses 136 diagnósticos foram eliminados. A TASK-028A também alinhou a declaração `per_item` da capability textual do ChatGPT ao comportamento já implementado. `npm run lint`, `npm run typecheck`, `npm run test:i18n`, as suites focais corrigidas e `npm run build` passam. A repetição final e ininterrupta dos gates agregados permanece pendente.
 
 ## Governing references
 
@@ -171,6 +171,4 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Deterministic Contracts foi encerrada com a TASK-028. A extensão explicitamente autorizada TASK-028A substitui o contrato de conteúdo; TASK-029 permanece `pending` e não foi iniciada.
-
-O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.
+Deterministic Contracts foi encerrada com a TASK-028. A extensão autorizada TASK-028A está funcionalmente implementada, mas permanece ativa até a repetição final e ininterrupta dos gates agregados. TASK-029 permanece `pending` e não foi iniciada. Não há blocker funcional conhecido; resta somente a auditoria automatizada final.

@@ -165,7 +165,7 @@ test("P50 mantém Meta em meta.ai e separa a origem standalone vibes.ai", () => 
   assert.equal(p50Boundary.standaloneVibesOrigin, "https://vibes.ai");
 });
 
-test("P50 congela a semântica da capability de vídeo legada do Meta", () => {
+test("P50 congela a semântica canônica da capability de vídeo do Meta", () => {
   const capability = manifest.capabilities.find((item) => item.id === "generate-video-in-browser");
   const expected = p50Boundary.capabilities["generate-video-in-browser"];
 
@@ -179,13 +179,24 @@ test("P50 congela a semântica da capability de vídeo legada do Meta", () => {
     expected.outputPorts,
   );
   assert.deepEqual(
-    capability.inputPorts.find((port) => port.key === "references")?.acceptedTypes,
-    expected.acceptedReferenceTypes,
+    capability.inputPorts.find((port) => port.key === "references")?.shape,
+    expected.imageReferenceShape,
   );
-  assert.deepEqual(capability.producedOutputTypes, expected.producedTypes);
+  assert.deepEqual(
+    capability.inputPorts.find((port) => port.key === "video_references")?.shape,
+    expected.videoReferenceShape,
+  );
+  assert.deepEqual(
+    capability.outputPorts.find((port) => port.key === "video")?.shape,
+    expected.videoOutputShape,
+  );
+  assert.deepEqual(
+    capability.outputPorts.find((port) => port.key === "description")?.shape,
+    expected.descriptionOutputShape,
+  );
   assert.ok(
     capability.outputSchema.required.includes(expected.requiredOutput),
-    "a saída singular video continua obrigatória no contrato legado",
+    "a saída singular video continua obrigatória no contrato",
   );
   assert.match(
     handlerSource,
@@ -206,9 +217,11 @@ test("P51 preserva image e adiciona images plural opcional com ações", () => {
   );
   assert.equal(capability.outputPorts.find((port) => port.key === "image")?.required, true);
   assert.equal(capability.outputPorts.find((port) => port.key === "images")?.required, false);
-  assert.deepEqual(capability.outputPorts.find((port) => port.key === "images")?.producedTypes, [
-    "files",
-  ]);
+  assert.equal(capability.outputPorts.find((port) => port.key === "images")?.shape.family, "image");
+  assert.equal(
+    capability.outputPorts.find((port) => port.key === "images")?.shape.cardinality,
+    "many",
+  );
   assert.deepEqual(capability.outputSchema.required, ["image"]);
   assert.deepEqual(
     capability.itemActions.map((item) => item.action),
@@ -306,7 +319,7 @@ test("P51 publica cada variante incrementalmente sem perder a saída singular", 
   assert.equal(partial2.progress, 1);
 });
 
-test("P52 adiciona animação sem alterar o contrato de vídeo legado", () => {
+test("P52 adiciona animação sem alterar o contrato canônico de vídeo", () => {
   const animation = manifest.capabilities.find((item) => item.id === "animate-image-in-browser");
   const legacy = manifest.capabilities.find((item) => item.id === "generate-video-in-browser");
   const expectedLegacy = p50Boundary.capabilities["generate-video-in-browser"];
@@ -321,7 +334,7 @@ test("P52 adiciona animação sem alterar o contrato de vídeo legado", () => {
     ["video", "videos", "description"],
   );
   assert.equal(animation.inputPorts.find((port) => port.key === "image")?.required, true);
-  assert.equal(animation.inputPorts.find((port) => port.key === "image")?.multiple, false);
+  assert.equal(animation.inputPorts.find((port) => port.key === "image")?.shape.cardinality, "one");
   assert.deepEqual(animation.outputSchema.required, ["video"]);
   assert.deepEqual(
     animation.itemActions.map((item) => item.action),
@@ -336,7 +349,10 @@ test("P52 adiciona animação sem alterar o contrato de vídeo legado", () => {
     legacy.outputPorts.map((port) => port.key),
     expectedLegacy.outputPorts,
   );
-  assert.deepEqual(legacy.producedOutputTypes, expectedLegacy.producedTypes);
+  assert.deepEqual(
+    legacy.outputPorts.find((port) => port.key === "video")?.shape,
+    expectedLegacy.videoOutputShape,
+  );
 });
 
 test("P52 preserva uma ou duas variantes e identidade determinística", () => {

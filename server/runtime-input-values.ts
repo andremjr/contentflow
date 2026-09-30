@@ -1,9 +1,4 @@
-import type {
-  BlockInputBinding,
-  RuntimeValue,
-  StoredFile,
-  ValueShape,
-} from "../src/lib/domain";
+import type { BlockInputBinding, RuntimeValue, StoredFile, ValueShape } from "../src/lib/domain";
 import { isEmptyRuntimeValue } from "../src/lib/human-workflow";
 import { getPresentationRestrictionIssue } from "../src/lib/presentation";
 
@@ -37,10 +32,13 @@ function typeMatches(shape: ValueShape, value: RuntimeValue) {
       (item) => item && typeof item === "object" && !Array.isArray(item) && !isStoredFile(item),
     );
   }
-  if (shape.control === "number") return values.every((item) => typeof item === "number" && Number.isFinite(item));
+  if (shape.control === "number")
+    return values.every((item) => typeof item === "number" && Number.isFinite(item));
   if (shape.control === "boolean") return values.every((item) => typeof item === "boolean");
   if (shape.control === "thumbnail_layout") {
-    return values.every((item) => Boolean(item && typeof item === "object" && !Array.isArray(item) && "boxes" in item));
+    return values.every((item) =>
+      Boolean(item && typeof item === "object" && !Array.isArray(item) && "boxes" in item),
+    );
   }
   return values.every((item) => typeof item === "string");
 }

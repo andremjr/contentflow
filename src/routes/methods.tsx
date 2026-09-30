@@ -57,8 +57,8 @@ import {
   planPortableMethodTransfer,
   serializePortableMethodTransfer,
   type MethodRequirement,
-  type PortableCollectionV2,
-  type PortableLibraryItemV2,
+  type PortableCollection,
+  type PortableLibraryItem,
   type PortableMethodRole,
 } from "@/lib/method-file";
 import {
@@ -97,10 +97,10 @@ type TransferDraft = {
   methods: ProcessMethod[];
   requirements: Partial<Record<UniversalProcess, MethodRequirement[]>>;
   roles?: Partial<Record<UniversalProcess, PortableMethodRole>>;
-  portableCollections?: PortableCollectionV2[];
+  portableCollections?: PortableCollection[];
   processOrder?: UniversalProcess[];
   itemsIncluded?: boolean;
-  items?: PortableLibraryItemV2[];
+  items?: PortableLibraryItem[];
   sourceChannelId?: string;
   isPack: boolean;
 };
@@ -289,10 +289,10 @@ function MethodsLibraryPage() {
       let channelImageUrl: string | undefined;
       let requirements: Partial<Record<UniversalProcess, MethodRequirement[]>>;
       let roles: Partial<Record<UniversalProcess, PortableMethodRole>>;
-      let portableCollections: PortableCollectionV2[] | undefined;
+      let portableCollections: PortableCollection[] | undefined;
       let processOrder: UniversalProcess[] | undefined;
       let itemsIncluded = false;
-      let items: PortableLibraryItemV2[] | undefined;
+      let items: PortableLibraryItem[] | undefined;
 
       if ("method" in imported) {
         methods = [imported.method];

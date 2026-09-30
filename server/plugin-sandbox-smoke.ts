@@ -49,7 +49,14 @@ function request(configuration: Record<string, unknown> = {}): PluginExecutionRe
     configuration,
     settings: {},
     inputs: { content: "Sandbox comunitária funcionando." },
-    inputContract: [{ id: "content", portKey: "content", label: "Conteúdo", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" } }],
+    inputContract: [
+      {
+        id: "content",
+        portKey: "content",
+        label: "Conteúdo",
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+      },
+    ],
     outputContract: [
       {
         key: "result",

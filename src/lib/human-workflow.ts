@@ -50,10 +50,9 @@ export function getMethodConfigurationIssue(method?: ProcessMethod) {
     for (const structuredField of [...(block.inputs ?? []), ...(block.outputs ?? [])].filter(
       (field) => field.shape.kind === "record",
     )) {
-      const recordFields = structuredField.shape.kind === "record" ? structuredField.shape.fields : [];
-      const recordKeys = recordFields
-        .map((field) => field.key.trim())
-        .filter(Boolean);
+      const recordFields =
+        structuredField.shape.kind === "record" ? structuredField.shape.fields : [];
+      const recordKeys = recordFields.map((field) => field.key.trim()).filter(Boolean);
       if (!recordKeys.length || recordKeys.length !== recordFields.length) {
         return `Defina a chave de todos os campos da lista de registros “${structuredField.label}”.`;
       }
@@ -113,24 +112,22 @@ const FINAL_FIELD_SHAPE: Record<Exclude<ProcessId, "assets">, ValueShape> = {
   publishing: controlShape("url"),
 };
 
-const FINAL_FIELD_KEY: Record<ProcessId, string> = {
+const FINAL_FIELD_KEY: Record<Exclude<ProcessId, "assets">, string> = {
   theme: "theme",
   title: "title",
   thumbnail: "thumbnail",
   script: "script",
   narration: "audio",
-  assets: "assets",
   editing: "video",
   publishing: "url",
 };
 
-const FINAL_FIELD_LABEL: Record<ProcessId, string> = {
+const FINAL_FIELD_LABEL: Record<Exclude<ProcessId, "assets">, string> = {
   theme: "Tema final",
   title: "Título final",
   thumbnail: "Thumbnail final",
   script: "Roteiro final",
   narration: "Narração final",
-  assets: "Assets visuais finais",
   editing: "Vídeo final",
   publishing: "URL da publicação",
 };
@@ -215,17 +212,26 @@ export function createSuggestedHumanFields(
     ];
   }
   if (blockType === "ESCOLHER") {
-    return [];
+    return [
+      field(
+        prefix,
+        "Item escolhido",
+        "selectedItemId",
+        controlShape("identifier"),
+        "Selecione um item da coleção",
+      ),
+    ];
   }
   if (blockType === "VALIDAR") {
     return createValidationFields("approval");
   }
+  if (processType === "assets") return createProcessOutputFields(processType);
   return [
     field(
       prefix,
       `${PROCESS_META[processType].label} produzido`,
       FINAL_FIELD_KEY[processType],
-      processType === "assets" ? contentShape("image", "many") : FINAL_FIELD_SHAPE[processType],
+      FINAL_FIELD_SHAPE[processType],
       "Entregue o resultado deste bloco",
     ),
   ];
@@ -246,7 +252,10 @@ export function createValidationFields(
     return [field(prefix, "Decisão", "decision", controlShape("approval")), feedback];
   }
   const selectedShape: ValueShape = targetOutputShape
-    ? { ...structuredClone(targetOutputShape), cardinality: mode === "select_many" ? "many" : "one" }
+    ? {
+        ...structuredClone(targetOutputShape),
+        cardinality: mode === "select_many" ? "many" : "one",
+      }
     : contentShape("text", mode === "select_many" ? "many" : "one");
   return [
     {
@@ -276,18 +285,15 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
         presentation: normalizeFieldPresentation(shape, input.presentation),
       };
     }),
-    outputs:
-      block.type === "ESCOLHER"
-        ? []
-        : block.outputs?.length
-          ? block.outputs.map((output) => ({
-              ...output,
-              presentation: normalizeFieldPresentation(output.shape, output.presentation),
-            }))
-          : createSuggestedHumanFields(processType, block.type).map((output) => ({
-              ...output,
-              presentation: normalizeFieldPresentation(output.shape, output.presentation),
-            })),
+    outputs: block.outputs?.length
+      ? block.outputs.map((output) => ({
+          ...output,
+          presentation: normalizeFieldPresentation(output.shape, output.presentation),
+        }))
+      : createSuggestedHumanFields(processType, block.type).map((output) => ({
+          ...output,
+          presentation: normalizeFieldPresentation(output.shape, output.presentation),
+        })),
     validation:
       block.type === "VALIDAR"
         ? {

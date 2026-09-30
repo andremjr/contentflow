@@ -353,18 +353,17 @@
           "key": "content",
           "label": "Contexto para geração",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
           "key": "attachments",
           "label": "Referências anexas",
           "required": false,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "image",
@@ -500,19 +499,17 @@
           "key": "prompt",
           "label": "Prompt da imagem",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
-            "family": "image",
+            "family": "text",
             "cardinality": "one",
-            "representation": "artifact"
+            "representation": "inline"
           }
         },
         {
           "key": "references",
           "label": "Imagens de referência",
           "required": false,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -702,7 +699,6 @@
           "key": "image",
           "label": "Imagem base",
           "required": true,
-          "multiple": false,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -722,7 +718,6 @@
           "key": "prompt",
           "label": "Prompt de movimento",
           "required": true,
-          "multiple": false,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -876,7 +871,6 @@
           "key": "prompt",
           "label": "Prompt do vídeo",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -886,14 +880,34 @@
         },
         {
           "key": "references",
-          "label": "Imagem ou vídeo de referência",
+          "label": "Referências de imagem",
           "required": false,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "image",
             "cardinality": "many",
-            "representation": "artifact"
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
+          }
+        },
+        {
+          "key": "video_references",
+          "label": "Referências de vídeo",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "video/*"
+              ]
+            }
           }
         }
       ],

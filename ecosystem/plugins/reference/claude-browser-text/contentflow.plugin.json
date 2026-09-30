@@ -137,11 +137,11 @@
           "label": "Contexto para geração",
           "description": "Informações de apoio que acompanham a instrução principal; não cria uma etapa separada.",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
@@ -149,11 +149,11 @@
           "label": "Outline / estrutura",
           "description": "Cada item gera uma mensagem e uma resposta na mesma conversa.",
           "required": false,
-          "multiple": false,
           "shape": {
-            "kind": "record",
+            "kind": "content",
+            "family": "text",
             "cardinality": "many",
-            "fields": []
+            "representation": "inline"
           }
         },
         {
@@ -161,7 +161,6 @@
           "label": "Quantidade de blocos",
           "description": "Quando não há outline, cria esta quantidade de etapas consecutivas.",
           "required": false,
-          "multiple": false,
           "shape": {
             "kind": "control",
             "control": "number",
@@ -173,7 +172,6 @@
           "label": "Meta de caracteres",
           "description": "Meta total validada depois da concatenação de todas as respostas.",
           "required": false,
-          "multiple": false,
           "shape": {
             "kind": "control",
             "control": "number",
@@ -185,7 +183,6 @@
           "label": "Referências anexas",
           "description": "Imagens ou documentos enviados somente na primeira mensagem da conversa.",
           "required": false,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "image",
@@ -397,11 +394,10 @@
           "key": "query",
           "label": "Consulta",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
-            "cardinality": "many",
+            "cardinality": "one",
             "representation": "inline"
           }
         },
@@ -409,11 +405,11 @@
           "key": "context",
           "label": "Contexto adicional",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -519,11 +515,11 @@
           "key": "context",
           "label": "Contexto da escolha",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -533,10 +529,9 @@
           "label": "ID do item escolhido",
           "required": true,
           "shape": {
-            "kind": "content",
-            "family": "text",
-            "cardinality": "one",
-            "representation": "inline"
+            "kind": "control",
+            "control": "identifier",
+            "cardinality": "one"
           }
         }
       ],
@@ -620,22 +615,22 @@
           "key": "content",
           "label": "Conteúdo a validar",
           "required": true,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
           "key": "criteria",
           "label": "Critérios adicionais",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
+            "kind": "content",
+            "family": "text",
             "cardinality": "many",
-            "fields": []
+            "representation": "inline"
           }
         }
       ],
@@ -758,7 +753,6 @@
           "key": "images",
           "label": "Imagens para visão",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "image",
@@ -770,11 +764,11 @@
           "key": "context",
           "label": "Contexto da análise",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -874,7 +868,6 @@
           "key": "documents",
           "label": "Documentos para análise",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -886,11 +879,11 @@
           "key": "context",
           "label": "Contexto da análise",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],

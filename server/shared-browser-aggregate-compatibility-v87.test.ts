@@ -26,7 +26,12 @@ function request(): PluginExecutionRequest {
         key: "images",
         portKey: "images",
         label: "Imagens",
-        shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
+        shape: {
+          kind: "content",
+          family: "image",
+          cardinality: "many",
+          representation: "artifact",
+        },
         required: true,
       },
     ],
@@ -50,17 +55,38 @@ function aggregateCapability(): PluginCapability {
     operator: "IA",
     blockTypes: ["CRIAR"],
     inputPorts: [
-      { key: "prompts", label: "Prompts", types: ["text"], required: true, multiple: true },
+      {
+        key: "prompts",
+        label: "Prompts",
+        shape: {
+          kind: "content",
+          family: "text",
+          cardinality: "many",
+          representation: "inline",
+        },
+        required: true,
+      },
     ],
     outputPorts: [
-      { key: "images", label: "Imagens", types: ["file"], required: true, multiple: true },
+      {
+        key: "images",
+        label: "Imagens",
+        shape: {
+          kind: "content",
+          family: "image",
+          cardinality: "many",
+          representation: "artifact",
+        },
+        required: true,
+      },
     ],
     execution: { mode: "immediate" },
     sideEffects: [],
-    cost: { type: "unknown" },
-    dataPolicy: { leavesDevice: false, providers: [] },
+    cost: { model: "unknown", estimateSupported: false },
+    dataPolicy: { sendsDataToThirdParties: false, providers: [] },
     blockConfigSchema: { type: "object", additionalProperties: false, properties: {} },
-  } as unknown as PluginCapability;
+    outputSchema: { type: "object", additionalProperties: true },
+  };
 }
 
 test("handler agregado legado continua recebendo a coleção inteira", () => {

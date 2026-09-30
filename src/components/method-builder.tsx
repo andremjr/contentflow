@@ -133,8 +133,8 @@ import {
   planPortableMethodTransfer,
   serializeMethodFile,
   type MethodRequirement,
-  type PortableCollectionV2,
-  type PortableLibraryItemV2,
+  type PortableCollection,
+  type PortableLibraryItem,
 } from "@/lib/method-file";
 import { getCompatiblePresentationRenderers, normalizeFieldPresentation } from "@/lib/presentation";
 import { createChannelHistoryRecordFields } from "@/lib/channel-history";
@@ -200,9 +200,9 @@ type MethodTransferPreview = {
   name: string;
   sourceChannelId?: string;
   methods: ProcessMethod[];
-  collections: PortableCollectionV2[];
+  collections: PortableCollection[];
   itemsIncluded: boolean;
-  items: PortableLibraryItemV2[];
+  items: PortableLibraryItem[];
   requirements: MethodRequirement[];
   preferredOrder: UniversalProcess[];
   primaryProcess: UniversalProcess;
@@ -1433,14 +1433,24 @@ function BlockEditor({
     block.plugin ? clonePluginConfigurationDraft(block.plugin) : undefined,
   );
   const [pluginDraftInvalid, setPluginDraftInvalid] = useState(false);
+  const pluginTriggerRef = useRef<HTMLButtonElement>(null);
+  const previousPluginConfigurationOpenRef = useRef(pluginConfigurationOpen);
   useEffect(() => {
     setPluginDraft(block.plugin ? clonePluginConfigurationDraft(block.plugin) : undefined);
     setPluginDraftInvalid(false);
   }, [block.id, block.plugin]);
+  useEffect(() => {
+    const wasOpen = previousPluginConfigurationOpenRef.current;
+    previousPluginConfigurationOpenRef.current = pluginConfigurationOpen;
+    if (wasOpen && !pluginConfigurationOpen) {
+      requestAnimationFrame(() => pluginTriggerRef.current?.focus());
+    }
+  }, [pluginConfigurationOpen]);
   const setPluginConfigurationVisibility = (open: boolean) => {
     onPluginConfigurationOpenChange(open);
     setPluginDraftInvalid(false);
     setPluginDraft(open && block.plugin ? clonePluginConfigurationDraft(block.plugin) : undefined);
+    if (!open) requestAnimationFrame(() => pluginTriggerRef.current?.focus());
   };
   const meta = BLOCK_META[block.type];
   const Icon = meta.icon;
@@ -1520,8 +1530,7 @@ function BlockEditor({
     );
     const compatible = selectedCapability.inputPorts.filter(
       (port) =>
-        areValueShapesCompatible(validationTargetOutput.shape, port.shape) &&
-        !used.has(port.key),
+        areValueShapesCompatible(validationTargetOutput.shape, port.shape) && !used.has(port.key),
     );
     const selected = block.validation?.targetPortKey
       ? compatible.find((port) => port.key === block.validation?.targetPortKey)
@@ -1752,6 +1761,7 @@ function BlockEditor({
         </div>
 
         <button
+          ref={pluginTriggerRef}
           type="button"
           className="mt-4 flex w-full items-center gap-3 rounded-xl border border-brand/30 bg-brand/5 p-4 text-left transition hover:border-brand/50 hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:p-5"
           onClick={(event) => {
@@ -2270,7 +2280,10 @@ function BlockEditor({
                                   shape: structuredClone(port.shape),
                                   binding: { kind: "runtime" },
                                   portKey: port.key,
-                                  presentation: normalizeFieldPresentation(port.shape, port.presentation),
+                                  presentation: normalizeFieldPresentation(
+                                    port.shape,
+                                    port.presentation,
+                                  ),
                                 };
                                 onChange({ inputs: [...(block.inputs ?? []), input] });
                               }}
@@ -3722,7 +3735,7 @@ function ChannelHistoryToggle({
         limit: 10,
         eligibility: "completed",
       },
-      presentation: { renderer: "table", itemType: "record" },
+      presentation: { renderer: "table" },
     };
     onChange({ inputs: [...regularInputs, input] });
   };
@@ -4188,7 +4201,8 @@ function InputBindingEditor({
                     });
                     return;
                   }
-                  if (source === "project") onChange({ binding: { kind: "project", key: "title" } });
+                  if (source === "project")
+                    onChange({ binding: { kind: "project", key: "title" } });
                   if (source === "runtime") onChange({ binding: { kind: "runtime" } });
                   if (source === "static") onChange({ binding: { kind: "static", value: "" } });
                   if (source === "previous_block") {
@@ -4448,8 +4462,7 @@ function OutputFieldEditor({
               <LineListTextarea
                 value={field.shape.kind === "control" ? (field.shape.options ?? []) : []}
                 onChange={(options) =>
-                  field.shape.kind === "control" &&
-                  onChange({ shape: { ...field.shape, options } })
+                  field.shape.kind === "control" && onChange({ shape: { ...field.shape, options } })
                 }
                 placeholder="Opções fixas, uma por linha (opcional)"
                 rows={3}
@@ -4489,7 +4502,9 @@ function ShapeEditor({
               if (kind === "record") onChange(recordShape("many", [newRecordField(0)]));
             }}
           >
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="content">Conteúdo</SelectItem>
               <SelectItem value="control">Controle</SelectItem>
@@ -4507,7 +4522,9 @@ function ShapeEditor({
                   onChange(contentShape(family as ContentFamily, shape.cardinality))
                 }
               >
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="text">Texto</SelectItem>
                   <SelectItem value="image">Imagem</SelectItem>
@@ -4532,7 +4549,9 @@ function ShapeEditor({
                   onChange(controlShape(control as ControlKind, shape.cardinality))
                 }
               >
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="identifier">Identificador</SelectItem>
                   <SelectItem value="number">Número</SelectItem>
@@ -4567,7 +4586,9 @@ function ShapeEditor({
               onChange({ ...shape, representation: representation as ContentRepresentation })
             }
           >
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="inline">Direto</SelectItem>
               <SelectItem value="artifact">Arquivo</SelectItem>
@@ -4597,7 +4618,9 @@ function CardinalityEditor({
     <div className="space-y-1">
       <Label className="text-[10px] text-muted-foreground">Quantidade</Label>
       <Select value={value} onValueChange={(next) => onChange(next as ContentCardinality)}>
-        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
         <SelectContent>
           <SelectItem value="one">Um</SelectItem>
           <SelectItem value="many">Vários</SelectItem>
@@ -4631,27 +4654,6 @@ function PresentationSelector({
   const preview = PRESENTATION_RENDERER_REGISTRY[previewId] ?? PRESENTATION_RENDERER_REGISTRY.auto;
   const selectedDefinition = PRESENTATION_RENDERER_REGISTRY[selected];
   const SelectedIcon = selectedDefinition.icon;
-  const supportsRestrictions = shape.kind === "content" || shape.kind === "record";
-  const itemTypeOptions =
-    shape.kind === "record"
-      ? (["record"] as const)
-      : shape.kind === "content" && shape.family === "text" && shape.representation !== "artifact"
-      ? (["text"] as const)
-      : shape.kind === "content" && shape.family === "image"
-          ? (["image"] as const)
-        : shape.kind === "content" && shape.family === "audio"
-            ? (["audio"] as const)
-          : shape.kind === "content" && shape.family === "video"
-              ? (["video"] as const)
-            : (["file"] as const);
-  const itemTypeLabels = {
-    text: "Texto",
-    record: "Registro",
-    file: "Arquivo",
-    image: "Imagem",
-    audio: "Áudio",
-    video: "Vídeo",
-  } as const;
 
   return (
     <Dialog
@@ -4716,41 +4718,6 @@ function PresentationSelector({
                 </div>
               </fieldset>
             ))}
-            {supportsRestrictions && (
-              <div className="grid gap-3 rounded-xl border border-border/70 p-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">
-                    Tipo de item esperado (opcional)
-                  </Label>
-                  <Select
-                    value={normalized.itemType ?? "any"}
-                    onValueChange={(itemType) =>
-                      onChange(
-                        normalizeFieldPresentation(shape, {
-                          ...normalized,
-                          itemType:
-                            itemType === "any"
-                              ? undefined
-                              : (itemType as FieldPresentation["itemType"]),
-                        }),
-                      )
-                    }
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="any">Qualquer item compatível</SelectItem>
-                      {itemTypeOptions.map((itemType) => (
-                        <SelectItem key={itemType} value={itemType}>
-                          {itemTypeLabels[itemType]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
           </div>
           <aside className="md:sticky md:top-0 md:self-start">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

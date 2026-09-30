@@ -102,7 +102,15 @@ O checkout atual usa `HumanFieldType` como taxonomia simultânea de conteúdo, c
 - `npm run test:content-shape`: 15/15 testes passaram.
 - O parser público serializa e aceita apenas envelope de Método v3 e rejeita v1/v2 e pseudotipos antigos.
 - O validador de manifesto aceita Plugin API v2 e rejeita API v1 e listas antigas de tipos.
-- Os exemplos e o template v2 foram validados por `validatePluginManifest()`.
+- Method Builder, formulários humanos e plugins persistem o mesmo `ValueShape`; portas ambíguas exigem `portKey` explícita.
+- Plugin API v2 foi aplicada aos manifestos oficiais, Plugin Kit, exemplos, fixtures e handlers; os exemplos passam por `validatePluginManifest()`.
+- Runtime inputs, output contracts, partials e respostas finais cruzam boundaries canônicas com shape e binding explícitos.
+- Deliveries preservam shape, cardinalidade, representação, identidade por item e promoção para output oficial sem depender do operador.
+- Item orchestration, retry, resume, partials, fallback, leases e lanes multiperfil passam nas suites agregadas, inclusive preservação de identidade e não duplicação.
+- Arquivos portáteis removem conexão e política de perfil locais; a persistência nativa aceita `profileExecution` e valida somente perfis vinculados.
+- Plugins e Métodos P24/P60 usam os contratos atuais; as skills oficiais e suas cópias locais estão sincronizadas.
+- `npm run lint`, `npm run typecheck`, `npm run test:i18n`, `npm run test:content-shape`, as suites focais corrigidas e `npm run build` passam.
+- `npm run test:browser-plugins` passa com 255/255 casos. A última repetição E2E foi interrompida por solicitação do usuário depois de 31/33 casos passarem; os dois casos restantes já haviam passado isoladamente após as correções.
+- O gate agregado avançou até guardrails obsoletos da Browser Bridge e do ChatGPT; ambos foram corrigidos e passaram isoladamente. Uma repetição integral e ininterrupta de `npm run check`, E2E e Electron permanece pendente para o próximo ciclo de testes.
 - `git diff --check` passa sem erro de conteúdo.
-- `npm run typecheck` permanece vermelho porque Builder, telas, executores, plugins e fixtures ainda consomem deliberadamente os símbolos removidos. A conversão desses consumidores está fora desta task e não será mascarada por adapters.
 

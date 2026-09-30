@@ -170,7 +170,7 @@ O plugin não acessa SQLite, cofre, diretórios arbitrários, outros perfis ou a
 
 ## Browser Bridge e perfis
 
-Perfis são identidades locais globais. O vínculo plugin + perfil e o readiness são explícitos e independentes. Cookies, sessão e credenciais nunca entram em Método, snapshot portátil ou request.
+Perfis são identidades locais globais. O vínculo plugin + perfil e o readiness são explícitos e independentes. O Método v3 usa a política local `profileExecution`, com `profileIds` e modos `fallback` ou `parallel`; os IDs nunca são enviados ao plugin em `request`. Quando o manifesto declara `profileSetup`, `configurationKey` e `fallbackConfigurationKey` apenas nomeiam a configuração funcional do vínculo. Cookies, sessão e credenciais nunca entram em Método, snapshot portátil ou request.
 
 A Browser Bridge negocia versão/capabilities antes do primeiro efeito, usa comandos idempotentes, eventos sequenciados, snapshots sob demanda, observers limitados e backpressure. Recarga não é fallback universal e fica bloqueada diante de efeito incerto.
 

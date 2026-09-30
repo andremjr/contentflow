@@ -235,8 +235,20 @@ test("separa variantes locais de dois itens de lote sem o plugin inventar IDs un
 
 test("preserva portas canônicas singular e plural quando ambas são declaradas", () => {
   const singularAndPlural = [
-    { key: "image", portKey: "image", label: "Imagem", shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" }, required: false },
-    { key: "images", portKey: "images", label: "Imagens", shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" }, required: false },
+    {
+      key: "image",
+      portKey: "image",
+      label: "Imagem",
+      shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" },
+      required: false,
+    },
+    {
+      key: "images",
+      portKey: "images",
+      label: "Imagens",
+      shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
+      required: false,
+    },
   ] satisfies PluginFieldContract[];
   const result = applyPluginIncrementalItemUpdates({
     job: job(),

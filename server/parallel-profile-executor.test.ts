@@ -16,8 +16,32 @@ function capability(): PluginCapability {
     label: "Generate",
     blockTypes: ["CRIAR"],
     processTypes: ["ASSETS_VISUAIS"],
-    inputPorts: [{ key: "prompts", dataType: "text", cardinality: "many", required: true }],
-    outputPorts: [{ key: "images", dataType: "image", cardinality: "many", required: true }],
+    inputPorts: [
+      {
+        key: "prompts",
+        label: "Prompts",
+        shape: {
+          kind: "content",
+          family: "text",
+          cardinality: "many",
+          representation: "inline",
+        },
+        required: true,
+      },
+    ],
+    outputPorts: [
+      {
+        key: "images",
+        label: "Imagens",
+        shape: {
+          kind: "content",
+          family: "image",
+          cardinality: "many",
+          representation: "artifact",
+        },
+        required: true,
+      },
+    ],
     execution: {
       mode: "immediate",
       maxConcurrency: 4,
@@ -43,7 +67,7 @@ function plugin(): RegisteredPlugin {
     executable: true,
     manifest: {
       id: "local.test.browser",
-      apiVersion: "1",
+      apiVersion: "2",
       version: "1.0.0",
       name: "Test browser",
       description: "Test",

@@ -27,7 +27,7 @@ test("exemplo oficial de Plugin passa pelo validator real", async () => {
       path.join(temp, "handler.mjs"),
     );
     const validated = validatePluginDirectory(temp, false);
-    assert.equal(validated.manifest.apiVersion, "1");
+    assert.equal(validated.manifest.apiVersion, "2");
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

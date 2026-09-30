@@ -1,5 +1,5 @@
 {
-  "apiVersion": "1",
+  "apiVersion": "2",
   "id": "com.example.invalid-continuous-items",
   "name": "Invalid Continuous Items Fixture",
   "version": "1.0.0",
@@ -15,10 +15,10 @@
       "operator": "Código",
       "blockTypes": ["CRIAR"],
       "inputPorts": [
-        { "key": "prompts", "label": "Prompts", "acceptedTypes": ["list"], "required": true }
+        { "key": "prompts", "label": "Prompts", "shape": { "kind": "content", "family": "text", "cardinality": "many", "representation": "inline" }, "required": true }
       ],
       "outputPorts": [
-        { "key": "images", "label": "Images", "producedTypes": ["files"], "required": true }
+        { "key": "images", "label": "Images", "shape": { "kind": "content", "family": "image", "cardinality": "many", "representation": "artifact" }, "required": true }
       ],
       "execution": {
         "mode": "immediate",

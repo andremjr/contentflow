@@ -16,9 +16,12 @@ function contract(
     key: value.key,
     portKey: value.portKey,
     label: value.label ?? value.key,
-    shape:
-      value.shape ??
-      { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+    shape: value.shape ?? {
+      kind: "content",
+      family: "text",
+      cardinality: "one",
+      representation: "inline",
+    },
     required: value.required ?? true,
     presentation: value.presentation,
   };
@@ -111,8 +114,8 @@ test("allows a final response to complete from previously normalized partial val
   });
 });
 
-test("preserves the allowed text-to-list shape normalization without guessing identity", () => {
-  const result = requireNormalizedPluginResponseValues({
+test("rejects scalar text for an explicitly many-shaped output", () => {
+  const result = normalizePluginResponseValues({
     block,
     responseValues: { suggestions_port: "1. Um\n- Dois" },
     outputContract: [
@@ -124,7 +127,10 @@ test("preserves the allowed text-to-list shape normalization without guessing id
     ],
     completion: "final",
   });
-  assert.deepEqual(result.values, { suggestions: ["Um", "Dois"] });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.code === "INCOMPATIBLE_OUTPUT_SHAPE"));
+  }
 });
 
 test("rejects invalid media, records and ambiguous port bindings", () => {
@@ -146,13 +152,20 @@ test("rejects invalid media, records and ambiguous port bindings", () => {
         shape: {
           kind: "record",
           cardinality: "many",
-          fields: [{
-            id: "title",
-            key: "title",
-            label: "Título",
-            shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
-            required: true,
-          }],
+          fields: [
+            {
+              id: "title",
+              key: "title",
+              label: "Título",
+              shape: {
+                kind: "content",
+                family: "text",
+                cardinality: "one",
+                representation: "inline",
+              },
+              required: true,
+            },
+          ],
         },
       }),
     ],
@@ -161,7 +174,9 @@ test("rejects invalid media, records and ambiguous port bindings", () => {
   assert.equal(invalid.ok, false);
   if (!invalid.ok) {
     assert.ok(invalid.issues.some((issue) => issue.code === "INCOMPATIBLE_OUTPUT_SHAPE"));
-    assert.ok(invalid.issues.some((issue) => issue.code === "MISSING_REQUIRED_RECORD_FIELD"));
+    assert.ok(
+      invalid.issues.filter((issue) => issue.code === "INCOMPATIBLE_OUTPUT_SHAPE").length >= 2,
+    );
   }
 
   const ambiguous = normalizePluginResponseValues({
@@ -177,7 +192,7 @@ test("rejects invalid media, records and ambiguous port bindings", () => {
   if (!ambiguous.ok) assert.equal(ambiguous.issues[0]?.code, "AMBIGUOUS_OUTPUT_PORT");
 });
 
-test("keeps ESCOLHER on the canonical contract while requiring its exact synthetic port", () => {
+test("keeps ESCOLHER on the canonical contract while requiring its exact declared port", () => {
   const outputContract = [
     contract({
       key: "selectedItemId",

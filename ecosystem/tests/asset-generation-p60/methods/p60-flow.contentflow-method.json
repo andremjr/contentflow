@@ -1,6 +1,6 @@
 {
   "format": "contentflow-method",
-  "version": 1,
+  "version": 3,
   "name": "P60 — Flow mínimo",
   "exportedAt": "2026-09-25T12:00:00.000Z",
   "method": {
@@ -17,15 +17,15 @@
           {
             "id": "p60-flow-prompts",
             "label": "Prompts",
-            "type": "list",
-            "source": "static",
-            "staticValue": [
-              "Cinematic aerial view of a city at dawn, warm light, 16:9",
-              "Close-up of a rainforest trail in gentle rain, realistic documentary style, 16:9",
-              "Wide cinematic coastline before a storm, dramatic clouds, realistic documentary style, 16:9",
-              "Craft workshop at night with warm practical lights, cinematic documentary photography, 16:9",
-              "Morning commuter train crossing a misty valley, cinematic realism, 16:9"
-            ],
+            "shape": {
+              "kind": "content",
+              "family": "text",
+              "cardinality": "many",
+              "representation": "inline"
+            },
+            "binding": {
+              "kind": "runtime"
+            },
             "portKey": "prompts"
           }
         ],
@@ -34,14 +34,22 @@
             "id": "p60-flow-images",
             "label": "Imagens",
             "key": "images",
-            "portKey": "images",
-            "type": "files",
+            "shape": {
+              "kind": "content",
+              "family": "image",
+              "cardinality": "many",
+              "representation": "artifact",
+              "formats": {
+                "mimeTypes": [
+                  "image/*"
+                ]
+              }
+            },
             "required": true,
             "presentation": {
-              "renderer": "image-gallery",
-              "itemType": "image",
-              "acceptedMimeTypes": ["image/*"]
-            }
+              "renderer": "image-gallery"
+            },
+            "portKey": "images"
           }
         ],
         "parameters": [],
@@ -70,7 +78,17 @@
             "id": "p60-flow-selected",
             "label": "Selecionadas",
             "key": "selected_value",
-            "type": "files",
+            "shape": {
+              "kind": "content",
+              "family": "image",
+              "cardinality": "many",
+              "representation": "artifact",
+              "formats": {
+                "mimeTypes": [
+                  "image/*"
+                ]
+              }
+            },
             "required": true,
             "optionsSourceBlockId": "p60-flow-generate",
             "optionsSourceKey": "images"
@@ -86,6 +104,7 @@
         "parameters": [],
         "order": 1
       }
-    ]
+    ],
+    "contractVersion": 3
   }
 }

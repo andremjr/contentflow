@@ -112,12 +112,11 @@
           "key": "text",
           "label": "Texto da narração",
           "required": true,
-          "multiple": false,
           "shape": {
             "kind": "content",
-            "family": "audio",
+            "family": "text",
             "cardinality": "one",
-            "representation": "artifact"
+            "representation": "inline"
           }
         }
       ],
@@ -314,18 +313,17 @@
           "key": "content",
           "label": "Contexto para geração",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         },
         {
           "key": "attachments",
           "label": "Referências anexas",
           "required": false,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "image",

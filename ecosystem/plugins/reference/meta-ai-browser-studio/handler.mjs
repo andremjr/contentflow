@@ -592,8 +592,9 @@ function attachmentInput(request) {
   if (request?.capabilityId === "generate-text-in-browser") return request?.inputs?.attachments;
   if (request?.capabilityId === "deep-research-in-browser") return request?.inputs?.context;
   if (request?.capabilityId === "animate-image-in-browser") return request?.inputs?.image;
-  if (["generate-image-in-browser", "generate-video-in-browser"].includes(request?.capabilityId))
-    return request?.inputs?.references;
+  if (request?.capabilityId === "generate-image-in-browser") return request?.inputs?.references;
+  if (request?.capabilityId === "generate-video-in-browser")
+    return [request?.inputs?.references, request?.inputs?.video_references];
   return undefined;
 }
 

@@ -21,16 +21,15 @@ import {
   closeBrowserSession,
 } from "./handler.mjs";
 
-test("manifesto possui estrutura e capabilities válidas conforme API v1", async () => {
+test("manifesto possui estrutura e capabilities válidas conforme API v2", async () => {
   const manifest = JSON.parse(
     await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
   );
-  assert.equal(manifest.apiVersion, "1");
+  assert.equal(manifest.apiVersion, "2");
   assert.equal(manifest.id, "local.contentflow.mai-playground-browser");
   assert.equal(manifest.entrypoint, "handler.mjs");
   assert.equal(manifest.runtime.kind, "node");
   assert.equal(manifest.runtime.module, "esm");
-  assert.deepEqual(manifest.deliveryTypes, ["audio", "text", "processing"]);
   assert.deepEqual(manifest.permissions, [
     "network",
     "filesystem:read",
@@ -49,6 +48,8 @@ test("manifesto possui estrutura e capabilities válidas conforme API v1", async
   assert.deepEqual(voiceCap.processTypes, ["narration"]);
   assert.ok(voiceCap.inputPorts.some((p) => p.key === "text"));
   assert.ok(voiceCap.outputPorts.some((p) => p.key === "audio"));
+  assert.equal(voiceCap.inputPorts.find((p) => p.key === "text").shape.family, "text");
+  assert.equal(voiceCap.outputPorts.find((p) => p.key === "audio").shape.family, "audio");
   assert.equal(manifest.version, "1.0.4");
   assert.equal(manifest.settingsSchema.properties.keepBrowserOpen.default, false);
   assert.equal(voiceCap.blockConfigSchema.properties.voice.default, "Caio");

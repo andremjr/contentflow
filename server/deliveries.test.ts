@@ -253,7 +253,15 @@ test("resolve uma entrega específica de bloco de processo anterior", () => {
         shape: {
           kind: "record",
           cardinality: "many",
-          fields: [{ id: "text", label: "Texto", key: "text", shape: textShape() as Extract<ValueShape, { kind: "content" }>, required: true }],
+          fields: [
+            {
+              id: "text",
+              label: "Texto",
+              key: "text",
+              shape: textShape() as Extract<ValueShape, { kind: "content" }>,
+              required: true,
+            },
+          ],
         },
         required: true,
       },

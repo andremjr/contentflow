@@ -38,7 +38,7 @@ test("resolves dynamic options by managed profile with cache and explicit refres
     path.join(pluginDirectory, "contentflow.plugin.json"),
     JSON.stringify(
       {
-        apiVersion: "1",
+        apiVersion: "2",
         id: "com.contentflow.e2e-options",
         name: "Dynamic Options E2E",
         version: "1.0.0",
@@ -57,7 +57,17 @@ test("resolves dynamic options by managed profile with cache and explicit refres
             blockTypes: ["CRIAR"],
             inputPorts: [],
             outputPorts: [
-              { key: "result", label: "Resultado", producedTypes: ["text"], required: true },
+              {
+                key: "result",
+                label: "Resultado",
+                shape: {
+                  kind: "content",
+                  family: "text",
+                  cardinality: "one",
+                  representation: "inline",
+                },
+                required: true,
+              },
             ],
             execution: { mode: "immediate" },
             sideEffects: [],

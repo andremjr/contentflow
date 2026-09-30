@@ -2,24 +2,66 @@
   "executionId": "fixture-openai-gpt",
   "traceId": "fixture-trace",
   "blockId": "fixture-block",
-  "capabilityId": "generate-text",
+  "capabilityId": "generate-or-validate-text",
   "attempt": 1,
-  "invocation": { "mode": "start" },
-  "configuration": { "model": "gpt-5.6-terra", "temperature": 0 },
+  "invocation": {
+    "mode": "start"
+  },
+  "configuration": {
+    "model": "gpt-5.6-terra",
+    "temperature": 0
+  },
   "settings": {},
-  "inputs": { "context": "Tema de teste" },
-  "inputContract": [{ "id": "context", "portKey": "context", "label": "Contexto", "type": "text" }],
+  "inputs": {
+    "context": "Tema de teste"
+  },
+  "inputContract": [
+    {
+      "id": "context",
+      "portKey": "context",
+      "label": "Contexto",
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
+    }
+  ],
   "outputContract": [
-    { "portKey": "result", "key": "title", "label": "Título", "type": "text", "required": true }
+    {
+      "portKey": "result",
+      "key": "title",
+      "label": "Título",
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
+    }
   ],
   "resolvedInstruction": "Crie um título curto.",
   "context": {
     "locale": "pt-BR",
     "timeZone": "America/Sao_Paulo",
-    "channel": { "id": "channel", "name": "Canal teste", "language": "pt-BR", "niche": "Educação" },
-    "project": { "id": "project", "title": "Projeto teste" },
+    "channel": {
+      "id": "channel",
+      "name": "Canal teste",
+      "language": "pt-BR",
+      "niche": "Educação"
+    },
+    "project": {
+      "id": "project",
+      "title": "Projeto teste"
+    },
     "processType": "title",
-    "block": { "type": "CRIAR", "name": "Criar título", "instructions": "Crie um título curto." },
+    "block": {
+      "type": "CRIAR",
+      "name": "Criar título",
+      "instructions": "Crie um título curto."
+    },
     "previousProcessOutputs": [],
     "previousBlockOutputs": []
   }

@@ -2,28 +2,41 @@
 
 ## Tema: pesquisar e selecionar
 
-O padrão correto é pesquisa em lista, seguida de validação singular:
+O padrão correto é produzir candidatos estruturados e validar uma seleção por identificador:
 
 ```json
 {
   "format": "contentflow-method",
-  "version": 1,
+  "version": 3,
   "name": "Tema pesquisado e validado",
   "exportedAt": "2026-08-12T12:00:00.000Z",
   "method": {
+    "contractVersion": 3,
+    "name": "Tema pesquisado e validado",
     "processType": "theme",
     "blocks": [
       {
         "id": "theme-search",
         "type": "BUSCAR",
         "operator": "IA",
-        "instructions": "Pesquise candidatos e retorne uma lista com tema, ângulo e fonte.",
+        "name": "Pesquisar temas",
+        "instructions": "Pesquise candidatos e retorne identificador, tema, ângulo e fonte.",
+        "inputs": [],
         "outputs": [
           {
             "id": "candidates",
             "label": "Candidatos",
             "key": "candidates",
-            "type": "list",
+            "shape": {
+              "kind": "record",
+              "cardinality": "many",
+              "fields": [
+                { "id": "candidate-id", "key": "id", "label": "ID", "shape": { "kind": "control", "control": "identifier", "cardinality": "one" }, "required": true },
+                { "id": "candidate-theme", "key": "theme", "label": "Tema", "shape": { "kind": "content", "family": "text", "cardinality": "one", "representation": "inline" }, "required": true },
+                { "id": "candidate-angle", "key": "angle", "label": "Ângulo", "shape": { "kind": "content", "family": "text", "cardinality": "one", "representation": "inline" }, "required": true },
+                { "id": "candidate-source", "key": "source", "label": "Fonte", "shape": { "kind": "content", "family": "text", "cardinality": "one", "representation": "inline" }, "required": true }
+              ]
+            },
             "required": true
           }
         ],
@@ -34,13 +47,15 @@ O padrão correto é pesquisa em lista, seguida de validação singular:
         "id": "theme-select",
         "type": "VALIDAR",
         "operator": "Humano",
+        "name": "Selecionar tema",
         "instructions": "Selecione um candidato para o vídeo atual.",
+        "inputs": [],
         "outputs": [
           {
             "id": "selected",
             "label": "Tema escolhido",
-            "key": "selected_value",
-            "type": "text",
+            "key": "selected_candidate_id",
+            "shape": { "kind": "control", "control": "identifier", "cardinality": "one" },
             "required": true,
             "optionsSourceBlockId": "theme-search",
             "optionsSourceKey": "candidates"
@@ -61,19 +76,19 @@ O padrão correto é pesquisa em lista, seguida de validação singular:
 }
 ```
 
-A seleção é válida porque `list` é a fonte de opções e `select_one` produz um valor singular `text`. Não conecte `candidates` diretamente a um input `text` de um bloco seguinte; use o output `selected_value`.
+A seleção não transforma o registro em texto: ela produz um identificador de controle que referencia um item da delivery de candidatos.
 
-## Records: criar cenas e consumir cenas
+## Registros: criar e consumir cenas
 
-Um bloco que produz `records` com `scene_id`, `voiceover`, `visual_description` e `duration_seconds` pode alimentar outro bloco que também exige esses campos. Se o consumidor exigir novos campos, como `asset_id`, crie um bloco de enriquecimento e produza novo schema; não reinterprete o record original.
+Um bloco que produz `shape.kind: "record"`, `cardinality: "many"` e campos como `scene_id`, `voiceover`, `visual_description` e `duration_seconds` pode alimentar outro bloco que exige o mesmo shape. Se o consumidor exigir `asset_id`, crie um bloco de enriquecimento e produza outro schema; não reinterprete o registro original.
 
 ## Mídia: layout para imagem
 
-`thumbnail_layout` descreve composição. Um bloco que exige `image` não pode consumi-lo diretamente. Insira `CRIAR/Código` com renderização e output `image`. Da mesma forma, `video` não vira `image` sem bloco de extração de frame.
+`thumbnail_layout` é controle estrutural. Um bloco que exige conteúdo da família `image` não pode consumi-lo diretamente. Insira `CRIAR/Código` com renderização e output `ContentShape` de imagem. Da mesma forma, vídeo não vira imagem sem bloco explícito de extração de frame.
 
 ## Arquivos
 
-`files` é coleção e não pode alimentar `file` sem seleção. Use `VALIDAR/select_one` ou um bloco Código que produza um arquivo único; declare o MIME e o output como `file`.
+Arquivo não é família de conteúdo. Imagem, áudio e vídeo usam suas famílias canônicas com `representation: "artifact"`; `cardinality: "many"` representa vários artifacts. Para selecionar somente um item, use `VALIDAR/select_one` ou um bloco Código com output singular.
 
 ## Exemplo inválido intencional
 
@@ -82,14 +97,16 @@ Um bloco que produz `records` com `scene_id`, `voiceover`, `visual_description` 
   "inputs": [
     {
       "id": "input-assets",
-      "label": "Asset",
-      "type": "file",
-      "source": "previous_block",
-      "blockId": "asset-search",
-      "sourceKey": "assets"
+      "label": "Imagens",
+      "shape": { "kind": "content", "family": "image", "cardinality": "one", "representation": "artifact" },
+      "binding": {
+        "kind": "previous_block",
+        "blockId": "asset-search",
+        "outputKey": "images"
+      }
     }
   ]
 }
 ```
 
-Se `asset-search.assets` for `files`, a conexão é inválida: cardinalidade coleção → singular. Corrija selecionando um arquivo ou alterando o input para `files`.
+Se `asset-search.images` tiver `cardinality: "many"`, a conexão é inválida. Corrija selecionando uma imagem ou alterando o input para `cardinality: "many"`.

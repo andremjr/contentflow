@@ -4,7 +4,9 @@
   "blockId": "claude-browser-fixture-block",
   "capabilityId": "generate-text-in-browser",
   "attempt": 1,
-  "invocation": { "mode": "start" },
+  "invocation": {
+    "mode": "start"
+  },
   "configuration": {
     "promptTemplate": "{{BLOCK_INSTRUCTIONS}}\n\n{{CONTENT}}",
     "generationMode": "single",
@@ -19,13 +21,20 @@
   "settings": {
     "diagnosticMockResponse": "Resposta fictícia do Claude para validar o sandbox."
   },
-  "inputs": { "content": "Tema fictício" },
+  "inputs": {
+    "content": "Tema fictício"
+  },
   "inputContract": [
     {
       "id": "fixture-input",
       "portKey": "content",
       "label": "Contexto para geração",
-      "type": "textarea"
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "outputContract": [
@@ -33,8 +42,13 @@
       "portKey": "result",
       "label": "Texto gerado",
       "key": "result",
-      "type": "textarea",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "context": {
@@ -46,7 +60,10 @@
       "language": "pt-BR",
       "niche": "Histórias"
     },
-    "project": { "id": "fixture-project", "title": "Projeto fictício" },
+    "project": {
+      "id": "fixture-project",
+      "title": "Projeto fictício"
+    },
     "processType": "script",
     "block": {
       "type": "CRIAR",

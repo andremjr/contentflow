@@ -1622,7 +1622,8 @@ function validationOptions(value: RuntimeValue | undefined): ValidationOption[] 
 }
 
 function validationOptionShape(value: ValidationOption, sourceShape: ValueShape): ValueShape {
-  if (!isStoredFileOption(value)) return typeof value === "string" ? contentShape("text") : sourceShape;
+  if (!isStoredFileOption(value))
+    return typeof value === "string" ? contentShape("text") : sourceShape;
   if (value.mimeType.startsWith("image/")) return contentShape("image");
   if (value.mimeType.startsWith("audio/")) return contentShape("audio");
   if (value.mimeType.startsWith("video/")) return contentShape("video");

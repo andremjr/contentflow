@@ -708,7 +708,6 @@
           "label": "Prompts",
           "description": "Um prompt ou uma lista ordenada de prompts.",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -721,7 +720,6 @@
           "label": "Referência de personagem",
           "description": "Uma imagem opcional de personagem.",
           "required": false,
-          "multiple": false,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -744,7 +742,6 @@
           "label": "Referência de cena",
           "description": "Uma imagem opcional de cena.",
           "required": false,
-          "multiple": false,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -767,7 +764,6 @@
           "label": "Referências de estilo",
           "description": "Imagens opcionais agrupadas em um componente de estilo.",
           "required": false,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -790,7 +786,6 @@
           "label": "URL do projeto",
           "description": "URL opcional de um projeto existente do Vibes.",
           "required": false,
-          "multiple": false,
           "shape": {
             "kind": "control",
             "control": "url",
@@ -971,7 +966,6 @@
           "label": "Quadros iniciais",
           "description": "Um ou vários quadros iniciais processados pela identidade da entrega.",
           "required": true,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -994,7 +988,6 @@
           "label": "Quadros finais",
           "description": "Quadros finais opcionais alinhados pela identidade da entrega.",
           "required": false,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -1017,7 +1010,6 @@
           "label": "Prompts de movimento",
           "description": "Um prompt ou prompts alinhados pela identidade da entrega.",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -1030,7 +1022,6 @@
           "label": "Referências de estilo",
           "description": "Imagens de estilo compartilhadas opcionais.",
           "required": false,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -1053,7 +1044,6 @@
           "label": "URL do projeto",
           "description": "URL opcional de um projeto existente do Vibes.",
           "required": false,
-          "multiple": false,
           "shape": {
             "kind": "control",
             "control": "url",
@@ -1249,7 +1239,6 @@
           "label": "Prompts de vídeo",
           "description": "Um prompt ou uma lista ordenada de prompts.",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
@@ -1262,7 +1251,6 @@
           "label": "Referência de personagem",
           "description": "Uma imagem opcional de Personagem. Uma segunda imagem é rejeitada.",
           "required": false,
-          "multiple": false,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -1285,7 +1273,6 @@
           "label": "Referência de cena",
           "description": "Uma imagem opcional de Cena. Uma segunda imagem é rejeitada.",
           "required": false,
-          "multiple": false,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -1308,7 +1295,6 @@
           "label": "Referências de estilo",
           "description": "Até seis imagens opcionais de Estilo.",
           "required": false,
-          "multiple": true,
           "presentation": {
             "renderer": "image-gallery"
           },
@@ -1331,7 +1317,6 @@
           "label": "URL do projeto",
           "description": "URL opcional de um projeto existente do Vibes.",
           "required": false,
-          "multiple": false,
           "shape": {
             "kind": "control",
             "control": "url",

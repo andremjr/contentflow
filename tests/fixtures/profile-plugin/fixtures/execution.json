@@ -17,7 +17,12 @@
       "portKey": "result",
       "label": "Resultado",
       "key": "result",
-      "type": "text",
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      },
       "required": true
     }
   ],

@@ -24,13 +24,34 @@ export const BUILDER_METHOD_CONTRACT = {
   blockTypes: ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
   operators: ["IA", "Humano", "Código"],
   processOutputs: {
-    theme: { key: "theme", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" } },
-    title: { key: "title", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" } },
-    thumbnail: { key: "thumbnail", shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" } },
-    script: { key: "script", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" } },
-    narration: { key: "audio", shape: { kind: "content", family: "audio", cardinality: "one", representation: "artifact" } },
-    assets: { key: "assets", shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" } },
-    editing: { key: "video", shape: { kind: "content", family: "video", cardinality: "one", representation: "artifact" } },
+    theme: {
+      key: "theme",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+    },
+    title: {
+      key: "title",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+    },
+    thumbnail: {
+      key: "thumbnail",
+      shape: { kind: "content", family: "image", cardinality: "one", representation: "artifact" },
+    },
+    script: {
+      key: "script",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+    },
+    narration: {
+      key: "audio",
+      shape: { kind: "content", family: "audio", cardinality: "one", representation: "artifact" },
+    },
+    assets: {
+      key: "assets",
+      shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
+    },
+    editing: {
+      key: "video",
+      shape: { kind: "content", family: "video", cardinality: "one", representation: "artifact" },
+    },
     publishing: { key: "url", shape: { kind: "control", control: "url", cardinality: "one" } },
   },
   rules: [
@@ -123,9 +144,7 @@ function validatePluginConfiguration(
         occupiedInputPorts.add(selected.key);
       }
     } else {
-      const candidates = compatible.filter(
-        (port) => !occupiedInputPorts.has(port.key),
-      );
+      const candidates = compatible.filter((port) => !occupiedInputPorts.has(port.key));
       if (candidates.length === 1) {
         const selected = candidates[0];
         input.portKey = selected.key;
@@ -246,10 +265,7 @@ export function validateBuilderMethods(input: {
       for (const binding of block.inputs ?? []) {
         const source = binding.binding;
         const sourceKind = source?.kind;
-        if (
-          sourceKind === "static" &&
-          !source.value.trim()
-        )
+        if (sourceKind === "static" && !source.value.trim())
           errors.push(`${label}: a entrada estática “${binding.label}” não possui valor.`);
         if (sourceKind === "previous_block") {
           const sourceBlockId = source?.kind === "previous_block" ? source.blockId : undefined;

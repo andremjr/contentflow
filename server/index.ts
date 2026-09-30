@@ -11,8 +11,8 @@ import { createMethodPackage, readMethodPackage } from "./method-package";
 import {
   copyImportedMethods,
   parsePortableLibraryItems,
-  type PortableCollectionV2,
-  type PortableLibraryItemV2,
+  type PortableCollection,
+  type PortableLibraryItem,
 } from "../src/lib/method-file";
 import { deriveProcessOutput } from "../src/lib/process-output";
 import {
@@ -87,10 +87,7 @@ import {
   createCanonicalProcessExecution,
   validationOutcomeFromValues,
 } from "../src/lib/execution-core";
-import {
-  getCompatiblePresentationRenderers,
-  getPresentationRestrictionIssue,
-} from "../src/lib/presentation";
+import { getPresentationRestrictionIssue } from "../src/lib/presentation";
 import type {
   PluginCapability,
   PluginConfigurationOption,
@@ -124,7 +121,6 @@ import {
   initializePluginRunner,
   type RegisteredPlugin,
 } from "./plugin-runner";
-import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
 import { areValueShapesCompatible } from "../src/lib/data-shape";
 import { processMethodV3Schema } from "../src/lib/method-contract-v3";
 import { valueShapeSchema } from "../src/lib/value-shape-schema";
@@ -192,7 +188,7 @@ import {
   findPluginConnectionDependencies,
   findPluginMethodDependencies,
 } from "./plugin-dependencies";
-import { validatePluginDirectory } from "./plugin-validation";
+import { validatePluginDirectory, validatePluginManifest } from "./plugin-validation";
 import {
   runtimeInputBindings,
   runtimeInputsReady,
@@ -1412,19 +1408,19 @@ function startOrchestratedProcess(
   const savedMethod =
     project.strategySnapshot?.methods[processType] ?? channel.methods?.[processType];
   const parsedMethod = savedMethod ? processMethodV3Schema.safeParse(savedMethod) : undefined;
-  const method =
-    parsedMethod?.success
-      ? {
-          contractVersion: parsedMethod.data.contractVersion,
-          name: parsedMethod.data.name || `Método de ${PROCESS_META[processType].label}`,
-          imageUrl: parsedMethod.data.imageUrl,
-          processType,
-          blocks: normalizeMethodBlocks(parsedMethod.data.blocks, processType),
-        }
-      : undefined;
-  const issue = parsedMethod && !parsedMethod.success
-    ? parsedMethod.error.issues[0]?.message
-    : getMethodConfigurationIssue(method);
+  const method = parsedMethod?.success
+    ? {
+        contractVersion: parsedMethod.data.contractVersion,
+        name: parsedMethod.data.name || `Método de ${PROCESS_META[processType].label}`,
+        imageUrl: parsedMethod.data.imageUrl,
+        processType,
+        blocks: normalizeMethodBlocks(parsedMethod.data.blocks, processType),
+      }
+    : undefined;
+  const issue =
+    parsedMethod && !parsedMethod.success
+      ? parsedMethod.error.issues[0]?.message
+      : getMethodConfigurationIssue(method);
   if (!method || issue) return { issue: issue ?? "O método deste processo não está disponível." };
 
   const now = new Date().toISOString();
@@ -3281,274 +3277,13 @@ pluginJobCleanup.unref();
 cleanupAbandonedPluginJobs();
 void processDuePluginJobs();
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function isUniqueStringArray(value: unknown, allowed?: readonly string[]): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.every((item) => isNonEmptyString(item) && (!allowed || allowed.includes(item))) &&
-    new Set(value).size === value.length
-  );
-}
-
-function isOptionalHttpsUrl(value: unknown) {
-  if (value === undefined) return true;
-  if (!isNonEmptyString(value)) return false;
+function isPluginManifest(manifest: Record<string, unknown>) {
   try {
-    return new URL(value).protocol === "https:";
+    validatePluginManifest(manifest);
+    return true;
   } catch {
     return false;
   }
-}
-
-function isPluginManifest(manifest: Record<string, unknown>) {
-  const runtime = manifest.runtime as Record<string, unknown> | undefined;
-  const capabilities = manifest.capabilities;
-  const profileSetup = manifest.profileSetup as Record<string, unknown> | undefined;
-  const permissions = [
-    "network",
-    "filesystem:read",
-    "filesystem:write",
-    "process",
-    "worker",
-    "native",
-  ] as const;
-  const blockTypes = ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"] as const;
-  const processTypes = [
-    "theme",
-    "title",
-    "thumbnail",
-    "script",
-    "narration",
-    "assets",
-    "editing",
-    "publishing",
-  ] as const;
-  const dataTypes = [
-    "text",
-    "textarea",
-    "number",
-    "boolean",
-    "list",
-    "records",
-    "select",
-    "multiselect",
-    "datetime",
-    "url",
-    "file",
-    "files",
-    "image",
-    "audio",
-    "video",
-    "approval",
-    "thumbnail_layout",
-  ] as const;
-  const presentationRenderers = [
-    "auto",
-    "text-short",
-    "text-long",
-    "list",
-    "tags",
-    "table",
-    "cards",
-    "file-list",
-    "image-gallery",
-    "audio-player",
-    "video-player",
-    "decision",
-  ] as const;
-  const presentationItemTypes = ["text", "record", "file", "image", "audio", "video"] as const;
-  const sideEffects = [
-    "external_read",
-    "external_write",
-    "public_publish",
-    "local_artifact",
-    "subprocess",
-  ] as const;
-
-  const manifestPermissions = isUniqueStringArray(manifest.permissions, permissions)
-    ? manifest.permissions
-    : [];
-  const manifestSecretKeys = isUniqueStringArray(manifest.secretKeys)
-    ? manifest.secretKeys
-    : undefined;
-  const optionalSecretKeys = isUniqueStringArray(manifest.optionalSecretKeys)
-    ? manifest.optionalSecretKeys
-    : undefined;
-  const optionalSecretKeysAreValid =
-    manifest.optionalSecretKeys === undefined ||
-    Boolean(
-      optionalSecretKeys &&
-      manifestSecretKeys &&
-      optionalSecretKeys.every((key) => manifestSecretKeys.includes(key)),
-    );
-  let networkHostsAreValid = manifest.networkHosts === undefined;
-  if (
-    Array.isArray(manifest.networkHosts) &&
-    manifest.networkHosts.length <= 100 &&
-    manifest.networkHosts.every((host) => typeof host === "string")
-  ) {
-    try {
-      const normalizedHosts = manifest.networkHosts.map(normalizeNetworkHostPattern);
-      networkHostsAreValid =
-        manifestPermissions.includes("network") &&
-        normalizedHosts.length > 0 &&
-        new Set(normalizedHosts).size === normalizedHosts.length;
-    } catch {
-      networkHostsAreValid = false;
-    }
-  }
-
-  return Boolean(
-    manifest.apiVersion === "1" &&
-    isNonEmptyString(manifest.id) &&
-    isNonEmptyString(manifest.name) &&
-    isNonEmptyString(manifest.version) &&
-    isNonEmptyString(manifest.description) &&
-    isNonEmptyString(manifest.author) &&
-    isNonEmptyString(manifest.license) &&
-    isOptionalHttpsUrl(manifest.homepage) &&
-    isOptionalHttpsUrl(manifest.repository) &&
-    isNonEmptyString(manifest.entrypoint) &&
-    !path.isAbsolute(manifest.entrypoint) &&
-    !manifest.entrypoint.includes("..") &&
-    isUniqueStringArray(manifest.permissions, permissions) &&
-    networkHostsAreValid &&
-    (profileSetup === undefined ||
-      (isNonEmptyString(profileSetup.configurationKey) &&
-        (profileSetup.fallbackConfigurationKey === undefined ||
-          isNonEmptyString(profileSetup.fallbackConfigurationKey)) &&
-        isNonEmptyString(profileSetup.label) &&
-        (profileSetup.description === undefined || typeof profileSetup.description === "string") &&
-        (profileSetup.prepareTimeoutMs === undefined ||
-          (Number.isInteger(profileSetup.prepareTimeoutMs) &&
-            Number(profileSetup.prepareTimeoutMs) >= 30_000 &&
-            Number(profileSetup.prepareTimeoutMs) <= 900_000)) &&
-        Object.keys(profileSetup).every((key) =>
-          [
-            "configurationKey",
-            "fallbackConfigurationKey",
-            "label",
-            "description",
-            "prepareTimeoutMs",
-          ].includes(key),
-        ))) &&
-    (manifest.secretKeys === undefined || isUniqueStringArray(manifest.secretKeys)) &&
-    optionalSecretKeysAreValid &&
-    runtime?.kind === "node" &&
-    runtime.module === "esm" &&
-    isNonEmptyString(runtime.version) &&
-    Array.isArray(capabilities) &&
-    capabilities.length > 0 &&
-    capabilities.every((value) => {
-      if (!value || typeof value !== "object") return false;
-      const capability = value as Record<string, unknown>;
-      const execution = capability.execution as Record<string, unknown> | undefined;
-      const itemOrchestration = execution?.itemOrchestration as Record<string, unknown> | undefined;
-      const cost = capability.cost as Record<string, unknown> | undefined;
-      const dataPolicy = capability.dataPolicy as Record<string, unknown> | undefined;
-      const capabilitySideEffects = capability.sideEffects;
-      const portsAreValid = (ports: unknown) =>
-        Array.isArray(ports) &&
-        ports.every((portValue) => {
-          if (!portValue || typeof portValue !== "object") return false;
-          const port = portValue as Record<string, unknown>;
-          const presentation = port.presentation as Record<string, unknown> | undefined;
-          const allowedPortKeys = ["key", "label", "description", "shape", "required", "presentation"];
-          const parsedShape = valueShapeSchema.safeParse(port.shape);
-          const presentationIsValid =
-            presentation === undefined ||
-            (presentation !== null &&
-              typeof presentation === "object" &&
-              presentationRenderers.includes(
-                String(presentation.renderer) as (typeof presentationRenderers)[number],
-              ) &&
-              parsedShape.success &&
-              getCompatiblePresentationRenderers(parsedShape.data).includes(
-                String(presentation.renderer) as (typeof presentationRenderers)[number],
-              ) &&
-              (presentation.itemType === undefined ||
-                presentationItemTypes.includes(
-                  String(presentation.itemType) as (typeof presentationItemTypes)[number],
-                )) &&
-              Object.keys(presentation).every((key) =>
-                ["renderer", "itemType"].includes(key),
-              ));
-          return (
-            isNonEmptyString(port.key) &&
-            isNonEmptyString(port.label) &&
-            typeof port.required === "boolean" &&
-            (port.description === undefined || typeof port.description === "string") &&
-            Object.keys(port).every((key) => allowedPortKeys.includes(key)) &&
-            parsedShape.success &&
-            presentationIsValid
-          );
-        }) &&
-        new Set(ports.map((port) => String((port as Record<string, unknown>).key))).size ===
-          ports.length;
-      const sendsData = dataPolicy?.sendsDataToThirdParties === true;
-      const usesNetwork =
-        Array.isArray(capabilitySideEffects) &&
-        capabilitySideEffects.some((effect) =>
-          ["external_read", "external_write", "public_publish"].includes(String(effect)),
-        );
-
-      return (
-        isNonEmptyString(capability.id) &&
-        ["Humano", "IA", "Código"].includes(String(capability.operator)) &&
-        isUniqueStringArray(capability.blockTypes, blockTypes) &&
-        capability.blockTypes.length > 0 &&
-        (capability.processTypes === undefined ||
-          isUniqueStringArray(capability.processTypes, processTypes)) &&
-        portsAreValid(capability.inputPorts) &&
-        portsAreValid(capability.outputPorts) &&
-        (capability.outputPorts as unknown[]).length > 0 &&
-        ["immediate", "async"].includes(String(execution?.mode)) &&
-        (execution?.maxConcurrency === undefined ||
-          (Number.isInteger(execution.maxConcurrency) &&
-            Number(execution.maxConcurrency) >= 1 &&
-            Number(execution.maxConcurrency) <= 100)) &&
-        (itemOrchestration === undefined ||
-          (itemOrchestration.mode === "sequential" &&
-            isNonEmptyString(itemOrchestration.inputPort) &&
-            isNonEmptyString(itemOrchestration.outputPort) &&
-            (capability.inputPorts as Array<Record<string, unknown>>).some(
-              (port) => port.key === itemOrchestration.inputPort,
-            ) &&
-            (capability.outputPorts as Array<Record<string, unknown>>).some(
-              (port) => port.key === itemOrchestration.outputPort,
-            ) &&
-            (itemOrchestration.combinedOutputPort === undefined ||
-              (isNonEmptyString(itemOrchestration.combinedOutputPort) &&
-                (capability.outputPorts as Array<Record<string, unknown>>).some(
-                  (port) => port.key === itemOrchestration.combinedOutputPort,
-                ))) &&
-            (itemOrchestration.separator === undefined ||
-              (typeof itemOrchestration.separator === "string" &&
-                itemOrchestration.separator.length <= 20)))) &&
-        isUniqueStringArray(capabilitySideEffects, sideEffects) &&
-        (!usesNetwork || manifestPermissions.includes("network")) &&
-        (!capabilitySideEffects.includes("local_artifact") ||
-          manifestPermissions.includes("filesystem:write")) &&
-        (!capabilitySideEffects.includes("subprocess") ||
-          manifestPermissions.includes("process")) &&
-        ["free", "metered", "unknown"].includes(String(cost?.model)) &&
-        typeof cost?.estimateSupported === "boolean" &&
-        typeof dataPolicy?.sendsDataToThirdParties === "boolean" &&
-        (!sendsData || isUniqueStringArray(dataPolicy?.providers)) &&
-        isOptionalHttpsUrl(dataPolicy?.retentionPolicyUrl) &&
-        isOptionalHttpsUrl(dataPolicy?.trainingPolicyUrl) &&
-        capability.blockConfigSchema !== null &&
-        typeof capability.blockConfigSchema === "object" &&
-        capability.outputSchema !== null &&
-        typeof capability.outputSchema === "object"
-      );
-    }) &&
-    new Set(capabilities.map((capability) => String((capability as Record<string, unknown>).id)))
-      .size === capabilities.length,
-  );
 }
 
 function migrateLegacyLibraryItems() {
@@ -3580,9 +3315,39 @@ function migrateLegacyLibraryItems() {
       );
       if (!collection) {
         const fields = [
-          { id: randomUUID(), label: "Nome", type: "text", required: true },
-          { id: randomUUID(), label: "Conteúdo", type: "textarea", required: true },
-          { id: randomUUID(), label: "Descrição", type: "textarea", required: false },
+          {
+            id: randomUUID(),
+            label: "Nome",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
+            required: true,
+          },
+          {
+            id: randomUUID(),
+            label: "Conteúdo",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
+            required: true,
+          },
+          {
+            id: randomUUID(),
+            label: "Descrição",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
+            required: false,
+          },
         ];
         collection = {
           id: randomUUID(),
@@ -5507,14 +5272,13 @@ function normalizeBuilderLibraryValues(
         return { ok: false, error: `O campo “${field.label}” exige um arquivo válido.` };
       }
       if (!file.mimeType.startsWith(`${field.shape.family}/`)) {
-        return { ok: false, error: `O campo “${field.label}” exige conteúdo ${field.shape.family}.` };
+        return {
+          ok: false,
+          error: `O campo “${field.label}” exige conteúdo ${field.shape.family}.`,
+        };
       }
     }
-    if (
-      !empty &&
-      field.shape.kind === "control" &&
-      field.shape.control === "thumbnail_layout"
-    ) {
+    if (!empty && field.shape.kind === "control" && field.shape.control === "thumbnail_layout") {
       const layout = value as ThumbnailLayout;
       if (layout.aspectRatio !== "16:9" || !Array.isArray(layout.boxes)) {
         return {
@@ -6342,12 +6106,10 @@ async function executePluginBlockInternal(
     };
   }
 
-  // ESCOLHER keeps its historical collection-selection contract until its
-  // dedicated compatibility work. It is not the universal output-binding path.
-  const validatedOutputs =
-    block.type === "ESCOLHER"
-      ? { outputContract: [], unsupportedFields: [] }
-      : validatePluginOutputContract(block.outputs ?? [], capability.outputPorts);
+  const validatedOutputs = validatePluginOutputContract(
+    block.outputs ?? [],
+    capability.outputPorts,
+  );
   if (validatedOutputs.unsupportedFields.length) {
     return {
       status: 422,
@@ -6359,18 +6121,7 @@ async function executePluginBlockInternal(
     };
   }
 
-  const outputContract: PluginFieldContract[] =
-    block.type === "ESCOLHER"
-      ? [
-          {
-            label: "Item escolhido",
-            key: "selectedItemId",
-            shape: { kind: "control", control: "identifier", cardinality: "one" },
-            required: true,
-            portKey: capability.outputPorts[0]?.key ?? "result",
-          },
-        ]
-      : validatedOutputs.outputContract;
+  const outputContract: PluginFieldContract[] = validatedOutputs.outputContract;
   const methodParameterValues = Object.fromEntries(
     (block.parameters ?? []).map((parameter) => [parameter.key, parameter.value]),
   );
@@ -7311,9 +7062,9 @@ app.post("/api/method-transfers/apply", (request, response) => {
     newChannel?: { id?: string; name?: string; methodsImageUrl?: string };
     expectedDefinitionRevision?: number;
     methods?: ProcessMethod[];
-    collections?: PortableCollectionV2[];
+    collections?: PortableCollection[];
     itemsIncluded?: boolean;
-    items?: PortableLibraryItemV2[];
+    items?: PortableLibraryItem[];
     preferredOrder?: UniversalProcess[];
     selectedProcesses?: UniversalProcess[];
     preserveLocalConnections?: boolean;
@@ -7370,7 +7121,7 @@ app.post("/api/method-transfers/apply", (request, response) => {
     return;
   }
 
-  let portableItems: PortableLibraryItemV2[] = [];
+  let portableItems: PortableLibraryItem[] = [];
   try {
     portableItems = parsePortableLibraryItems(body.items ?? []);
     if (body.itemsIncluded !== true && portableItems.length) {
@@ -8363,7 +8114,11 @@ app.patch("/api/executions/:id/blocks/:blockId/values", (request, response) => {
     .filter((field) => field.required && isEmptyRuntimeValue(values[field.key]))
     .map((field) => field.label);
   const restrictionIssues = (block.outputs ?? []).flatMap((field) => {
-    const issue = getPresentationRestrictionIssue(field.shape, field.presentation, values[field.key]);
+    const issue = getPresentationRestrictionIssue(
+      field.shape,
+      field.presentation,
+      values[field.key],
+    );
     return issue ? [`${field.label}: ${issue}`] : [];
   });
   if (missing.length || restrictionIssues.length) {
@@ -8788,11 +8543,7 @@ app.put("/api/executions/:id", (request, response) => {
   execution.revision = (current.revision ?? 0) + 1;
   const result = database
     .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
-    .run(
-      serializeStoredExecution(execution),
-      execution.updatedAt,
-      execution.id,
-    );
+    .run(serializeStoredExecution(execution), execution.updatedAt, execution.id);
   if (result.changes) {
     scheduleAutomaticPluginBlock(execution as unknown as ProcessExecution);
     if (execution.projectId) queueOrchestratorReconciliationForProject(execution.projectId);

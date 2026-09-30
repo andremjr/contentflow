@@ -27,7 +27,12 @@ function request(): PluginExecutionRequest {
         key: "clips",
         portKey: "clips",
         label: "Clips",
-        shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
+        shape: {
+          kind: "content",
+          family: "image",
+          cardinality: "many",
+          representation: "artifact",
+        },
         required: true,
       },
     ],

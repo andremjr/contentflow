@@ -18,13 +18,20 @@ function executionWithBlock(
       operator: "IA",
       name: "Images",
       inputs: [],
-      outputs: [{
-        id: "assets",
-        key: "assets",
-        label: "Assets",
-        shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
-        required: true,
-      }],
+      outputs: [
+        {
+          id: "assets",
+          key: "assets",
+          label: "Assets",
+          shape: {
+            kind: "content",
+            family: "image",
+            cardinality: "many",
+            representation: "artifact",
+          },
+          required: true,
+        },
+      ],
       parameters: [],
       instructions: "",
       order: 0,

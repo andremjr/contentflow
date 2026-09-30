@@ -4,32 +4,58 @@
   "blockId": "mai-fixture-block",
   "capabilityId": "generate-voice-in-browser",
   "attempt": 1,
-  "invocation": { "mode": "start" },
+  "invocation": {
+    "mode": "start"
+  },
   "configuration": {
     "model": "mai-voice-2",
     "voice": "alder",
     "style": "neutral",
     "accountProfile": "default"
   },
-  "settings": { "diagnosticMockResponse": "Narração de teste gerada pelo modelo de mock." },
-  "inputs": { "text": "Este é um teste de áudio narrado pelo plugin." },
+  "settings": {
+    "diagnosticMockResponse": "Narração de teste gerada pelo modelo de mock."
+  },
+  "inputs": {
+    "text": "Este é um teste de áudio narrado pelo plugin."
+  },
   "inputContract": [
-    { "id": "input", "portKey": "text", "label": "Texto da narração", "type": "textarea" }
+    {
+      "id": "input",
+      "portKey": "text",
+      "label": "Texto da narração",
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
+    }
   ],
   "outputContract": [
     {
       "portKey": "audio",
       "label": "Áudio narrado",
       "key": "audio",
-      "type": "audio",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "audio",
+        "cardinality": "one",
+        "representation": "artifact"
+      }
     },
     {
       "portKey": "transcript",
       "label": "Texto falado",
       "key": "transcript",
-      "type": "textarea",
-      "required": false
+      "required": false,
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "context": {
@@ -41,7 +67,10 @@
       "language": "pt-BR",
       "niche": "Histórias"
     },
-    "project": { "id": "project", "title": "Projeto de Teste" },
+    "project": {
+      "id": "project",
+      "title": "Projeto de Teste"
+    },
     "processType": "narration",
     "block": {
       "type": "CRIAR",

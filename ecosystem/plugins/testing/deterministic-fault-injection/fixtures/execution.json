@@ -4,16 +4,27 @@
   "blockId": "fault-block-001",
   "capabilityId": "fault",
   "attempt": 1,
-  "invocation": { "mode": "start" },
-  "configuration": { "scenario": "success" },
+  "invocation": {
+    "mode": "start"
+  },
+  "configuration": {
+    "scenario": "success"
+  },
   "settings": {},
-  "inputs": { "content": "  hello  " },
+  "inputs": {
+    "content": "  hello  "
+  },
   "inputContract": [
     {
       "id": "fault-input-content",
       "portKey": "content",
       "label": "Content",
-      "type": "textarea"
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "outputContract": [
@@ -21,8 +32,13 @@
       "portKey": "result",
       "label": "Result",
       "key": "result",
-      "type": "textarea",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "context": {

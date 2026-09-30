@@ -26,7 +26,28 @@
       "id": "fixture-audio-input",
       "portKey": "source",
       "label": "Áudio de origem",
-      "type": "audio"
+      "shape": {
+        "kind": "content",
+        "family": "audio",
+        "cardinality": "one",
+        "representation": "artifact",
+        "formats": {
+          "mimeTypes": [
+            "audio/aac",
+            "audio/flac",
+            "audio/mp3",
+            "audio/mp4",
+            "audio/mpeg",
+            "audio/ogg",
+            "audio/opus",
+            "audio/wav",
+            "audio/webm",
+            "audio/x-flac",
+            "audio/x-m4a",
+            "audio/x-wav"
+          ]
+        }
+      }
     }
   ],
   "outputContract": [
@@ -34,12 +55,23 @@
       "portKey": "result",
       "label": "Áudio sem silêncios",
       "key": "result",
-      "type": "audio",
       "required": true,
       "presentation": {
         "renderer": "audio-player",
-        "itemType": "audio",
-        "acceptedMimeTypes": ["audio/*"]
+        "acceptedMimeTypes": [
+          "audio/*"
+        ]
+      },
+      "shape": {
+        "kind": "content",
+        "family": "audio",
+        "cardinality": "one",
+        "representation": "artifact",
+        "formats": {
+          "mimeTypes": [
+            "audio/*"
+          ]
+        }
       }
     }
   ],

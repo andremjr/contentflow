@@ -186,7 +186,7 @@ const DELIVERY_META: Record<
   video: { label: "Vídeo", icon: Video, className: "bg-rose-500/10 text-rose-600" },
 };
 
-function deliveryTypes(plugin: DiscoveredPlugin) {
+function deliveryFamilies(plugin: DiscoveredPlugin) {
   return Array.from(
     new Set(
       plugin.manifest.capabilities.flatMap((capability) =>
@@ -274,7 +274,7 @@ function PluginsPage() {
         plugin.id,
       ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
     const matchesDelivery =
-      deliveryFilter === "all" || deliveryTypes(plugin).includes(deliveryFilter);
+      deliveryFilter === "all" || deliveryFamilies(plugin).includes(deliveryFilter);
     const matchesBlock =
       blockFilter === "all" ||
       capabilities.some((capability) => capability.blockTypes.includes(blockFilter));
@@ -624,7 +624,7 @@ function PluginCard({
 }) {
   const { language } = useAppPreferences();
   const manifest = localizePluginManifest(plugin.manifest, language);
-  const types = deliveryTypes(plugin);
+  const families = deliveryFamilies(plugin);
   const [open, setOpen] = useState(false);
   const [iconFailed, setIconFailed] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -791,12 +791,12 @@ function PluginCard({
         <section>
           <h3 className="text-xs font-semibold">O que este plugin faz</h3>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {types.map((type) => {
-              const meta = DELIVERY_META[type];
+            {families.map((family) => {
+              const meta = DELIVERY_META[family];
               const Icon = meta.icon;
               return (
                 <span
-                  key={type}
+                  key={family}
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium ${meta.className}`}
                 >
                   <Icon className="size-3" /> {meta.label}

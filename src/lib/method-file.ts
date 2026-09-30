@@ -144,14 +144,14 @@ const portableLibraryValueSchema = z.union([
   z.array(portableLibraryRecordSchema),
 ]);
 
-const portableLibraryItemV2Schema = z.object({
+const portableLibraryItemSchema = z.object({
   key: z.string().min(1).max(200),
   collectionKey: z.string().min(1).max(160),
   values: z.record(portableLibraryValueSchema),
   createdAt: z.string().optional(),
 });
 
-const portableCollectionV2Schema = z.object({
+const portableCollectionSchema = z.object({
   key: z.string().min(1).max(160),
   name: z.string().min(1).max(200),
   fields: z
@@ -174,13 +174,13 @@ const portableCollectionV2Schema = z.object({
     .max(200),
 });
 
-const portableMethodEntryV2Schema = z.object({
+const portableMethodEntrySchema = z.object({
   role: portableMethodRoleSchema,
   method: portableMethodSchema,
   requirements: z.array(methodRequirementSchema).max(300),
 });
 
-const sharedMethodBundleV2Schema = z
+const portableMethodBundleSchema = z
   .object({
     format: z.enum(["contentflow-method", "contentflow-method-pack"]),
     version: z.literal(3),
@@ -190,10 +190,10 @@ const sharedMethodBundleV2Schema = z
     exportedAt: z.string(),
     primaryProcessType: universalProcessSchema.optional(),
     processOrder: z.array(universalProcessSchema).length(8),
-    methods: z.array(portableMethodEntryV2Schema).min(1).max(8),
-    collections: z.array(portableCollectionV2Schema).max(100),
+    methods: z.array(portableMethodEntrySchema).min(1).max(8),
+    collections: z.array(portableCollectionSchema).max(100),
     itemsIncluded: z.boolean(),
-    items: z.array(portableLibraryItemV2Schema).max(500).optional(),
+    items: z.array(portableLibraryItemSchema).max(500).optional(),
   })
   .superRefine((bundle, context) => {
     const order = bundle.processOrder;
@@ -219,11 +219,11 @@ export type SharedMethodFile = Omit<z.infer<typeof sharedMethodSchema>, "method"
 export type SharedMethodPackFile = Omit<z.infer<typeof sharedMethodPackSchema>, "methods"> & {
   methods: ProcessMethod[];
 };
-export type SharedMethodImport = SharedMethodFile | SharedMethodPackFile | SharedMethodBundleV2;
+export type SharedMethodImport = SharedMethodFile | SharedMethodPackFile | PortableMethodBundle;
 export type PortableMethodRole = z.infer<typeof portableMethodRoleSchema>;
-export type PortableCollectionV2 = z.infer<typeof portableCollectionV2Schema>;
-export type PortableLibraryItemV2 = z.infer<typeof portableLibraryItemV2Schema>;
-export type SharedMethodBundleV2 = Omit<z.infer<typeof sharedMethodBundleV2Schema>, "methods"> & {
+export type PortableCollection = z.infer<typeof portableCollectionSchema>;
+export type PortableLibraryItem = z.infer<typeof portableLibraryItemSchema>;
+export type PortableMethodBundle = Omit<z.infer<typeof portableMethodBundleSchema>, "methods"> & {
   methods: Array<{
     role: PortableMethodRole;
     method: ProcessMethod;
@@ -231,8 +231,8 @@ export type SharedMethodBundleV2 = Omit<z.infer<typeof sharedMethodBundleV2Schem
   }>;
 };
 
-export function parsePortableLibraryItems(input: unknown): PortableLibraryItemV2[] {
-  return z.array(portableLibraryItemV2Schema).max(500).parse(input);
+export function parsePortableLibraryItems(input: unknown): PortableLibraryItem[] {
+  return z.array(portableLibraryItemSchema).max(500).parse(input);
 }
 
 export type PortableTransferPlan = {
@@ -247,9 +247,9 @@ export type PortableTransferPlan = {
     method: ProcessMethod;
     requirements: MethodRequirement[];
   }>;
-  collections: PortableCollectionV2[];
+  collections: PortableCollection[];
   itemsIncluded: boolean;
-  items: PortableLibraryItemV2[];
+  items: PortableLibraryItem[];
 };
 
 export function collectMethodRequirements(
@@ -489,7 +489,9 @@ export function planPortableMethodTransfer(input: {
 }): PortableTransferPlan {
   const collections = input.collections ?? [];
   const sourceItems = input.items ?? [];
-  const adaptedSourceMethods = input.sourceMethods.map((method) => parseProcessMethodV3(method));
+  const adaptedSourceMethods = input.sourceMethods
+    .filter((method) => method.blocks.length > 0)
+    .map((method) => parseProcessMethodV3(method));
   const byProcess = new Map(adaptedSourceMethods.map((method) => [method.processType, method]));
   const primary = new Set(input.primaryProcessTypes ?? []);
   const included = new Set<UniversalProcess>();
@@ -609,7 +611,7 @@ export function planPortableMethodTransfer(input: {
     };
   });
 
-  const portableItems: PortableLibraryItemV2[] = input.includeItems
+  const portableItems: PortableLibraryItem[] = input.includeItems
     ? sourceItems.flatMap((item, itemIndex) => {
         const collection = selectedCollections.find(
           (candidate) => candidate.id === item.collectionId,
@@ -652,7 +654,7 @@ export function planPortableMethodTransfer(input: {
 }
 
 export function serializePortableMethodTransfer(plan: PortableTransferPlan) {
-  const file = sharedMethodBundleV2Schema.parse({
+  const file = portableMethodBundleSchema.parse({
     ...plan,
     version: 3,
     exportedAt: new Date().toISOString(),
@@ -660,8 +662,8 @@ export function serializePortableMethodTransfer(plan: PortableTransferPlan) {
   return JSON.stringify(file, null, 2);
 }
 
-function parseMethodBundleV2(parsed: unknown): SharedMethodBundleV2 {
-  const result = sharedMethodBundleV2Schema.safeParse(parsed);
+function parsePortableMethodBundle(parsed: unknown): PortableMethodBundle {
+  const result = portableMethodBundleSchema.safeParse(parsed);
   if (!result.success) {
     throw new Error("Este não é um pacote portátil válido do ContentFlow.");
   }
@@ -675,7 +677,7 @@ function parseMethodBundleV2(parsed: unknown): SharedMethodBundleV2 {
       });
       return { ...entry, method };
     }),
-  } as SharedMethodBundleV2;
+  } as PortableMethodBundle;
 }
 
 function isPortableMethodBundle(parsed: unknown) {
@@ -782,7 +784,7 @@ export function parseMethodFile(contents: string): SharedMethodFile {
   }
 
   if (isPortableMethodBundle(parsed)) {
-    const bundle = parseMethodBundleV2(parsed);
+    const bundle = parsePortableMethodBundle(parsed);
     if (bundle.format !== "contentflow-method" || !bundle.primaryProcessType) {
       throw new Error("Este não é um arquivo de método válido do ContentFlow.");
     }
@@ -823,7 +825,7 @@ export function parseMethodImportFile(contents: string): SharedMethodImport {
     throw new Error("O arquivo selecionado não contém um JSON válido.");
   }
   if (isPortableMethodBundle(parsed)) {
-    return parseMethodBundleV2(parsed);
+    return parsePortableMethodBundle(parsed);
   }
   if ((parsed as { format?: unknown })?.format === "contentflow-method") {
     return parseMethodFile(contents);

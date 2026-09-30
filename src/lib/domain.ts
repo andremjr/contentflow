@@ -115,11 +115,8 @@ export const PRESENTATION_RENDERER_IDS = [
 
 export type PresentationRendererId = (typeof PRESENTATION_RENDERER_IDS)[number];
 
-export type PresentationItemType = "text" | "record" | "file" | "image" | "audio" | "video";
-
 export type FieldPresentation = {
   renderer: PresentationRendererId;
-  itemType?: PresentationItemType;
 };
 
 export type RecordFieldDefinition = ShapeRecordFieldDefinition;

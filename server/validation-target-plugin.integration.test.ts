@@ -52,14 +52,19 @@ async function createValidationPlugin(directory: string) {
     processTypes: ["theme"],
     inputPorts: inputPorts.map((input) => ({
       ...input,
-      acceptedTypes: ["textarea"],
+      shape: {
+        kind: "content",
+        family: "text",
+        cardinality: "one",
+        representation: "inline",
+      },
       required: inputPorts.length === 1,
     })),
     outputPorts: [
       {
         key: "decision",
         label: "Decisão",
-        producedTypes: ["approval"],
+        shape: { kind: "control", control: "approval", cardinality: "one" },
         required: true,
       },
     ],
@@ -79,7 +84,7 @@ async function createValidationPlugin(directory: string) {
     path.join(directory, "contentflow.plugin.json"),
     JSON.stringify(
       {
-        apiVersion: "1",
+        apiVersion: "2",
         id: pluginId,
         name: "Validation target fixture",
         version: "1.0.0",
@@ -89,7 +94,6 @@ async function createValidationPlugin(directory: string) {
         runtime: { kind: "node", version: ">=26 <27", module: "esm" },
         entrypoint: "handler.mjs",
         permissions: [],
-        deliveryTypes: ["text"],
         capabilities: [
           capability("validate-multiple", [
             { key: "first", label: "Primeira" },
@@ -178,7 +182,18 @@ test("plugin VALIDAR uses only the explicit target output and target port", asyn
         name: id,
         inputs: [],
         outputs: [
-          { id: `${id}-output`, label: "Valor", key: "value", type: "textarea", required: true },
+          {
+            id: `${id}-output`,
+            label: "Valor",
+            key: "value",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
+            required: true,
+          },
         ],
         parameters: [],
         order,
@@ -197,7 +212,7 @@ test("plugin VALIDAR uses only the explicit target output and target port", asyn
               id: "decision-output",
               label: "Decisão",
               key: "decision",
-              type: "approval",
+              shape: { kind: "control", control: "approval", cardinality: "one" },
               required: true,
               portKey: "decision",
             },
@@ -242,7 +257,12 @@ test("plugin VALIDAR uses only the explicit target output and target port", asyn
           projectId,
           channelId: "validation-target-channel",
           processType: "theme",
-          methodSnapshot: { processType: "theme", blocks },
+          methodSnapshot: {
+            contractVersion: 3,
+            name: "Validation target",
+            processType: "theme",
+            blocks,
+          },
           blocks: [
             { blockId: "target-a", status: "completed", values: { value: "A" }, attempt: 1 },
             {

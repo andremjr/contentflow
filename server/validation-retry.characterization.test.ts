@@ -28,7 +28,12 @@ function createBlock(
   order: number,
   operator: ActionBlock["operator"] = "Humano",
   outputKey = `${id}_value`,
-  outputShape: NonNullable<ActionBlock["outputs"]>[number]["shape"] = { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+  outputShape: NonNullable<ActionBlock["outputs"]>[number]["shape"] = {
+    kind: "content",
+    family: "text",
+    cardinality: "one",
+    representation: "inline",
+  },
 ): ActionBlock {
   return {
     id,
@@ -90,11 +95,12 @@ function validationBlock(
         id: `${id}-output`,
         key: outputKey,
         label: `Decisão ${id}`,
-        shape: mode === "approval"
-          ? { kind: "control", control: "approval", cardinality: "one" }
-          : mode === "select_many"
-            ? { kind: "control", control: "selection", cardinality: "many" }
-            : { kind: "control", control: "selection", cardinality: "one" },
+        shape:
+          mode === "approval"
+            ? { kind: "control", control: "approval", cardinality: "one" }
+            : mode === "select_many"
+              ? { kind: "control", control: "selection", cardinality: "many" }
+              : { kind: "control", control: "selection", cardinality: "one" },
         required: true,
       },
       ...(mode === "approval"
@@ -103,7 +109,12 @@ function validationBlock(
               id: `${id}-feedback`,
               key: "feedback",
               label: `Feedback ${id}`,
-              shape: { kind: "content" as const, family: "text" as const, cardinality: "one" as const, representation: "inline" as const },
+              shape: {
+                kind: "content" as const,
+                family: "text" as const,
+                cardinality: "one" as const,
+                representation: "inline" as const,
+              },
               required: false,
             },
           ]
@@ -132,7 +143,12 @@ function validationBlock(
 
 function fixture(blocks: ActionBlock[]) {
   const methods = createEmptyMethods();
-  methods.theme = { contractVersion: 3, name: "Validação caracterizada", processType: "theme", blocks };
+  methods.theme = {
+    contractVersion: 3,
+    name: "Validação caracterizada",
+    processType: "theme",
+    blocks,
+  };
   const channel: Channel = {
     id: "channel-validation",
     name: "Canal de validação",
@@ -538,7 +554,12 @@ test("V06/V07/V08/V09 — retry invalida exatamente o trecho downstream e seu ou
 });
 
 test("V10 — retryMode full limpa conversa e materializa feedback/contexto/attachments", () => {
-  const target = createBlock("target", 0, "Código", "asset", { kind: "content", family: "image", cardinality: "one", representation: "artifact" });
+  const target = createBlock("target", 0, "Código", "asset", {
+    kind: "content",
+    family: "image",
+    cardinality: "one",
+    representation: "artifact",
+  });
   const review = validationBlock("review", 1, target.id, { retryMode: "full" });
   const { execution, commands } = fixture([target, review]);
   const image: StoredFile = {
@@ -581,7 +602,12 @@ test("V10 — retryMode full limpa conversa e materializa feedback/contexto/atta
 });
 
 test("V11 — conversation_feedback preserva conversa e fallback da tentativa rejeitada", () => {
-  const target = createBlock("target", 0, "Código", "asset", { kind: "content", family: "image", cardinality: "one", representation: "artifact" });
+  const target = createBlock("target", 0, "Código", "asset", {
+    kind: "content",
+    family: "image",
+    cardinality: "one",
+    representation: "artifact",
+  });
   const review = validationBlock("review", 1, target.id, {
     retryMode: "conversation_feedback",
   });
@@ -704,7 +730,12 @@ test("V13 — aprovação após retry avança sem invalidar novamente a nova ten
 });
 
 test("V14 — select_one persiste a seleção e avança sem retry editorial", () => {
-  const target = createBlock("options", 0, "Humano", "options", { kind: "content", family: "text", cardinality: "many", representation: "inline" });
+  const target = createBlock("options", 0, "Humano", "options", {
+    kind: "content",
+    family: "text",
+    cardinality: "many",
+    representation: "inline",
+  });
   const review = validationBlock("review", 1, target.id, {
     mode: "select_one",
     targetOutputKey: "options",
@@ -790,9 +821,19 @@ test("P02 — plugin usa attempt editorial do VALIDAR e invalida output oficial"
 
 test("P03 — humano e plugin aplicam os mesmos modos editoriais de conversa", () => {
   for (const retryMode of ["full", "conversation_feedback"] as const) {
-    const humanTarget = createBlock("target", 0, "Código", "asset", { kind: "content", family: "image", cardinality: "one", representation: "artifact" });
+    const humanTarget = createBlock("target", 0, "Código", "asset", {
+      kind: "content",
+      family: "image",
+      cardinality: "one",
+      representation: "artifact",
+    });
     const humanReview = validationBlock("review", 1, humanTarget.id, { retryMode });
-    const pluginTarget = createBlock("target", 0, "Código", "asset", { kind: "content", family: "image", cardinality: "one", representation: "artifact" });
+    const pluginTarget = createBlock("target", 0, "Código", "asset", {
+      kind: "content",
+      family: "image",
+      cardinality: "one",
+      representation: "artifact",
+    });
     const pluginReview = validationBlock("review", 1, pluginTarget.id, {
       retryMode,
       operator: "Código",

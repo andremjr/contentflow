@@ -128,7 +128,12 @@ test("mostra a quantidade de validações pendentes no ícone da barra de tarefa
           id: "desktop-human-theme-output",
           key: "theme",
           label: "Tema",
-          type: "textarea",
+          shape: {
+            kind: "content",
+            family: "text",
+            cardinality: "one",
+            representation: "inline",
+          },
           required: true,
         },
       ],

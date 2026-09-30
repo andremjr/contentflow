@@ -27,7 +27,11 @@ export function RuntimeValueViewer({
     return <span className="text-xs text-muted-foreground">Não informado</span>;
   }
 
-  if (shape.kind === "control" && shape.control === "thumbnail_layout" && isThumbnailLayout(value)) {
+  if (
+    shape.kind === "control" &&
+    shape.control === "thumbnail_layout" &&
+    isThumbnailLayout(value)
+  ) {
     return <CompositionPreview boxes={value.boxes} className={compact ? "max-w-72" : undefined} />;
   }
 

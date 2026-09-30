@@ -79,6 +79,8 @@ function testChannel(): Channel {
       PROCESS_ORDER.map((processType) => [
         processType,
         {
+          contractVersion: 3,
+          name: `Método ${processType}`,
           processType,
           blocks: [
             {
@@ -94,7 +96,12 @@ function testChannel(): Channel {
                         id: `${processType}-output-test`,
                         label: processType === "theme" ? "Tema produzido" : "Título produzido",
                         key: processType,
-                        type: processType === "theme" ? "textarea" : "text",
+                        shape: {
+                          kind: "content",
+                          family: "text",
+                          cardinality: "one",
+                          representation: "inline",
+                        },
                         required: true,
                       },
                     ]

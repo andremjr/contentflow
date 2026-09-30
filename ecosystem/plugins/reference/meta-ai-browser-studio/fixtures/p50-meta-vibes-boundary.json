@@ -23,11 +23,13 @@
       "outputPorts": ["image", "description"]
     },
     "generate-video-in-browser": {
-      "inputPorts": ["prompt", "references"],
+      "inputPorts": ["prompt", "references", "video_references"],
       "outputPorts": ["video", "description"],
       "requiredOutput": "video",
-      "acceptedReferenceTypes": ["image", "video", "file", "files"],
-      "producedTypes": ["video", "textarea"]
+      "imageReferenceShape": { "kind": "content", "family": "image", "cardinality": "many", "representation": "artifact", "formats": { "mimeTypes": ["image/*"] } },
+      "videoReferenceShape": { "kind": "content", "family": "video", "cardinality": "many", "representation": "artifact", "formats": { "mimeTypes": ["video/*"] } },
+      "videoOutputShape": { "kind": "content", "family": "video", "cardinality": "one", "representation": "artifact" },
+      "descriptionOutputShape": { "kind": "content", "family": "text", "cardinality": "one", "representation": "inline" }
     }
   }
 }

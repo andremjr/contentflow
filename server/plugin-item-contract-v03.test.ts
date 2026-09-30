@@ -33,7 +33,7 @@ test("pacote 0.3 rejeita estratégia preferida e associações inconsistentes", 
   );
 });
 
-test("API v1 continua válida sem itemOrchestration", () => {
+test("API v2 continua válida sem itemOrchestration", () => {
   const value = fixture("valid-manifest.json") as PluginManifest;
   delete value.capabilities[0]!.execution.itemOrchestration;
   assert.doesNotThrow(() => validatePluginManifest(value));
@@ -41,7 +41,7 @@ test("API v1 continua válida sem itemOrchestration", () => {
 
 test("schema JSON público expõe os campos aditivos do pacote 0.3", () => {
   const schema = JSON.parse(
-    readFileSync("docs/ecosystem/schemas/contentflow-plugin-v1.schema.json", "utf8"),
+    readFileSync("docs/ecosystem/schemas/contentflow-plugin-v2.schema.json", "utf8"),
   ) as {
     $defs: {
       capability: {

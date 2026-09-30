@@ -17,7 +17,9 @@ import { createProcessOutputFields, getMethodConfigurationIssue } from "../src/l
 
 const now = "2026-08-22T12:00:00.000Z";
 
-function historyShape(valueShape: ReturnType<typeof contentShape> | ReturnType<typeof controlShape>) {
+function historyShape(
+  valueShape: ReturnType<typeof contentShape> | ReturnType<typeof controlShape>,
+) {
   return {
     kind: "record" as const,
     cardinality: "many" as const,

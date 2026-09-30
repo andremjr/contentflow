@@ -44,12 +44,11 @@
           "label": "Texto da narração",
           "description": "Texto enviado ao serviço online de leitura do Microsoft Edge.",
           "required": true,
-          "multiple": false,
           "shape": {
             "kind": "content",
-            "family": "audio",
+            "family": "text",
             "cardinality": "one",
-            "representation": "artifact"
+            "representation": "inline"
           }
         }
       ],

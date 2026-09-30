@@ -1,6 +1,6 @@
 # Claude Code Skill Runner
 
-Plugin independente para ContentFlow Plugin API v1. Ele executa o agente Claude Code em blocos do Método e devolve entregas tipadas. Skills são o caminho principal, mas o agente também pode pesquisar, analisar arquivos, escrever código e criar scripts quando essas ferramentas forem autorizadas no bloco.
+Plugin independente para ContentFlow Plugin API v2. Ele executa o agente Claude Code em blocos do Método e devolve entregas tipadas. Skills são o caminho principal, mas o agente também pode pesquisar, analisar arquivos, escrever código e criar scripts quando essas ferramentas forem autorizadas no bloco.
 
 Este pacote não é afiliado, patrocinado nem mantido pela Anthropic. “Claude” e “Claude Code” identificam apenas o provedor interoperado.
 

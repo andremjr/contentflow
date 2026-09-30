@@ -1,6 +1,6 @@
 # Antigravity Skill Runner
 
-Plugin independente para ContentFlow Plugin API v1. Ele automatiza o agente Antigravity dentro dos blocos do Método como uma pessoa o usaria no terminal: conversa, pesquisa, análise, criação de scripts e edição no workspace, conforme as permissões concedidas. Skills são a especialização principal, mas não limitam as ferramentas do agente.
+Plugin independente para ContentFlow Plugin API v2. Ele automatiza o agente Antigravity dentro dos blocos do Método como uma pessoa o usaria no terminal: conversa, pesquisa, análise, criação de scripts e edição no workspace, conforme as permissões concedidas. Skills são a especialização principal, mas não limitam as ferramentas do agente.
 
 Este pacote não é afiliado, patrocinado nem mantido pelo Google. “Antigravity” identifica apenas o produto interoperado.
 

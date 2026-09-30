@@ -147,7 +147,7 @@ test("rate limit do provedor é tipado", async () => {
 test("transcrição valida MIME antes de ler arquivo", async () => {
   const value = request(
     "transcribe-media",
-    { media: { id: "x", name: "x.txt", mimeType: "text/plain", size: 10, url: "artifact://x" } },
+    { audio: { id: "x", name: "x.txt", mimeType: "text/plain", size: 10, url: "artifact://x" } },
     {},
     {},
   );
@@ -177,7 +177,7 @@ test("transcrição real simulada é armazenada de forma idempotente", async () 
     const value = request(
       "transcribe-media",
       {
-        media: {
+        audio: {
           id: "source",
           name: "source.mp3",
           mimeType: "audio/mpeg",

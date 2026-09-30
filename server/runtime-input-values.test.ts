@@ -17,7 +17,6 @@ const imageInput: BlockInputBinding = {
   portKey: "reference_images",
   presentation: {
     renderer: "image-gallery",
-    itemType: "image",
   },
 };
 
@@ -44,7 +43,7 @@ test("rejects external and MIME-incompatible runtime files", () => {
   const video = validateRuntimeInputValues([imageInput], {
     references: [{ ...image, mimeType: "video/mp4", name: "reference.mp4" }],
   });
-  assert.match(video.error ?? "", /apenas arquivos image/);
+  assert.match(video.error ?? "", /apenas image/);
 });
 
 test("requires every runtime binding before automatic execution", () => {

@@ -1,9 +1,11 @@
 {
   "format": "contentflow-method",
-  "version": 1,
+  "version": 3,
   "name": "Nome do Método",
   "exportedAt": "2026-08-12T12:00:00.000Z",
   "method": {
+    "contractVersion": 3,
+    "name": "Nome do Método",
     "processType": "theme",
     "blocks": [
       {
@@ -18,7 +20,12 @@
             "id": "first-output",
             "label": "Saída",
             "key": "output_value",
-            "type": "textarea",
+            "shape": {
+              "kind": "content",
+              "family": "text",
+              "cardinality": "one",
+              "representation": "inline"
+            },
             "required": true
           }
         ],

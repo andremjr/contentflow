@@ -29,7 +29,6 @@ const presentationSchema = z
       "video-player",
       "decision",
     ]),
-    itemType: z.enum(["text", "record", "file", "image", "audio", "video"]).optional(),
   })
   .strict();
 
@@ -140,6 +139,14 @@ const actionBlockSchema = z
         configuration: z.record(z.union([z.string(), z.number(), z.boolean()])),
         connectionRequired: z.boolean().optional(),
         connectionId: z.string().optional(),
+        profileExecution: z
+          .object({
+            mode: z.enum(["single", "fallback", "parallel"]),
+            profileIds: z.array(z.string().min(1)).min(1),
+            maxParallel: z.number().int().min(1).optional(),
+          })
+          .strict()
+          .optional(),
         conversation: z
           .discriminatedUnion("mode", [
             z.object({ mode: z.literal("new") }).strict(),

@@ -57,12 +57,7 @@ const permissions = [
   "native",
 ] as const;
 const blockTypes = ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"] as const;
-const dataTypes = [
-  "text",
-  "image",
-  "audio",
-  "video",
-] as const;
+const dataTypes = ["text", "image", "audio", "video"] as const;
 
 function contentShape(family: ContentFamily) {
   return {
@@ -533,12 +528,12 @@ export async function sandboxCommand(directory: string) {
       response.status === "error" &&
       (!response.code || !response.message || typeof response.retryable !== "boolean")
     )
-      throw new Error("O plugin devolveu um erro fora do contrato da API v1.");
+      throw new Error("O plugin devolveu um erro fora do contrato da API v2.");
     if (
       response.status === "pending" &&
       (!response.jobId || !Number.isFinite(response.pollAfterMs))
     )
-      throw new Error("O plugin devolveu uma pendência fora do contrato da API v1.");
+      throw new Error("O plugin devolveu uma pendência fora do contrato da API v2.");
     output.write(
       `✓ Execução real encerrada no sandbox do ContentFlow (${response.status}).\n✓ Permissões concedidas somente conforme manifesto: ${result.manifest.permissions.join(", ") || "nenhuma"}.\n`,
     );
@@ -548,7 +543,7 @@ export async function sandboxCommand(directory: string) {
 }
 
 export async function compatibilityReport(directory: string) {
-  const lines = ["RELATÓRIO DE COMPATIBILIDADE — CONTENTFLOW PLUGIN API v1", ""];
+  const lines = ["RELATÓRIO DE COMPATIBILIDADE — CONTENTFLOW PLUGIN API v2", ""];
   let compatible = true;
   try {
     const result = validatePluginDirectory(directory);

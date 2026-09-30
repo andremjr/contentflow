@@ -99,20 +99,21 @@ function outputValue(processType: UniversalProcess) {
     name: `${processType}.bin`,
     size: 12,
     mimeType:
-      processType === "narration"
+      field.shape.kind === "content" && field.shape.family === "audio"
         ? "audio/mpeg"
-        : processType === "thumbnail"
+        : field.shape.kind === "content" && field.shape.family === "image"
           ? "image/png"
           : "video/mp4",
     url: "/api/files/synthetic",
   };
-  const value = field.shape.kind === "content" && ["image", "audio", "video"].includes(field.shape.family)
-    ? file
-    : field.shape.cardinality === "many"
+  const value =
+    field.shape.cardinality === "many"
       ? [file]
-      : processType === "publishing"
-        ? "https://example.com/video"
-        : `final ${processType}`;
+      : field.shape.kind === "content" && ["image", "audio", "video"].includes(field.shape.family)
+        ? file
+        : processType === "publishing"
+          ? "https://example.com/video"
+          : `final ${processType}`;
   return { [field.key]: value };
 }
 

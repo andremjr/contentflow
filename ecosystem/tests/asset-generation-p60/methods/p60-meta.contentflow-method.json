@@ -1,6 +1,6 @@
 {
   "format": "contentflow-method",
-  "version": 1,
+  "version": 3,
   "name": "P60 — Meta mínimo",
   "exportedAt": "2026-09-25T12:00:00.000Z",
   "method": {
@@ -17,15 +17,15 @@
           {
             "id": "p60-meta-prompts",
             "label": "Prompts",
-            "type": "list",
-            "source": "static",
-            "staticValue": [
-              "Cinematic aerial view of a city at dawn, warm light, 16:9",
-              "Close-up of a rainforest trail in gentle rain, realistic documentary style, 16:9",
-              "Wide cinematic coastline before a storm, dramatic clouds, realistic documentary style, 16:9",
-              "Craft workshop at night with warm practical lights, cinematic documentary photography, 16:9",
-              "Morning commuter train crossing a misty valley, cinematic realism, 16:9"
-            ],
+            "shape": {
+              "kind": "content",
+              "family": "text",
+              "cardinality": "one",
+              "representation": "inline"
+            },
+            "binding": {
+              "kind": "runtime"
+            },
             "portKey": "prompt"
           }
         ],
@@ -34,14 +34,22 @@
             "id": "p60-meta-images",
             "label": "Imagens",
             "key": "images",
-            "portKey": "images",
-            "type": "files",
+            "shape": {
+              "kind": "content",
+              "family": "image",
+              "cardinality": "many",
+              "representation": "artifact",
+              "formats": {
+                "mimeTypes": [
+                  "image/*"
+                ]
+              }
+            },
             "required": true,
             "presentation": {
-              "renderer": "image-gallery",
-              "itemType": "image",
-              "acceptedMimeTypes": ["image/*"]
-            }
+              "renderer": "image-gallery"
+            },
+            "portKey": "images"
           }
         ],
         "parameters": [],
@@ -50,7 +58,9 @@
           "pluginId": "local.contentflow.meta-ai-browser-studio",
           "pluginVersion": "1.0.5",
           "capabilityId": "generate-image-in-browser",
-          "configuration": { "aspectRatio": "16:9" },
+          "configuration": {
+            "aspectRatio": "16:9"
+          },
           "connectionRequired": false
         }
       },
@@ -66,7 +76,17 @@
             "id": "p60-meta-selected",
             "label": "Selecionadas",
             "key": "selected_value",
-            "type": "files",
+            "shape": {
+              "kind": "content",
+              "family": "image",
+              "cardinality": "many",
+              "representation": "artifact",
+              "formats": {
+                "mimeTypes": [
+                  "image/*"
+                ]
+              }
+            },
             "required": true,
             "optionsSourceBlockId": "p60-meta-generate",
             "optionsSourceKey": "images"
@@ -82,6 +102,7 @@
         "parameters": [],
         "order": 1
       }
-    ]
+    ],
+    "contractVersion": 3
   }
 }

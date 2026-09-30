@@ -4,7 +4,9 @@
   "blockId": "fixture-block",
   "capabilityId": "transcribe-to-srt",
   "attempt": 1,
-  "invocation": { "mode": "start" },
+  "invocation": {
+    "mode": "start"
+  },
   "configuration": {
     "region": "us",
     "segmentationMode": "sentence",
@@ -14,7 +16,7 @@
   },
   "settings": {},
   "inputs": {
-    "media_files": {
+    "audio_files": {
       "id": "fixture-audio",
       "name": "audio.mp3",
       "mimeType": "audio/mpeg",
@@ -25,9 +27,14 @@
   "inputContract": [
     {
       "id": "fixture-input",
-      "portKey": "media_files",
-      "label": "Áudios ou vídeos",
-      "type": "audio"
+      "portKey": "audio_files",
+      "label": "Áudios",
+      "shape": {
+        "kind": "content",
+        "family": "audio",
+        "cardinality": "many",
+        "representation": "artifact"
+      }
     }
   ],
   "outputContract": [
@@ -35,8 +42,19 @@
       "portKey": "subtitles",
       "label": "Legendas SRT",
       "key": "subtitles",
-      "type": "files",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "many",
+        "representation": "artifact",
+        "formats": {
+          "mimeTypes": [
+            "application/x-subrip",
+            "text/plain"
+          ]
+        }
+      }
     }
   ],
   "context": {
@@ -48,9 +66,16 @@
       "language": "pt-BR",
       "niche": "Testes"
     },
-    "project": { "id": "fixture-project", "title": "Projeto fictício" },
+    "project": {
+      "id": "fixture-project",
+      "title": "Projeto fictício"
+    },
     "processType": "narration",
-    "block": { "type": "CRIAR", "name": "Gerar legendas", "instructions": "Transcreva a mídia." },
+    "block": {
+      "type": "CRIAR",
+      "name": "Gerar legendas",
+      "instructions": "Transcreva a mídia."
+    },
     "previousProcessOutputs": [],
     "previousBlockOutputs": []
   }

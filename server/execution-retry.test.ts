@@ -47,7 +47,13 @@ test("tentativas técnicas não esgotam as rodadas da validação humana", () =>
       name: "Review",
       inputs: [],
       outputs: [
-        { id: "decision", key: "decision", label: "Decision", shape: { kind: "control", control: "approval", cardinality: "one" }, required: true },
+        {
+          id: "decision",
+          key: "decision",
+          label: "Decision",
+          shape: { kind: "control", control: "approval", cardinality: "one" },
+          required: true,
+        },
       ],
       parameters: [],
       instructions: "",
@@ -303,7 +309,15 @@ test("aceita a entrega persistida de um bloco cancelado sem refazer blocos anter
       operator: "Código",
       name: "Criar SRT",
       inputs: [],
-      outputs: [{ id: "srt-output", key: "srt", label: "SRT", shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" }, required: true }],
+      outputs: [
+        {
+          id: "srt-output",
+          key: "srt",
+          label: "SRT",
+          shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+          required: true,
+        },
+      ],
       parameters: [],
       instructions: "",
       order: 0,
@@ -315,7 +329,13 @@ test("aceita a entrega persistida de um bloco cancelado sem refazer blocos anter
       name: "Criar prompts",
       inputs: [],
       outputs: [
-        { id: "prompts-output", key: "prompts", label: "Prompts", shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" }, required: true },
+        {
+          id: "prompts-output",
+          key: "prompts",
+          label: "Prompts",
+          shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
+          required: true,
+        },
       ],
       parameters: [],
       instructions: "",
@@ -328,7 +348,18 @@ test("aceita a entrega persistida de um bloco cancelado sem refazer blocos anter
       name: "Criar imagens",
       inputs: [],
       outputs: [
-        { id: "assets-output", key: "assets", label: "Assets", shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" }, required: true },
+        {
+          id: "images-output",
+          key: "images",
+          label: "Imagens",
+          shape: {
+            kind: "content",
+            family: "image",
+            cardinality: "many",
+            representation: "artifact",
+          },
+          required: true,
+        },
       ],
       parameters: [],
       instructions: "",
@@ -355,7 +386,7 @@ test("aceita a entrega persistida de um bloco cancelado sem refazer blocos anter
     blocks: [
       { blockId: "srt", status: "completed", values: { srt: "ok" }, attempt: 1 },
       { blockId: "prompts", status: "completed", values: { prompts: ["a", "b"] }, attempt: 1 },
-      { blockId: "images", status: "cancelled", values: { assets: images }, attempt: 7 },
+      { blockId: "images", status: "cancelled", values: { images }, attempt: 7 },
     ],
   };
   const commands = executionCommands({
@@ -374,10 +405,10 @@ test("aceita a entrega persistida de um bloco cancelado sem refazer blocos anter
   assert.equal(execution.blocks[1].attempt, 1);
   assert.equal(execution.blocks[2].status, "completed");
   assert.equal(execution.blocks[2].attempt, 7);
-  assert.equal((execution.blocks[2].values.assets as typeof images).length, 124);
+  assert.equal((execution.blocks[2].values.images as typeof images).length, 124);
   assert.equal(execution.status, "completed");
   assert.equal(execution.outputStatus, "completed");
-  assert.equal((execution.output?.values.assets as typeof images).length, 124);
+  assert.equal((execution.output?.values.images as typeof images).length, 124);
   assert.equal(project.stages.assets, "done");
 });
 

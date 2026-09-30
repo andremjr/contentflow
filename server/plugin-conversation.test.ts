@@ -28,7 +28,12 @@ const execution: ProcessExecution = {
   projectId: "project",
   channelId: "channel",
   processType: "script",
-  methodSnapshot: { contractVersion: 3, name: "Método de teste", processType: "script", blocks: [source, target] },
+  methodSnapshot: {
+    contractVersion: 3,
+    name: "Método de teste",
+    processType: "script",
+    blocks: [source, target],
+  },
   blocks: [
     {
       blockId: source.id,

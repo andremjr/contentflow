@@ -116,9 +116,12 @@ test("runtime requires explicit output bindings before creating a plugin job", a
           {
             id: "source",
             label: "Texto",
-            type: "textarea",
-            source: "static",
-            staticValue: "explicit output",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             binding: { kind: "static", value: "explicit output" },
             portKey: "content",
           },
@@ -156,7 +159,12 @@ test("runtime requires explicit output bindings before creating a plugin job", a
           projectId,
           channelId: "output-contract-channel",
           processType: "theme",
-          methodSnapshot: { processType: "theme", blocks: [block] },
+          methodSnapshot: {
+            contractVersion: 3,
+            name: "Output contract",
+            processType: "theme",
+            blocks: [block],
+          },
           blocks: [
             {
               blockId: block.id,

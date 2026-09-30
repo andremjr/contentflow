@@ -1,6 +1,6 @@
 # AssemblyAI SRT Studio
 
-Plugin privado compatível com ContentFlow Plugin API v1. Ele converte a lógica de `legendas.py` para uma capability assíncrona de transcrição e geração de SRT, sem exigir Python ou instalar dependências em runtime.
+Plugin privado compatível com ContentFlow Plugin API v2. Ele converte a lógica de `legendas.py` para uma capability assíncrona de transcrição e geração de SRT, sem exigir Python ou instalar dependências em runtime.
 
 ## Comportamento preservado
 

@@ -32,7 +32,12 @@
       "id": "google-flow-fixture-input",
       "portKey": "prompts",
       "label": "Prompts",
-      "type": "textarea"
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "many",
+        "representation": "inline"
+      }
     }
   ],
   "outputContract": [
@@ -40,8 +45,18 @@
       "portKey": "images",
       "label": "Imagens geradas",
       "key": "images",
-      "type": "files",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "image",
+        "cardinality": "many",
+        "representation": "artifact",
+        "formats": {
+          "mimeTypes": [
+            "image/*"
+          ]
+        }
+      }
     }
   ],
   "context": {

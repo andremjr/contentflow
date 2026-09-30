@@ -97,11 +97,10 @@
           "key": "query",
           "label": "Termos de busca",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
-            "cardinality": "many",
+            "cardinality": "one",
             "representation": "inline"
           }
         }
@@ -269,11 +268,10 @@
           "key": "query",
           "label": "Termos de busca",
           "required": true,
-          "multiple": true,
           "shape": {
             "kind": "content",
             "family": "text",
-            "cardinality": "many",
+            "cardinality": "one",
             "representation": "inline"
           }
         }
@@ -436,7 +434,6 @@
           "label": "Briefings visuais por trecho",
           "description": "Records gerados a partir da transcrição. Cada item deve conter brief_id, tempos, primary_query e, opcionalmente, fallbacks, preferência de mídia, orientação e termos negativos.",
           "required": true,
-          "multiple": true,
           "presentation": {
             "renderer": "table"
           },
@@ -633,7 +630,6 @@
           "label": "Assets selecionados por trecho",
           "description": "Records produzidos pela busca automática por briefings. Somente estes vencedores serão baixados.",
           "required": true,
-          "multiple": true,
           "presentation": {
             "renderer": "cards"
           },
@@ -651,18 +647,12 @@
           "description": "Um arquivo local por briefing, preservando brief_id, timestamps, provedor, atribuição e licença.",
           "required": true,
           "presentation": {
-            "renderer": "file-list"
+            "renderer": "cards"
           },
           "shape": {
-            "kind": "content",
-            "family": "video",
+            "kind": "record",
             "cardinality": "many",
-            "representation": "artifact",
-            "formats": {
-              "mimeTypes": [
-                "video/*"
-              ]
-            }
+            "fields": []
           }
         }
       ],
@@ -734,10 +724,9 @@
           "key": "asset",
           "label": "Imagem stock escolhida",
           "required": true,
-          "multiple": false,
           "shape": {
             "kind": "record",
-            "cardinality": "many",
+            "cardinality": "one",
             "fields": []
           }
         }
@@ -771,7 +760,7 @@
           },
           "shape": {
             "kind": "record",
-            "cardinality": "many",
+            "cardinality": "one",
             "fields": []
           }
         }
@@ -838,10 +827,9 @@
           "key": "asset",
           "label": "Vídeo stock escolhido",
           "required": true,
-          "multiple": false,
           "shape": {
             "kind": "record",
-            "cardinality": "many",
+            "cardinality": "one",
             "fields": []
           }
         }
@@ -875,7 +863,7 @@
           },
           "shape": {
             "kind": "record",
-            "cardinality": "many",
+            "cardinality": "one",
             "fields": []
           }
         }

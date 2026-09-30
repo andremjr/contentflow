@@ -4,7 +4,9 @@
   "blockId": "chatgpt-browser-fixture-block",
   "capabilityId": "generate-text-in-browser",
   "attempt": 1,
-  "invocation": { "mode": "start" },
+  "invocation": {
+    "mode": "start"
+  },
   "configuration": {
     "promptTemplate": "{{BLOCK_INSTRUCTIONS}}\n\n{{CONTENT}}",
     "generationMode": "single",
@@ -15,18 +17,37 @@
     "delayBetweenPartsMs": 0,
     "retryAttempts": 0
   },
-  "settings": { "diagnosticMockResponse": "Resposta fictícia para validar o sandbox." },
-  "inputs": { "content": "Tema fictício" },
+  "settings": {
+    "diagnosticMockResponse": "Resposta fictícia para validar o sandbox."
+  },
+  "inputs": {
+    "content": "Tema fictício"
+  },
   "inputContract": [
-    { "id": "fixture-input", "portKey": "content", "label": "Contexto", "type": "textarea" }
+    {
+      "id": "fixture-input",
+      "portKey": "content",
+      "label": "Contexto",
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "many",
+        "representation": "inline"
+      }
+    }
   ],
   "outputContract": [
     {
       "portKey": "result",
       "label": "Texto gerado",
       "key": "result",
-      "type": "textarea",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "context": {
@@ -38,9 +59,16 @@
       "language": "pt-BR",
       "niche": "Histórias"
     },
-    "project": { "id": "fixture-project", "title": "Projeto fictício" },
+    "project": {
+      "id": "fixture-project",
+      "title": "Projeto fictício"
+    },
     "processType": "script",
-    "block": { "type": "CRIAR", "name": "Criar texto", "instructions": "Escreva um teste." },
+    "block": {
+      "type": "CRIAR",
+      "name": "Criar texto",
+      "instructions": "Escreva um teste."
+    },
     "previousProcessOutputs": [],
     "previousBlockOutputs": []
   }

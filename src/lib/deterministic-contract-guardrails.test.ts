@@ -109,19 +109,7 @@ test("keeps runtime input sources deterministic and canonical bindings authorita
     /kind: "previous_process"[\s\S]*processType: UniversalProcess;[\s\S]*outputKey: string/,
   );
 
-  const bindingMaterialization = read("src/lib/input-source-binding.ts");
-  assert.doesNotMatch(bindingMaterialization, /\.label\b|portKey|pluginId|capabilityId/);
-  assert.deepEqual(filesMentioning("canonicalInputBindingFromLegacy("), [
-    "src/lib/input-source-binding.ts",
-    "src/lib/legacy-method-adapter.ts",
-  ]);
-  const legacyAdapter = read("src/lib/legacy-method-adapter.ts");
-  assert.match(
-    legacyAdapter,
-    /Explicit compatibility boundary for historical Method representations/,
-  );
-  assert.match(legacyAdapter, /candidates\.length !== 1/);
-  assert.doesNotMatch(legacyAdapter, /labelScore|normalizeLabel|\.sort\(/);
+  assert.deepEqual(filesMentioning("canonicalInputBindingFromLegacy("), []);
 
   const pluginInputs = read("server/plugin-input-values.ts");
   const portSelection = sourceBetween(
@@ -131,11 +119,11 @@ test("keeps runtime input sources deterministic and canonical bindings authorita
   );
   assert.match(portSelection, /if \(!input\.portKey\) return undefined/);
   assert.match(portSelection, /ports\.find\(\(candidate\) => candidate\.key === input\.portKey\)/);
-  assert.match(portSelection, /legacyTypeListAccepts\(port\.acceptedTypes, input\.type\)/);
-  assert.match(portSelection, /!port\.multiple && usedInputPorts\.has\(port\.key\)/);
+  assert.match(portSelection, /areValueShapesCompatible\(input\.shape, port\.shape\)/);
+  assert.match(portSelection, /usedInputPorts\.has\(port\.key\)/);
   assert.doesNotMatch(
     portSelection,
-    /\.sort\(|\.filter\(|acceptedTypes[\s\S]*\[0\]|presentation|sourceKey|input\.label|input\.id/,
+    /\.sort\(|\.filter\(|acceptedTypes|multiple|presentation|sourceKey|input\.label|input\.id/,
     "runtime input port selection must be an exact portKey lookup without ranking or fallback",
   );
 });
@@ -169,14 +157,14 @@ test("keeps plugin output bindings and executor response normalization explicit"
   assert.match(responseNormalizer, /GENERIC_RESULT_ALIAS_NOT_ALLOWED/);
   assert.match(responseNormalizer, /UNKNOWN_OUTPUT_PORT/);
   assert.match(responseNormalizer, /MISSING_REQUIRED_OUTPUT/);
-  assert.match(responseNormalizer, /INCOMPATIBLE_OUTPUT_TYPE/);
+  assert.match(responseNormalizer, /INCOMPATIBLE_OUTPUT_SHAPE/);
 
   assert.match(outputContracts, /if \(!field\.portKey\) return true/);
   assert.match(
     outputContracts,
     /ports\.find\(\(candidate\) => candidate\.key === field\.portKey\)/,
   );
-  assert.match(outputContracts, /legacyTypeListAccepts\(port\.producedTypes, field\.type\)/);
+  assert.match(outputContracts, /areValueShapesCompatible\(port\.shape, field\.shape\)/);
   assert.match(outputContracts, /portKey: field\.portKey!/);
   assert.doesNotMatch(outputContracts, /ports\.filter|ports\[0\]|portKey:\s*field\.key/);
   assert.doesNotMatch(
@@ -185,17 +173,18 @@ test("keeps plugin output bindings and executor response normalization explicit"
   );
   assert.match(
     pluginOperation,
-    /validatePluginOutputContract\(block\.outputs \?\? \[\], capability\.outputPorts\)/,
+    /validatePluginOutputContract\([\s\S]*block\.outputs \?\? \[\],[\s\S]*capability\.outputPorts/,
   );
   assert.match(
     pluginOperation,
     /if \(validatedOutputs\.unsupportedFields\.length\)[\s\S]*status: 422/,
   );
-  assert.match(pluginOperation, /:\s*validatedOutputs\.outputContract/);
+  assert.match(
+    pluginOperation,
+    /const outputContract: PluginFieldContract\[\] = validatedOutputs\.outputContract/,
+  );
 
-  // ESCOLHER remains a single, explicitly delimited historical compatibility path.
-  assert.equal((pluginOperation.match(/capability\.outputPorts\[0\]/g) ?? []).length, 1);
-  assert.match(pluginOperation, /ESCOLHER keeps its historical collection-selection contract/);
+  assert.doesNotMatch(pluginOperation, /capability\.outputPorts\[0\]/);
   assert.doesNotMatch(
     pluginOperation,
     /targetBlock\?\.outputs\?\.\[0\]|targetBlock\.outputs\?\.\[0\]/,
@@ -206,11 +195,11 @@ test("keeps plugin output bindings and executor response normalization explicit"
   );
   assert.match(
     pluginOperation,
-    /validation\.targetPortKey[\s\S]*capability\.inputPorts\.find\([\s\S]*port\.key === validation\.targetPortKey[\s\S]*legacyTypeListAccepts/,
+    /validation\.targetPortKey[\s\S]*capability\.inputPorts\.find\([\s\S]*port\.key === validation\.targetPortKey[\s\S]*areValueShapesCompatible/,
   );
   assert.doesNotMatch(
     pluginOperation,
-    /capability\.inputPorts\.find\(\s*\(port\) =>\s*legacyTypeListAccepts/,
+    /capability\.inputPorts\.find\(\s*\(port\) =>\s*areValueShapesCompatible/,
   );
   assert.doesNotMatch(pluginOperation, /capability\.inputPorts\[0\]/);
 

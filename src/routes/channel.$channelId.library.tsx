@@ -553,7 +553,9 @@ function NewCollection({ channelId }: { channelId: string }) {
                   />
                   <Select
                     value={shapeOption(field.shape)}
-                    onValueChange={(option) => updateField(field.id, { shape: shapeFromOption(option) })}
+                    onValueChange={(option) =>
+                      updateField(field.id, { shape: shapeFromOption(option) })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -840,7 +842,11 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
                 ) : (
                   <Input
                     type={
-                      isControl(field, "number") ? "number" : isControl(field, "url") ? "url" : "text"
+                      isControl(field, "number")
+                        ? "number"
+                        : isControl(field, "url")
+                          ? "url"
+                          : "text"
                     }
                     value={
                       typeof fieldValue === "string" || typeof fieldValue === "number"

@@ -35,7 +35,7 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
   await writeFile(
     path.join(pluginDirectory, "contentflow.plugin.json"),
     JSON.stringify({
-      apiVersion: "1",
+      apiVersion: "2",
       id: "test.contentflow.browser-fallback",
       name: "Browser fallback test",
       version: "1.0.0",
@@ -60,13 +60,27 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
             {
               key: "prompts",
               label: "Prompts",
-              acceptedTypes: ["list", "text"],
+              shape: {
+                kind: "content",
+                family: "text",
+                cardinality: "many",
+                representation: "inline",
+              },
               required: true,
-              multiple: true,
             },
           ],
           outputPorts: [
-            { key: "results", label: "Resultados", producedTypes: ["list"], required: true },
+            {
+              key: "results",
+              label: "Resultados",
+              shape: {
+                kind: "content",
+                family: "text",
+                cardinality: "many",
+                representation: "inline",
+              },
+              required: true,
+            },
           ],
           execution: {
             mode: "immediate",
@@ -203,8 +217,12 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
         {
           id: "prompts",
           label: "Prompts",
-          type: "list",
-          source: "runtime",
+          shape: {
+            kind: "content",
+            family: "text",
+            cardinality: "many",
+            representation: "inline",
+          },
           binding: { kind: "runtime" },
           portKey: "prompts",
         },
@@ -214,7 +232,12 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
           id: "results",
           label: "Resultados",
           key: "results",
-          type: "list",
+          shape: {
+            kind: "content",
+            family: "text",
+            cardinality: "many",
+            representation: "inline",
+          },
           required: true,
           portKey: "results",
         },
@@ -239,7 +262,7 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
         channelId: "fallback-channel",
         processType: "theme",
         methodSnapshot: {
-          contractVersion: 2,
+          contractVersion: 3,
           name: "Fallback",
           processType: "theme",
           blocks: [block],
@@ -339,7 +362,7 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
         channelId: "fallback-channel",
         processType: "theme",
         methodSnapshot: {
-          contractVersion: 2,
+          contractVersion: 3,
           name: "Fallback cancel",
           processType: "theme",
           blocks: [hangingBlock],
@@ -464,7 +487,7 @@ test("perfil ocupado avança imediatamente para o próximo perfil preparado", as
   await writeFile(
     path.join(pluginDirectory, "contentflow.plugin.json"),
     JSON.stringify({
-      apiVersion: "1",
+      apiVersion: "2",
       id: "test.contentflow.browser-busy-fallback",
       name: "Browser busy fallback test",
       version: "1.0.0",
@@ -487,7 +510,17 @@ test("perfil ocupado avança imediatamente para o próximo perfil preparado", as
           processTypes: ["theme"],
           inputPorts: [],
           outputPorts: [
-            { key: "result", label: "Resultado", producedTypes: ["text"], required: true },
+            {
+              key: "result",
+              label: "Resultado",
+              shape: {
+                kind: "content",
+                family: "text",
+                cardinality: "one",
+                representation: "inline",
+              },
+              required: true,
+            },
           ],
           execution: { mode: "immediate", maxConcurrency: 1, defaultTimeoutMs: 30_000 },
           sideEffects: [],
@@ -651,7 +684,12 @@ test("perfil ocupado avança imediatamente para o próximo perfil preparado", as
           id: "result",
           label: "Resultado",
           key: "result",
-          type: "text",
+          shape: {
+            kind: "content",
+            family: "text",
+            cardinality: "one",
+            representation: "inline",
+          },
           required: true,
           portKey: "result",
         },
@@ -672,7 +710,12 @@ test("perfil ocupado avança imediatamente para o próximo perfil preparado", as
         projectId: "busy-project",
         channelId: "busy-channel",
         processType: "theme",
-        methodSnapshot: { processType: "theme", blocks: [block] },
+        methodSnapshot: {
+          contractVersion: 3,
+          name: "Busy fallback",
+          processType: "theme",
+          blocks: [block],
+        },
         blocks: [
           {
             blockId: "busy-block",

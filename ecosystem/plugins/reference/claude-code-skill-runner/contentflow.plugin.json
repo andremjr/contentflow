@@ -58,11 +58,11 @@
           "label": "Contexto",
           "description": "Entradas resolvidas que o agente usará para produzir a entrega.",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -73,9 +73,10 @@
           "description": "Entrega tipada produzida pelo Claude Code.",
           "required": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -200,11 +201,11 @@
           "key": "context",
           "label": "Contexto da escolha",
           "required": false,
-          "multiple": true,
           "shape": {
-            "kind": "record",
-            "cardinality": "many",
-            "fields": []
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -215,7 +216,7 @@
           "required": true,
           "shape": {
             "kind": "control",
-            "control": "selection",
+            "control": "identifier",
             "cardinality": "one"
           }
         }

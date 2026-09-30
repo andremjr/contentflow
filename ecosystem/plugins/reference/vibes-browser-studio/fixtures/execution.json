@@ -4,7 +4,9 @@
   "blockId": "p43-generate-images",
   "capabilityId": "generate-images-in-browser",
   "attempt": 1,
-  "invocation": { "mode": "start" },
+  "invocation": {
+    "mode": "start"
+  },
   "configuration": {
     "accountProfile": "default",
     "fallbackAccountProfiles": [],
@@ -13,13 +15,20 @@
     "startMinimized": true
   },
   "settings": {},
-  "inputs": { "prompts": "" },
+  "inputs": {
+    "prompts": ""
+  },
   "inputContract": [
     {
       "id": "prompt",
       "portKey": "prompts",
       "label": "Prompts",
-      "type": "textarea"
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "many",
+        "representation": "inline"
+      }
     }
   ],
   "outputContract": [
@@ -27,18 +36,38 @@
       "portKey": "images",
       "label": "Imagens geradas",
       "key": "images",
-      "type": "files",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "image",
+        "cardinality": "many",
+        "representation": "artifact",
+        "formats": {
+          "mimeTypes": [
+            "image/png",
+            "image/jpeg",
+            "image/webp"
+          ]
+        }
+      }
     },
     {
       "portKey": "project_url",
       "label": "URL do projeto",
       "key": "project_url",
-      "type": "url",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "control",
+        "control": "url",
+        "cardinality": "one"
+      }
     }
   ],
-  "batch": { "itemId": "p43-prompt-1", "index": 0, "total": 1 },
+  "batch": {
+    "itemId": "p43-prompt-1",
+    "index": 0,
+    "total": 1
+  },
   "context": {
     "locale": "pt-BR",
     "timeZone": "America/Sao_Paulo",
@@ -48,9 +77,16 @@
       "language": "pt-BR",
       "niche": "Testes"
     },
-    "project": { "id": "p43-project", "title": "Projeto P43" },
+    "project": {
+      "id": "p43-project",
+      "title": "Projeto P43"
+    },
     "processType": "assets",
-    "block": { "type": "CRIAR", "name": "Gerar imagens no Vibes", "instructions": "" },
+    "block": {
+      "type": "CRIAR",
+      "name": "Gerar imagens no Vibes",
+      "instructions": ""
+    },
     "previousProcessOutputs": [],
     "previousBlockOutputs": []
   }

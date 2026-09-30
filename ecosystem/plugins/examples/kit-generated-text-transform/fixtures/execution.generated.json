@@ -17,7 +17,12 @@
       "id": "kit-input",
       "portKey": "content",
       "label": "Texto",
-      "type": "textarea"
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "outputContract": [
@@ -25,8 +30,13 @@
       "portKey": "result",
       "label": "Resultado",
       "key": "result",
-      "type": "textarea",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "text",
+        "cardinality": "one",
+        "representation": "inline"
+      }
     }
   ],
   "context": {

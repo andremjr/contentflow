@@ -4,7 +4,9 @@
   "blockId": "ffmpeg-sequence-fixture-block",
   "capabilityId": "compose-image-sequence-with-audio",
   "attempt": 1,
-  "invocation": { "mode": "start" },
+  "invocation": {
+    "mode": "start"
+  },
   "configuration": {
     "width": 1920,
     "height": 1080,
@@ -33,16 +35,66 @@
     }
   },
   "inputContract": [
-    { "id": "images", "portKey": "images", "label": "Imagens ordenadas", "type": "files" },
-    { "id": "audio", "portKey": "audio", "label": "Áudio final", "type": "audio" }
+    {
+      "id": "images",
+      "portKey": "images",
+      "label": "Imagens ordenadas",
+      "shape": {
+        "kind": "content",
+        "family": "image",
+        "cardinality": "many",
+        "representation": "artifact",
+        "formats": {
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "audio",
+      "portKey": "audio",
+      "label": "Áudio final",
+      "shape": {
+        "kind": "content",
+        "family": "audio",
+        "cardinality": "one",
+        "representation": "artifact",
+        "formats": {
+          "mimeTypes": [
+            "audio/aac",
+            "audio/flac",
+            "audio/mp4",
+            "audio/mpeg",
+            "audio/ogg",
+            "audio/opus",
+            "audio/wav",
+            "audio/webm",
+            "audio/x-m4a"
+          ]
+        }
+      }
+    }
   ],
   "outputContract": [
     {
       "portKey": "video",
       "label": "Vídeo final",
       "key": "video",
-      "type": "video",
-      "required": true
+      "required": true,
+      "shape": {
+        "kind": "content",
+        "family": "video",
+        "cardinality": "one",
+        "representation": "artifact",
+        "formats": {
+          "mimeTypes": [
+            "video/mp4"
+          ]
+        }
+      }
     }
   ],
   "context": {
@@ -54,9 +106,16 @@
       "language": "pt-BR",
       "niche": "Testes"
     },
-    "project": { "id": "fixture-project", "title": "Projeto fictício" },
+    "project": {
+      "id": "fixture-project",
+      "title": "Projeto fictício"
+    },
     "processType": "editing",
-    "block": { "type": "CRIAR", "name": "Montar vídeo", "instructions": "Monte o vídeo final." },
+    "block": {
+      "type": "CRIAR",
+      "name": "Montar vídeo",
+      "instructions": "Monte o vídeo final."
+    },
     "previousProcessOutputs": [],
     "previousBlockOutputs": []
   }
