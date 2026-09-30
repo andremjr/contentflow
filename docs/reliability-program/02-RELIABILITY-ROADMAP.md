@@ -64,16 +64,18 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 
 ### Deterministic Contracts — TASK-021 a TASK-028
 
-| Task     | Missão                                                  | Estado  |
-| -------- | ------------------------------------------------------- | ------- |
-| TASK-021 | Guardrails arquiteturais automatizados                  | `done`  |
-| TASK-022 | Representação canônica de bindings                      | `done`  |
-| TASK-023 | Retirar `labelScore` do runtime canônico                | `done`  |
-| TASK-024 | Porta de entrada de plugin explícita                    | `done`  |
-| TASK-025 | Outputs de plugin explícitos                            | `done`  |
-| TASK-026 | `VALIDAR` com alvo explícito                            | `done`  |
-| TASK-027 | Adapter para Métodos legados                            | `done`  |
-| TASK-028 | Normalização/validação canônica da resposta do executor | `ready` |
+| Task     | Missão                                                  | Estado |
+| -------- | ------------------------------------------------------- | ------ |
+| TASK-021 | Guardrails arquiteturais automatizados                  | `done` |
+| TASK-022 | Representação canônica de bindings                      | `done` |
+| TASK-023 | Retirar `labelScore` do runtime canônico                | `done` |
+| TASK-024 | Porta de entrada de plugin explícita                    | `done` |
+| TASK-025 | Outputs de plugin explícitos                            | `done` |
+| TASK-026 | `VALIDAR` com alvo explícito                            | `done` |
+| TASK-027 | Adapter para Métodos legados                            | `done` |
+| TASK-028 | Normalização/validação canônica da resposta do executor | `done` |
+
+Deterministic Contracts está encerrada. Nenhuma task da fase Universal Recovery está autorizada ou pronta por consequência automática desse encerramento.
 
 ### Universal Recovery — TASK-029 a TASK-038
 

@@ -318,11 +318,10 @@ function textList(t) {
 }
 function searchValues(text, sources, r) {
   const f = r?.outputContract ?? [];
-  if (!f.length) return { result: text, sources };
   const v = {};
   for (const x of f) {
     const src = /source|fonte|url|link/i.test(`${x.key} ${x.label}`);
-    v[x.key] = src
+    v[x.portKey] = src
       ? x.type === "url"
         ? (sources[0] ?? URL_NEW)
         : sources
@@ -333,9 +332,10 @@ function searchValues(text, sources, r) {
   return v;
 }
 function generationValues(result, responses, r) {
-  const v = { result };
-  if ((r?.outputContract ?? []).some((x) => x.key === "parts"))
-    v.parts = responses.map((x) => x.text);
+  const v = {};
+  for (const field of r?.outputContract ?? []) {
+    v[field.portKey] = field.key === "parts" ? responses.map((response) => response.text) : result;
+  }
   return v;
 }
 function clean(t) {

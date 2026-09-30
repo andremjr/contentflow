@@ -23,9 +23,8 @@
         "FORMATO OBRIGATÓRIO"
       ],
       "mockResponse": "Primeiro parágrafo.\n\nSegundo parágrafo.",
-      "outputContract": [{ "key": "parts", "type": "list" }],
+      "outputContract": [{ "key": "parts", "portKey": "parts", "type": "list" }],
       "expectedValues": {
-        "result": "Primeiro parágrafo.\n\nSegundo parágrafo.",
         "parts": ["Primeiro parágrafo.\n\nSegundo parágrafo."]
       }
     },

@@ -135,6 +135,12 @@ function outputField(request) {
   return fields.find((field) => field.portKey === "result") ?? fields[0];
 }
 
+function responseValues(request, parsed, choosing) {
+  const field = outputField(request);
+  if (!field) return {};
+  return { [field.portKey]: parsed?.[choosing ? "selectedItemId" : "result"] };
+}
+
 function outputSchema(request, choosing) {
   if (choosing) {
     const items = request.context?.selectedCollection?.items ?? [];
@@ -399,7 +405,10 @@ export async function executeWithRunner(request, services, runner = runCodexProc
     const configuration = normalizedConfiguration(request.configuration);
     const schema = outputSchema(request, choosing);
     if (configuration.diagnosticMode) {
-      return { status: "success", values: diagnosticResult(request, choosing) };
+      return {
+        status: "success",
+        values: responseValues(request, diagnosticResult(request, choosing), choosing),
+      };
     }
 
     const workspaceRoot = services.getWorkspacePath(".");
@@ -503,7 +512,7 @@ export async function executeWithRunner(request, services, runner = runCodexProc
     }
     const response = {
       status: "success",
-      values: parsed,
+      values: responseValues(request, parsed, choosing),
       usage: { provider: "OpenAI", model: configuration.model },
     };
     const conversationId = conversationIdFromEvents(execution?.stdout);

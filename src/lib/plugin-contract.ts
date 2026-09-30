@@ -430,6 +430,7 @@ export type PluginExecutionRequest = {
 export type PluginExecutionResponse =
   | {
       status: "success";
+      /** Values keyed exclusively by the technical `portKey` in `outputContract`. */
       values: Record<string, RuntimeValue>;
       artifacts?: PluginArtifact[];
       /** Preenchido pelo núcleo após importar artifacts; plugins não devem definir este campo. */
@@ -446,7 +447,7 @@ export type PluginExecutionResponse =
       pollAfterMs: number;
       progress?: number;
       message?: string;
-      /** Snapshot parcial por campo. Cada chave substitui o snapshot anterior da mesma chave. */
+      /** Snapshot keyed exclusively by output `portKey`; each present key replaces that port. */
       partialValues?: Record<string, RuntimeValue>;
       /** Artifacts referenciados por partialValues; passam pelo mesmo importador dos finais. */
       partialArtifacts?: PluginArtifact[];
@@ -467,7 +468,7 @@ export type PluginExecutionResponse =
       recovery?: PluginRecoveryFacts;
       retryable: boolean;
       retryAfterMs?: number;
-      /** Completed outputs remain durable when a later item fails. */
+      /** Completed outputs keyed by output `portKey` remain durable when a later item fails. */
       partialValues?: Record<string, RuntimeValue>;
       partialArtifacts?: PluginArtifact[];
       storedArtifacts?: StoredFile[];

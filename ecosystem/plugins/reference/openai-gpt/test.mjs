@@ -48,5 +48,5 @@ test("transforma uma resposta simulada no contrato do bloco", async (context) =>
   };
   const result = await execute(request, services("test-secret"));
   assert.equal(result.status, "success");
-  assert.deepEqual(result.values, { title: "Como aprender melhor" });
+  assert.deepEqual(result.values, { result: "Como aprender melhor" });
 });

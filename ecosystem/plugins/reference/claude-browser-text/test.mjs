@@ -10,6 +10,33 @@ const manifest = JSON.parse(
 );
 const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 
+function outputContractFor(capabilityId, validation, fields) {
+  const selected =
+    fields ??
+    (capabilityId === "search-web-in-browser"
+      ? [
+          { key: "result", type: "textarea" },
+          { key: "sources", type: "list" },
+        ]
+      : capabilityId === "validate-content-in-browser"
+        ? validation?.mode === "select_one"
+          ? [
+              { key: "selected_value", type: "text" },
+              { key: "feedback", type: "textarea" },
+            ]
+          : validation?.mode === "select_many"
+            ? [
+                { key: "selected_values", type: "list" },
+                { key: "feedback", type: "textarea" },
+              ]
+            : [
+                { key: "decision", type: "approval" },
+                { key: "feedback", type: "textarea" },
+              ]
+        : [{ key: "result", type: "textarea" }]);
+  return selected.map((field) => ({ ...field, portKey: field.portKey ?? field.key }));
+}
+
 test("manifesto prepara perfis antes da execução", () => {
   assert.equal(manifest.version, "1.1.5");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
@@ -58,7 +85,11 @@ function request(overrides = {}) {
       ...overrides.context,
     },
     validation: overrides.validation,
-    outputContract: overrides.outputContract,
+    outputContract: outputContractFor(
+      overrides.capabilityId ?? "generate-text-in-browser",
+      overrides.validation,
+      overrides.outputContract,
+    ),
   };
 }
 
@@ -307,8 +338,8 @@ test("preserva cada resposta quando a saída parts é conectada", () => {
     [{ text: "Parte A" }, { text: "Parte B" }],
     {
       outputContract: [
-        { key: "result", type: "textarea" },
-        { key: "parts", type: "list" },
+        { key: "result", portKey: "result", type: "textarea" },
+        { key: "parts", portKey: "parts", type: "list" },
       ],
     },
   );
@@ -333,13 +364,13 @@ test("Buscar respeita as chaves e tipos do outputContract do bloco", () => {
     ["https://example.com/a"],
     {
       outputContract: [
-        { key: "items_found", label: "Itens encontrados", type: "list" },
-        { key: "sources", label: "Fontes consultadas", type: "list" },
+        { key: "items_found", portKey: "result", label: "Itens encontrados", type: "list" },
+        { key: "sources", portKey: "sources", label: "Fontes consultadas", type: "list" },
       ],
     },
   );
   assert.deepEqual(values, {
-    items_found: ["Tendência A", "Tendência B"],
+    result: ["Tendência A", "Tendência B"],
     sources: ["https://example.com/a"],
   });
 });

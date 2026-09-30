@@ -381,6 +381,7 @@ test("C09 — input ausente impede conclusão humana e promoção de delivery", 
       source: "previous_process",
       sourceProcessType: "title",
       sourceKey: "title",
+      binding: { kind: "previous_process", processType: "title", outputKey: "title" },
     },
   ];
   const { commands, project } = fixture([block]);

@@ -482,28 +482,28 @@ function textAsFiniteNumber(text) {
 
 function searchResponseValues(text, sources, request) {
   const fields = Array.isArray(request?.outputContract) ? request.outputContract : [];
-  if (!fields.length) return { result: text, sources };
   const values = {};
   for (const field of fields) {
     const isSource = /source|fonte|url|link/i.test(`${field.key} ${field.label}`);
     if (isSource)
-      values[field.key] = field.type === "url" ? (sources[0] ?? "https://chatgpt.com") : sources;
-    else if (["list", "multiselect"].includes(field.type)) values[field.key] = textAsList(text);
-    else values[field.key] = text;
+      values[field.portKey] =
+        field.type === "url" ? (sources[0] ?? "https://chatgpt.com") : sources;
+    else if (["list", "multiselect"].includes(field.type)) values[field.portKey] = textAsList(text);
+    else values[field.portKey] = text;
   }
   return values;
 }
 
 function generationResponseValues(result, responses, request) {
-  const values = { result };
-  for (const field of request?.outputContract ?? []) {
-    if (field?.key === "parts") values.parts = responses.map((response) => response.text);
-    else if (["list", "multiselect"].includes(field?.type)) values[field.key] = textAsList(result);
+  const fields = request?.outputContract ?? [];
+  const values = {};
+  for (const field of fields) {
+    if (field?.key === "parts") values[field.portKey] = responses.map((response) => response.text);
+    else if (["list", "multiselect"].includes(field?.type))
+      values[field.portKey] = textAsList(result);
     else if (field?.type === "number") {
-      const value = textAsFiniteNumber(result);
-      values[field.key] = value;
-      if (field.portKey === "result") values.result = value;
-    } else values[field.key] = result;
+      values[field.portKey] = textAsFiniteNumber(result);
+    } else values[field.portKey] = result;
   }
   return values;
 }

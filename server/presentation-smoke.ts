@@ -22,7 +22,7 @@ const legacyMethod = {
         type: "CRIAR",
         operator: "Humano",
         name: "Produzir assets",
-        inputs: [{ id: "input-1", label: "Referências", type: "files", source: "previous_block" }],
+        inputs: [{ id: "input-1", label: "Referências", type: "files", source: "runtime" }],
         outputs: [
           {
             id: "output-1",

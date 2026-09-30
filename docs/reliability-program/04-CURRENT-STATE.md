@@ -1,16 +1,16 @@
 # Current State
 
-Última revisão semântica: 29/09/2026.
+Última revisão semântica: 30/09/2026.
 
 Este documento representa o estado semântico e arquitetural conhecido do produto: capabilities presentes, gaps, blockers e posição no programa. Ele não é autoridade para o HEAD Git, a branch ativa nem a condição atual do worktree. Toda task deve descobrir esses dados diretamente do checkout no momento em que começa.
 
-| Campo                       | Estado atual                               |
-| --------------------------- | ------------------------------------------ |
-| Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
-| Versão                      | `1.2.1`                                    |
-| Task concluída              | TASK-026                                   |
-| Task ativa                  | Nenhuma                                    |
-| Próxima                     | TASK-027 (`ready`), ainda não iniciada     |
+| Campo                       | Estado atual                                |
+| --------------------------- | ------------------------------------------- |
+| Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422`  |
+| Versão                      | `1.2.1`                                     |
+| Task concluída              | TASK-028                                    |
+| Task ativa                  | Nenhuma                                     |
+| Próxima                     | Nenhuma autorizada; TASK-029 está `pending` |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -115,17 +115,19 @@ Builder, salvamento de Método, importação/transferência, criação de execu�
 
 Outputs declarados normais destinados a plugins também entram no executor somente por `BlockFieldDefinition.portKey` explícita. Ausência de binding, porta inexistente ou tipo incompatível falham antes da criação do job; compatibilidade de tipo apenas valida a porta escolhida pelo Método. O Builder materializa `portKey` quando existe exatamente uma candidata compatível e exige configuração explícita quando há ambiguidade. O Execution Core continua sem conhecimento de labels, manifestos, portas ou respostas de plugin.
 
-### Binding de outputs explícito e response mapping permissivo
+### Binding e normalização canônica de outputs de plugin
 
 As saídas universais continuam pertencendo ao Bloco. Para Blocos executados por plugin, o Método/snapshot materializa explicitamente qual `outputPort` da capability implementa cada saída declarada. O runtime normal não escolhe portas por tipo, ordem, primeira porta ou fallback de `field.key`; `BlockFieldDefinition.key` continua identificando `BlockExecution.values` e `Delivery.outputKey`, enquanto `portKey` permanece somente correlação técnica.
 
-`valuesForPluginResponse()` em `server/index.ts` ainda tenta, nesta ordem, chave do campo, `portKey` do contrato e o fallback genérico `responseValues.result`. O caminho de `ESCOLHER` também aceita `selectedItemId ?? result`. Esse comportamento pode transformar resposta ambígua em aparente sucesso e precisa migrar para normalização canônica da resposta com compatibilidade legada delimitada.
+Respostas de executor cruzam uma única boundary explícita em `server/plugin-response-normalization.ts`. Success, pending, error e snapshots de `publishPartial()` aceitam exclusivamente `portKey` presente no `outputContract` congelado, validam os valores materiais e traduzem uma única vez para a `key` estratégica. Success exige os outputs obrigatórios, incluindo partials canônicos previamente persistidos; partials não concluem o Bloco.
 
-O contrato sintético histórico de `ESCOLHER` ainda usa a primeira output port da capability ou `result`. Ele está delimitado por guardrail como compatibilidade especializada da seleção de coleção, não como semântica universal de output binding. A interpretação ampla da resposta permanece reservada à TASK-028.
+Chaves estratégicas, labels, ordem do objeto e `result` genérico não são aliases. `result` só é válido quando é literalmente a porta declarada. Chaves desconhecidas, tipos incompatíveis, required ausente e bindings ambíguos falham antes de sucesso ou mutação parcial observável. `BlockExecution.values` e `Delivery.outputKey` permanecem estratégicos.
+
+O contrato sintético histórico de `ESCOLHER` ainda usa a primeira output port da capability ou `result`. Ele está delimitado por guardrail como compatibilidade especializada da seleção de coleção, não como semântica universal de output binding; a resposta precisa usar exatamente a porta sintética enviada.
 
 `VALIDAR` possui alvo estratégico explícito no Método e no snapshot. `targetBlockId` identifica sempre um Bloco anterior não-`VALIDAR`; `select_one` e `select_many` exigem `targetOutputKey`, enquanto `approval` continua aprovando o Bloco inteiro e só transporta um valor material quando uma saída foi declarada. Para execução por plugin, `targetPortKey` correlaciona esse valor com uma porta técnica da capability antes do runtime. Normalização e execução não escolhem alvo, saída ou porta por proximidade, tipo ou ordem. Inputs adicionais permanecem contexto complementar e não substituem o target.
 
-Os fallbacks de resposta e `ESCOLHER` permanecem localizados por guardrails focais. A proteção de bindings normais e de `VALIDAR` impede seleção por tipo, primeira porta, primeira saída ou `field.key`, e a proteção restante impede que compatibilidades especializadas se expandam para o Core ou para novas boundaries.
+Guardrails focais protegem a boundary canônica, os bindings normais e `VALIDAR` contra seleção por tipo, primeira porta, primeira saída ou `field.key`, e impedem que a compatibilidade especializada de `ESCOLHER` se expanda para o Core ou para novas boundaries.
 
 ### Recovery decidido de forma mais rica do que é aplicado
 
@@ -171,6 +173,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para iniciar a TASK-028. A TASK-027 concentrou a adaptação de Métodos históricos em uma boundary explícita, sem alterar a interpretação permissiva de respostas. A próxima missão é a normalização/validação canônica da resposta do executor.
+Deterministic Contracts foi encerrada com a TASK-028. Não há próxima missão autorizada: TASK-029 permanece `pending` e deve receber especificação just-in-time e autorização explícita antes de iniciar Universal Recovery.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

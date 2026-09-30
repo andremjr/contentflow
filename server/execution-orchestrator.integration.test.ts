@@ -534,6 +534,10 @@ test(
       missingPluginChannel.methods.theme.blocks[0] = {
         ...missingPluginChannel.methods.theme.blocks[0],
         operator: "IA",
+        outputs: (missingPluginChannel.methods.theme!.blocks[0]!.outputs ?? []).map((output) => ({
+          ...output,
+          portKey: output.key,
+        })),
         plugin: {
           pluginId: "missing.contentflow.test",
           capabilityId: "generate-theme",

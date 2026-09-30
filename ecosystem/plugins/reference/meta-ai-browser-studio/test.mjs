@@ -13,6 +13,33 @@ const p50Boundary = JSON.parse(
 );
 const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
 
+function outputContractFor(capabilityId, validation, fields) {
+  const selected =
+    fields ??
+    (capabilityId === "search-web-in-browser"
+      ? [
+          { key: "result", type: "textarea" },
+          { key: "sources", type: "list" },
+        ]
+      : capabilityId === "validate-content-in-browser"
+        ? validation?.mode === "select_one"
+          ? [
+              { key: "selected_value", type: "text" },
+              { key: "feedback", type: "textarea" },
+            ]
+          : validation?.mode === "select_many"
+            ? [
+                { key: "selected_values", type: "list" },
+                { key: "feedback", type: "textarea" },
+              ]
+            : [
+                { key: "decision", type: "approval" },
+                { key: "feedback", type: "textarea" },
+              ]
+        : [{ key: "result", type: "textarea" }]);
+  return selected.map((field) => ({ ...field, portKey: field.portKey ?? field.key }));
+}
+
 function request(overrides = {}) {
   return {
     capabilityId: overrides.capabilityId ?? "generate-text-in-browser",
@@ -36,7 +63,11 @@ function request(overrides = {}) {
       ...overrides.context,
     },
     validation: overrides.validation,
-    outputContract: overrides.outputContract,
+    outputContract: outputContractFor(
+      overrides.capabilityId ?? "generate-text-in-browser",
+      overrides.validation,
+      overrides.outputContract,
+    ),
     executionId: overrides.executionId,
     blockId: overrides.blockId,
     attempt: overrides.attempt,
@@ -606,9 +637,9 @@ test("ignora partes personalizadas", () => {
 
 test("preserva respostas individuais quando parts está conectada", () => {
   const values = __test.generationResponseValues("A\n\nB", [{ text: "A" }, { text: "B" }], {
-    outputContract: [{ key: "parts" }],
+    outputContract: [{ key: "parts", portKey: "parts" }],
   });
-  assert.deepEqual(values, { result: "A\n\nB", parts: ["A", "B"] });
+  assert.deepEqual(values, { parts: ["A", "B"] });
 });
 
 test("monta pesquisa com instrução e entradas", () => {
@@ -637,11 +668,11 @@ test("respeita o outputContract de Buscar", () => {
   assert.deepEqual(
     __test.searchResponseValues("- A\n- B", ["https://example.com"], {
       outputContract: [
-        { key: "items_found", type: "list" },
-        { key: "sources", type: "list" },
+        { key: "items_found", portKey: "result", type: "list" },
+        { key: "sources", portKey: "sources", type: "list" },
       ],
     }),
-    { items_found: ["A", "B"], sources: ["https://example.com"] },
+    { result: ["A", "B"], sources: ["https://example.com"] },
   );
 });
 

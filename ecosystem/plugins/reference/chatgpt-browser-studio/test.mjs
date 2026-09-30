@@ -55,6 +55,33 @@ const P30_NON_VISUAL_CAPABILITY_IDS = [
   "analyze-documents-in-browser",
 ];
 
+function outputContractFor(capabilityId, validation, fields) {
+  const selected =
+    fields ??
+    (capabilityId === "search-web-in-browser" || capabilityId === "deep-research-in-browser"
+      ? [
+          { key: "result", type: "textarea" },
+          { key: "sources", type: "list" },
+        ]
+      : capabilityId === "validate-content-in-browser"
+        ? validation?.mode === "select_one"
+          ? [
+              { key: "selected_value", type: "text" },
+              { key: "feedback", type: "textarea" },
+            ]
+          : validation?.mode === "select_many"
+            ? [
+                { key: "selected_values", type: "list" },
+                { key: "feedback", type: "textarea" },
+              ]
+            : [
+                { key: "decision", type: "approval" },
+                { key: "feedback", type: "textarea" },
+              ]
+        : [{ key: "result", type: "textarea" }]);
+  return selected.map((field) => ({ ...field, portKey: field.portKey ?? field.key }));
+}
+
 test("aceita somente referências de conversa do ChatGPT", () => {
   assert.equal(
     validateConversationUrl("https://chatgpt.com/c/12345678-1234-1234-1234-123456789abc"),
@@ -92,7 +119,11 @@ function request(overrides = {}) {
     },
     validation: overrides.validation,
     retryFeedback: overrides.retryFeedback,
-    outputContract: overrides.outputContract,
+    outputContract: outputContractFor(
+      overrides.capabilityId ?? "generate-text-in-browser",
+      overrides.validation,
+      overrides.outputContract,
+    ),
     conversation: overrides.conversation,
     batch: overrides.batch,
     itemAction: overrides.itemAction,
@@ -164,8 +195,8 @@ test("P30 congela as sete capabilities não visuais por fixture", async (t) => {
         assert.deepEqual(
           __test.searchResponseValues(fixture.mockResponse, fixture.capturedSources, {
             outputContract: [
-              { key: "result", type: "textarea" },
-              { key: "sources", type: "list" },
+              { key: "result", portKey: "result", type: "textarea" },
+              { key: "sources", portKey: "sources", type: "list" },
             ],
           }),
           { result: fixture.mockResponse, sources: fixture.capturedSources },
@@ -1181,9 +1212,9 @@ test("trata lista em content como um único contexto agregado", () => {
 
 test("preserva respostas individuais quando parts está conectada", () => {
   const values = __test.generationResponseValues("A\n\nB", [{ text: "A" }, { text: "B" }], {
-    outputContract: [{ key: "parts" }],
+    outputContract: [{ key: "parts", portKey: "parts" }],
   });
-  assert.deepEqual(values, { result: "A\n\nB", parts: ["A", "B"] });
+  assert.deepEqual(values, { parts: ["A", "B"] });
 });
 
 test("respeita saída list em geração de texto", () => {
@@ -1191,8 +1222,8 @@ test("respeita saída list em geração de texto", () => {
     __test.generationResponseValues(
       "Primeiro prompt\n\nSegundo prompt\n\nTerceiro prompt",
       [{ text: "Primeiro prompt\n\nSegundo prompt\n\nTerceiro prompt" }],
-      { outputContract: [{ key: "visual_prompts", type: "list" }] },
-    ).visual_prompts,
+      { outputContract: [{ key: "visual_prompts", portKey: "result", type: "list" }] },
+    ).result,
     ["Primeiro prompt", "Segundo prompt", "Terceiro prompt"],
   );
 });
@@ -1202,7 +1233,7 @@ test("converte uma resposta numérica estrita para uma entrega number", () => {
     __test.generationResponseValues("7", [{ text: "7" }], {
       outputContract: [{ key: "sections", type: "number", portKey: "result" }],
     }),
-    { result: 7, sections: 7 },
+    { result: 7 },
   );
   assert.throws(
     () =>
@@ -1239,11 +1270,11 @@ test("respeita o outputContract de Buscar", () => {
   assert.deepEqual(
     __test.searchResponseValues("- A\n- B", ["https://example.com"], {
       outputContract: [
-        { key: "items_found", type: "list" },
-        { key: "sources", type: "list" },
+        { key: "items_found", portKey: "result", type: "list" },
+        { key: "sources", portKey: "sources", type: "list" },
       ],
     }),
-    { items_found: ["A", "B"], sources: ["https://example.com"] },
+    { result: ["A", "B"], sources: ["https://example.com"] },
   );
 });
 

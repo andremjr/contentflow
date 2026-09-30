@@ -107,7 +107,7 @@ function outputInstructions(fields: OutputField[]) {
 function valuesFromResponse(text: string, fields: OutputField[]) {
   if (fields.length <= 1) {
     const field = fields[0];
-    return { [field?.key ?? "result"]: parseOutput(text, field?.type) };
+    return field ? { [field.portKey]: parseOutput(text, field.type) } : {};
   }
   let parsed: Record<string, unknown>;
   try {
@@ -119,7 +119,7 @@ function valuesFromResponse(text: string, fields: OutputField[]) {
     fields
       .filter((field) => parsed[field.key] !== undefined)
       .map((field) => [
-        field.key,
+        field.portKey,
         typeof parsed[field.key] === "string"
           ? parseOutput(String(parsed[field.key]), field.type)
           : parsed[field.key],

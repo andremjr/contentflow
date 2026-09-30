@@ -110,7 +110,7 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
       if (profile === "primary" && prompt === "two") {
         return { status: "error", code: "UPSTREAM_UNAVAILABLE", message: "temporary", retryable: true };
       }
-      return { status: "success", values: { results: [profile + ":" + prompt] } };
+      return { status: "success", values: { results: profile + ":" + prompt } };
     }`,
   );
 
@@ -204,8 +204,8 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
           id: "prompts",
           label: "Prompts",
           type: "list",
-          source: "static",
-          staticValue: ["one", "two", "three"],
+          source: "runtime",
+          binding: { kind: "runtime" },
           portKey: "prompts",
         },
       ],
@@ -238,7 +238,12 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
         projectId: "fallback-project",
         channelId: "fallback-channel",
         processType: "theme",
-        methodSnapshot: { processType: "theme", blocks: [block] },
+        methodSnapshot: {
+          contractVersion: 2,
+          name: "Fallback",
+          processType: "theme",
+          blocks: [block],
+        },
         blocks: [
           {
             blockId: "fallback-block",
@@ -254,9 +259,24 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
         updatedAt: now,
       }),
     });
+    const initialFallbackState = (await request("/api/executions/fallback-execution/state")) as {
+      execution: { revision?: number };
+    };
+    await request("/api/executions/fallback-execution/blocks/fallback-block/runtime-inputs", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        revision: initialFallbackState.execution.revision ?? 0,
+        values: { prompts: ["one", "two", "three"] },
+      }),
+    });
 
     let execution:
-      | { status: string; blocks: Array<{ status: string; values: Record<string, unknown> }> }
+      | {
+          status: string;
+          error?: string;
+          blocks: Array<{ status: string; values: Record<string, unknown> }>;
+        }
       | undefined;
     for (let attempt = 0; attempt < 120; attempt += 1) {
       execution = (
@@ -268,7 +288,7 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    assert.equal(execution?.blocks[0]?.status, "completed", output.join("\n"));
+    assert.equal(execution?.blocks[0]?.status, "completed", execution?.error ?? output.join("\n"));
     assert.deepEqual(execution?.blocks[0]?.values.results, [
       "primary:one",
       "backup:two",
@@ -310,7 +330,6 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
     });
     const hangingBlock = structuredClone(block);
     hangingBlock.id = "fallback-cancel-block";
-    hangingBlock.inputs[0].staticValue = ["hang"];
     await request("/api/executions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -319,7 +338,12 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
         projectId: "fallback-cancel-project",
         channelId: "fallback-channel",
         processType: "theme",
-        methodSnapshot: { processType: "theme", blocks: [hangingBlock] },
+        methodSnapshot: {
+          contractVersion: 2,
+          name: "Fallback cancel",
+          processType: "theme",
+          blocks: [hangingBlock],
+        },
         blocks: [
           {
             blockId: hangingBlock.id,
@@ -335,6 +359,20 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
         updatedAt: now,
       }),
     });
+    const initialCancelState = (await request(
+      "/api/executions/fallback-cancel-execution/state",
+    )) as { execution: { revision?: number } };
+    await request(
+      "/api/executions/fallback-cancel-execution/blocks/fallback-cancel-block/runtime-inputs",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          revision: initialCancelState.execution.revision ?? 0,
+          values: { prompts: ["hang"] },
+        }),
+      },
+    );
 
     const database = new Database(path.join(dataDirectory, "contentflow.sqlite"), {
       readonly: true,

@@ -130,6 +130,7 @@ import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
 import { legacyTypeListAccepts } from "../src/lib/data-shape";
 import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
 import { validatePluginOutputContract } from "./plugin-output-contract";
+import { requireNormalizedPluginResponseValues } from "./plugin-response-normalization";
 import { instructionWithRetryFeedback } from "../src/lib/retry-feedback";
 import { pluginConversationFallbackContext } from "../src/lib/conversation-context";
 import { collectionItemValuesForPlugin } from "../src/lib/plugin-collection";
@@ -1094,50 +1095,6 @@ function executionFor(projectId: string, processType: string) {
   return row ? parseStoredExecution(row.payload) : undefined;
 }
 
-function normalizePluginListValue(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => (typeof item === "string" ? item.trim() : String(item).trim()))
-      .filter(Boolean);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(/\r?\n/)
-      .map((line) => {
-        const cleaned = line
-          .trim()
-          .replace(/^[-*•\s]+/, "")
-          .replace(/^\d+[.)]\s*/, "")
-          .trim();
-        return cleaned || line.trim();
-      })
-      .filter(Boolean);
-  }
-  return [];
-}
-
-function valuesForPluginResponse(
-  block: ActionBlock,
-  responseValues: Record<string, RuntimeValue>,
-  outputContract: PluginFieldContract[],
-) {
-  const values: Record<string, RuntimeValue> = {};
-  for (const field of block.outputs ?? []) {
-    const contract = outputContract.find((item) => item.key === field.key);
-    let value =
-      responseValues[field.key] ??
-      (contract ? responseValues[contract.portKey] : undefined) ??
-      responseValues.result;
-    if (value !== undefined) {
-      if (field.type === "list" && (typeof value === "string" || Array.isArray(value))) {
-        value = normalizePluginListValue(value);
-      }
-      values[field.key] = value;
-    }
-  }
-  return values;
-}
-
 function finishPluginBlock(
   execution: ProcessExecution,
   block: ActionBlock,
@@ -1965,14 +1922,22 @@ function publicPluginJob(job: PersistentPluginJob) {
   return publicState;
 }
 
-function mappedPluginValues(
+function normalizedPluginValues(
   block: ActionBlock,
-  responseValues: Record<string, RuntimeValue>,
+  responseValues: unknown,
   outputContract: PluginFieldContract[],
+  completion: "partial" | "final",
+  valueShape: "snapshot" | "item" = "snapshot",
+  existingValues?: Record<string, RuntimeValue>,
 ) {
-  return block.type === "ESCOLHER"
-    ? { selectedItemId: responseValues.selectedItemId ?? responseValues.result }
-    : valuesForPluginResponse(block, responseValues, outputContract);
+  return requireNormalizedPluginResponseValues({
+    block,
+    responseValues,
+    outputContract,
+    completion,
+    valueShape,
+    existingValues,
+  }).values;
 }
 
 function declaredItemActionForBlock(block: ActionBlock, action: string) {
@@ -2657,10 +2622,12 @@ async function processPluginJobClaimed(
           ) {
             return;
           }
-          const mappedUpdate = mappedPluginValues(
+          const mappedUpdate = normalizedPluginValues(
             latestBlock,
             update.values,
             job.request.outputContract,
+            "partial",
+            job.itemOrchestration ? "item" : "snapshot",
           );
           const incremental = applyPluginIncrementalItemUpdates({
             job,
@@ -2784,10 +2751,12 @@ async function processPluginJobClaimed(
       }
       const partialValues = {
         ...job.partialValues,
-        ...mappedPluginValues(
+        ...normalizedPluginValues(
           block,
           pluginResponse.partialValues ?? {},
           job.request.outputContract,
+          "partial",
+          job.itemOrchestration ? "item" : "snapshot",
         ),
       };
       const progress = Number.isFinite(pluginResponse.progress)
@@ -2833,10 +2802,12 @@ async function processPluginJobClaimed(
     if (pluginResponse.status === "error") {
       const partialValues = {
         ...job.partialValues,
-        ...mappedPluginValues(
+        ...normalizedPluginValues(
           block,
           pluginResponse.partialValues ?? {},
           job.request.outputContract,
+          "partial",
+          job.itemOrchestration ? "item" : "snapshot",
         ),
       };
       const partialArtifacts = mergeStoredArtifacts(
@@ -2945,6 +2916,8 @@ async function processPluginJobClaimed(
         currentProfile: activeProfileAliasForJob(plugin, job),
         preservedCount: itemProgressForJob(job)?.completed,
       });
+      job = { ...job, partialValues, partialArtifacts };
+      claim.job = job;
       return markPluginJobFailed(
         claim,
         execution,
@@ -2957,7 +2930,14 @@ async function processPluginJobClaimed(
 
     const values = {
       ...job.partialValues,
-      ...mappedPluginValues(block, pluginResponse.values, job.request.outputContract),
+      ...normalizedPluginValues(
+        block,
+        pluginResponse.values,
+        job.request.outputContract,
+        "final",
+        job.itemOrchestration ? "item" : "snapshot",
+        job.partialValues,
+      ),
     };
     const itemOrchestration = job.itemOrchestration;
     if (itemOrchestration) {
@@ -2969,10 +2949,12 @@ async function processPluginJobClaimed(
             (field) => field.portKey === itemOrchestration.combinedOutputPort,
           )?.key
         : undefined;
-      const mappedValues = mappedPluginValues(
+      const mappedValues = normalizedPluginValues(
         block,
         pluginResponse.values,
         job.request.outputContract,
+        "final",
+        "item",
       );
       const rawIncoming = pluginResponse.values[itemOrchestration.outputPort];
       const incomingItems = Array.isArray(rawIncoming)
@@ -3067,18 +3049,6 @@ async function processPluginJobClaimed(
       )
     ) {
       throw new Error("O plugin não escolheu um item válido da coleção vinculada.");
-    }
-    const missingOutputs = (block.outputs ?? [])
-      .filter((field) => field.required && isEmptyRuntimeValue(values[field.key]))
-      .map((field) => field.label);
-    if (missingOutputs.length)
-      throw new Error(`O plugin não entregou: ${missingOutputs.join(", ")}.`);
-    const restrictionIssues = (block.outputs ?? []).flatMap((field) => {
-      const issue = getPresentationRestrictionIssue(field.presentation, values[field.key]);
-      return issue ? [`${field.label}: ${issue}`] : [];
-    });
-    if (restrictionIssues.length) {
-      throw new Error(`O plugin entregou valores incompatíveis: ${restrictionIssues.join("; ")}.`);
     }
     if (!job.itemOrchestration) {
       const materialized = aggregateCompatibilityItemOrchestration(capability, job.request, values);

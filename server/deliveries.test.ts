@@ -273,6 +273,12 @@ test("resolve uma entrega específica de bloco de processo anterior", () => {
         sourceProcessType: "narration",
         blockId: "transcribe",
         sourceKey: "subtitle_cues",
+        binding: {
+          kind: "previous_process",
+          processType: "narration",
+          blockId: "transcribe",
+          outputKey: "subtitle_cues",
+        },
       },
     ],
     outputs: [],
@@ -345,6 +351,7 @@ test("permite resolver campos específicos do mesmo item escolhido", () => {
         source: "previous_block",
         blockId: chooseBlock.id,
         sourceKey: "name",
+        binding: { kind: "previous_block", blockId: chooseBlock.id, outputKey: "name" },
       },
       {
         id: "angle-description",
@@ -353,6 +360,11 @@ test("permite resolver campos específicos do mesmo item escolhido", () => {
         source: "previous_block",
         blockId: chooseBlock.id,
         sourceKey: "description",
+        binding: {
+          kind: "previous_block",
+          blockId: chooseBlock.id,
+          outputKey: "description",
+        },
       },
     ],
     outputs: [],

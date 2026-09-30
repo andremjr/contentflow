@@ -640,27 +640,27 @@ function recordFromSearch(field, text, sources) {
 
 function searchResponseValues(text, sources, request) {
   const fields = Array.isArray(request?.outputContract) ? request.outputContract : [];
-  if (!fields.length) return { result: text, sources };
   const values = {};
   for (const field of fields) {
     const isSource = /source|fonte|url|link/i.test(`${field.key} ${field.label}`);
     if (isSource) {
-      values[field.key] = field.type === "url" ? (sources[0] ?? "https://claude.ai") : sources;
+      values[field.portKey] = field.type === "url" ? (sources[0] ?? "https://claude.ai") : sources;
     } else if (field.type === "list" || field.type === "multiselect") {
-      values[field.key] = textAsList(text);
+      values[field.portKey] = textAsList(text);
     } else if (field.type === "records") {
-      values[field.key] = [recordFromSearch(field, text, sources)];
+      values[field.portKey] = [recordFromSearch(field, text, sources)];
     } else {
-      values[field.key] = text;
+      values[field.portKey] = text;
     }
   }
   return values;
 }
 
 function generationResponseValues(result, responses, request) {
-  const values = { result };
-  if ((request?.outputContract ?? []).some((field) => field?.key === "parts")) {
-    values.parts = responses.map((response) => response.text);
+  const values = {};
+  for (const field of request?.outputContract ?? []) {
+    values[field.portKey] =
+      field?.key === "parts" ? responses.map((response) => response.text) : result;
   }
   return values;
 }

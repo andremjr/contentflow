@@ -396,7 +396,7 @@ Regras de binding:
 
 `multiple: true` significa que a porta pode agregar mais de um campo compatível. Isso não transforma automaticamente valores escalares em listas; o contrato enviado informa a forma efetiva.
 
-Saídas seguem a mesma lógica. `outputContract` contém a chave do bloco e a `portKey` correspondente. A resposta usa `portKey`; o núcleo persiste o valor na chave técnica do bloco.
+Saídas seguem a mesma lógica. `outputContract` contém a chave estratégica do bloco e a `portKey` correspondente. `values`, `partialValues` de `pending`/`error` e `services.publishPartial().values` aceitam exclusivamente as `portKey` declaradas; o núcleo valida o tipo e traduz cada valor uma única vez para a chave estratégica do bloco. Chaves estratégicas, aliases genéricos como `result` quando essa porta não foi declarada e campos desconhecidos são violações de contrato, não fallbacks.
 
 ### Apresentação declarativa
 
@@ -828,7 +828,7 @@ O núcleo valida:
 }
 ```
 
-`pollAfterMs` respeita mínimo e máximo impostos pelo núcleo. `progress` deve ser monotônico quando conhecido; ausência é preferível a um valor inventado. `partialValues` é um snapshot por campo: uma chave presente substitui o snapshot anterior daquela chave, o que torna repetições de `resume` idempotentes. Listas, cartões, tabelas e galerias devem devolver a coleção acumulada até aquele instante.
+`pollAfterMs` respeita mínimo e máximo impostos pelo núcleo. `progress` deve ser monotônico quando conhecido; ausência é preferível a um valor inventado. `partialValues` usa exatamente o mesmo namespace técnico e a mesma validação de tipos de `values`. Ele é um snapshot por porta: uma chave presente substitui o snapshot anterior daquela porta, o que torna repetições de `resume` idempotentes. Listas, cartões, tabelas e galerias devem devolver a coleção acumulada até aquele instante.
 
 `partialArtifacts` usa exatamente o contrato e o importador de `artifacts`: path/URL, permissões, HTTPS, SSRF, MIME, tamanho, streaming e SHA-256 são revalidados. IDs já importados são reutilizados e tornam retries seguros; mudar nome, MIME ou tamanho de um mesmo ID é erro. O núcleo troca `artifact://` por `StoredFile` antes de persistir e expor o snapshot.
 

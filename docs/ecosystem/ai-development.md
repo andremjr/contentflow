@@ -19,7 +19,7 @@ Inclua no pedido o objetivo observável, operador, blocos compatíveis, entradas
 Um plugin é uma pasta independente com `contentflow.plugin.json` e um entrypoint ESM que exporta `async function execute(request, services)`. A resposta pública tem estado `success`, `pending` ou `error`.
 
 - `request.inputs` contém os valores indexados por `portKey`.
-- `request.inputContract` e `request.outputContract` descrevem o binding atual.
+- `request.inputContract` e `request.outputContract` descrevem o binding atual; toda chave em `values` ou `partialValues` deve ser exatamente uma `outputContract[].portKey` declarada.
 - `request.inputDeliveries` fornece a proveniência de cada entrada explicitamente conectada; o plugin não recebe histórico implícito de outros blocos ou Processos.
 - `services.signal` controla cancelamento e timeout.
 - `getSecret`, `resolveInputFile`, `getOutputPath` e `getWorkspacePath` dão acesso controlado aos recursos declarados.
@@ -27,7 +27,7 @@ Um plugin é uma pasta independente com `contentflow.plugin.json` e um entrypoin
 - jobs retornam `pending` com `jobId` e `pollAfterMs`; início, retomada e cancelamento devem ser idempotentes.
 - o núcleo cria IDs universais, entregas e itens; o plugin preserva apenas IDs externos para proveniência.
 
-Resposta imediata mínima:
+Resposta imediata mínima para uma capability que declarou a porta técnica `result`:
 
 ```js
 return { status: "success", values: { result: "texto" } };

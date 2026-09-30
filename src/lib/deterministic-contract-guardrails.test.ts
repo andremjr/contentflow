@@ -140,17 +140,13 @@ test("keeps runtime input sources deterministic and canonical bindings authorita
   );
 });
 
-test("keeps normal plugin output bindings explicit while preserving scoped response compatibility", () => {
+test("keeps plugin output bindings and executor response normalization explicit", () => {
   const server = read("server/index.ts");
   const outputContracts = read("server/plugin-output-contract.ts");
+  const responseNormalizer = read("server/plugin-response-normalization.ts");
   const responseMapping = sourceBetween(
     server,
-    "function valuesForPluginResponse",
-    "function finishPluginBlock",
-  );
-  const choosingMapping = sourceBetween(
-    server,
-    "function mappedPluginValues",
+    "function normalizedPluginValues",
     "function declaredItemActionForBlock",
   );
   const pluginOperation = sourceBetween(
@@ -159,12 +155,21 @@ test("keeps normal plugin output bindings explicit while preserving scoped respo
     'app.post("/api/execute-block"',
   );
 
-  assert.match(responseMapping, /responseValues\[field\.key\][\s\S]*responseValues\.result/);
-  assert.match(
-    choosingMapping,
-    /selectedItemId:\s*responseValues\.selectedItemId\s*\?\?\s*responseValues\.result/,
+  assert.match(responseMapping, /requireNormalizedPluginResponseValues/);
+  assert.doesNotMatch(server, /valuesForPluginResponse|mappedPluginValues|responseValues\.result/);
+  assert.doesNotMatch(server, /selectedItemId\s*:\s*[^\n]*\?\?/);
+  assert.match(responseNormalizer, /contractsByPort\.has\(responseKey\)/);
+  assert.match(responseNormalizer, /contractsByPort\.get\(contract\.portKey\)/);
+  assert.match(responseNormalizer, /Object\.hasOwn\(input\.responseValues, contract\.portKey\)/);
+  assert.doesNotMatch(
+    responseNormalizer,
+    /responseValues\[contract\.key\]|outputContract\[0\]|\.sort\(|\.find\([^\n]*label/,
   );
-  assert.equal((server.match(/responseValues\.result/g) ?? []).length, 2);
+  assert.match(responseNormalizer, /STRATEGIC_KEY_ALIAS_NOT_ALLOWED/);
+  assert.match(responseNormalizer, /GENERIC_RESULT_ALIAS_NOT_ALLOWED/);
+  assert.match(responseNormalizer, /UNKNOWN_OUTPUT_PORT/);
+  assert.match(responseNormalizer, /MISSING_REQUIRED_OUTPUT/);
+  assert.match(responseNormalizer, /INCOMPATIBLE_OUTPUT_TYPE/);
 
   assert.match(outputContracts, /if \(!field\.portKey\) return true/);
   assert.match(

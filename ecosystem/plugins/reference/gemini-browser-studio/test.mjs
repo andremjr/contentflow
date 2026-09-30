@@ -6,6 +6,32 @@ const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
 );
 const handlerSource = await readFile(new URL("./handler.mjs", import.meta.url), "utf8");
+function outputContractFor(capabilityId, validation, fields) {
+  const selected =
+    fields ??
+    (capabilityId === "search-web-in-browser"
+      ? [
+          { key: "result", type: "textarea" },
+          { key: "sources", type: "list" },
+        ]
+      : capabilityId === "validate-content-in-browser"
+        ? validation?.mode === "select_one"
+          ? [
+              { key: "selected_value", type: "text" },
+              { key: "feedback", type: "textarea" },
+            ]
+          : validation?.mode === "select_many"
+            ? [
+                { key: "selected_values", type: "list" },
+                { key: "feedback", type: "textarea" },
+              ]
+            : [
+                { key: "decision", type: "approval" },
+                { key: "feedback", type: "textarea" },
+              ]
+        : [{ key: "result", type: "textarea" }]);
+  return selected.map((field) => ({ ...field, portKey: field.portKey ?? field.key }));
+}
 function req(o = {}) {
   return {
     capabilityId: o.capabilityId ?? "generate-text-in-browser",
@@ -29,7 +55,11 @@ function req(o = {}) {
       ...o.context,
     },
     validation: o.validation,
-    outputContract: o.outputContract,
+    outputContract: outputContractFor(
+      o.capabilityId ?? "generate-text-in-browser",
+      o.validation,
+      o.outputContract,
+    ),
   };
 }
 
@@ -185,9 +215,9 @@ test("ignora partes personalizadas", () =>
 test("preserva partes individuais", () =>
   assert.deepEqual(
     __test.generationValues("A B", [{ text: "A" }, { text: "B" }], {
-      outputContract: [{ key: "parts" }],
+      outputContract: [{ key: "parts", portKey: "parts" }],
     }),
-    { result: "A B", parts: ["A", "B"] },
+    { parts: ["A", "B"] },
   ));
 test("monta busca com instrução e entradas", () =>
   assert.match(
@@ -209,11 +239,11 @@ test("respeita contrato de busca", () =>
   assert.deepEqual(
     __test.searchValues("- A\n- B", ["https://example.com"], {
       outputContract: [
-        { key: "items", type: "list" },
-        { key: "sources", type: "list" },
+        { key: "items", portKey: "result", type: "list" },
+        { key: "sources", portKey: "sources", type: "list" },
       ],
     }),
-    { items: ["A", "B"], sources: ["https://example.com"] },
+    { result: ["A", "B"], sources: ["https://example.com"] },
   ));
 test("Escolher exige ID real", () => {
   const r = req({ context: { selectedCollection: { items: [{ id: "a" }, { id: "b" }] } } });

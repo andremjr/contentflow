@@ -97,6 +97,7 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
             label: "Texto",
             type: "textarea",
             source: "runtime",
+            binding: { kind: "runtime" },
             portKey: "content",
           },
         ],
@@ -127,6 +128,7 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
             source: "previous_block",
             blockId: "block-one",
             sourceKey: "intermediate",
+            binding: { kind: "previous_block", blockId: "block-one", outputKey: "intermediate" },
             portKey: "content",
           },
         ],
@@ -156,6 +158,7 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
             type: "textarea",
             source: "static",
             staticValue: "wrong final value",
+            binding: { kind: "static", value: "wrong final value" },
             portKey: "content",
           },
         ],
@@ -213,7 +216,12 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
         projectId: "test-project",
         channelId: "test-channel",
         processType: "theme",
-        methodSnapshot: { processType: "theme", blocks },
+        methodSnapshot: {
+          contractVersion: 2,
+          name: "Automatic execution",
+          processType: "theme",
+          blocks,
+        },
         blocks: [
           {
             blockId: "block-one",
@@ -235,7 +243,11 @@ test("coleta entradas da execução e depois encadeia blocos de plugin automatic
     const waiting = (await request("/api/executions/test-execution/state")) as {
       execution: AutomaticExecutionState & { revision?: number };
     };
-    assert.equal(waiting.execution.status, "blocked_executor");
+    assert.equal(
+      waiting.execution.status,
+      "blocked_executor",
+      waiting.execution.error ?? output.join("\n"),
+    );
     assert.equal(waiting.execution.blocks[0].status, "blocked_executor");
     await request("/api/executions/test-execution/blocks/block-one/runtime-inputs", {
       method: "PATCH",
