@@ -714,10 +714,6 @@ export function MethodBuilder({
   };
 
   const addBlock = (type: BlockType) => {
-    const validationTarget =
-      type === "VALIDAR"
-        ? [...blocks].reverse().find((block) => block.type !== "VALIDAR")
-        : undefined;
     const newBlock: ActionBlock = {
       id: uid(`${processType}-${type.toLowerCase()}`),
       type,
@@ -727,12 +723,12 @@ export function MethodBuilder({
       inputs: [],
       outputs:
         type === "VALIDAR"
-          ? createValidationFields("approval", validationTarget?.id)
+          ? createValidationFields("approval")
           : createSuggestedHumanFields(processType, type),
       validation:
         type === "VALIDAR"
           ? {
-              targetBlockId: validationTarget?.id,
+              targetBlockId: "",
               mode: "approval",
               onReject: "retry_target",
               maxAttempts: 3,
@@ -1529,6 +1525,34 @@ function BlockEditor({
       return { input, compatible, selected, ambiguous: !input.portKey && compatible.length > 1 };
     });
   })();
+  const validationTarget =
+    block.type === "VALIDAR"
+      ? methodBlocks.find((candidate) => candidate.id === block.validation?.targetBlockId)
+      : undefined;
+  const validationTargetOutput = validationTarget?.outputs?.find(
+    (output) => output.key === block.validation?.targetOutputKey,
+  );
+  const validationTargetPortState = (() => {
+    if (!selectedCapability || isManualHumanTool || !validationTargetOutput) return undefined;
+    const used = new Set(
+      inputPortState.flatMap((item) => (item.selected ? [item.selected.key] : [])),
+    );
+    const compatible = selectedCapability.inputPorts.filter(
+      (port) =>
+        legacyTypeListAccepts(port.acceptedTypes, validationTargetOutput.type) &&
+        !used.has(port.key),
+    );
+    const selected = block.validation?.targetPortKey
+      ? compatible.find((port) => port.key === block.validation?.targetPortKey)
+      : compatible.length === 1
+        ? compatible[0]
+        : undefined;
+    return {
+      compatible,
+      selected,
+      ambiguous: !block.validation?.targetPortKey && compatible.length > 1,
+    };
+  })();
   const outputPortState = isManualHumanTool
     ? []
     : (block.outputs ?? []).map((field) => {
@@ -1548,17 +1572,23 @@ function BlockEditor({
       ? []
       : selectedCapability?.inputPorts.filter(
           (port) =>
-            port.required && !inputPortState.some((item) => item.selected?.key === port.key),
+            port.required &&
+            !inputPortState.some((item) => item.selected?.key === port.key) &&
+            validationTargetPortState?.selected?.key !== port.key,
         )) ?? [];
   const unboundInputPorts =
     selectedCapability?.inputPorts.filter(
-      (port) => !inputPortState.some((item) => item.selected?.key === port.key),
+      (port) =>
+        !inputPortState.some((item) => item.selected?.key === port.key) &&
+        validationTargetPortState?.selected?.key !== port.key,
     ) ?? [];
   const contractIssues =
     [
       ...inputPortState.filter((item) => !item.selected),
       ...outputPortState.filter((item) => !item.selected),
-    ].length + requiredPortsMissing.length;
+    ].length +
+    requiredPortsMissing.length +
+    (validationTargetOutput && !validationTargetPortState?.selected ? 1 : 0);
 
   return (
     <div
@@ -1710,6 +1740,7 @@ function BlockEditor({
                 block={block}
                 methodBlocks={methodBlocks}
                 index={index}
+                capability={selectedCapability}
                 onChange={onChange}
               />
               <ContextInputsEditor
@@ -1898,6 +1929,35 @@ function BlockEditor({
                         presentation: current,
                       };
                     });
+                    const requestedValidation = block.validation
+                      ? (() => {
+                          const target = methodBlocks.find(
+                            (candidate) => candidate.id === block.validation?.targetBlockId,
+                          );
+                          const targetOutput = target?.outputs?.find(
+                            (output) => output.key === block.validation?.targetOutputKey,
+                          );
+                          if (!targetOutput) {
+                            return { ...block.validation, targetPortKey: undefined };
+                          }
+                          const usedPorts = new Set(
+                            (requestedInputs ?? []).flatMap((input) =>
+                              input.portKey ? [input.portKey] : [],
+                            ),
+                          );
+                          const compatiblePorts =
+                            selection?.capability.inputPorts.filter(
+                              (port) =>
+                                legacyTypeListAccepts(port.acceptedTypes, targetOutput.type) &&
+                                (port.multiple || !usedPorts.has(port.key)),
+                            ) ?? [];
+                          return {
+                            ...block.validation,
+                            targetPortKey:
+                              compatiblePorts.length === 1 ? compatiblePorts[0].key : undefined,
+                          };
+                        })()
+                      : undefined;
                     const nextPlugin: BlockPluginBinding = {
                       pluginId,
                       pluginVersion: selection?.plugin.manifest.version,
@@ -1913,6 +1973,7 @@ function BlockEditor({
                       plugin: nextPlugin,
                       inputs: requestedInputs,
                       outputs: requestedOutputs,
+                      validation: requestedValidation,
                     });
                   }}
                 >
@@ -2065,9 +2126,53 @@ function BlockEditor({
                 {contractIssues > 0 && (
                   <details className="rounded-lg border border-border/70 bg-card/60 p-3">
                     <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                      Dados usados pelo plugin
+                      {t("Dados usados pelo plugin")}
                     </summary>
                     <div className="mt-3 space-y-3">
+                      {validationTargetPortState && validationTargetOutput && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-[10px] text-muted-foreground">
+                              {t("Bloco validado")} · {validationTargetOutput.label}
+                            </Label>
+                            {validationTargetPortState.ambiguous && (
+                              <span className="text-[9px] font-medium text-amber-700 dark:text-amber-300">
+                                {t("Escolha necessária")}
+                              </span>
+                            )}
+                          </div>
+                          <Select
+                            value={
+                              block.validation?.targetPortKey ??
+                              validationTargetPortState.selected?.key ??
+                              ""
+                            }
+                            onValueChange={(targetPortKey) =>
+                              onChange({
+                                validation: block.validation
+                                  ? { ...block.validation, targetPortKey }
+                                  : undefined,
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder={t("Como o plugin usará este dado?")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {validationTargetPortState.compatible.map((port) => (
+                                <SelectItem key={port.key} value={port.key}>
+                                  {port.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {!validationTargetPortState.compatible.length && (
+                            <p className="text-[10px] text-destructive">
+                              {t("Nenhuma porta aceita este formato.")}
+                            </p>
+                          )}
+                        </div>
+                      )}
                       {inputPortState.map(({ input, compatible, selected, ambiguous }) => (
                         <div key={input.id} className="space-y-1">
                           <div className="flex items-center justify-between gap-2">
@@ -3371,16 +3476,19 @@ function ValidationEditor({
   block,
   methodBlocks,
   index,
+  capability,
   onChange,
 }: {
   block: ActionBlock;
   methodBlocks: ActionBlock[];
   index: number;
+  capability?: PluginCapability;
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
+  const { t } = useAppPreferences();
   const previousBlocks = methodBlocks.slice(0, index).filter((item) => item.type !== "VALIDAR");
   const validation = block.validation ?? {
-    targetBlockId: previousBlocks.at(-1)?.id,
+    targetBlockId: "",
     mode: "approval" as ValidationMode,
     onReject: "retry_target" as const,
     maxAttempts: 3,
@@ -3390,13 +3498,7 @@ function ValidationEditor({
   const targetOutputs = target?.outputs ?? [];
 
   function sourceOutputFor(targetBlock: ActionBlock | undefined, key?: string) {
-    return (
-      targetBlock?.outputs?.find((output) => output.key === key) ??
-      targetBlock?.outputs?.find((output) =>
-        ["list", "files", "multiselect"].includes(output.type),
-      ) ??
-      targetBlock?.outputs?.[0]
-    );
+    return key ? targetBlock?.outputs?.find((output) => output.key === key) : undefined;
   }
 
   function applyValidation(
@@ -3407,12 +3509,24 @@ function ValidationEditor({
     ),
   ) {
     const nextValidation = { ...validation, ...patch };
-    const sourceOutput =
-      nextMode === "approval"
-        ? undefined
-        : sourceOutputFor(nextTarget, patch.targetOutputKey ?? nextValidation.targetOutputKey);
-    if (nextMode !== "approval") nextValidation.targetOutputKey = sourceOutput?.key;
-    else nextValidation.targetOutputKey = undefined;
+    const sourceOutput = sourceOutputFor(nextTarget, nextValidation.targetOutputKey);
+    if (!sourceOutput) {
+      nextValidation.targetOutputKey = undefined;
+      nextValidation.targetPortKey = undefined;
+    } else if (capability) {
+      const usedPorts = new Set(
+        (block.inputs ?? [])
+          .map((input) => input.portKey)
+          .filter((key): key is string => Boolean(key)),
+      );
+      const compatiblePorts = capability.inputPorts.filter(
+        (port) =>
+          legacyTypeListAccepts(port.acceptedTypes, sourceOutput.type) && !usedPorts.has(port.key),
+      );
+      const configured = compatiblePorts.find((port) => port.key === nextValidation.targetPortKey);
+      nextValidation.targetPortKey =
+        configured?.key ?? (compatiblePorts.length === 1 ? compatiblePorts[0].key : undefined);
+    }
     onChange({
       validation: nextValidation,
       outputs: createValidationFields(
@@ -3492,6 +3606,34 @@ function ValidationEditor({
               O bloco selecionado precisa declarar uma saída para oferecer opções.
             </p>
           )}
+        </div>
+      )}
+
+      {validation.mode === "approval" && capability && (
+        <div className="space-y-1.5">
+          <Label>{t("Saída enviada ao plugin")}</Label>
+          <Select
+            value={validation.targetOutputKey ?? "__whole_block__"}
+            onValueChange={(targetOutputKey) =>
+              applyValidation({
+                targetOutputKey:
+                  targetOutputKey === "__whole_block__" ? undefined : targetOutputKey,
+                targetPortKey: undefined,
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__whole_block__">{t("Aprovar o bloco inteiro")}</SelectItem>
+              {targetOutputs.map((output) => (
+                <SelectItem key={output.id} value={output.key}>
+                  {output.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 

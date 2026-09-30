@@ -175,8 +175,9 @@ const blockSchema = z
     outputs: z.array(outputSchema).optional(),
     validation: z
       .object({
-        targetBlockId: z.string().optional(),
+        targetBlockId: z.string().min(1),
         targetOutputKey: z.string().optional(),
+        targetPortKey: z.string().min(1).optional(),
         mode: z.enum(["approval", "select_one", "select_many"]),
         onReject: z.enum(["retry_target", "pause"]),
         maxAttempts: z.number().int().min(1).max(20),
@@ -263,6 +264,7 @@ function compatibleType(source: HumanFieldType, target: HumanFieldType) {
 function validatePluginConfiguration(
   blockLabel: string,
   block: ProcessMethod["blocks"][number],
+  validationTarget: ProcessMethod["blocks"][number] | undefined,
   plugins: BuilderPluginContext[],
   errors: string[],
   warnings: string[],
@@ -308,17 +310,66 @@ function validatePluginConfiguration(
   if (profileValidation.error) errors.push(`${blockLabel}: ${profileValidation.error}`);
   else if (profileValidation.policy) block.plugin.profileExecution = profileValidation.policy;
 
+  const occupiedInputPorts = new Set<string>();
+  const assignedInputPorts = new Set<string>();
   for (const input of block.inputs ?? []) {
-    const candidates = capability.inputPorts.filter((port) =>
+    const compatible = capability.inputPorts.filter((port) =>
       legacyTypeListAccepts(port.acceptedTypes, input.type),
     );
     if (input.portKey) {
-      if (!candidates.some((port) => port.key === input.portKey))
+      const selected = compatible.find((port) => port.key === input.portKey);
+      if (!selected)
         errors.push(`${blockLabel}: porta da entrada “${input.label}” é incompatível.`);
-    } else if (candidates.length === 1) input.portKey = candidates[0].key;
-    else if (candidates.length === 0)
-      errors.push(`${blockLabel}: nenhuma porta aceita a entrada “${input.label}”.`);
-    else errors.push(`${blockLabel}: informe portKey para a entrada ambígua “${input.label}”.`);
+      else if (!selected.multiple && occupiedInputPorts.has(selected.key))
+        errors.push(`${blockLabel}: a porta da entrada “${input.label}” já está ocupada.`);
+      else {
+        assignedInputPorts.add(selected.key);
+        if (!selected.multiple) occupiedInputPorts.add(selected.key);
+      }
+    } else {
+      const candidates = compatible.filter(
+        (port) => port.multiple || !occupiedInputPorts.has(port.key),
+      );
+      if (candidates.length === 1) {
+        const selected = candidates[0];
+        input.portKey = selected.key;
+        assignedInputPorts.add(selected.key);
+        if (!selected.multiple) occupiedInputPorts.add(selected.key);
+      } else if (candidates.length === 0)
+        errors.push(`${blockLabel}: nenhuma porta aceita a entrada “${input.label}”.`);
+      else errors.push(`${blockLabel}: informe portKey para a entrada ambígua “${input.label}”.`);
+    }
+  }
+  if (block.type === "VALIDAR") {
+    const targetOutput = validationTarget?.outputs?.find(
+      (output) => output.key === block.validation?.targetOutputKey,
+    );
+    if (targetOutput) {
+      const candidates = capability.inputPorts.filter(
+        (port) =>
+          legacyTypeListAccepts(port.acceptedTypes, targetOutput.type) &&
+          !assignedInputPorts.has(port.key),
+      );
+      if (block.validation?.targetPortKey) {
+        const selected = candidates.find((port) => port.key === block.validation?.targetPortKey);
+        if (!selected)
+          errors.push(`${blockLabel}: porta do alvo de validação é incompatível ou está ocupada.`);
+        else {
+          assignedInputPorts.add(selected.key);
+          if (!selected.multiple) occupiedInputPorts.add(selected.key);
+        }
+      } else if (candidates.length === 1) {
+        block.validation!.targetPortKey = candidates[0].key;
+        assignedInputPorts.add(candidates[0].key);
+        if (!candidates[0].multiple) occupiedInputPorts.add(candidates[0].key);
+      } else if (candidates.length === 0) {
+        errors.push(`${blockLabel}: nenhuma porta aceita o alvo de validação.`);
+      } else {
+        errors.push(`${blockLabel}: informe targetPortKey para o alvo de validação ambíguo.`);
+      }
+    } else if (block.validation?.targetPortKey) {
+      errors.push(`${blockLabel}: targetPortKey exige targetOutputKey válido.`);
+    }
   }
   for (const output of block.outputs ?? []) {
     const candidates = capability.outputPorts.filter((port) =>
@@ -333,7 +384,7 @@ function validatePluginConfiguration(
     else errors.push(`${blockLabel}: informe portKey para a saída ambígua “${output.label}”.`);
   }
   for (const port of capability.inputPorts.filter((item) => item.required)) {
-    if (!(block.inputs ?? []).some((input) => input.portKey === port.key))
+    if (!assignedInputPorts.has(port.key))
       errors.push(`${blockLabel}: falta a entrada obrigatória do plugin “${port.label}”.`);
   }
   for (const port of capability.outputPorts.filter((item) => item.required)) {
@@ -419,7 +470,11 @@ export function validateBuilderMethods(input: {
             errors.push(`${label}: tipo incompatível na entrada “${binding.label}”.`);
         }
       }
-      validatePluginConfiguration(label, block, input.plugins, errors, warnings);
+      const validationTarget =
+        block.type === "VALIDAR"
+          ? blocks.find((candidate) => candidate.id === block.validation?.targetBlockId)
+          : undefined;
+      validatePluginConfiguration(label, block, validationTarget, input.plugins, errors, warnings);
     }
     const issue = getMethodConfigurationIssue(method);
     if (issue) errors.push(`${processType}: ${issue}`);

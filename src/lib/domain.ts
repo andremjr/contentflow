@@ -198,8 +198,10 @@ export type BlockParameter = {
 export type ValidationMode = "approval" | "select_one" | "select_many";
 
 export type BlockValidationConfig = {
-  targetBlockId?: string;
+  targetBlockId: string;
   targetOutputKey?: string;
+  /** Capability input port that receives the explicitly selected target output. */
+  targetPortKey?: string;
   mode: ValidationMode;
   onReject: "retry_target" | "pause";
   maxAttempts: number;

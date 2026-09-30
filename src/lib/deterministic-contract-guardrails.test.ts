@@ -40,10 +40,12 @@ test("keeps textual and plugin contract heuristics out of the Execution Core", (
     /\bselectPluginInputPort\b/,
     /\binputPorts\b/,
     /\boutputPorts\b/,
+    /\bPluginInputPort\b/,
     /\bPluginOutputPort\b/,
     /\bPluginFieldContract\b/,
     /\bresponseValues\b/,
     /\bPluginManifest\b/,
+    /\btargetPortKey\b/,
     /from ["'][^"']*plugin-contract["']/,
     /from ["'][^"']*runtime-contract["']/,
   ];
@@ -181,14 +183,23 @@ test("keeps normal plugin output bindings explicit while preserving scoped respo
   // ESCOLHER remains a single, explicitly delimited historical compatibility path.
   assert.equal((pluginOperation.match(/capability\.outputPorts\[0\]/g) ?? []).length, 1);
   assert.match(pluginOperation, /ESCOLHER keeps its historical collection-selection contract/);
-  assert.match(
+  assert.doesNotMatch(
     pluginOperation,
-    /targetBlock\?\.outputs\?\.find\([\s\S]*targetOutputKey[\s\S]*targetBlock\?\.outputs\?\.\[0\]/,
+    /targetBlock\?\.outputs\?\.\[0\]|targetBlock\.outputs\?\.\[0\]/,
   );
   assert.match(
     pluginOperation,
-    /targetOutput[\s\S]*capability\.inputPorts\.find\([\s\S]*legacyTypeListAccepts/,
+    /validation\.targetOutputKey[\s\S]*targetBlock\.outputs\?\.find\([\s\S]*field\.key === validation\.targetOutputKey/,
   );
+  assert.match(
+    pluginOperation,
+    /validation\.targetPortKey[\s\S]*capability\.inputPorts\.find\([\s\S]*port\.key === validation\.targetPortKey[\s\S]*legacyTypeListAccepts/,
+  );
+  assert.doesNotMatch(
+    pluginOperation,
+    /capability\.inputPorts\.find\(\s*\(port\) =>\s*legacyTypeListAccepts/,
+  );
+  assert.doesNotMatch(pluginOperation, /capability\.inputPorts\[0\]/);
 
   const humanWorkflow = read("src/lib/human-workflow.ts");
   const methodNormalization = sourceBetween(
@@ -196,13 +207,11 @@ test("keeps normal plugin output bindings explicit while preserving scoped respo
     "export function normalizeMethodBlocks",
     "export function isEmptyRuntimeValue",
   );
-  assert.match(
+  assert.match(methodNormalization, /candidate\.id === currentValidation\?\.targetBlockId/);
+  assert.match(methodNormalization, /output\.key === currentValidation\?\.targetOutputKey/);
+  assert.doesNotMatch(
     methodNormalization,
-    /normalized\.find\([\s\S]*targetBlockId[\s\S]*reverse\(\)\.find\([\s\S]*candidate\.type !== "VALIDAR"/,
-  );
-  assert.match(
-    methodNormalization,
-    /target\?\.outputs\?\.find\([\s\S]*targetOutputKey[\s\S]*target\?\.outputs\?\.\[0\]/,
+    /reverse\(\)|candidate\.type !== "VALIDAR"|\["list", "files", "multiselect"\]|outputs\?\.\[0\]/,
   );
 });
 

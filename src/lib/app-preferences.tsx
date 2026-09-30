@@ -828,6 +828,8 @@ const PHRASES: Record<string, Translation> = {
     "Output offered for selection",
     "Salida presentada para elegir",
   ],
+  "Saída enviada ao plugin": ["Output sent to the plugin", "Salida enviada al plugin"],
+  "Aprovar o bloco inteiro": ["Approve the whole block", "Aprobar el bloque completo"],
   "Selecione a saída com as opções": [
     "Select the output containing the options",
     "Selecciona la salida con las opciones",
@@ -1809,6 +1811,10 @@ const PHRASES: Record<string, Translation> = {
   "Como o plugin usará este dado?": [
     "How will the plugin use this data?",
     "¿Cómo usará el plugin este dato?",
+  ],
+  "Nenhuma porta aceita este formato.": [
+    "No port accepts this format.",
+    "Ningún puerto acepta este formato.",
   ],
   "O que o plugin entregará aqui?": [
     "What will the plugin output here?",

@@ -1765,6 +1765,7 @@ function HumanBlockGate({
   libraryItems: ChannelLibraryItem[];
   onProcessCompleted: () => void;
 }) {
+  const { t } = useAppPreferences();
   const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
   const retryFeedback = blockExecution?.retryFeedback;
   const [values, setValues] = useState<Record<string, RuntimeValue>>(() =>
@@ -1790,6 +1791,21 @@ function HumanBlockGate({
     value: RuntimeValue;
     source?: string;
   }> = [];
+  const validationTargetBlock =
+    block.type === "VALIDAR"
+      ? execution.methodSnapshot.blocks.find(
+          (candidate) => candidate.id === block.validation?.targetBlockId,
+        )
+      : undefined;
+  const validationTargetExecution = validationTargetBlock
+    ? execution.blocks.find((candidate) => candidate.blockId === validationTargetBlock.id)
+    : undefined;
+  const validationTargetOutputs =
+    block.type === "VALIDAR" && block.validation?.mode !== "approval"
+      ? (validationTargetBlock?.outputs ?? []).filter(
+          (output) => output.key === block.validation?.targetOutputKey,
+        )
+      : (validationTargetBlock?.outputs ?? []);
 
   for (const previousProcess of projectExecutions
     .filter(
@@ -1943,6 +1959,26 @@ function HumanBlockGate({
               ? retryFeedback.feedback
               : "O resultado anterior foi reprovado. Produza uma nova versão antes de continuar."}
           </p>
+        </div>
+      )}
+
+      {validationTargetBlock && validationTargetExecution && validationTargetOutputs.length > 0 && (
+        <div className="mt-5 rounded-xl border border-border/70 bg-background/30 p-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("Bloco validado")} · {validationTargetBlock.name ?? validationTargetBlock.type}
+          </h4>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {validationTargetOutputs.map((output) => (
+              <CollapsibleResultValue
+                key={output.id}
+                label={output.label}
+                type={output.type}
+                presentation={output.presentation}
+                value={validationTargetExecution.values[output.key]}
+                source={validationTargetBlock.name ?? validationTargetBlock.type}
+              />
+            ))}
+          </div>
         </div>
       )}
 

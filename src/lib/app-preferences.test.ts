@@ -3,6 +3,18 @@ import test from "node:test";
 
 import { translate } from "./app-preferences";
 
+test("translates explicit VALIDAR target and plugin binding controls", () => {
+  for (const phrase of [
+    "Saída enviada ao plugin",
+    "Aprovar o bloco inteiro",
+    "Nenhuma porta aceita este formato.",
+  ]) {
+    assert.equal(translate(phrase, "pt-BR"), phrase);
+    assert.notEqual(translate(phrase, "en"), phrase);
+    assert.notEqual(translate(phrase, "es"), phrase);
+  }
+});
+
 test("translates the sidebar project CTA", () => {
   assert.equal(
     translate("Saiba mais sobre o projeto ContentFlow", "en"),

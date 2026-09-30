@@ -300,10 +300,16 @@ function attachValidationReferences(
   items: DeliveryItem[],
 ) {
   if (block.type !== "VALIDAR" || !block.validation?.targetBlockId) return;
-  const targets = (execution.deliveries ?? []).filter(
-    (delivery) =>
-      delivery.blockId === block.validation?.targetBlockId && delivery.status !== "invalidated",
-  );
+  const targets = (execution.deliveries ?? [])
+    .filter(
+      (delivery) =>
+        delivery.blockId === block.validation?.targetBlockId && delivery.status !== "invalidated",
+    )
+    .filter(
+      (delivery) =>
+        !block.validation?.targetOutputKey ||
+        delivery.outputKey === block.validation.targetOutputKey,
+    );
   for (const item of items) {
     const target = targets
       .flatMap((delivery) => delivery.items)

@@ -6267,37 +6267,84 @@ async function executePluginBlockInternal(
       ];
     }),
   ) as Record<string, RuntimeValue>;
-  if (block.type === "VALIDAR" && block.validation?.targetBlockId) {
-    const targetBlock = execution.methodSnapshot.blocks.find(
-      (candidate) => candidate.id === block.validation?.targetBlockId,
+  if (block.type === "VALIDAR") {
+    const validation = block.validation;
+    const validationIndex = execution.methodSnapshot.blocks.findIndex(
+      (candidate) => candidate.id === block.id,
     );
+    const targetIndex = execution.methodSnapshot.blocks.findIndex(
+      (candidate) => candidate.id === validation?.targetBlockId,
+    );
+    const targetBlock = execution.methodSnapshot.blocks[targetIndex];
     const targetExecution = execution.blocks.find(
-      (candidate) => candidate.blockId === block.validation?.targetBlockId,
+      (candidate) => candidate.blockId === validation?.targetBlockId,
     );
-    const targetOutput =
-      targetBlock?.outputs?.find((field) => field.key === block.validation?.targetOutputKey) ??
-      targetBlock?.outputs?.[0];
-    const targetValue = targetOutput ? targetExecution?.values[targetOutput.key] : undefined;
-    const targetPort = targetOutput
-      ? capability.inputPorts.find((port) =>
-          legacyTypeListAccepts(port.acceptedTypes, targetOutput.type),
-        )
-      : undefined;
     if (
-      targetOutput &&
-      targetValue !== undefined &&
-      targetPort &&
-      inputs[targetPort.key] === undefined
+      !validation?.targetBlockId ||
+      targetIndex < 0 ||
+      targetIndex >= validationIndex ||
+      !targetBlock ||
+      targetBlock.type === "VALIDAR" ||
+      !targetExecution
     ) {
+      return {
+        status: 422,
+        body: { error: "O bloco validado não está configurado no snapshot da execução." },
+      };
+    }
+    const requiresTargetOutput = validation.mode !== "approval";
+    if (requiresTargetOutput && !validation.targetOutputKey) {
+      return {
+        status: 422,
+        body: { error: "A validação precisa declarar qual saída contém as opções." },
+      };
+    }
+    const targetOutput = validation.targetOutputKey
+      ? targetBlock.outputs?.find((field) => field.key === validation.targetOutputKey)
+      : undefined;
+    if (validation.targetOutputKey && !targetOutput) {
+      return {
+        status: 422,
+        body: { error: "A saída configurada para a validação não existe no bloco validado." },
+      };
+    }
+    if (!targetOutput && validation.targetPortKey) {
+      return {
+        status: 422,
+        body: { error: "A porta do alvo exige uma saída explícita do bloco validado." },
+      };
+    }
+    if (targetOutput) {
+      const targetValue = targetExecution.values[targetOutput.key];
+      const targetPort = validation.targetPortKey
+        ? capability.inputPorts.find(
+            (port) =>
+              port.key === validation.targetPortKey &&
+              legacyTypeListAccepts(port.acceptedTypes, targetOutput.type),
+          )
+        : undefined;
+      if (!targetPort || inputs[targetPort.key] !== undefined) {
+        return {
+          status: 422,
+          body: { error: "Vincule explicitamente uma porta compatível ao alvo da validação." },
+        };
+      }
+      if (targetValue === undefined) {
+        return {
+          status: 422,
+          body: { error: "O resultado configurado para a validação ainda não está disponível." },
+        };
+      }
       inputs[targetPort.key] = targetValue;
       inputContract.push({
-        id: `validation-${targetBlock?.id ?? "target"}-${targetOutput.key}`,
+        id: `validation-${targetBlock.id}-${targetOutput.key}`,
         portKey: targetPort.key,
         label: targetOutput.label,
         type: targetOutput.type,
         recordFields: targetOutput.recordFields,
         presentation: targetOutput.presentation,
       });
+      if (!targetPort.multiple) usedInputPorts.add(targetPort.key);
     }
   }
   // A plugin receives values only through bindings that are visible in the

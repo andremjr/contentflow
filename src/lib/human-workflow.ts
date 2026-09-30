@@ -58,26 +58,30 @@ export function getMethodConfigurationIssue(method?: ProcessMethod) {
       }
     }
     if (block.type === "VALIDAR") {
-      const targetIndex = block.validation?.targetBlockId
-        ? method.blocks.findIndex((candidate) => candidate.id === block.validation?.targetBlockId)
-        : (method.blocks
-            .slice(0, blockIndex)
-            .map((candidate, index) => ({ candidate, index }))
-            .reverse()
-            .find(({ candidate }) => candidate.type !== "VALIDAR")?.index ?? -1);
+      const targetBlockId = block.validation?.targetBlockId?.trim();
+      if (!targetBlockId) {
+        return `Selecione um bloco anterior para a validação “${block.name ?? "Validar"}”.`;
+      }
+      const targetIndex = method.blocks.findIndex((candidate) => candidate.id === targetBlockId);
       if (targetIndex < 0 || targetIndex >= blockIndex) {
         return `Selecione um bloco anterior para a validação “${block.name ?? "Validar"}”.`;
       }
       if (method.blocks[targetIndex].type === "VALIDAR") {
         return `A validação “${block.name ?? "Validar"}” deve apontar para um bloco Buscar, Escolher ou Criar.`;
       }
+      const targetOutputKey = block.validation?.targetOutputKey?.trim();
+      const requiresTargetOutput = block.validation?.mode !== "approval";
+      if (requiresTargetOutput && !targetOutputKey) {
+        return `Selecione qual saída será apresentada pela validação “${block.name ?? "Validar"}”.`;
+      }
       if (
-        block.validation?.mode !== "approval" &&
-        !method.blocks[targetIndex].outputs?.some(
-          (output) => output.key === block.validation?.targetOutputKey,
-        )
+        targetOutputKey &&
+        !method.blocks[targetIndex].outputs?.some((output) => output.key === targetOutputKey)
       ) {
         return `Selecione qual saída será apresentada pela validação “${block.name ?? "Validar"}”.`;
+      }
+      if (!targetOutputKey && block.validation?.targetPortKey) {
+        return `Selecione qual saída será enviada ao plugin na validação “${block.name ?? "Validar"}”.`;
       }
     }
   }
@@ -293,8 +297,9 @@ export function normalizeActionBlock(block: ActionBlock, processType: ProcessId)
             onReject: block.validation?.onReject ?? "retry_target",
             maxAttempts: Math.max(1, block.validation?.maxAttempts ?? 3),
             retryMode: block.validation?.retryMode ?? "full",
-            targetBlockId: block.validation?.targetBlockId,
+            targetBlockId: block.validation?.targetBlockId ?? "",
             targetOutputKey: block.validation?.targetOutputKey,
+            targetPortKey: block.validation?.targetPortKey,
           }
         : undefined,
     parameters: block.parameters ?? [],
@@ -306,21 +311,22 @@ export function normalizeMethodBlocks(blocks: ActionBlock[], processType: Proces
   for (const [order, sourceBlock] of blocks.entries()) {
     const block = { ...normalizeActionBlock(sourceBlock, processType), order };
     if (block.type === "VALIDAR") {
-      const target =
-        normalized.find((candidate) => candidate.id === block.validation?.targetBlockId) ??
-        [...normalized].reverse().find((candidate) => candidate.type !== "VALIDAR");
-      const mode = block.validation?.mode ?? "approval";
-      const targetOutput =
-        target?.outputs?.find((output) => output.key === block.validation?.targetOutputKey) ??
-        target?.outputs?.find((output) => ["list", "files", "multiselect"].includes(output.type)) ??
-        target?.outputs?.[0];
+      const currentValidation = block.validation;
+      const mode = currentValidation?.mode ?? "approval";
+      const target = normalized.find(
+        (candidate) => candidate.id === currentValidation?.targetBlockId,
+      );
+      const targetOutput = target?.outputs?.find(
+        (output) => output.key === currentValidation?.targetOutputKey,
+      );
       block.validation = {
         mode,
-        targetBlockId: target?.id,
-        targetOutputKey: mode === "approval" ? undefined : targetOutput?.key,
-        onReject: block.validation?.onReject ?? "retry_target",
-        maxAttempts: Math.max(1, block.validation?.maxAttempts ?? 3),
-        retryMode: block.validation?.retryMode ?? "full",
+        targetBlockId: currentValidation?.targetBlockId ?? "",
+        targetOutputKey: currentValidation?.targetOutputKey,
+        targetPortKey: currentValidation?.targetPortKey,
+        onReject: currentValidation?.onReject ?? "retry_target",
+        maxAttempts: Math.max(1, currentValidation?.maxAttempts ?? 3),
+        retryMode: currentValidation?.retryMode ?? "full",
       };
       const hasExpectedOutput = (block.outputs ?? []).some((output) =>
         mode === "approval"
@@ -330,9 +336,19 @@ export function normalizeMethodBlocks(blocks: ActionBlock[], processType: Proces
       if (!hasExpectedOutput) {
         block.outputs = createValidationFields(
           mode,
-          target?.id,
+          block.validation.targetBlockId,
           block.validation.targetOutputKey,
           targetOutput?.type,
+        );
+      } else if (mode !== "approval") {
+        block.outputs = (block.outputs ?? []).map((output) =>
+          ["selected_value", "selected_values"].includes(output.key)
+            ? {
+                ...output,
+                optionsSourceBlockId: block.validation!.targetBlockId,
+                optionsSourceKey: block.validation!.targetOutputKey,
+              }
+            : output,
         );
       }
     }

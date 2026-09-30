@@ -154,6 +154,68 @@ test("preserva binding canônico e remapeia seu blockId no round-trip portátil"
   }
 });
 
+test("preserva target estratégico, output e porta técnica de VALIDAR no round-trip", () => {
+  const validationMethod: ProcessMethod = {
+    ...method,
+    blocks: [
+      {
+        ...method.blocks[0],
+        operator: "Humano",
+        plugin: undefined,
+        outputs: [
+          {
+            id: "draft-output",
+            label: "Rascunho",
+            key: "draft",
+            type: "textarea",
+            required: true,
+          },
+        ],
+      },
+      {
+        id: "review-script",
+        type: "VALIDAR",
+        operator: "Código",
+        name: "Revisar roteiro",
+        inputs: [],
+        outputs: [
+          {
+            id: "decision-output",
+            label: "Decisão",
+            key: "decision",
+            type: "approval",
+            required: true,
+            portKey: "decision",
+          },
+        ],
+        validation: {
+          targetBlockId: "write-script",
+          targetOutputKey: "draft",
+          targetPortKey: "content",
+          mode: "approval",
+          onReject: "retry_target",
+          maxAttempts: 3,
+        },
+        plugin: {
+          pluginId: "official-validator",
+          capabilityId: "review-text",
+          configuration: {},
+        },
+        parameters: [],
+        order: 1,
+      },
+    ],
+  };
+
+  const parsed = parseMethodFile(serializeMethodFile("Roteiro validado", validationMethod));
+  assert.deepEqual(parsed.method.blocks[1].validation, validationMethod.blocks[1].validation);
+
+  const copied = copyImportedBlocks("script", parsed.method.blocks, (prefix) => `${prefix}-new`);
+  assert.equal(copied[1].validation?.targetBlockId, copied[0].id);
+  assert.equal(copied[1].validation?.targetOutputKey, "draft");
+  assert.equal(copied[1].validation?.targetPortKey, "content");
+});
+
 test("cópia interna pode preservar a referência local sem copiar secrets", () => {
   const [copied] = copyImportedBlocks("script", method.blocks, (prefix) => `${prefix}-new`, {
     preserveLocalConnections: true,

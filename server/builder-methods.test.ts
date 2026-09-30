@@ -118,6 +118,75 @@ function pluginThemeMethod(): ProcessMethod {
   return method;
 }
 
+function validationPluginContext(inputPortKeys: string[]): BuilderPluginContext {
+  const base = pluginContext([]);
+  base.plugin.manifest.capabilities = [
+    {
+      id: "validate-theme",
+      operator: "IA",
+      blockTypes: ["VALIDAR"],
+      processTypes: ["theme"],
+      inputPorts: inputPortKeys.map((key) => ({
+        key,
+        label: key,
+        acceptedTypes: ["textarea"],
+        required: inputPortKeys.length === 1,
+      })),
+      outputPorts: [
+        {
+          key: "decision",
+          label: "Decisão",
+          producedTypes: ["approval"],
+          required: true,
+        },
+      ],
+      execution: { mode: "immediate" },
+      sideEffects: [],
+      cost: { model: "free", estimateSupported: false },
+      dataPolicy: { sendsDataToThirdParties: false },
+      blockConfigSchema: { type: "object", properties: {}, additionalProperties: false },
+      outputSchema: { type: "object", properties: {}, additionalProperties: false },
+    },
+  ];
+  return base;
+}
+
+function pluginValidationMethod(): ProcessMethod {
+  const method = manualThemeMethod();
+  method.blocks.push({
+    id: "review-theme",
+    type: "VALIDAR",
+    operator: "IA",
+    name: "Revisar tema",
+    inputs: [],
+    outputs: [
+      {
+        id: "decision-output",
+        label: "Decisão",
+        key: "decision",
+        type: "approval",
+        required: true,
+        portKey: "decision",
+      },
+    ],
+    validation: {
+      targetBlockId: "theme-input",
+      targetOutputKey: "theme",
+      mode: "approval",
+      onReject: "retry_target",
+      maxAttempts: 3,
+    },
+    plugin: {
+      pluginId: "dev.contentflow.port-test",
+      capabilityId: "validate-theme",
+      configuration: {},
+    },
+    parameters: [],
+    order: 1,
+  });
+  return method;
+}
+
 test("accepts a complete manual Method without requiring a plugin", () => {
   const result = validateBuilderMethods({
     channel,
@@ -333,4 +402,42 @@ test("builder requires an explicit portKey when multiple plugin output ports are
 
   assert.equal(result.ok, false);
   assert.match(result.errors.join("\n"), /informe portKey para a saída ambígua/);
+});
+
+test("builder materializes the only compatible validation target port before runtime", () => {
+  const result = validateBuilderMethods({
+    channel,
+    methods: { theme: pluginValidationMethod() },
+    plugins: [validationPluginContext(["content"])],
+    collections: [],
+  });
+
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.equal(result.methods?.theme?.blocks[1].validation?.targetPortKey, "content");
+});
+
+test("builder requires targetPortKey when multiple plugin ports accept the validation target", () => {
+  const result = validateBuilderMethods({
+    channel,
+    methods: { theme: pluginValidationMethod() },
+    plugins: [validationPluginContext(["content", "reference"])],
+    collections: [],
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /informe targetPortKey/);
+});
+
+test("explicit validation target port wins over another compatible port", () => {
+  const method = pluginValidationMethod();
+  method.blocks[1].validation!.targetPortKey = "reference";
+  const result = validateBuilderMethods({
+    channel,
+    methods: { theme: method },
+    plugins: [validationPluginContext(["content", "reference"])],
+    collections: [],
+  });
+
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.equal(result.methods?.theme?.blocks[1].validation?.targetPortKey, "reference");
 });

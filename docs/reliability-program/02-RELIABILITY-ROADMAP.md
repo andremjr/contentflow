@@ -71,8 +71,8 @@ A especificação de cada TASK-N será criada somente quando a missão estiver p
 | TASK-023 | Retirar `labelScore` do runtime canônico                | `done`    |
 | TASK-024 | Porta de entrada de plugin explícita                    | `done`    |
 | TASK-025 | Outputs de plugin explícitos                            | `done`    |
-| TASK-026 | `VALIDAR` com alvo explícito                            | `ready`   |
-| TASK-027 | Adapter para Métodos legados                            | `pending` |
+| TASK-026 | `VALIDAR` com alvo explícito                            | `done`    |
+| TASK-027 | Adapter para Métodos legados                            | `ready`   |
 | TASK-028 | Normalização/validação canônica da resposta do executor | `pending` |
 
 ### Universal Recovery — TASK-029 a TASK-038

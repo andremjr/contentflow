@@ -581,3 +581,71 @@ test("materializa itens individuais em saídas do tipo list", () => {
   assert.equal(deliveries[0].items[1].value, themes[1]);
   assert.equal(deliveries[0].items[2].value, themes[2]);
 });
+
+test("seleção de VALIDAR referencia somente a delivery do targetOutputKey explícito", () => {
+  const target: ActionBlock = {
+    id: "generate-options",
+    type: "CRIAR",
+    operator: "Humano",
+    outputs: [
+      { id: "other", label: "Outra", key: "other", type: "list", required: true },
+      {
+        id: "candidates",
+        label: "Candidatos",
+        key: "candidates",
+        type: "list",
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 0,
+  };
+  const validation: ActionBlock = {
+    id: "select-option",
+    type: "VALIDAR",
+    operator: "Humano",
+    outputs: [
+      {
+        id: "selected",
+        label: "Selecionado",
+        key: "selected_value",
+        type: "text",
+        required: true,
+      },
+    ],
+    validation: {
+      targetBlockId: target.id,
+      targetOutputKey: "candidates",
+      mode: "select_one",
+      onReject: "pause",
+      maxAttempts: 3,
+    },
+    parameters: [],
+    order: 1,
+  };
+  const execution = executionFor("theme", target);
+  execution.methodSnapshot.blocks.push(validation);
+  execution.blocks.push({
+    blockId: validation.id,
+    status: "completed",
+    values: { selected_value: "B" },
+    attempt: 1,
+  });
+  recordBlockDeliveries(execution, target, { other: ["B"], candidates: ["A", "B"] }, "completed");
+  const candidateDelivery = execution.deliveries?.find(
+    (delivery) => delivery.outputKey === "candidates",
+  );
+  const candidateItem = candidateDelivery?.items.find((item) => item.value === "B");
+  assert.ok(candidateItem);
+
+  const [selectionDelivery] = recordBlockDeliveries(
+    execution,
+    validation,
+    { selected_value: "B" },
+    "completed",
+  );
+
+  assert.deepEqual(selectionDelivery.items[0].references, [
+    { itemId: candidateItem.id, role: "selected_from" },
+  ]);
+});

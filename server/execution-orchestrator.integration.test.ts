@@ -300,6 +300,12 @@ test(
         name: "Validar tema",
         inputs: [],
         outputs: [],
+        validation: {
+          targetBlockId: "theme-human-test",
+          mode: "approval",
+          onReject: "retry_target",
+          maxAttempts: 3,
+        },
         parameters: [],
         order: 1,
       });
@@ -541,6 +547,12 @@ test(
         name: "Validar tema automático",
         inputs: [],
         outputs: [],
+        validation: {
+          targetBlockId: "theme-human-test",
+          mode: "approval",
+          onReject: "retry_target",
+          maxAttempts: 3,
+        },
         parameters: [],
         order: 1,
       });

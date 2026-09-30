@@ -207,8 +207,9 @@ const outputSchema = z
   }));
 
 const validationSchema = z.object({
-  targetBlockId: z.string().optional(),
+  targetBlockId: z.string().min(1),
   targetOutputKey: z.string().max(200).optional(),
+  targetPortKey: z.string().min(1).max(100).optional(),
   mode: z.enum(["approval", "select_one", "select_many"]),
   onReject: z.enum(["retry_target", "pause"]),
   maxAttempts: z.number().int().min(1).max(20),
@@ -680,7 +681,8 @@ function createPortableMethodV2(
         validation: block.validation
           ? {
               ...block.validation,
-              targetBlockId: mapBlockReference(block.validation.targetBlockId),
+              targetBlockId:
+                mapBlockReference(block.validation.targetBlockId) ?? block.validation.targetBlockId,
             }
           : undefined,
       };
@@ -1144,9 +1146,8 @@ function copyBlocksWithIds(
     validation: block.validation
       ? {
           ...block.validation,
-          targetBlockId: block.validation.targetBlockId
-            ? (blockIds.get(block.validation.targetBlockId) ?? block.validation.targetBlockId)
-            : undefined,
+          targetBlockId:
+            blockIds.get(block.validation.targetBlockId) ?? block.validation.targetBlockId,
         }
       : undefined,
   }));

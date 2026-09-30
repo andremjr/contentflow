@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --------------------------- | ------------------------------------------ |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão                      | `1.2.1`                                    |
-| Task concluída              | TASK-025                                   |
+| Task concluída              | TASK-026                                   |
 | Task ativa                  | Nenhuma                                    |
-| Próxima                     | TASK-026 (`ready`), ainda não iniciada     |
+| Próxima                     | TASK-027 (`ready`), ainda não iniciada     |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -117,9 +117,9 @@ As saídas universais continuam pertencendo ao Bloco. Para Blocos executados por
 
 O contrato sintético histórico de `ESCOLHER` ainda usa a primeira output port da capability ou `result`. Ele está delimitado por guardrail como compatibilidade especializada da seleção de coleção, não como semântica universal de output binding. A interpretação ampla da resposta permanece reservada à TASK-028.
 
-`VALIDAR` possui alvo persistido, mas a normalização de Método ainda pode inferir o último Bloco não-`VALIDAR` e uma saída compatível. Na boundary de plugin, a primeira saída do alvo e a primeira porta de input compatível ainda funcionam como fallback.
+`VALIDAR` possui alvo estratégico explícito no Método e no snapshot. `targetBlockId` identifica sempre um Bloco anterior não-`VALIDAR`; `select_one` e `select_many` exigem `targetOutputKey`, enquanto `approval` continua aprovando o Bloco inteiro e só transporta um valor material quando uma saída foi declarada. Para execução por plugin, `targetPortKey` correlaciona esse valor com uma porta técnica da capability antes do runtime. Normalização e execução não escolhem alvo, saída ou porta por proximidade, tipo ou ordem. Inputs adicionais permanecem contexto complementar e não substituem o target.
 
-Os fallbacks de resposta, `ESCOLHER` e `VALIDAR` permanecem localizados por guardrails focais. A proteção de outputs normais agora impede o retorno de seleção por tipo, primeira porta ou `field.key`, e a proteção restante impede que compatibilidades especializadas se expandam para o Core ou para novas boundaries.
+Os fallbacks de resposta e `ESCOLHER` permanecem localizados por guardrails focais. A proteção de bindings normais e de `VALIDAR` impede seleção por tipo, primeira porta, primeira saída ou `field.key`, e a proteção restante impede que compatibilidades especializadas se expandam para o Core ou para novas boundaries.
 
 ### Recovery decidido de forma mais rica do que é aplicado
 
@@ -165,6 +165,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para iniciar a TASK-026. Origem estratégica, portas de input e portas de outputs declarados normais agora são determinísticas; a próxima missão torna explícito o alvo de `VALIDAR` sem alterar a normalização ampla da resposta reservada à TASK-028.
+Não há blocker externo confirmado para iniciar a TASK-027. Origem estratégica, portas de input, portas de outputs declarados normais e o alvo de `VALIDAR` agora são determinísticos. A próxima missão concentra a adaptação de Métodos legados na boundary, sem antecipar a normalização ampla da resposta reservada à TASK-028.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.
