@@ -174,9 +174,7 @@ test("rejects invalid media, records and ambiguous port bindings", () => {
   assert.equal(invalid.ok, false);
   if (!invalid.ok) {
     assert.ok(invalid.issues.some((issue) => issue.code === "INCOMPATIBLE_OUTPUT_SHAPE"));
-    assert.ok(
-      invalid.issues.filter((issue) => issue.code === "INCOMPATIBLE_OUTPUT_SHAPE").length >= 2,
-    );
+    assert.ok(invalid.issues.some((issue) => issue.code === "MISSING_REQUIRED_RECORD_FIELD"));
   }
 
   const ambiguous = normalizePluginResponseValues({

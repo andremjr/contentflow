@@ -81,7 +81,7 @@ export function areValueShapesCompatible(source: ValueShape, target: ValueShape)
   if (source.kind === "content" && target.kind === "content") {
     if (source.family !== target.family) return false;
     if (!representationsCompatible(source.representation, target.representation)) return false;
-    return formatConstraintsOverlap(source, target);
+    return formatConstraintsAreCompatible(source, target);
   }
   if (source.kind === "control" && target.kind === "control") {
     if (source.control !== target.control) return false;
@@ -158,34 +158,36 @@ function representationsCompatible(source: ContentRepresentation, target: Conten
   return target === "either" || source === target;
 }
 
-function formatConstraintsOverlap(source: ContentShape, target: ContentShape) {
+function formatConstraintsAreCompatible(source: ContentShape, target: ContentShape) {
   const sourceMimes = source.formats?.mimeTypes ?? [];
   const targetMimes = target.formats?.mimeTypes ?? [];
-  if (sourceMimes.length && targetMimes.length) {
+  if (targetMimes.length) {
+    if (!sourceMimes.length) return false;
     if (
-      !sourceMimes.some((left) => targetMimes.some((right) => mimePatternsOverlap(left, right)))
+      !sourceMimes.every((sourceMime) =>
+        targetMimes.some((targetMime) => mimePatternContainedBy(sourceMime, targetMime)),
+      )
     ) {
       return false;
     }
   }
   const sourceExtensions = source.formats?.extensions ?? [];
   const targetExtensions = target.formats?.extensions ?? [];
-  return (
-    !sourceExtensions.length ||
-    !targetExtensions.length ||
-    sourceExtensions.some((extension) => targetExtensions.includes(extension))
-  );
+  if (!targetExtensions.length) return true;
+  if (!sourceExtensions.length) return false;
+  const accepted = new Set(targetExtensions.map((value) => value.toLowerCase().replace(/^\./, "")));
+  return sourceExtensions.every((value) => accepted.has(value.toLowerCase().replace(/^\./, "")));
 }
 
-function mimePatternsOverlap(left: string, right: string) {
-  if (left === right || left === "*/*" || right === "*/*") return true;
+function mimePatternContainedBy(source: string, target: string) {
+  const left = source.toLowerCase();
+  const right = target.toLowerCase();
+  if (right === "*/*" || left === right) return true;
+  if (left === "*/*") return false;
   const [leftType, leftSubtype] = left.split("/");
   const [rightType, rightSubtype] = right.split("/");
-  return (
-    Boolean(leftType && leftSubtype && rightType && rightSubtype) &&
-    leftType === rightType &&
-    (leftSubtype === "*" || rightSubtype === "*")
-  );
+  if (!leftType || !leftSubtype || !rightType || !rightSubtype) return false;
+  return rightSubtype === "*" && leftType === rightType;
 }
 
 function normalizeMimeTypes(values: string[]) {

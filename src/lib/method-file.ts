@@ -352,7 +352,7 @@ function buildPortableBlockIds(methods: ProcessMethod[]) {
   return result;
 }
 
-function createPortableMethodV2(
+function createPortableImportedMethod(
   method: ProcessMethod,
   blockIds: Map<string, string>,
   collectionKeys: Map<string, string>,
@@ -574,7 +574,7 @@ export function planPortableMethodTransfer(input: {
       : primary.has(method.processType)
         ? ("primary" as const)
         : ("dependency" as const),
-    method: createPortableMethodV2(method, blockIds, collectionKeys, {
+    method: createPortableImportedMethod(method, blockIds, collectionKeys, {
       preserveLocalConnections: input.preserveLocalConnections,
     }),
     requirements: portableRequirements(method),

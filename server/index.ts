@@ -6,7 +6,6 @@ import express, {
 } from "express";
 import { z } from "zod";
 import { executionCommands } from "./execution-commands";
-import { adaptLegacyExecutionCreatePayload } from "./legacy-execution-boundary";
 import { createMethodPackage, readMethodPackage } from "./method-package";
 import {
   copyImportedMethods,
@@ -123,6 +122,7 @@ import {
 } from "./plugin-runner";
 import { areValueShapesCompatible } from "../src/lib/data-shape";
 import { processMethodV3Schema } from "../src/lib/method-contract-v3";
+import { parseCanonicalExecutionCreatePayload } from "./execution-create-boundary";
 import { valueShapeSchema } from "../src/lib/value-shape-schema";
 import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
 import { validatePluginOutputContract } from "./plugin-output-contract";
@@ -7979,15 +7979,19 @@ app.post("/api/executions/:id/cancel", (request, response) => {
 });
 
 app.post("/api/executions", (request, response) => {
-  const adapted = adaptLegacyExecutionCreatePayload(request.body);
-  if (!adapted.ok) {
+  const parsed = parseCanonicalExecutionCreatePayload(request.body);
+  if (!parsed.ok) {
     response.status(400).json({ error: "Execução inválida." });
     return;
   }
-  const execution = adapted.execution;
+  const execution = parsed.execution;
   const project = readPayload<Project>("projects", execution.projectId);
   const channel = project && readPayload<Channel>("channels", project.channelId);
-  if (project && channel && !project.strategySnapshot) {
+  if (!project || !channel || project.channelId !== execution.channelId) {
+    response.status(400).json({ error: "Execução inválida." });
+    return;
+  }
+  if (!project.strategySnapshot) {
     captureProjectStrategy(
       project,
       channel,

@@ -5,6 +5,7 @@ import type {
   RuntimeValue,
   ValueShape,
 } from "../src/lib/domain";
+import { runtimeItemMatchesShape } from "../src/lib/runtime-value-validation";
 import type { PluginFieldContract, PluginIncrementalItemUpdate } from "../src/lib/plugin-contract";
 import type { PersistentPluginJob } from "./plugin-job-store";
 import { workUnitAttemptIdFor } from "../src/lib/work-units";
@@ -228,44 +229,5 @@ function safeDiagnostic(value: string | undefined) {
 }
 
 export function isCompatiblePluginItemValue(shape: ValueShape, value: unknown) {
-  if (value === null || value === undefined) return false;
-  if (shape.kind === "content") {
-    if (
-      shape.family === "text" &&
-      shape.representation !== "artifact" &&
-      typeof value === "string"
-    ) {
-      return true;
-    }
-    if (shape.representation === "inline" || typeof value !== "object" || Array.isArray(value)) {
-      return false;
-    }
-    const file = value as Record<string, unknown>;
-    return (
-      typeof file.id === "string" &&
-      typeof file.name === "string" &&
-      typeof file.mimeType === "string" &&
-      (shape.family === "text" || String(file.mimeType).startsWith(`${shape.family}/`)) &&
-      typeof file.size === "number" &&
-      Number.isFinite(file.size) &&
-      typeof file.url === "string"
-    );
-  }
-  if (shape.kind === "record") {
-    return Boolean(
-      value && typeof value === "object" && !Array.isArray(value) && !("url" in value),
-    );
-  }
-  if (shape.control === "number") return typeof value === "number" && Number.isFinite(value);
-  if (shape.control === "boolean") return typeof value === "boolean";
-  if (shape.control === "thumbnail_layout") {
-    return Boolean(
-      value &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      (value as { aspectRatio?: unknown }).aspectRatio === "16:9" &&
-      Array.isArray((value as { boxes?: unknown }).boxes),
-    );
-  }
-  return typeof value === "string";
+  return runtimeItemMatchesShape(shape, value);
 }

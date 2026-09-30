@@ -1,47 +1,7 @@
-import type { BlockInputBinding, RuntimeValue, StoredFile, ValueShape } from "../src/lib/domain";
+import type { BlockInputBinding, RuntimeValue } from "../src/lib/domain";
 import { isEmptyRuntimeValue } from "../src/lib/human-workflow";
 import { getPresentationRestrictionIssue } from "../src/lib/presentation";
-
-function isStoredFile(value: unknown): value is StoredFile {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const file = value as Partial<StoredFile>;
-  return (
-    typeof file.id === "string" &&
-    /^[a-zA-Z0-9_-]+$/.test(file.id) &&
-    typeof file.name === "string" &&
-    Boolean(file.name) &&
-    typeof file.mimeType === "string" &&
-    Boolean(file.mimeType) &&
-    typeof file.size === "number" &&
-    Number.isFinite(file.size) &&
-    file.size >= 0 &&
-    typeof file.url === "string" &&
-    /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(file.url)
-  );
-}
-
-function typeMatches(shape: ValueShape, value: RuntimeValue) {
-  if (value === null) return false;
-  const values = shape.cardinality === "many" ? (Array.isArray(value) ? value : []) : [value];
-  if (!values.length || (shape.cardinality === "one" && Array.isArray(value))) return false;
-  if (shape.kind === "content") {
-    return values.every((item) => typeof item === "string" || isStoredFile(item));
-  }
-  if (shape.kind === "record") {
-    return values.every(
-      (item) => item && typeof item === "object" && !Array.isArray(item) && !isStoredFile(item),
-    );
-  }
-  if (shape.control === "number")
-    return values.every((item) => typeof item === "number" && Number.isFinite(item));
-  if (shape.control === "boolean") return values.every((item) => typeof item === "boolean");
-  if (shape.control === "thumbnail_layout") {
-    return values.every((item) =>
-      Boolean(item && typeof item === "object" && !Array.isArray(item) && "boxes" in item),
-    );
-  }
-  return values.every((item) => typeof item === "string");
-}
+import { runtimeValueMatchesShape } from "../src/lib/runtime-value-validation";
 
 export function runtimeInputBindings(inputs: BlockInputBinding[] | undefined) {
   return (inputs ?? []).filter((input) => input.binding?.kind === "runtime");
@@ -79,7 +39,7 @@ export function validateRuntimeInputValues(
   }
   for (const input of bindings) {
     const value = normalized[input.id];
-    if (!typeMatches(input.shape, value)) {
+    if (!runtimeValueMatchesShape(input.shape, value)) {
       return { error: `${input.label}: valor incompatível com o shape declarado.` } as const;
     }
     const restriction = getPresentationRestrictionIssue(input.shape, input.presentation, value);

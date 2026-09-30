@@ -2,7 +2,7 @@
 
 ## Estado
 
-`in_progress`
+`done`
 
 ## Objetivo de produto
 
@@ -95,22 +95,33 @@ O checkout atual usa `HumanFieldType` como taxonomia simultânea de conteúdo, c
 - Branch: `main`.
 - Worktree: limpo no início.
 - Versão: `1.2.1`.
-- O gate agregado possui falha preexistente documentada em `test:shared-browser-v89`; ela não será confundida com regressão desta task.
+- No início havia uma falha histórica registrada em `test:shared-browser-v89`; no fechamento ela não se reproduziu e a suite passou dentro de `npm run check`.
 
 ## Evidência desta implementação
 
-- `npm run test:content-shape`: 15/15 testes passaram.
+- `npm run test:content-shape`: 17/17 testes passaram, incluindo compatibilidade direcional de MIME/extensão e validação material de `RuntimeValue`.
 - O parser público serializa e aceita apenas envelope de Método v3 e rejeita v1/v2 e pseudotipos antigos.
 - O validador de manifesto aceita Plugin API v2 e rejeita API v1 e listas antigas de tipos.
 - Method Builder, formulários humanos e plugins persistem o mesmo `ValueShape`; portas ambíguas exigem `portKey` explícita.
 - Plugin API v2 foi aplicada aos manifestos oficiais, Plugin Kit, exemplos, fixtures e handlers; os exemplos passam por `validatePluginManifest()`.
-- Runtime inputs, output contracts, partials e respostas finais cruzam boundaries canônicas com shape e binding explícitos.
+- Runtime inputs, output contracts, partials, respostas finais, conclusão humana, output oficial e delivery usam `src/lib/runtime-value-validation.ts` como autoridade material compartilhada para `RuntimeValue` contra `ValueShape`.
+- `areValueShapesCompatible()` usa inclusão direcional: todo valor permitido pela origem precisa ser aceito pelo destino; wildcard de MIME e conjuntos de extensão obedecem à mesma regra.
+- `POST /api/executions` deixou de usar `server/legacy-execution-boundary.ts`. A boundary atual exige Method v3, invariantes do Execution Core, Project/Channel existentes e valores materiais compatíveis; payload histórico sem `contractVersion: 3` é rejeitado.
 - Deliveries preservam shape, cardinalidade, representação, identidade por item e promoção para output oficial sem depender do operador.
 - Item orchestration, retry, resume, partials, fallback, leases e lanes multiperfil passam nas suites agregadas, inclusive preservação de identidade e não duplicação.
 - Arquivos portáteis removem conexão e política de perfil locais; a persistência nativa aceita `profileExecution` e valida somente perfis vinculados.
 - Plugins e Métodos P24/P60 usam os contratos atuais; as skills oficiais e suas cópias locais estão sincronizadas.
-- `npm run lint`, `npm run typecheck`, `npm run test:i18n`, `npm run test:content-shape`, as suites focais corrigidas e `npm run build` passam.
-- `npm run test:browser-plugins` passa com 255/255 casos. A última repetição E2E foi interrompida por solicitação do usuário depois de 31/33 casos passarem; os dois casos restantes já haviam passado isoladamente após as correções.
-- O gate agregado avançou até guardrails obsoletos da Browser Bridge e do ChatGPT; ambos foram corrigidos e passaram isoladamente. Uma repetição integral e ininterrupta de `npm run check`, E2E e Electron permanece pendente para o próximo ciclo de testes.
+- `npm run test:execution-create-boundary`: 6/6 testes passaram.
+- `npm run test:plugin-inputs`: 16/16; `npm run test:plugin-responses`: 9/9; `npm run test:automatic-execution`: 8/8; `npm run test:execution-state-machine`: 17/17.
+- `npm run lint` e `npm run typecheck` passam.
+- `npm run build` passa para client e SSR.
+- `npm run check` passou integralmente em 30/09/2026 com exit code 0, incluindo `test:shared-browser-v89`, item orchestration, fallback, perfis/lanes, migrations, Browser Bridge, `test:browser-plugins` com 255/255 casos, skill sync e build final.
 - `git diff --check` passa sem erro de conteúdo.
+
+## Fechamento
+
+- A definição de pronto desta task foi atendida no checkout local.
+- Nenhum novo ADR foi necessário: o contrato material já é normatizado por `CONTENT_CONTRACT.md`, e ADR-003/ADR-007 já governam contratos determinísticos e legado nas bordas.
+- Nenhuma versão, tag, release ou publicação foi criada.
+- TASK-029 é a próxima missão elegível e foi marcada `ready`; sua implementação não foi iniciada.
 

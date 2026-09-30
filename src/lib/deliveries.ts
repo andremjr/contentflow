@@ -11,6 +11,7 @@ import type {
 } from "@/lib/domain";
 import { createProcessOutputFields } from "@/lib/human-workflow";
 import { areValueShapesCompatible, controlShape } from "@/lib/data-shape";
+import { runtimeValueMatchesShape } from "@/lib/runtime-value-validation";
 
 export function deliveryIdFor(
   execution: Pick<ProcessExecution, "id">,
@@ -59,6 +60,11 @@ export function materializeBlockDeliveries({
     const id = deliveryIdFor(execution, block.id, output.key, attempt);
     const previous = execution.deliveries?.find((item) => item.id === id);
     const shape = fieldValueShape(output);
+    if (!runtimeValueMatchesShape(shape, value)) {
+      throw new Error(
+        `Delivery ${block.id}.${output.key} recebeu valor incompatível com o ValueShape.`,
+      );
+    }
     const rawItems = shape.cardinality === "many" && Array.isArray(value) ? value : [value];
     const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
     const outputExecutionItems = (blockExecution?.items ?? []).filter(

@@ -1,13 +1,11 @@
-import type {
-  ActionBlock,
-  AtomicValueShape,
-  RuntimeValue,
-  StoredFile,
-  ValueShape,
-} from "../src/lib/domain";
+import type { ActionBlock, RuntimeValue } from "../src/lib/domain";
 import { isEmptyRuntimeValue } from "../src/lib/human-workflow";
 import { getPresentationRestrictionIssue } from "../src/lib/presentation";
 import type { PluginFieldContract } from "../src/lib/plugin-contract";
+import {
+  validateRuntimeValueAgainstShape,
+  runtimeItemMatchesShape,
+} from "../src/lib/runtime-value-validation";
 
 export type PluginResponseContractIssueCode =
   | "INVALID_VALUES_SHAPE"
@@ -104,17 +102,31 @@ export function normalizePluginResponseValues(
   for (const contract of input.outputContract) {
     if (!Object.hasOwn(input.responseValues, contract.portKey)) continue;
     const rawValue = input.responseValues[contract.portKey];
-    if (!matchesValueShape(contract.shape, rawValue, input.valueShape ?? "snapshot")) {
+    const materialIssues =
+      input.valueShape === "item"
+        ? runtimeItemMatchesShape(contract.shape, rawValue)
+          ? []
+          : validateRuntimeValueAgainstShape(
+              { ...contract.shape, cardinality: "one" },
+              rawValue,
+              contract.portKey,
+            )
+        : validateRuntimeValueAgainstShape(contract.shape, rawValue, contract.portKey);
+    if (materialIssues.length) {
+      const missingRecordField = materialIssues.find(
+        (issue) => issue.code === "MISSING_REQUIRED_RECORD_FIELD",
+      );
       issues.push({
-        code: "INCOMPATIBLE_OUTPUT_SHAPE",
-        message: `${contract.portKey} é incompatível com o shape de ${contract.label}.`,
+        code: missingRecordField ? "MISSING_REQUIRED_RECORD_FIELD" : "INCOMPATIBLE_OUTPUT_SHAPE",
+        message: missingRecordField
+          ? `${contract.portKey}: ${missingRecordField.message}`
+          : `${contract.portKey} é incompatível com o shape de ${contract.label}: ${materialIssues[0].message}`,
         outputKey: contract.key,
         portKey: contract.portKey,
       });
       continue;
     }
     const normalizedValue = rawValue as RuntimeValue;
-    issues.push(...requiredRecordFieldIssues(contract, normalizedValue));
     const presentationIssue = getPresentationRestrictionIssue(
       input.valueShape === "item" ? { ...contract.shape, cardinality: "one" } : contract.shape,
       contract.presentation,
@@ -149,88 +161,6 @@ export function requireNormalizedPluginResponseValues(input: NormalizePluginResp
   return result;
 }
 
-function matchesValueShape(shape: ValueShape, value: unknown, mode: "snapshot" | "item") {
-  const effective = mode === "item" ? { ...shape, cardinality: "one" as const } : shape;
-  if (effective.cardinality === "many") {
-    return Array.isArray(value) && value.every((item) => matchesOne(effective, item));
-  }
-  return !Array.isArray(value) && matchesOne(effective, value);
-}
-
-function matchesOne(shape: ValueShape, value: unknown): boolean {
-  if (value === null || value === undefined) return false;
-  if (shape.kind === "content") {
-    const allowsInline = shape.representation === "inline" || shape.representation === "either";
-    const allowsArtifact = shape.representation === "artifact" || shape.representation === "either";
-    if (shape.family === "text" && allowsInline && typeof value === "string") return true;
-    if (!allowsArtifact || !isStoredFile(value)) return false;
-    if (shape.family !== "text" && !value.mimeType.startsWith(`${shape.family}/`)) return false;
-    return (
-      !shape.formats?.mimeTypes?.length ||
-      shape.formats.mimeTypes.some((pattern) => mimeMatches(value.mimeType, pattern))
-    );
-  }
-  if (shape.kind === "record") {
-    if (!isPlainObject(value) || isStoredFile(value)) return false;
-    return shape.fields.every((field) => {
-      const fieldValue = value[field.key];
-      if (field.required && isEmptyRuntimeValue(fieldValue as RuntimeValue | undefined))
-        return false;
-      return fieldValue == null || matchesAtomicShape(field.shape, fieldValue);
-    });
-  }
-  return matchesControl(shape, value);
-}
-
-function matchesAtomicShape(shape: AtomicValueShape, value: unknown) {
-  return matchesOne(shape, value);
-}
-
-function matchesControl(shape: Extract<ValueShape, { kind: "control" }>, value: unknown) {
-  if (shape.control === "number") return typeof value === "number" && Number.isFinite(value);
-  if (shape.control === "boolean") return typeof value === "boolean";
-  if (shape.control === "thumbnail_layout") {
-    return Boolean(
-      isPlainObject(value) &&
-      value.aspectRatio === "16:9" &&
-      Array.isArray(value.boxes) &&
-      value.boxes.every(
-        (box) =>
-          isPlainObject(box) &&
-          typeof box.id === "string" &&
-          typeof box.label === "string" &&
-          typeof box.color === "string" &&
-          [box.x, box.y, box.w, box.h].every(
-            (coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate),
-          ),
-      ),
-    );
-  }
-  return typeof value === "string";
-}
-
-function requiredRecordFieldIssues(contract: PluginFieldContract, value: RuntimeValue) {
-  if (contract.shape.kind !== "record") return [];
-  const fields = contract.shape.fields;
-  const recordValues = (Array.isArray(value) ? value : [value]) as unknown[];
-  const issues: PluginResponseContractIssue[] = [];
-  recordValues.forEach((record, index) => {
-    if (!isPlainObject(record) || isStoredFile(record)) return;
-    for (const field of fields) {
-      const fieldValue = record[field.key];
-      if (field.required && isEmptyRuntimeValue(fieldValue as RuntimeValue | undefined)) {
-        issues.push({
-          code: "MISSING_REQUIRED_RECORD_FIELD",
-          message: `${contract.portKey}, registro ${index + 1}, não contém ${field.label}.`,
-          outputKey: contract.key,
-          portKey: contract.portKey,
-        });
-      }
-    }
-  });
-  return issues;
-}
-
 function missingRequiredIssue(contract: PluginFieldContract): PluginResponseContractIssue {
   return {
     code: "MISSING_REQUIRED_OUTPUT",
@@ -240,27 +170,6 @@ function missingRequiredIssue(contract: PluginFieldContract): PluginResponseCont
   };
 }
 
-function isStoredFile(value: unknown): value is StoredFile {
-  if (!isPlainObject(value)) return false;
-  return (
-    typeof value.id === "string" &&
-    Boolean(value.id) &&
-    typeof value.name === "string" &&
-    Boolean(value.name) &&
-    typeof value.mimeType === "string" &&
-    Boolean(value.mimeType) &&
-    typeof value.size === "number" &&
-    Number.isFinite(value.size) &&
-    value.size >= 0 &&
-    typeof value.url === "string" &&
-    Boolean(value.url)
-  );
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function mimeMatches(mimeType: string, pattern: string) {
-  return pattern.endsWith("/*") ? mimeType.startsWith(pattern.slice(0, -1)) : mimeType === pattern;
 }

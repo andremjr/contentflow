@@ -3,7 +3,6 @@ import {
   type FieldPresentation,
   type PresentationRendererId,
   type RuntimeValue,
-  type StoredFile,
   type ValueShape,
 } from "@/lib/domain";
 
@@ -73,50 +72,12 @@ export function normalizeFieldPresentation(
 
 export function getPresentationRestrictionIssue(
   shape: ValueShape,
-  _presentation: FieldPresentation | undefined,
-  value: RuntimeValue | undefined,
+  presentation: FieldPresentation | undefined,
+  _value: RuntimeValue | undefined,
 ) {
-  if (value == null) return undefined;
-  const values = Array.isArray(value) ? value : [value];
-  if (shape.cardinality === "one" && Array.isArray(value)) return "aceita somente um valor";
-  if (shape.cardinality === "many" && !Array.isArray(value)) return "exige uma coleção de valores";
-  if (shape.kind === "content") {
-    const issue = contentMaterialIssue(shape, values);
-    if (issue) return issue;
-  }
-  if (shape.kind === "record") {
-    if (values.some((item) => !item || typeof item !== "object" || isStoredFile(item))) {
-      return "deve conter apenas registros";
-    }
-  }
-  return undefined;
-}
-
-function contentMaterialIssue(shape: Extract<ValueShape, { kind: "content" }>, values: unknown[]) {
-  const allowsInline = shape.representation === "inline" || shape.representation === "either";
-  const allowsArtifact = shape.representation === "artifact" || shape.representation === "either";
-  for (const value of values) {
-    if (typeof value === "string" && shape.family === "text" && allowsInline) continue;
-    if (!isStoredFile(value) || !allowsArtifact) return "possui representação incompatível";
-    if (shape.family !== "text" && !value.mimeType.startsWith(`${shape.family}/`)) {
-      return `deve conter apenas ${shape.family}`;
-    }
-    if (
-      shape.formats?.mimeTypes?.length &&
-      !shape.formats.mimeTypes.some((pattern) => mimeMatches(value.mimeType, pattern))
-    ) {
-      return `aceita somente MIME: ${shape.formats.mimeTypes.join(", ")}`;
-    }
-  }
-  return undefined;
-}
-
-function isStoredFile(value: unknown): value is StoredFile {
-  return Boolean(
-    value && typeof value === "object" && "mimeType" in value && "url" in value && "id" in value,
-  );
-}
-
-function mimeMatches(mimeType: string, pattern: string) {
-  return pattern.endsWith("/*") ? mimeType.startsWith(pattern.slice(0, -1)) : mimeType === pattern;
+  const renderer = presentation?.renderer;
+  if (!renderer || renderer === "auto") return undefined;
+  return getCompatiblePresentationRenderers(shape).includes(renderer)
+    ? undefined
+    : `renderer ${renderer} incompatível com o shape declarado`;
 }

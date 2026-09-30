@@ -7,6 +7,7 @@ import {
   recordShape,
   validateValueShape,
 } from "./data-shape";
+import { validateRuntimeValueAgainstShape } from "./runtime-value-validation";
 
 test("o contrato canônico possui somente quatro famílias de conteúdo", () => {
   for (const family of ["text", "image", "audio", "video"] as const) {
@@ -55,8 +56,54 @@ test("restrições materiais participam da compatibilidade", () => {
   const png = contentShape("image", "one", "artifact", { mimeTypes: ["image/png"] });
   const jpeg = contentShape("image", "one", "artifact", { mimeTypes: ["image/jpeg"] });
   const anyImage = contentShape("image", "one", "artifact", { mimeTypes: ["image/*"] });
+  const pngOrJpeg = contentShape("image", "one", "artifact", {
+    mimeTypes: ["image/png", "image/jpeg"],
+  });
   assert.equal(areValueShapesCompatible(png, jpeg), false);
   assert.equal(areValueShapesCompatible(png, anyImage), true);
+  assert.equal(areValueShapesCompatible(anyImage, png), false);
+  assert.equal(areValueShapesCompatible(pngOrJpeg, png), false);
+  assert.equal(areValueShapesCompatible(png, pngOrJpeg), true);
+});
+
+test("restrições de extensão também são direcionais", () => {
+  const png = contentShape("image", "one", "artifact", { extensions: ["png"] });
+  const pngOrJpeg = contentShape("image", "one", "artifact", {
+    extensions: ["png", "jpeg"],
+  });
+  const unconstrained = contentShape("image", "one", "artifact");
+  assert.equal(areValueShapesCompatible(png, pngOrJpeg), true);
+  assert.equal(areValueShapesCompatible(pngOrJpeg, png), false);
+  assert.equal(areValueShapesCompatible(unconstrained, png), false);
+  assert.equal(areValueShapesCompatible(png, unconstrained), true);
+});
+
+test("RuntimeValue é validado pela família, representação, formatos e cardinalidade", () => {
+  const shape = contentShape("image", "one", "artifact", {
+    mimeTypes: ["image/png"],
+    extensions: ["png"],
+  });
+  const png = {
+    id: "image-1",
+    name: "frame.png",
+    mimeType: "image/png",
+    size: 12,
+    url: "/api/files/image-1",
+  };
+  assert.deepEqual(validateRuntimeValueAgainstShape(shape, png), []);
+  assert.equal(
+    validateRuntimeValueAgainstShape(shape, { ...png, name: "frame.jpg" })[0]?.code,
+    "EXTENSION_MISMATCH",
+  );
+  assert.equal(
+    validateRuntimeValueAgainstShape(shape, { ...png, mimeType: "image/jpeg" })[0]?.code,
+    "MIME_TYPE_MISMATCH",
+  );
+  assert.equal(validateRuntimeValueAgainstShape(shape, [png])[0]?.code, "CARDINALITY_MISMATCH");
+  assert.equal(
+    validateRuntimeValueAgainstShape(contentShape("audio", "one", "artifact"), png)[0]?.code,
+    "CONTENT_FAMILY_MISMATCH",
+  );
 });
 
 test("registro exige chaves únicas", () => {

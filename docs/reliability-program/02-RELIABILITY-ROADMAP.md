@@ -81,13 +81,13 @@ Deterministic Contracts está encerrada. Nenhuma task da fase Universal Recovery
 
 | Task      | Missão                                  | Estado        |
 | --------- | --------------------------------------- | ------------- |
-| TASK-028A | Contrato canônico de conteúdo e entrega | `in_progress` |
+| TASK-028A | Contrato canônico de conteúdo e entrega | `done`        |
 
 ### Universal Recovery — TASK-029 a TASK-038
 
 | Task     | Missão                                       | Estado    |
 | -------- | -------------------------------------------- | --------- |
-| TASK-029 | Estados duráveis de recovery                 | `pending` |
+| TASK-029 | Estados duráveis de recovery                 | `ready`   |
 | TASK-030 | `applyRecoveryDecision()` único              | `pending` |
 | TASK-031 | Aplicar decisão `cancel` corretamente        | `pending` |
 | TASK-032 | Implementar estado `intervene`               | `pending` |

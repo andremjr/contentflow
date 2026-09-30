@@ -43,7 +43,7 @@ test("rejects external and MIME-incompatible runtime files", () => {
   const video = validateRuntimeInputValues([imageInput], {
     references: [{ ...image, mimeType: "video/mp4", name: "reference.mp4" }],
   });
-  assert.match(video.error ?? "", /apenas image/);
+  assert.match(video.error ?? "", /incompatível/);
 });
 
 test("requires every runtime binding before automatic execution", () => {

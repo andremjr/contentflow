@@ -132,7 +132,8 @@ test("keeps the Reliability Program connected and bounded", () => {
   for (const taskId of expectedTaskIds.slice(0, 28)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `done`\\s+\\|"));
   }
-  assert.match(roadmap, /\| TASK-029 \|[^\n]+\| `pending`\s+\|/);
+  assert.match(roadmap, /\| TASK-028A \|[^\n]+\| `done`\s+\|/);
+  assert.match(roadmap, /\| TASK-029 \|[^\n]+\| `ready`\s+\|/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),
@@ -297,21 +298,25 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.doesNotMatch(orchestratedStart, /blocks:\s*methodSnapshot\.blocks\.map/);
   assert.doesNotMatch(orchestratedStart, /block\.operator === "Humano"/);
 
-  const legacyPostStart = server.indexOf('app.post("/api/executions",');
-  const legacyPostEnd = server.indexOf(
+  const executionPostStart = server.indexOf('app.post("/api/executions",');
+  const executionPostEnd = server.indexOf(
     'app.patch("/api/executions/:id/blocks/:blockId/runtime-inputs",',
-    legacyPostStart,
+    executionPostStart,
   );
-  assert.ok(legacyPostStart >= 0 && legacyPostEnd > legacyPostStart);
-  const legacyExecutionPost = server.slice(legacyPostStart, legacyPostEnd);
+  assert.ok(executionPostStart >= 0 && executionPostEnd > executionPostStart);
+  const executionPost = server.slice(executionPostStart, executionPostEnd);
   assert.match(
     server,
-    /import \{ adaptLegacyExecutionCreatePayload \} from "\.\/legacy-execution-boundary"/,
+    /import \{ parseCanonicalExecutionCreatePayload \} from "\.\/execution-create-boundary"/,
   );
-  assert.match(legacyExecutionPost, /adaptLegacyExecutionCreatePayload\(request\.body\)/);
-  assert.doesNotMatch(legacyExecutionPost, /createCanonicalProcessExecution\(/);
-  assert.doesNotMatch(legacyExecutionPost, /request\.body as StoredPayload/);
-  assert.doesNotMatch(legacyExecutionPost, /as unknown as ProcessExecution/);
+  assert.match(executionPost, /parseCanonicalExecutionCreatePayload\(request\.body\)/);
+  assert.match(
+    executionPost,
+    /!project \|\| !channel \|\| project\.channelId !== execution\.channelId/,
+  );
+  assert.doesNotMatch(executionPost, /adaptLegacyExecutionCreatePayload/);
+  assert.doesNotMatch(executionPost, /request\.body as StoredPayload/);
+  assert.doesNotMatch(executionPost, /as unknown as ProcessExecution/);
 
   const manualProgression = executionCommands.match(
     /function activateNextBlock[\s\S]*?\n {2}function blockDeliveryIssues/,
@@ -416,12 +421,14 @@ test("keeps the Reliability Program connected and bounded", () => {
   assert.doesNotMatch(pluginJobCancellation, /execution\.status\s*=\s*"cancelled"/);
   assert.doesNotMatch(pluginJobCancellation, /execution\.blocks\s*=\s*execution\.blocks\.map/);
 
-  const legacyBoundary = readFileSync(
-    new URL("../../server/legacy-execution-boundary.ts", import.meta.url),
+  const executionCreateBoundary = readFileSync(
+    new URL("../../server/execution-create-boundary.ts", import.meta.url),
     "utf8",
   );
-  assert.match(legacyBoundary, /adaptLegacyExecutionCreatePayload/);
-  assert.match(legacyBoundary, /Compatibility adapter for the historical HTTP creation boundary/);
+  assert.match(executionCreateBoundary, /processMethodV3Schema\.safeParse/);
+  assert.match(executionCreateBoundary, /validateExecutionCoreInvariants\(/);
+  assert.match(executionCreateBoundary, /runtimeValueMatchesShape\(/);
+  assert.doesNotMatch(executionCreateBoundary, /adaptLegacyExecutionCreatePayload/);
 
   const pluginPersistence = server.match(
     /function persistPluginExecution[\s\S]*?\nfunction failAutomaticPluginStart/,
@@ -475,7 +482,7 @@ test("keeps the Reliability Program connected and bounded", () => {
   );
   assert.doesNotMatch(server, /function updateProjectAfterPluginBlock/);
 
-  for (const taskId of expectedTaskIds.slice(28)) {
+  for (const taskId of expectedTaskIds.slice(29)) {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `pending` \\|"));
   }
   assert.doesNotMatch(roadmap, /\bTASK-053\b/);

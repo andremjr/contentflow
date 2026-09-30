@@ -8,6 +8,7 @@ import {
   normalizeFieldPresentation,
   resolvePresentationRenderer,
 } from "../src/lib/presentation";
+import { validateRuntimeValueAgainstShape } from "../src/lib/runtime-value-validation";
 
 const canonicalMethod = {
   format: "contentflow-method",
@@ -91,12 +92,20 @@ assert.equal(
 );
 assert.deepEqual(getCompatiblePresentationRenderers(records), ["auto", "table", "cards"]);
 assert.equal(new Set(PRESENTATION_RENDERER_IDS).size, PRESENTATION_RENDERER_IDS.length);
+const invalidMaterial = [
+  {
+    id: "audio",
+    name: "audio.mp3",
+    mimeType: "audio/mpeg",
+    size: 1,
+    url: "/api/files/audio.mp3",
+  },
+];
 assert.equal(
-  getPresentationRestrictionIssue(imageMany, gallery, [
-    { id: "audio", name: "audio.mp3", mimeType: "audio/mpeg", size: 1, url: "local" },
-  ]),
-  "deve conter apenas image",
+  validateRuntimeValueAgainstShape(imageMany, invalidMaterial)[0]?.code,
+  "CONTENT_FAMILY_MISMATCH",
 );
+assert.equal(getPresentationRestrictionIssue(imageMany, gallery, invalidMaterial), undefined);
 
 const exported = serializeMethodFile("Método normalizado", parsedCanonical.method);
 const reparsed = parseMethodFile(exported);

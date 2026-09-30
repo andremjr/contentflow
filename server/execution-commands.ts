@@ -21,6 +21,7 @@ import {
   normalizeMethodBlocks,
 } from "../src/lib/human-workflow";
 import { getPresentationRestrictionIssue } from "../src/lib/presentation";
+import { validateRuntimeValueAgainstShape } from "../src/lib/runtime-value-validation";
 import { resolveBlockInputs } from "../src/lib/runtime-contract";
 import { recordBlockDeliveries, recordProcessOutputDelivery } from "../src/lib/deliveries";
 import {
@@ -134,30 +135,31 @@ export function executionCommands(db: {
   }
 
   function blockDeliveryIssues(block: ActionBlock, values: Record<string, RuntimeValue>) {
-    const issues = (block.outputs ?? [])
-      .filter((output) => output.required && isEmptyRuntimeValue(values[output.key]))
-      .map((output) => output.label);
-    for (const output of block.outputs ?? []) {
+    const outputs = block.outputs ?? [];
+    const outputKeys = new Set(outputs.map((output) => output.key));
+    const issues = Object.keys(values)
+      .filter((key) => !outputKeys.has(key))
+      .map((key) => `Output desconhecido: ${key}`);
+    issues.push(
+      ...outputs
+        .filter((output) => output.required && isEmptyRuntimeValue(values[output.key]))
+        .map((output) => output.label),
+    );
+    for (const output of outputs) {
+      const value = values[output.key];
+      if (!isEmptyRuntimeValue(value)) {
+        const materialIssues = validateRuntimeValueAgainstShape(output.shape, value, output.key);
+        if (materialIssues.length) {
+          issues.push(`${output.label}: ${materialIssues[0].message}`);
+          continue;
+        }
+      }
       const issue = getPresentationRestrictionIssue(
         output.shape,
         output.presentation,
         values[output.key],
       );
       if (issue) issues.push(`${output.label}: ${issue}`);
-    }
-    for (const output of (block.outputs ?? []).filter((field) => field.shape.kind === "record")) {
-      const storedRecords = values[output.key];
-      const records = Array.isArray(storedRecords) ? storedRecords : [];
-      records.forEach((record, index) => {
-        if (!record || typeof record !== "object" || Array.isArray(record) || "url" in record)
-          return;
-        const recordFields = output.shape.kind === "record" ? output.shape.fields : [];
-        for (const recordField of recordFields.filter((field) => field.required)) {
-          if (isEmptyRuntimeValue(record[recordField.key] as RuntimeValue | undefined)) {
-            issues.push(`${output.label} · registro ${index + 1} · ${recordField.label}`);
-          }
-        }
-      });
     }
     return issues;
   }
@@ -321,9 +323,28 @@ export function executionCommands(db: {
     if (!execution || execution.status !== "awaiting_output") {
       return { ok: false, missing: ["Execução indisponível para receber o resultado final"] };
     }
-    const missing = createProcessOutputFields(execution.processType)
-      .filter((field) => field.required && isEmptyRuntimeValue(values[field.key]))
-      .map((field) => field.label);
+    const outputFields = createProcessOutputFields(execution.processType);
+    const outputKeys = new Set(outputFields.map((field) => field.key));
+    const missing = Object.keys(values)
+      .filter((key) => !outputKeys.has(key))
+      .map((key) => `Output desconhecido: ${key}`);
+    missing.push(
+      ...outputFields
+        .filter((field) => field.required && isEmptyRuntimeValue(values[field.key]))
+        .map((field) => field.label),
+    );
+    for (const field of outputFields) {
+      const value = values[field.key];
+      if (isEmptyRuntimeValue(value)) continue;
+      const issues = validateRuntimeValueAgainstShape(field.shape, value, field.key);
+      if (issues.length) missing.push(`${field.label}: ${issues[0].message}`);
+      const presentationIssue = getPresentationRestrictionIssue(
+        field.shape,
+        field.presentation,
+        value,
+      );
+      if (presentationIssue) missing.push(`${field.label}: ${presentationIssue}`);
+    }
     if (missing.length) return { ok: false, missing };
 
     execution.output = {
