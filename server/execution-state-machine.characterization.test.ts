@@ -590,6 +590,7 @@ test(
             key: "theme",
             type: "textarea",
             required: true,
+            portKey: "result",
           },
         ],
         plugin: {

@@ -8,9 +8,9 @@ Este documento representa o estado semântico e arquitetural conhecido do produt
 | --------------------------- | ------------------------------------------ |
 | Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
 | Versão                      | `1.2.1`                                    |
-| Task concluída              | TASK-024                                   |
+| Task concluída              | TASK-025                                   |
 | Task ativa                  | Nenhuma                                    |
-| Próxima                     | TASK-025 (`ready`), ainda não iniciada     |
+| Próxima                     | TASK-026 (`ready`), ainda não iniciada     |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -105,15 +105,21 @@ Métodos antigos sem binding canônico continuam temporariamente aceitos somente
 
 Inputs destinados a plugins só entram em portas explicitamente declaradas pelo Método. `selectPluginInputPort()` exige `input.portKey`, faz lookup exato na capability e valida tipo e multiplicidade; ausência, porta inexistente, incompatibilidade ou segunda ocupação de porta não-multiple permanecem sem vínculo e causam `422` antes da criação do job. Label, ID, `sourceKey`, presentation, MIME e ordem não escolhem mais input ports no runtime. O Builder continua materializando `portKey` quando existe exatamente uma candidata compatível antes da execução e exige configuração explícita quando há ambiguidade.
 
-`selectPluginImplicitContextPort()` foi removida: não havia caller de produção e o runtime não injeta contexto oculto. O source binding continua separado do port binding. Métodos históricos que chegam diretamente ao runtime sem `portKey` falham de forma segura até o adapter da TASK-027. A boundary de plugin ainda infere portas de output por tipo ou pela primeira porta disponível; isso permanece reservado à TASK-025. O Execution Core continua sem conhecimento de labels, manifestos, portas ou respostas de plugin.
+`selectPluginImplicitContextPort()` foi removida: não havia caller de produção e o runtime não injeta contexto oculto. O source binding continua separado do port binding. Métodos históricos que chegam diretamente ao runtime sem `portKey` falham de forma segura até o adapter da TASK-027.
 
-### Mapeamento permissivo de outputs
+Outputs declarados normais destinados a plugins também entram no executor somente por `BlockFieldDefinition.portKey` explícita. Ausência de binding, porta inexistente ou tipo incompatível falham antes da criação do job; compatibilidade de tipo apenas valida a porta escolhida pelo Método. O Builder materializa `portKey` quando existe exatamente uma candidata compatível e exige configuração explícita quando há ambiguidade. O Execution Core continua sem conhecimento de labels, manifestos, portas ou respostas de plugin.
 
-`valuesForPluginResponse()` em `server/index.ts` ainda tenta, nesta ordem, chave do campo, `portKey` do contrato e o fallback genérico `responseValues.result`. O caminho de `ESCOLHER` também aceita `selectedItemId ?? result`. Esse comportamento pode transformar resposta ambígua em aparente sucesso e precisa migrar para outputs explícitos com adapter legado delimitado.
+### Binding de outputs explícito e response mapping permissivo
+
+As saídas universais continuam pertencendo ao Bloco. Para Blocos executados por plugin, o Método/snapshot materializa explicitamente qual `outputPort` da capability implementa cada saída declarada. O runtime normal não escolhe portas por tipo, ordem, primeira porta ou fallback de `field.key`; `BlockFieldDefinition.key` continua identificando `BlockExecution.values` e `Delivery.outputKey`, enquanto `portKey` permanece somente correlação técnica.
+
+`valuesForPluginResponse()` em `server/index.ts` ainda tenta, nesta ordem, chave do campo, `portKey` do contrato e o fallback genérico `responseValues.result`. O caminho de `ESCOLHER` também aceita `selectedItemId ?? result`. Esse comportamento pode transformar resposta ambígua em aparente sucesso e precisa migrar para normalização canônica da resposta com compatibilidade legada delimitada.
+
+O contrato sintético histórico de `ESCOLHER` ainda usa a primeira output port da capability ou `result`. Ele está delimitado por guardrail como compatibilidade especializada da seleção de coleção, não como semântica universal de output binding. A interpretação ampla da resposta permanece reservada à TASK-028.
 
 `VALIDAR` possui alvo persistido, mas a normalização de Método ainda pode inferir o último Bloco não-`VALIDAR` e uma saída compatível. Na boundary de plugin, a primeira saída do alvo e a primeira porta de input compatível ainda funcionam como fallback.
 
-Os fallbacks de output, resposta, `ESCOLHER` e `VALIDAR` também estão localizados por guardrails focais. Essa proteção impede sua expansão para o Core ou para novas boundaries sem declarar que os contratos já são determinísticos; a remoção continua pertencendo às TASKs 022–028.
+Os fallbacks de resposta, `ESCOLHER` e `VALIDAR` permanecem localizados por guardrails focais. A proteção de outputs normais agora impede o retorno de seleção por tipo, primeira porta ou `field.key`, e a proteção restante impede que compatibilidades especializadas se expandam para o Core ou para novas boundaries.
 
 ### Recovery decidido de forma mais rica do que é aplicado
 
@@ -159,6 +165,6 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Não há blocker externo confirmado para iniciar a TASK-025. Origem estratégica e porta de entrada de plugin agora são determinísticas; a próxima missão torna explícitas as portas de output sem alterar `VALIDAR` ou response mapping fora de seu recorte.
+Não há blocker externo confirmado para iniciar a TASK-026. Origem estratégica, portas de input e portas de outputs declarados normais agora são determinísticas; a próxima missão torna explícito o alvo de `VALIDAR` sem alterar a normalização ampla da resposta reservada à TASK-028.
 
 O gate agregado `npm run check` não está verde pela falha confirmada em `test:shared-browser-v89`. Corrigir esse contrato funcional exige escopo próprio e não foi incluído automaticamente na limpeza de formatação.

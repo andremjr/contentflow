@@ -41,7 +41,10 @@ function manualThemeMethod(): ProcessMethod {
   };
 }
 
-function pluginContext(inputPortKeys: string[]): BuilderPluginContext {
+function pluginContext(
+  inputPortKeys: string[],
+  outputPortKeys: string[] = ["theme"],
+): BuilderPluginContext {
   const plugin: RegisteredPlugin = {
     id: "dev.contentflow.port-test",
     source: "local",
@@ -72,14 +75,12 @@ function pluginContext(inputPortKeys: string[]): BuilderPluginContext {
             acceptedTypes: ["number"],
             required: false,
           })),
-          outputPorts: [
-            {
-              key: "theme",
-              label: "Tema",
-              producedTypes: ["textarea"],
-              required: true,
-            },
-          ],
+          outputPorts: outputPortKeys.map((key) => ({
+            key,
+            label: key,
+            producedTypes: ["textarea"],
+            required: key === "theme",
+          })),
           execution: { mode: "immediate" },
           sideEffects: [],
           cost: { model: "free", estimateSupported: false },
@@ -296,4 +297,40 @@ test("builder requires an explicit portKey when multiple plugin ports are compat
 
   assert.equal(result.ok, false);
   assert.match(result.errors.join("\n"), /informe portKey para a entrada ambígua/);
+});
+
+test("builder materializes the only compatible plugin output port before runtime", () => {
+  const method = pluginThemeMethod();
+  method.blocks[0].outputs = method.blocks[0].outputs?.map((output) => ({
+    ...output,
+    portKey: undefined,
+  }));
+
+  const result = validateBuilderMethods({
+    channel,
+    methods: { theme: method },
+    plugins: [pluginContext(["sections"])],
+    collections: [],
+  });
+
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.equal(result.methods?.theme?.blocks[0].outputs?.[0].portKey, "theme");
+});
+
+test("builder requires an explicit portKey when multiple plugin output ports are compatible", () => {
+  const method = pluginThemeMethod();
+  method.blocks[0].outputs = method.blocks[0].outputs?.map((output) => ({
+    ...output,
+    portKey: undefined,
+  }));
+
+  const result = validateBuilderMethods({
+    channel,
+    methods: { theme: method },
+    plugins: [pluginContext(["sections"], ["theme", "draft"])],
+    collections: [],
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /informe portKey para a saída ambígua/);
 });

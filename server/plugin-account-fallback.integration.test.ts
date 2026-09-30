@@ -210,7 +210,14 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
         },
       ],
       outputs: [
-        { id: "results", label: "Resultados", key: "results", type: "list", required: true },
+        {
+          id: "results",
+          label: "Resultados",
+          key: "results",
+          type: "list",
+          required: true,
+          portKey: "results",
+        },
       ],
       plugin: {
         pluginId: "test.contentflow.browser-fallback",
@@ -601,7 +608,16 @@ test("perfil ocupado avança imediatamente para o próximo perfil preparado", as
       operator: "Código",
       name: "Gerar",
       inputs: [],
-      outputs: [{ id: "result", label: "Resultado", key: "result", type: "text", required: true }],
+      outputs: [
+        {
+          id: "result",
+          label: "Resultado",
+          key: "result",
+          type: "text",
+          required: true,
+          portKey: "result",
+        },
+      ],
       plugin: {
         pluginId: "test.contentflow.browser-busy-fallback",
         capabilityId: "generate",

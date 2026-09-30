@@ -128,6 +128,7 @@ import {
 import { normalizeNetworkHostPattern } from "./remote-artifact-downloader";
 import { legacyTypeListAccepts } from "../src/lib/data-shape";
 import { composePluginPortValue, selectPluginInputPort } from "./plugin-input-values";
+import { validatePluginOutputContract } from "./plugin-output-contract";
 import { instructionWithRetryFeedback } from "../src/lib/retry-feedback";
 import { pluginConversationFallbackContext } from "../src/lib/conversation-context";
 import { collectionItemValuesForPlugin } from "../src/lib/plugin-collection";
@@ -6320,19 +6321,17 @@ async function executePluginBlockInternal(
     };
   }
 
-  const invalidOutputBindings = (block.outputs ?? []).filter(
-    (field) =>
-      field.portKey &&
-      !capability.outputPorts.some(
-        (port) =>
-          port.key === field.portKey && legacyTypeListAccepts(port.producedTypes, field.type),
-      ),
-  );
-  if (invalidOutputBindings.length) {
+  // ESCOLHER keeps its historical collection-selection contract until its
+  // dedicated compatibility work. It is not the universal output-binding path.
+  const validatedOutputs =
+    block.type === "ESCOLHER"
+      ? { outputContract: [], unsupportedFields: [] }
+      : validatePluginOutputContract(block.outputs ?? [], capability.outputPorts);
+  if (validatedOutputs.unsupportedFields.length) {
     return {
       status: 422,
       body: {
-        error: `O plugin não consegue entregar: ${invalidOutputBindings
+        error: `O plugin não consegue entregar: ${validatedOutputs.unsupportedFields
           .map((field) => field.label)
           .join(", ")}. Revise o vínculo da entrega no painel do plugin.`,
       },
@@ -6350,22 +6349,7 @@ async function executePluginBlockInternal(
             portKey: capability.outputPorts[0]?.key ?? "result",
           },
         ]
-      : (block.outputs ?? []).map((field) => ({
-          label: field.label,
-          key: field.key,
-          type: field.type,
-          required: field.required,
-          options: field.options,
-          recordFields: field.recordFields,
-          presentation: field.presentation,
-          portKey:
-            field.portKey ??
-            capability.outputPorts.find((port) =>
-              legacyTypeListAccepts(port.producedTypes, field.type),
-            )?.key ??
-            capability.outputPorts[0]?.key ??
-            field.key,
-        }));
+      : validatedOutputs.outputContract;
   const methodParameterValues = Object.fromEntries(
     (block.parameters ?? []).map((parameter) => [parameter.key, parameter.value]),
   );

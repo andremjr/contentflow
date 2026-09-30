@@ -80,12 +80,24 @@ test("preserva a declaração portátil de entrada fornecida na execução", () 
             },
           },
         ],
+        outputs: [
+          {
+            id: "script-output",
+            label: "Roteiro",
+            key: "script",
+            type: "textarea",
+            required: true,
+            portKey: "generated_text",
+          },
+        ],
       },
     ],
   };
   const parsed = parseMethodFile(serializeMethodFile("Roteiro", runtimeMethod));
   assert.equal(parsed.method.blocks[0].inputs?.[0].source, "runtime");
   assert.equal(parsed.method.blocks[0].inputs?.[0].portKey, "reference_images");
+  assert.equal(parsed.method.blocks[0].outputs?.[0].key, "script");
+  assert.equal(parsed.method.blocks[0].outputs?.[0].portKey, "generated_text");
 });
 
 test("preserva binding canônico e remapeia seu blockId no round-trip portátil", () => {

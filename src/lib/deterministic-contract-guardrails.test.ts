@@ -40,6 +40,8 @@ test("keeps textual and plugin contract heuristics out of the Execution Core", (
     /\bselectPluginInputPort\b/,
     /\binputPorts\b/,
     /\boutputPorts\b/,
+    /\bPluginOutputPort\b/,
+    /\bPluginFieldContract\b/,
     /\bresponseValues\b/,
     /\bPluginManifest\b/,
     /from ["'][^"']*plugin-contract["']/,
@@ -128,8 +130,9 @@ test("keeps runtime input sources deterministic and canonical bindings authorita
   );
 });
 
-test("keeps output and validation fallbacks concentrated in the current server boundaries", () => {
+test("keeps normal plugin output bindings explicit while preserving scoped response compatibility", () => {
   const server = read("server/index.ts");
+  const outputContracts = read("server/plugin-output-contract.ts");
   const responseMapping = sourceBetween(
     server,
     "function valuesForPluginResponse",
@@ -153,10 +156,31 @@ test("keeps output and validation fallbacks concentrated in the current server b
   );
   assert.equal((server.match(/responseValues\.result/g) ?? []).length, 2);
 
+  assert.match(outputContracts, /if \(!field\.portKey\) return true/);
+  assert.match(
+    outputContracts,
+    /ports\.find\(\(candidate\) => candidate\.key === field\.portKey\)/,
+  );
+  assert.match(outputContracts, /legacyTypeListAccepts\(port\.producedTypes, field\.type\)/);
+  assert.match(outputContracts, /portKey: field\.portKey!/);
+  assert.doesNotMatch(outputContracts, /ports\.filter|ports\[0\]|portKey:\s*field\.key/);
+  assert.doesNotMatch(
+    pluginOperation,
+    /field\.portKey\s*\?\?|capability\.outputPorts\.find\([\s\S]*producedTypes|portKey:\s*field\.key/,
+  );
   assert.match(
     pluginOperation,
-    /field\.portKey\s*\?\?[\s\S]*legacyTypeListAccepts\(port\.producedTypes, field\.type\)[\s\S]*capability\.outputPorts\[0\]\?\.key\s*\?\?[\s\S]*field\.key/,
+    /validatePluginOutputContract\(block\.outputs \?\? \[\], capability\.outputPorts\)/,
   );
+  assert.match(
+    pluginOperation,
+    /if \(validatedOutputs\.unsupportedFields\.length\)[\s\S]*status: 422/,
+  );
+  assert.match(pluginOperation, /:\s*validatedOutputs\.outputContract/);
+
+  // ESCOLHER remains a single, explicitly delimited historical compatibility path.
+  assert.equal((pluginOperation.match(/capability\.outputPorts\[0\]/g) ?? []).length, 1);
+  assert.match(pluginOperation, /ESCOLHER keeps its historical collection-selection contract/);
   assert.match(
     pluginOperation,
     /targetBlock\?\.outputs\?\.find\([\s\S]*targetOutputKey[\s\S]*targetBlock\?\.outputs\?\.\[0\]/,
@@ -191,11 +215,13 @@ test("keeps Method resolution authoritative before plugin capability mapping", (
   );
   const resolveInputsAt = pluginOperation.indexOf("resolveBlockInputs({");
   const selectPortAt = pluginOperation.indexOf("selectPluginInputPort(");
+  const validateOutputsAt = pluginOperation.indexOf("validatePluginOutputContract(");
   const createJobAt = pluginOperation.indexOf("createPersistentPluginJob(");
 
   assert.ok(resolveInputsAt >= 0);
   assert.ok(selectPortAt > resolveInputsAt);
-  assert.ok(createJobAt > selectPortAt);
+  assert.ok(validateOutputsAt > selectPortAt);
+  assert.ok(createJobAt > validateOutputsAt);
   assert.match(pluginOperation, /portKey: item\.input\.portKey!/);
   assert.doesNotMatch(pluginOperation, /port\?\.key \?\? item\.input\.id/);
   assert.doesNotMatch(pluginOperation, /inputContract\[index\]\?\.portKey \?\? item\.input\.id/);
