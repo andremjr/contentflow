@@ -366,7 +366,7 @@ function executionFixture(manifest: PluginManifest, answers: Answers) {
 }
 
 function generatedReadme(answers: Answers) {
-  return `# ${answers.name}\n\nPlugin gerado pelo kit oficial do ContentFlow usando a API pública v1.\n\n## Desenvolvimento\n\nNa raiz do ContentFlow, substitua \`<pasta-do-plugin>\` pela pasta deste plugin:\n\n\`\`\`powershell\nnpm run plugin:kit -- validate <pasta-do-plugin>\nnpm run plugin:kit -- test-contract <pasta-do-plugin>\nnpm run plugin:kit -- test-sandbox <pasta-do-plugin>\nnpm run plugin:kit -- report <pasta-do-plugin>\n\`\`\`\n\nCredenciais declaradas: ${answers.secretKeys.length ? answers.secretKeys.map((key) => `\`${key}\``).join(", ") : "nenhuma"}. Não grave valores secretos no manifesto.\n\nPolítica de dados: ${answers.sendsDataToThirdParties ? `envia dados para ${answers.providers.join(", ")}` : "não envia dados a terceiros"}.\n`;
+  return `# ${answers.name}\n\nPlugin gerado pelo kit oficial do ContentFlow usando a API pública v2.\n\n## Desenvolvimento\n\nNa raiz do ContentFlow, substitua \`<pasta-do-plugin>\` pela pasta deste plugin:\n\n\`\`\`powershell\nnpm run plugin:kit -- validate <pasta-do-plugin>\nnpm run plugin:kit -- test-contract <pasta-do-plugin>\nnpm run plugin:kit -- test-sandbox <pasta-do-plugin>\nnpm run plugin:kit -- report <pasta-do-plugin>\n\`\`\`\n\nCredenciais declaradas: ${answers.secretKeys.length ? answers.secretKeys.map((key) => `\`${key}\``).join(", ") : "nenhuma"}. Não grave valores secretos no manifesto.\n\nPolítica de dados: ${answers.sendsDataToThirdParties ? `envia dados para ${answers.providers.join(", ")}` : "não envia dados a terceiros"}.\n`;
 }
 
 async function generatedTest(answers: Answers) {

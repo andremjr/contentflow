@@ -11,7 +11,7 @@ O ContentFlow é um gerenciador estratégico de Métodos para produção de cont
 | Núcleo       | Interface React, API local, execução de Métodos, persistência e desktop Electron | [`docs/README.md`](docs/README.md)                                                                     |
 | Confiabilidade | Consolidação atual, decisões, estado e roadmap do Reliability Program           | [`docs/reliability-program/README.md`](docs/reliability-program/README.md)                             |
 | Ecossistema  | Protocolo público, plugins, exemplos, Browser Bridge, Plugin Kit e skills        | [`ecosystem/README.md`](ecosystem/README.md)                                                           |
-| Criar plugin | Guia rápido, templates, testes e contratos da Plugin API v1                      | [`docs/ecosystem/quickstart.md`](docs/ecosystem/quickstart.md)                                         |
+| Criar plugin | Guia rápido, templates, testes e contratos da Plugin API v2                      | [`docs/ecosystem/quickstart.md`](docs/ecosystem/quickstart.md)                                         |
 | Criar Método | Skill portátil para modelar e validar arquivos `.contentflow-method.json`        | [`ecosystem/skills/contentflow-method-development/`](ecosystem/skills/contentflow-method-development/) |
 | Releases     | Instaladores e versões portáteis para Windows                                    | [GitHub Releases](https://github.com/andremjr/contentflow/releases)                                    |
 
@@ -51,7 +51,7 @@ As pastas `src`, `server` e `desktop` compõem o produto ContentFlow. A pasta `d
 
 Os pacotes atualmente disponíveis em [`ecosystem/plugins/reference`](ecosystem/plugins/reference/) são plugins independentes disponibilizados separadamente. Eles não fazem parte do núcleo e sua presença neste repositório não representa promessa de manutenção contínua, suporte, disponibilidade de provedores ou compatibilidade futura. Cada plugin possui identidade, versão, permissões, dependências e licença próprias; quem cria ou distribui um plugin é responsável por seu pacote.
 
-O ContentFlow valida todos os plugins pela mesma Plugin API v1, solicita consentimento local e executa o código em processo separado com a sandbox de permissões do Node. APIs oficiais, automações de navegador, FFmpeg, Python e regras específicas de fornecedores permanecem dentro dos respectivos plugins.
+O ContentFlow valida todos os plugins pela mesma Plugin API v2, solicita consentimento local e executa o código em processo separado com a sandbox de permissões do Node. APIs oficiais, automações de navegador, FFmpeg, Python e regras específicas de fornecedores permanecem dentro dos respectivos plugins.
 
 O instalador aceita tanto a pasta de um plugin quanto a raiz extraída de `ContentFlow-Plugins.zip`. No segundo caso, valida o conjunto antes de instalar, adiciona todos os plugins novos em lote e preserva sem sobrescrever os que já estavam instalados.
 
@@ -89,7 +89,7 @@ npm run plugin:kit -- check ./meu-plugin
 - [Reliability Program](docs/reliability-program/README.md)
 - [Mapa e autoridade da documentação](docs/README.md)
 - [Interface do plugin](docs/PLUGIN_INTERFACE.md)
-- [Plugin API v1](docs/ecosystem/protocol.md)
+- [Plugin API v2](docs/ecosystem/protocol.md)
 - [Segurança de plugins](docs/ecosystem/security.md)
 - [Automação de navegador](docs/ecosystem/browser-automation.md)
 - [Distribuição e responsabilidades](docs/ecosystem/distribution.md)

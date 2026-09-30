@@ -6,7 +6,7 @@ Se você já possui uma automação e quer decidir como envolvê-la, leia primei
 
 ## 0–5 min — escolher o comportamento
 
-Decida uma responsabilidade pequena: receber `content` e devolver `result`. Escolha operador `Código`, bloco `CRIAR`, entrada `textarea`, saída `textarea`, nenhuma permissão e nenhum envio a terceiros.
+Decida uma responsabilidade pequena: receber `content` e devolver `result`. Escolha operador `Código`, bloco `CRIAR`, entrada e saída `text/one/inline`, nenhuma permissão e nenhum envio a terceiros.
 
 Conheça os templates:
 

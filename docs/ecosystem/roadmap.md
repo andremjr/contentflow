@@ -146,19 +146,18 @@ Contrato recomendado para `visual_slots`:
 | `priority`                     | número      | Prioridade de preenchimento.                                                            |
 | `transition`                   | texto       | Sugestão, não comando arbitrário.                                                       |
 
-Contrato recomendado para `resolved_assets`:
+Mídia resolvida usa portas separadas por família: `resolved_images: image/many/artifact`, `resolved_videos: video/many/artifact` e, quando necessário, `resolved_audio: audio/many/artifact`. Não existe `resolved_assets` ou campo `file` genérico que misture famílias. Metadados associados usam registros próprios, ligados aos IDs dos itens concedidos pelo núcleo:
 
-| Campo              | Tipo                 | Regra                                             |
+| Campo              | Shape/controle       | Regra                                             |
 | ------------------ | -------------------- | ------------------------------------------------- |
-| `asset_id`         | texto                | ID estável.                                       |
-| `slot_id`          | texto                | Slot atendido.                                    |
-| `file`             | arquivo/imagem/vídeo | Referência gerenciada pelo núcleo.                |
-| `source_type`      | seleção              | `stock`, `user`, `generated` ou `recorded`.       |
-| `source_url`       | URL                  | Opcional.                                         |
-| `license`          | texto                | Obrigatório para mídia externa quando disponível. |
-| `duration_ms`      | número               | Obrigatório para vídeo e áudio.                   |
-| `width` / `height` | número               | Dimensões detectadas.                             |
-| `selected`         | sim ou não           | Indica a escolha final.                           |
+| `item_id`          | `identifier/one`     | ID do item de mídia concedido pelo núcleo.        |
+| `slot_id`          | `identifier/one`     | Slot atendido.                                    |
+| `source_type`      | `selection/one`      | `stock`, `user`, `generated` ou `recorded`.       |
+| `source_url`       | `url/one`            | Opcional.                                         |
+| `license`          | `text/one/inline`    | Obrigatório para mídia externa quando disponível. |
+| `duration_ms`      | `number/one`         | Obrigatório para vídeo e áudio.                   |
+| `width` / `height` | `number/one`         | Dimensões detectadas.                             |
+| `selected`         | `boolean/one`        | Indica a escolha final.                           |
 
 Regras como intervalo mínimo entre B-rolls, percentual máximo de cobertura, proteção de CTA e prioridade de A-roll ficam na Biblioteca Estratégica ou nos parâmetros locais do Visual Coverage Planner.
 
@@ -211,7 +210,7 @@ script_segments
   -> narração ou gravação
   -> timed_cues + SRT
   -> visual_slots
-  -> resolved_assets
+  -> resolved_images + resolved_videos (+ resolved_audio quando necessário)
   -> timeline_items
   -> vídeo renderizado
   -> relatório de qualidade

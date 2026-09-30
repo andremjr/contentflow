@@ -974,9 +974,9 @@ No modo de fallback, o núcleo pode avançar para o próximo perfil explicitamen
 
 ---
 
-# Capítulo 16 — Estado atual e direção de evolução
+# Capítulo 16 — Estado atual consolidado
 
-O projeto já possui uma base importante para:
+O projeto usa de forma integrada:
 
 - jobs persistentes;
 - resultados parciais;
@@ -992,24 +992,11 @@ O projeto já possui uma base importante para:
 - reload controlado;
 - diagnóstico redigido.
 
-Algumas partes ainda estão sendo conectadas progressivamente.
+Perfis físicos são globais e reutilizáveis somente por vínculo explícito. Readiness pertence ao par plugin + perfil; cada perfil físico possui um lease global; e o modo paralelo distribui unidades exclusivas entre perfis distintos. A política local atual oferece `fallback` ordenado e `parallel`.
 
-Entre as próximas etapas estão:
+Unidades de trabalho recebem identidade do núcleo antes de efeitos externos. Métodos v3 e plugins API v2 usam os mesmos `ValueShape`; contratos anteriores não entram neste fluxo nem recebem fallback, inferência ou adapter automático.
 
-- adaptar todos os plugins de navegador ao perfil global;
-- oferecer o compartilhamento de perfis na interface;
-- materializar todas as unidades de trabalho de forma universal;
-- permitir uma sessão contínua processando vários itens;
-- distribuir itens exclusivos entre perfis diferentes;
-- oferecer os modos `single`, `fallback` e `parallel`;
-- reorganizar a janela de configuração dos plugins;
-- validar tudo em cenários reais de ponta a ponta.
-
-Isso significa que a arquitetura descrita neste documento representa ao mesmo tempo:
-
-1. o funcionamento já existente;
-2. as fronteiras que já foram definidas;
-3. a direção para a qual as partes ainda em transição estão sendo alinhadas.
+Validação de ponta a ponta continua obrigatória para cada fluxo real antes de uma release. Build, typecheck e testes isolados não substituem a confirmação do comportamento observável completo.
 
 ---
 

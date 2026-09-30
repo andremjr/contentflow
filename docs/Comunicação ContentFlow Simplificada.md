@@ -6,7 +6,7 @@ Este documento explica o ContentFlow para pessoas que não são programadoras. E
 
 - como a comunicação funciona hoje;
 - o que deveria pertencer a essa camada;
-- o que hoje está misturado, duplicado ou em transição;
+- quais limites impedem mistura ou duplicação de responsabilidade;
 - quando uma comunicação precisa ultrapassar o quadrado vizinho.
 
 O ponto mais importante é que o diagrama representa uma **ordem de responsabilidades**, mas não uma corrente obrigatória de telefonemas entre quadrados.
@@ -155,19 +155,19 @@ O núcleo deve continuar dono de IDs, execuções, itens, entregas, tentativas, 
 
 O plugin deve ser dono da adaptação técnica para o serviço escolhido, da interpretação dos erros desse serviço e da transformação da resposta externa para o contrato do ContentFlow.
 
-## O que está fora do lugar ou em transição
+## Limites que preservam a autoridade correta
 
-Há dois pontos principais.
+A coordenação de pedido, jobs, retries, perfis, resultados parciais e entregas pertence ao núcleo, mesmo quando sua implementação é dividida em serviços internos. Essa organização nunca transfere autoridade para Método ou plugin.
 
-Primeiro, boa parte da coordenação ainda está concentrada no servidor principal: preparação do pedido, jobs, retries, perfis, resultados parciais e entregas. Essas funções pertencem ao núcleo, mas o código pode ser dividido futuramente em serviços internos menores. A correção é **organizar o núcleo por dentro**, não transferir autoridade para Método ou plugin.
-
-Segundo, o modelo futuro de itens já aparece em contratos, mas ainda não está completo em todo o runtime. Em alguns caminhos, a correlação incremental ainda depende de posições ou chaves devolvidas pelo plugin. O destino mais seguro é:
+Itens intermediários já seguem uma identidade universal concedida antes do efeito externo:
 
 ```text
 Núcleo cria o item e concede seu ID antes do efeito externo
 Plugin executa e repete o mesmo ID na resposta
 Núcleo atualiza aquele item sem precisar adivinhar sua identidade
 ```
+
+Posição, label, nome de campo ou chave inventada pelo plugin não substituem essa identidade.
 
 ## Comunicação que precisa ultrapassar o vizinho
 
@@ -384,24 +384,18 @@ Readiness correto = plugin + perfil
 
 O perfil físico continua sendo a mesma identidade, mas cada vínculo possui sua própria preparação, autenticação, URL e validação.
 
-## O que está fora do lugar ou em transição
+## Limites atuais de perfil e workspace
 
-### Workspace privado e perfil físico ainda convivem
-
-Historicamente, partes dos plugins usaram a mesma pasta para checkpoints privados e para a sessão do Chrome. A implementação atual separa essas responsabilidades: perfil físico e lifecycle pertencem ao núcleo, enquanto checkpoints privados continuam no workspace do plugin.
+Perfil físico e workspace privado são responsabilidades distintas: perfil físico e lifecycle pertencem ao núcleo, enquanto checkpoints privados continuam no workspace do plugin.
 
 ```text
 getWorkspacePath = estado privado e checkpoints do plugin
 getProfilePath   = pasta física da sessão concedida pelo núcleo
 ```
 
-### Perfis ainda carregam marcas do modelo antigo
+Perfis são identidades globais do ContentFlow, reutilizáveis somente por vínculos explícitos. Readiness pertence ao par `plugin + perfil`; marcador físico, alias, e-mail, cookie ou semelhança de nome nunca cria vínculo nem readiness.
 
-O modelo anterior tratava o perfil como pertencente ao plugin. A arquitetura atual o transforma em identidade global do ContentFlow, reutilizável somente por vínculos explícitos. A compatibilidade com instalações antigas faz os dois modelos ainda aparecerem em alguns caminhos.
-
-### Readiness físico legado
-
-Alguns fluxos ainda usam marcadores na pasta do navegador como sinal de preparação. Eles podem auxiliar uma migração, mas não devem ser a única fonte de verdade. O núcleo deve registrar readiness para cada par `plugin + perfil`.
+Migrações recuperáveis podem preservar pastas e registros físicos de instalações anteriores, mas ficam isoladas na boundary de armazenamento. Elas não adaptam Método v1/v2, Plugin API v1 nem configuração portátil antiga.
 
 ### O diagrama coloca o perfil no lugar errado
 
@@ -425,21 +419,20 @@ A sua visão de separar as responsabilidades em camadas está correta e torna o 
 
 | Parte analisada         | Situação atual                                    | Direção recomendada                                                           |
 | ----------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Núcleo ↔ Método         | Bem separado                                      | Preservar Método como receita passiva.                                        |
-| Núcleo/Bloco ↔ plugin   | Correto no conceito                               | Manter chamada direta e modularizar o núcleo internamente.                    |
-| Plugin ↔ API            | Bem posicionado                                   | Preservar adaptação no plugin.                                                |
-| Plugin ↔ código local   | Bem posicionado                                   | Preservar sandbox e importação no núcleo.                                     |
-| Plugin ↔ Bridge         | Robusto, com duplicações e vazamentos específicos | Criar SDK compartilhado e manter regras de fornecedor nos plugins.            |
-| Bridge/navegador/perfil | Em transição                                      | Separar definitivamente workspace, perfil físico, vínculo, readiness e lease. |
+| Núcleo ↔ Método         | Autoridade definida | Preservar Método v3 como receita passiva e portátil.                           |
+| Núcleo/Bloco ↔ plugin   | Autoridade definida | Manter chamada direta pelo núcleo e contrato explícito por porta.              |
+| Plugin ↔ API            | Autoridade definida | Preservar adaptação específica dentro do plugin.                               |
+| Plugin ↔ código local   | Autoridade definida | Preservar sandbox, permissões e importação pelo núcleo.                        |
+| Plugin ↔ Bridge         | Autoridade definida | Compartilhar apenas o protocolo; regras de fornecedor permanecem nos plugins. |
+| Bridge/navegador/perfil | Autoridade definida | Separar workspace, perfil físico, vínculo, readiness e lease.                  |
 
-## Ordem recomendada para a reorganização futura
+## Guardrails atuais
 
-1. concluir a separação entre workspace privado e perfil físico;
-2. concluir perfis, vínculos, readiness e leases nos handlers;
-3. completar a identidade durável dos itens antes de efeitos externos;
-4. criar um SDK compartilhado para o cliente da Browser Bridge;
-5. retirar gradualmente regras específicas de fornecedores da extensão;
-6. dividir a coordenação do servidor principal em serviços internos, sem retirar a autoridade do núcleo.
+1. criar identidades de work units e deliveries no núcleo antes de efeitos externos;
+2. usar somente Método v3, Plugin API v2 e bindings explícitos;
+3. manter perfis globais, vínculos explícitos, readiness por vínculo e lease por perfil físico;
+4. manter regras de fornecedor nos plugins e comandos universais na Browser Bridge;
+5. preservar migrações de armazenamento em boundaries recuperáveis, sem adaptar contratos antigos.
 
 ## Regra final para alunos e criadores de plugins
 

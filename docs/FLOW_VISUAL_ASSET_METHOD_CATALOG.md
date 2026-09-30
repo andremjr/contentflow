@@ -358,7 +358,7 @@ Essas políticas pertencem ao núcleo e ao executor. Só criam outro Método qua
 | Regenerar uma candidata | ação universal sobre item |
 | Escolher uma candidata | `VALIDAR` ou ação de seleção |
 | Criar projeto/renomear projeto | configuração e contexto da capability |
-| Upload técnico ao Flow | consequência de uma porta de arquivo |
+| Upload técnico ao Flow | consequência de uma porta de conteúdo com representação `artifact` |
 | Retentativas e rate limit | política do executor |
 
 Upscale só vira um Bloco adicional quando realmente cria um novo artifact derivado. Escolher uma resolução nativa antes da geração continua sendo configuração do Bloco que gera a mídia.
@@ -373,9 +373,9 @@ Os Métodos que trabalham com um plano estruturado devem usar registros como:
 | --- | --- | --- |
 | `scene_key` | texto | chave editorial estável |
 | `order` | número | posição da cena |
-| `image_prompt` | textarea opcional | instrução de imagem |
-| `video_prompt` | textarea opcional | movimento e câmera |
-| `output_mode` | select | imagem, vídeo ou ambos |
+| `image_prompt` | `text/one/inline` opcional | instrução de imagem; apresentação pode usar campo multilinha |
+| `video_prompt` | `text/one/inline` opcional | movimento e câmera; apresentação pode usar campo multilinha |
+| `output_mode` | `selection/one` | imagem, vídeo ou ambos |
 
 ### Referências
 

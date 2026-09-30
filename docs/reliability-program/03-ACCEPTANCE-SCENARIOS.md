@@ -111,7 +111,7 @@ Cada cenário descreve uma situação e o resultado que o usuário e o sistema d
 - o runtime canônico não escolhe por nome, proximidade ou semelhança textual;
 - o trabalho afetado não inicia com dado possivelmente incorreto;
 - a ambiguidade produz diagnóstico identificável;
-- heurística de editor ou adapter legado, quando existente, materializa binding explícito ou mantém o bloqueio antes da execução.
+- sugestão do editor só pode materializar um binding depois de confirmação; formato antigo ou origem indefinida permanece bloqueado antes da execução.
 
 ## S10 — Retry editorial após `VALIDAR`
 
@@ -181,6 +181,8 @@ Este cenário não fixa números antecipados de workers, memória ou latência; 
 - arquivos e pastas associados a esses registros.
 
 O upgrade não funde perfis por heurística, não reinterpreta snapshots históricos e não apaga a representação anterior antes de backup e validação.
+
+Métodos v1/v2 e plugins API v1 podem ser preservados como dados históricos para recuperação pelo usuário, mas permanecem inválidos para importação e execução. O upgrade não os adapta; um pacote utilizável precisa ser produzido novamente nos contratos Método v3 e Plugin API v2.
 
 ## S15 — Estratégia imutável depois do início
 

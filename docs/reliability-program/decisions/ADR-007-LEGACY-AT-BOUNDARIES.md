@@ -6,17 +6,17 @@ Aceito
 
 ## Contexto
 
-Representações antigas precisam continuar legíveis durante a evolução do produto, mas ramificações legadas espalhadas pelo domínio tornam o comportamento canônico difícil de compreender e testar.
+Instalações existentes contêm representações históricas de perfis físicos, filas, jobs, work units, snapshots e outros estados operacionais que precisam ser preservados durante a evolução do produto. Isso não transforma contratos antigos de Método ou plugin em formatos suportados.
 
 ## Decisão
 
-Compatibilidade legada fica nas fronteiras de leitura, importação, adaptação e migração. Antes de entrar no domínio canônico, dados antigos são validados e adaptados sem reinterpretar seu significado histórico, preservando proveniência e caminho de recuperação.
+Migrações de estado operacional ficam nas fronteiras de storage. Antes de entrar no domínio canônico, esses dados são validados e migrados sem reinterpretar seu significado histórico, preservando proveniência, backup e caminho de recuperação. Importadores e runtime rejeitam Método v1/v2 e Plugin API v1; não existe adapter desses contratos.
 
 ## Consequências
 
-Adaptadores e migrações precisam ser versionados e testados. O Core opera sobre poucos modelos canônicos, enquanto transições de storage seguem fases recuperáveis e compatíveis com instalações anteriores.
+Migrações precisam ser versionadas e testadas. O Core opera sobre poucos modelos canônicos, enquanto transições de storage seguem fases recuperáveis e compatíveis com instalações anteriores.
 
 ## O que esta decisão NÃO significa
 
-Não significa apagar dados antigos, reescrever snapshots históricos no mesmo passo, migrar tudo de forma ansiosa ou quebrar compatibilidade sem uma estratégia explícita.
+Não significa apagar dados antigos, reescrever snapshots históricos no mesmo passo ou migrar tudo de forma ansiosa. Também não significa aceitar, inferir ou converter automaticamente contratos antigos de Método ou plugin.
 

@@ -369,7 +369,7 @@ export type PluginExecutionRequest = {
   /** Inputs not already interpolated into `resolvedInstruction`, for prompt context composition. */
   instructionContextInputs?: Record<string, RuntimeValue>;
   inputContract: PluginInputContract[];
-  /** Metadados paralelos aos valores, sem quebrar plugins v1 que leem apenas `inputs`. */
+  /** Metadados paralelos aos valores para plugins que precisam rastrear a proveniência dos `inputs`. */
   inputDeliveries?: PluginInputDelivery[];
   outputContract: PluginFieldContract[];
   /** Core-owned durable partial outputs available to a later retry of the same block. */

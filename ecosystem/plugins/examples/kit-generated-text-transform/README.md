@@ -1,6 +1,6 @@
 # ContentFlow Kit Text Demo
 
-Plugin gerado pelo kit oficial do ContentFlow usando a API pública v1.
+Plugin gerado pelo kit oficial do ContentFlow usando a API pública v2.
 
 ## Desenvolvimento
 

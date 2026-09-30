@@ -39,6 +39,9 @@ test("o gerador cria e valida os três templates oficiais", async () => {
       const directory = await createPlugin(path.join(temporary, template), answers(template));
       const validated = validatePluginDirectory(directory);
       assert.equal(validated.manifest.apiVersion, "2");
+      const readme = await readFile(path.join(directory, "README.md"), "utf8");
+      assert.match(readme, /API pública v2/);
+      assert.doesNotMatch(readme, /API pública v1/);
       await contractCommand(directory);
     }
   } finally {

@@ -245,7 +245,7 @@ Na revisão atual:
 - todos os fluxos de assets incluem AssemblyAI para SRT e uma etapa de planejamento com IA antes do plugin visual;
 - a conexão configurada do AssemblyAI existe e está conectada;
 - os plugins configurados estão instalados e todas as capabilities referenciadas pelos métodos existem nas versões atualmente instaladas;
-- alguns métodos guardam no JSON versões anteriores de Claude, Gemini ou Google Flow, mas o executor do ContentFlow cria novos jobs usando a versão instalada do plugin; portanto essa diferença de metadado não é, por si só, um bloqueio estrutural;
+- cada Método deve ser revisado e salvo com a capability e os contratos atuais do plugin escolhido; metadados de versão divergentes não autorizam substituição silenciosa nem validam a execução;
 - o canal História ContentFlow não carrega mais a antiga obrigação de ser ficção científica;
 - no canal Agricultura, as referências conceituais internas aparecem apenas nas instruções de bastidor e estão explicitamente proibidas de aparecer como fonte editorial no conteúdo final.
 

@@ -1,6 +1,6 @@
 # Templates oficiais do Plugin Kit
 
-Os três diretórios desta pasta são as fontes usadas por `npm run plugin:kit -- create`. Cada um contém defaults declarativos e um handler que usa somente a API pública v1.
+Os três diretórios desta pasta são as fontes usadas por `npm run plugin:kit -- create`. Cada um contém defaults declarativos e um handler que usa somente a API pública v2.
 
 - `text-transform`: transformação local, sem permissões.
 - `hosted-api`: chamada HTTPS com `networkHosts` e segredo obtido por `services.getSecret`.

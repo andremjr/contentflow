@@ -136,24 +136,24 @@ Tecnologias e formatos concretos ficam nas bordas:
 - SQLite persiste representações duráveis;
 - Plugin API traduz comandos e fatos de executores externos;
 - Browser Bridge transporta operações de navegador autorizadas;
-- formatos históricos passam por adapters de compatibilidade;
+- representações históricas de storage operacional passam por migrações delimitadas;
 - filesystem e processos locais aplicam comandos sob permissões controladas.
 
 O Core alvo não importa tipos de framework, não depende de rotas HTTP, não conhece tabelas SQLite, não interpreta DOM e não contém IDs, seletores ou regras de provider.
 
 Adapters validam sintaxe, autenticidade, permissão e tradução de formato. Eles não preenchem lacunas semânticas por adivinhação.
 
-## 8. Compatibilidade converge para o modelo canônico
+## 8. Migração de storage converge para o modelo canônico
 
 ```text
-Legacy persisted representation
+Historical operational representation
            ↓
-Compatibility/Migration Adapter
+Versioned Storage Migration
            ↓
 Canonical Core Representation
 ```
 
-Representações antigas devem ser lidas por adapters explícitos, versionados e testáveis. O resultado adaptado entra no Core com significado canônico ou com um diagnóstico de incompatibilidade.
+Representações antigas de perfis físicos, filas, jobs, work units e snapshots operacionais são tratadas por migrações explícitas, versionadas, recuperáveis e testáveis. O resultado entra no Core com significado preservado ou com um diagnóstico de incompatibilidade. Método v1/v2 e Plugin API v1 ficam fora dessa regra: são contratos inválidos e não recebem adapter de leitura, importação ou runtime.
 
 Deve-se evitar:
 
@@ -163,7 +163,7 @@ Canonical Core
 Permanent branches for every historical version
 ```
 
-Compatibilidade não pode espalhar condicionais históricos indefinidamente pela política central. Durante uma migração, leitura dupla ou escrita compatível pode existir nas bordas, com gate, telemetria local redigida, rollback e critério explícito de remoção. Snapshots históricos não são reescritos apenas para parecerem atuais.
+Migração de storage não pode espalhar condicionais históricos indefinidamente pela política central. Durante uma migração, leitura dupla ou escrita compatível pode existir nas bordas, com gate, telemetria local redigida, rollback e critério explícito de remoção. Snapshots históricos não são reescritos apenas para parecerem atuais.
 
 ## 9. Identidade e proveniência
 
@@ -183,19 +183,19 @@ Antes do primeiro efeito externo, o Core cria e persiste a identidade da unidade
 
 O runtime canônico recebe bindings resolvidos. Para cada entrada, ele conhece origem, porta, tipo, cardinalidade e identidade dos dados.
 
-Critérios de proximidade, compatibilidade aproximada ou semelhança de nome podem ajudar a propor uma conexão no editor ou a interpretar um formato legado. Eles não escolhem silenciosamente dados durante a execução canônica.
+Critérios de proximidade, compatibilidade aproximada ou semelhança de nome podem ajudar a propor uma conexão no editor. Eles não interpretam formatos antigos nem escolhem silenciosamente dados durante a execução canônica.
 
 O fluxo alvo é:
 
 ```text
-Design-time suggestion or legacy interpretation
+Design-time suggestion
                   ↓
 Explicit normalized binding or diagnostic
                   ↓
 Canonical runtime validation
 ```
 
-Porta ausente, tipo incompatível, cardinalidade errada, múltiplas origens elegíveis ou output inválido produzem diagnóstico. Um adapter pode preservar comportamento legado conhecido, mas precisa identificá-lo como compatibilidade e nunca ampliar o contrato por fallback genérico.
+Porta ausente, tipo incompatível, cardinalidade errada, múltiplas origens elegíveis ou output inválido produzem diagnóstico. Nenhum adapter, fallback ou heurística preserva comportamento de contrato antigo dentro desse fluxo.
 
 ## 11. Recovery com política única
 
@@ -265,7 +265,7 @@ A direção alvo foi alcançada quando, para um mesmo estado canônico e os mesm
 - efeito incerto bloqueia replay e aciona reconciliação;
 - trabalho independente continua quando recursos e política permitem;
 - contratos ambíguos falham com diagnóstico em vez de sucesso aparente;
-- instalações antigas preservam significado por adapters e migrações recuperáveis;
+- instalações antigas preservam o significado de storage e estado operacional por migrações recuperáveis, sem adaptar Métodos v1/v2 ou Plugin API v1;
 - o cenário dos cinco vídeos produz conclusão ou razões concretas sem exigir vigilância constante.
 
 Este critério orienta as futuras tasks, mas não substitui acceptance scenarios, medições, ADRs ou gates que serão definidos separadamente.

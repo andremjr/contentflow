@@ -35,7 +35,7 @@ Depois do início:
 - alterações no Canal ou no Método não reinterpretam silenciosamente a execução;
 - retries e retomadas preservam a estratégia e a proveniência originais;
 - migrações não reescrevem o significado de snapshots, filas ou entregas históricas;
-- dados antigos continuam legíveis em seu contexto original ou passam por adaptação explícita e recuperável.
+- dados operacionais persistidos continuam legíveis em seu contexto original ou passam por migração explícita e recuperável; essa garantia não adapta contratos antigos de Método ou plugin.
 
 Compatibilidade significa preservar significado, não apenas conseguir desserializar bytes.
 
@@ -111,7 +111,7 @@ O runtime canônico executa contratos explícitos. Ele não pode:
 - resolver ambiguidade silenciosamente;
 - aceitar output inválido porque ele se parece com o esperado.
 
-Heurísticas podem auxiliar o editor, o importador ou um adapter legado. Antes da execução canônica, porém, o resultado precisa estar materializado como binding ou diagnóstico determinístico. Ambiguidade bloqueia o trabalho afetado com explicação concreta; não muda o significado do contrato.
+Heurísticas podem auxiliar sugestões do editor, mas nunca completar um contrato ausente. Antes da execução canônica, toda origem precisa estar materializada como binding explícito ou diagnóstico determinístico. Ambiguidade bloqueia o trabalho afetado com explicação concreta; não muda o significado do contrato. Importadores de Método aceitam somente o envelope v3 e plugins somente a API v2.
 
 ## 9. Intervenção humana é uma decisão, não um fallback genérico
 

@@ -123,7 +123,7 @@ Checklist obrigatório para capabilities com `profileSetup` ou navegador:
 
 Toda capability que envia ao provedor texto derivado de instruções, configuração, contexto ou inputs declara `promptPreview`. O template mostra o payload textual completo antes dos valores reais, usa somente placeholders documentados e não inclui secrets. Uma capability sem envio de prompt não declara preview fictício.
 
-A revisão de pacote deve comparar o template com o caminho real de composição do handler. Diferença entre prévia e texto enviado é falha de contrato. Capabilities legadas sem preview precisam receber o campo no pacote responsável antes de serem consideradas validadas para esta iniciativa; o núcleo não contém templates específicos de fornecedor.
+A revisão de pacote deve comparar o template com o caminho real de composição do handler. Diferença entre prévia e texto enviado é falha de contrato. Uma capability atual sem preview precisa receber o campo no pacote responsável antes de ser considerada validada para esta iniciativa; o núcleo não contém templates específicos de fornecedor.
 
 ## 8. Checklist reutilizável de aceite
 
