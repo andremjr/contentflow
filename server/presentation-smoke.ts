@@ -115,12 +115,15 @@ const processRunnerSource = readFileSync(
   new URL("../src/components/process-runner.tsx", import.meta.url),
   "utf8",
 );
-const executionResultsSource = processRunnerSource.slice(
-  processRunnerSource.indexOf("function ExecutionResults"),
+const methodExecutionSource = processRunnerSource.slice(
+  processRunnerSource.indexOf("function MethodExecution"),
   processRunnerSource.indexOf("function ResultValue"),
 );
-assert.match(executionResultsSource, /item\.status === "cancelled"/);
-assert.match(executionResultsSource, /open=\{blockExecution\.status !== "completed"\}/);
+assert.equal(processRunnerSource.match(/Execução do método/g)?.length, 1);
+assert.doesNotMatch(processRunnerSource, /Resultados produzidos/);
+assert.match(methodExecutionSource, /execution\.blocks\.map\(\(blockExecution, index\)/);
+assert.match(methodExecutionSource, /completedBlocks\}\/\{execution\.blocks\.length/);
+assert.match(methodExecutionSource, /<details[\s\S]*<summary/);
 assert.match(processRunnerSource, /w-full max-w-6xl border-t/);
 
 const rendererSource = readFileSync(

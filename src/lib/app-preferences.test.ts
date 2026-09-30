@@ -323,6 +323,8 @@ test("translates execution attention and error notifications", () => {
 });
 
 test("translates completed output editing controls", () => {
+  assert.equal(translate("Execução do método", "en"), "Method execution");
+  assert.equal(translate("Execução do método", "es"), "Ejecución del método");
   assert.equal(translate("Editar entrega", "en"), "Edit output");
   assert.equal(translate("Editar entrega", "es"), "Editar salida");
   assert.equal(translate("Salvar alterações", "en"), "Save changes");

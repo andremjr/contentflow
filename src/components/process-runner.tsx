@@ -385,8 +385,7 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
         />
       ) : execution ? (
         <>
-          <ExecutionTimeline execution={execution} />
-          <ExecutionResults
+          <MethodExecution
             execution={execution}
             collections={collections}
             libraryItems={libraryItems}
@@ -502,76 +501,7 @@ function MissingMethod({
   );
 }
 
-function ExecutionTimeline({ execution }: { execution: ProcessExecution }) {
-  return (
-    <section className="rounded-xl border border-border/70 bg-card p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Execução do método
-        </h3>
-        <Badge variant="outline">
-          {execution.blocks.filter((item) => item.status === "completed").length}/
-          {execution.blocks.length}
-        </Badge>
-      </div>
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {execution.blocks.map((item, index) => {
-          const block = execution.methodSnapshot.blocks.find(
-            (candidate) => candidate.id === item.blockId,
-          );
-          const done = item.status === "completed";
-          const waiting = item.status === "awaiting_human";
-          const running = ["in_progress", "blocked_executor"].includes(item.status);
-          return (
-            <div
-              key={item.blockId}
-              className={cn(
-                "rounded-lg border p-3 transition-colors duration-500",
-                done
-                  ? "border-border bg-secondary"
-                  : waiting
-                    ? "border-warning/45 bg-warning/10"
-                    : running
-                      ? "border-brand/40 bg-brand/10"
-                      : "border-border/60 bg-background/30",
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "grid size-6 place-items-center rounded-sm transition-colors duration-500",
-                    done
-                      ? "bg-muted-foreground text-background"
-                      : waiting
-                        ? "bg-warning/20 text-warning"
-                        : running
-                          ? "bg-brand/20 text-brand-soft"
-                          : "bg-secondary text-muted-foreground",
-                  )}
-                >
-                  {done ? (
-                    <Check className="size-3.5" />
-                  ) : running ? (
-                    <LoaderCircle className="size-3.5 animate-spin" />
-                  ) : (
-                    <span className="font-mono text-[10px]">{index + 1}</span>
-                  )}
-                </span>
-                <span className="truncate text-xs font-semibold">{block?.name ?? block?.type}</span>
-              </div>
-              <p className="mt-2 text-[10px] text-muted-foreground">{STATUS_LABEL[item.status]}</p>
-              {item.status === "in_progress" && item.progress !== undefined && (
-                <Progress value={item.progress * 100} className="mt-2 h-1" />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function ExecutionResults({
+function MethodExecution({
   execution,
   collections,
   libraryItems,
@@ -586,22 +516,20 @@ function ExecutionResults({
   const [editingBlockId, setEditingBlockId] = useState<string>();
   const [editValues, setEditValues] = useState<Record<string, RuntimeValue>>({});
   const [savingBlockId, setSavingBlockId] = useState<string>();
-  const visibleResults = execution.blocks.filter(
-    (item) =>
-      item.status === "completed" ||
-      ((item.status === "in_progress" || item.status === "failed" || item.status === "cancelled") &&
-        (item.items?.length ||
-          Object.values(item.values).some((value) => !isEmptyDisplayValue(value)))),
-  );
-  if (!visibleResults.length) return null;
+  const completedBlocks = execution.blocks.filter((item) => item.status === "completed").length;
 
   return (
     <section className="rounded-xl border border-border/70 bg-card p-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Resultados produzidos
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Execução do método
+        </h3>
+        <Badge variant="outline">
+          {completedBlocks}/{execution.blocks.length}
+        </Badge>
+      </div>
       <div className="mt-3 space-y-2">
-        {visibleResults.map((blockExecution) => {
+        {execution.blocks.map((blockExecution, index) => {
           const block = execution.methodSnapshot.blocks.find(
             (candidate) => candidate.id === blockExecution.blockId,
           );
@@ -662,8 +590,21 @@ function ExecutionResults({
           return (
             <details
               key={blockExecution.blockId}
-              open={blockExecution.status !== "completed"}
-              className="group rounded-lg border border-border/60 bg-background/30"
+              open={[
+                "awaiting_human",
+                "in_progress",
+                "blocked_executor",
+                "failed",
+                "cancelled",
+              ].includes(blockExecution.status)}
+              className={cn(
+                "group rounded-lg border bg-background/30 transition-colors duration-500",
+                blockExecution.status === "awaiting_human"
+                  ? "border-warning/45 bg-warning/5"
+                  : ["in_progress", "blocked_executor"].includes(blockExecution.status)
+                    ? "border-brand/40 bg-brand/5"
+                    : "border-border/60",
+              )}
             >
               <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium">
                 {blockExecution.status === "completed" ? (
@@ -672,14 +613,23 @@ function ExecutionResults({
                   <AlertTriangle className="size-4 text-destructive" />
                 ) : blockExecution.status === "cancelled" ? (
                   <Square className="size-4 text-muted-foreground" />
-                ) : (
+                ) : ["in_progress", "blocked_executor"].includes(blockExecution.status) ? (
                   <LoaderCircle className="size-4 animate-spin text-brand-soft" />
+                ) : blockExecution.status === "awaiting_human" ? (
+                  <MousePointer2 className="size-4 text-warning" />
+                ) : (
+                  <span className="grid size-4 place-items-center font-mono text-[10px] text-muted-foreground">
+                    {index + 1}
+                  </span>
                 )}
                 <span className="min-w-0 flex-1 truncate">{block.name ?? block.type}</span>
                 <Badge variant="outline" className="text-[9px] text-muted-foreground">
                   {STATUS_LABEL[blockExecution.status]}
                 </Badge>
               </summary>
+              {blockExecution.status === "in_progress" && blockExecution.progress !== undefined ? (
+                <Progress value={blockExecution.progress * 100} className="mx-3 mb-2 h-1 w-auto" />
+              ) : null}
               <div className="border-t border-border/60 p-3">
                 {showExecutionItemsWorkspace ? (
                   <ExecutionItemsWorkspace
