@@ -114,6 +114,7 @@ type PluginExecutionRequest = {
   inputContract: PluginInputContract[];
   inputDeliveries?: PluginInputDelivery[];
   outputContract: PluginFieldContract[];
+  recoveryDirective?: { action: "reload_page"; reasonCode: string };
   resolvedInstruction?: string;
   unresolvedInstructionVariables?: string[];
   batch?: { itemId: string; index: number; total: number };
@@ -145,9 +146,19 @@ Erro:
   code: "RATE_LIMIT",
   message: "Limite temporário.",
   retryable: true,
-  retryAfterMs: 30000
+  retryAfterMs: 30000,
+  recovery: {
+    stage: "before_effect",
+    externalEffect: "none"
+  }
 }
 ```
+
+`code` e `recovery` são fatos operacionais, não comandos. `stage` informa a última fronteira externa alcançada, `externalEffect` informa a certeza sobre efeitos e `externalReceipt` pode correlacionar reconciliação. `intervention` descreve somente uma condição humana observada. O plugin não devolve “troque de perfil”, “recarregue” ou “repita”.
+
+A tradução é responsabilidade do adapter que possui contexto suficiente. A Browser Bridge reporta apenas transporte e lifecycle. O plugin interpreta DOM, resposta HTTP/RPC e estados do fornecedor e os converte para códigos universais. Por exemplo, “atividade incomum”, “unusual traffic”, “suspicious activity” e uma tela equivalente de detecção anti-bot tornam-se `PROVIDER_SECURITY_CHALLENGE`, com `recovery.intervention = "provider_security_challenge"`; não devem ser achatados em `RATE_LIMIT`, `AUTHENTICATION_FAILED` ou mensagem genérica. O Core nunca analisa esse texto nem recebe o nome interno do fornecedor.
+
+Quando a política central escolher uma recarga segura, a próxima invocação recebe `recoveryDirective.action = "reload_page"`. O cliente da Browser Bridge executa uma única recarga controlada antes do `ping` e revalida origem e sessão. A diretiva nunca é produzida pelo próprio plugin e não é enviada se houver efeito externo possível.
 
 Outputs usam exclusivamente port keys declaradas. Shape incompatível, cardinalidade incorreta, porta desconhecida ou output obrigatório ausente falham antes da conclusão.
 
@@ -168,6 +179,16 @@ Execução multiperfil distribui work units exclusivas entre perfis físicos dis
 Invocações usam `start`, `resume` e `cancel`. A chave lógica é `executionId + blockId + capabilityId + attempt + invocation.mode`. `start` repetido não pode criar efeito ou cobrança duplicada; `resume` e `cancel` são idempotentes.
 
 Timeout ou reconnect após possível efeito externo exige reconciliação. O plugin relata fatos e receipts; não escolhe retry, troca de perfil nem avanço estratégico.
+
+A classificação base da automação de navegador distingue:
+
+- `BRIDGE_PAGE_UNAVAILABLE`: página/content script indisponível antes de efeito; permite ao Core considerar recarga controlada no mesmo perfil;
+- `BRIDGE_MISSING` e `BRIDGE_INCOMPATIBLE`: instalação ou protocolo requer reparo do plugin/perfil; não autorizam fallback de conta;
+- `COMMAND_OUTCOME_UNKNOWN`: a resposta se perdeu depois de comando potencialmente mutável; exige reconciliação e bloqueia replay, recarga e troca de perfil;
+- códigos de autenticação, CAPTCHA, permissão, cota, upgrade e bloqueio: fatos associados à conta/perfil que podem permitir fallback somente pela política central.
+- `PROVIDER_SECURITY_CHALLENGE`: o plugin reconheceu proteção antiabuso, atividade suspeita ou desafio equivalente do fornecedor; exige intervenção e nunca autoriza rotação automática de identidade.
+
+Mensagem localizada não substitui código estável. Um erro desconhecido falha fechado; ele não herda automaticamente fallback ou reload de uma classe parecida.
 
 ## Services
 

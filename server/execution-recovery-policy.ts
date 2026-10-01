@@ -18,6 +18,7 @@ export type RecoveryDecision =
       intervention: NonNullable<PluginRecoveryFacts["intervention"]>;
     }
   | { action: "switch_profile"; reasonCode: string }
+  | { action: "reload_and_retry"; reasonCode: string; delayMs: number }
   | { action: "retry"; reasonCode: string; delayMs: number }
   | { action: "fail"; reasonCode: string };
 
@@ -36,7 +37,10 @@ const INTERVENTION_BY_CODE: Record<string, NonNullable<PluginRecoveryFacts["inte
   QUOTA_EXCEEDED: "quota",
   UPGRADE_REQUIRED: "upgrade",
   ACCOUNT_BLOCKED: "account_blocked",
+  PROVIDER_SECURITY_CHALLENGE: "provider_security_challenge",
   DOM_INCOMPATIBLE: "provider_ui_changed",
+  BRIDGE_MISSING: "plugin_setup",
+  BRIDGE_INCOMPATIBLE: "plugin_setup",
 };
 
 const SAFE_TECHNICAL_RETRY_CODES = new Set([
@@ -46,12 +50,12 @@ const SAFE_TECHNICAL_RETRY_CODES = new Set([
   "RATE_LIMIT",
   "OUTPUT_VALIDATION_FAILED",
   "BRIDGE_DISCONNECTED",
+  "BRIDGE_PAGE_UNAVAILABLE",
   "BROWSER_SESSION_CLOSED",
   "PROFILE_BUSY",
 ]);
 
 const PROFILE_SCOPED_CODES = new Set([
-  ...SAFE_TECHNICAL_RETRY_CODES,
   "AUTHENTICATION_FAILED",
   "CAPTCHA_REQUIRED",
   "PERMISSION_DENIED",
@@ -106,7 +110,7 @@ export function decideExecutionRecovery(input: {
   const code = failure.code || "JOB_FAILED";
   if (job.cancelRequested || code === "CANCELLED") return { action: "cancel", reasonCode: code };
 
-  if (hasUncertainExternalEffect(failure)) {
+  if (code === "COMMAND_OUTCOME_UNKNOWN" || hasUncertainExternalEffect(failure)) {
     return {
       action: "reconcile",
       reasonCode: code,
@@ -123,6 +127,16 @@ export function decideExecutionRecovery(input: {
   if (intervention) return { action: "intervene", reasonCode: code, intervention };
 
   const nowMs = input.nowMs ?? Date.now();
+  if (code === "BRIDGE_PAGE_UNAVAILABLE") {
+    const delayMs = technicalRetryDelay(failure, job.retryCount + 1);
+    if (
+      job.retryCount < (input.maxTechnicalRetries ?? DEFAULT_MAX_TECHNICAL_RETRIES) &&
+      nowMs + delayMs < new Date(job.deadlineAt).getTime()
+    ) {
+      return { action: "reload_and_retry", reasonCode: code, delayMs };
+    }
+    return { action: "fail", reasonCode: code };
+  }
   if (code === "PROFILE_BUSY") {
     const delayMs = technicalRetryDelay(failure, job.retryCount + 1);
     if (nowMs + delayMs < new Date(job.deadlineAt).getTime()) {
@@ -165,6 +179,8 @@ export function recoveryProductMessage(input: {
     case "switch_profile":
       return `${input.failureMessage} ${preserved} O ContentFlow continuará com ${input.nextProfile ?? "outro perfil preparado"}.`;
     case "retry":
+      return `${input.failureMessage} ${preserved} O ContentFlow tentará novamente com segurança.`;
+    case "reload_and_retry":
       return `${input.failureMessage} ${preserved} O ContentFlow tentará novamente com segurança.`;
     case "reconcile":
       return `${input.failureMessage} ${preserved} O ContentFlow precisa confirmar o resultado externo antes de repetir este trabalho.`;

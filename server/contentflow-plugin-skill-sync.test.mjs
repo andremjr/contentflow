@@ -3,13 +3,17 @@ import { access, readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-const skills = ["contentflow-method-development", "contentflow-plugin-development"];
+const skills = [
+  "development-contentflow",
+  "contentflow-method-development",
+  "contentflow-plugin-development",
+];
 
-test("as duas skills oficiais existem, têm metadata e apontam para contratos vivos", async () => {
+test("as skills oficiais existem, têm metadata e apontam para contratos vivos", async () => {
   for (const skill of skills) {
     const canonical = `ecosystem/skills/${skill}/SKILL.md`;
     const local = `.agents/skills/${skill}/SKILL.md`;
-    const boundaries = `ecosystem/skills/${skill}/references/layer-boundaries.md`;
+    const boundaries = `ecosystem/skills/${skill}/references/${skill === "development-contentflow" ? "architecture-map.md" : "layer-boundaries.md"}`;
     await access(canonical);
     await access(local);
     await access(boundaries);
@@ -23,7 +27,7 @@ test("as duas skills oficiais existem, têm metadata e apontam para contratos vi
   }
 });
 
-test("as cópias locais derivam das duas fontes canônicas", () => {
+test("as cópias locais derivam das fontes canônicas", () => {
   const result = spawnSync(
     process.execPath,
     ["scripts/sync-contentflow-plugin-skill.mjs", "--check"],

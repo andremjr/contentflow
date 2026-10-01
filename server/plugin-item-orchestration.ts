@@ -91,9 +91,23 @@ export function declaredItemOrchestration(
   request: PluginExecutionRequest,
   materializedInputItems?: BlockExecutionItem[],
 ) {
-  const policy = capability.execution.itemOrchestration;
+  const declaredPolicy = capability.execution.itemOrchestration;
+  const association = declaredPolicy?.collectionAssociations?.find((candidate) => {
+    const value = request.inputs[candidate.inputPort];
+    return Array.isArray(value) && value.length >= 1;
+  });
+  const policy = association
+    ? {
+        ...declaredPolicy!,
+        inputPort: association.inputPort,
+        outputPort: association.outputPort,
+        combinedOutputPort: association.combinedOutputPort,
+        separator: association.separator,
+      }
+    : declaredPolicy;
   const items = policy ? request.inputs[policy.inputPort] : undefined;
-  if (!policy || !Array.isArray(items) || items.length < 2) return undefined;
+  const minimumItems = association ? 1 : 2;
+  if (!policy || !Array.isArray(items) || items.length < minimumItems) return undefined;
   const sourceItemIds = request.inputDeliveries?.find(
     (delivery) => delivery.portKey === policy.inputPort,
   )?.itemIds;
@@ -356,7 +370,8 @@ export function legacyItemOrchestration(
 }
 
 export function itemProgressForJob(job: PersistentPluginJob): BlockItemProgress | undefined {
-  if (job.incrementalItems?.length) {
+  const orchestration = job.itemOrchestration;
+  if (!orchestration && job.incrementalItems?.length) {
     const items = job.incrementalItems;
     const completed = items.filter((item) => item.status === "completed").length;
     const failedItem = items.find((item) => item.status === "failed");
@@ -369,7 +384,6 @@ export function itemProgressForJob(job: PersistentPluginJob): BlockItemProgress 
       failedIndex: failedItem?.order,
     };
   }
-  const orchestration = job.itemOrchestration;
   if (!orchestration) return undefined;
   const requiredItems = requiredOrchestratedItems(job);
   const total = requiredItems.length || orchestration.items.length;
@@ -418,15 +432,19 @@ export function blockExecutionItemsForJob(
   job: PersistentPluginJob,
   currentItems: BlockExecutionItem[] | undefined = undefined,
 ) {
+  const jobItems = [
+    ...(job.itemOrchestration?.workItems ?? []),
+    ...(job.incrementalItems ?? []),
+    ...(job.registeredItems ?? []),
+  ];
+  const jobItemIds = new Set(jobItems.map((item) => item.id));
   const merged = new Map<string, BlockExecutionItem>();
-  for (const item of currentItems ?? []) merged.set(item.id, structuredClone(item));
-  for (const item of job.itemOrchestration?.workItems ?? []) {
-    merged.set(item.id, structuredClone(item));
+  for (const item of currentItems ?? []) {
+    if (item.attempt === job.attempt || jobItemIds.has(item.id)) {
+      merged.set(item.id, structuredClone(item));
+    }
   }
-  for (const item of job.incrementalItems ?? []) {
-    merged.set(item.id, structuredClone(item));
-  }
-  for (const item of job.registeredItems ?? []) {
+  for (const item of jobItems) {
     merged.set(item.id, structuredClone(item));
   }
   if (!merged.size) return undefined;
@@ -455,6 +473,13 @@ export function consolidatedOrchestratedOutputs(job: PersistentPluginJob) {
       requiredItems.length > 0 &&
       requiredItems.every((item) => item.status === "completed" && item.output !== undefined),
   };
+}
+
+export function canFinalizeFromDurableOrchestratedItems(
+  job: PersistentPluginJob,
+  rawIncoming: unknown,
+) {
+  return rawIncoming === undefined && consolidatedOrchestratedOutputs(job).complete;
 }
 
 export function startCurrentOrchestratedItem(job: PersistentPluginJob) {
@@ -612,6 +637,12 @@ export function invocationRequestForJob(job: PersistentPluginJob, invocation: Pl
     batch: item
       ? {
           itemId: item.itemIds[item.currentIndex],
+          ...(() => {
+            const sourceItemId =
+              item.workItems?.[item.currentIndex]?.provenance?.sourceDeliveryItemId ??
+              item.workItems?.[item.currentIndex]?.sourceItemId;
+            return sourceItemId ? { sourceItemId } : {};
+          })(),
           index: item.currentIndex,
           total: item.items.length,
         }

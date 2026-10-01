@@ -13,7 +13,7 @@ import {
   type RuntimeValue,
   type StrategicCollection,
 } from "../src/lib/domain";
-import { captureProjectStrategy } from "../src/lib/process-order";
+import { captureProjectStrategy, refreshProjectProcessStrategy } from "../src/lib/process-order";
 import {
   createProcessOutputFields,
   getMethodConfigurationIssue,
@@ -396,14 +396,26 @@ export function executionCommands(db: {
   ) {
     const execution = db.executions.find((item) => item.id === executionId);
     if (!execution) return false;
+    const project = db.projects.find((item) => item.id === execution.projectId);
+    const channel = db.channels.find((item) => item.id === execution.channelId);
+    const storedCurrentMethod = channel?.methods[execution.processType];
+    const currentMethod = storedCurrentMethod
+      ? db.adaptMethod
+        ? db.adaptMethod(storedCurrentMethod, "persisted_channel")
+        : storedCurrentMethod
+      : undefined;
+    if (!project) return false;
+    if (channel && (!currentMethod || getMethodConfigurationIssue(currentMethod))) return false;
     const result = applyManualBlockRetry(
       execution,
       { type: "manual_block_retry_requested", blockId, scope: retryScope, itemId },
       new Date().toISOString(),
+      currentMethod,
+      channel?.definitionRevision,
     );
     if (!result.ok) return false;
-    const project = db.projects.find((item) => item.id === execution.projectId);
-    if (project) applyExecutionProjectProjection(project, execution);
+    if (channel) refreshProjectProcessStrategy(project, channel, execution.processType);
+    applyExecutionProjectProjection(project, execution);
     touchExecution(execution);
     return true;
   }

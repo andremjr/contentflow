@@ -2,6 +2,7 @@ import type { ActionBlock, RuntimeValue } from "../src/lib/domain";
 import { isEmptyRuntimeValue } from "../src/lib/human-workflow";
 import { getPresentationRestrictionIssue } from "../src/lib/presentation";
 import type { PluginFieldContract } from "../src/lib/plugin-contract";
+import type { PluginInputDelivery } from "../src/lib/plugin-contract";
 import {
   validateRuntimeValueAgainstShape,
   runtimeItemMatchesShape,
@@ -17,6 +18,7 @@ export type PluginResponseContractIssueCode =
   | "INCOMPATIBLE_OUTPUT_SHAPE"
   | "MISSING_REQUIRED_OUTPUT"
   | "MISSING_REQUIRED_RECORD_FIELD"
+  | "UNKNOWN_INPUT_ITEM_REFERENCE"
   | "PRESENTATION_RESTRICTION_FAILED";
 
 export type PluginResponseContractIssue = {
@@ -48,6 +50,7 @@ type NormalizePluginResponseValuesInput = {
   outputContract: PluginFieldContract[];
   completion: "partial" | "final";
   existingValues?: Record<string, RuntimeValue>;
+  inputDeliveries?: PluginInputDelivery[];
   /** Item orchestration validates one member of a many-shaped port. */
   valueShape?: "snapshot" | "item";
 };
@@ -102,8 +105,23 @@ export function normalizePluginResponseValues(
   for (const contract of input.outputContract) {
     if (!Object.hasOwn(input.responseValues, contract.portKey)) continue;
     const rawValue = input.responseValues[contract.portKey];
-    const materialIssues =
-      input.valueShape === "item"
+    const itemValues =
+      input.valueShape === "item" && contract.shape.cardinality === "many"
+        ? Array.isArray(rawValue)
+          ? rawValue
+          : [rawValue]
+        : undefined;
+    const materialIssues = itemValues
+      ? itemValues.flatMap((item, index) =>
+          runtimeItemMatchesShape(contract.shape, item)
+            ? []
+            : validateRuntimeValueAgainstShape(
+                { ...contract.shape, cardinality: "one" },
+                item,
+                `${contract.portKey}.${index}`,
+              ),
+        )
+      : input.valueShape === "item"
         ? runtimeItemMatchesShape(contract.shape, rawValue)
           ? []
           : validateRuntimeValueAgainstShape(
@@ -126,12 +144,30 @@ export function normalizePluginResponseValues(
       });
       continue;
     }
-    const normalizedValue = rawValue as RuntimeValue;
-    const presentationIssue = getPresentationRestrictionIssue(
-      input.valueShape === "item" ? { ...contract.shape, cardinality: "one" } : contract.shape,
-      contract.presentation,
-      normalizedValue,
+    const referenceIssues = validateItemReferences(
+      contract,
+      rawValue,
+      input.inputDeliveries ?? [],
+      input.valueShape,
     );
+    if (referenceIssues.length) {
+      issues.push(...referenceIssues);
+      continue;
+    }
+    const normalizedValue = rawValue as RuntimeValue;
+    const presentationShape =
+      input.valueShape === "item"
+        ? { ...contract.shape, cardinality: "one" as const }
+        : contract.shape;
+    const presentationIssue = (itemValues ?? [normalizedValue])
+      .map((item) =>
+        getPresentationRestrictionIssue(
+          presentationShape,
+          contract.presentation,
+          item as RuntimeValue,
+        ),
+      )
+      .find(Boolean);
     if (presentationIssue) {
       issues.push({
         code: "PRESENTATION_RESTRICTION_FAILED",
@@ -153,6 +189,42 @@ export function normalizePluginResponseValues(
   }
 
   return issues.length ? { ok: false, issues } : { ok: true, values, compatibility: "canonical" };
+}
+
+function validateItemReferences(
+  contract: PluginFieldContract,
+  value: unknown,
+  inputDeliveries: PluginInputDelivery[],
+  valueShape?: "snapshot" | "item",
+): PluginResponseContractIssue[] {
+  if (contract.shape.kind !== "record") return [];
+  const records =
+    contract.shape.cardinality === "many" && valueShape !== "item"
+      ? value
+      : Array.isArray(value)
+        ? value
+        : [value];
+  if (!Array.isArray(records)) return [];
+  const issues: PluginResponseContractIssue[] = [];
+  for (const field of contract.shape.fields.filter((candidate) => candidate.referencesInputId)) {
+    const source = inputDeliveries.find((delivery) => delivery.inputId === field.referencesInputId);
+    const allowed = new Set(source?.itemIds ?? []);
+    for (const [index, record] of records.entries()) {
+      if (!isPlainObject(record)) continue;
+      const rawReferences = record[field.key];
+      const references = Array.isArray(rawReferences) ? rawReferences : [rawReferences];
+      for (const reference of references) {
+        if (typeof reference === "string" && allowed.has(reference)) continue;
+        issues.push({
+          code: "UNKNOWN_INPUT_ITEM_REFERENCE",
+          message: `${contract.portKey}.${index}.${field.key} referencia um item que não pertence à entrada ${field.referencesInputId}.`,
+          outputKey: contract.key,
+          portKey: contract.portKey,
+        });
+      }
+    }
+  }
+  return issues;
 }
 
 export function requireNormalizedPluginResponseValues(input: NormalizePluginResponseValuesInput) {

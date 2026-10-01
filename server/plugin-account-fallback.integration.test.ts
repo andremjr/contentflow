@@ -28,7 +28,7 @@ async function waitForServer() {
   throw new Error("A API isolada não iniciou no prazo.");
 }
 
-test("preserva itens concluídos e continua na próxima conta após falha técnica", async () => {
+test("preserva itens concluídos e continua na próxima conta após falha da conta", async () => {
   const dataDirectory = await mkdtemp(path.join(tmpdir(), "contentflow-profile-fallback-"));
   const pluginDirectory = path.join(dataDirectory, "test-browser-plugin");
   await mkdir(pluginDirectory, { recursive: true });
@@ -122,7 +122,7 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
         await new Promise((resolve) => setTimeout(resolve, 60_000));
       }
       if (profile === "primary" && prompt === "two") {
-        return { status: "error", code: "UPSTREAM_UNAVAILABLE", message: "temporary", retryable: true };
+        return { status: "error", code: "AUTHENTICATION_FAILED", message: "account unavailable", retryable: false };
       }
       return { status: "success", values: { results: profile + ":" + prompt } };
     }`,
@@ -480,7 +480,7 @@ test("preserva itens concluídos e continua na próxima conta após falha técni
   }
 });
 
-test("perfil ocupado avança imediatamente para o próximo perfil preparado", async () => {
+test("perfil ocupado aguarda o mesmo perfil em vez de trocar de identidade", async () => {
   const dataDirectory = await mkdtemp(path.join(tmpdir(), "contentflow-profile-busy-fallback-"));
   const pluginDirectory = path.join(dataDirectory, "test-browser-plugin");
   await mkdir(pluginDirectory, { recursive: true });
@@ -622,7 +622,7 @@ test("perfil ocupado avança imediatamente para o próximo perfil preparado", as
           "busy-profile-test-token",
           now.toISOString(),
           now.toISOString(),
-          new Date(now.getTime() + 60_000).toISOString(),
+          new Date(now.getTime() + 1_500).toISOString(),
         );
     } finally {
       database.close();
@@ -745,7 +745,7 @@ test("perfil ocupado avança imediatamente para o próximo perfil preparado", as
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     assert.equal(execution?.blocks[0]?.status, "completed", output.join("\n"));
-    assert.equal(execution?.blocks[0]?.values.result, "backup");
+    assert.equal(execution?.blocks[0]?.values.result, "primary");
   } finally {
     if (server.exitCode === null) {
       server.kill();

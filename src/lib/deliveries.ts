@@ -67,29 +67,56 @@ export function materializeBlockDeliveries({
     }
     const rawItems = shape.cardinality === "many" && Array.isArray(value) ? value : [value];
     const blockExecution = execution.blocks.find((item) => item.blockId === block.id);
-    const outputExecutionItems = (blockExecution?.items ?? []).filter(
+    const matchingOutputExecutionItems = (blockExecution?.items ?? []).filter(
       (item) => !item.pluginCorrelation || item.pluginCorrelation.outputKey === output.key,
     );
+    // Core-owned work units are the canonical lineage for outputs materialized from
+    // block inputs. Incremental plugin-derived units may coexist in older/partial
+    // snapshots, but must not change the positional alignment or erase derived_from.
+    const coreOwnedOutputExecutionItems = matchingOutputExecutionItems.filter(
+      (item) => item.provenance?.origin !== "plugin_derived",
+    );
+    const outputExecutionItems =
+      coreOwnedOutputExecutionItems.length > 0
+        ? coreOwnedOutputExecutionItems
+        : matchingOutputExecutionItems;
+    const sortedOutputExecutionItems = [...outputExecutionItems].sort(
+      (left, right) => left.order - right.order,
+    );
+    const expandedOutputExecutionItems = sortedOutputExecutionItems.flatMap((item) =>
+      Array.isArray(item.output) ? item.output.map(() => item) : [item],
+    );
     const executionItems =
-      shape.cardinality === "many" && outputExecutionItems.length === rawItems.length
-        ? [...outputExecutionItems].sort((left, right) => left.order - right.order)
+      shape.cardinality === "many" && expandedOutputExecutionItems.length === rawItems.length
+        ? expandedOutputExecutionItems
         : undefined;
+    const executionItemOccurrences = new Map<string, number>();
+    for (const item of executionItems ?? []) {
+      executionItemOccurrences.set(item.id, (executionItemOccurrences.get(item.id) ?? 0) + 1);
+    }
     const usedIdentities = new Set<string>();
     const items = rawItems.map((item, order) => {
       const externalKey = externalItemKey(item);
-      const sourceExecutionItemId = executionItems?.[order]?.id;
-      const baseIdentity = sourceExecutionItemId ?? externalKey ?? String(order + 1);
+      const executionItem = executionItems?.[order];
+      const sourceExecutionItemId = executionItem?.id;
+      const sourceHasVariants =
+        sourceExecutionItemId && (executionItemOccurrences.get(sourceExecutionItemId) ?? 0) > 1;
+      const baseIdentity = sourceHasVariants
+        ? `${sourceExecutionItemId}:${externalKey ?? String(order + 1)}`
+        : (sourceExecutionItemId ?? externalKey ?? String(order + 1));
       let identity = baseIdentity;
       let duplicate = 2;
       while (usedIdentities.has(identity)) identity = `${baseIdentity}-${duplicate++}`;
       usedIdentities.add(identity);
       const generatedItemId = deliveryItemIdFor(id, identity);
       const previousItem =
-        previous?.items.find(
-          (candidate) =>
-            sourceExecutionItemId && candidate.sourceExecutionItemId === sourceExecutionItemId,
-        ) ??
         previous?.items.find((candidate) => candidate.id === generatedItemId) ??
+        (!sourceHasVariants
+          ? previous?.items.find(
+              (candidate) =>
+                sourceExecutionItemId && candidate.sourceExecutionItemId === sourceExecutionItemId,
+            )
+          : undefined) ??
         previous?.items.find(
           (candidate) =>
             candidate.order === order &&
@@ -102,7 +129,18 @@ export function materializeBlockDeliveries({
         order,
         value: structuredClone(item) as RuntimeValue | StructuredRecord,
         externalKey,
-        references: previousItem?.references,
+        references: mergeReferences(
+          previousItem?.references,
+          executionItem?.provenance?.sourceDeliveryItemId
+            ? [
+                {
+                  itemId: executionItem.provenance.sourceDeliveryItemId,
+                  role: "derived_from",
+                },
+              ]
+            : undefined,
+          declaredRecordReferences(output.shape, item),
+        ),
       } satisfies DeliveryItem;
     });
     attachValidationReferences(execution, block, items);
@@ -125,6 +163,27 @@ export function materializeBlockDeliveries({
       } satisfies ProjectDelivery,
     ];
   });
+}
+
+function declaredRecordReferences(shape: ValueShape, value: unknown): DeliveryItem["references"] {
+  if (shape.kind !== "record" || !isStructuredRecord(value)) return undefined;
+  const references = shape.fields.flatMap((field) => {
+    if (!field.referencesInputId) return [];
+    const raw = value[field.key];
+    const values = Array.isArray(raw) ? raw : [raw];
+    return values.flatMap((itemId) =>
+      typeof itemId === "string" ? [{ itemId, role: field.key }] : [],
+    );
+  });
+  return references.length ? references : undefined;
+}
+
+function mergeReferences(...groups: Array<DeliveryItem["references"]>): DeliveryItem["references"] {
+  const merged = new Map<string, NonNullable<DeliveryItem["references"]>[number]>();
+  for (const reference of groups.flatMap((group) => group ?? [])) {
+    merged.set(`${reference.itemId}:${reference.role ?? ""}`, reference);
+  }
+  return merged.size ? [...merged.values()] : undefined;
 }
 
 export function recordBlockDeliveries(

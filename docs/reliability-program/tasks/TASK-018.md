@@ -1,5 +1,7 @@
 # TASK-018 — Centralizar a projeção de `Project` a partir de `ProcessExecution`
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../../ARCHITECTURE.md), o [estado e limitações](../../CURRENT_STATE.md) e o [processo de desenvolvimento](../../DEVELOPMENT.md).
+
 ## Objetivo
 
 Substituir as tabelas e regras locais que traduzem `ProcessExecution.status` para `Project.stages`, `currentStage`, `state` e `progress` por uma projeção canônica, pura e reutilizável. `ProcessExecution` continua sendo a fonte do estado operacional; `Project` permanece uma visão derivada para organização, UI e avanço entre Processos.

@@ -368,7 +368,8 @@ test("identifica detecção de bot e atividade incomum com backoff adaptativo", 
   };
   const botErr = __test.classifyGeminiError(botState);
   assert.ok(botErr);
-  assert.equal(botErr.code, "RATE_LIMIT");
+  assert.equal(botErr.code, "PROVIDER_SECURITY_CHALLENGE");
+  assert.equal(botErr.retryable, false);
   assert.equal(botErr.isUnusualActivity, true);
   assert.equal(botErr.retryAfterMs, 45000);
 });

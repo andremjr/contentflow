@@ -7,7 +7,7 @@ import {
   type UniversalProcess,
 } from "./domain";
 import { createProcessOutputFields } from "./human-workflow";
-import { areValueShapesCompatible } from "./data-shape";
+import { areInputShapesCompatible } from "./data-shape";
 
 export function isProcessOrder(value: unknown): value is UniversalProcess[] {
   return (
@@ -118,7 +118,7 @@ export function validateProcessDependencies(
                 .find((candidate) => candidate.id === blockId)
                 ?.outputs?.find((field) => field.key === outputKey);
         if (!output) errors.push(`${label}: saída anterior não encontrada para “${input.label}”.`);
-        else if (!areValueShapesCompatible(output.shape, input.shape))
+        else if (!areInputShapesCompatible(output.shape, input.shape))
           errors.push(`${label}: tipo incompatível na entrada “${input.label}”.`);
       }
       const reuse = block.plugin?.conversation;

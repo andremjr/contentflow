@@ -1,5 +1,7 @@
 # Roadmap oficial do Reliability Program
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../ARCHITECTURE.md), o [estado e limitações](../CURRENT_STATE.md) e o [processo de desenvolvimento](../DEVELOPMENT.md). A sequência TASK-029–TASK-052 foi encerrada; nenhum estado ready/pending abaixo autoriza retomá-la. O encerramento não significa implementação dessas missões.
+
 ## Propósito
 
 Este roadmap registra as missões do Reliability Program. Ele não é um prompt de Codex, uma especificação de implementação ou autorização para executar antecipadamente uma task.
@@ -79,9 +81,37 @@ Deterministic Contracts está encerrada. Nenhuma task da fase Universal Recovery
 
 ### Extensão autorizada de contratos — TASK-028A
 
-| Task      | Missão                                  | Estado        |
-| --------- | --------------------------------------- | ------------- |
-| TASK-028A | Contrato canônico de conteúdo e entrega | `done`        |
+| Task      | Missão                                  | Estado |
+| --------- | --------------------------------------- | ------ |
+| TASK-028A | Contrato canônico de conteúdo e entrega | `done` |
+
+### Migração autorizada de dados — TASK-028B
+
+| Task      | Missão                                       | Estado |
+| --------- | -------------------------------------------- | ------ |
+| TASK-028B | Migrar dados locais para contratos canônicos | `done` |
+
+### Correção autorizada de retry — TASK-028C
+
+| Task      | Missão                                 | Estado |
+| --------- | -------------------------------------- | ------ |
+| TASK-028C | Atualizar o Método ao refazer um Bloco | `done` |
+
+### Extensão autorizada de consumo — TASK-028D
+
+| Task      | Missão                                         | Estado   |
+| --------- | ---------------------------------------------- | -------- |
+| TASK-028D | Consumo textual e relações explícitas de itens | `active` |
+
+### Infraestrutura interna autorizada — TASK-028E
+
+| Task      | Missão                                  | Estado |
+| --------- | --------------------------------------- | ------ |
+| TASK-028E | Dev Monitor local e integração da skill | `done` |
+
+Implementação, cenários monitorados e gate integral validados; 19 testes próprios
+aprovados, traces íntegros e diff real sem violações novas.
+Esta extensão não encerra TASK-028D nem inicia TASK-029.
 
 ### Universal Recovery — TASK-029 a TASK-038
 

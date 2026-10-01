@@ -5,6 +5,7 @@ import { executionCommands } from "./execution-commands";
 import {
   createEmptyMethods,
   PROCESS_ORDER,
+  type Channel,
   type Project,
   type ProcessExecution,
 } from "../src/lib/domain";
@@ -502,4 +503,123 @@ test("refaz somente o bloco cancelado e mantém os anteriores consolidados", () 
   assert.deepEqual(execution.blocks[2].values, {});
   assert.equal(execution.status, "blocked_executor");
   assert.equal(project.stages.assets, "blocked");
+});
+
+test("retry manual adota o Método atual do Canal a partir do alvo", () => {
+  const methods = createEmptyMethods();
+  const oldMethod = structuredClone(methods.assets);
+  oldMethod.name = "Assets antigo";
+  oldMethod.blocks = [
+    {
+      id: "prompts",
+      type: "CRIAR",
+      operator: "IA",
+      name: "Prompts antigos",
+      inputs: [],
+      outputs: [],
+      parameters: [],
+      order: 0,
+    },
+    {
+      id: "characters",
+      type: "CRIAR",
+      operator: "IA",
+      name: "Personagens antigos",
+      inputs: [],
+      outputs: [],
+      parameters: [],
+      order: 1,
+    },
+  ];
+  const currentMethod = structuredClone(oldMethod);
+  currentMethod.name = "Assets atual";
+  currentMethod.blocks[0].name = "Prompts atuais";
+  currentMethod.blocks[1].name = "Personagens corrigidos";
+  currentMethod.blocks[1].instructions = "contrato corrigido";
+  currentMethod.blocks.push({
+    id: "scenes",
+    type: "CRIAR",
+    operator: "IA",
+    name: "Cenas novas",
+    inputs: [],
+    outputs: [],
+    parameters: [],
+    order: 2,
+  });
+  methods.assets = currentMethod;
+  const channel = {
+    id: "channel-current-method",
+    name: "Canal",
+    handle: "@canal",
+    color: "#000",
+    subscribers: "0",
+    niche: "",
+    language: "pt-BR",
+    activeProjects: 1,
+    frequency: "",
+    nextPublish: "",
+    currentProjectProgress: 0,
+    status: "healthy",
+    trend: [],
+    methods,
+    definitionRevision: 7,
+    createdAt: "2026-09-30T00:00:00.000Z",
+  } satisfies Channel;
+  const project: Project = {
+    id: "project-current-method",
+    channelId: channel.id,
+    title: "Vertical assets",
+    createdAt: channel.createdAt,
+    updatedAt: channel.createdAt,
+    deadline: "",
+    duration: "",
+    assignee: { name: "", initials: "" },
+    thumbHue: 0,
+    stages: Object.fromEntries(
+      PROCESS_ORDER.map((process) => [process, process === "assets" ? "error" : "not_started"]),
+    ) as Project["stages"],
+    currentStage: "assets",
+    state: "error",
+    progress: 0,
+    strategySnapshot: {
+      processOrder: [...PROCESS_ORDER],
+      methods: { ...createEmptyMethods(), assets: structuredClone(oldMethod) },
+      definitionRevision: 6,
+      capturedAt: channel.createdAt,
+    },
+  };
+  const execution: ProcessExecution = {
+    id: "execution-current-method",
+    projectId: project.id,
+    channelId: channel.id,
+    processType: "assets",
+    methodSnapshot: oldMethod,
+    status: "failed",
+    outputStatus: "pending",
+    createdAt: channel.createdAt,
+    updatedAt: channel.createdAt,
+    blocks: [
+      { blockId: "prompts", status: "completed", values: { prompts: ["a", "b"] }, attempt: 1 },
+      { blockId: "characters", status: "failed", values: {}, attempt: 1, error: "contract" },
+    ],
+  };
+  const commands = executionCommands({
+    channels: [channel],
+    projects: [project],
+    executions: [execution],
+    libraryItems: [],
+    libraryCollections: [],
+  });
+
+  assert.equal(commands.retryBlockExecution(execution.id, "characters", "all"), true);
+  assert.equal(execution.methodSnapshot.name, "Assets atual");
+  assert.equal(execution.methodSnapshot.blocks[0].name, "Prompts antigos");
+  assert.equal(execution.methodSnapshot.blocks[1].name, "Personagens corrigidos");
+  assert.equal(execution.methodSnapshot.blocks[2].id, "scenes");
+  assert.equal(execution.blocks[0].status, "completed");
+  assert.deepEqual(execution.blocks[0].values, { prompts: ["a", "b"] });
+  assert.equal(execution.blocks[1].status, "blocked_executor");
+  assert.equal(execution.blocks[2].status, "pending");
+  assert.equal(project.strategySnapshot?.methods.assets.name, "Assets atual");
+  assert.equal(project.strategySnapshot?.definitionRevision, 7);
 });

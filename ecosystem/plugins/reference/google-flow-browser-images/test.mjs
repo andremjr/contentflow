@@ -11,6 +11,55 @@ assert.equal(
 );
 assert.equal(__test.describeCdpParams("Target.createTarget", { url: "not a url" }), "url=invalid");
 assert.equal(__test.describeCdpParams("Runtime.evaluate", { expression: "location.href" }), "");
+assert.match(
+  __test.referenceUploadStateExpression("", ["reference.jpg"]),
+  /button, \[role="button"\], \[role="option"\], img/,
+);
+assert.match(
+  __test.existingReferenceSelectionExpression(["reference.jpg"]),
+  /choices\.some\(\(choice\) => choice\.includes\(name\)\)/,
+);
+
+const promptMedia = [
+  {
+    file: {
+      id: "image-1",
+      name: "image-1.png",
+      mimeType: "image/png",
+      size: 10,
+      url: "artifact://image-1",
+    },
+  },
+];
+assert.equal(
+  __test.mediaItemUpdatesForPrompt({
+    continuous: true,
+    index: 1,
+    outputPort: "images",
+    input: "Prompt 2",
+    value: promptMedia,
+  }),
+  undefined,
+);
+assert.deepEqual(
+  __test.mediaItemUpdatesForPrompt({
+    continuous: false,
+    index: 1,
+    outputPort: "images",
+    input: "Prompt 2",
+    value: promptMedia,
+  }),
+  [
+    {
+      key: "prompt:1",
+      variantKey: "image:0",
+      outputPort: "images",
+      state: "completed",
+      input: "Prompt 2",
+      value: promptMedia[0].file,
+    },
+  ],
+);
 
 const manifest = JSON.parse(
   await readFile(new URL("./contentflow.plugin.json", import.meta.url), "utf8"),
@@ -129,11 +178,19 @@ assert.deepEqual(cap.configurationOptions, [
 assert.equal(cap.execution.defaultTimeoutMs, 86_400_000);
 assert.deepEqual(
   cap.inputPorts.map((port) => port.key),
-  ["prompts", "reference_images", "project_url"],
+  [
+    "prompts",
+    "prompt",
+    "reference_images",
+    "item_relations",
+    "prompt_records",
+    "reference_image",
+    "project_url",
+  ],
 );
 assert.deepEqual(
   cap.outputPorts.map((port) => port.key),
-  ["images", "project_url"],
+  ["images", "image", "project_url"],
 );
 assert.deepEqual(cap.outputPorts[0].shape, {
   kind: "content",
@@ -158,6 +215,13 @@ assert.deepEqual(cap.execution.itemOrchestration, {
   outputPort: "images",
   strategies: ["continuous_session", "per_item"],
   preferredStrategy: "continuous_session",
+  collectionAssociations: [
+    {
+      key: "prompt-records-to-images",
+      inputPort: "prompt_records",
+      outputPort: "images",
+    },
+  ],
 });
 assert.deepEqual(
   cap.itemActions.map((item) => item.action),
@@ -1834,9 +1898,9 @@ const unusualErr = __test.classifyGenerationHttpError(
   403,
   JSON.stringify({ error: { message: "Unusual activity detected from your network" } }),
 );
-assert.equal(unusualErr.code, "RATE_LIMIT");
+assert.equal(unusualErr.code, "PROVIDER_SECURITY_CHALLENGE");
 assert.equal(unusualErr.isUnusualActivity, true);
-assert.equal(unusualErr.retryable, true);
+assert.equal(unusualErr.retryable, false);
 assert.equal(unusualErr.retryAfterMs, 45_000);
 
 const policyErr = __test.classifyGenerationHttpError(
@@ -1930,6 +1994,41 @@ const submitRes = await __test.clickSubmit(fakeSubmitClient, "session-test", {})
 assert.equal(submitRes.ok, true);
 assert.equal(submitEvaluated, true);
 
+let attachmentProbeExpression = "";
+const attachmentCount = await __test.attachedReferenceCount(
+  {
+    async send(_method, params) {
+      attachmentProbeExpression = params?.expression || "";
+      return { result: { value: 4 } };
+    },
+  },
+  "session-test",
+);
+assert.equal(attachmentCount, 4);
+assert.match(attachmentProbeExpression, /flow-base-prompt-box flow-ingredient-chip/);
+assert.match(attachmentProbeExpression, /flow-ingredient-bar flow-image-ingredient-chip/);
+assert.match(attachmentProbeExpression, /frame-trigger img/);
+
+const generationDispatches = [];
+const exactGenerateClick = await __test.clickGenerateWithExtension(
+  {
+    async dispatch(action, payload, operationKey) {
+      generationDispatches.push({ action, payload, operationKey });
+      return { ok: true, mechanism: "cdp-input" };
+    },
+  },
+  {},
+  "image:1:submit",
+);
+assert.equal(exactGenerateClick.ok, true);
+assert.deepEqual(generationDispatches, [
+  {
+    action: "click",
+    payload: { selectors: ["flow-generate-icon-button button"] },
+    operationKey: "image:1:submit",
+  },
+]);
+
 const origFetch = globalThis.fetch;
 let patchUrl = null;
 let patchHeaders = null;
@@ -1968,9 +2067,19 @@ const flowEngineSource = await readFile(new URL("./flow-engine.js", import.meta.
 // media ticket keeps the prompt-to-result association unchanged.
 assert.doesNotMatch(source, /window\.FlowAuto\.adapter\.prepareAndSubmit/);
 assert.match(source, /window\.FlowAuto\.media2\.novoBilhete/);
-assert.match(source, /clickGenerateWithExtension\([\s\S]*?engine-submit/);
+assert.match(source, /clickGenerateAndConfirm\([\s\S]*?engine-submit/);
 assert.match(source, /button\[aria-label\*="iniciar geração" i\]/);
 assert.match(source, /flow-generate-icon-button button/);
+assert.match(source, /flow-base-prompt-box flow-ingredient-chip/);
+assert.match(source, /flow-ingredient-bar flow-image-ingredient-chip/);
+assert.match(source, /flow-pending-tile/);
+assert.match(source, /async function attachReferenceImagesOneByOne/);
+assert.match(source, /for \(const \[index, filePath\] of filePaths\.entries\(\)\)/);
+assert.match(source, /attachedCount < baselineCount \+ 1/);
+assert.match(
+  source,
+  /attachedReferenceCount\(client, sessionId\)\) !== taskReferencePaths\.length/,
+);
 assert.match(source, /open-reference-menu:[\s\S]*?preferDomActivation: true/);
 assert.match(source, /selectors: \["flow-add-menu button"\]/);
 assert.match(source, /const launchMinimized = startMinimized && referencePaths\.length === 0/);
@@ -2158,6 +2267,163 @@ assert.ok(source.includes("Nano Banana 2 Lite"));
 assert.ok(source.includes("Quantidade por prompt confirmada"));
 assert.ok(source.includes("produce-visual-assets-in-browser"));
 assert.ok(source.includes("Produção visual:"));
+assert.match(source, /const maxConcurrentGenerations = continuousClaims\s*\? 2/);
+assert.match(source, /preparando interface na sessão compartilhada/);
+assert.match(source, /const releaseSubmission = await acquireSubmissionLock\(\)/);
+assert.deepEqual(
+  __test
+    .referenceImagesForCurrentItem({
+      batch: { itemId: "work-scene-1", sourceItemId: "scene-1", index: 0, total: 2 },
+      inputs: { reference_images: [{ id: "fallback" }] },
+      inputDeliveries: [
+        {
+          inputId: "relations",
+          portKey: "item_relations",
+          itemIds: ["character-a", "character-b"],
+          items: [
+            {
+              id: "character-a",
+              value: { name: "Ana" },
+              references: [{ itemId: "scene-1", role: "scene_ids" }],
+            },
+            {
+              id: "character-b",
+              value: { name: "Beto" },
+              references: [{ itemId: "scene-2", role: "scene_ids" }],
+            },
+          ],
+        },
+        {
+          inputId: "references",
+          portKey: "reference_images",
+          itemIds: ["image-a", "image-b"],
+          items: [
+            {
+              id: "image-a",
+              value: { id: "ana" },
+              references: [{ itemId: "character-a", role: "derived_from" }],
+            },
+            {
+              id: "image-b",
+              value: { id: "beto" },
+              references: [{ itemId: "character-b", role: "derived_from" }],
+            },
+          ],
+        },
+      ],
+    })
+    .map((item) => item.id),
+  ["ana"],
+);
+assert.deepEqual(
+  __test
+    .referenceImagesForSourceItem(
+      {
+        inputs: { reference_images: [{ id: "fallback" }] },
+        inputDeliveries: [
+          {
+            portKey: "item_relations",
+            items: [
+              {
+                id: "character-a",
+                value: { name: "Ana" },
+                references: [{ itemId: "scene-1", role: "scene_ids" }],
+              },
+              {
+                id: "character-b",
+                value: { name: "Beto" },
+                references: [{ itemId: "scene-2", role: "scene_ids" }],
+              },
+            ],
+          },
+          {
+            portKey: "reference_images",
+            items: [
+              {
+                id: "image-a",
+                value: { id: "ana" },
+                references: [{ itemId: "character-a", role: "derived_from" }],
+              },
+              {
+                id: "image-b",
+                value: { id: "beto" },
+                references: [{ itemId: "character-b", role: "derived_from" }],
+              },
+            ],
+          },
+        ],
+      },
+      "scene-2",
+    )
+    .map((item) => item.id),
+  ["beto"],
+);
+assert.deepEqual(
+  __test
+    .referenceImagesForSourceItem(
+      {
+        inputDeliveries: [
+          {
+            portKey: "item_relations",
+            items: [
+              {
+                id: "character-a",
+                references: [{ itemId: "scene-multi", role: "scene_ids" }],
+              },
+              {
+                id: "character-b",
+                references: [{ itemId: "scene-multi", role: "scene_ids" }],
+              },
+            ],
+          },
+          {
+            portKey: "reference_images",
+            items: [
+              {
+                value: { id: "ana" },
+                references: [{ itemId: "character-a", role: "derived_from" }],
+              },
+              {
+                value: { id: "beto" },
+                references: [{ itemId: "character-b", role: "derived_from" }],
+              },
+            ],
+          },
+        ],
+      },
+      "scene-multi",
+    )
+    .map((item) => item.id),
+  ["ana", "beto"],
+);
+assert.throws(
+  () =>
+    __test.referenceImagesForSourceItem(
+      {
+        inputDeliveries: [
+          {
+            portKey: "item_relations",
+            items: [
+              { id: "character-a", references: [{ itemId: "scene-multi" }] },
+              { id: "character-b", references: [{ itemId: "scene-multi" }] },
+            ],
+          },
+          {
+            portKey: "reference_images",
+            items: [
+              {
+                value: { id: "ana" },
+                references: [{ itemId: "character-a", role: "derived_from" }],
+              },
+              { value: { id: "beto" } },
+            ],
+          },
+        ],
+      },
+      "scene-multi",
+    ),
+  /2 personagem\(ns\).*somente 1/,
+);
 assert.ok(!source.includes("createFallbackArtifact"));
 assert.ok(!source.includes("FALLBACK_IMAGE_BASE64"));
 await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), /ENOENT/);

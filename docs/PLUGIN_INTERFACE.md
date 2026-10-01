@@ -79,6 +79,10 @@ O **plugin** declara:
 
 O plugin não injeta uma interface arbitrária. O núcleo interpreta um schema declarativo para que plugins diferentes mantenham uma experiência coerente sem esconder suas capacidades reais.
 
+O contrato de saída também separa intenção de serialização. O usuário não precisa escrever no prompt “responda somente JSON”, impedir introduções ou ensinar IDs internos. O Bloco declara o shape e, quando necessário, campos que referenciam itens de entradas. O núcleo envia ao plugin o contrato e somente os IDs concedidos; o plugin acrescenta a instrução técnica adequada ao provedor, faz o parsing e devolve o valor tipado. O núcleo valida a resposta antes de materializar deliveries.
+
+Quando uma capability usa relações estruturadas — por exemplo, cenas ligadas a imagens de personagens — a interface pode explicar funcionalmente o uso dessas referências. A mecânica de anexar, selecionar, ordenar ou converter as referências no serviço externo pertence ao plugin. O Core transporta IDs e proveniência, mas não possui regras sobre personagens, legendas, cortes ou posições.
+
 O preview usado durante o desenvolvimento do plugin deve renderizar esse mesmo schema com o mesmo renderer do editor de Método. Assim, o autor desenvolve e testa a interface funcional junto do plugin, e o que aprovar no preview é o que o usuário verá depois de selecionar aquela capability no Bloco.
 
 ## Granularidade da capability e do Bloco

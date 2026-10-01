@@ -1,5 +1,7 @@
 # TASK-016 — Centralizar “usar entrega atual”
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../../ARCHITECTURE.md), o [estado e limitações](../../CURRENT_STATE.md) e o [processo de desenvolvimento](../../DEVELOPMENT.md).
+
 ## Objetivo
 
 Fazer a intenção manual de aceitar como definitiva a entrega já persistida de um Bloco `failed` ou `cancelled` ser validada e aplicada pelo Execution Core, preservando a API externa e mantendo validação material dos values, deliveries, progressão, projeção de `Project` e persistência nas fronteiras atuais.

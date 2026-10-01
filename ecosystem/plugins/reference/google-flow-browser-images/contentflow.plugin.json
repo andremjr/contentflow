@@ -328,9 +328,25 @@
               "label": "Reference images",
               "description": "Optional images shared by the execution to preserve a character, avatar, product, setting, or style."
             },
+            "item_relations": {
+              "label": "Item relations",
+              "description": "Structured records that explicitly relate each reference to the source items where it applies."
+            },
+            "prompt_records": {
+              "label": "Prompt records",
+              "description": "Structured records with a visual_prompt, prompt, or description field used to generate one image per item."
+            },
             "project_url": {
               "label": "Project URL",
               "description": "Optional Flow project URL used to continue in the same room or chat while preserving characters and history."
+            },
+            "prompt": {
+              "label": "Single prompt",
+              "description": "A single prompt when the Method expects one generated image."
+            },
+            "reference_image": {
+              "label": "Reference image",
+              "description": "A single reference image shared with the generation."
             }
           },
           "outputPorts": {
@@ -341,6 +357,10 @@
             "project_url": {
               "label": "Project URL",
               "description": "URL of the active Google Flow project for reuse in later Method blocks."
+            },
+            "image": {
+              "label": "Generated image",
+              "description": "Single generated image used when the Method expects one image."
             }
           },
           "blockConfigSchema": {
@@ -1111,9 +1131,25 @@
               "label": "Imágenes de referencia",
               "description": "Imágenes opcionales compartidas por la ejecución para conservar un personaje, avatar, producto, escenario o estilo."
             },
+            "item_relations": {
+              "label": "Relaciones entre elementos",
+              "description": "Registros estructurados que relacionan explícitamente cada referencia con los elementos de origen donde se aplica."
+            },
+            "prompt_records": {
+              "label": "Registros con prompts",
+              "description": "Registros estructurados con un campo visual_prompt, prompt o description usado para generar una imagen por elemento."
+            },
             "project_url": {
               "label": "URL del proyecto",
               "description": "URL opcional de un proyecto de Flow para continuar en la misma sala o chat conservando personajes e historial."
+            },
+            "prompt": {
+              "label": "Prompt único",
+              "description": "Un único prompt cuando el Método espera una sola imagen generada."
+            },
+            "reference_image": {
+              "label": "Imagen de referencia",
+              "description": "Una única imagen de referencia compartida con la generación."
             }
           },
           "outputPorts": {
@@ -1124,6 +1160,10 @@
             "project_url": {
               "label": "URL del proyecto",
               "description": "URL del proyecto activo de Google Flow para reutilizarla en bloques posteriores del Método."
+            },
+            "image": {
+              "label": "Imagen generada",
+              "description": "Imagen generada única usada cuando el Método espera una sola imagen."
             }
           },
           "blockConfigSchema": {
@@ -2447,6 +2487,18 @@
           }
         },
         {
+          "key": "prompt",
+          "label": "Prompt único",
+          "description": "Um único prompt quando o Método espera uma única imagem.",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
+        },
+        {
           "key": "reference_images",
           "label": "Imagens de referência",
           "description": "Imagens opcionais compartilhadas pela execução para preservar personagem, avatar, produto, cenário ou estilo.",
@@ -2458,6 +2510,50 @@
             "kind": "content",
             "family": "image",
             "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
+          }
+        },
+        {
+          "key": "item_relations",
+          "label": "Relações entre itens",
+          "description": "Registros estruturados que relacionam explicitamente cada referência aos itens de origem em que ela se aplica.",
+          "required": false,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": [],
+            "open": true
+          }
+        },
+        {
+          "key": "prompt_records",
+          "label": "Registros com prompts",
+          "description": "Registros estruturados com um campo visual_prompt, prompt ou description usado para gerar uma imagem por item.",
+          "required": false,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": [],
+            "open": true
+          }
+        },
+        {
+          "key": "reference_image",
+          "label": "Imagem de referência",
+          "description": "Uma única imagem de referência compartilhada com a geração.",
+          "required": false,
+          "presentation": {
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "one",
             "representation": "artifact",
             "formats": {
               "mimeTypes": [
@@ -2500,6 +2596,26 @@
           }
         },
         {
+          "key": "image",
+          "label": "Imagem gerada",
+          "description": "Primeira imagem gerada quando o Método espera uma única imagem.",
+          "required": false,
+          "presentation": {
+            "renderer": "image-gallery"
+          },
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "one",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
+          }
+        },
+        {
           "key": "project_url",
           "label": "URL do projeto",
           "description": "URL do projeto ativo no Google Flow para reaproveitar em blocos seguintes do método.",
@@ -2524,7 +2640,14 @@
             "continuous_session",
             "per_item"
           ],
-          "preferredStrategy": "continuous_session"
+          "preferredStrategy": "continuous_session",
+          "collectionAssociations": [
+            {
+              "key": "prompt-records-to-images",
+              "inputPort": "prompt_records",
+              "outputPort": "images"
+            }
+          ]
         }
       },
       "sideEffects": [

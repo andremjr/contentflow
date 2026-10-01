@@ -12,6 +12,7 @@ export const REQUIRED_CAPABILITIES = Object.freeze([
   "condition-observer.v1",
   "reload.v1",
 ]);
+const EFFECTFUL_ACTIONS = new Set(["click", "pressEnter", "setFiles", "reload"]);
 
 const PROJECT_URL = /^https:\/\/vibes\.ai\/projects\/[A-Za-z0-9_-]+\/?$/;
 const COPY = {
@@ -201,7 +202,7 @@ export async function attachVibesBridge({
             return { sessionId: attached.sessionId, identity: candidateIdentity };
           }
           if (candidateIdentity?.bridgeId === BRIDGE_ID) {
-            throw codedError("INVALID_CONFIGURATION", copy(request, "incompatible"));
+            throw codedError("BRIDGE_INCOMPATIBLE", copy(request, "incompatible"));
           }
         } catch (error) {
           if (!missingSession(error)) throw error;
@@ -215,7 +216,7 @@ export async function attachVibesBridge({
       }
       await delay(250, signal, request);
     }
-    throw codedError("INVALID_CONFIGURATION", copy(request, "missing"));
+    throw codedError("BRIDGE_MISSING", copy(request, "missing"));
   };
 
   ({ sessionId: workerSessionId, identity } = await attachWorker());
@@ -235,7 +236,7 @@ export async function attachVibesBridge({
   const connect = async () => {
     const response = await evaluateWorker(client, workerSessionId, connectionExpression);
     if (!response?.ok) {
-      throw codedError("INVALID_CONFIGURATION", response?.message || copy(request, "refused"));
+      throw codedError("BRIDGE_INCOMPATIBLE", response?.message || copy(request, "refused"));
     }
     if (
       !Number.isInteger(response.protocolVersion) ||
@@ -243,7 +244,7 @@ export async function attachVibesBridge({
       response.protocolVersion > PROTOCOL_RANGE.max ||
       !REQUIRED_CAPABILITIES.every((capability) => response.capabilities?.includes(capability))
     ) {
-      throw codedError("INVALID_CONFIGURATION", copy(request, "incompatible"));
+      throw codedError("BRIDGE_INCOMPATIBLE", copy(request, "incompatible"));
     }
     negotiatedProtocolVersion = response.protocolVersion;
   };
@@ -337,10 +338,21 @@ export async function attachVibesBridge({
     if (response?.ok) return response;
     const code = String(response?.code || "");
     if (code === "CANCELLED") throw codedError("CANCELLED", copy(request, "cancelled"));
-    if (["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code)) {
-      throw codedError("UPSTREAM_UNAVAILABLE", response?.message || copy(request, "timeout"), true);
+    if (
+      ["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code) &&
+      !EFFECTFUL_ACTIONS.has(action)
+    ) {
+      throw codedError(
+        "BRIDGE_PAGE_UNAVAILABLE",
+        response?.message || copy(request, "timeout"),
+        true,
+      );
     }
-    if (code === "COMMAND_OUTCOME_UNKNOWN") {
+    if (
+      code === "COMMAND_OUTCOME_UNKNOWN" ||
+      (["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code) &&
+        EFFECTFUL_ACTIONS.has(action))
+    ) {
       throw codedError(
         "COMMAND_OUTCOME_UNKNOWN",
         response?.message || "O resultado do último comando precisa ser reconciliado.",
@@ -352,7 +364,7 @@ export async function attachVibesBridge({
         code,
       )
     ) {
-      throw codedError("INVALID_CONFIGURATION", response?.message || copy(request, "incompatible"));
+      throw codedError("BRIDGE_INCOMPATIBLE", response?.message || copy(request, "incompatible"));
     }
     throw codedError(
       "OUTPUT_VALIDATION_FAILED",
@@ -383,6 +395,17 @@ export async function attachVibesBridge({
   signal?.addEventListener("abort", cancel, { once: true });
 
   try {
+    if (request?.recoveryDirective?.action === "reload_page") {
+      await dispatch(
+        "reload",
+        {
+          reconciliationState: "safe",
+          bypassCache: true,
+          reasonCode: request.recoveryDirective.reasonCode,
+        },
+        `core-recovery:${request.recoveryDirective.reasonCode}`,
+      );
+    }
     await dispatch("ping", {}, "bridge-ready");
   } catch (error) {
     cancel();

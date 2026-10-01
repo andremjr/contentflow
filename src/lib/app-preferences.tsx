@@ -45,6 +45,10 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 type Translation = [english: string, spanish: string];
 
 const PHRASES: Record<string, Translation> = {
+  "Sem conexão com o serviço local. Seus dados salvos estão preservados; tentando reconectar…": [
+    "No connection to the local service. Your saved data is preserved; trying to reconnect…",
+    "Sin conexión con el servicio local. Tus datos guardados están preservados; intentando reconectar…",
+  ],
   Orquestrador: ["Orchestrator", "Orquestador"],
   "Centralize as filas de produção dos seus canais em um só lugar.": [
     "Manage your channels' production queues in one place.",

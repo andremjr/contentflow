@@ -15,12 +15,16 @@
 - [`security.md`](security.md) — permissões, sandbox e modelo de ameaças.
 - [`browser-automation.md`](browser-automation.md) — requisitos adicionais para interfaces web.
 
-## Governança e planejamento
+## Governança
 
 - [`distribution.md`](distribution.md) — distribuição, sinais de origem e responsabilidades.
-- [`roadmap.md`](roadmap.md) — planejamento ativo e catálogo estratégico de capacidades; não é fonte normativa nem promessa de manutenção.
 - [`icon-sources.md`](icon-sources.md) — proveniência de ícones usados nos pacotes de referência.
+
+## Desenvolvimento atual
+
+Crie um plugin, valide contrato/sandbox e execute sua capability em um Método real. Siga [DEVELOPMENT.md](../DEVELOPMENT.md) para investigar falhas, criar regressões e repetir o cenário. Consulte os [pacotes existentes](../../ecosystem/plugins/reference/README.md) e seus manifestos para conhecer capacidades implementadas.
 
 ## Evidência histórica
 
+- [`roadmap.md`](roadmap.md) — propostas e ondas históricas, sem sequência obrigatória.
 - [`asset-generation-evidence/`](asset-generation-evidence/) — relatórios P00–P61 e pendências de E2E preservadas; não definem o contrato atual.

@@ -1,5 +1,7 @@
 # TASK-000 — Fundação documental do Reliability Program
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../../ARCHITECTURE.md), o [estado e limitações](../../CURRENT_STATE.md) e o [processo de desenvolvimento](../../DEVELOPMENT.md).
+
 ## Objetivo
 
 Criar uma memória versionada, curta e suficiente para que outra sessão compreenda o produto, o programa, o estado atual, as decisões permanentes e a próxima missão sem depender das conversas que originaram o trabalho.

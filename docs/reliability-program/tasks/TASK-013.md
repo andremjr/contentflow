@@ -1,5 +1,7 @@
 # TASK-013 — Conclusão de Plugin passa pelo Core
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../../ARCHITECTURE.md), o [estado e limitações](../../CURRENT_STATE.md) e o [processo de desenvolvimento](../../DEVELOPMENT.md).
+
 ## Objetivo
 
 Fazer a conclusão automática normal de um Bloco executado por plugin entrar no Execution Core como fato explícito, ser validada contra o snapshot e o estado canônico e ser materializada por uma aplicação canônica antes de delivery e progressão.

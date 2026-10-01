@@ -1,30 +1,24 @@
-# Reliability Program
+# Encerramento do programa de confiabilidade
 
-Esta pasta preserva a memória estável do programa de confiabilidade do ContentFlow. Conversas, prompts e resumos de sessão ajudam durante um trabalho, mas não são fontes permanentes nem substituem documentos versionados.
+**Estado: encerrado em 01/10/2026 por decisão explícita do criador.**
 
-As fontes centrais do programa são:
+O programa separado cumpriu seu papel de consolidar fundações importantes: Core de execução, contratos determinísticos, snapshots, proveniência e infraestrutura de provas. Seu encerramento altera o modelo de desenvolvimento; não declara que toda a arquitetura-alvo foi implementada ou que todos os cenários passaram.
 
-1. [`../ARCHITECTURE.md`](../ARCHITECTURE.md), fonte normativa principal do domínio atual;
-2. [`00-PRODUCT-CONSTITUTION.md`](00-PRODUCT-CONSTITUTION.md), promessas de produto e confiabilidade que governam o programa;
-3. [`01-TARGET-ARCHITECTURE.md`](01-TARGET-ARCHITECTURE.md), direção arquitetural que deve emergir ao longo do programa;
-4. [`02-RELIABILITY-ROADMAP.md`](02-RELIABILITY-ROADMAP.md), missões e estados oficiais;
-5. [`03-ACCEPTANCE-SCENARIOS.md`](03-ACCEPTANCE-SCENARIOS.md), resultados observáveis que orientam as provas;
-6. [`04-CURRENT-STATE.md`](04-CURRENT-STATE.md), fotografia semântica atual da arquitetura, capabilities, gaps, blockers e posição no programa;
-7. [`05-WORKING-PROTOCOL.md`](05-WORKING-PROTOCOL.md), ordem de leitura e disciplina oficial para TASK-001–TASK-052.
-8. [`decisions/`](decisions/README.md), ADRs permanentes que complementam a arquitetura com escolhas explícitas de confiabilidade.
+Não existe mais uma sequência obrigatória de tarefas de confiabilidade antes da evolução do ContentFlow. As antigas missões TASK-029–TASK-052 não serão executadas como sequência independente de hardening e não são requisitos para considerar o produto funcional. Estados ready/pending nos registros preservados não geram uma próxima missão.
 
-Continuam obrigatórios [`../../AGENTS.md`](../../AGENTS.md), [`../../LICENSE`](../../LICENSE), [`../../AI_USAGE_POLICY.md`](../../AI_USAGE_POLICY.md) e, quando aplicável, [`../PLUGIN_INTERFACE.md`](../PLUGIN_INTERFACE.md).
+A evolução acontece por Método/plugin real → execução vertical → observação determinística → problema ou lacuna → correção na autoridade arquitetural correta → regressão/check quando aplicável → repetição do cenário. O [Dev Monitor](../DEV_MONITOR.md) e a [skill development-contentflow](../../ecosystem/skills/development-contentflow/SKILL.md) apoiam esse trabalho interno. A qualidade continua sendo verificada em cada cenário.
 
-## Autoridade
+Limitações e provas parciais continuam explícitas no [estado atual](../CURRENT_STATE.md). Em particular, a evidência parcial de assets registrada na TASK-028D não se tornou prova completa por este encerramento. Não houve autorização de release.
 
-`ARCHITECTURE.md` descreve o produto e o domínio vigentes. A Constituição não a substitui: ela estabelece os compromissos que orientam o Reliability Program. A Target Architecture traduz esses compromissos em fronteiras técnicas desejadas e não afirma, por si só, que a implementação atual já chegou ao estado alvo.
+## Fontes atuais
 
-Em caso de divergência, não escolha silenciosamente uma interpretação. Preserve o comportamento vigente, identifique a diferença e trate a mudança na task autorizada correspondente.
+- [Arquitetura e visão do produto](../ARCHITECTURE.md).
+- [Contrato de conteúdo](../CONTENT_CONTRACT.md) e [Plugin API v2](../ecosystem/protocol.md).
+- [Desenvolvimento vertical](../DEVELOPMENT.md) e [orientações de agentes](../../AGENTS.md).
+- [Estado e limitações](../CURRENT_STATE.md).
 
-## Disciplina de contexto
+## Registros preservados
 
-Antes de uma task, siga a ordem completa e as regras de contexto de `05-WORKING-PROTOCOL.md`. As especificações detalhadas são criadas just-in-time em [`tasks/`](tasks/).
+Constituição, arquitetura-alvo, roadmap, cenários, snapshot e protocolo antigos, além das [tasks](tasks/README.md), estão arquivados nos caminhos originais com aviso no topo. São contexto técnico/histórico, sem autoridade sobre o plano atual. Os [ADRs](decisions/README.md) preservam decisões, subordinadas aos contratos vivos e às decisões explícitas posteriores.
 
-Leia documentos históricos, evidências e roadmaps de outros subsistemas somente quando a task precisar daquela compatibilidade, baseline ou decisão. Eles não devem ser carregados indiscriminadamente nem usados para competir com fontes normativas atuais.
-
-Os ADRs iniciais ficam em [`decisions/`](decisions/README.md). Especificações em [`tasks/`](tasks/) são criadas apenas quando uma tarefa autorizada exigir esse registro.
+O [índice histórico](../history/README.md) registra a auditoria e a destinação dos documentos. Nada foi apagado, renumerado ou marcado como implementado apenas para encerrar o programa.

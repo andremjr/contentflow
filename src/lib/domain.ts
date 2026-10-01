@@ -88,12 +88,16 @@ export type ShapeRecordFieldDefinition = {
   key: string;
   shape: AtomicValueShape;
   required: boolean;
+  /** Campo identifier que referencia itens da entrada indicada no mesmo Bloco. */
+  referencesInputId?: string;
 };
 
 export type RecordShape = {
   kind: "record";
   cardinality: ContentCardinality;
   fields: ShapeRecordFieldDefinition[];
+  /** Porta polimórfica de plugin; o schema concreto continua pertencendo ao Método. */
+  open?: true;
 };
 
 export type ValueShape = ContentShape | ControlShape | RecordShape;
@@ -369,7 +373,16 @@ export type ThumbnailLayout = {
   boxes: ThumbnailLayoutBox[];
 };
 
-export type StructuredRecord = Record<string, string | number | boolean | StoredFile | null>;
+export type StructuredRecord = Record<
+  string,
+  | string
+  | number
+  | boolean
+  | StoredFile
+  | ThumbnailLayout
+  | null
+  | Array<string | number | boolean | StoredFile>
+>;
 
 export type RuntimeValue =
   | string
@@ -591,6 +604,13 @@ export type ProcessExecution = {
   channelId: string;
   processType: UniversalProcess;
   methodSnapshot: ProcessMethod;
+  /** Snapshots substituídos somente por uma decisão humana explícita de refazer um Bloco. */
+  methodSnapshotHistory?: Array<{
+    method: ProcessMethod;
+    replacedAt: string;
+    fromBlockId: string;
+    channelDefinitionRevision?: number;
+  }>;
   blocks: BlockExecution[];
   /** Registro derivado e persistido de todas as entregas produzidas pela execução. */
   deliveries?: ProjectDelivery[];

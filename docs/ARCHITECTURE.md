@@ -1,5 +1,7 @@
 # 📄 Documento de Arquitetura e Visão de Produto: ContentFlow
 
+Este documento é **normativo vigente**: descreve o produto e suas responsabilidades atuais. Direções históricas não comprovam implementação. Consulte [estado e limitações](CURRENT_STATE.md) e o [processo de desenvolvimento](DEVELOPMENT.md) para delimitar capacidades e evidências.
+
 ## 1. Visão Geral do Produto
 
 O **ContentFlow** é um **Gerenciador Estratégico de Métodos** para produção de conteúdo. Diferente das ferramentas tradicionais "caixa-preta" (geradores de 1 clique que ocultam o processo e geram conteúdo repetitivo e vulnerável à desmonetização no YouTube), o ContentFlow desacopla a **Estratégia do Método** da **Execução Funcional**.
@@ -8,7 +10,7 @@ A plataforma permite que criadores desenhem, personalizem e automatizem seus pr�
 
 ### 1.1. Invariante absoluta: núcleo e plugins são produtos separados
 
-O ContentFlow precisa ser completo e útil com **zero plugins instalados**. Sem integrações, ele continua sendo o Gerenciador Estratégico de Métodos: organiza Canais e Projetos, armazena Métodos, prompts, estruturas, CTAs e Biblioteca Estratégica, transporta dados tipados e conduz blocos do operador `Humano`.
+O ContentFlow funciona com **zero plugins instalados**. Sem integrações, ele continua sendo o Gerenciador Estratégico de Métodos: organiza Canais e Projetos, armazena Métodos, prompts, estruturas, CTAs e Biblioteca Estratégica, transporta dados tipados e conduz blocos do operador `Humano`.
 
 O núcleo pode conhecer somente o protocolo público de plugins, seus contratos tipados, ciclo de vida, permissões, sandbox, referências opacas de conexões e cofre genérico de secrets. Ele não pode conter IDs, endpoints, autenticação, listas de modelos, seletores de navegador, codecs ou regras de negócio de um fornecedor específico.
 
@@ -57,7 +59,7 @@ Estas invariantes orientam mudanças no Método, no motor de execução, nos plu
 6. **Plugins implementam capacidades; nunca definem a estratégia.** O Método especifica a intenção, os contratos e a composição; o plugin executa uma capacidade compatível.
 7. **Humano é sempre um executor nativo válido.** O núcleo continua funcional sem plugins instalados.
 8. **Item é identidade operacional transversal.** Ele identifica trabalho e entregas em qualquer escala compatível; não é um novo Bloco nem um Processo Universal.
-9. **O Método define a estratégia; o snapshot congela a estratégia utilizada pela execução.** Alterações posteriores no Canal ou no Método não reinterpretam um Projeto já iniciado.
+9. **O Método define a estratégia; o snapshot congela a estratégia utilizada pela execução.** Alterações posteriores no Canal ou no Método não reinterpretam silenciosamente um Projeto já iniciado. A ação humana explícita `Refazer este Bloco` pode adotar a revisão atual do Método a partir do alvo, preservando o prefixo concluído e registrando o snapshot anterior no histórico.
 10. **Orquestradores agendam trabalho; não determinam estratégia.** Eles escolhem quando e qual Projeto avança; o próximo Processo elegível vem da ordem congelada e do estado desse Projeto.
 11. **O núcleo conhece contratos universais, nunca regras específicas de ferramentas.** Integrações, fornecedores e técnicas particulares vivem nos plugins e na composição do Método.
 12. **Uma nova necessidade só cria uma primitiva quando não puder ser expressa pela composição das existentes.** Antes de ampliar a gramática, testar a combinação de Processos, Blocos, Operadores, contratos e Itens.
@@ -79,7 +81,20 @@ Para explicar ou evoluir o ContentFlow, o núcleo pode ser entendido em cinco re
 
 Em termos simples: **Processos dizem o que precisa existir; Métodos dizem como chegar lá; Blocos dizem qual ação executar; Operadores dizem quem executa; plugins fornecem capacidades; o motor preserva estado e dados; o Orquestrador decide quando avançar.**
 
-Essa separação é a principal fronteira da V1. Funcionalidades futuras devem primeiro encontrar seu lugar nesse mapa antes de criarem novos conceitos, telas ou persistências.
+Essa separação governa as responsabilidades do produto. A evolução usa Métodos/plugins e cenários verticais reais, respeitando esse mapa.
+
+### 1.5. Componentes existentes e caminho de execução
+
+- `src/`: interface React, domínio e contratos compartilhados. `src/lib/execution-core/` contém criação e transições canônicas puras; a UI apresenta projeções e envia intenções.
+- `server/`: API Express, comandos, aplicação das transições, jobs de plugin, scheduler, Orchestrator, SQLite e arquivos. `server/index.ts` ainda concentra parte dessa integração; o Core puro não implica isolamento integral de todos os caminhos.
+- `desktop/`: shell Electron, runtime privado e atualização Windows.
+- `ecosystem/`: pacotes independentes, Plugin Kit, SDK/Browser Bridge e ferramentas de desenvolvimento.
+
+Um Projeto captura a estratégia do Canal; o início do Processo cria `ProcessExecution` a partir do snapshot. A camada de aplicação resolve bindings e valida valores. Blocos humanos aguardam intenção/entrega; Blocos automáticos geram trabalho identificado e um job persistido antes de delegar ao executor. O resultado cruza a normalização contratual, o Core aceita a transição e a aplicação persiste estado, projeção do Projeto e deliveries. O scheduler considera o próximo trabalho elegível; a interface lê o estado persistido.
+
+O contrato de valores vive em [CONTENT_CONTRACT.md](CONTENT_CONTRACT.md), com validação material compartilhada em `src/lib/runtime-value-validation.ts`. A fronteira de plugin usa [Plugin API v2](ecosystem/protocol.md) e `server/plugin-response-normalization.ts`. O domínio permanece independente de seletores e regras de fornecedor.
+
+O perfil físico preserva a sessão local; o binding concede acesso ao plugin; readiness confirma a preparação daquele par. Antes da execução de navegador, o lease exclusivo reserva o perfil e o BrowserSessionManager controla a instância Chrome. O plugin recebe a sessão efêmera, negocia a Bridge e opera a página autorizada. Cookies e credenciais não integram o Método portátil. Limites funcionais e de cobertura estão em [CURRENT_STATE.md](CURRENT_STATE.md).
 
 ---
 
@@ -288,6 +303,8 @@ Para cada item, o núcleo só considera o trabalho resolvido depois que a chamad
 
 O item é uma primitiva operacional transversal, não uma nova peça da gramática. Cada unidade persistente possui identidade do núcleo, referência opcional ao item da entrega de origem, ordem, entrada, estado, tentativa lógica atual, saída, erro e histórico de tentativas. O `BlockExecution` expõe essa coleção para a interface e o job persistente continua sendo a autoridade durante uma execução ativa. O resumo `itemProgress` permanece disponível para telas que precisam somente de total, concluídos, pendentes e posição atual.
 
+Quando um job combina lote orquestrado e eventos incrementais de artifacts ou variantes, o progresso pertence às unidades obrigatórias do lote. Eventos incrementais enriquecem essas unidades, mas não substituem o denominador, não criam conclusão independente e não podem fazer a interface mostrar `1/1` para um lote de quatro itens.
+
 A identidade do item não depende da posição textual devolvida por um modelo. Retomadas da mesma coleção preservam os IDs já atribuídos; quando a entrada veio de uma entrega anterior, `sourceItemId` mantém a linhagem. Uma nova tentativa editorial de um item incrementa sua tentativa sem apagar o histórico anterior. Essa identidade é a base para edição, regeneração, seleção múltipla, comparação de tentativas e continuidade parcial sem deslocar os demais itens.
 
 Quando uma tentativa termina com parte do lote concluída, a interface oferece operações genéricas de recuperação no nível do Bloco:
@@ -295,6 +312,10 @@ Quando uma tentativa termina com parte do lote concluída, a interface oferece o
 1. **Continuar pendentes**: cria uma nova tentativa, confirma que a entrada é a mesma — preferencialmente pelos IDs universais da entrega —, reaproveita as entregas e artifacts concluídos e retoma no primeiro item ainda não resolvido. Se a identidade da entrada mudou, o núcleo não mistura lotes e recomeça a execução completa.
 2. **Usar a entrega atual**: quando um Bloco falhou ou foi cancelado, mas já possui valores persistidos que satisfazem seu contrato de saída, o usuário pode consolidar esses valores como a entrega concluída do Bloco. Se for o último Bloco, o Processo pode ser finalizado diretamente; se houver Blocos posteriores, a execução continua a partir do próximo. Essa operação não chama novamente o plugin.
 3. **Refazer este Bloco**: cria uma nova tentativa somente para o primeiro Bloco não concluído, preservando integralmente os Blocos anteriores já concluídos. A tentativa pode descartar a entrega parcial do Bloco atual ou, quando houver orquestração item a item compatível, retomar somente os itens pendentes. Reiniciar o Processo inteiro permanece uma ação separada e explícita.
+
+Ao acionar manualmente `Refazer este Bloco`, o Core compara o snapshot da execução com a revisão atual do Método. Blocos anteriores já concluídos permanecem congelados. O alvo e todo o sufixo são substituídos pelas definições atuais correspondentes por ID estável, estados e deliveries do sufixo são invalidados e o snapshot anterior entra no histórico da execução. Se o novo alvo depender de uma entrada que o prefixo preservado não produziu, a execução falha normalmente por contrato; o Core não inventa dados nem refaz silenciosamente etapas anteriores. Retries técnicos automáticos e retries editoriais continuam usando o snapshot vigente da tentativa e não adotam revisões por conta própria.
+
+Unidades operacionais só atravessam tentativas quando continuam pertencendo ao lote atual ou foram adotadas explicitamente pelo job retomado. Uma mudança de porta, cardinalidade ou base de itemização não pode conservar unidades obsoletas nem usá-las para calcular o progresso da nova tentativa. Quando uma única unidade produz múltiplas variantes válidas, todas permanecem ligadas à mesma unidade e ao mesmo item de origem, com identidades próprias na delivery.
 
 O plugin continua responsável apenas por executar a capability sobre o item recebido e devolver seu resultado. A reconciliação entre recebido, concluído e pendente, a persistência, a decisão de retomar e a prevenção de duplicação pertencem ao núcleo. Essa capacidade não cria loops no canvas nem um novo tipo de validação editorial: é infraestrutura de execução reutilizável por qualquer Bloco e qualquer tipo de entrega compatível.
 
@@ -323,15 +344,13 @@ O usuário pode parar uma fila em execução, aguardando humano, bloqueada ou co
 
 ### 7.4. Execução agregada no lote híbrido histórico
 
-O lote híbrido histórico é uma política de agendamento do Orquestrador; não é um Método, Processo Universal, Bloco ou Operador novo. Um Método continua descrevendo a execução de um vídeo individual e o núcleo continua sem conhecer regras específicas de ChatGPT, Claude, Gemini, Flow ou qualquer outro fornecedor.
+O lote híbrido histórico é uma política de agendamento do Orquestrador; não é um Método, Processo Universal, Bloco ou Operador novo. Um Método continua descrevendo a execução de um Projeto individual.
 
-Nesse modo histórico, o Orquestrador constrói uma coleção ordenada de itens de produção para os três Processos iniciais da sequência legada. Cada item possui uma identidade estável que atravessa `Tema → Título → Thumbnail`; qualquer protocolo agregado deve transportar essa identidade até o resultado. O núcleo rejeita uma resposta que não consiga associar deterministicamente cada resultado ao item correspondente. Índice ou posição podem ser usados como informação auxiliar, nunca como a única identidade.
+O runtime conserva etapas agregadas das filas antigas. Em `reconcileExecutionOrchestrator()`, uma etapa desse tipo percorre seus `projectIds`, inicia ou recupera a execução do Processo de cada Projeto pelo motor existente e avança o cursor somente quando todos terminaram. Espera, bloqueio, cancelamento ou falha do item atual são apresentados na fila sem recriar os Projetos concluídos. Esse caminho não comprova um protocolo nativo universal de coleção delegado ao plugin.
 
-O contrato alvo é `core entrega coleção → plugin escolhe estratégia`. Uma capability compatível pode executar a coleção numa única chamada de LLM, sequencialmente dentro da mesma sessão de navegador, em pequenos grupos ou com paralelismo próprio quando permitido. O plugin não escolhe a identidade, a ordem lógica, a política de retomada ou quais itens já estão aprovados; essas decisões pertencem ao núcleo.
+Novas filas usam `strategyVersion = 5` e o caminho de slots elegíveis. A versão e a estratégia persistidas distinguem os dois caminhos, preservando o significado das filas históricas. Tratamento de storage operacional antigo não adapta Métodos v1/v2 nem Plugin API v1.
 
-Durante a migração, a etapa agregada pode usar um adaptador de compatibilidade que percorre os Projetos pelo motor existente. Isso preserva parada, retomada, validação humana, snapshots e plugins atuais enquanto o protocolo nativo de coleção é introduzido. O estado persistido distingue a estratégia da fila, permitindo substituir a implementação interna sem alterar o modelo mental do usuário.
-
-`execution.itemOrchestration` e o lote híbrido compartilham a mesma primitiva de Item, mas atuam em escalas diferentes. O primeiro expande uma coleção dentro de um único Bloco/Projeto; o segundo coordena itens de produção entre Projetos. Um Projeto em lote pode, portanto, chegar a `Assets` e possuir 50 itens internos sem criar uma estrutura plana global nem misturar a identidade do vídeo com a identidade de suas cenas, prompts, áudios ou arquivos.
+`execution.itemOrchestration` atua em outra escala: distribui as unidades de uma capability dentro de um Bloco/Projeto. Não se confunde com o agrupamento de Projetos da fila nem transfere ao plugin identidade, estratégia ou política universal de retomada.
 
 ---
 
@@ -343,7 +362,9 @@ O ContentFlow apoia-se em dois tipos de compartilhamento comunitário:
 
 Métodos e Canais podem possuir uma capa própria para a Biblioteca de Métodos. Na ausência dela, a interface usa o símbolo local do ContentFlow. A capa do Canal nessa biblioteca é independente do avatar ou banner sincronizado do YouTube. Pacotes de Canal carregam a capa do conjunto e as capas de seus Métodos dentro de `assets/`, sem exportar outras propriedades ou conteúdos do Canal.
 
-A importação apresenta uma prévia antes de gravar: Métodos incluídos, conflitos com processos já configurados, dependências de processos anteriores, plugins/capacidades, necessidade de conexão e coleções estratégicas com seus campos. O usuário escolhe os processos que deseja substituir. A aplicação de vários Métodos a um Canal é atômica; não pode deixar uma importação parcial após falha. 2. **Plugins Independentes**: Pastas instaláveis ou vinculadas podem adaptar APIs HTTPS, scripts, executáveis, filas externas, n8n/Make/FastAPI públicos e automações de navegador sem acrescentar um novo tipo de integração ao núcleo.
+A importação apresenta uma prévia antes de gravar: Métodos incluídos, conflitos com processos já configurados, dependências de processos anteriores, plugins/capacidades, necessidade de conexão e coleções estratégicas com seus campos. O usuário escolhe os processos que deseja substituir. A aplicação de vários Métodos a um Canal é atômica; não pode deixar uma importação parcial após falha.
+
+2. **Plugins Independentes**: Pastas instaláveis ou vinculadas podem adaptar APIs HTTPS, scripts, executáveis, filas externas, n8n/Make/FastAPI públicos e automações de navegador sem acrescentar um novo tipo de integração ao núcleo.
 
 A Biblioteca de Métodos global não cria uma segunda cópia independente no banco. Ela agrega os métodos existentes nos canais. Uma cópia só é criada quando o usuário escolhe usar um método em outro canal ou importa um arquivo compartilhado.
 
@@ -406,6 +427,8 @@ O Método não grava IDs de execução. No construtor, o usuário escolhe estrut
 
 As entregas são persistidas no snapshot da execução, sem criar uma segunda base de dados paralela. Uma nova tentativa invalida as entregas afetadas e cria IDs correspondentes à nova tentativa, preservando o histórico. A interface de execução apresenta os resultados concluídos dentro de cada etapa e não duplica essas entregas em um painel consolidado do Projeto. Relações especializadas, como um asset selecionado para uma cena, são referências genéricas entre IDs e permanecem configuradas pelo Método ou plugin, nunca codificadas como uma regra fixa do núcleo.
 
+O Método pode declarar campos de relação por IDs de itens de uma entrada. Um Bloco de IA produz a associação semântica; o Core limita os valores aos IDs concedidos, persiste a relação e transporta a linhagem; o plugin posterior converte essa relação para a operação de seu fornecedor. Assim, o Core não precisa saber o que é personagem, legenda, corte ou imagem de referência, e ferramentas diferentes podem implementar a mesma relação universal de maneiras diferentes.
+
 Separadamente, cada Processo Universal possui um output oficial, independente do método e do executor utilizado:
 
 1. `Tema`: `text/one/inline`.
@@ -427,7 +450,7 @@ Quando o Processo `Thumbnail` é concluído com uma ou mais imagens, a primeira 
 
 ## 12. Protocolo de Plugins
 
-O contrato técnico está documentado em [`protocol.md`](ecosystem/protocol.md), o guia prático em [`development.md`](ecosystem/development.md), os requisitos do executor em [`security.md`](ecosystem/security.md), os requisitos para plugins que automatizam interfaces web em [`browser-automation.md`](ecosystem/browser-automation.md), a governança do catálogo em [`distribution.md`](ecosystem/distribution.md) e a ordem estratégica de implementação em [`roadmap.md`](ecosystem/roadmap.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Todos são externos, exigem consentimento local e executam na mesma sandbox de permissões em processo separado, inclusive os publicados pelo autor do ContentFlow.
+O contrato técnico está documentado em [`protocol.md`](ecosystem/protocol.md), o guia prático em [`development.md`](ecosystem/development.md), os requisitos do executor em [`security.md`](ecosystem/security.md), os requisitos para plugins que automatizam interfaces web em [`browser-automation.md`](ecosystem/browser-automation.md) e a governança do catálogo em [`distribution.md`](ecosystem/distribution.md). Plugins recebem contexto controlado do motor e nunca acessam diretamente o banco local. Todos são externos, exigem consentimento local e executam na mesma sandbox de permissões em processo separado, inclusive os publicados pelo autor do ContentFlow.
 
 A arquitetura não possui aprovação central: qualquer pessoa pode criar e compartilhar um plugin, inclusive por arquivo ou repositório, e qualquer usuário pode instalá-lo e autorizá-lo localmente. O núcleo aplica validações automáticas e pede consentimento para permissões; revisão humana do mantenedor existe apenas para selo `verified` ou publicação em catálogo opcional.
 
@@ -437,11 +460,15 @@ Automações de navegador podem cadastrar vários perfis de conta explicitamente
 
 Na V1, a extensão companheira é instalada manualmente em cada perfil dedicado por **Carregar sem compactação**. O aplicativo disponibiliza os arquivos públicos da ponte em uma pasta estável de dados, separada do checkout e preservada entre atualizações, para que renomear ou mover o código-fonte não quebre os perfis. A preparação pode informar prontidão assim que login e ponte forem validados, mas nunca fecha automaticamente a instância interativa. Em cadastro, preparação ou reparo de perfil, o usuário instala ou atualiza a extensão, conclui o login e decide quando fechar o navegador; sucesso, incompatibilidade da ponte e falha de autenticação permanecem visíveis sem retirar essa superfície de correção. Ferramentas pessoais que o mantenedor use para preparar vários perfis da própria máquina são paralelas ao aplicativo, não são chamadas pelo núcleo ou pelos plugins.
 
-A execução rotineira ocorre minimizada ou em background por comandos estruturados entre o handler, o service worker e o content script. Ela não depende de foco do Windows, teclado ou mouse do sistema e não deve trazer a janela para frente. Login, reautenticação e diagnóstico podem abrir uma superfície visível somente mediante ação explícita do usuário. Headless é uma evolução do mesmo contrato quando tecnicamente compatível.
+A execução rotineira ocorre minimizada ou em background por comandos estruturados entre o handler, o service worker e o content script. Ela não depende de foco do Windows, teclado ou mouse do sistema e não deve trazer a janela para frente. Login, reautenticação e diagnóstico podem abrir uma superfície visível somente mediante ação explícita do usuário. Headless não é uma garantia universal da implementação atual; depende de compatibilidade e validação do cenário.
 
 A Browser Bridge é um protocolo compartilhado e versionado. Cliente e extensão negociam versão e capabilities antes do primeiro efeito; comandos possuem identidade idempotente e validade limitada; eventos de lifecycle usam sequência monotônica; snapshots são solicitados sob demanda; observadores de condição são temporários e sujeitos a timeout, debounce e backpressure. Reconnect, timeout ou perda do worker/debugger depois de uma ação potencialmente mutável exigem reconciliação antes de replay. Recarga é uma primitiva allowlisted e controlada, nunca fallback universal, e permanece bloqueada enquanto houver efeito externo incerto. Diagnósticos da ponte registram somente metadados redigidos e não transportam conteúdo privado, cookies, tokens, storage de sessão ou caminhos físicos.
 
-O núcleo mantém a ordem, o cursor e as entregas e decide recuperação por uma política única. Ele só avança para outro perfil explicitamente preparado quando a falha é segura para redistribuição, associada ao perfil e não há efeito externo incerto; autenticação, CAPTCHA, permissão, cota, upgrade ou bloqueio sem alternativa segura viram intervenção, e qualquer efeito potencialmente submetido exige reconciliação antes de retry ou fallback. Cancelamento nunca avança o cursor, a lista configurada nunca é ultrapassada e o histórico das tentativas é preservado. Capacidades que declaram uma entrada em lote podem solicitar orquestração sequencial ou multiperfil por unidades persistidas pelo núcleo, que nunca repete silenciosamente itens concluídos ou efeitos incertos. A extensão existe para produtividade, isolamento, determinismo e observabilidade da automação.
+A recuperação possui três camadas explícitas. Navegador e Browser Bridge reportam fatos técnicos universais de transporte, sem interpretar a página. O plugin conhece DOM, respostas e linguagem do fornecedor e traduz estados como “atividade incomum”, “suspicious activity” ou “anti-bot detected” para o código universal `PROVIDER_SECURITY_CHALLENGE`; particularidades equivalentes nunca chegam ao Core como texto a ser adivinhado. O Core recebe somente códigos e fatos normalizados e escolhe a ação, sem conhecer fornecedor, seletor ou mensagem.
+
+A política do núcleo aplica uma escada determinística: cancelamento explícito; reconciliação quando o efeito externo é possível ou desconhecido; intervenção para instalação/protocolo incompatível, autenticação, desafio de segurança do provedor ou outra condição humana; recarga controlada no mesmo perfil somente quando uma operação anterior à submissão perdeu a página; fallback apenas para falha realmente associada à conta/perfil; retry técnico com limite e backoff; e, por fim, falha terminal. Texto de mensagem nunca é interpretado para tomar essa decisão. Novos comportamentos observados em testes reais devem ampliar esse vocabulário de fatos e decisões na fronteira canônica, acompanhado de teste contratual, em vez de gerar fallback específico por fornecedor.
+
+O núcleo mantém a ordem, o cursor e as entregas e decide recuperação por essa política única. Ele só avança para outro perfil explicitamente preparado quando a falha é segura para redistribuição, associada ao perfil e não há efeito externo incerto; indisponibilidade transitória de página, Bridge ausente/desatualizada, timeout genérico ou output inválido não autorizam trocar silenciosamente de conta. Autenticação, CAPTCHA, permissão, cota, upgrade ou bloqueio sem alternativa segura viram intervenção, e qualquer efeito potencialmente submetido exige reconciliação antes de retry ou fallback. Cancelamento nunca avança o cursor, a lista configurada nunca é ultrapassada e o histórico das tentativas é preservado. Capacidades que declaram uma entrada em lote podem solicitar orquestração sequencial ou multiperfil por unidades persistidas pelo núcleo, que nunca repete silenciosamente itens concluídos ou efeitos incertos. A extensão existe para produtividade, isolamento, determinismo e observabilidade da automação.
 
 Qualquer integração com modelos de linguagem, catálogos de modelos, pesquisa web ou mídia especializada é responsabilidade do respectivo plugin externo. O núcleo apenas apresenta `blockConfigSchema`, capacidades e contratos declarados pelo pacote; ele não conhece fornecedor, endpoint, modelo ou ferramenta específica.
 

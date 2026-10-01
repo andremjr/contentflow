@@ -4,7 +4,11 @@ import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
-const SKILLS = ["contentflow-method-development", "contentflow-plugin-development"];
+const SKILLS = [
+  "development-contentflow",
+  "contentflow-method-development",
+  "contentflow-plugin-development",
+];
 
 async function filesUnder(directory, prefix = "") {
   const entries = await readdir(directory, { withFileTypes: true });

@@ -23,7 +23,6 @@ import {
   normalizeActionBlock,
   normalizeMethodBlocks,
 } from "@/lib/human-workflow";
-import { normalizeExecutionDeliveries } from "@/lib/deliveries";
 import { effectiveProcessOrder } from "@/lib/process-order";
 import type { PortableCollection, PortableLibraryItem } from "@/lib/method-file";
 import {
@@ -102,15 +101,6 @@ function normalizeChannel(channel: Channel): Channel {
   return { ...channel, methods };
 }
 
-function normalizeExecution(execution: ProcessExecution): ProcessExecution {
-  return normalizeExecutionDeliveries({
-    ...execution,
-    blocks: execution.blocks.map((block) => ({ attempt: 1, ...block })),
-    outputStatus:
-      execution.outputStatus ?? (execution.status === "completed" ? "completed" : "pending"),
-  });
-}
-
 type ServerState = Omit<typeof db, "ready"> & { revision: number };
 let serverRevision = -1;
 let stateRequest: Promise<boolean> | undefined;
@@ -123,13 +113,20 @@ function reconcileEntities<T extends { id: string }>(current: T[], incoming: T[]
 }
 function applyState(state: ServerState) {
   if (state.revision < serverRevision) return;
+  const channels = state.channels.map(normalizeChannel);
+  const projects = state.projects;
+  const executions = state.executions;
+  const orchestrators = state.orchestrators;
+  const libraryItems = state.libraryItems;
+  const libraryCollections = state.libraryCollections;
+
   serverRevision = state.revision;
-  db.channels = reconcileEntities(db.channels, state.channels.map(normalizeChannel));
-  db.projects = reconcileEntities(db.projects, state.projects);
-  db.executions = reconcileEntities(db.executions, state.executions.map(normalizeExecution));
-  db.orchestrators = reconcileEntities(db.orchestrators, state.orchestrators);
-  db.libraryItems = reconcileEntities(db.libraryItems, state.libraryItems);
-  db.libraryCollections = reconcileEntities(db.libraryCollections, state.libraryCollections);
+  db.channels = reconcileEntities(db.channels, channels);
+  db.projects = reconcileEntities(db.projects, projects);
+  db.executions = reconcileEntities(db.executions, executions);
+  db.orchestrators = reconcileEntities(db.orchestrators, orchestrators);
+  db.libraryItems = reconcileEntities(db.libraryItems, libraryItems);
+  db.libraryCollections = reconcileEntities(db.libraryCollections, libraryCollections);
   db.ready = true;
   emit();
 }
@@ -170,13 +167,22 @@ if (typeof window !== "undefined") {
   const refresh = () =>
     void refreshState().catch((error) => console.error("Conexão com a API local:", error));
   refresh();
-  const interval = window.setInterval(refresh, 1_000);
-  if (import.meta.hot) import.meta.hot.dispose(() => window.clearInterval(interval));
+  const refreshWhenVisible = () => {
+    if (!document.hidden) refresh();
+  };
+  const interval = window.setInterval(refreshWhenVisible, 1_000);
+  document.addEventListener("visibilitychange", refreshWhenVisible);
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    });
+  }
 }
 
 export function useDatabaseConnectionError() {
-  useClientStoreVersion();
-  return connectionError;
+  const storeVersion = useClientStoreVersion();
+  return storeVersion >= 0 ? connectionError : undefined;
 }
 
 export function useDatabaseReady() {

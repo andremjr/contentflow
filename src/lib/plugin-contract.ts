@@ -334,6 +334,11 @@ export type PluginInputDelivery = {
   portKey: string;
   deliveryId?: string;
   itemIds: string[];
+  items?: Array<{
+    id: string;
+    value: RuntimeValue;
+    references?: Array<{ itemId: string; role?: string }>;
+  }>;
 };
 
 export type PluginArtifact = {
@@ -379,6 +384,8 @@ export type PluginExecutionRequest = {
   };
   validation?: BlockValidationConfig;
   retryFeedback?: Record<string, RuntimeValue>;
+  /** Recovery action chosen by the Core from facts reported by the previous invocation. */
+  recoveryDirective?: { action: "reload_page"; reasonCode: string };
   /** Core-resolved block instruction. Updated plugins should prefer this over the raw template. */
   resolvedInstruction?: string;
   /** Variables left intact because no declared runtime source could resolve them. */
@@ -403,7 +410,7 @@ export type PluginExecutionRequest = {
         fallbackAttachments?: StoredFile[];
       };
   /** Core-owned position when a declared list input is executed item by item. */
-  batch?: { itemId: string; index: number; total: number };
+  batch?: { itemId: string; sourceItemId?: string; index: number; total: number };
   /** Contexto imutável do item quando invocation.mode=item_action. */
   itemAction?: {
     key?: string;
@@ -481,7 +488,9 @@ export type PluginRecoveryFacts = {
     | "quota"
     | "upgrade"
     | "account_blocked"
-    | "provider_ui_changed";
+    | "provider_security_challenge"
+    | "provider_ui_changed"
+    | "plugin_setup";
 };
 
 export type PluginConfigurationOption = {

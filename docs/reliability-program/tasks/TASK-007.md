@@ -1,5 +1,7 @@
 # TASK-007 — Unificar criação de ProcessExecution
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../../ARCHITECTURE.md), o [estado e limitações](../../CURRENT_STATE.md) e o [processo de desenvolvimento](../../DEVELOPMENT.md).
+
 ## Objetivo
 
 Estabelecer no Core uma única função pura e determinística que materialize o estado inicial canônico de uma `ProcessExecution` a partir de identidade, tempo e `ProcessMethod` já canônico e validado.

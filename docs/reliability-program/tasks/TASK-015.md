@@ -1,5 +1,7 @@
 # TASK-015 — Centralizar retry manual de Bloco
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../../ARCHITECTURE.md), o [estado e limitações](../../CURRENT_STATE.md) e o [processo de desenvolvimento](../../DEVELOPMENT.md).
+
 ## Objetivo
 
 Fazer o retry manual solicitado pelo usuário sobre um `BlockExecution` ser validado e aplicado por uma transição canônica do Execution Core, preservando a API externa e mantendo projeção de `Project`, persistência e agendamento nos adapters.

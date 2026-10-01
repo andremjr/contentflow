@@ -1,6 +1,8 @@
 # Roadmap estratégico de plugins
 
-**Classificação: D — planejamento ativo.** Este documento é um catálogo estratégico de capacidades, não fonte normativa do núcleo, documentação de instalação nem promessa de integrações disponíveis. Para criar um plugin, comece em [`quickstart.md`](quickstart.md). Atualize este backlog conforme integrações forem validadas pela comunidade.
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../ARCHITECTURE.md), o [estado e limitações](../CURRENT_STATE.md) e o [processo de desenvolvimento](../DEVELOPMENT.md). As ondas e prioridades foram preservadas para contexto; não há compromisso de executá-las.
+
+**Classificação: C — planejamento histórico.** Este documento é um catálogo estratégico de capacidades, não fonte normativa do núcleo, documentação de instalação nem promessa de integrações disponíveis. Para criar um plugin, comece em [`quickstart.md`](quickstart.md). Consulte os manifestos dos pacotes atuais para descobrir capacidades implementadas.
 
 O protocolo normativo está em [`protocol.md`](protocol.md) e o guia prático em [`development.md`](development.md).
 

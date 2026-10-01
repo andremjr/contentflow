@@ -10,7 +10,9 @@ import {
   attachmentsAreReady,
   batchOperationKey,
   composerUploadState,
+  collectAssistantResponseNodes,
   collectGeneratedImages,
+  countUserTurns,
   conversationForInvocation,
   imageActionBaselineHashes,
   imageConversationCorrelation,
@@ -222,6 +224,52 @@ test("P30 congela aprovação, escolha única e escolha múltipla", () => {
   }
 });
 
+test("instrui registros tipados a usar somente IDs canônicos das entradas", () => {
+  const value = request({
+    inputs: { context_1: "Cena A\n\nCena B" },
+    outputContract: [
+      {
+        key: "characters",
+        portKey: "records",
+        shape: {
+          kind: "record",
+          cardinality: "many",
+          fields: [
+            {
+              key: "name",
+              required: true,
+              shape: { kind: "content", family: "text", cardinality: "one" },
+            },
+            {
+              key: "scene_ids",
+              required: true,
+              referencesInputId: "all-scenes",
+              shape: { kind: "control", control: "identifier", cardinality: "many" },
+            },
+          ],
+        },
+      },
+    ],
+  });
+  value.inputDeliveries = [
+    {
+      inputId: "all-scenes",
+      portKey: "context_1",
+      itemIds: ["scene-1", "scene-2"],
+      items: [
+        { id: "scene-1", value: "Cena A" },
+        { id: "scene-2", value: "Cena B" },
+      ],
+    },
+  ];
+  const prompt = __test.buildParts(value)[0];
+  assert.match(prompt, /referencesInputId/);
+  assert.match(prompt, /scene-1/);
+  assert.match(prompt, /somente IDs exatos/);
+  assert.match(prompt, /Não traduza as chaves/);
+  assert.match(prompt, /\[\{"name":"valor","scene_ids":\["ID_EXATO_DO_ITEM_DE_ORIGEM"\]\}\]/);
+});
+
 test("P30 congela conversa nova, continuidade e fallback", async () => {
   const fixture = p30Baseline.conversation;
   const originalParts = ["Solicitação original"];
@@ -418,7 +466,7 @@ test("P32 declara prompt → images sequencial somente na capability de imagem a
   );
   assert.equal(imageCapability.execution.maxConcurrency, 1);
   assert.deepEqual(imageCapability.execution.itemOrchestration, {
-    inputPort: "prompt",
+    inputPort: "prompts",
     outputPort: "images",
     mode: "sequential",
   });
@@ -930,6 +978,36 @@ test("não confunde texto do conteúdo com controles reais de login", () => {
   assert.equal(promptPageState(doc).login, true);
 });
 
+test("captura respostas e turnos na marcação atual e nas marcações anteriores do ChatGPT", () => {
+  const currentResponse = { id: "current-response" };
+  const legacyResponse = { id: "legacy-response" };
+  const currentUserTurn = { id: "current-user" };
+  const selectors = new Map([
+    [
+      '[data-chatgpt-selection-message-id] [data-markdown-text-style="assistant-message"]',
+      [currentResponse],
+    ],
+    ['[data-message-author-role="assistant"] .markdown', [legacyResponse]],
+    ['[data-user-message-bubble="true"]', [currentUserTurn]],
+  ]);
+  const doc = {
+    querySelectorAll(selector) {
+      return selectors.get(selector) ?? [];
+    },
+  };
+
+  assert.deepEqual(collectAssistantResponseNodes(doc), [currentResponse]);
+  assert.equal(countUserTurns(doc), 1);
+
+  selectors.set(
+    '[data-chatgpt-selection-message-id] [data-markdown-text-style="assistant-message"]',
+    [],
+  );
+  selectors.set('[data-message-author-role="user"]', [currentUserTurn]);
+  assert.deepEqual(collectAssistantResponseNodes(doc), [legacyResponse]);
+  assert.equal(countUserTurns(doc), 1);
+});
+
 test("isola contas por alias e porta", () => {
   assert.equal(__test.normalizeAccountProfile("canal-a"), "canal-a");
   assert.throws(() => __test.normalizeAccountProfile("../x"), /Perfil ChatGPT/);
@@ -1214,11 +1292,30 @@ test("trata lista em content como um único contexto agregado", () => {
   assert.match(parts[0], /Cena C/);
 });
 
-test("preserva respostas individuais quando parts está conectada", () => {
-  const values = __test.generationResponseValues("A\n\nB", [{ text: "A" }, { text: "B" }], {
-    outputContract: [{ key: "parts", portKey: "parts" }],
+test("exige array JSON estrito para saída canônica text/many", () => {
+  const outputContract = [
+    {
+      key: "parts",
+      portKey: "parts",
+      shape: {
+        kind: "content",
+        family: "text",
+        cardinality: "many",
+        representation: "inline",
+      },
+    },
+  ];
+  const values = __test.generationResponseValues('["A","B"]', [{ text: '["A","B"]' }], {
+    outputContract,
   });
   assert.deepEqual(values, { parts: ["A", "B"] });
+  assert.throws(
+    () =>
+      __test.generationResponseValues("Aqui estão os prompts:\nA\nB", [], {
+        outputContract,
+      }),
+    /array JSON válido de textos/,
+  );
 });
 
 test("respeita saída list em geração de texto", () => {
@@ -1976,6 +2073,83 @@ test("envia pelo seletor atual e pelo seletor legado do compositor", () => {
 
 test("limpa markdown de saída", () => {
   assert.equal(__test.cleanGeneratedText("# Título\n\nTexto"), "Título\n\nTexto");
+});
+
+test("mapeia saída textual many pela portKey canônica do outputContract", () => {
+  const value = request({
+    outputContract: [
+      {
+        key: "prompts",
+        portKey: "parts",
+        shape: {
+          kind: "content",
+          family: "text",
+          cardinality: "many",
+          representation: "inline",
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    __test.generationResponseValues(
+      '["Cena 1 em plano geral","Cena 2 em close"]',
+      [{ text: '["Cena 1 em plano geral","Cena 2 em close"]' }],
+      value,
+    ),
+    { parts: ["Cena 1 em plano geral", "Cena 2 em close"] },
+  );
+});
+
+test("não publica aliases genéricos fora do outputContract", async () => {
+  const value = request({
+    outputContract: [
+      {
+        key: "prompts",
+        portKey: "parts",
+        shape: {
+          kind: "content",
+          family: "text",
+          cardinality: "many",
+          representation: "inline",
+        },
+      },
+    ],
+  });
+  const mapped = __test.generationResponseValues(
+    '["Cena 1","Cena 2"]',
+    [{ text: '["Cena 1","Cena 2"]' }],
+    value,
+  );
+
+  assert.deepEqual(Object.keys(mapped), ["parts"]);
+  assert.equal("result" in mapped, false);
+});
+
+test("respeita cardinalidade atômica da porta parts durante per_item", () => {
+  const value = request({
+    outputContract: [
+      {
+        key: "parts",
+        portKey: "parts",
+        shape: {
+          kind: "content",
+          family: "text",
+          cardinality: "one",
+          representation: "inline",
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    __test.generationResponseValues(
+      "Personagem consistente",
+      [{ text: "Personagem consistente" }],
+      value,
+    ),
+    { parts: "Personagem consistente" },
+  );
 });
 
 test("rotas simuladas não abrem navegador", async () => {

@@ -728,16 +728,22 @@ export async function execute(request, services) {
       throw new PluginFailure("CANCELLED", "A transcrição foi cancelada.");
     validateSettings(request.settings);
     const configuration = validateConfiguration(request.configuration);
-    const audioFiles = Array.isArray(request.inputs?.audio_files)
-      ? request.inputs.audio_files
-      : request.inputs?.audio_files
-        ? [request.inputs.audio_files]
-        : [];
-    const videoFiles = Array.isArray(request.inputs?.video_files)
-      ? request.inputs.video_files
-      : request.inputs?.video_files
-        ? [request.inputs.video_files]
-        : [];
+    const audioFiles = [
+      request.inputs?.audio_file,
+      ...(Array.isArray(request.inputs?.audio_files)
+        ? request.inputs.audio_files
+        : request.inputs?.audio_files
+          ? [request.inputs.audio_files]
+          : []),
+    ].filter(Boolean);
+    const videoFiles = [
+      request.inputs?.video_file,
+      ...(Array.isArray(request.inputs?.video_files)
+        ? request.inputs.video_files
+        : request.inputs?.video_files
+          ? [request.inputs.video_files]
+          : []),
+    ].filter(Boolean);
     const media = normalizeMediaInput([...audioFiles, ...videoFiles]);
     const keys = parseApiKeys(await services.getSecret(SECRET_NAME));
     const expectedJobId = jobIdFor(request);

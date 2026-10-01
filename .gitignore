@@ -66,3 +66,10 @@ release/
 
 # Planejamento arquitetural local (deliberacoes privadas, nao publicar)
 planejamento/
+
+# Local development traces (metadata, never distribution artifacts)
+.dev-monitor/
+
+# Local diagnostic captures and one-off inspection/update scripts
+/preview-home*.png
+/scripts/*.tmp.ts

@@ -1,3 +1,5 @@
+import { devProbe } from "./dev-monitor/client";
+import type { DevEvent } from "./dev-monitor/contract";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import net from "node:net";
@@ -12,7 +14,10 @@ export function shouldAutoCloseCoreBrowserSession(invocation?: { mode?: string; 
   return invocation?.mode !== "configure";
 }
 
-type ManagedSession = CoreBrowserSession & { child: ChildProcess };
+type ManagedSession = CoreBrowserSession & {
+  child: ChildProcess;
+  monitorCorrelation?: DevEvent["correlation"];
+};
 
 export type BrowserSessionManagerDependencies = {
   reservePort: () => Promise<number>;
@@ -116,6 +121,7 @@ export class BrowserSessionManager {
   }
 
   async open(input: {
+    monitorCorrelation?: DevEvent["correlation"];
     profileDirectory: string;
     chromeExecutable?: unknown;
     visible?: boolean;
@@ -151,6 +157,15 @@ export class BrowserSessionManager {
       windowsHide: false,
       shell: false,
     });
+    const probe = devProbe("profiles", "browser-session-manager");
+    const correlation = { ...input.monitorCorrelation, instanceId: String(child.pid ?? port) };
+    if (probe.enabled)
+      probe.emit({
+        kind: "instance.created",
+        entity: { type: "instance", id: correlation.instanceId },
+        correlation,
+        payload: { status: "created" },
+      });
     const abort = () => child.kill();
     input.signal?.addEventListener("abort", abort, { once: true });
     try {
@@ -160,11 +175,27 @@ export class BrowserSessionManager {
           throw Object.assign(new Error("Execução cancelada."), { code: "CANCELLED" });
         if (child.exitCode !== null) throw new Error("O Chrome encerrou durante a inicialização.");
         const webSocketDebuggerUrl = await this.dependencies.browserVersion(port);
-        if (webSocketDebuggerUrl) return { port, webSocketDebuggerUrl, child };
+        if (webSocketDebuggerUrl) {
+          if (probe.enabled)
+            probe.emit({
+              kind: "instance.ready",
+              entity: { type: "instance", id: correlation.instanceId },
+              correlation,
+              payload: { status: "ready" },
+            });
+          return { port, webSocketDebuggerUrl, child, monitorCorrelation: correlation };
+        }
         await new Promise((resolve) => setTimeout(resolve, this.dependencies.pollIntervalMs));
       }
       throw new Error("O Chrome não ficou pronto dentro do tempo esperado.");
     } catch (error) {
+      if (probe.enabled)
+        probe.emit({
+          kind: "instance.crashed",
+          entity: { type: "instance", id: correlation.instanceId },
+          correlation,
+          payload: { status: "crashed" },
+        });
       child.kill();
       throw error;
     } finally {
@@ -185,5 +216,13 @@ export class BrowserSessionManager {
       });
     }
     if (session.child.exitCode === null) session.child.kill();
+    const probe = devProbe("profiles", "browser-session-manager");
+    if (probe.enabled)
+      probe.emit({
+        kind: "instance.closed",
+        entity: { type: "instance", id: String(session.child.pid ?? session.port) },
+        correlation: session.monitorCorrelation ?? {},
+        payload: { status: "closed" },
+      });
   }
 }

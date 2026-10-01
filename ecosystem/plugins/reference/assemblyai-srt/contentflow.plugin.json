@@ -55,6 +55,18 @@
           }
         },
         {
+          "key": "audio_file",
+          "label": "Áudio",
+          "description": "Um único áudio para transcrição.",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "audio",
+            "cardinality": "one",
+            "representation": "artifact"
+          }
+        },
+        {
           "key": "video_files",
           "label": "Vídeos",
           "description": "Um ou vários vídeos, processados na ordem recebida.",
@@ -63,6 +75,18 @@
             "kind": "content",
             "family": "video",
             "cardinality": "many",
+            "representation": "artifact"
+          }
+        },
+        {
+          "key": "video_file",
+          "label": "Vídeo",
+          "description": "Um único vídeo para transcrição.",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "one",
             "representation": "artifact"
           }
         }

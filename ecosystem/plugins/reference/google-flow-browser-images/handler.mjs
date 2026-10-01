@@ -586,6 +586,13 @@ const EXTENSION_REQUIRED_CAPABILITIES = Object.freeze([
   "condition-observer.v1",
   "reload.v1",
 ]);
+const EXTENSION_EFFECTFUL_ACTIONS = new Set([
+  "click",
+  "clickGenerate",
+  "pressEnter",
+  "setFiles",
+  "reload",
+]);
 const IMAGE_MODELS = Object.freeze({
   flow_auto: null,
   nano_banana_2: "NARWHAL",
@@ -617,6 +624,15 @@ const VIDEO_MODEL_LABELS = Object.freeze({
   veo_3_1_lite: "Veo 3.1 - Lite",
   omni_1_1_flash: "Omni 1.1 Flash",
 });
+const FLOW_ATTACHED_REFERENCE_SELECTOR = [
+  "flow-base-prompt-box flow-ingredient-chip",
+  "flow-base-prompt-box flow-image-ingredient-chip",
+  "flow-base-prompt-box flow-audio-ingredient-chip",
+  "flow-base-prompt-box .frame-trigger img",
+  "flow-ingredient-bar flow-ingredient-chip",
+  "flow-ingredient-bar flow-image-ingredient-chip",
+  "flow-ingredient-bar flow-audio-ingredient-chip",
+].join(", ");
 const FLOW_MODEL_VALUE_PREFIX = "flow_label:";
 const FLOW_MEDIA_MESSAGES = Object.freeze({
   "pt-BR": {
@@ -770,6 +786,19 @@ function mediaItemUpdate({ key, variantKey, outputPort, input, value }) {
     value,
   };
 }
+
+function mediaItemUpdatesForPrompt({ continuous, index, outputPort, input, value }) {
+  if (continuous) return undefined;
+  return value.map((result, variantIndex) =>
+    mediaItemUpdate({
+      key: `prompt:${index}`,
+      variantKey: `image:${variantIndex}`,
+      outputPort,
+      input,
+      value: result.file,
+    }),
+  );
+}
 const VIDEO_RESOLUTIONS = Object.freeze({
   flow_current: null,
   res_720p: "720p",
@@ -913,6 +942,9 @@ function normalizePrompts(value) {
       return;
     }
     if (Array.isArray(item)) for (const nested of item) visit(nested);
+    else if (item && typeof item === "object") {
+      visit(item.visual_prompt ?? item.prompt ?? item.description);
+    }
   };
   visit(value);
   return out;
@@ -1530,10 +1562,60 @@ function normalizeReferenceImages(value) {
   return out;
 }
 
+function referenceImagesForSourceItem(request, sourceItemId) {
+  const fallback = normalizeReferenceImages([
+    request?.inputs?.reference_images,
+    request?.inputs?.reference_image,
+  ]);
+  if (!sourceItemId) return fallback;
+  const deliveries = request?.inputDeliveries ?? [];
+  const relations = deliveries.find((delivery) => delivery.portKey === "item_relations");
+  const references = deliveries.find((delivery) => delivery.portKey === "reference_images");
+  if (!relations?.items?.length || !references?.items?.length) return fallback;
+
+  const relatedRecordIds = new Set(
+    relations.items
+      .filter((item) => item.references?.some((reference) => reference.itemId === sourceItemId))
+      .map((item) => item.id),
+  );
+  if (relatedRecordIds.size === 0) return [];
+  const matchedCharacterIds = new Set();
+  const matchedReferences = references.items.filter((item) => {
+    const derived = item.references?.filter((reference) => reference.role === "derived_from") ?? [];
+    const matches = derived.filter((reference) => relatedRecordIds.has(reference.itemId));
+    for (const reference of matches) matchedCharacterIds.add(reference.itemId);
+    return matches.length > 0;
+  });
+  if (matchedCharacterIds.size !== relatedRecordIds.size) {
+    throw codedError(
+      "INVALID_INPUT",
+      `A cena possui ${relatedRecordIds.size} personagem(ns) relacionado(s), mas somente ${matchedCharacterIds.size} possui(em) imagem de referência com linhagem preservada.`,
+    );
+  }
+  return normalizeReferenceImages(matchedReferences.map((item) => item.value));
+}
+
+function referenceImagesForCurrentItem(request) {
+  return referenceImagesForSourceItem(request, request?.batch?.sourceItemId);
+}
+
 function requestsSingleImage(request) {
   return (request?.outputContract ?? []).some(
-    (field) => field?.portKey === "images" && field?.type === "image",
+    (field) =>
+      field?.portKey === "image" ||
+      (field?.portKey === "images" &&
+        (field?.type === "image" ||
+          (field?.shape?.kind === "content" &&
+            field?.shape?.family === "image" &&
+            field?.shape?.cardinality === "one"))),
   );
+}
+
+function imageOutputValues(request, files, projectUrl) {
+  return {
+    ...(requestsSingleImage(request) ? { image: files[0] } : { images: files }),
+    ...(projectUrl ? { project_url: projectUrl } : {}),
+  };
 }
 
 function requestsSingleVideo(request) {
@@ -1837,7 +1919,9 @@ async function claimFlowContinuousItems(request, services) {
   const claimed = await services.claimItems(Math.max(1, source.length));
   if (!Array.isArray(claimed) || claimed.length === 0) return [];
   const normalized = claimed
-    .filter((item) => typeof item?.itemId === "string" && typeof item?.input === "string")
+    .filter(
+      (item) => typeof item?.itemId === "string" && normalizePrompts(item?.input).length === 1,
+    )
     .sort((left, right) => left.order - right.order);
   if (normalized.length !== claimed.length) {
     throw codedError(
@@ -2671,7 +2755,7 @@ async function attachExtensionBridge(
             return { target: candidate, sessionId: attached.sessionId, identity };
           }
           if (identity?.bridgeId === EXTENSION_BRIDGE_ID) {
-            throw codedError("INVALID_CONFIGURATION", "A extensão instalada é incompatível.");
+            throw codedError("BRIDGE_INCOMPATIBLE", "A extensão instalada é incompatível.");
           }
         } catch (error) {
           if (!isMissingCdpSession(error)) throw error;
@@ -2686,7 +2770,7 @@ async function attachExtensionBridge(
       await sleep(250, signal);
     }
     throw codedError(
-      "INVALID_CONFIGURATION",
+      "BRIDGE_MISSING",
       "A ContentFlow Browser Bridge não está instalada neste perfil do Chrome. Abra chrome://extensions, ative o modo do desenvolvedor, use Carregar sem compactação na pasta contentflow-browser-bridge e recarregue a extensão. O plugin não continuará usando teclado ou mouse como alternativa.",
     );
   };
@@ -2715,7 +2799,7 @@ async function attachExtensionBridge(
     const handshake = await evaluateWorker(client, workerSessionId, connectionExpression());
     if (!handshake?.ok) {
       throw codedError(
-        "INVALID_CONFIGURATION",
+        "BRIDGE_INCOMPATIBLE",
         handshake?.message || "A extensão recusou a conexão efêmera do plugin.",
       );
     }
@@ -2727,7 +2811,7 @@ async function attachExtensionBridge(
         handshake.capabilities?.includes(capability),
       )
     ) {
-      throw codedError("INVALID_CONFIGURATION", "A extensão instalada é incompatível.");
+      throw codedError("BRIDGE_INCOMPATIBLE", "A extensão instalada é incompatível.");
     }
     negotiatedProtocolVersion = handshake.protocolVersion;
   };
@@ -2799,14 +2883,21 @@ async function attachExtensionBridge(
           true,
         );
       }
-      if (["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code)) {
+      if (
+        ["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code) &&
+        !EXTENSION_EFFECTFUL_ACTIONS.has(action)
+      ) {
         throw codedError(
-          "UPSTREAM_UNAVAILABLE",
+          "BRIDGE_PAGE_UNAVAILABLE",
           response?.message || "A extensão deixou de responder.",
           true,
         );
       }
-      if (code === "COMMAND_OUTCOME_UNKNOWN") {
+      if (
+        code === "COMMAND_OUTCOME_UNKNOWN" ||
+        (["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code) &&
+          EXTENSION_EFFECTFUL_ACTIONS.has(action))
+      ) {
         throw codedError(
           "COMMAND_OUTCOME_UNKNOWN",
           response?.message || "O resultado do último comando precisa ser reconciliado.",
@@ -2822,7 +2913,7 @@ async function attachExtensionBridge(
         ].includes(code)
       ) {
         throw codedError(
-          "INVALID_CONFIGURATION",
+          "BRIDGE_INCOMPATIBLE",
           response?.message || "A extensão instalada é incompatível.",
         );
       }
@@ -2860,20 +2951,20 @@ async function attachExtensionBridge(
   let disposed = false;
 
   try {
-    let ping;
-    try {
-      ping = await dispatch("ping", {}, "bridge-ready");
-    } catch (error) {
-      if (error?.code !== "UPSTREAM_UNAVAILABLE") throw error;
+    if (request?.recoveryDirective?.action === "reload_page") {
       await dispatch(
         "reload",
-        { reconciliationState: "safe", bypassCache: true },
-        "bridge-ready-controlled-reload",
+        {
+          reconciliationState: "safe",
+          bypassCache: true,
+          reasonCode: request.recoveryDirective.reasonCode,
+        },
+        `core-recovery:${request.recoveryDirective.reasonCode}`,
       );
-      ping = await dispatch("ping", {}, "bridge-ready-after-reload");
     }
+    const ping = await dispatch("ping", {}, "bridge-ready");
     if (ping?.protocolVersion !== negotiatedProtocolVersion) {
-      throw codedError("INVALID_CONFIGURATION", "A ContentFlow Browser Bridge está desatualizada.");
+      throw codedError("BRIDGE_INCOMPATIBLE", "A ContentFlow Browser Bridge está desatualizada.");
     }
   } catch (error) {
     await evaluateWorker(
@@ -3579,6 +3670,122 @@ async function uploadMediaActionIsVisible(client, sessionId) {
   );
 }
 
+function existingReferenceSelectionExpression(referenceNames) {
+  return `(() => { ${DEEP_HELPERS}
+    const names = ${JSON.stringify(referenceNames.map((name) => name.toLowerCase()))};
+    const choices = cfAll('button, [role="button"], [role="option"]')
+      .filter(cfVisible)
+      .map((element) => cfText(element));
+    return names.length > 0 && names.every((name) => choices.some((choice) => choice.includes(name)));
+  })()`;
+}
+
+async function openReferencePicker(client, sessionId, bridge, signal) {
+  let pickerVisible = await uploadMediaActionIsVisible(client, sessionId);
+  for (let clickAttempt = 1; !pickerVisible && clickAttempt <= 3; clickAttempt += 1) {
+    await bridge.dispatch(
+      "click",
+      { selectors: ["flow-add-menu button"], preferDomActivation: true },
+      `open-reference-menu:${clickAttempt}`,
+    );
+    const menuDeadline = Date.now() + 3_000;
+    while (!pickerVisible && Date.now() < menuDeadline) {
+      await sleep(250, signal);
+      pickerVisible = await uploadMediaActionIsVisible(client, sessionId);
+    }
+  }
+  return pickerVisible;
+}
+
+async function attachExistingReferenceImages(
+  client,
+  sessionId,
+  bridge,
+  filePaths,
+  settings,
+  signal,
+  step,
+) {
+  if (filePaths.length === 0) return true;
+  const baselineCount = await attachedReferenceCount(client, sessionId);
+  await ensureImageMode(client, sessionId, settings, signal);
+  if (!(await openReferencePicker(client, sessionId, bridge, signal))) return false;
+  const referenceNames = filePaths.map((filePath) => basename(filePath));
+  const allVisible = await evaluate(
+    client,
+    sessionId,
+    existingReferenceSelectionExpression(referenceNames),
+  );
+  if (!allVisible) return false;
+
+  for (const [index, referenceName] of referenceNames.entries()) {
+    await bridge.dispatch(
+      "click",
+      {
+        selectors: ["button", '[role="button"]', '[role="option"]'],
+        textIncludes: [referenceName],
+      },
+      `select-existing-reference:${index}:${referenceName}`,
+    );
+    await sleep(250, signal);
+  }
+  await bridge.dispatch(
+    "click",
+    {
+      selectors: ["button", '[role="button"]'],
+      textIncludes: ["incluir", "add to prompt", "include in prompt"],
+    },
+    "include-existing-references",
+  );
+  const deadline = Date.now() + 8_000;
+  while (Date.now() < deadline) {
+    if ((await attachedReferenceCount(client, sessionId)) >= baselineCount + filePaths.length) {
+      step?.(`${referenceNames.length} referência(s) existente(s) reutilizada(s) no comando.`);
+      return true;
+    }
+    await sleep(250, signal);
+  }
+  return false;
+}
+
+async function attachReferenceImagesOneByOne(
+  client,
+  sessionId,
+  bridge,
+  filePaths,
+  settings,
+  signal,
+  step,
+) {
+  for (const [index, filePath] of filePaths.entries()) {
+    const baselineCount = await attachedReferenceCount(client, sessionId);
+    const reused = await attachExistingReferenceImages(
+      client,
+      sessionId,
+      bridge,
+      [filePath],
+      settings,
+      signal,
+      step,
+    );
+    if (!reused) {
+      await uploadReferenceImages(client, sessionId, bridge, [filePath], settings, signal, step);
+    }
+    const deadline = Date.now() + 8_000;
+    let attachedCount = await attachedReferenceCount(client, sessionId);
+    while (attachedCount < baselineCount + 1 && Date.now() < deadline) {
+      await sleep(250, signal);
+      attachedCount = await attachedReferenceCount(client, sessionId);
+    }
+    if (attachedCount < baselineCount + 1) {
+      throw codedError(
+        "OUTPUT_VALIDATION_FAILED",
+        `O Flow não confirmou a referência ${index + 1} de ${filePaths.length}; o prompt não foi enviado.`,
+      );
+    }
+  }
+}
+
 async function prepareReferenceImagePaths(referenceImages, services, maximum) {
   if (referenceImages.length > maximum) {
     throw codedError(
@@ -3631,22 +3838,7 @@ async function uploadReferenceImagesInPage(
   await ensureImageMode(client, sessionId, settings, signal);
   let input = await locateImageFileInput(client, sessionId);
   if (!input) {
-    let uploadMenuVisible = await uploadMediaActionIsVisible(client, sessionId);
-    for (let clickAttempt = 1; !uploadMenuVisible && clickAttempt <= 3; clickAttempt += 1) {
-      await bridge.dispatch(
-        "click",
-        {
-          selectors: ["flow-add-menu button"],
-          preferDomActivation: true,
-        },
-        `open-reference-menu:${clickAttempt}`,
-      );
-      const menuDeadline = Date.now() + 3_000;
-      while (!uploadMenuVisible && Date.now() < menuDeadline) {
-        await sleep(250, signal);
-        uploadMenuVisible = await uploadMediaActionIsVisible(client, sessionId);
-      }
-    }
+    const uploadMenuVisible = await openReferencePicker(client, sessionId, bridge, signal);
     if (!uploadMenuVisible) {
       throw codedError(
         "OUTPUT_VALIDATION_FAILED",
@@ -3708,7 +3900,7 @@ function referenceUploadStateExpression(promptSelector, referenceNames = []) {
       .some(el => !el.disabled && el.getAttribute('aria-disabled') !== 'true' && /incluir no comando|add to prompt|include in prompt/i.test(cfText(el)));
     const names = ${JSON.stringify(referenceNames.map((name) => name.toLowerCase()))};
     const referenceMatches = names.length > 0 && names.every(name =>
-      cfAll('[role="option"], img').filter(cfVisible).some(el =>
+      cfAll('button, [role="button"], [role="option"], img').filter(cfVisible).some(el =>
         (cfText(el) + ' ' + (el.getAttribute('alt') || '').toLowerCase()).includes(name)));
     return { consent, dialogs: dialogs.length, pickerOpen, editable, includeReady, referenceMatches };
   })()`;
@@ -3721,6 +3913,8 @@ async function attachedReferenceCount(client, sessionId) {
         client,
         sessionId,
         `(() => { ${DEEP_HELPERS}
+    const structural = cfAll(${JSON.stringify(FLOW_ATTACHED_REFERENCE_SELECTOR)});
+    if (structural.length > 0) return structural.length;
     return cfAll('button, [role="button"]').filter(cfVisible).filter(el =>
       /^(elemento|element|ingredient)$/i.test((el.getAttribute('aria-label') || '').trim()) &&
       !!el.querySelector('img')).length;
@@ -3961,28 +4155,40 @@ async function waitGenerateEnabled(client, sessionId, settings, signal, timeoutM
 }
 
 async function clickGenerateWithExtension(bridge, settings, operationKey) {
+  const customSelector = String(settings?.generateSelector || "").trim();
+  try {
+    return await bridge.dispatch(
+      "click",
+      {
+        selectors: customSelector ? [customSelector] : ["flow-generate-icon-button button"],
+      },
+      operationKey,
+    );
+  } catch (cause) {
+    if (cause?.code !== "CONTROL_NOT_FOUND") throw cause;
+  }
   return await bridge.dispatch(
     "clickGenerate",
     {
       selectors: [
-        "flow-generate-icon-button button",
         'button[aria-label*="iniciar geração" i]',
         'button[aria-label*="start generation" i]',
+        'button[aria-label*="iniciar creaci" i]',
         'button[aria-label*="iniciar generaci" i]',
         'button[type="submit"]',
-        "button",
       ],
       promptSelector: settings?.promptSelector || "",
-      generateSelector: settings?.generateSelector || "",
+      generateSelector: customSelector,
       textIncludes: [
         "iniciar geração",
         "iniciar geracao",
         "start generation",
+        "iniciar creación",
+        "iniciar generacion",
         "iniciar generación",
-        "arrow_forward",
       ],
     },
-    operationKey,
+    `${operationKey}:fallback`,
   );
 }
 
@@ -4003,7 +4209,7 @@ async function clickGenerateAndConfirm(
         const prompt = cfPromptCandidate(${JSON.stringify(settings?.promptSelector || "")});
         const button = cfGenerateCandidate(prompt, ${JSON.stringify(settings?.generateSelector || "")}, true);
         const promptText = (prompt?.innerText || prompt?.textContent || prompt?.value || '').replace(/\s+/g, ' ').trim();
-        const pending = cfAll('[aria-busy="true"], [role="progressbar"], [class*="loading" i], [class*="spinner" i]')
+        const pending = cfAll('flow-pending-tile, [aria-busy="true"], [role="progressbar"], [class*="loading" i], [class*="spinner" i]')
           .filter(cfVisible).length;
         return {
           promptText,
@@ -4017,6 +4223,7 @@ async function clickGenerateAndConfirm(
   try {
     click = await clickGenerateWithExtension(bridge, settings, operationKey);
   } catch (cause) {
+    if (cause?.code === "COMMAND_OUTCOME_UNKNOWN") cause.externalEffectUncertain = true;
     if (!/controle não encontrado|control not found/i.test(String(cause?.message || "")))
       throw cause;
     click = { ok: false, mechanism: "control-not-found" };
@@ -4789,7 +4996,7 @@ async function runGenerationPlan({
             continue;
           }
           if (reconciliation.status === "uncertain") break;
-          const isRate = error?.code === "RATE_LIMIT" || error?.isUnusualActivity === true;
+          const isRate = error?.code === "RATE_LIMIT";
           if (isRate && rateRetries < rateLimitRetryAttempts) {
             rateRetries += 1;
             const throttle = controller.failure(error);
@@ -4906,9 +5113,9 @@ function classifyGenerationHttpError(status, bodyText) {
     );
   if (/atividade incomum|unusual activity|unusual traffic|suspicious activity/i.test(hint)) {
     error = codedError(
-      "RATE_LIMIT",
+      "PROVIDER_SECURITY_CHALLENGE",
       "O Google Flow detectou atividade incomum na rede ou conta.",
-      true,
+      false,
     );
     error.isUnusualActivity = true;
     error.retryAfterMs = 45000;
@@ -4979,9 +5186,9 @@ function parseGenerationResponse(captured) {
           /UNUSUAL_ACTIVITY|atividade incomum|unusual activity|suspicious activity/i.test(errStr)
         ) {
           const err = codedError(
-            "RATE_LIMIT",
+            "PROVIDER_SECURITY_CHALLENGE",
             "O Google Flow detectou atividade incomum na rede ou conta.",
-            true,
+            false,
           );
           err.isUnusualActivity = true;
           err.retryAfterMs = 45000;
@@ -5200,9 +5407,9 @@ async function waitForGeneratedMediaOnPage(
       if (tileErr) {
         if (tileErr.type === "unusual_activity") {
           const err = codedError(
-            "RATE_LIMIT",
+            "PROVIDER_SECURITY_CHALLENGE",
             "Notamos uma atividade incomum na sua conta ou rede.",
-            true,
+            false,
           );
           err.isUnusualActivity = true;
           err.retryAfterMs = 45000;
@@ -5239,6 +5446,7 @@ async function waitForGeneratedMediaOnPage(
     } catch (err) {
       if (
         err?.code === "RATE_LIMIT" ||
+        err?.code === "PROVIDER_SECURITY_CHALLENGE" ||
         err?.code === "OUTPUT_VALIDATION_FAILED" ||
         err?.code === "CANCELLED"
       ) {
@@ -5472,9 +5680,9 @@ async function waitForGeneratedVideosOnPage(
       if (tileErr) {
         if (tileErr.type === "unusual_activity") {
           const err = codedError(
-            "RATE_LIMIT",
+            "PROVIDER_SECURITY_CHALLENGE",
             "Notamos uma atividade incomum na sua conta ou rede.",
-            true,
+            false,
           );
           err.isUnusualActivity = true;
           err.retryAfterMs = 45000;
@@ -5511,6 +5719,7 @@ async function waitForGeneratedVideosOnPage(
     } catch (err) {
       if (
         err?.code === "RATE_LIMIT" ||
+        err?.code === "PROVIDER_SECURITY_CHALLENGE" ||
         err?.code === "OUTPUT_VALIDATION_FAILED" ||
         err?.code === "CANCELLED"
       ) {
@@ -5941,8 +6150,10 @@ async function executeHandler(request, services) {
     ? createFlowContinuousItemState(continuousClaims, request?.context?.locale)
     : undefined;
   let prompts = continuousClaims
-    ? continuousClaims.map((claim) => String(claim.input))
-    : normalizePrompts(request?.inputs?.prompts);
+    ? continuousClaims.map((claim) => normalizePrompts(claim.input)[0])
+    : normalizePrompts(
+        request?.inputs?.prompts ?? request?.inputs?.prompt ?? request?.inputs?.prompt_records,
+      );
   const singleImageOutput = requestsSingleImage(request);
   // Em uma invocação orquestrada por item, o núcleo precisa receber o valor
   // escalar daquela unidade para consolidar a coleção sem criar arrays aninhados.
@@ -5963,7 +6174,7 @@ async function executeHandler(request, services) {
     if (prompts.length === 0) prompts = [""];
   }
 
-  let rawReferences = request?.inputs?.reference_images;
+  let rawReferences = referenceImagesForCurrentItem(request);
   if (isImageAnimation && !rawReferences) {
     rawReferences = request?.inputs?.images ?? request?.inputs?.image;
   }
@@ -6131,11 +6342,9 @@ async function executeHandler(request, services) {
     if (navigation.captchaRetry) {
       step("Retomando o projeto recém-verificado após CAPTCHA.");
     }
-    referencePaths = await prepareReferenceImagePaths(
-      referenceImages,
-      services,
-      maxReferenceImages,
-    );
+    referencePaths = continuousClaims
+      ? []
+      : await prepareReferenceImagePaths(referenceImages, services, maxReferenceImages);
     step("Sessão de navegador reservada pelo ContentFlow.");
     step(`Perfil de conta selecionado: ${profileRuntime.accountProfile}.`);
     if (diagnosticFile) step(`Captura integral deste job: ${diagnosticFile}.`);
@@ -6254,10 +6463,7 @@ async function executeHandler(request, services) {
       await clearCaptchaRetryNavigation(request, services);
       return {
         status: "success",
-        values: {
-          images: singleImageOutput ? recovered.file : [recovered.file],
-          project_url: activeProjectUrl,
-        },
+        values: imageOutputValues(request, [recovered.file], activeProjectUrl),
         artifacts: [recovered.artifact],
         logs: [
           ...stepLogs,
@@ -6270,8 +6476,7 @@ async function executeHandler(request, services) {
       step("Iniciando fluxo de animação de imagem no Google Flow...");
       if (
         referencePaths.length > 0 &&
-        (!referencesAttached ||
-          (await attachedReferenceCount(client, sessionId)) < referencePaths.length)
+        (!referencesAttached || (await attachedReferenceCount(client, sessionId)) === 0)
       ) {
         await uploadReferenceImages(
           client,
@@ -6690,10 +6895,7 @@ async function executeHandler(request, services) {
     }
 
     step("Editor Slate detectado.");
-    if (
-      !referencesAttached ||
-      (await attachedReferenceCount(client, sessionId)) < referencePaths.length
-    )
+    if (!referencesAttached || (await attachedReferenceCount(client, sessionId)) === 0)
       await uploadReferenceImages(
         client,
         sessionId,
@@ -6725,9 +6927,24 @@ async function executeHandler(request, services) {
       return await continuousItems.publish(services, claim.itemId, state, extra);
     };
     const maxConcurrentGenerations = continuousClaims
-      ? 1
+      ? 2
       : Math.min(3, Math.max(1, requestedConcurrentGenerations));
     let submissionLock = Promise.resolve();
+    const acquireSubmissionLock = async () => {
+      let unlock;
+      const current = new Promise((resolve) => {
+        unlock = resolve;
+      });
+      const prior = submissionLock;
+      submissionLock = prior.then(() => current);
+      await prior;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        unlock();
+      };
+    };
     const submissionBaselines = new Map();
     const materializeImageResults = async (task, selectedMedia) => {
       const absolutePromptIndex = coreBatchIndex ?? task.index;
@@ -6813,6 +7030,12 @@ async function executeHandler(request, services) {
               throw cause;
             }
           }
+          const taskReferenceImages = continuousClaim
+            ? referenceImagesForSourceItem(request, continuousClaim.sourceItemId)
+            : referenceImages;
+          const taskReferencePaths = continuousClaim
+            ? await prepareReferenceImagePaths(taskReferenceImages, services, maxReferenceImages)
+            : referencePaths;
           const fallbackModelsTried = new Set();
           const switchToNextImageModel = async (reason) => {
             const fallbackModelKey = nextImageModelFallback(activePreferences.modelKey);
@@ -6857,41 +7080,61 @@ async function executeHandler(request, services) {
             return true;
           };
           while (true) {
-            step(`${label}: preparando interface.`);
-            await ensureFlowProjectReady(client, sessionId, settings, services.signal, true, trace);
-
-            let selectedMedia = null;
-            const hasEngine = await evaluate(
-              client,
-              sessionId,
-              "Boolean(window.FlowAuto?.adapter?.generate)",
-            ).catch(() => false);
-            if (hasEngine && referencePaths.length === 0) {
-              step(`${label}: gerando via FlowAuto adapter.`);
-              const baselineMedia = await generatedMediaOnPage(client, sessionId);
-              submissionBaselines.set(
-                task.index,
-                baselineMedia.map((item) => item.image.generatedImage.fifeUrl),
+            const releaseSubmission = await acquireSubmissionLock();
+            try {
+              step(`${label}: preparando interface na sessão compartilhada.`);
+              await ensureFlowProjectReady(
+                client,
+                sessionId,
+                settings,
+                services.signal,
+                true,
+                trace,
               );
-              if (task.continuousItemId) {
-                await saveVisualBatchItemBaseline(
-                  request,
-                  services,
-                  task.continuousItemId,
-                  "image",
-                  submissionBaselines.get(task.index),
+              const staleReferenceCount = await attachedReferenceCount(client, sessionId);
+              if (staleReferenceCount !== 0) {
+                throw codedError(
+                  "OUTPUT_VALIDATION_FAILED",
+                  `O editor do Flow reteve ${staleReferenceCount} referência(s) da unidade anterior; o próximo prompt foi bloqueado para evitar associação incorreta.`,
                 );
               }
-              generationSubmitted = true;
-              let releaseLock;
-              const lockWait = new Promise((resolve) => {
-                releaseLock = resolve;
-              });
-              const priorLock = submissionLock;
-              submissionLock = priorLock.then(() => lockWait);
-              let ticketInfo;
-              await priorLock;
-              try {
+              if (taskReferencePaths.length > 0) {
+                await attachReferenceImagesOneByOne(
+                  client,
+                  sessionId,
+                  extensionBridge,
+                  taskReferencePaths,
+                  settings,
+                  services.signal,
+                  step,
+                );
+                referencesAttached = true;
+                step(`${label}: referências específicas da unidade anexadas ao comando.`);
+              }
+
+              let selectedMedia = null;
+              const hasEngine = await evaluate(
+                client,
+                sessionId,
+                "Boolean(window.FlowAuto?.adapter?.generate)",
+              ).catch(() => false);
+              if (hasEngine && taskReferencePaths.length === 0) {
+                step(`${label}: gerando via FlowAuto adapter.`);
+                const baselineMedia = await generatedMediaOnPage(client, sessionId);
+                submissionBaselines.set(
+                  task.index,
+                  baselineMedia.map((item) => item.image.generatedImage.fifeUrl),
+                );
+                if (task.continuousItemId) {
+                  await saveVisualBatchItemBaseline(
+                    request,
+                    services,
+                    task.continuousItemId,
+                    "image",
+                    submissionBaselines.get(task.index),
+                  );
+                }
+                let ticketInfo;
                 await waitForPromptEditorStable(
                   client,
                   sessionId,
@@ -6923,11 +7166,16 @@ async function executeHandler(request, services) {
                   ),
                 };
                 try {
-                  await clickGenerateWithExtension(
+                  await clickGenerateAndConfirm(
+                    client,
+                    sessionId,
                     extensionBridge,
                     settings,
                     `${task.index}:${task.attempt}:engine-submit`,
+                    services.signal,
+                    request?.context?.locale,
                   );
+                  generationSubmitted = true;
                   await publishContinuousTaskState(task, "submitted", {
                     externalReceipt: `flow:image:${task.continuousItemId}`,
                   });
@@ -6941,223 +7189,231 @@ async function executeHandler(request, services) {
                   ).catch(() => undefined);
                   throw cause;
                 }
-              } finally {
-                releaseLock();
-              }
+                releaseSubmission();
 
-              let engineRes;
-              try {
-                engineRes = await evaluate(
-                  client,
-                  sessionId,
-                  `window.FlowAuto.adapter.waitForResults({
+                let engineRes;
+                try {
+                  engineRes = await evaluate(
+                    client,
+                    sessionId,
+                    `window.FlowAuto.adapter.waitForResults({
                     slots: ${JSON.stringify(maxImagesPerPrompt)},
                     bilhete: ${JSON.stringify(ticketInfo?.bilhete)}
                   })`,
-                );
-              } catch (cause) {
-                cause.externalEffectUncertain = true;
-                throw cause;
-              }
-
-              if (engineRes?.results && Array.isArray(engineRes.results)) {
-                const okResults = engineRes.results.filter((r) => !r.failed && r.url);
-                if (okResults.length > 0) {
-                  selectedMedia = okResults.map((r) => ({
-                    image: {
-                      generatedImage: {
-                        fifeUrl: r.url,
-                        mediaId: r.mediaUuid || r.tileId,
-                      },
-                    },
-                  }));
-                } else {
-                  const firstFail = engineRes.results.find((r) => r.failed);
-                  const reason = firstFail?.failedReason || "Falha na geração pelo FlowAuto.";
-                  const isModelLimit =
-                    firstFail?.errorType === "model_limit" ||
-                    /limite de uso|cota|quota|daily limit|limite di[áa]rio|n[ãa]o houve cobran[çc]a|voc[êe] chegou ao limite/i.test(
-                      reason,
-                    );
-                  if (isModelLimit) {
-                    const switched = await switchToNextImageModel("limite do modelo atingido");
-                    if (switched) {
-                      continue;
-                    }
-                    throw codedError("MODEL_LIMIT", reason);
-                  }
-                  if (
-                    firstFail?.errorType === "unusual_activity" ||
-                    /incomum|unusual/i.test(reason)
-                  ) {
-                    const err = codedError("RATE_LIMIT", reason, true);
-                    err.isUnusualActivity = true;
-                    err.retryAfterMs = 45000;
-                    throw err;
-                  }
-                  if (firstFail?.errorType === "rate_limit" || /rate/i.test(reason)) {
-                    const err = codedError("RATE_LIMIT", reason, true);
-                    err.retryAfterMs = 45000;
-                    throw err;
-                  }
-                  throw codedError("JOB_FAILED", reason);
-                }
-              }
-            }
-
-            if (!selectedMedia) {
-              await ensureAgentOff(client, sessionId, services.signal);
-              await ensureFlowModelAndRatio(
-                client,
-                sessionId,
-                extensionBridge,
-                {
-                  modelName: MODEL_LABELS[activePreferences.modelKey],
-                  outputCount: maxImagesPerPrompt,
-                  forceImageMode: true,
-                  settings,
-                  signal: services.signal,
-                  locale: request?.context?.locale,
-                },
-                step,
-              );
-              await waitForPromptEditorStable(
-                client,
-                sessionId,
-                settings.promptSelector || "",
-                services.signal,
-              );
-              await dynamicSleep(TIMING.HUMAN_PAUSE, services.signal);
-              const promptResult = await setPromptWithExtension(
-                extensionBridge,
-                task.prompt,
-                settings.promptSelector || "",
-                `${task.index}:${task.attempt}:prompt`,
-                services.signal,
-                client,
-                sessionId,
-              );
-              step(`${label}: Slate preenchido (${promptResult?.readbackLength || 0} caracteres).`);
-              await dynamicSleep(TIMING.HUMAN_READ, services.signal);
-              let generateState;
-              try {
-                generateState = await waitGenerateEnabled(
-                  client,
-                  sessionId,
-                  settings,
-                  services.signal,
-                  20_000,
-                );
-              } catch (cause) {
-                const disabledAfterPrompt =
-                  cause?.code === "OUTPUT_VALIDATION_FAILED" &&
-                  /aria-disabled=true/i.test(String(cause?.message || ""));
-                if (
-                  disabledAfterPrompt &&
-                  (await switchToNextImageModel("o modelo não habilitou a geração"))
-                ) {
-                  continue;
-                }
-                throw cause;
-              }
-              if (
-                referencePaths.length > 0 &&
-                (await attachedReferenceCount(client, sessionId)) < referencePaths.length
-              ) {
-                throw codedError(
-                  "OUTPUT_VALIDATION_FAILED",
-                  "A referência não está anexada ao comando do Flow. O prompt não foi enviado.",
-                );
-              }
-              step(`${label}: botão habilitado (${generateState?.text || "Criar"}).`);
-
-              const baselineMedia = await generatedMediaOnPage(client, sessionId);
-              const baselineUrls = baselineMedia.map((item) => item.image.generatedImage.fifeUrl);
-              submissionBaselines.set(task.index, baselineUrls);
-              if (task.continuousItemId) {
-                await saveVisualBatchItemBaseline(
-                  request,
-                  services,
-                  task.continuousItemId,
-                  "image",
-                  baselineUrls,
-                );
-              }
-              const responseTimeoutMs = requestTimeoutSeconds * 1000;
-              const reservation = responseTracker.reserve(responseTimeoutMs);
-              let stopPageFallback = false;
-              let pageFallback;
-              try {
-                generationSubmitted = true;
-                await clickGenerateWithExtension(
-                  extensionBridge,
-                  settings,
-                  `${task.index}:${task.attempt}:submit`,
-                );
-                await publishContinuousTaskState(task, "submitted", {
-                  externalReceipt: `flow:image:${task.continuousItemId}`,
-                });
-                await publishContinuousTaskState(task, "awaiting_result");
-                step(`${label}: envio real confirmado pela Browser Bridge.`);
-                pageFallback = waitForGeneratedMediaOnPage(
-                  client,
-                  sessionId,
-                  baselineUrls,
-                  services.signal,
-                  responseTimeoutMs,
-                  () => stopPageFallback,
-                );
-              } catch (cause) {
-                stopPageFallback = true;
-                reservation.cancel(cause);
-                await reservation.promise.catch(() => undefined);
-                throw cause;
-              }
-
-              let completed;
-              try {
-                completed = await Promise.race([
-                  reservation.promise.then((captured) => ({ source: "network", captured })),
-                  pageFallback.then((body) => ({
-                    source: "page",
-                    captured: { status: 200, bodyText: JSON.stringify(body) },
-                  })),
-                ]);
-              } catch (cause) {
-                if (cause?.code === "TIMEOUT" || cause?.code === "UPSTREAM_UNAVAILABLE") {
+                  );
+                } catch (cause) {
                   cause.externalEffectUncertain = true;
+                  throw cause;
                 }
-                throw cause;
-              }
-              stopPageFallback = true;
-              if (completed.source === "page") {
-                reservation.cancel(codedError("CANCELLED", "Fallback visual concluiu primeiro."));
-                await reservation.promise.catch(() => undefined);
-                step(`${label}: imagem nova detectada no projeto do Flow.`);
-              } else {
-                step(`${label}: resposta HTTP ${completed.captured?.status ?? "?"} capturada.`);
-              }
-              const captured = completed.captured;
-              let generation;
-              try {
-                generation = parseGenerationResponse(captured);
-              } catch (cause) {
-                if (
-                  cause?.code === "MODEL_LIMIT" &&
-                  (await switchToNextImageModel("limite do modelo atingido"))
-                )
-                  continue;
-                throw cause;
+
+                if (engineRes?.results && Array.isArray(engineRes.results)) {
+                  const okResults = engineRes.results.filter((r) => !r.failed && r.url);
+                  if (okResults.length > 0) {
+                    selectedMedia = okResults.map((r) => ({
+                      image: {
+                        generatedImage: {
+                          fifeUrl: r.url,
+                          mediaId: r.mediaUuid || r.tileId,
+                        },
+                      },
+                    }));
+                  } else {
+                    const firstFail = engineRes.results.find((r) => r.failed);
+                    const reason = firstFail?.failedReason || "Falha na geração pelo FlowAuto.";
+                    const isModelLimit =
+                      firstFail?.errorType === "model_limit" ||
+                      /limite de uso|cota|quota|daily limit|limite di[áa]rio|n[ãa]o houve cobran[çc]a|voc[êe] chegou ao limite/i.test(
+                        reason,
+                      );
+                    if (isModelLimit) {
+                      const switched = await switchToNextImageModel("limite do modelo atingido");
+                      if (switched) {
+                        continue;
+                      }
+                      throw codedError("MODEL_LIMIT", reason);
+                    }
+                    if (
+                      firstFail?.errorType === "unusual_activity" ||
+                      /incomum|unusual/i.test(reason)
+                    ) {
+                      const err = codedError("PROVIDER_SECURITY_CHALLENGE", reason, false);
+                      err.isUnusualActivity = true;
+                      err.retryAfterMs = 45000;
+                      throw err;
+                    }
+                    if (firstFail?.errorType === "rate_limit" || /rate/i.test(reason)) {
+                      const err = codedError("RATE_LIMIT", reason, true);
+                      err.retryAfterMs = 45000;
+                      throw err;
+                    }
+                    throw codedError("JOB_FAILED", reason);
+                  }
+                }
               }
 
-              selectedMedia = generation.media.slice(0, maxImagesPerPrompt);
-              if (generation.media.length > selectedMedia.length) {
-                step(
-                  `${label}: ${generation.media.length} mídias recebidas; ${selectedMedia.length} preservada(s) conforme maxImagesPerPrompt.`,
+              if (!selectedMedia) {
+                await ensureAgentOff(client, sessionId, services.signal);
+                await ensureFlowModelAndRatio(
+                  client,
+                  sessionId,
+                  extensionBridge,
+                  {
+                    modelName: MODEL_LABELS[activePreferences.modelKey],
+                    outputCount: maxImagesPerPrompt,
+                    forceImageMode: true,
+                    settings,
+                    signal: services.signal,
+                    locale: request?.context?.locale,
+                  },
+                  step,
                 );
+                await waitForPromptEditorStable(
+                  client,
+                  sessionId,
+                  settings.promptSelector || "",
+                  services.signal,
+                );
+                await dynamicSleep(TIMING.HUMAN_PAUSE, services.signal);
+                const promptResult = await setPromptWithExtension(
+                  extensionBridge,
+                  task.prompt,
+                  settings.promptSelector || "",
+                  `${task.index}:${task.attempt}:prompt`,
+                  services.signal,
+                  client,
+                  sessionId,
+                );
+                step(
+                  `${label}: Slate preenchido (${promptResult?.readbackLength || 0} caracteres).`,
+                );
+                await dynamicSleep(TIMING.HUMAN_READ, services.signal);
+                let generateState;
+                try {
+                  generateState = await waitGenerateEnabled(
+                    client,
+                    sessionId,
+                    settings,
+                    services.signal,
+                    20_000,
+                  );
+                } catch (cause) {
+                  const disabledAfterPrompt =
+                    cause?.code === "OUTPUT_VALIDATION_FAILED" &&
+                    /aria-disabled=true/i.test(String(cause?.message || ""));
+                  if (
+                    disabledAfterPrompt &&
+                    (await switchToNextImageModel("o modelo não habilitou a geração"))
+                  ) {
+                    continue;
+                  }
+                  throw cause;
+                }
+                if (
+                  taskReferencePaths.length > 0 &&
+                  (await attachedReferenceCount(client, sessionId)) !== taskReferencePaths.length
+                ) {
+                  throw codedError(
+                    "OUTPUT_VALIDATION_FAILED",
+                    `O Flow não confirmou todas as ${taskReferencePaths.length} referências da unidade. O prompt não foi enviado.`,
+                  );
+                }
+                step(`${label}: botão habilitado (${generateState?.text || "Criar"}).`);
+
+                const baselineMedia = await generatedMediaOnPage(client, sessionId);
+                const baselineUrls = baselineMedia.map((item) => item.image.generatedImage.fifeUrl);
+                submissionBaselines.set(task.index, baselineUrls);
+                if (task.continuousItemId) {
+                  await saveVisualBatchItemBaseline(
+                    request,
+                    services,
+                    task.continuousItemId,
+                    "image",
+                    baselineUrls,
+                  );
+                }
+                const responseTimeoutMs = requestTimeoutSeconds * 1000;
+                const reservation = responseTracker.reserve(responseTimeoutMs);
+                let stopPageFallback = false;
+                let pageFallback;
+                try {
+                  await clickGenerateAndConfirm(
+                    client,
+                    sessionId,
+                    extensionBridge,
+                    settings,
+                    `${task.index}:${task.attempt}:submit`,
+                    services.signal,
+                    request?.context?.locale,
+                  );
+                  generationSubmitted = true;
+                  await publishContinuousTaskState(task, "submitted", {
+                    externalReceipt: `flow:image:${task.continuousItemId}`,
+                  });
+                  await publishContinuousTaskState(task, "awaiting_result");
+                  step(`${label}: envio real confirmado pela Browser Bridge.`);
+                  pageFallback = waitForGeneratedMediaOnPage(
+                    client,
+                    sessionId,
+                    baselineUrls,
+                    services.signal,
+                    responseTimeoutMs,
+                    () => stopPageFallback,
+                  );
+                  releaseSubmission();
+                } catch (cause) {
+                  stopPageFallback = true;
+                  reservation.cancel(cause);
+                  await reservation.promise.catch(() => undefined);
+                  throw cause;
+                }
+
+                let completed;
+                try {
+                  completed = await Promise.race([
+                    reservation.promise.then((captured) => ({ source: "network", captured })),
+                    pageFallback.then((body) => ({
+                      source: "page",
+                      captured: { status: 200, bodyText: JSON.stringify(body) },
+                    })),
+                  ]);
+                } catch (cause) {
+                  if (cause?.code === "TIMEOUT" || cause?.code === "UPSTREAM_UNAVAILABLE") {
+                    cause.externalEffectUncertain = true;
+                  }
+                  throw cause;
+                }
+                stopPageFallback = true;
+                if (completed.source === "page") {
+                  reservation.cancel(codedError("CANCELLED", "Fallback visual concluiu primeiro."));
+                  await reservation.promise.catch(() => undefined);
+                  step(`${label}: imagem nova detectada no projeto do Flow.`);
+                } else {
+                  step(`${label}: resposta HTTP ${completed.captured?.status ?? "?"} capturada.`);
+                }
+                const captured = completed.captured;
+                let generation;
+                try {
+                  generation = parseGenerationResponse(captured);
+                } catch (cause) {
+                  if (
+                    cause?.code === "MODEL_LIMIT" &&
+                    (await switchToNextImageModel("limite do modelo atingido"))
+                  )
+                    continue;
+                  throw cause;
+                }
+
+                selectedMedia = generation.media.slice(0, maxImagesPerPrompt);
+                if (generation.media.length > selectedMedia.length) {
+                  step(
+                    `${label}: ${generation.media.length} mídias recebidas; ${selectedMedia.length} preservada(s) conforme maxImagesPerPrompt.`,
+                  );
+                }
               }
+              return materializeImageResults(task, selectedMedia);
+            } finally {
+              releaseSubmission();
             }
-            return materializeImageResults(task, selectedMedia);
           }
         })(),
       };
@@ -7293,20 +7549,15 @@ async function executeHandler(request, services) {
           }
           step(`Fila: prompt ${index + 1} persistido localmente antes de avançar.`);
           await services.publishPartial?.({
-            values: {
-              images: singleImageOutput ? files[0] : files,
-              ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
-            },
+            values: imageOutputValues(request, files, activeProjectUrl),
             artifacts,
-            itemUpdates: value.map((result, variantIndex) =>
-              mediaItemUpdate({
-                key: `prompt:${index}`,
-                variantKey: `image:${variantIndex}`,
-                outputPort: "images",
-                input: task.prompt,
-                value: result.file,
-              }),
-            ),
+            itemUpdates: mediaItemUpdatesForPrompt({
+              continuous: continuousClaims !== undefined,
+              index,
+              outputPort: "images",
+              input: task.prompt,
+              value,
+            }),
             progress: completedPromptIndexes.size / prompts.length,
             message: `Prompt ${index + 1} de ${prompts.length} capturado.`,
           });
@@ -7377,10 +7628,7 @@ async function executeHandler(request, services) {
 
     return {
       status: "success",
-      values: {
-        images: singleImageOutput ? files[0] : files,
-        project_url: activeProjectUrl,
-      },
+      values: imageOutputValues(request, files, activeProjectUrl),
       artifacts,
       usage: { provider: "Google Labs / Flow", outputUnits: files.length, unit: "image" },
       logs: [
@@ -7432,6 +7680,12 @@ async function executeHandler(request, services) {
       Boolean(cause?.retryable),
       cause?.retryAfterMs,
     );
+    if (cause?.code === "PROVIDER_SECURITY_CHALLENGE") {
+      errorResponse.recovery = {
+        externalEffect: "none",
+        intervention: "provider_security_challenge",
+      };
+    }
     if (files.length > 0) {
       if (isVideoCapability) {
         errorResponse.partialValues = {
@@ -7439,10 +7693,7 @@ async function executeHandler(request, services) {
           ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
         };
       } else {
-        errorResponse.partialValues = {
-          images: singleImageOutput ? files[0] : files,
-          ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
-        };
+        errorResponse.partialValues = imageOutputValues(request, files, activeProjectUrl);
       }
     } else if (activeProjectUrl) {
       errorResponse.partialValues = { project_url: activeProjectUrl };
@@ -7490,6 +7741,8 @@ export const __test = {
   uploadReferenceImages,
   waitReferenceUploadReady,
   referenceUploadStateExpression,
+  existingReferenceSelectionExpression,
+  attachExistingReferenceImages,
   isFlowHost,
   normalizePrompts,
   safeFilename,
@@ -7545,12 +7798,15 @@ export const __test = {
   actionableOutputPort,
   normalizeItemActionRequest,
   mediaItemUpdate,
+  mediaItemUpdatesForPrompt,
   artifactNamespace,
   flowMediaMessage,
   validateImageArtifactBytes,
   validateVideoArtifactBytes,
   nextImageModelFallback,
   normalizeReferenceImages,
+  referenceImagesForSourceItem,
+  referenceImagesForCurrentItem,
   requestsSingleImage,
   requestsSingleVideo,
   selectAnimationIndexes,
@@ -7590,6 +7846,9 @@ export const __test = {
   RE_SOBRECARGA,
   ensureAgentOff,
   triggerTrustedReactClick,
+  attachedReferenceCount,
+  clickGenerateWithExtension,
+  clickGenerateAndConfirm,
   decodificarBatchExecute,
   extrairMidiasRpc,
   createCredentialsTracker,

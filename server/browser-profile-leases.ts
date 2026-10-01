@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { devProbe } from "./dev-monitor/client";
+import { randomUUID, createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 
 export type BrowserProfileLeaseOwnerType = "job" | "invocation";
@@ -124,7 +125,28 @@ export class BrowserProfileLeaseStore {
       return { acquired: true as const, lease: this.get(profileId)! };
     });
 
-    return acquire.immediate();
+    const result = acquire.immediate();
+    const probe = devProbe("profiles", "profile-leases");
+    if (probe.enabled)
+      probe.emit({
+        kind: result.acquired ? "lease.acquired" : "lease.rejected",
+        entity: {
+          type: result.acquired ? "lease" : "lease_rejection",
+          id: createHash("sha256").update(result.lease.leaseToken).digest("hex"),
+        },
+        correlation: {
+          profileId,
+          ...(input.ownerType === "job" ? { pluginJobId: ownerId } : { invocationId: ownerId }),
+          ...(pluginId ? { pluginId } : {}),
+        },
+        payload: {
+          status: result.acquired ? "acquired" : "rejected",
+          expiresAt,
+          ownerId,
+          ownerType: input.ownerType,
+        },
+      });
+    return result;
   }
 
   heartbeat(profileId: string, leaseToken: string, now = new Date(), ttlMs = 30_000) {
@@ -142,15 +164,38 @@ export class BrowserProfileLeaseStore {
   }
 
   release(profileId: string, leaseToken: string) {
-    return this.database
+    const changes = this.database
       .prepare("DELETE FROM browser_profile_leases WHERE profile_id = ? AND lease_token = ?")
       .run(profileId, leaseToken).changes;
+    const probe = devProbe("profiles", "profile-leases");
+    if (changes && probe.enabled)
+      probe.emit({
+        kind: "lease.released",
+        entity: { type: "lease", id: createHash("sha256").update(leaseToken).digest("hex") },
+        correlation: { profileId },
+        payload: { status: "released" },
+      });
+    return changes;
   }
 
   releaseByOwner(ownerType: BrowserProfileLeaseOwnerType, ownerId: string) {
-    return this.database
+    const probe = devProbe("profiles", "profile-leases");
+    const leases = probe.enabled
+      ? (this.database
+          .prepare("SELECT * FROM browser_profile_leases WHERE owner_type = ? AND owner_id = ?")
+          .all(ownerType, ownerId) as BrowserProfileLeaseRow[])
+      : [];
+    const changes = this.database
       .prepare("DELETE FROM browser_profile_leases WHERE owner_type = ? AND owner_id = ?")
       .run(ownerType, ownerId).changes;
+    for (const lease of leases)
+      probe.emit({
+        kind: "lease.released",
+        entity: { type: "lease", id: createHash("sha256").update(lease.lease_token).digest("hex") },
+        correlation: { profileId: lease.profile_id },
+        payload: { status: "released" },
+      });
+    return changes;
   }
 
   recoverExpired(now = new Date()) {

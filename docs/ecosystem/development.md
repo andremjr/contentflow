@@ -13,6 +13,8 @@ O contrato normativo está em [`protocol.md`](protocol.md) e [`../CONTENT_CONTRA
 7. Faça jobs, cancelamento e efeitos externos idempotentes.
 8. Teste contrato, sandbox e execução real antes de distribuir.
 
+Após as validações locais, conecte o plugin ao aplicativo e execute o [cenário vertical](../DEVELOPMENT.md) do Método que usa a capability. Confira o resultado na interface e a delivery persistida; teste de contrato isolado não comprova a integração real.
+
 ## Shapes
 
 - Texto inline: `text/one/inline` ou `text/many/inline`.

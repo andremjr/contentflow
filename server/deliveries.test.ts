@@ -204,6 +204,256 @@ test("preserva a identidade da entrega quando itens operacionais mudam de posiç
   }
 });
 
+test("materializa relações declaradas e propaga linhagem para outputs derivados", () => {
+  const relationShape: ValueShape = {
+    kind: "record",
+    cardinality: "many",
+    fields: [
+      {
+        id: "scenes",
+        label: "Cenas",
+        key: "scene_ids",
+        shape: { kind: "control", control: "identifier", cardinality: "many" },
+        required: true,
+        referencesInputId: "scene-prompts",
+      },
+    ],
+  };
+  const relationBlock: ActionBlock = {
+    id: "characters",
+    type: "CRIAR",
+    operator: "IA",
+    inputs: [],
+    outputs: [
+      {
+        id: "relations",
+        label: "Personagens",
+        key: "characters",
+        shape: relationShape,
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 0,
+  };
+  const execution = executionFor("assets", relationBlock);
+  execution.blocks[0].values = { characters: [{ scene_ids: ["scene-1", "scene-3"] }] };
+  recordBlockDeliveries(execution, relationBlock, execution.blocks[0].values, "completed");
+  const characterItem = execution.deliveries?.[0].items[0];
+  assert.deepEqual(characterItem?.references, [
+    { itemId: "scene-1", role: "scene_ids" },
+    { itemId: "scene-3", role: "scene_ids" },
+  ]);
+
+  const imageBlock: ActionBlock = {
+    id: "character-images",
+    type: "CRIAR",
+    operator: "IA",
+    inputs: [],
+    outputs: [
+      {
+        id: "images",
+        label: "Imagens",
+        key: "images",
+        shape: {
+          kind: "content",
+          family: "image",
+          cardinality: "many",
+          representation: "artifact",
+        },
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 1,
+  };
+  execution.methodSnapshot.blocks.push(imageBlock);
+  const image = {
+    id: "image-a",
+    name: "a.png",
+    mimeType: "image/png",
+    size: 1,
+    url: "/api/files/a.png",
+  };
+  execution.blocks.push({
+    blockId: imageBlock.id,
+    status: "completed",
+    values: {},
+    attempt: 1,
+    items: [
+      {
+        id: "work-character-a",
+        order: 0,
+        input: { scene_ids: ["scene-1", "scene-3"] },
+        output: image,
+        status: "completed",
+        attempt: 1,
+        attempts: [],
+        provenance: {
+          origin: "block_input",
+          sourceDeliveryItemId: characterItem?.id,
+        },
+      },
+    ],
+  });
+  execution.blocks[1].values = { images: [image] };
+  recordBlockDeliveries(execution, imageBlock, execution.blocks[1].values, "completed");
+  assert.deepEqual(execution.deliveries?.[1].items[0].references, [
+    { itemId: characterItem?.id, role: "derived_from" },
+  ]);
+});
+
+test("propaga a mesma linhagem para todas as variantes produzidas por uma unidade", () => {
+  const block: ActionBlock = {
+    id: "character-images",
+    type: "CRIAR",
+    operator: "IA",
+    inputs: [],
+    outputs: [
+      {
+        id: "images",
+        label: "Imagens",
+        key: "images",
+        shape: {
+          kind: "content",
+          family: "image",
+          cardinality: "many",
+          representation: "artifact",
+        },
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 0,
+  };
+  const execution = executionFor("assets", block);
+  const images = ["a", "b"].map((id) => ({
+    id: `image-${id}`,
+    name: `${id}.png`,
+    mimeType: "image/png",
+    size: 1,
+    url: `/api/files/${id}.png`,
+  }));
+  execution.blocks[0].items = [
+    {
+      id: "work-character",
+      order: 0,
+      input: { name: "Ana" },
+      output: images,
+      status: "completed",
+      attempt: 1,
+      attempts: [],
+      provenance: { origin: "block_input", sourceDeliveryItemId: "character-item" },
+    },
+  ];
+  execution.blocks[0].values = { images };
+
+  const [delivery] = recordBlockDeliveries(
+    execution,
+    block,
+    execution.blocks[0].values,
+    "completed",
+  );
+
+  assert.equal(delivery.items.length, 2);
+  assert.equal(new Set(delivery.items.map((item) => item.id)).size, 2);
+  assert.deepEqual(
+    delivery.items.map((item) => item.sourceExecutionItemId),
+    ["work-character", "work-character"],
+  );
+  assert.deepEqual(
+    delivery.items.map((item) => item.references),
+    [
+      [{ itemId: "character-item", role: "derived_from" }],
+      [{ itemId: "character-item", role: "derived_from" }],
+    ],
+  );
+});
+
+test("preserva a linhagem canônica quando existe item incremental duplicado do plugin", () => {
+  const block: ActionBlock = {
+    id: "character-images",
+    type: "CRIAR",
+    operator: "IA",
+    inputs: [],
+    outputs: [
+      {
+        id: "images",
+        label: "Imagens",
+        key: "images",
+        shape: {
+          kind: "content",
+          family: "image",
+          cardinality: "many",
+          representation: "artifact",
+        },
+        required: true,
+      },
+    ],
+    parameters: [],
+    order: 0,
+  };
+  const execution = executionFor("assets", block);
+  const images = ["ana", "beto"].map((id) => ({
+    id: `image-${id}`,
+    name: `${id}.png`,
+    mimeType: "image/png",
+    size: 1,
+    url: `/api/files/${id}.png`,
+  }));
+  execution.blocks[0].items = [
+    ...images.map((image, order) => ({
+      id: `work-${image.id}`,
+      order,
+      input: { name: image.name },
+      output: image,
+      status: "completed" as const,
+      attempt: 1,
+      attempts: [],
+      provenance: {
+        origin: "block_input" as const,
+        sourceDeliveryItemId: `character-${order + 1}`,
+      },
+    })),
+    {
+      id: "stale-plugin-duplicate",
+      order: 2,
+      kind: "derived",
+      input: { name: "Ana" },
+      output: images[0],
+      status: "completed",
+      attempt: 1,
+      attempts: [],
+      provenance: { origin: "plugin_derived" },
+      pluginCorrelation: {
+        key: "legacy-image-1",
+        outputPort: "images",
+        outputKey: "images",
+      },
+    },
+  ];
+  execution.blocks[0].values = { images };
+
+  const [delivery] = recordBlockDeliveries(
+    execution,
+    block,
+    execution.blocks[0].values,
+    "completed",
+  );
+
+  assert.deepEqual(
+    delivery.items.map((item) => item.sourceExecutionItemId),
+    ["work-image-ana", "work-image-beto"],
+  );
+  assert.deepEqual(
+    delivery.items.map((item) => item.references),
+    [
+      [{ itemId: "character-1", role: "derived_from" }],
+      [{ itemId: "character-2", role: "derived_from" }],
+    ],
+  );
+});
+
 test("usa a primeira imagem do output concluído como thumbnail do card", () => {
   const block: ActionBlock = {
     id: "create-thumbnails",

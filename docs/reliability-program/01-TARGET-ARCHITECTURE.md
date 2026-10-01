@@ -1,5 +1,7 @@
 # Arquitetura-alvo do Reliability Program
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../ARCHITECTURE.md), o [estado e limitações](../CURRENT_STATE.md) e o [processo de desenvolvimento](../DEVELOPMENT.md).
+
 ## Propósito e relação com a arquitetura vigente
 
 Este documento traduz a [`Constituição de produto`](00-PRODUCT-CONSTITUTION.md) em fronteiras técnicas desejadas. [`../ARCHITECTURE.md`](../ARCHITECTURE.md) continua sendo a fonte normativa do domínio e do comportamento vigente.

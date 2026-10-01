@@ -55,19 +55,23 @@ type ControlShape = {
 type RecordShape = {
   kind: "record";
   cardinality: "one" | "many";
+  open?: true;
   fields: Array<{
     id: string;
     label: string;
     key: string;
     shape: ContentShape | ControlShape;
     required: boolean;
+    referencesInputId?: string;
   }>;
 };
 
 type ValueShape = ContentShape | ControlShape | RecordShape;
 ```
 
-`approval` e seleção editorial continuam sendo controle do `VALIDAR`. IDs, datas, URLs administrativas, parâmetros, estado e configuração de plugin não se tornam conteúdo. Registros descrevem estrutura e não uma quinta família.
+`approval` e seleção editorial continuam sendo controle do `VALIDAR`. IDs, datas, URLs administrativas, parâmetros, estado e configuração de plugin não se tornam conteúdo. Registros descrevem estrutura e não uma quinta família. `open: true` existe somente em portas polimórficas de plugin: o Método continua declarando os campos concretos da entrega e a porta aceita essa estrutura sem inferir significado por nomes mágicos.
+
+`referencesInputId` só é válido em campo `identifier`. Ele declara que cada ID desse campo deve pertencer aos itens concedidos à entrada indicada. O núcleo valida essa relação, persiste-a entre IDs de itens e propaga a proveniência; ele não interpreta o significado editorial da relação.
 
 ## Um contrato em todas as fronteiras
 
@@ -81,7 +85,7 @@ Cada porta de plugin declara exatamente um `shape`. Não existem `acceptedTypes`
 
 ## Compatibilidade
 
-Dois shapes são compatíveis somente quando:
+Como regra, dois shapes são compatíveis somente quando:
 
 - possuem o mesmo `kind` e a mesma cardinalidade;
 - conteúdos possuem a mesma família e representação material compatível;
@@ -91,6 +95,20 @@ Dois shapes são compatíveis somente quando:
 
 Não há promoção implícita, inferência por label, coerção de escalar para coleção, seleção da primeira porta nem conversão automática de arquivo.
 
+### Contração explícita de texto na entrada
+
+Existe uma única operação de consumo entre cardinalidades: uma entrada `text/one/inline` (ou `either`) pode ligar-se a uma saída `text/many/inline`. Nesse caso, a saída continua sendo uma delivery `many`, com um ID por item, mas o runtime apresenta ao executor um único texto, unindo os itens em ordem com uma linha em branco. Para aquele Bloco, o valor recebido é uma unidade escalar; isso não reescreve a delivery de origem nem apaga seus IDs, e os itens completos continuam disponíveis em `inputDeliveries` para correlação estruturada.
+
+A direção inversa não existe. A regra também não se aplica a imagem, áudio, vídeo, artifacts, controles ou registros. Converter várias mídias, selecionar um item ou produzir outro formato exige um Bloco/capability explícito.
+
+## Saídas estruturadas e relações semânticas
+
+O usuário escreve a intenção editorial do Bloco. Quando a saída exige `text/many` ou `record/many`, o executor é responsável por acrescentar a instrução técnica de serialização apropriada à ferramenta, analisar a resposta e devolver exatamente o valor tipado da porta. Texto introdutório, Markdown ou comentários não podem ser promovidos silenciosamente a itens.
+
+O núcleo valida cardinalidade, estrutura, campos obrigatórios e IDs concedidos antes de aceitar a resposta. Ele não executa análise semântica. Uma associação como “personagem X aparece nas cenas A e C” deve ser produzida por um Bloco semanticamente capaz em um campo `identifier` com `referencesInputId`. O plugin consumidor recebe os registros, as deliveries e seus IDs; cabe a ele traduzir a associação validada para o mecanismo específico da ferramenta, como anexar imagens de referência, aplicar legendas ou posicionar assets.
+
+Quando uma capability é orquestrada item a item sobre uma saída `many`, cada unidade pode devolver um valor atômico ou várias variantes atômicas compatíveis com o mesmo shape. O núcleo valida cada variante, agrega todas na delivery e preserva em cada uma a mesma linhagem da unidade e do item de origem. Uma lista devolvida por uma unidade não autoriza misturar famílias, estruturas inválidas ou IDs não concedidos.
+
 ## Múltiplas famílias
 
 Um Bloco que produz famílias diferentes usa portas diferentes. Exemplo:
@@ -98,8 +116,24 @@ Um Bloco que produz famílias diferentes usa portas diferentes. Exemplo:
 ```json
 {
   "outputs": [
-    { "key": "images", "shape": { "kind": "content", "family": "image", "cardinality": "many", "representation": "artifact" } },
-    { "key": "videos", "shape": { "kind": "content", "family": "video", "cardinality": "many", "representation": "artifact" } }
+    {
+      "key": "images",
+      "shape": {
+        "kind": "content",
+        "family": "image",
+        "cardinality": "many",
+        "representation": "artifact"
+      }
+    },
+    {
+      "key": "videos",
+      "shape": {
+        "kind": "content",
+        "family": "video",
+        "cardinality": "many",
+        "representation": "artifact"
+      }
+    }
   ]
 }
 ```
@@ -111,4 +145,3 @@ Não existe porta genérica de assets ou mixed media.
 `presentation` escolhe apenas um renderer permitido. Ele não altera família, cardinalidade, representação ou formatos. Restrições MIME e extensões pertencem a `ContentShape.formats`.
 
 Formulários humanos e viewers são derivados do mesmo `ValueShape` usado por plugins. Nenhuma UI cria um tipo semântico paralelo.
-

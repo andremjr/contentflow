@@ -3,6 +3,21 @@ import test from "node:test";
 
 import { translate } from "./app-preferences";
 
+test("translates the local service connection state", () => {
+  const phrase =
+    "Sem conexão com o serviço local. Seus dados salvos estão preservados; tentando reconectar…";
+
+  assert.equal(translate(phrase, "pt-BR"), phrase);
+  assert.equal(
+    translate(phrase, "en"),
+    "No connection to the local service. Your saved data is preserved; trying to reconnect…",
+  );
+  assert.equal(
+    translate(phrase, "es"),
+    "Sin conexión con el servicio local. Tus datos guardados están preservados; intentando reconectar…",
+  );
+});
+
 test("translates explicit VALIDAR target and plugin binding controls", () => {
   for (const phrase of [
     "Saída enviada ao plugin",

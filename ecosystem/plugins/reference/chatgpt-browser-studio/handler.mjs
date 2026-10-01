@@ -223,11 +223,78 @@ function expandOutlinePrompt(template, request, block, index, total, base) {
 }
 
 function buildParts(request) {
+  const structuredRecords = (request?.outputContract ?? []).some(
+    (field) => field?.shape?.kind === "record" && field?.shape?.cardinality === "many",
+  );
+  const textCollection = (request?.outputContract ?? []).some(
+    (field) =>
+      field?.shape?.kind === "content" &&
+      field.shape.family === "text" &&
+      field.shape.cardinality === "many",
+  );
   return [
     buildInstructionPrompt(request, [
-      "FORMATO OBRIGATÓRIO: entregue o conteúdo diretamente como texto, sem criar arquivos ou canvas.",
+      structuredRecords
+        ? recordOutputInstruction(request)
+        : textCollection
+          ? "FORMATO OBRIGATÓRIO: responda somente com um array JSON válido de strings, com exatamente um item por unidade pedida, sem Markdown, numeração, comentários, introdução ou texto fora do JSON."
+          : "FORMATO OBRIGATÓRIO: entregue o conteúdo diretamente como texto, sem criar arquivos ou canvas.",
     ]),
   ];
+}
+
+function recordOutputInstruction(request) {
+  const contracts = (request?.outputContract ?? []).filter(
+    (field) => field?.shape?.kind === "record",
+  );
+  const fields = contracts[0]?.shape?.fields ?? [];
+  const schema = fields.map((field) => ({
+    key: field.key,
+    required: field.required,
+    type:
+      field.shape.kind === "content"
+        ? `${field.shape.family}/${field.shape.cardinality}`
+        : `${field.shape.control}/${field.shape.cardinality}`,
+    ...(field.referencesInputId ? { referencesInputId: field.referencesInputId } : {}),
+  }));
+  const example = Object.fromEntries(
+    fields.map((field) => [
+      field.key,
+      field.shape.cardinality === "many"
+        ? field.referencesInputId
+          ? ["ID_EXATO_DO_ITEM_DE_ORIGEM"]
+          : ["valor"]
+        : field.shape.kind === "control" && field.shape.control === "number"
+          ? 1
+          : field.shape.kind === "control" && field.shape.control === "boolean"
+            ? true
+            : "valor",
+    ]),
+  );
+  const referencedInputIds = new Set(
+    contracts.flatMap((contract) =>
+      contract.shape.fields.flatMap((field) =>
+        field.referencesInputId ? [field.referencesInputId] : [],
+      ),
+    ),
+  );
+  const sourceItems = (request?.inputDeliveries ?? [])
+    .filter((delivery) => referencedInputIds.has(delivery.inputId))
+    .map((delivery) => ({
+      inputId: delivery.inputId,
+      items: (delivery.items ?? []).map((item) => ({ id: item.id, value: item.value })),
+    }));
+  return [
+    "FORMATO OBRIGATÓRIO: responda somente com um array JSON válido de objetos, sem Markdown, comentários ou texto fora do JSON.",
+    "Use exatamente as chaves JSON declaradas abaixo. Não traduza as chaves, não use os rótulos visuais e não devolva o schema como conteúdo.",
+    `CAMPOS DE CADA OBJETO:\n${JSON.stringify(schema)}`,
+    `EXEMPLO APENAS ESTRUTURAL — substitua os valores, mas preserve exatamente as chaves:\n${JSON.stringify([example])}`,
+    sourceItems.length
+      ? `ITENS DE ORIGEM COM IDs CANÔNICOS:\n${JSON.stringify(sourceItems)}\nCampos referencesInputId devem conter somente IDs exatos da entrada indicada.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function buildSearchPrompt(request, _deep = false) {
@@ -391,6 +458,23 @@ function parseJsonObject(text) {
   }
 }
 
+function parseJsonArray(text) {
+  const stripped = stripCodeFence(text);
+  try {
+    const parsed = JSON.parse(stripped);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseJsonStringArray(text) {
+  const parsed = parseJsonArray(text);
+  return parsed?.every((item) => typeof item === "string" && item.trim())
+    ? parsed.map((item) => item.trim())
+    : undefined;
+}
+
 function parseSelectedItemId(text, request) {
   const items = request?.context?.selectedCollection?.items ?? [];
   const parsed = parseJsonObject(text);
@@ -498,10 +582,37 @@ function generationResponseValues(result, responses, request) {
   const fields = request?.outputContract ?? [];
   const values = {};
   for (const field of fields) {
-    if (field?.key === "parts") values[field.portKey] = responses.map((response) => response.text);
-    else if (["list", "multiselect"].includes(field?.type))
+    if (field?.shape?.kind === "record" && field?.shape?.cardinality === "many") {
+      const records = parseJsonArray(result);
+      if (
+        !records ||
+        !records.every((item) => item && typeof item === "object" && !Array.isArray(item))
+      )
+        throw codedError(
+          "OUTPUT_VALIDATION_FAILED",
+          "A resposta não contém um array JSON válido de registros.",
+          true,
+        );
+      values[field.portKey] = records;
+    } else if (
+      field?.shape?.kind === "content" &&
+      field.shape.family === "text" &&
+      field.shape.cardinality === "many"
+    ) {
+      const items = parseJsonStringArray(result);
+      if (!items)
+        throw codedError(
+          "OUTPUT_VALIDATION_FAILED",
+          "A resposta não contém um array JSON válido de textos.",
+          true,
+        );
+      values[field.portKey] = items;
+    } else if (["list", "multiselect"].includes(field?.type)) {
       values[field.portKey] = textAsList(result);
-    else if (field?.type === "number") {
+    } else if (
+      (field?.shape?.kind === "control" && field?.shape?.control === "number") ||
+      field?.type === "number"
+    ) {
       values[field.portKey] = textAsFiniteNumber(result);
     } else values[field.portKey] = result;
   }
@@ -537,7 +648,8 @@ function attachmentInput(request) {
   if (request?.capabilityId === "analyze-images-in-browser") return request?.inputs?.images;
   if (request?.capabilityId === "analyze-documents-in-browser") return request?.inputs?.documents;
   if (request?.capabilityId === "validate-content-in-browser") return request?.inputs?.content;
-  if (request?.capabilityId === "generate-text-in-browser") return request?.inputs?.attachments;
+  if (request?.capabilityId === "generate-text-in-browser")
+    return [request?.inputs?.attachments, request?.inputs?.documents];
   if (request?.capabilityId === "deep-research-in-browser") return request?.inputs?.context;
   if (request?.capabilityId === "generate-image-in-browser") return request?.inputs?.references;
   return undefined;
@@ -1083,16 +1195,43 @@ export function collectGeneratedImages(doc) {
   return [...unique.values()];
 }
 
+export function collectAssistantResponseNodes(doc, visible = () => true) {
+  const selectors = [
+    '[data-chatgpt-selection-message-id] [data-markdown-text-style="assistant-message"]',
+    '[data-content-search-unit-key$=":assistant"] [data-markdown-text-style="assistant-message"]',
+    '[data-message-author-role="assistant"] .markdown',
+    '[data-message-author-role="assistant"]',
+    'article[data-testid^="conversation-turn-"] .markdown',
+  ];
+  for (const selector of selectors) {
+    const nodes = [...doc.querySelectorAll(selector)].filter(visible);
+    if (nodes.length) return nodes;
+  }
+  return [];
+}
+
+export function countUserTurns(doc) {
+  for (const selector of [
+    '[data-message-author-role="user"]',
+    '[data-turn="user"]',
+    '[data-user-message-bubble="true"]',
+  ]) {
+    const count = doc.querySelectorAll(selector).length;
+    if (count) return count;
+  }
+  return 0;
+}
+
 const PAGE_HELPERS = String.raw`
 function cfVisible(el){if(!el||!(el instanceof Element))return false;const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>8&&r.height>8&&r.bottom>0&&r.right>0}
 function cfText(el){return [el?.innerText,el?.textContent,el?.getAttribute?.('aria-label'),el?.getAttribute?.('data-testid')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()}
 function cfGenerating(){const stopPattern=new RegExp(${JSON.stringify(GENERATION_STOP_PATTERN.source)},'i');return [...document.querySelectorAll('button')].some(el=>cfVisible(el)&&(stopPattern.test(cfText(el))||el.getAttribute('data-testid')==='stop-button'))}
 function cfVoiceReady(){const voicePattern=new RegExp(${JSON.stringify(VOICE_READY_PATTERN.source)},'i');return [...document.querySelectorAll('button')].some(el=>cfVisible(el)&&!el.disabled&&el.getAttribute('aria-disabled')!=='true'&&voicePattern.test(cfText(el)))}
 function cfPrompt(){const selectors=['#prompt-textarea','[contenteditable="true"][role="textbox"]','[role="textbox"][aria-label*="Chat" i]'];for(const s of selectors){const el=[...document.querySelectorAll(s)].find(cfVisible);if(el)return el}return null}
-function cfAssistantNodes(){const selectors=['[data-message-author-role="assistant"] .markdown','[data-message-author-role="assistant"]','article[data-testid^="conversation-turn-"] .markdown'];for(const s of selectors){const n=[...document.querySelectorAll(s)].filter(cfVisible);if(n.length)return n}return []}
+function cfAssistantNodes(){return (${collectAssistantResponseNodes.toString()})(document,cfVisible)}
 function cfGeneratedImages(){return (${collectGeneratedImages.toString()})(document)}
 function cfResolveComparison(){const body=document.body?.innerText||'';if(!/giving feedback on a new version|qual resposta voc[êe] prefere|dando feedback sobre uma nova vers[ãa]o/i.test(body))return false;const button=[...document.querySelectorAll('button')].find(el=>cfVisible(el)&&/prefer this response|prefiro esta resposta|choose this response|escolher esta resposta/i.test(cfText(el)));if(!button)return false;button.click();return true}
-function cfUserTurnCount(){const authored=document.querySelectorAll('[data-message-author-role="user"]').length;if(authored)return authored;return document.querySelectorAll('[data-turn="user"]').length}
+function cfUserTurnCount(){return (${countUserTurns.toString()})(document)}
 function cfResponseState(){const comparisonResolved=cfResolveComparison(),nodes=cfAssistantNodes(),entries=nodes.map(el=>({text:(el.innerText||el.textContent||'').trim(),links:[...el.querySelectorAll('a[href]')].map(a=>({href:a.href,label:(a.innerText||a.textContent||'').trim()})).filter(x=>/^https:\/\//i.test(x.href))})).filter(x=>x.text);return{texts:entries.map(x=>x.text),entries,stop:cfGenerating(),userTurnCount:cfUserTurnCount(),voiceReady:cfVoiceReady(),completedActionCount:document.querySelectorAll('button[data-testid="copy-turn-action-button"]').length,comparisonResolved,bodyHint:(document.body?.innerText||'').slice(0,6000)}}
 `;
 
@@ -2354,7 +2493,7 @@ async function executeHandler(request, services) {
           responses.map((response) => response.text).join("\n\n"),
         );
         await services.publishPartial?.({
-          values: { result: partialText, parts: responses.map((response) => response.text) },
+          values: generationResponseValues(partialText, responses, request),
           progress: (index + 1) / parts.length,
           message: `Resposta ${index + 1} de ${parts.length} capturada.`,
         });
@@ -2485,6 +2624,7 @@ export const __test = {
   prepareProfileSession,
   searchResponseValues,
   generationResponseValues,
+  recordOutputInstruction,
   imageResponseValues,
   generatedImagesAfterBaseline,
   isCdpConnectionLoss,

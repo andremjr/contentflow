@@ -233,3 +233,142 @@ test("throws a typed contract error for boundary callers", () => {
       error instanceof PluginResponseContractError && error.code === "OUTPUT_CONTRACT_VIOLATION",
   );
 });
+
+test("aceita somente referências a IDs concedidos pela entrada declarada", () => {
+  const outputContract = [
+    contract({
+      key: "characters",
+      portKey: "records",
+      shape: {
+        kind: "record",
+        cardinality: "many",
+        fields: [
+          {
+            id: "name",
+            key: "name",
+            label: "Nome",
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
+            required: true,
+          },
+          {
+            id: "scenes",
+            key: "scene_ids",
+            label: "Cenas",
+            shape: { kind: "control", control: "identifier", cardinality: "many" },
+            required: true,
+            referencesInputId: "all-scenes",
+          },
+        ],
+      },
+    }),
+  ];
+  const inputDeliveries = [
+    {
+      inputId: "all-scenes",
+      portKey: "context_1",
+      deliveryId: "delivery-scenes",
+      itemIds: ["scene-1", "scene-2"],
+    },
+  ];
+  const valid = normalizePluginResponseValues({
+    block,
+    responseValues: { records: [{ name: "Ana", scene_ids: ["scene-1"] }] },
+    outputContract,
+    inputDeliveries,
+    completion: "final",
+  });
+  assert.equal(valid.ok, true);
+
+  const invalid = normalizePluginResponseValues({
+    block,
+    responseValues: { records: [{ name: "Ana", scene_ids: ["invented"] }] },
+    outputContract,
+    inputDeliveries,
+    completion: "final",
+  });
+  assert.equal(invalid.ok, false);
+  if (!invalid.ok) assert.equal(invalid.issues[0]?.code, "UNKNOWN_INPUT_ITEM_REFERENCE");
+});
+
+test("aceita uma ou mais saídas atômicas para uma unidade de output many", () => {
+  const image = (id: string) => ({
+    id,
+    name: `${id}.png`,
+    mimeType: "image/png",
+    size: 1,
+    url: `/api/files/${id}.png`,
+  });
+  const outputContract = [
+    contract({
+      key: "images",
+      portKey: "images",
+      shape: {
+        kind: "content",
+        family: "image",
+        cardinality: "many",
+        representation: "artifact",
+      },
+    }),
+  ];
+
+  for (const value of [image("one"), [image("one"), image("two")]]) {
+    const result = normalizePluginResponseValues({
+      block,
+      responseValues: { images: value },
+      outputContract,
+      completion: "final",
+      valueShape: "item",
+    });
+    assert.equal(result.ok, true);
+  }
+
+  const invalid = normalizePluginResponseValues({
+    block,
+    responseValues: { images: [image("one"), "not-an-image"] },
+    outputContract,
+    completion: "final",
+    valueShape: "item",
+  });
+  assert.equal(invalid.ok, false);
+  if (!invalid.ok) assert.equal(invalid.issues[0]?.code, "INCOMPATIBLE_OUTPUT_SHAPE");
+});
+
+test("valida referências em registros atômicos e variantes de uma unidade", () => {
+  const outputContract = [
+    contract({
+      key: "relations",
+      portKey: "relations",
+      shape: {
+        kind: "record",
+        cardinality: "many",
+        fields: [
+          {
+            id: "sources",
+            key: "source_ids",
+            label: "Origens",
+            shape: { kind: "control", control: "identifier", cardinality: "many" },
+            required: true,
+            referencesInputId: "sources",
+          },
+        ],
+      },
+    }),
+  ];
+  const result = normalizePluginResponseValues({
+    block,
+    responseValues: {
+      relations: [{ source_ids: ["source-1"] }, { source_ids: ["invented"] }],
+    },
+    outputContract,
+    inputDeliveries: [{ inputId: "sources", portKey: "sources", itemIds: ["source-1"] }],
+    completion: "final",
+    valueShape: "item",
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.issues[0]?.code, "UNKNOWN_INPUT_ITEM_REFERENCE");
+});

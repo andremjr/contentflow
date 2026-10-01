@@ -10,7 +10,9 @@ Conversas, resumos de sessão e memória implícita não são uma base confiáve
 
 ## Decisão
 
-O contexto necessário para executar o Reliability Program será persistido em documentos versionados: constituição, arquitetura-alvo, estado atual, protocolo de trabalho, roadmap, cenários, tarefas e ADRs. Cada tarefa deve atualizar as fontes afetadas antes de ser encerrada.
+O contexto necessário ao desenvolvimento é persistido em contratos normativos, [estado atual](../../CURRENT_STATE.md), [processo de desenvolvimento](../../DEVELOPMENT.md), decisões e evidências do cenário afetado. Cada trabalho atualiza as fontes pertinentes antes de ser encerrado.
+
+Em 01/10/2026, o programa separado foi encerrado: a obrigação anterior de manter constituição, arquitetura-alvo, roadmap e sequência de tasks como contexto ativo foi substituída por leitura dirigida aos contratos e ao cenário vertical real. Os registros anteriores continuam históricos.
 
 ## Consequências
 
@@ -19,4 +21,3 @@ Uma retomada começa pela leitura dirigida desses documentos. O repositório pas
 ## O que esta decisão NÃO significa
 
 Não significa copiar conversas inteiras para o repositório, carregar todo o histórico em cada tarefa nem transformar detalhes temporários em política permanente.
-

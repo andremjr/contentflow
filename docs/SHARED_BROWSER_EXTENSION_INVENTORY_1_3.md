@@ -1,5 +1,7 @@
 # Pacote 1.3 — inventário da extensão Browser Bridge
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](./ARCHITECTURE.md), o [estado e limitações](./CURRENT_STATE.md) e o [processo de desenvolvimento](./DEVELOPMENT.md).
+
 Data do levantamento: 2026-09-26. Branch observada: `main`.
 
 Este documento registra o estado atual da ContentFlow Browser Bridge antes das fases de endurecimento, versionamento e execução multiperfil. O levantamento é descritivo: não altera manifesto, protocolo, runtime da extensão, clientes dos plugins, políticas, storage, timers, listeners, debugger ou comportamento em Chrome real.

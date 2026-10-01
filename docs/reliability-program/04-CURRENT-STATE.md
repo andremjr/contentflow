@@ -1,16 +1,19 @@
 # Current State
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../ARCHITECTURE.md), o [estado e limitações](../CURRENT_STATE.md) e o [processo de desenvolvimento](../DEVELOPMENT.md).
+
 Última revisão semântica: 30/09/2026.
 
 Este documento representa o estado semântico e arquitetural conhecido do produto: capabilities presentes, gaps, blockers e posição no programa. Ele não é autoridade para o HEAD Git, a branch ativa nem a condição atual do worktree. Toda task deve descobrir esses dados diretamente do checkout no momento em que começa.
 
-| Campo                       | Estado atual                                |
-| --------------------------- | ------------------------------------------- |
-| Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422`  |
-| Versão                      | `1.2.1`                                     |
-| Task concluída              | TASK-028A                                   |
-| Task ativa                  | nenhuma                                     |
-| Próxima                     | TASK-029 está `ready`                       |
+| Campo                       | Estado atual                               |
+| --------------------------- | ------------------------------------------ |
+| Baseline histórico original | `4ba92a834daef05d8c57fa871530ba935c5c9422` |
+| Versão                      | `1.2.1`                                    |
+| Task concluída              | TASK-028B                                  |
+| Task ativa                  | TASK-028D                                  |
+| Ativa                       | Consumo textual e relações explícitas      |
+| Próxima                     | TASK-029 está `ready`                      |
 
 Este arquivo representa somente o estado atual. O histórico de cada trabalho pertence à respectiva especificação em `tasks/` e ao Git; fatos substituídos devem ser removidos daqui em vez de acumulados como changelog.
 
@@ -89,6 +92,8 @@ A checagem de `maxAttempts` ocorre depois de persistir values e deliveries da re
 
 O retry manual possui aplicação canônica própria no Execution Core. `failed` e `cancelled` são elegíveis; `completed` é elegível somente para `selected`. O item selecionado precisa existir antes de qualquer mutação. A aplicação incrementa a tentativa, invalida deliveries do Bloco, limpa o estado técnico da tentativa anterior, preserva a semântica de `all`, `remaining` e `selected` e reabre o Bloco como `awaiting_human` ou `blocked_executor` pela definição canônica do snapshot.
 
+Na ação humana explícita, o Core também pode adotar a revisão atual do Método a partir do Bloco alvo: preserva o prefixo concluído, registra o snapshot substituído e invalida o sufixo. Unidades operacionais só são preservadas quando pertencem ao lote atual ou ao job retomado; mudanças de porta, cardinalidade ou base de itemização descartam unidades obsoletas e seu progresso.
+
 O adapter conserva apenas tradução para boolean, aplicação da projeção canônica de `Project`, `touchExecution()` e persistência externa. No comportamento vigente preservado, um retry `selected` de Bloco concluído mantém `execution.output` e `outputStatus = completed` enquanto reabre o Bloco; a política de invalidação desse output oficial não foi redefinida pela TASK-015.
 
 ### Usar entrega atual
@@ -107,6 +112,8 @@ Métodos sem binding canônico são inválidos. Não há boundary de adaptação
 
 Inputs destinados a plugins só entram em portas explicitamente declaradas pelo Método. `selectPluginInputPort()` exige `input.portKey`, faz lookup exato na capability e valida o `ValueShape`; ausência, porta inexistente, incompatibilidade ou segunda ocupação da mesma porta permanecem sem vínculo. Label, ID, `sourceKey`, presentation, MIME e ordem não escolhem portas no runtime.
 
+A compatibilidade é direcional no único caso de contração declarado: uma saída `text/many/inline` pode alimentar uma entrada `text/one/inline` ou `either`. O produtor continua com N itens e N IDs, enquanto o consumidor recebe uma unidade textual concatenada de forma determinística. Nenhuma mídia, artifact, controle ou registro recebe merge implícito.
+
 ### Contrato definitivo de Método e plugin
 
 `ProcessMethod.contractVersion: 3` identifica a única representação aceita. Campos carregam `ValueShape`; a Plugin API v2 usa o mesmo shape em cada porta. Não existem adapters de taxonomia v1/v2 no caminho canônico. Métodos e plugins anteriores permanecem inválidos até conversão explícita posterior.
@@ -119,6 +126,10 @@ As saídas universais continuam pertencendo ao Bloco. Para Blocos executados por
 
 Respostas de executor cruzam uma única boundary explícita em `server/plugin-response-normalization.ts`. Success, pending, error e snapshots de `publishPartial()` aceitam exclusivamente `portKey` presente no `outputContract` congelado, validam os valores materiais e traduzem uma única vez para a `key` estratégica. Success exige os outputs obrigatórios, incluindo partials canônicos previamente persistidos; partials não concluem o Bloco.
 
+Campos `identifier` de registros podem declarar `referencesInputId`; a boundary aceita somente IDs concedidos naquela entrada e as deliveries materializam essas referências sem interpretar seu significado editorial. Em orquestração item a item, uma unidade de uma porta `many` pode produzir uma ou mais variantes atômicas compatíveis; cada variante é validada e conserva a linhagem da mesma unidade de origem.
+
+Quando o mesmo job publica artifacts ou variantes incrementais, `itemProgress` continua derivado das unidades obrigatórias do lote. Esses eventos não substituem o total nem criam um segundo cursor de conclusão.
+
 Chaves estratégicas, labels, ordem do objeto e `result` genérico não são aliases. `result` só é válido quando é literalmente a porta declarada. Chaves desconhecidas, tipos incompatíveis, required ausente e bindings ambíguos falham antes de sucesso ou mutação parcial observável. `BlockExecution.values` e `Delivery.outputKey` permanecem estratégicos.
 
 `ESCOLHER` usa output canônico de controle `selection`, com cardinalidade explícita. Quando executado por plugin, o Método deve declarar `portKey` exato; primeira porta e chave implícita `result` não possuem semântica especial.
@@ -129,9 +140,9 @@ Guardrails focais protegem a boundary canônica, todos os bindings, `ESCOLHER` e
 
 ### Recovery decidido de forma mais rica do que é aplicado
 
-`decideExecutionRecovery()` produz seis decisões: `cancel`, `reconcile`, `intervene`, `switch_profile`, `retry` e `fail`.
+`decideExecutionRecovery()` produz sete decisões: `cancel`, `reconcile`, `intervene`, `switch_profile`, `reload_and_retry`, `retry` e `fail`.
 
-Nos principais caminhos de falha de plugin em `server/index.ts`, somente `switch_profile` e `retry` recebem aplicação dedicada. As demais decisões terminam, em geral, no mesmo caminho `markPluginJobFailed()`, embora a mensagem de produto varie. `PluginJobStatus` ainda não possui estados duráveis próprios para `reconcile` e `intervene`.
+Nos principais caminhos de falha de plugin em `server/index.ts`, `switch_profile`, `retry` e `reload_and_retry` recebem aplicação dedicada. A recarga é decidida pelo Core apenas para `BRIDGE_PAGE_UNAVAILABLE`, persiste uma diretiva na próxima invocação e permanece no mesmo perfil. A Bridge distingue ausência, incompatibilidade, indisponibilidade pré-efeito e resultado incerto; fallback automático ficou restrito a códigos de conta/perfil. As demais decisões terminam, em geral, no mesmo caminho `markPluginJobFailed()`, embora a mensagem de produto varie. `PluginJobStatus` ainda não possui estados duráveis próprios para `reconcile` e `intervene`.
 
 Assim, a política já reconhece efeito incerto e intervenção, mas sua aplicação e retomada não são ainda simétricas, universais e duráveis.
 
@@ -148,6 +159,19 @@ O scheduler de plugin jobs possui limite global fixo de quatro workers. `maxConc
 - conexões e perfis antigos continuam passando por resolvers e migrações de compatibilidade.
 
 Esses caminhos preservam instalações existentes, mas parte da reconciliação semântica ainda ocorre no bootstrap e no fluxo principal em vez de convergir por adapters delimitados.
+
+## Infraestrutura interna de provas
+
+O Dev Monitor opt-in (`docs/DEV_MONITOR.md`, TASK-028E) reúne eventos locais dos
+cinco domínios, reconstrói projeções e gera checks, slices e digest. Os cenários
+monitorados iniciais são humano/HTTP/Core/delivery e falhas do worker real.
+Profiles/Bridge e demais lacunas permanecem explícitas na matriz; um PASS desses
+cenários não demonstra o Reliability Gate ou o provider autenticado. TASK-028D
+permanece ativa e TASK-029 não foi iniciada por este trabalho.
+
+TASK-028E foi concluída em 01/10/2026 com 19 testes próprios, dois cenários
+monitorados íntegros e `npm run check` integral aprovado. Evidências e limites
+estão registrados em `docs/DEV_MONITOR_REPORT.md`; não houve publicação.
 
 ## Known test gaps
 
@@ -170,4 +194,4 @@ As decisões permanentes não são duplicadas neste snapshot. Consulte a [`Const
 
 ## Blockers
 
-Deterministic Contracts foi encerrada com a TASK-028. A extensão autorizada TASK-028A foi concluída. TASK-029 está `ready` e não foi iniciada. Não há blocker funcional conhecido no fechamento desta task.
+Deterministic Contracts foi encerrada com a TASK-028 e as extensões autorizadas TASK-028A e TASK-028B foram concluídas. A base local real foi migrada para as representações canônicas atuais com backup verificado, pós-planejamento limpo e preservação explícita de histórico terminal. TASK-029 é a próxima missão `ready`.

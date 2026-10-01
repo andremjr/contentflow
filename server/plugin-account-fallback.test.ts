@@ -56,16 +56,7 @@ test("normaliza aliases ordenados e remove duplicatas ou valores inválidos", ()
   ]);
 });
 
-for (const code of [
-  "UPSTREAM_UNAVAILABLE",
-  "TIMEOUT",
-  "JOB_FAILED",
-  "AUTHENTICATION_FAILED",
-  "RATE_LIMIT",
-  "PERMISSION_DENIED",
-  "QUOTA_EXCEEDED",
-  "OUTPUT_VALIDATION_FAILED",
-]) {
+for (const code of ["AUTHENTICATION_FAILED", "PERMISSION_DENIED", "QUOTA_EXCEEDED"]) {
   test(`avança perfil em erro seguro associado ao perfil ${code}`, () => {
     assert.equal(
       canAdvanceProfileFallback(jobWithFallback(), {
@@ -75,6 +66,30 @@ for (const code of [
         retryable: false,
       }),
       true,
+    );
+  });
+}
+
+for (const code of [
+  "UPSTREAM_UNAVAILABLE",
+  "TIMEOUT",
+  "JOB_FAILED",
+  "RATE_LIMIT",
+  "OUTPUT_VALIDATION_FAILED",
+  "BRIDGE_PAGE_UNAVAILABLE",
+  "BRIDGE_MISSING",
+  "BRIDGE_INCOMPATIBLE",
+  "PROVIDER_SECURITY_CHALLENGE",
+]) {
+  test(`não usa outra identidade para erro que não é fallback de conta ${code}`, () => {
+    assert.equal(
+      canAdvanceProfileFallback(jobWithFallback(), {
+        status: "error",
+        code,
+        message: `Falha com ${code}`,
+        retryable: true,
+      }),
+      false,
     );
   });
 }

@@ -4,6 +4,7 @@ import {
   type BlockInputBinding,
   type BlockInputSourceBinding,
   type ChannelLibraryItem,
+  type DeliveryItem,
   type ProcessExecution,
   type ProjectDelivery,
   type Project,
@@ -15,7 +16,7 @@ import { projectProcessOrder } from "@/lib/process-order";
 import { createProcessOutputFields, isEmptyRuntimeValue } from "@/lib/human-workflow";
 import { normalizeExecutionDeliveries, processOutputDeliveryFor } from "@/lib/deliveries";
 import { resolveChannelHistory } from "@/lib/channel-history";
-import { areValueShapesCompatible } from "@/lib/data-shape";
+import { areInputShapesCompatible, consumeInputValue } from "@/lib/data-shape";
 
 type RuntimeCandidate = {
   id: string;
@@ -28,6 +29,7 @@ type RuntimeCandidate = {
   sourceProcessType?: ProcessExecution["processType"];
   deliveryId?: string;
   deliveryItemIds?: string[];
+  deliveryItems?: DeliveryItem[];
 };
 
 export type ResolvedBlockInput = {
@@ -40,6 +42,7 @@ export type ResolvedBlockInput = {
   sourceProcessType?: ProcessExecution["processType"];
   sourceDeliveryId?: string;
   sourceDeliveryItemIds?: string[];
+  sourceDeliveryItems?: DeliveryItem[];
 };
 
 export function resolveBlockInputs({
@@ -171,6 +174,7 @@ function collectCandidates({
         sourceBlockId: completed.blockId,
         deliveryId: delivery?.id,
         deliveryItemIds: delivery?.items.map((item) => item.id),
+        deliveryItems: delivery?.items.map((item) => structuredClone(item)),
       });
     }
   }
@@ -209,6 +213,7 @@ function collectCandidates({
         sourceProcessType: processExecution.processType,
         deliveryId: delivery.id,
         deliveryItemIds: delivery.items.map((item) => item.id),
+        deliveryItems: delivery.items.map((item) => structuredClone(item)),
       });
     }
     for (const output of createProcessOutputFields(processExecution.processType)) {
@@ -226,6 +231,7 @@ function collectCandidates({
         sourceProcessType: processExecution.processType,
         deliveryId: delivery?.id,
         deliveryItemIds: delivery?.items.map((item) => item.id),
+        deliveryItems: delivery?.items.map((item) => structuredClone(item)),
       });
     }
   }
@@ -244,18 +250,24 @@ type InputResolutionContext = {
   channelProjects: Project[];
 };
 
-function resultForCandidate(candidate: RuntimeCandidate): ExplicitResolution {
+function resultForCandidate(
+  candidate: RuntimeCandidate,
+  input: BlockInputBinding,
+): ExplicitResolution {
+  const value = consumeInputValue(candidate.shape, input.shape, candidate.value);
+  if (value === undefined) return { result: { resolved: false } };
   return {
     candidateId: candidate.id,
     result: {
       resolved: true,
-      value: candidate.value,
+      value: value as RuntimeValue,
       resolvedSourceKey: candidate.key,
       sourceLabel: candidate.sourceLabel,
       sourceBlockId: candidate.sourceBlockId,
       sourceProcessType: candidate.sourceProcessType,
       sourceDeliveryId: candidate.deliveryId,
       sourceDeliveryItemIds: candidate.deliveryItemIds,
+      sourceDeliveryItems: candidate.deliveryItems,
     },
   };
 }
@@ -305,9 +317,9 @@ function resolveCanonicalInput(
           item.sourceProcessType === undefined &&
           item.sourceBlockId === binding.blockId &&
           item.key === binding.outputKey &&
-          areValueShapesCompatible(item.shape, input.shape),
+          areInputShapesCompatible(item.shape, input.shape),
       );
-      return candidate ? resultForCandidate(candidate) : { result: { resolved: false } };
+      return candidate ? resultForCandidate(candidate, input) : { result: { resolved: false } };
     }
     case "previous_process": {
       const candidate = candidates.find(
@@ -316,9 +328,9 @@ function resolveCanonicalInput(
           item.sourceProcessType === binding.processType &&
           item.sourceBlockId === (binding.blockId ?? "__process_output__") &&
           item.key === binding.outputKey &&
-          areValueShapesCompatible(item.shape, input.shape),
+          areInputShapesCompatible(item.shape, input.shape),
       );
-      return candidate ? resultForCandidate(candidate) : { result: { resolved: false } };
+      return candidate ? resultForCandidate(candidate, input) : { result: { resolved: false } };
     }
     default:
       return { result: { resolved: false } };

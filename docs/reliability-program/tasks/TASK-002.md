@@ -1,5 +1,7 @@
 # TASK-002 — Characterization tests da máquina de estados atual
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../../ARCHITECTURE.md), o [estado e limitações](../../CURRENT_STATE.md) e o [processo de desenvolvimento](../../DEVELOPMENT.md).
+
 ## Objetivo
 
 Congelar o comportamento observável vigente da máquina de estados de execução antes da convergência arquitetural prevista para TASK-006–TASK-020, sem corrigir ou redesenhar o runtime atual.

@@ -1,5 +1,7 @@
 # TASK-012 — Conclusão Humana passa pelo Core
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../../ARCHITECTURE.md), o [estado e limitações](../../CURRENT_STATE.md) e o [processo de desenvolvimento](../../DEVELOPMENT.md).
+
 ## Objetivo
 
 Fazer a conclusão humana normal entrar no Execution Core como fato explícito, ser validada pelo snapshot e pelo estado canônico e ser materializada por uma única aplicação antes da progressão compartilhada criada na TASK-011.

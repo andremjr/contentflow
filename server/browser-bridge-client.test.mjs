@@ -201,8 +201,162 @@ test("cliente novo rejeita Bridge antiga antes de conectar ou produzir efeito", 
       allowedOrigins: ["https://gemini.google.com"],
       waitMs: 100,
     }),
-    (error) => error?.code === "INVALID_CONFIGURATION",
+    (error) => error?.code === "BRIDGE_INCOMPATIBLE",
   );
   assert.equal(connectCalls, 0);
   assert.equal(dispatchCalls, 0);
+});
+
+test("diretiva do Core recarrega de forma controlada antes de validar a Bridge", async () => {
+  const { attachContentFlowBridge } =
+    await import("../ecosystem/plugins/reference/gemini-browser-studio/browser-bridge-client.mjs");
+  const actions = [];
+  const identity = {
+    bridgeId: "com.contentflow.browser-bridge",
+    protocolVersion: 2,
+    protocol: { min: 2, max: 2 },
+    capabilities: [
+      "idempotent-replay.v1",
+      "lifecycle-events.v1",
+      "snapshot.v1",
+      "condition-observer.v1",
+      "reload.v1",
+    ],
+    bridgeVersion: "0.4.0",
+    extensionVersion: "0.4.0",
+  };
+  const context = vm.createContext({
+    setTimeout,
+    contentFlowBridge: {
+      identity,
+      connect: () => ({ ok: true, protocolVersion: 2, capabilities: identity.capabilities }),
+      dispatch: (command) => {
+        actions.push({ action: command.action, payload: command.payload });
+        return { ok: true, ...identity };
+      },
+      disconnect: () => ({ ok: true }),
+    },
+  });
+  const client = {
+    async send(method, params = {}, sessionId) {
+      if (method === "Target.getTargets")
+        return {
+          targetInfos: [
+            {
+              type: "service_worker",
+              targetId: "worker",
+              url: "chrome-extension://current/service-worker.js",
+            },
+          ],
+        };
+      if (method === "Target.attachToTarget") return { sessionId: "worker-session" };
+      if (method === "Runtime.enable" || method === "Target.detachFromTarget") return {};
+      if (method === "Runtime.evaluate") {
+        const value =
+          sessionId === "page-session"
+            ? { url: "https://gemini.google.com/app", origin: "https://gemini.google.com" }
+            : await vm.runInContext(String(params.expression), context);
+        return { result: { value } };
+      }
+      throw new Error(`Comando inesperado: ${method}`);
+    },
+  };
+
+  const bridge = await attachContentFlowBridge({
+    client,
+    pageSessionId: "page-session",
+    pluginId: "local.contentflow.gemini-browser-studio",
+    profileId: "default",
+    request: {
+      executionId: "reload-test",
+      recoveryDirective: { action: "reload_page", reasonCode: "BRIDGE_PAGE_UNAVAILABLE" },
+    },
+    signal: new AbortController().signal,
+    allowedOrigins: ["https://gemini.google.com"],
+  });
+
+  assert.deepEqual(
+    actions.map(({ action }) => action),
+    ["reload", "ping"],
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(actions[0].payload)), {
+    reconciliationState: "safe",
+    bypassCache: true,
+    reasonCode: "BRIDGE_PAGE_UNAVAILABLE",
+  });
+  bridge.dispose();
+});
+
+test("timeout distingue leitura repetível de comando com efeito incerto", async () => {
+  const { attachContentFlowBridge } =
+    await import("../ecosystem/plugins/reference/gemini-browser-studio/browser-bridge-client.mjs");
+  const identity = {
+    bridgeId: "com.contentflow.browser-bridge",
+    protocolVersion: 2,
+    protocol: { min: 2, max: 2 },
+    capabilities: [
+      "idempotent-replay.v1",
+      "lifecycle-events.v1",
+      "snapshot.v1",
+      "condition-observer.v1",
+      "reload.v1",
+    ],
+    bridgeVersion: "0.4.0",
+    extensionVersion: "0.4.0",
+  };
+  const context = vm.createContext({
+    setTimeout,
+    contentFlowBridge: {
+      identity,
+      connect: () => ({ ok: true, protocolVersion: 2, capabilities: identity.capabilities }),
+      dispatch: (command) =>
+        command.action === "ping"
+          ? { ok: true, ...identity }
+          : { ok: false, code: "COMMAND_TIMEOUT", message: "timeout" },
+      disconnect: () => ({ ok: true }),
+    },
+  });
+  const client = {
+    async send(method, params = {}, sessionId) {
+      if (method === "Target.getTargets")
+        return {
+          targetInfos: [
+            {
+              type: "service_worker",
+              targetId: "worker",
+              url: "chrome-extension://current/service-worker.js",
+            },
+          ],
+        };
+      if (method === "Target.attachToTarget") return { sessionId: "worker-session" };
+      if (method === "Runtime.enable" || method === "Target.detachFromTarget") return {};
+      if (method === "Runtime.evaluate") {
+        const value =
+          sessionId === "page-session"
+            ? { url: "https://gemini.google.com/app", origin: "https://gemini.google.com" }
+            : await vm.runInContext(String(params.expression), context);
+        return { result: { value } };
+      }
+      throw new Error(`Comando inesperado: ${method}`);
+    },
+  };
+  const bridge = await attachContentFlowBridge({
+    client,
+    pageSessionId: "page-session",
+    pluginId: "local.contentflow.gemini-browser-studio",
+    profileId: "default",
+    request: { executionId: "timeout-classification" },
+    signal: new AbortController().signal,
+    allowedOrigins: ["https://gemini.google.com"],
+  });
+
+  await assert.rejects(
+    bridge.dispatch("inspect"),
+    (error) => error?.code === "BRIDGE_PAGE_UNAVAILABLE",
+  );
+  await assert.rejects(
+    bridge.dispatch("click"),
+    (error) => error?.code === "COMMAND_OUTCOME_UNKNOWN",
+  );
+  bridge.dispose();
 });

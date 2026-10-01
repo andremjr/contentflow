@@ -1,3 +1,5 @@
+import { observeExecution, observeJob } from "./dev-monitor/probes";
+import { monitorEnabled, devProbe } from "./dev-monitor/client";
 import express, {
   type ErrorRequestHandler,
   type NextFunction,
@@ -157,6 +159,7 @@ import {
   areRequiredOrchestratedItemsCompleted,
   belongsToSameItemActionGroup,
   blockExecutionItemsForJob,
+  canFinalizeFromDurableOrchestratedItems,
   claimOrchestratedItems,
   consolidatedOrchestratedOutputs,
   completeContinuousSessionClaims,
@@ -1113,6 +1116,20 @@ function finishPluginBlock(
   execution.updatedAt = now;
 }
 
+function observeCommittedExecution(execution: ProcessExecution) {
+  if (!monitorEnabled()) return;
+  try {
+    observeExecution(execution);
+    for (const job of pluginJobs.listForExecution(execution.id)) observeJob(job);
+  } catch {
+    devProbe("core", "execution-persistence").emit({
+      kind: "instrumentation.invalid",
+      entity: { type: "execution", id: execution.id },
+      correlation: { executionId: execution.id },
+    });
+  }
+}
+
 function executionById(executionId: string) {
   const row = database
     .prepare("SELECT payload FROM process_executions WHERE id = ?")
@@ -1150,6 +1167,7 @@ function persistPluginExecution(execution: ProcessExecution, project: Project) {
   }
   // An outer PluginJobStore.save() owns the commit when called from onSaved.
   // Its caller queues reconciliation only after that commit succeeds.
+  if (!database.inTransaction) observeCommittedExecution(execution);
   if (!database.inTransaction) queueOrchestratorReconciliationForProject(execution.projectId);
 }
 
@@ -1166,7 +1184,10 @@ function savePluginJob(
   }
   if (onSaved && !database.inTransaction) {
     const execution = executionById(saved.executionId);
-    if (execution) queueOrchestratorReconciliationForProject(execution.projectId);
+    if (execution) {
+      observeCommittedExecution(execution);
+      queueOrchestratorReconciliationForProject(execution.projectId);
+    }
   }
   return saved;
 }
@@ -1177,6 +1198,12 @@ function commitPluginJobTransition<T>(projectId: string, apply: () => T): T {
     result = database.transaction(apply)();
   } catch (error) {
     throw new PersistenceCommitError(error);
+  }
+  if (monitorEnabled()) {
+    for (const row of database
+      .prepare("SELECT payload FROM process_executions WHERE project_id = ?")
+      .all(projectId) as { payload: string }[])
+      observeCommittedExecution(parseStoredExecution(row.payload));
   }
   queueOrchestratorReconciliationForProject(projectId);
   return result;
@@ -1885,6 +1912,7 @@ function normalizedPluginValues(
   completion: "partial" | "final",
   valueShape: "snapshot" | "item" = "snapshot",
   existingValues?: Record<string, RuntimeValue>,
+  inputDeliveries?: PluginExecutionRequest["inputDeliveries"],
 ) {
   return requireNormalizedPluginResponseValues({
     block,
@@ -1893,6 +1921,7 @@ function normalizedPluginValues(
     completion,
     valueShape,
     existingValues,
+    inputDeliveries,
   }).values;
 }
 
@@ -2221,7 +2250,7 @@ async function processPluginJobClaimed(
         return saved;
       });
     }
-    if (recoveryDecision.action === "retry") {
+    if (recoveryDecision.action === "retry" || recoveryDecision.action === "reload_and_retry") {
       return commitPluginJobTransition(project.id, () => {
         const saved = savePluginJob(claim, {
           ...appendPluginDiagnostic(job, {
@@ -2231,6 +2260,16 @@ async function processPluginJobClaimed(
             attempt: job.attempt,
           }),
           status: "starting",
+          request:
+            recoveryDecision.action === "reload_and_retry"
+              ? {
+                  ...job.request,
+                  recoveryDirective: {
+                    action: "reload_page",
+                    reasonCode: recoveryDecision.reasonCode,
+                  },
+                }
+              : job.request,
           retryCount: job.retryCount + 1,
           message: recoveryProductMessage({
             decision: recoveryDecision,
@@ -2407,6 +2446,7 @@ async function processPluginJobClaimed(
       (await executeActivePlugin(job, plugin, invocationRequest, invocationTimeout, secrets, {
         workspaceDirectory,
         profileDirectory: browserProfileForJob(plugin, job)?.profileDirectory,
+        monitorCorrelation: { profileId: job.browserProfile?.profileId, pluginJobId: job.id },
         existingArtifacts: job.partialArtifacts,
         onRegisterItems: async (parentItemId, plannedItems) => {
           const latestExecution = executionById(job.executionId);
@@ -2584,6 +2624,8 @@ async function processPluginJobClaimed(
             job.request.outputContract,
             "partial",
             job.itemOrchestration ? "item" : "snapshot",
+            undefined,
+            job.request.inputDeliveries,
           );
           const incremental = applyPluginIncrementalItemUpdates({
             job,
@@ -2713,6 +2755,8 @@ async function processPluginJobClaimed(
           job.request.outputContract,
           "partial",
           job.itemOrchestration ? "item" : "snapshot",
+          undefined,
+          job.request.inputDeliveries,
         ),
       };
       const progress = Number.isFinite(pluginResponse.progress)
@@ -2764,6 +2808,8 @@ async function processPluginJobClaimed(
           job.request.outputContract,
           "partial",
           job.itemOrchestration ? "item" : "snapshot",
+          undefined,
+          job.request.inputDeliveries,
         ),
       };
       const partialArtifacts = mergeStoredArtifacts(
@@ -2829,7 +2875,7 @@ async function processPluginJobClaimed(
         releaseJobProfileLease(job.id);
         return saved;
       }
-      if (recoveryDecision.action === "retry") {
+      if (recoveryDecision.action === "retry" || recoveryDecision.action === "reload_and_retry") {
         const retryCount = job.retryCount + 1;
         return commitPluginJobTransition(project.id, () => {
           const saved = savePluginJob(claim, {
@@ -2840,6 +2886,16 @@ async function processPluginJobClaimed(
               attempt: job.attempt,
             }),
             status: job.jobId ? "pending" : "starting",
+            request:
+              recoveryDecision.action === "reload_and_retry"
+                ? {
+                    ...job.request,
+                    recoveryDirective: {
+                      action: "reload_page",
+                      reasonCode: recoveryDecision.reasonCode,
+                    },
+                  }
+                : job.request,
             retryCount,
             partialValues,
             partialArtifacts,
@@ -2893,6 +2949,7 @@ async function processPluginJobClaimed(
         "final",
         job.itemOrchestration ? "item" : "snapshot",
         job.partialValues,
+        job.request.inputDeliveries,
       ),
     };
     const itemOrchestration = job.itemOrchestration;
@@ -2905,14 +2962,17 @@ async function processPluginJobClaimed(
             (field) => field.portKey === itemOrchestration.combinedOutputPort,
           )?.key
         : undefined;
+      const rawIncoming = pluginResponse.values[itemOrchestration.outputPort];
+      const finalizesFromDurableItems = canFinalizeFromDurableOrchestratedItems(job, rawIncoming);
       const mappedValues = normalizedPluginValues(
         block,
         pluginResponse.values,
         job.request.outputContract,
-        "final",
+        finalizesFromDurableItems ? "partial" : "final",
         "item",
+        undefined,
+        job.request.inputDeliveries,
       );
-      const rawIncoming = pluginResponse.values[itemOrchestration.outputPort];
       const incomingItems = Array.isArray(rawIncoming)
         ? rawIncoming
         : rawIncoming === undefined
@@ -2923,22 +2983,24 @@ async function processPluginJobClaimed(
             (claim) => claim.invocationId === continuousInvocationId,
           ).length
         : 0;
-      const completedItemJob = parallelExecution
+      const completedItemJob = finalizesFromDurableItems
         ? job
-        : continuousInvocationId
-          ? completeContinuousSessionClaims(
-              job,
-              continuousInvocationId,
-              structuredClone(
-                ownedClaimCount === 1 && !Array.isArray(rawIncoming)
-                  ? [rawIncoming]
-                  : incomingItems,
-              ) as BlockExecutionItemValue[],
-            )
-          : completeCurrentOrchestratedItem(
-              job,
-              structuredClone(rawIncoming) as BlockExecutionItemValue,
-            );
+        : parallelExecution
+          ? job
+          : continuousInvocationId
+            ? completeContinuousSessionClaims(
+                job,
+                continuousInvocationId,
+                structuredClone(
+                  ownedClaimCount === 1 && !Array.isArray(rawIncoming)
+                    ? [rawIncoming]
+                    : incomingItems,
+                ) as BlockExecutionItemValue[],
+              )
+            : completeCurrentOrchestratedItem(
+                job,
+                structuredClone(rawIncoming) as BlockExecutionItemValue,
+              );
       const completedItemOrchestration = completedItemJob.itemOrchestration!;
       const consolidation = consolidatedOrchestratedOutputs(completedItemJob);
       if ((parallelExecution || continuousInvocationId) && !consolidation.complete) {
@@ -3152,7 +3214,7 @@ async function processPluginJobClaimed(
       releaseJobProfileLease(job.id);
       return saved;
     }
-    if (recoveryDecision.action === "retry") {
+    if (recoveryDecision.action === "retry" || recoveryDecision.action === "reload_and_retry") {
       const retryCount = job.retryCount + 1;
       return commitPluginJobTransition(project.id, () => {
         const saved = savePluginJob(claim, {
@@ -3163,6 +3225,16 @@ async function processPluginJobClaimed(
             attempt: job.attempt,
           }),
           status: job.jobId ? "pending" : "starting",
+          request:
+            recoveryDecision.action === "reload_and_retry"
+              ? {
+                  ...job.request,
+                  recoveryDirective: {
+                    action: "reload_page",
+                    reasonCode: recoveryDecision.reasonCode,
+                  },
+                }
+              : job.request,
           retryCount,
           error: message,
           message: recoveryProductMessage({
@@ -6241,6 +6313,11 @@ async function executePluginBlockInternal(
       portKey: item.input.portKey!,
       deliveryId: item.sourceDeliveryId,
       itemIds: item.sourceDeliveryItemIds ?? [],
+      items: item.sourceDeliveryItems?.map((sourceItem) => ({
+        id: sourceItem.id,
+        value: structuredClone(sourceItem.value) as RuntimeValue,
+        references: sourceItem.references,
+      })),
     })),
     outputContract,
     validation: block.validation,
@@ -6680,6 +6757,11 @@ app.post("/api/commands", (request, response) => {
       }
       return result;
     })();
+    if (monitorEnabled())
+      for (const row of database.prepare("SELECT payload FROM process_executions").all() as {
+        payload: string;
+      }[])
+        observeCommittedExecution(parseStoredExecution(row.payload));
     response.json({ result, state: stateSnapshot() });
     const projectId =
       command.projectId ??
@@ -8028,6 +8110,7 @@ app.post("/api/executions", (request, response) => {
     );
   scheduleAutomaticPluginBlock(execution);
   queueOrchestratorReconciliationForProject(execution.projectId);
+  observeCommittedExecution(execution);
   response.status(201).json(execution);
 });
 

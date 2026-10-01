@@ -22,7 +22,7 @@
         "A missão Apollo 11",
         "FORMATO OBRIGATÓRIO"
       ],
-      "mockResponse": "Primeiro parágrafo.\n\nSegundo parágrafo.",
+      "mockResponse": "[\"Primeiro parágrafo.\\n\\nSegundo parágrafo.\"]",
       "outputContract": [
         {
           "key": "parts",

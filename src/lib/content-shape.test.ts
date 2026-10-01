@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  areInputShapesCompatible,
   areValueShapesCompatible,
+  consumeInputValue,
   contentShape,
   controlShape,
   recordShape,
@@ -21,6 +23,21 @@ test("cardinalidade é explícita e participa da compatibilidade", () => {
   const many = contentShape("text", "many", "inline");
   assert.equal(areValueShapesCompatible(one, one), true);
   assert.equal(areValueShapesCompatible(one, many), false);
+});
+
+test("somente texto inline many pode ser consumido como texto inline one", () => {
+  const many = contentShape("text", "many", "inline");
+  const one = contentShape("text", "one", "inline");
+  assert.equal(areValueShapesCompatible(many, one), false);
+  assert.equal(areInputShapesCompatible(many, one), true);
+  assert.equal(consumeInputValue(many, one, ["Cena 1", "Cena 2"]), "Cena 1\n\nCena 2");
+  assert.equal(
+    areInputShapesCompatible(
+      contentShape("image", "many", "artifact"),
+      contentShape("image", "one", "artifact"),
+    ),
+    false,
+  );
 });
 
 test("arquivo é representação, não família", () => {
@@ -112,4 +129,29 @@ test("registro exige chaves únicas", () => {
     { id: "b", label: "B", key: "value", shape: contentShape("text"), required: true },
   ]);
   assert.equal(validateValueShape(invalid)[0]?.code, "DUPLICATE_RECORD_FIELD");
+});
+
+test("relação entre itens só pode ser declarada em identifier", () => {
+  const valid = recordShape("many", [
+    {
+      id: "scenes",
+      label: "Cenas",
+      key: "scene_ids",
+      shape: controlShape("identifier", "many"),
+      required: true,
+      referencesInputId: "scene-prompts",
+    },
+  ]);
+  assert.deepEqual(validateValueShape(valid), []);
+  const invalid = recordShape("many", [
+    {
+      id: "scenes",
+      label: "Cenas",
+      key: "scene_ids",
+      shape: contentShape("text", "many", "inline"),
+      required: true,
+      referencesInputId: "scene-prompts",
+    },
+  ]);
+  assert.equal(validateValueShape(invalid)[0]?.code, "INVALID_ITEM_REFERENCE_FIELD");
 });

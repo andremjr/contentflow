@@ -70,12 +70,60 @@ test("falha segura e ligada ao perfil avança para outro perfil preparado", () =
   );
 });
 
+test("falha técnica da ponte tenta o mesmo perfil antes de considerar fallback", () => {
+  assert.equal(
+    decideExecutionRecovery({
+      job: job({ deadlineAt: new Date(Date.now() + 60_000).toISOString() }),
+      failure: { code: "BRIDGE_PAGE_UNAVAILABLE", retryable: true },
+    }).action,
+    "reload_and_retry",
+  );
+});
+
+test("ponte ausente ou incompatível pede correção da instalação sem trocar de perfil", () => {
+  for (const code of ["BRIDGE_MISSING", "BRIDGE_INCOMPATIBLE"]) {
+    assert.deepEqual(decideExecutionRecovery({ job: job(), failure: { code } }), {
+      action: "intervene",
+      reasonCode: code,
+      intervention: "plugin_setup",
+    });
+  }
+});
+
+test("resultado incerto de comando exige reconciliação mesmo sem fatos opcionais", () => {
+  assert.equal(
+    decideExecutionRecovery({
+      job: job(),
+      failure: { code: "COMMAND_OUTCOME_UNKNOWN", retryable: true },
+    }).action,
+    "reconcile",
+  );
+});
+
 test("autenticação sem fallback vira intervenção explícita", () => {
   const withoutFallback = job({ profileFallback: undefined });
   assert.equal(
     decideExecutionRecovery({ job: withoutFallback, failure: { code: "AUTHENTICATION_FAILED" } })
       .action,
     "intervene",
+  );
+});
+
+test("desafio de segurança do provedor nunca vira rate limit ou rotação de conta", () => {
+  assert.deepEqual(
+    decideExecutionRecovery({
+      job: job(),
+      failure: {
+        code: "PROVIDER_SECURITY_CHALLENGE",
+        retryable: true,
+        retryAfterMs: 45_000,
+      },
+    }),
+    {
+      action: "intervene",
+      reasonCode: "PROVIDER_SECURITY_CHALLENGE",
+      intervention: "provider_security_challenge",
+    },
   );
 });
 

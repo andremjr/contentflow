@@ -158,6 +158,50 @@ test("resolves the exact canonical previous_block output", () => {
   assert.equal(resolved.resolvedSourceKey, "approved_copy");
 });
 
+test("consome text many inline como um texto sem perder os IDs dos itens de origem", () => {
+  const textMany: ValueShape = { ...textOne, cardinality: "many" };
+  const source: ActionBlock = {
+    id: "scene-prompts",
+    type: "CRIAR",
+    operator: "IA",
+    order: 0,
+    parameters: [],
+    outputs: [{ id: "prompts", label: "Prompts", key: "prompts", shape: textMany, required: true }],
+  };
+  const target: ActionBlock = {
+    id: "characters",
+    type: "CRIAR",
+    operator: "IA",
+    order: 1,
+    parameters: [],
+    inputs: [
+      {
+        id: "all-scenes",
+        label: "Todas as cenas",
+        shape: textOne,
+        binding: { kind: "previous_block", blockId: source.id, outputKey: "prompts" },
+      },
+    ],
+    outputs: [],
+  };
+  const active = execution(
+    [source, target],
+    [
+      { blockId: source.id, status: "completed", values: { prompts: ["Cena A", "Cena B"] } },
+      { blockId: target.id, status: "blocked_executor", values: {} },
+    ],
+  );
+
+  const resolved = resolve(target, active);
+  assert.equal(resolved.resolved, true);
+  assert.equal(resolved.value, "Cena A\n\nCena B");
+  assert.equal(resolved.sourceDeliveryItemIds?.length, 2);
+  assert.deepEqual(
+    resolved.sourceDeliveryItems?.map((item) => item.value),
+    ["Cena A", "Cena B"],
+  );
+});
+
 test("resolves the exact canonical previous_process output", () => {
   const target: ActionBlock = {
     id: "target-process",

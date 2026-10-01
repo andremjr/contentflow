@@ -1,5 +1,7 @@
 # Pacote 1.2 — inventário de itens e correlação
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](./ARCHITECTURE.md), o [estado e limitações](./CURRENT_STATE.md) e o [processo de desenvolvimento](./DEVELOPMENT.md).
+
 Data do levantamento: 2026-09-26. Branch observada: `main`.
 
 Este documento registra como o ContentFlow representa hoje `BlockExecution`, unidades operacionais, deliveries, delivery items, jobs, partials e artifacts antes da normalização universal prevista na fase 8. O levantamento é descritivo: não cria tabela, migração, scheduler, serviço incremental novo nem muda o comportamento de plugins.

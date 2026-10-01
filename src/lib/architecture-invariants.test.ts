@@ -35,6 +35,15 @@ test("keeps every universal process represented by metadata and an empty Method 
   }
 });
 
+test("keeps the frontend store as a projection of canonical execution state", () => {
+  const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
+
+  assert.doesNotMatch(store, /normalizeExecutionDeliveries/);
+  assert.doesNotMatch(store, /outputStatus\s*\?\?/);
+  assert.doesNotMatch(store, /attempt:\s*1,\s*\.\.\.block/);
+  assert.match(store, /if \(!document\.hidden\) refresh\(\)/);
+});
+
 test("documents the domain identity hierarchy, shared profiles, and exactly three domain interfaces", () => {
   const architecture = readFileSync(new URL("../../docs/ARCHITECTURE.md", import.meta.url), "utf8");
 
@@ -60,7 +69,7 @@ test("documents the domain identity hierarchy, shared profiles, and exactly thre
   assert.equal((architecture.match(/INTERFACE [123]:/g) ?? []).length, 3);
 });
 
-test("keeps the Reliability Program connected and bounded", () => {
+test("preserves reliability history without making it the current development plan", () => {
   const requiredFiles = [
     "README.md",
     "00-PRODUCT-CONSTITUTION.md",
@@ -115,8 +124,39 @@ test("keeps the Reliability Program connected and bounded", () => {
   }
 
   const agents = readFileSync(new URL("../../AGENTS.md", import.meta.url), "utf8");
-  assert.match(agents, /Reliability Program/);
+  assert.match(agents, /programa separado de confiabilidade foi encerrado/i);
+  assert.match(agents, /docs\/DEVELOPMENT\.md/);
+  assert.match(agents, /docs\/CURRENT_STATE\.md/);
   assert.match(agents, /docs\/reliability-program\/05-WORKING-PROTOCOL\.md/);
+  assert.doesNotMatch(agents, /siga integralmente o \[Working Protocol\]/);
+
+  const closure = readFileSync(
+    new URL("../../docs/reliability-program/README.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(closure, /Estado: encerrado/);
+  assert.match(closure, /TASK-029–TASK-052 não serão executadas/);
+  const development = readFileSync(new URL("../../docs/DEVELOPMENT.md", import.meta.url), "utf8");
+  assert.match(development, /cenários verticais/);
+  assert.match(development, /Dev Monitor/);
+  assert.match(development, /DECISION REQUIRED/);
+  for (const file of ["../../README.md", "../../docs/ARCHITECTURE.md"]) {
+    const currentDocument = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.doesNotMatch(currentDocument, /TASK-0(?:29|[34]\d|5[0-2])/);
+    assert.doesNotMatch(
+      currentDocument,
+      /\]\([^)]*(?:02-RELIABILITY-ROADMAP|ecosystem\/roadmap)\.md\)/,
+    );
+  }
+  for (const relativePath of requiredFiles.filter(
+    (file) => !file.startsWith("decisions/") && file !== "README.md",
+  )) {
+    const historical = readFileSync(
+      new URL(`../../docs/reliability-program/${relativePath}`, import.meta.url),
+      "utf8",
+    );
+    assert.match(historical, /(?:Documento histórico|Arquivo histórico)/);
+  }
 
   const roadmap = readFileSync(
     new URL("../../docs/reliability-program/02-RELIABILITY-ROADMAP.md", import.meta.url),
@@ -133,7 +173,8 @@ test("keeps the Reliability Program connected and bounded", () => {
     assert.match(roadmap, new RegExp("\\| " + taskId + " \\|[^\\n]+\\| `done`\\s+\\|"));
   }
   assert.match(roadmap, /\| TASK-028A \|[^\n]+\| `done`\s+\|/);
-  assert.match(roadmap, /\| TASK-029 \|[^\n]+\| `ready`\s+\|/);
+  assert.match(roadmap, /Documento histórico/);
+  assert.match(roadmap, /sequência TASK-029–TASK-052 foi encerrada/);
 
   const task010 = readFileSync(
     new URL("../../docs/reliability-program/tasks/TASK-010.md", import.meta.url),

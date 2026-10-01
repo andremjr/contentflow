@@ -18,6 +18,7 @@ export type ValueShapeIssue = {
     | "INVALID_REPRESENTATION"
     | "INVALID_FORMAT_CONSTRAINT"
     | "INVALID_CONTROL_OPTIONS"
+    | "INVALID_ITEM_REFERENCE_FIELD"
     | "DUPLICATE_RECORD_FIELD"
     | "EMPTY_RECORD_FIELD";
   message: string;
@@ -91,6 +92,7 @@ export function areValueShapesCompatible(source: ValueShape, target: ValueShape)
     return source.options.every((option) => target.options!.includes(option));
   }
   if (source.kind === "record" && target.kind === "record") {
+    if (source.open || target.open) return true;
     return target.fields.every((targetField) => {
       const sourceField = source.fields.find((field) => field.key === targetField.key);
       return Boolean(
@@ -101,6 +103,33 @@ export function areValueShapesCompatible(source: ValueShape, target: ValueShape)
     });
   }
   return false;
+}
+
+/** Compatibility at the producer → consumer boundary, including the one allowed contraction. */
+export function areInputShapesCompatible(source: ValueShape, target: ValueShape): boolean {
+  if (areValueShapesCompatible(source, target)) return true;
+  return (
+    source.kind === "content" &&
+    target.kind === "content" &&
+    source.family === "text" &&
+    target.family === "text" &&
+    source.cardinality === "many" &&
+    target.cardinality === "one" &&
+    source.representation === "inline" &&
+    (target.representation === "inline" || target.representation === "either")
+  );
+}
+
+export function consumeInputValue(source: ValueShape, target: ValueShape, value: unknown): unknown {
+  if (areValueShapesCompatible(source, target)) return structuredClone(value);
+  if (
+    areInputShapesCompatible(source, target) &&
+    Array.isArray(value) &&
+    value.every((item) => typeof item === "string")
+  ) {
+    return value.join("\n\n");
+  }
+  return undefined;
 }
 
 export function validateValueShape(shape: ValueShape, path = "shape"): ValueShapeIssue[] {
@@ -149,6 +178,16 @@ export function validateValueShape(shape: ValueShape, path = "shape"): ValueShap
       });
     }
     keys.add(field.key);
+    if (
+      field.referencesInputId &&
+      !(field.shape.kind === "control" && field.shape.control === "identifier")
+    ) {
+      issues.push({
+        path: `${fieldPath}.referencesInputId`,
+        code: "INVALID_ITEM_REFERENCE_FIELD",
+        message: "Referências de itens exigem um campo de controle identifier.",
+      });
+    }
     issues.push(...validateValueShape(field.shape, `${fieldPath}.shape`));
   }
   return issues;

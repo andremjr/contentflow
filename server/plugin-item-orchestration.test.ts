@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { BlockExecutionItem } from "../src/lib/domain";
 import type { PluginCapability, PluginExecutionRequest } from "../src/lib/plugin-contract";
 import { createPersistentPluginJob } from "./plugin-job-store";
 import {
   appendOrchestratedOutput,
   blockExecutionItemsForJob,
+  canFinalizeFromDurableOrchestratedItems,
   completeCurrentOrchestratedItem,
   belongsToSameItemActionGroup,
   declaredItemOrchestration,
@@ -76,6 +78,88 @@ test("expande uma lista em chamadas atômicas com ID e posição", () => {
   });
 });
 
+test("resposta terminal pode consolidar unidades já publicadas sem repetir output agregado", () => {
+  const itemOrchestration = declaredItemOrchestration(capability, request)!;
+  let job = createPersistentPluginJob({
+    pluginId: "test.browser",
+    pluginVersion: "1.0.0",
+    request,
+    timeoutMs: 60_000,
+    itemOrchestration,
+  });
+  for (const output of ["image-one", "image-two", "image-three"]) {
+    job = completeCurrentOrchestratedItem(job, output);
+    const orchestration = job.itemOrchestration;
+    assert.ok(orchestration);
+    const workItems = orchestration.workItems;
+    assert.ok(workItems);
+    const next = workItems.findIndex((item) => item.status !== "completed");
+    if (next >= 0) orchestration.currentIndex = next;
+  }
+
+  assert.equal(canFinalizeFromDurableOrchestratedItems(job, undefined), true);
+  assert.equal(canFinalizeFromDurableOrchestratedItems(job, "duplicate"), false);
+});
+
+test("usa uma associação estrutural declarada quando a coleção principal está ausente", () => {
+  const associatedCapability = {
+    ...capability,
+    execution: {
+      ...capability.execution,
+      itemOrchestration: {
+        ...capability.execution.itemOrchestration!,
+        collectionAssociations: [
+          {
+            key: "prompt-records",
+            inputPort: "prompt_records",
+            outputPort: "images",
+          },
+        ],
+      },
+    },
+  } satisfies PluginCapability;
+  const associatedRequest = {
+    ...request,
+    inputs: {
+      prompt_records: [{ visual_prompt: "Ana em plano médio" }, { visual_prompt: "Beto em close" }],
+    },
+  } satisfies PluginExecutionRequest;
+
+  const orchestration = declaredItemOrchestration(associatedCapability, associatedRequest);
+  assert.equal(orchestration?.inputPort, "prompt_records");
+  assert.equal(orchestration?.outputPort, "images");
+  assert.equal(orchestration?.workItems?.length, 2);
+});
+
+test("preserva a associação estrutural quando ela contém um único item", () => {
+  const associatedCapability = {
+    ...capability,
+    execution: {
+      ...capability.execution,
+      itemOrchestration: {
+        ...capability.execution.itemOrchestration!,
+        collectionAssociations: [
+          {
+            key: "prompt-records",
+            inputPort: "prompt_records",
+            outputPort: "images",
+          },
+        ],
+      },
+    },
+  } satisfies PluginCapability;
+  const associatedRequest = {
+    ...request,
+    inputs: {
+      prompt_records: [{ visual_prompt: "Ana em plano médio" }],
+    },
+  } satisfies PluginExecutionRequest;
+
+  const orchestration = declaredItemOrchestration(associatedCapability, associatedRequest);
+  assert.equal(orchestration?.inputPort, "prompt_records");
+  assert.equal(orchestration?.workItems?.length, 1);
+});
+
 test("materializa itens operacionais com identidade e linhagem persistentes", () => {
   const requestWithDelivery = {
     ...request,
@@ -129,6 +213,91 @@ test("materializa itens operacionais com identidade e linhagem persistentes", ()
     ["completed", "pending", "pending"],
   );
   assert.equal(resumed.workItems![1].attempt, 2);
+});
+
+test("progresso do lote não é substituído por variantes incrementais", () => {
+  const orchestration = declaredItemOrchestration(capability, request)!;
+  let job = createPersistentPluginJob({
+    pluginId: "test.browser",
+    pluginVersion: "1.0.0",
+    request,
+    timeoutMs: 60_000,
+    itemOrchestration: orchestration,
+  });
+  job = startCurrentOrchestratedItem(job);
+  job = completeCurrentOrchestratedItem(job, ["image-a"]);
+  job.incrementalItems = [
+    {
+      id: "variant-a",
+      order: 0,
+      input: "one",
+      output: "image-a",
+      status: "completed",
+      attempt: 1,
+      attempts: [],
+      pluginCorrelation: { key: "variant-a", outputPort: "images", outputKey: "images" },
+    },
+  ];
+
+  assert.deepEqual(itemProgressForJob(job), {
+    total: 3,
+    completed: 1,
+    pending: 2,
+    currentIndex: 0,
+    failedIndex: undefined,
+  });
+});
+
+test("remove unidades obsoletas de tentativas antigas sem perder unidades retomadas pelo job", () => {
+  const itemOrchestration = declaredItemOrchestration(capability, request)!;
+  const resumedItem = itemOrchestration.workItems![0] as BlockExecutionItem;
+  resumedItem.attempt = 1;
+  resumedItem.status = "completed";
+  resumedItem.output = "image-a";
+  const job = createPersistentPluginJob({
+    pluginId: "test.browser",
+    pluginVersion: "1.0.0",
+    request: { ...request, attempt: 2 },
+    timeoutMs: 60_000,
+    itemOrchestration,
+  });
+  const currentItems = [
+    {
+      id: "obsolete-input",
+      kind: "list_item" as const,
+      order: 0,
+      input: "old",
+      status: "pending" as const,
+      attempt: 1,
+      attempts: [],
+      provenance: { origin: "block_input" as const, inputPort: "old-port" },
+    },
+    {
+      id: "current-input",
+      kind: "scalar" as const,
+      order: 0,
+      input: "current",
+      status: "pending" as const,
+      attempt: 2,
+      attempts: [],
+      provenance: { origin: "block_input" as const, inputPort: "context" },
+    },
+  ];
+
+  const items = blockExecutionItemsForJob(job, currentItems)!;
+
+  assert.equal(
+    items.some((item) => item.id === "obsolete-input"),
+    false,
+  );
+  assert.equal(
+    items.some((item) => item.id === "current-input"),
+    true,
+  );
+  assert.equal(
+    items.some((item) => item.id === itemOrchestration.workItems![0].id),
+    true,
+  );
 });
 
 test("acumula outputs parciais sem repetir itens anteriores", () => {

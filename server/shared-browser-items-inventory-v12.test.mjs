@@ -30,13 +30,13 @@ test("pacote 1.2 inventaria identidades, persistência e superfícies de itens",
   }
 });
 
-test("inferências posicionais existentes permanecem explicitamente registradas no inventário 1.2", async () => {
-  const [inventory, deliveries, orchestration, index] = await Promise.all([
-    readFile(inventoryPath, "utf8"),
-    readFile(path.join(root, "src", "lib", "deliveries.ts"), "utf8"),
-    readFile(path.join(root, "server", "plugin-item-orchestration.ts"), "utf8"),
-    readFile(path.join(root, "server", "index.ts"), "utf8"),
-  ]);
+test("inventário 1.2 preserva inferências históricas sem exigir sua presença no runtime atual", async () => {
+  const inventory = await readFile(inventoryPath, "utf8");
+
+  assert.match(inventory, /Documento histórico — arquivado/);
+  assert.match(inventory, /não é o roadmap de implementação vigente/);
+  assert.match(inventory, /CURRENT_STATE\.md/);
+  assert.match(inventory, /DEVELOPMENT\.md/);
 
   for (const expected of [
     "sourceItemIds[order]",
@@ -49,19 +49,7 @@ test("inferências posicionais existentes permanecem explicitamente registradas 
   ]) {
     assert.ok(
       inventory.includes(expected),
-      `inventário não registra inferência posicional: ${expected}`,
+      `inventário não preserva inferência posicional histórica: ${expected}`,
     );
   }
-
-  assert.match(
-    orchestration,
-    /sourceItemIds\?\.length === items\.length \? sourceItemIds\[order\]/,
-  );
-  assert.match(orchestration, /outputs\[index\]/);
-  assert.match(orchestration, /item\.items\[item\.currentIndex\]/);
-  assert.match(orchestration, /item\.itemIds\[item\.currentIndex\]/);
-  assert.match(deliveries, /executionItems\?\.\[order\]\?\.id/);
-  assert.match(deliveries, /String\(order \+ 1\)/);
-  assert.match(deliveries, /candidate\.order === order/);
-  assert.match(index, /oldIndexById\.get\(item\.id\)!/);
 });

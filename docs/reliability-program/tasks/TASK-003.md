@@ -1,5 +1,7 @@
 # TASK-003 — Characterization de `VALIDAR` e retry editorial
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../../ARCHITECTURE.md), o [estado e limitações](../../CURRENT_STATE.md) e o [processo de desenvolvimento](../../DEVELOPMENT.md).
+
 ## Objetivo
 
 Congelar em testes reproduzíveis a semântica vigente do caminho humano de `VALIDAR` e do retry editorial antes da futura centralização no Core canônico, sem corrigir nem redesenhar o comportamento observado.

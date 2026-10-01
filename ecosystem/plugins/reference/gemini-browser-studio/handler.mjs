@@ -567,7 +567,11 @@ function classifyGeminiError(st) {
       combinedRelevant,
     )
   ) {
-    const error = err("RATE_LIMIT", "Notamos uma atividade incomum no Gemini ou na rede.", true);
+    const error = err(
+      "PROVIDER_SECURITY_CHALLENGE",
+      "Notamos uma atividade incomum no Gemini ou na rede.",
+      false,
+    );
     error.isUnusualActivity = true;
     error.retryAfterMs = 45000;
     return error;
@@ -1277,12 +1281,19 @@ async function executeHandler(request, services) {
   } catch (e) {
     if (services.signal?.aborted || e.code === "CANCELLED")
       return failure("CANCELLED", "Execução cancelada.");
-    return failure(
+    const response = failure(
       e.code || "UPSTREAM_UNAVAILABLE",
       e.message || "Falha Gemini.",
       !!e.retryable,
       e.retryAfterMs,
     );
+    if (e.code === "PROVIDER_SECURITY_CHALLENGE") {
+      response.recovery = {
+        externalEffect: "none",
+        intervention: "provider_security_challenge",
+      };
+    }
+    return response;
   } finally {
     await bridge?.dispose();
     if (closeTaskTarget && taskTargetId)

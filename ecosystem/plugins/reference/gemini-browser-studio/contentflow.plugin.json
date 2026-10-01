@@ -138,6 +138,89 @@
           }
         },
         {
+          "key": "history",
+          "label": "Histórico do canal",
+          "description": "Registros históricos explicitamente vinculados pelo núcleo para orientar a geração.",
+          "required": false,
+          "shape": {
+            "kind": "record",
+            "cardinality": "many",
+            "fields": []
+          }
+        },
+        {
+          "key": "context_1",
+          "label": "Contexto adicional 1",
+          "description": "Entrada textual adicional explicitamente vinculada pelo Método e enviada no contexto da instrução.",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
+        },
+        {
+          "key": "context_2",
+          "label": "Contexto adicional 2",
+          "description": "Entrada textual adicional explicitamente vinculada pelo Método e enviada no contexto da instrução.",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
+        },
+        {
+          "key": "context_3",
+          "label": "Contexto adicional 3",
+          "description": "Entrada textual adicional explicitamente vinculada pelo Método e enviada no contexto da instrução.",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
+        },
+        {
+          "key": "context_4",
+          "label": "Contexto adicional 4",
+          "description": "Entrada textual adicional explicitamente vinculada pelo Método e enviada no contexto da instrução.",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
+        },
+        {
+          "key": "context_5",
+          "label": "Contexto adicional 5",
+          "description": "Entrada textual adicional explicitamente vinculada pelo Método e enviada no contexto da instrução.",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
+        },
+        {
+          "key": "context_6",
+          "label": "Contexto adicional 6",
+          "description": "Entrada textual adicional explicitamente vinculada pelo Método e enviada no contexto da instrução.",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          }
+        },
+        {
           "key": "outline",
           "label": "Outline",
           "required": false,

@@ -1,5 +1,7 @@
 # TASK-011 — Unificar transição Bloco concluído → próximo estado
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../../ARCHITECTURE.md), o [estado e limitações](../../CURRENT_STATE.md) e o [processo de desenvolvimento](../../DEVELOPMENT.md).
+
 ## Objetivo
 
 Fazer a progressão normal após um Bloco já concluído usar uma única decisão do Execution Core e uma única aplicação compartilhada para os caminhos humano/manual e plugin.

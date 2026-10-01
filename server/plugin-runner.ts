@@ -1,3 +1,5 @@
+import { devProbe, monitorEnabled } from "./dev-monitor/client";
+import { eventSchema, type EventInput } from "./dev-monitor/contract";
 import { spawn } from "node:child_process";
 import {
   createReadStream,
@@ -40,6 +42,15 @@ import {
 } from "./browser-session-manager";
 
 const browserSessionManager = new BrowserSessionManager();
+
+export function storedArtifactsDeclaredByUpdate(
+  storedArtifacts: StoredFile[],
+  declaredArtifacts: PluginArtifact[] | undefined,
+) {
+  if (!declaredArtifacts?.length) return [];
+  const declaredIds = new Set(declaredArtifacts.map((artifact) => artifact.id));
+  return storedArtifacts.filter((artifact) => declaredIds.has(artifact.id));
+}
 
 export type PluginSource = "local" | "installed";
 
@@ -223,6 +234,7 @@ export async function executeRegisteredPlugin(
   timeoutMs: number | undefined,
   secrets: Record<string, string> = {},
   options: {
+    monitorCorrelation?: { profileId?: string; pluginJobId?: string };
     workspaceDirectory?: string;
     profileDirectory?: string;
     existingArtifacts?: StoredFile[];
@@ -289,6 +301,11 @@ export async function executeRegisteredPlugin(
         visible:
           request.invocation.mode === "configure" || request.settings.startMinimized !== true,
         signal: options.signal,
+        monitorCorrelation: {
+          ...options.monitorCorrelation,
+          executionId: request.executionId,
+          blockId: request.blockId,
+        },
       })
     : undefined;
   const workerRequest: PluginExecutionRequest = coreBrowserSession
@@ -345,11 +362,29 @@ export async function executeRegisteredPlugin(
       LOCALAPPDATA: process.env.LOCALAPPDATA,
       TEMP: process.env.TEMP,
       TMP: process.env.TMP,
+      ...(monitorEnabled() ? { CONTENTFLOW_DEV_MONITOR_WORKER: "1" } : {}),
     },
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
   });
 
+  const monitor = devProbe("plugin", "plugin-runner");
+  const monitorId = String(child.pid ?? request.traceId);
+  const monitorCorrelation = {
+    ...coreBrowserSession?.monitorCorrelation,
+    ...options.monitorCorrelation,
+    executionId: request.executionId,
+    blockId: request.blockId,
+    pluginId: plugin.id,
+    invocationId: monitorId,
+  };
+  if (monitor.enabled)
+    monitor.emit({
+      kind: "invocation.started",
+      entity: { type: "invocation", id: monitorId },
+      correlation: monitorCorrelation,
+      phase: "begin",
+    });
   const execution = new Promise<PluginExecutionResponse>((resolve, reject) => {
     let stdout = "";
     let stdoutBuffer = "";
@@ -358,6 +393,7 @@ export async function executeRegisteredPlugin(
     let partialChain = Promise.resolve();
     let partialFailure: unknown;
     let settled = false;
+    let monitorWorkerSequence = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const abort = () => {
       child.kill();
@@ -386,6 +422,37 @@ export async function executeRegisteredPlugin(
     }
 
     const consumeStdoutLine = (line: string) => {
+      if (monitor.enabled && line.startsWith("CONTENTFLOW_DEV_EVENT\t")) {
+        try {
+          const frame = JSON.parse(line.slice("CONTENTFLOW_DEV_EVENT\t".length)) as {
+            sequence: number;
+            event: EventInput;
+          };
+          if (frame.sequence !== ++monitorWorkerSequence)
+            throw new Error("MONITOR_WORKER_SEQUENCE_GAP");
+          const input = frame.event;
+          const safe = eventSchema
+            .omit({
+              source: true,
+              schemaVersion: true,
+              eventId: true,
+              runId: true,
+              observedAt: true,
+            })
+            .parse(input);
+          devProbe("browser_bridge", "bridge-sdk").emit({
+            ...safe,
+            correlation: { ...safe.correlation, ...monitorCorrelation },
+          });
+        } catch {
+          devProbe("browser_bridge", "bridge-sdk").emit({
+            kind: "instrumentation.invalid",
+            entity: { type: "instrumentation", id: monitorId },
+            correlation: monitorCorrelation,
+          });
+        }
+        return;
+      }
       if (line.startsWith(servicePrefix)) {
         const payload = line.slice(servicePrefix.length);
         partialChain = partialChain.then(async () => {
@@ -433,6 +500,10 @@ export async function executeRegisteredPlugin(
                 },
               );
               partialArtifacts = imported.storedArtifacts ?? partialArtifacts;
+              const itemStoredArtifacts = storedArtifactsDeclaredByUpdate(
+                partialArtifacts,
+                event.update.artifacts,
+              );
               const importedValue =
                 event.update.value === undefined
                   ? undefined
@@ -446,7 +517,7 @@ export async function executeRegisteredPlugin(
                     ? { value: importedValue as BlockExecutionItemValue }
                     : {}),
                 },
-                imported.storedArtifacts ?? partialArtifacts,
+                itemStoredArtifacts,
               );
             } else {
               throw new Error("O runtime não habilitou o serviço solicitado para esta invocação.");
@@ -589,7 +660,27 @@ export async function executeRegisteredPlugin(
     );
   });
   try {
-    return await execution;
+    const response = await execution;
+    if (monitor.enabled)
+      monitor.emit({
+        kind: "invocation.completed",
+        entity: { type: "invocation", id: monitorId },
+        correlation: monitorCorrelation,
+        phase: "end",
+        outcome: response.status === "error" ? "error" : "ok",
+        payload: { status: response.status },
+      });
+    return response;
+  } catch (error) {
+    if (monitor.enabled)
+      monitor.emit({
+        kind: "invocation.failed",
+        entity: { type: "invocation", id: monitorId },
+        correlation: monitorCorrelation,
+        phase: "end",
+        outcome: "error",
+      });
+    throw error;
   } finally {
     if (coreBrowserSession && shouldAutoCloseCoreBrowserSession(request.invocation)) {
       await browserSessionManager.close(coreBrowserSession);

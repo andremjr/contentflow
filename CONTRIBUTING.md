@@ -31,6 +31,12 @@ Antes de enviar uma contribuição:
 npm run check
 ```
 
+## Desenvolvimento e validação
+
+Siga o [processo de desenvolvimento vertical](docs/DEVELOPMENT.md): escolha um Método/plugin real, execute o cenário afetado, observe resultado e invariantes, corrija a causa e repita a jornada com regressão/check quando aplicável. Leia [AGENTS.md](AGENTS.md), o [contrato de conteúdo](docs/CONTENT_CONTRACT.md) e os contratos pertinentes.
+
+O Dev Monitor e a skill `development-contentflow` apoiam o desenvolvimento interno; o aplicativo não depende de agentes de IA. Os [limites de validação](docs/CURRENT_STATE.md) continuam explícitos. O programa separado de confiabilidade foi encerrado e suas tasks não são pré-requisitos para contribuir.
+
 ## Segurança e privacidade
 
 - Nunca envie chaves de API, tokens, senhas, bancos SQLite, uploads ou dados de canais reais.

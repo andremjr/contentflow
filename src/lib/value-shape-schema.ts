@@ -59,10 +59,12 @@ export const recordShapeSchema = z
             key: z.string().min(1).max(200),
             shape: atomicValueShapeSchema,
             required: z.boolean(),
+            referencesInputId: z.string().min(1).max(200).optional(),
           })
           .strict(),
       )
       .max(100),
+    open: z.literal(true).optional(),
   })
   .strict();
 

@@ -251,3 +251,90 @@ test("reactivates native human and executor blocks with distinct canonical state
   assert.equal(executorExecution.blocks[0].status, "blocked_executor");
   assert.equal(executorExecution.status, "blocked_executor");
 });
+
+test("adopts the current Method from the retried Block and preserves the completed prefix", () => {
+  const execution = executionWithBlock("IA");
+  const prefix = {
+    id: "prompts",
+    type: "CRIAR" as const,
+    operator: "IA" as const,
+    name: "Prompts antigos",
+    inputs: [],
+    outputs: [],
+    parameters: [],
+    instructions: "old prefix",
+    order: 0,
+  };
+  execution.methodSnapshot.blocks = [prefix, execution.methodSnapshot.blocks[0]];
+  execution.blocks = [
+    { blockId: prefix.id, status: "completed", values: { prompts: ["a", "b"] }, attempt: 1 },
+    execution.blocks[0],
+  ];
+  execution.deliveries?.push({
+    ...execution.deliveries[0],
+    id: "downstream-delivery",
+    blockId: "old-downstream",
+    outputKey: "result",
+  });
+  const currentMethod = structuredClone(execution.methodSnapshot);
+  currentMethod.name = "Método corrigido";
+  currentMethod.blocks = [
+    { ...prefix, name: "Prompts novos que não devem substituir o prefixo" },
+    {
+      ...currentMethod.blocks[1],
+      name: "Imagens corrigidas",
+      instructions: "new target",
+    },
+    {
+      id: "new-downstream",
+      type: "VALIDAR",
+      operator: "Humano",
+      name: "Novo downstream",
+      inputs: [],
+      outputs: [],
+      parameters: [],
+      instructions: "",
+      order: 2,
+    },
+  ];
+
+  const result = applyManualBlockRetry(
+    execution,
+    { type: "manual_block_retry_requested", blockId: "images", scope: "all" },
+    NOW,
+    currentMethod,
+    12,
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(execution.methodSnapshot.name, "Método corrigido");
+  assert.equal(execution.methodSnapshot.blocks[0].name, "Prompts antigos");
+  assert.equal(execution.methodSnapshot.blocks[1].name, "Imagens corrigidas");
+  assert.equal(execution.methodSnapshot.blocks[2].id, "new-downstream");
+  assert.deepEqual(execution.blocks[0].values, { prompts: ["a", "b"] });
+  assert.equal(execution.blocks[0].status, "completed");
+  assert.equal(execution.blocks[1].status, "blocked_executor");
+  assert.equal(execution.blocks[1].attempt, 4);
+  assert.equal(execution.blocks[1].items, undefined);
+  assert.equal(execution.blocks[2].status, "pending");
+  assert.equal(execution.methodSnapshotHistory?.length, 1);
+  assert.equal(execution.methodSnapshotHistory?.[0].fromBlockId, "images");
+  assert.equal(execution.methodSnapshotHistory?.[0].channelDefinitionRevision, 12);
+});
+
+test("rejects a partial retry when the current target definition changed", () => {
+  const execution = executionWithBlock("IA");
+  const currentMethod = structuredClone(execution.methodSnapshot);
+  currentMethod.blocks[0].instructions = "changed";
+  const before = structuredClone(execution);
+
+  const result = applyManualBlockRetry(
+    execution,
+    { type: "manual_block_retry_requested", blockId: "images", scope: "remaining" },
+    NOW,
+    currentMethod,
+  );
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(execution, before);
+});

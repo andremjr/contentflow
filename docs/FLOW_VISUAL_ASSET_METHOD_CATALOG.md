@@ -1,6 +1,8 @@
 # Catálogo de Métodos de Assets Visuais com Google Flow
 
-Status: planejamento funcional, sem implementação.
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](./ARCHITECTURE.md), o [estado e limitações](./CURRENT_STATE.md) e o [processo de desenvolvimento](./DEVELOPMENT.md). As propostas F01–F14 não são um catálogo de arquivos importáveis nem uma lista obrigatória de implementação.
+
+Status do registro original: propostas funcionais, sem implementação dos arquivos de Método descritos; não é plano vigente.
 
 Este documento inventaria os **diferentes Métodos de geração de assets visuais** que podem ser criados no ContentFlow a partir das possibilidades encontradas na extensão **Estúdio de Canais Dark — Free**, com foco no Google Flow.
 

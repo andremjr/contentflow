@@ -10,6 +10,8 @@ const REQUIRED_CAPABILITIES = Object.freeze([
   "condition-observer.v1",
   "reload.v1",
 ]);
+const EFFECTFUL_ACTIONS = new Set(["click", "clickGenerate", "pressEnter", "setFiles", "reload"]);
+let devMonitorSequence = 0;
 
 function codedError(code, message, retryable = false) {
   const error = new Error(message);
@@ -97,6 +99,12 @@ export async function attachContentFlowBridge({
   let workerTarget;
   let workerSessionId;
   let identity;
+  const monitor = (event) => {
+    if (process.env.CONTENTFLOW_DEV_MONITOR_WORKER !== "1") return;
+    process.stdout.write(
+      "CONTENTFLOW_DEV_EVENT\t" + JSON.stringify({ sequence: ++devMonitorSequence, event }) + "\n",
+    );
+  };
 
   const attachWorkerSession = async (timeoutMs = waitMs) => {
     const deadline = Date.now() + timeoutMs;
@@ -131,7 +139,7 @@ export async function attachContentFlowBridge({
             };
           }
           if (candidateIdentity?.bridgeId === BRIDGE_ID) {
-            throw codedError("INVALID_CONFIGURATION", "A extensão instalada é incompatível.");
+            throw codedError("BRIDGE_INCOMPATIBLE", "A extensão instalada é incompatível.");
           }
         } catch (error) {
           if (!isMissingCdpSession(error)) throw error;
@@ -145,7 +153,7 @@ export async function attachContentFlowBridge({
       await delay(250, signal);
     }
     throw codedError(
-      "INVALID_CONFIGURATION",
+      "BRIDGE_MISSING",
       "A ContentFlow Browser Bridge não está instalada neste perfil do Chrome. Abra chrome://extensions, ative o modo do desenvolvedor, use Carregar sem compactação na pasta contentflow-browser-bridge e recarregue a extensão. O plugin não continuará usando teclado ou mouse como alternativa.",
     );
   };
@@ -169,7 +177,7 @@ export async function attachContentFlowBridge({
     const handshake = await evaluateWorker(client, workerSessionId, connectionExpression());
     if (!handshake?.ok) {
       throw codedError(
-        "INVALID_CONFIGURATION",
+        "BRIDGE_INCOMPATIBLE",
         handshake?.message || "A extensão recusou a conexão efêmera do plugin.",
       );
     }
@@ -179,7 +187,7 @@ export async function attachContentFlowBridge({
       handshake.protocolVersion > PROTOCOL_RANGE.max ||
       !REQUIRED_CAPABILITIES.every((capability) => handshake.capabilities?.includes(capability))
     ) {
-      throw codedError("INVALID_CONFIGURATION", "A extensão instalada é incompatível.");
+      throw codedError("BRIDGE_INCOMPATIBLE", "A extensão instalada é incompatível.");
     }
     negotiatedProtocolVersion = handshake.protocolVersion;
   };
@@ -244,7 +252,7 @@ export async function attachContentFlowBridge({
   };
 
   const origins = new Set(allowedOrigins);
-  const dispatch = async (action, payload = {}, operationKey = action, timeoutMs = 30000) => {
+  const dispatchRaw = async (action, payload = {}, operationKey = action, timeoutMs = 30000) => {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     // During an interactive Microsoft login the DevTools target can briefly
     // report the previous identity-provider URL after the page has already
@@ -300,7 +308,7 @@ export async function attachContentFlowBridge({
       const reconnect = await evaluateBridge(connectionExpression());
       if (!reconnect?.ok) {
         throw codedError(
-          "INVALID_CONFIGURATION",
+          "BRIDGE_INCOMPATIBLE",
           reconnect?.message || "A extensão recusou a reconexão efêmera do plugin.",
         );
       }
@@ -316,14 +324,21 @@ export async function attachContentFlowBridge({
           true,
         );
       }
-      if (["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code)) {
+      if (
+        ["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code) &&
+        !EFFECTFUL_ACTIONS.has(action)
+      ) {
         throw codedError(
-          "UPSTREAM_UNAVAILABLE",
+          "BRIDGE_PAGE_UNAVAILABLE",
           response?.message || "A extensão deixou de responder.",
           true,
         );
       }
-      if (code === "COMMAND_OUTCOME_UNKNOWN") {
+      if (
+        code === "COMMAND_OUTCOME_UNKNOWN" ||
+        (["COMMAND_TIMEOUT", "CONTENT_SCRIPT_UNAVAILABLE"].includes(code) &&
+          EFFECTFUL_ACTIONS.has(action))
+      ) {
         throw codedError(
           "COMMAND_OUTCOME_UNKNOWN",
           response?.message || "O resultado do último comando precisa ser reconciliado.",
@@ -339,7 +354,7 @@ export async function attachContentFlowBridge({
         ].includes(code)
       ) {
         throw codedError(
-          "INVALID_CONFIGURATION",
+          "BRIDGE_INCOMPATIBLE",
           response?.message || "A extensão instalada é incompatível.",
         );
       }
@@ -352,6 +367,36 @@ export async function attachContentFlowBridge({
     return response;
   };
 
+  const dispatch = async (action, payload = {}, operationKey = action, timeoutMs = 30000) => {
+    if (process.env.CONTENTFLOW_DEV_MONITOR_WORKER !== "1")
+      return dispatchRaw(action, payload, operationKey, timeoutMs);
+    const id = commandId(key, action, operationKey);
+    const base = {
+      entity: { type: "command", id },
+      correlation: { commandId: id, sessionId: workerSessionId },
+      payload: { action, effect: EFFECTFUL_ACTIONS.has(action) ? "possible" : "none" },
+    };
+    monitor({ ...base, kind: "command.sent", phase: "begin" });
+    try {
+      const result = await dispatchRaw(action, payload, operationKey, timeoutMs);
+      monitor({ ...base, kind: "command.completed", phase: "end", outcome: "ok" });
+      return result;
+    } catch (error) {
+      monitor({
+        ...base,
+        kind: "command.failed",
+        phase: "end",
+        outcome:
+          error.code === "COMMAND_OUTCOME_UNKNOWN"
+            ? "unknown"
+            : error.code === "CANCELLED"
+              ? "cancelled"
+              : "error",
+        payload: { ...base.payload, code: error.code || "UNKNOWN" },
+      });
+      throw error;
+    }
+  };
   const cancel = () => {
     const payload = {
       pluginId,
@@ -376,18 +421,21 @@ export async function attachContentFlowBridge({
   signal?.addEventListener("abort", cancel, { once: true });
   let disposed = false;
 
-  let ping;
   try {
-    try {
-      ping = await dispatch("ping", {}, "bridge-ready");
-    } catch (error) {
-      if (error?.code !== "UPSTREAM_UNAVAILABLE") throw error;
+    if (request?.recoveryDirective?.action === "reload_page") {
       await dispatch(
         "reload",
-        { reconciliationState: "safe", bypassCache: true },
-        "bridge-ready-controlled-reload",
+        {
+          reconciliationState: "safe",
+          bypassCache: true,
+          reasonCode: request.recoveryDirective.reasonCode,
+        },
+        `core-recovery:${request.recoveryDirective.reasonCode}`,
       );
-      ping = await dispatch("ping", {}, "bridge-ready-after-reload");
+    }
+    const ping = await dispatch("ping", {}, "bridge-ready");
+    if (ping?.protocolVersion !== negotiatedProtocolVersion) {
+      throw codedError("BRIDGE_INCOMPATIBLE", "A ContentFlow Browser Bridge está desatualizada.");
     }
   } catch (error) {
     // A failed initialization must not leave chrome.debugger attached. A
@@ -407,10 +455,6 @@ export async function attachContentFlowBridge({
       .catch(() => undefined);
     throw error;
   }
-  if (ping?.protocolVersion !== negotiatedProtocolVersion) {
-    throw codedError("INVALID_CONFIGURATION", "A ContentFlow Browser Bridge está desatualizada.");
-  }
-
   return {
     dispatch,
     identity,

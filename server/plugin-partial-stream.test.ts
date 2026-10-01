@@ -4,7 +4,37 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import type { PluginExecutionRequest, PluginManifest } from "../src/lib/plugin-contract";
-import { executeRegisteredPlugin, type RegisteredPlugin } from "./plugin-runner";
+import {
+  executeRegisteredPlugin,
+  storedArtifactsDeclaredByUpdate,
+  type RegisteredPlugin,
+} from "./plugin-runner";
+
+test("limits a work-item update to the artifacts declared by that update", () => {
+  const first = {
+    id: "first",
+    name: "first.png",
+    mimeType: "image/png",
+    size: 10,
+    url: "/api/files/first.png",
+  };
+  const second = {
+    id: "second",
+    name: "second.png",
+    mimeType: "image/png",
+    size: 20,
+    url: "/api/files/second.png",
+  };
+
+  assert.deepEqual(
+    storedArtifactsDeclaredByUpdate(
+      [first, second],
+      [{ ...second, source: { kind: "path", path: "second.png" } }],
+    ),
+    [second],
+  );
+  assert.deepEqual(storedArtifactsDeclaredByUpdate([first, second], undefined), []);
+});
 
 test("imports and forwards partial plugin snapshots before the final response", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "contentflow-partial-stream-"));

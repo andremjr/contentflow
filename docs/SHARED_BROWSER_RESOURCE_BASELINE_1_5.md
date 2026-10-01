@@ -1,5 +1,7 @@
 # Linha de base de recursos — pacote 1.5
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](./ARCHITECTURE.md), o [estado e limitações](./CURRENT_STATE.md) e o [processo de desenvolvimento](./DEVELOPMENT.md).
+
 Data da coleta: 2026-09-26.
 
 Esta linha de base mede o estado atual antes de qualquer migração para perfis globais. O benchmark usa somente dados, workspaces e perfis temporários. Nenhuma sessão real, cookie, credencial ou perfil persistente do usuário participa da coleta.

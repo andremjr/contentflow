@@ -1,5 +1,7 @@
 # Cenários de aceitação do Reliability Program
 
+> **Documento histórico — arquivado em 01/10/2026.** Descreve uma fase anterior e não é o roadmap de implementação vigente. Estados, pendências e instruções abaixo pertencem àquele registro. Consulte a [arquitetura atual](../ARCHITECTURE.md), o [estado e limitações](../CURRENT_STATE.md) e o [processo de desenvolvimento](../DEVELOPMENT.md).
+
 ## Propósito
 
 Estes cenários preservam histórias observáveis de produto que devem orientar decisões e provas do Reliability Program. Eles complementam a [`Constituição de produto`](00-PRODUCT-CONSTITUTION.md) e a [`Arquitetura-alvo`](01-TARGET-ARCHITECTURE.md), sem antecipar implementação, ferramenta ou desenho final dos testes.

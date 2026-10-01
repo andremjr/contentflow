@@ -21,7 +21,7 @@ function request(): PluginExecutionRequest {
     attempt: 1,
     invocation: { mode: "start" },
     configuration: { accountProfile: "shared-chatgpt" },
-    settings: { diagnosticMockResponse: "resposta incremental" },
+    settings: { diagnosticMockResponse: JSON.stringify(["resposta incremental"]) },
     inputs: { content: ["primeiro", "segundo", "terceiro"] },
     inputContract: [],
     outputContract: [
@@ -99,7 +99,7 @@ test("handler mantém uma resposta por invocação per_item sem depender de sess
 
   assert.equal(response.status, "success");
   if (response.status !== "success") return;
-  assert.equal(response.values.result, "resposta incremental");
+  assert.equal(response.values.result, '["resposta incremental"]');
   assert.deepEqual(response.values.parts, ["resposta incremental"]);
   assert.deepEqual(response.bridgeDiagnostics, []);
 });
@@ -114,4 +114,13 @@ test("8.9 preserva a geração de imagens sem declarar estratégia incremental n
   assert.equal(imageCapability.execution.itemOrchestration.strategies, undefined);
   assert.equal(imageCapability.execution.itemOrchestration.preferredStrategy, undefined);
   assert.equal(usesContinuousItemSession(imageCapability), false);
+});
+
+test("text/many exige JSON estruturado e rejeita a antiga resposta escalar", async () => {
+  const { execute } = await import(chatGptHandlerModule);
+  const invocation = invocationRequestForJob(job(), { mode: "start" });
+  invocation.settings.diagnosticMockResponse = "resposta incremental";
+  const response = await execute(invocation, { signal: AbortSignal.timeout(5000) });
+  assert.equal(response.status, "error");
+  assert.equal(response.code, "OUTPUT_VALIDATION_FAILED");
 });
