@@ -87,7 +87,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara capabilities reais de texto, imagem, animação e vídeo legado", () => {
   assert.equal(manifest.id, "local.contentflow.meta-ai-browser-studio");
-  assert.equal(manifest.version, "1.0.5");
+  assert.equal(manifest.version, "2.0.0");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.capabilities[0].instructionUsage, "required");
   assert.deepEqual(Object.keys(manifest.capabilities[0].blockConfigSchema.properties), [

@@ -82,6 +82,7 @@ test("Métodos P60 apontam para capabilities e portas que existem nos manifestos
       ),
     );
     assert.equal(manifest.id, provider.pluginId);
+    assert.equal(pluginBlock.plugin.pluginVersion, manifest.version, provider.source);
     const capability = manifest.capabilities.find((entry) => entry.id === provider.capabilityId);
     assert.ok(capability, `${provider.source}: capability ausente`);
     assert.ok(capability.inputPorts.some((port) => port.key === provider.inputPort));

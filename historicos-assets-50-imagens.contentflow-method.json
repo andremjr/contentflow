@@ -1,8 +1,8 @@
 {
   "format": "contentflow-method",
-  "version": 1,
+  "version": 3,
   "name": "Históricos — 50 imagens do roteiro",
-  "exportedAt": "2026-09-06T03:00:00.000Z",
+  "exportedAt": "2026-10-01T18:02:24.321Z",
   "method": {
     "processType": "assets",
     "blocks": [
@@ -11,16 +11,23 @@
         "type": "CRIAR",
         "operator": "IA",
         "name": "Dividir roteiro e criar 50 prompts visuais",
-        "instructions": "Leia integralmente o roteiro em espanhol. Divida sua progressão narrativa em exatamente {{parameters.scene_count}} trechos cronológicos de cobertura aproximadamente uniforme, sem omitir a abertura, as transições importantes nem a conclusão. Para cada trecho, escreva um prompt visual autônomo em espanhol, historicamente fiel ao período e ao local narrados, com sujeito e ação concretos, ambiente, enquadramento, iluminação cinematográfica e detalhes de época. Preserve continuidade visual razoável entre cenas recorrentes. Não invente fatos que contradigam o roteiro. Não inclua texto visível, legendas, logotipos, marcas d'água, molduras ou colagens. Entregue exatamente {{parameters.scene_count}} linhas não vazias, uma linha por prompt, sem numeração, marcadores, cabeçalho, explicação ou quebra interna. Roteiro: {{inputs.roteiro_do_video}}",
+        "instructions": "Leia integralmente o roteiro em espanhol. Divida sua progressão narrativa em exatamente {{parameters.scene_count}} trechos cronológicos de cobertura aproximadamente uniforme, sem omitir a abertura, as transições importantes nem a conclusão. Para cada trecho, escreva um prompt visual autônomo em espanhol, historicamente fiel ao período e ao local narrados, com sujeito e ação concretos, ambiente, enquadramento, iluminação cinematográfica e detalhes de época. Preserve continuidade visual razoável entre cenas recorrentes. Não invente fatos que contradigam o roteiro. Não inclua texto visível, legendas, logotipos, marcas d'água, molduras ou colagens. Entregue exatamente {{parameters.scene_count}} prompts autônomos, um por trecho, na ordem narrativa, sem numeração, marcadores, cabeçalho ou explicação. Roteiro: {{inputs.roteiro_do_video}}",
         "inputs": [
           {
             "id": "assets-historicos-input-script",
             "label": "Roteiro do vídeo",
-            "type": "textarea",
-            "source": "previous_process",
-            "sourceProcessType": "script",
-            "sourceKey": "script",
-            "blockId": "__process_output__"
+            "shape": {
+              "kind": "content",
+              "family": "text",
+              "cardinality": "one",
+              "representation": "inline"
+            },
+            "binding": {
+              "kind": "previous_process",
+              "processType": "script",
+              "outputKey": "script"
+            },
+            "portKey": "context_1"
           }
         ],
         "outputs": [
@@ -28,12 +35,17 @@
             "id": "assets-historicos-output-prompts",
             "label": "50 prompts visuais",
             "key": "visual_prompts",
-            "type": "list",
+            "shape": {
+              "kind": "content",
+              "family": "text",
+              "cardinality": "many",
+              "representation": "inline"
+            },
             "required": true,
             "presentation": {
-              "renderer": "list",
-              "itemType": "text"
-            }
+              "renderer": "list"
+            },
+            "portKey": "parts"
           }
         ],
         "parameters": [
@@ -49,12 +61,9 @@
         "order": 0,
         "plugin": {
           "pluginId": "local.contentflow.chatgpt-browser-studio",
-          "pluginVersion": "1.0.9",
+          "pluginVersion": "2.0.0",
           "capabilityId": "generate-text-in-browser",
-          "configuration": {
-            "accountProfile": "default",
-            "fallbackAccountProfiles": ""
-          },
+          "configuration": {},
           "connectionRequired": false
         }
       },
@@ -68,14 +77,21 @@
           {
             "id": "assets-historicos-input-prompts",
             "label": "Prompts visuais",
-            "type": "list",
-            "source": "previous_block",
-            "blockId": "assets-historicos-criar-50-prompts",
-            "sourceKey": "visual_prompts",
+            "shape": {
+              "kind": "content",
+              "family": "text",
+              "cardinality": "many",
+              "representation": "inline"
+            },
+            "binding": {
+              "kind": "previous_block",
+              "blockId": "assets-historicos-criar-50-prompts",
+              "outputKey": "visual_prompts"
+            },
             "presentation": {
-              "renderer": "list",
-              "itemType": "text"
-            }
+              "renderer": "list"
+            },
+            "portKey": "prompts"
           }
         ],
         "outputs": [
@@ -83,24 +99,31 @@
             "id": "assets-historicos-output-assets",
             "label": "Assets visuais do vídeo",
             "key": "assets",
-            "type": "files",
+            "shape": {
+              "kind": "content",
+              "family": "image",
+              "cardinality": "many",
+              "representation": "artifact",
+              "formats": {
+                "mimeTypes": [
+                  "image/*"
+                ]
+              }
+            },
             "required": true,
             "presentation": {
-              "renderer": "image-gallery",
-              "itemType": "image",
-              "acceptedMimeTypes": ["image/jpeg", "image/png", "image/webp"]
-            }
+              "renderer": "image-gallery"
+            },
+            "portKey": "images"
           }
         ],
         "parameters": [],
         "order": 1,
         "plugin": {
           "pluginId": "local.contentflow.google-flow-batch-images",
-          "pluginVersion": "1.3.3",
+          "pluginVersion": "2.0.0",
           "capabilityId": "generate-images-in-browser",
           "configuration": {
-            "accountProfile": "default",
-            "fallbackAccountProfiles": "",
             "projectMode": "auto",
             "projectUrl": "",
             "imageModel": "flow_auto",
@@ -116,6 +139,8 @@
           "connectionRequired": false
         }
       }
-    ]
+    ],
+    "contractVersion": 3,
+    "name": "Históricos — 50 imagens do roteiro"
   }
 }

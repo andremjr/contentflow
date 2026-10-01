@@ -59,6 +59,11 @@ import { pluginCapabilityDescription, pluginCapabilityLabel } from "@/lib/plugin
 import type { PluginManifest } from "@/lib/plugin-contract";
 import { localizePluginManifest } from "@/lib/plugin-localization";
 import { useAppPreferences } from "@/lib/app-preferences";
+import {
+  pluginAdministrationText,
+  type PluginAdministrationCompatibility,
+} from "@/lib/plugin-administration-localization";
+import type { AppLanguage } from "@/lib/app-preferences";
 
 export const Route = createFileRoute("/plugins")({
   head: () => ({
@@ -77,7 +82,11 @@ type DiscoveredPlugin = {
   id: string;
   source: "installed" | "local";
   directory: string;
-  manifest: PluginManifest;
+  manifest: Omit<PluginManifest, "apiVersion" | "entrypoint"> & {
+    apiVersion?: string;
+    entrypoint?: string;
+  };
+  compatibility?: PluginAdministrationCompatibility;
   enabled: boolean;
   executable: boolean;
   sandboxed: boolean;
@@ -95,7 +104,24 @@ type PluginUpdate = {
   currentVersion: string;
   version?: string;
   updateAvailable: boolean;
+  apiVersion?: string;
+  minCoreVersion?: string;
+  compatibility?: PluginAdministrationCompatibility;
 };
+
+function displayPluginManifest(plugin: DiscoveredPlugin, language: AppLanguage) {
+  const manifest = plugin.manifest;
+  if (
+    plugin.compatibility?.status === "incompatible" ||
+    manifest.apiVersion !== "2" ||
+    !manifest.entrypoint
+  )
+    return manifest;
+  return localizePluginManifest(
+    { ...manifest, apiVersion: "2", entrypoint: manifest.entrypoint },
+    language,
+  );
+}
 type PluginMethodDependency = {
   channelId: string;
   channelName: string;
@@ -263,7 +289,7 @@ function PluginsPage() {
 
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredPlugins = data.plugins.filter((plugin) => {
-    const localizedManifest = localizePluginManifest(plugin.manifest, language);
+    const localizedManifest = displayPluginManifest(plugin, language);
     const capabilities = localizedManifest.capabilities;
     const matchesSearch =
       !normalizedSearch ||
@@ -623,7 +649,8 @@ function PluginCard({
   onChanged: () => Promise<void>;
 }) {
   const { language } = useAppPreferences();
-  const manifest = localizePluginManifest(plugin.manifest, language);
+  const manifest = displayPluginManifest(plugin, language);
+  const incompatible = plugin.compatibility?.status === "incompatible";
   const families = deliveryFamilies(plugin);
   const [open, setOpen] = useState(false);
   const [iconFailed, setIconFailed] = useState(false);
@@ -698,12 +725,24 @@ function PluginCard({
             {update?.updateAvailable && (
               <span
                 className="size-2 rounded-full bg-sky-500 ring-4 ring-sky-500/10"
-                title={`Atualização disponível: v${update.version}`}
+                title={`${pluginAdministrationText("updateAvailable", language)}: v${update.version}`}
               >
-                <span className="sr-only">Atualização disponível</span>
+                <span className="sr-only">
+                  {pluginAdministrationText("updateAvailable", language)}
+                </span>
               </span>
             )}
-            {!plugin.enabled && (
+            {incompatible && (
+              <span
+                className="size-2 rounded-full bg-destructive ring-4 ring-destructive/10"
+                title={pluginAdministrationText("incompatible", language)}
+              >
+                <span className="sr-only">
+                  {pluginAdministrationText("incompatible", language)}
+                </span>
+              </span>
+            )}
+            {!plugin.enabled && !incompatible && (
               <span
                 className="size-2 rounded-full bg-warning ring-4 ring-warning/10"
                 title="Plugin ainda não ativado"
@@ -758,7 +797,12 @@ function PluginCard({
                 <Badge variant="secondary" className="text-[10px]">
                   v{manifest.version}
                 </Badge>
-                {!plugin.enabled && (
+                {incompatible && (
+                  <Badge variant="outline" className="text-[10px] text-destructive">
+                    {pluginAdministrationText("incompatible", language)}
+                  </Badge>
+                )}
+                {!plugin.enabled && !incompatible && (
                   <Badge variant="outline" className="text-[10px] text-warning">
                     Desativado
                   </Badge>
@@ -788,103 +832,134 @@ function PluginCard({
           </div>
         </div>
 
-        <section>
-          <h3 className="text-xs font-semibold">O que este plugin faz</h3>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {families.map((family) => {
-              const meta = DELIVERY_META[family];
-              const Icon = meta.icon;
-              return (
-                <span
-                  key={family}
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium ${meta.className}`}
-                >
-                  <Icon className="size-3" /> {meta.label}
-                </span>
-              );
-            })}
-          </div>
-          <div className="mt-3 space-y-2">
-            {manifest.capabilities.slice(0, 3).map((capability) => (
-              <div
-                key={capability.id}
-                className="rounded-lg border border-border/70 bg-card/50 px-3 py-2.5"
-              >
-                <div className="flex items-center gap-2">
-                  {capability.operator === "IA" ? (
-                    <Bot className="size-3.5 text-brand-soft" />
-                  ) : (
-                    <Code2 className="size-3.5 text-brand-soft" />
-                  )}
-                  <span className="text-xs font-medium">{pluginCapabilityLabel(capability)}</span>
-                </div>
-                {pluginCapabilityDescription(capability) && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {pluginCapabilityDescription(capability)}
-                  </p>
-                )}
-              </div>
-            ))}
-            {manifest.capabilities.length > 3 && (
-              <p className="flex items-center gap-1 px-1 text-[11px] text-muted-foreground">
-                <span>+ {manifest.capabilities.length - 3}</span>
-                <span>Recursos disponíveis</span>
+        {incompatible && (
+          <section
+            role="alert"
+            className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs"
+          >
+            <p>
+              {pluginAdministrationText(
+                plugin.compatibility?.reason ?? "invalid_manifest",
+                language,
+              )}
+            </p>
+            <p className="mt-1">{pluginAdministrationText("executionBlocked", language)}</p>
+            <p className="mt-2">
+              {pluginAdministrationText("apiVersion", language)}: {manifest.apiVersion ?? "—"}
+            </p>
+            {manifest.minCoreVersion && (
+              <p>
+                {pluginAdministrationText("minCoreVersion", language)}: {manifest.minCoreVersion}
               </p>
             )}
-          </div>
-          <details className="mt-3 rounded-lg border border-border/70 bg-card/40 px-3">
-            <summary className="flex cursor-pointer items-center gap-1 py-2.5 text-[11px] font-medium text-muted-foreground">
-              <span>Detalhes técnicos</span>
-              <span>({manifest.capabilities.length})</span>
-            </summary>
-            <div className="divide-y divide-border">
-              {manifest.capabilities.map((capability) => (
-                <div key={capability.id} className="py-2.5">
-                  <div className="flex flex-wrap items-center gap-1.5">
+          </section>
+        )}
+
+        {!incompatible && (
+          <section>
+            <h3 className="text-xs font-semibold">O que este plugin faz</h3>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {families.map((family) => {
+                const meta = DELIVERY_META[family];
+                const Icon = meta.icon;
+                return (
+                  <span
+                    key={family}
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium ${meta.className}`}
+                  >
+                    <Icon className="size-3" /> {meta.label}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="mt-3 space-y-2">
+              {manifest.capabilities.slice(0, 3).map((capability) => (
+                <div
+                  key={capability.id}
+                  className="rounded-lg border border-border/70 bg-card/50 px-3 py-2.5"
+                >
+                  <div className="flex items-center gap-2">
+                    {capability.operator === "IA" ? (
+                      <Bot className="size-3.5 text-brand-soft" />
+                    ) : (
+                      <Code2 className="size-3.5 text-brand-soft" />
+                    )}
                     <span className="text-xs font-medium">{pluginCapabilityLabel(capability)}</span>
-                    <Badge variant="outline" className="ml-auto text-[9px]">
-                      {capability.operator}
-                    </Badge>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {capability.blockTypes.map((block) => (
-                      <Badge key={block} variant="secondary" className="text-[9px]">
-                        {BLOCK_LABEL[block]}
-                      </Badge>
-                    ))}
-                    {(capability.processTypes ?? []).map((process) => (
-                      <Badge key={process} variant="outline" className="text-[9px]">
-                        {PROCESS_META[process as UniversalProcess].label}
-                      </Badge>
-                    ))}
-                  </div>
-                  <code className="mt-2 block text-[10px] text-muted-foreground">
-                    {capability.id}
-                  </code>
+                  {pluginCapabilityDescription(capability) && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {pluginCapabilityDescription(capability)}
+                    </p>
+                  )}
                 </div>
               ))}
+              {manifest.capabilities.length > 3 && (
+                <p className="flex items-center gap-1 px-1 text-[11px] text-muted-foreground">
+                  <span>+ {manifest.capabilities.length - 3}</span>
+                  <span>Recursos disponíveis</span>
+                </p>
+              )}
             </div>
-          </details>
-        </section>
+            <details className="mt-3 rounded-lg border border-border/70 bg-card/40 px-3">
+              <summary className="flex cursor-pointer items-center gap-1 py-2.5 text-[11px] font-medium text-muted-foreground">
+                <span>Detalhes técnicos</span>
+                <span>({manifest.capabilities.length})</span>
+              </summary>
+              <div className="divide-y divide-border">
+                {manifest.capabilities.map((capability) => (
+                  <div key={capability.id} className="py-2.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-medium">
+                        {pluginCapabilityLabel(capability)}
+                      </span>
+                      <Badge variant="outline" className="ml-auto text-[9px]">
+                        {capability.operator}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {capability.blockTypes.map((block) => (
+                        <Badge key={block} variant="secondary" className="text-[9px]">
+                          {BLOCK_LABEL[block]}
+                        </Badge>
+                      ))}
+                      {(capability.processTypes ?? []).map((process) => (
+                        <Badge key={process} variant="outline" className="text-[9px]">
+                          {PROCESS_META[process as UniversalProcess].label}
+                        </Badge>
+                      ))}
+                    </div>
+                    <code className="mt-2 block text-[10px] text-muted-foreground">
+                      {capability.id}
+                    </code>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </section>
+        )}
 
-        <section className="rounded-xl border border-border bg-muted/15 p-3">
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <ShieldCheck className="size-3.5 text-brand-soft" /> Permissões declaradas
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {manifest.permissions.length ? (
-              manifest.permissions.map((permission) => (
-                <Badge key={permission} variant="outline" className="text-[9px]">
-                  {PERMISSION_LABEL[permission] ?? permission}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-[11px] text-muted-foreground">Sem permissões adicionais.</span>
-            )}
-          </div>
-        </section>
+        {!incompatible && (
+          <section className="rounded-xl border border-border bg-muted/15 p-3">
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <ShieldCheck className="size-3.5 text-brand-soft" /> Permissões declaradas
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {manifest.permissions.length ? (
+                manifest.permissions.map((permission) => (
+                  <Badge key={permission} variant="outline" className="text-[9px]">
+                    {PERMISSION_LABEL[permission] ?? permission}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-[11px] text-muted-foreground">
+                  Sem permissões adicionais.
+                </span>
+              )}
+            </div>
+          </section>
+        )}
 
-        <CommunityAccessPanel plugin={plugin} onChanged={onChanged} />
+        {!incompatible && <CommunityAccessPanel plugin={plugin} onChanged={onChanged} />}
 
         {manifest.secretKeys?.length ? <PluginConnectionsPanel plugin={plugin} /> : null}
 
@@ -902,14 +977,16 @@ function PluginCard({
               </a>
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            onClick={() => exportManifest(plugin)}
-          >
-            <Download className="size-3.5" /> Exportar manifesto
-          </Button>
+          {!incompatible && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => exportManifest(plugin)}
+            >
+              <Download className="size-3.5" /> Exportar manifesto
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -1697,6 +1774,7 @@ function UpdateInstalledPluginPanel({
 }) {
   const [folderPath, setFolderPath] = useState("");
   const [updating, setUpdating] = useState(false);
+  const { language } = useAppPreferences();
 
   async function updateFromCatalog() {
     setUpdating(true);
@@ -1773,6 +1851,21 @@ function UpdateInstalledPluginPanel({
             )}
             Atualizar plugin
           </Button>
+        </div>
+      )}
+      {update?.compatibility?.status === "incompatible" && (
+        <div role="alert" className="mt-3 rounded-lg border border-warning/30 p-3 text-xs">
+          <p className="font-semibold">
+            {pluginAdministrationText("blockedCatalog", language)}: {update.version}
+          </p>
+          <p className="mt-1">
+            {pluginAdministrationText(update.compatibility.reason ?? "invalid_manifest", language)}
+          </p>
+          {update.minCoreVersion && (
+            <p>
+              {pluginAdministrationText("minCoreVersion", language)}: {update.minCoreVersion}
+            </p>
+          )}
         </div>
       )}
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">

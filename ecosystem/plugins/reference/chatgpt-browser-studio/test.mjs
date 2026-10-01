@@ -375,7 +375,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "1.0.15");
+  assert.equal(manifest.version, "2.0.0");
   assert.equal(manifest.supportsConversationContinuation, true);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -1073,7 +1073,7 @@ test("reconecta o service worker da Browser Bridge quando a sessão CDP desapare
                   "condition-observer.v1",
                   "reload.v1",
                 ],
-                bridgeVersion: "0.4.0",
+                bridgeVersion: "0.5.0",
               },
             },
           };

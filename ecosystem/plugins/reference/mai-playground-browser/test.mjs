@@ -50,7 +50,7 @@ test("manifesto possui estrutura e capabilities válidas conforme API v2", async
   assert.ok(voiceCap.outputPorts.some((p) => p.key === "audio"));
   assert.equal(voiceCap.inputPorts.find((p) => p.key === "text").shape.family, "text");
   assert.equal(voiceCap.outputPorts.find((p) => p.key === "audio").shape.family, "audio");
-  assert.equal(manifest.version, "1.0.4");
+  assert.equal(manifest.version, "2.0.0");
   assert.equal(manifest.settingsSchema.properties.keepBrowserOpen.default, false);
   assert.equal(voiceCap.blockConfigSchema.properties.voice.default, "Caio");
   assert.ok(voiceCap.blockConfigSchema.properties.voice.enum.includes("Luana"));

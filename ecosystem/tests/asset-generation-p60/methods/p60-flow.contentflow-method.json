@@ -56,7 +56,7 @@
         "order": 0,
         "plugin": {
           "pluginId": "local.contentflow.google-flow-batch-images",
-          "pluginVersion": "1.3.7",
+          "pluginVersion": "2.0.0",
           "capabilityId": "generate-images-in-browser",
           "configuration": {
             "productionMode": "images_only",

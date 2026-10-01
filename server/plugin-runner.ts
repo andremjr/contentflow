@@ -37,6 +37,11 @@ import {
 } from "./remote-artifact-downloader";
 import { findPluginManifest, validatePluginDirectory } from "./plugin-validation";
 import {
+  isSafePluginVersion,
+  pluginCatalogCompatibility,
+  type PluginCompatibility,
+} from "./plugin-catalog";
+import {
   BrowserSessionManager,
   shouldAutoCloseCoreBrowserSession,
 } from "./browser-session-manager";
@@ -65,6 +70,22 @@ export type RegisteredPlugin = {
 };
 
 type PluginIssue = { directory: string; message: string };
+
+/** Identification for package administration only. Never a PluginManifest or an executor. */
+export type AdministrativePlugin = {
+  id: string;
+  source: PluginSource;
+  directory: string;
+  absoluteDirectory: string;
+  manifest: Pick<PluginManifest, "id" | "name" | "version" | "description" | "author"> & {
+    apiVersion?: string;
+    minCoreVersion?: string;
+    capabilities: [];
+    permissions: [];
+  };
+  executable: false;
+  compatibility: PluginCompatibility;
+};
 
 const maxPluginExecutionMs = 24 * 60 * 60 * 1_000;
 const maxArtifactBytes = 4 * 1024 * 1024 * 1024;
@@ -137,6 +158,7 @@ export function windowsExecutableDiscoveryReadPaths(
 }
 
 const registry = new Map<string, RegisteredPlugin>();
+const administrativeRegistry = new Map<string, AdministrativePlugin>();
 let discoveryIssues: PluginIssue[] = [];
 
 export function pluginRegistrationConflictIsReportable(
@@ -160,7 +182,10 @@ function scanPluginDirectory(
   try {
     const validated = validatePluginDirectory(pluginDirectory, true);
     const { manifest, absoluteDirectory: realDirectory, entrypoint: realEntrypoint } = validated;
-    const registered = registry.get(manifest.id);
+    const compatibility = pluginCatalogCompatibility(manifest);
+    if (compatibility.status !== "compatible")
+      throw new Error("O plugin exige uma versão mais recente do ContentFlow.");
+    const registered = registry.get(manifest.id) ?? administrativeRegistry.get(manifest.id);
     if (registered) {
       if (!pluginRegistrationConflictIsReportable(registered.source, source)) return;
       throw new Error(`O id ${manifest.id} já foi registrado por outro plugin.`);
@@ -175,6 +200,54 @@ function scanPluginDirectory(
       executable: true,
     });
   } catch (error) {
+    // Only safe identity/version and display metadata survive failed validation. No legacy
+    // capabilities, entrypoint, permissions, secrets, profile setup or runtime are interpreted.
+    try {
+      const raw = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+      if (
+        source === "installed" &&
+        typeof raw.id === "string" &&
+        raw.id.length <= 200 &&
+        /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/.test(raw.id) &&
+        isSafePluginVersion(raw.version) &&
+        !registry.has(raw.id) &&
+        !administrativeRegistry.has(raw.id)
+      ) {
+        const absoluteDirectory = realpathSync(pluginDirectory);
+        if (!pathIsInside(realpathSync(installedPluginsRoot), absoluteDirectory))
+          throw new Error("Invalid installed path");
+        const metadata = {
+          apiVersion: typeof raw.apiVersion === "string" ? raw.apiVersion.slice(0, 20) : undefined,
+          minCoreVersion: isSafePluginVersion(raw.minCoreVersion) ? raw.minCoreVersion : undefined,
+        };
+        const compatibility = pluginCatalogCompatibility(metadata);
+        const display = (value: unknown, fallback: string, limit: number) =>
+          typeof value === "string" ? value.slice(0, limit) : fallback;
+        administrativeRegistry.set(raw.id, {
+          id: raw.id,
+          source,
+          directory: shownDirectory,
+          absoluteDirectory,
+          manifest: {
+            id: raw.id,
+            version: raw.version,
+            name: display(raw.name, raw.id, 100),
+            description: display(raw.description, "", 500),
+            author: display(raw.author, "", 100),
+            ...metadata,
+            capabilities: [],
+            permissions: [],
+          },
+          executable: false,
+          compatibility:
+            compatibility.status === "compatible"
+              ? { status: "incompatible", reason: "invalid_manifest" }
+              : compatibility,
+        });
+      }
+    } catch {
+      // Unidentifiable manifests remain diagnostic issues, never administrative targets.
+    }
     discoveryIssues.push({
       directory: shownDirectory,
       message: error instanceof Error ? error.message : "Não foi possível carregar o plugin.",
@@ -213,6 +286,7 @@ function scanDevelopmentLinks() {
 
 export function initializePluginRunner() {
   registry.clear();
+  administrativeRegistry.clear();
   discoveryIssues = [];
   scanRoot(localPluginsRoot, "local");
   scanDevelopmentLinks();
@@ -221,7 +295,11 @@ export function initializePluginRunner() {
 }
 
 export function getPluginRegistrySnapshot() {
-  return { plugins: [...registry.values()], issues: [...discoveryIssues] };
+  return {
+    plugins: [...registry.values()],
+    administrativePlugins: [...administrativeRegistry.values()],
+    issues: [...discoveryIssues],
+  };
 }
 
 export function getRegisteredPlugin(pluginId: string) {
@@ -253,7 +331,11 @@ export async function executeRegisteredPlugin(
     ) => Promise<PluginWorkItemUpdateReceipt>;
   } = {},
 ): Promise<PluginExecutionResponse> {
-  if (!plugin.executable) {
+  if (
+    !plugin.executable ||
+    plugin.manifest.apiVersion !== "2" ||
+    pluginCatalogCompatibility(plugin.manifest).status !== "compatible"
+  ) {
     throw new Error("Este plugin não está disponível para execução.");
   }
 

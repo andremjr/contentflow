@@ -29,6 +29,7 @@ import {
 import {
   startGlobalExecutionOrchestration,
   useChannels,
+  useUpgradeState,
   useExecutionOrchestrators,
   useProjects,
 } from "@/lib/store";
@@ -59,6 +60,7 @@ const STATUS_LABELS: Record<ExecutionOrchestrator["status"], string> = {
 function OrchestratorPage() {
   const { t } = useAppPreferences();
   const channels = useChannels();
+  const upgrade = useUpgradeState();
   const projects = useProjects();
   const orchestrators = useExecutionOrchestrators();
   const latestByChannel = useMemo(() => {
@@ -264,7 +266,11 @@ function OrchestratorPage() {
                         type="button"
                         onClick={startGlobalProduction}
                         disabled={
-                          isStartingGlobal || !globalChannelIds.length || !globalPrefix.trim()
+                          upgrade.required ||
+                          upgrade.applying ||
+                          isStartingGlobal ||
+                          !globalChannelIds.length ||
+                          !globalPrefix.trim()
                         }
                         className="gap-1.5 text-white"
                       >

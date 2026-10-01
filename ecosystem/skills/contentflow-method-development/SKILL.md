@@ -9,15 +9,21 @@ Use esta skill para criar ou revisar a estratégia de um Processo Universal. Um 
 
 ## Antes de desenvolver
 
-Leia no checkout atual `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/CONTENT_CONTRACT.md`, `src/lib/domain.ts` e `src/lib/method-file.ts`. Quando a tarefa tocar execução, leia também os contratos vivos de deliveries/work units e o estado vigente do Reliability Program. Esses arquivos prevalecem sobre exemplos congelados desta skill.
+Aplique o guardrail `development-contentflow`; fora do checkout, leia a cópia incluída em `guardrails/development-contentflow/SKILL.md`. Leia `AGENTS.md`, `LICENSE`, `AI_USAGE_POLICY.md`, `docs/ARCHITECTURE.md` e `docs/CONTENT_CONTRACT.md` da versão em trabalho. Fora do checkout, siga [documentação standalone e versão](references/documentation.md): o ZIP inclui essas fontes e o guia de migração para 1.3.1. Não exija caminhos de código inexistentes para iniciar a análise nem declare validação automática sem o validador real.
+
+No checkout correspondente, consulte também `src/lib/domain.ts` e `src/lib/method-file.ts`; valide o arquivo pelo parser/importador real. Para execução, confira deliveries/work units, `docs/CURRENT_STATE.md` e `docs/DEVELOPMENT.md`. O programa de confiabilidade anterior é histórico e não define novas missões. As fontes vivas do checkout prevalecem sobre o snapshot documental e os exemplos desta skill.
 
 Modelo atual:
 
-- Processos, nessa ordem: `theme`, `title`, `thumbnail`, `script`, `narration`, `assets`, `editing`, `publishing`.
+- Processos disponíveis (a ordem pertence à estratégia do Canal): `theme`, `title`, `thumbnail`, `script`, `narration`, `assets`, `editing`, `publishing`.
 - Blocos: `BUSCAR`, `ESCOLHER`, `CRIAR`, `VALIDAR`.
 - Operadores: `Humano`, `IA`, `Código`.
 
 Não crie uma nova primitiva quando o comportamento puder ser expresso pela composição dessas primitivas universais.
+
+## Migração para 1.3.1
+
+Métodos v1/v2 são inválidos; crie explicitamente um novo envelope v3 com `contractVersion: 3` em cópia preservada. Siga o [roteiro de migração](references/documentation.md), revise todos os shapes/bindings, use a versão exata dos plugins migrados e reassocie recursos locais. Não adapte o runtime nem reescreva snapshots históricos. Backup, conversão do arquivo e atualização de storage são etapas distintas.
 
 ## Fronteiras de autoridade
 
@@ -39,7 +45,7 @@ O Method é congelado em `methodSnapshot` dentro da execução e pode integrar o
 6. Ligue plugin/capability ao Bloco somente quando necessário. O binding escolhe capacidade; não transfere ao plugin autoridade sobre o fluxo nem determina a granularidade do Método.
 7. Valide tipo, schema, cardinalidade, `portKey`, proveniência e ordem antes de conectar uma saída a uma entrada.
 8. Para shapes `many`, trate items/work units como estado operacional criado e persistido pelo Core. O Método não inventa `itemId`, delivery ID ou identidade intermediária.
-9. Valide o JSON com o parser real de `src/lib/method-file.ts` antes de entregar.
+9. Valide o JSON com o parser real de `src/lib/method-file.ts` e a prévia de importação. Sem checkout/validador correspondente, entregue somente rascunho com validação pendente e siga o guia standalone.
 
 ## Desenho estratégico e granularidade dos Blocos
 

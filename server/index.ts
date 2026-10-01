@@ -1,3 +1,4 @@
+import { UserDataUpgrade, registerUserDataUpgradeRoutes } from "./user-data-upgrade";
 import { observeExecution, observeJob } from "./dev-monitor/probes";
 import { monitorEnabled, devProbe } from "./dev-monitor/client";
 import express, {
@@ -527,8 +528,9 @@ const pluginProfileBindings = new PluginProfileBindingStore(database);
 const pluginProfileReadiness = new PluginProfileReadinessStore(database);
 const browserProfileLeases = new BrowserProfileLeaseStore(database);
 const pluginConfigurationOptionsCache = new PluginConfigurationOptionsCache();
-pluginJobs.recoverInterrupted();
-browserProfileLeases.recoverExpired();
+const userDataUpgrade = new UserDataUpgrade(database, dataDirectory, () => activePluginWorkers === 0 && activePluginInvocations.size === 0);
+if (userDataUpgrade.backgroundAllowed() && !userDataUpgrade.hasHistoricalJobs()) pluginJobs.recoverInterrupted();
+if (userDataUpgrade.backgroundAllowed()) browserProfileLeases.recoverExpired();
 // A database-wide sequence orders snapshots from commands and background workers.
 database.exec(
   "CREATE TABLE IF NOT EXISTS state_clock (id INTEGER PRIMARY KEY CHECK(id = 1), revision INTEGER NOT NULL); INSERT OR IGNORE INTO state_clock VALUES (1, 0)",
@@ -646,7 +648,7 @@ function reconcileStoredProjectTitles() {
   })();
 }
 
-reconcileStoredProjectTitles();
+if (userDataUpgrade.backgroundAllowed()) reconcileStoredProjectTitles();
 
 function reconcileStoredExecutionItems() {
   const executionRows = database
@@ -1235,6 +1237,7 @@ function automaticPluginBlockReady(block?: ActionBlock, blockExecution?: BlockEx
 }
 
 function scheduleAutomaticPluginBlock(execution: ProcessExecution) {
+  if (!userDataUpgrade.backgroundAllowed() || userDataUpgrade.executionHasHistoricalJobs(execution.id)) return;
   if (execution.status !== "blocked_executor") return;
   const blockExecution = execution.blocks.find((item) => item.status !== "completed");
   const block = blockExecution
@@ -1694,6 +1697,7 @@ function reconcileEligibleSlotOrchestrator(orchestrator: ExecutionOrchestrator, 
 }
 
 function reconcileExecutionOrchestrator(id: string) {
+  if (!userDataUpgrade.backgroundAllowed()) return;
   if (orchestratorReconciliationLocks.has(id)) return;
   orchestratorReconciliationLocks.add(id);
   try {
@@ -3289,8 +3293,9 @@ async function processPluginJob(
 let activePluginWorkers = 0;
 const activePluginConcurrencySlots = new Map<string, number>();
 async function processDuePluginJobs() {
+  if (!userDataUpgrade.backgroundAllowed()) return;
   while (activePluginWorkers < 4) {
-    const claim = pluginJobs.claimNext();
+    const claim = userDataUpgrade.claimCompatibleJob(pluginJobs);
     if (!claim) break;
     const slot = pluginConcurrencySlot(getRegisteredPlugin(claim.job.pluginId), claim.job);
     const activeInSlot = activePluginConcurrencySlots.get(slot.key) ?? 0;
@@ -3312,11 +3317,14 @@ async function processDuePluginJobs() {
 }
 
 initializePluginRunner();
-reconcileStoredExecutionItems();
-normalizeStoredExecutionWorkUnits();
+if (userDataUpgrade.backgroundAllowed() && !userDataUpgrade.hasHistoricalJobs()) {
+  reconcileStoredExecutionItems();
+  normalizeStoredExecutionWorkUnits();
+}
 const pluginJobScheduler = setInterval(() => void processDuePluginJobs(), 500);
 pluginJobScheduler.unref();
 function cleanupAbandonedPluginJobs() {
+  if (!userDataUpgrade.backgroundAllowed() || userDataUpgrade.hasHistoricalJobs()) return;
   const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1_000);
   const expired = pluginJobs.terminalBefore(cutoff);
   for (const job of expired) {
@@ -3348,6 +3356,17 @@ const pluginJobCleanup = setInterval(cleanupAbandonedPluginJobs, 60 * 60 * 1_000
 pluginJobCleanup.unref();
 cleanupAbandonedPluginJobs();
 void processDuePluginJobs();
+
+const { comparePluginVersions, pluginCatalogCompatibility } = await import("./plugin-catalog");
+type ManagedPlugin = RegisteredPlugin | import("./plugin-runner").AdministrativePlugin;
+
+function getAdministrativePlugin(pluginId: string): ManagedPlugin | undefined {
+  const registry = initializePluginRunner();
+  return (
+    registry.plugins.find((plugin) => plugin.id === pluginId) ??
+    registry.administrativePlugins.find((plugin) => plugin.id === pluginId)
+  );
+}
 
 function isPluginManifest(manifest: Record<string, unknown>) {
   try {
@@ -3633,7 +3652,18 @@ app.get("/api/plugins", (_request, response) => {
     };
   });
   response.json({
-    plugins,
+    plugins: [
+      ...plugins.map((plugin) => ({ ...plugin, compatibility: { status: "compatible" } })),
+      ...registry.administrativePlugins.map(
+        ({ absoluteDirectory: _absoluteDirectory, ...plugin }) => ({
+          ...plugin,
+          enabled: false,
+          executable: false,
+          sandboxed: true,
+          networkIsolation: communitySandboxAvailable,
+        }),
+      ),
+    ],
     issues: registry.issues,
   });
 });
@@ -4562,28 +4592,8 @@ app.post("/api/plugins/link-development-folder", (request, response) => {
   }
 });
 
-function semverCore(version: string) {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(version);
-  if (!match) return undefined;
-  return {
-    numbers: [Number(match[1]), Number(match[2]), Number(match[3])] as const,
-    prerelease: match[4],
-  };
-}
-
 function isNewerPluginVersion(candidate: string, current: string) {
-  const next = semverCore(candidate);
-  const previous = semverCore(current);
-  if (!next || !previous) return false;
-  for (let index = 0; index < next.numbers.length; index += 1) {
-    if (next.numbers[index] !== previous.numbers[index]) {
-      return next.numbers[index] > previous.numbers[index];
-    }
-  }
-  if (next.prerelease === previous.prerelease) return false;
-  if (!next.prerelease) return true;
-  if (!previous.prerelease) return false;
-  return next.prerelease.localeCompare(previous.prerelease, undefined, { numeric: true }) > 0;
+  return comparePluginVersions(candidate, current) > 0;
 }
 
 let pluginCatalogCache: { catalog: PluginCatalog; loadedAt: number } | undefined;
@@ -4600,16 +4610,22 @@ app.get("/api/plugins/updates", async (request, response) => {
   try {
     const catalog = await currentPluginCatalog(request.query.refresh === "true");
     const registry = initializePluginRunner();
-    const updates = registry.plugins
+    const updates = [...registry.plugins, ...registry.administrativePlugins]
       .filter((plugin) => plugin.source === "installed")
       .map((plugin) => {
         const available = catalog.plugins.find((entry) => entry.id === plugin.id);
+        const compatibility = available ? pluginCatalogCompatibility(available) : undefined;
         return {
           id: plugin.id,
           currentVersion: plugin.manifest.version,
           version: available?.version,
+          apiVersion: available?.apiVersion,
+          minCoreVersion: available?.minCoreVersion,
+          compatibility,
           updateAvailable: Boolean(
-            available && isNewerPluginVersion(available.version, plugin.manifest.version),
+            available &&
+            compatibility?.status === "compatible" &&
+            isNewerPluginVersion(available.version, plugin.manifest.version),
           ),
         };
       });
@@ -4621,7 +4637,7 @@ app.get("/api/plugins/updates", async (request, response) => {
   }
 });
 
-function replaceInstalledPluginFromDirectory(plugin: RegisteredPlugin, sourceDirectory: string) {
+function replaceInstalledPluginFromDirectory(plugin: ManagedPlugin, sourceDirectory: string) {
   const installedRoot = path.resolve(installedPluginsDirectory);
   const destination = path.resolve(plugin.absoluteDirectory);
   const updateBackupsDirectory = path.resolve(dataDirectory, "plugins", "update-backups");
@@ -4634,6 +4650,8 @@ function replaceInstalledPluginFromDirectory(plugin: RegisteredPlugin, sourceDir
     if (!destination.startsWith(`${installedRoot}${path.sep}`))
       throw new Error("A instalação atual não está dentro do armazenamento autorizado.");
     const source = validatePluginDirectory(sourceDirectory, true);
+    if (pluginCatalogCompatibility(source.manifest).status !== "compatible")
+      throw new Error("O plugin exige uma versão mais recente do ContentFlow.");
     if (source.manifest.id !== plugin.id)
       throw new Error("A pasta selecionada pertence a outro plugin.");
     if (!isNewerPluginVersion(source.manifest.version, plugin.manifest.version))
@@ -4651,6 +4669,13 @@ function replaceInstalledPluginFromDirectory(plugin: RegisteredPlugin, sourceDir
       errorOnExist: true,
     });
     validatePluginDirectory(temporaryDestination, true);
+
+    // Another request may have replaced the same package while a catalog download awaited I/O.
+    const latest = JSON.parse(
+      readFileSync(path.join(destination, "contentflow.plugin.json"), "utf8"),
+    ) as { id?: unknown; version?: unknown };
+    if (latest.id !== plugin.id || latest.version !== plugin.manifest.version)
+      throw new Error("O plugin mudou. Recarregue antes de atualizar.");
 
     renameSync(destination, backupDestination);
     renameSync(temporaryDestination, destination);
@@ -4687,7 +4712,7 @@ function replaceInstalledPluginFromDirectory(plugin: RegisteredPlugin, sourceDir
 
 app.put("/api/plugins/:pluginId/update-from-folder", (request, response) => {
   initializePluginRunner();
-  const plugin = getRegisteredPlugin(request.params.pluginId);
+  const plugin = getAdministrativePlugin(request.params.pluginId);
   if (!plugin) {
     response.status(404).json({ error: "Plugin não encontrado." });
     return;
@@ -4716,7 +4741,7 @@ app.put("/api/plugins/:pluginId/update-from-folder", (request, response) => {
 
 app.put("/api/plugins/:pluginId/update-from-catalog", async (request, response) => {
   initializePluginRunner();
-  const plugin = getRegisteredPlugin(request.params.pluginId);
+  const plugin = getAdministrativePlugin(request.params.pluginId);
   if (!plugin) {
     response.status(404).json({ error: "Plugin não encontrado." });
     return;
@@ -4735,6 +4760,8 @@ app.put("/api/plugins/:pluginId/update-from-catalog", async (request, response) 
     const catalog = await currentPluginCatalog(true);
     const entry = catalog.plugins.find((candidate) => candidate.id === plugin.id);
     if (!entry) throw new Error("Este plugin não possui atualização no catálogo configurado.");
+    if (pluginCatalogCompatibility(entry).status !== "compatible")
+      throw new Error("A versão do catálogo é incompatível com este ContentFlow.");
     if (!isNewerPluginVersion(entry.version, plugin.manifest.version))
       throw new Error(`O plugin já está na versão mais recente (v${plugin.manifest.version}).`);
 
@@ -4744,6 +4771,14 @@ app.put("/api/plugins/:pluginId/update-from-catalog", async (request, response) 
     await extractPluginArchive(archivePath, extractedRoot);
     const directories = discoverPluginDirectories(extractedRoot);
     if (directories.length !== 1) throw new Error("O pacote individual contém plugins extras.");
+    const candidate = validatePluginDirectory(directories[0], true).manifest;
+    if (
+      candidate.id !== entry.id ||
+      candidate.version !== entry.version ||
+      candidate.apiVersion !== entry.apiVersion ||
+      candidate.minCoreVersion !== entry.minCoreVersion
+    )
+      throw new Error("O manifesto do pacote não corresponde ao catálogo.");
     response.json(replaceInstalledPluginFromDirectory(plugin, directories[0]));
   } catch (error) {
     response.status(422).json({
@@ -4761,7 +4796,7 @@ function pluginMethodDependencies(pluginId: string) {
 
 app.get("/api/plugins/:pluginId/dependencies", (request, response) => {
   initializePluginRunner();
-  const plugin = getRegisteredPlugin(request.params.pluginId);
+  const plugin = getAdministrativePlugin(request.params.pluginId);
   if (!plugin) {
     response.status(404).json({ error: "Plugin não encontrado." });
     return;
@@ -4772,7 +4807,7 @@ app.get("/api/plugins/:pluginId/dependencies", (request, response) => {
 
 app.delete("/api/plugins/:pluginId", async (request, response) => {
   initializePluginRunner();
-  const plugin = getRegisteredPlugin(request.params.pluginId);
+  const plugin = getAdministrativePlugin(request.params.pluginId);
   if (!plugin) {
     response.status(404).json({ error: "Plugin não encontrado." });
     return;
@@ -4788,6 +4823,7 @@ app.delete("/api/plugins/:pluginId", async (request, response) => {
   }
   try {
     const connections = pluginConnections.list(plugin.id, true);
+    const secretKeys = "secretKeys" in plugin.manifest ? (plugin.manifest.secretKeys ?? []) : [];
     if (plugin.source === "installed") {
       const installedRoot = path.resolve(installedPluginsDirectory);
       if (!plugin.absoluteDirectory.startsWith(`${installedRoot}${path.sep}`)) {
@@ -4802,11 +4838,11 @@ app.delete("/api/plugins/:pluginId", async (request, response) => {
       database.prepare("DELETE FROM plugin_workspaces WHERE plugin_id = ?").run(plugin.id);
     })();
     for (const connection of connections) {
-      for (const secretKey of plugin.manifest.secretKeys ?? []) {
+      for (const secretKey of secretKeys) {
         await deletePluginConnectionSecret(plugin.id, connection.id, secretKey);
       }
     }
-    for (const secretKey of plugin.manifest.secretKeys ?? []) {
+    for (const secretKey of secretKeys) {
       await deletePluginSecret(plugin.id, secretKey);
     }
     database.prepare("DELETE FROM plugin_connections WHERE plugin_id = ?").run(plugin.id);
@@ -5363,6 +5399,8 @@ function normalizeBuilderLibraryValues(
   return { ok: true, values: normalized };
 }
 
+registerUserDataUpgradeRoutes(app, userDataUpgrade);
+
 app.get("/api/builder/mcp-info", (request, response) => {
   const channelId =
     typeof request.query.channelId === "string" ? request.query.channelId : undefined;
@@ -5874,6 +5912,7 @@ type ExecutePluginBlockResult = {
 async function executePluginBlockInternal(
   body: ExecutePluginBlockInput,
 ): Promise<ExecutePluginBlockResult> {
+  if (!userDataUpgrade.backgroundAllowed()) return { status: 409, body: { error: "USER_DATA_UPGRADE_REQUIRED" } };
   if (
     !body.projectId ||
     !body.processType ||
@@ -5912,6 +5951,8 @@ async function executePluginBlockInternal(
       body: { error: "Bloco não encontrado no snapshot desta execução." },
     };
   }
+  if (userDataUpgrade.executionHasHistoricalJobs(execution.id))
+    return { status: 409, body: { error: "USER_DATA_UPGRADE_REQUIRED" } };
   const existingJob = pluginJobs.getByExecution(
     execution.id,
     blockExecution.blockId,
@@ -6558,6 +6599,7 @@ function stateSnapshot() {
           revision: number;
         }
       ).revision,
+      upgrade: userDataUpgrade.state(),
       channels: (
         database
           .prepare(
@@ -6782,6 +6824,7 @@ app.post("/api/commands", (request, response) => {
 });
 
 function reconcileStandaloneProcesses() {
+  if (!userDataUpgrade.backgroundAllowed()) return;
   const projects = (
     database
       .prepare(

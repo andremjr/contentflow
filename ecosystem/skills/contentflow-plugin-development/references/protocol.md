@@ -1,6 +1,6 @@
 # Referência: ContentFlow Plugin API v2
 
-Leia [`docs/CONTENT_CONTRACT.md`](../../../../docs/CONTENT_CONTRACT.md) e [`docs/ecosystem/protocol.md`](../../../../docs/ecosystem/protocol.md).
+Leia [`docs/CONTENT_CONTRACT.md`](documentation.md) e [`docs/ecosystem/protocol.md`](documentation.md).
 
 Cada capability declara portas semânticas com `key`, `label`, `shape` e `required`. O `shape` é um `ContentShape`, `ControlShape` ou `RecordShape`. Não existem `acceptedTypes`, `producedTypes`, `acceptedInputTypes`, `producedOutputTypes`, `multiple` ou `deliveryTypes`.
 

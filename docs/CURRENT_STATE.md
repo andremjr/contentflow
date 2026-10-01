@@ -1,6 +1,6 @@
 # Estado atual e limites de validação
 
-Revisão documental: 01/10/2026. Esta descrição corresponde ao checkout inspecionado, incluindo alterações locais; não afirma que todas elas estejam em uma release publicada. Versão declarada em `package.json`: `1.2.1`. HEAD, branch e alterações devem ser consultados ao vivo.
+Revisão documental: 01/10/2026. Esta descrição corresponde ao checkout inspecionado, incluindo alterações locais; não afirma que todas elas estejam em uma release publicada. Versão declarada em `package.json`: `1.3.1`. HEAD, branch e alterações devem ser consultados ao vivo.
 
 ## Produto disponível
 
@@ -31,3 +31,4 @@ Há suites de contratos, execução, persistência, plugins, Browser Bridge, per
 O [Dev Monitor](DEV_MONITOR.md) cobre inicialmente `human-theme` (HTTP/Core/delivery) e `sandbox-faults` (worker real). Chrome/provedor autenticado, renderer e várias fronteiras de recovery, binding/readiness, heartbeat e restart têm cobertura parcial ou ausente. O monitor não mediu CPU/RAM em i3 e não revalida materialmente todos os outputs; sua matriz de coverage explicita esses limites.
 
 Melhorias são escolhidas e validadas no [fluxo de desenvolvimento vertical](DEVELOPMENT.md). Ideias de integração e tarefas históricas não são capacidades disponíveis nem pré-requisitos para usar o produto.
+

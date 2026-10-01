@@ -4,7 +4,9 @@ import { MethodAgentCta } from "@/components/method-agent-cta";
 import { MethodBuilder } from "@/components/method-builder";
 import { TopBar } from "@/components/top-bar";
 import { PROCESS_ORDER, type UniversalProcess } from "@/lib/domain";
-import { useChannel } from "@/lib/store";
+import { IncompatibleDataNotice } from "@/components/user-data-upgrade-panel";
+import { channelNeedsUpgrade } from "@/lib/user-data-upgrade";
+import { useChannel, useUpgradeState } from "@/lib/store";
 
 export const Route = createFileRoute("/channel/$channelId/methods")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -19,6 +21,7 @@ function ChannelMethodsPage() {
   const { channelId } = Route.useParams();
   const { process } = Route.useSearch();
   const channel = useChannel(channelId);
+  const upgrade = useUpgradeState();
   if (!channel) return null;
   return (
     <AppShell>
@@ -32,7 +35,11 @@ function ChannelMethodsPage() {
         ]}
       />
       <MethodAgentCta className="px-4 pt-4 sm:px-6" channelId={channel.id} />
-      <MethodBuilder key={channel.id} channelId={channel.id} initialProcess={process} />
+      {upgrade.applying || channelNeedsUpgrade(channel) ? (
+        <IncompatibleDataNotice value={channel.methods} />
+      ) : (
+        <MethodBuilder key={channel.id} channelId={channel.id} initialProcess={process} />
+      )}
     </AppShell>
   );
 }

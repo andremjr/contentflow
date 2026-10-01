@@ -91,6 +91,7 @@ test(
             id: "com.contentflow.reference-community",
             name: "Plugin comunitário de referência",
             version: "1.1.0",
+            apiVersion: "2",
             asset: updateAsset,
             sha256: createHash("sha256").update(updateBytes).digest("hex"),
             size: updateBytes.length,

@@ -89,6 +89,8 @@ test("P24 fornece Método BUSCAR → VALIDAR → CRIAR executável nos três idi
   );
   assert.deepEqual(p24RealMethod.p24.locales, ["pt-BR", "en", "es"]);
   const [search, validation, download] = p24RealMethod.method.blocks;
+  assert.equal(search.plugin.pluginVersion, manifest.version);
+  assert.equal(download.plugin.pluginVersion, manifest.version);
   assert.equal(search.plugin.capabilityId, "search-stock-images");
   assert.equal(validation.validation.targetBlockId, search.id);
   assert.equal(validation.validation.targetOutputKey, "candidates");

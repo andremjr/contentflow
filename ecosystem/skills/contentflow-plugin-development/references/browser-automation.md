@@ -60,4 +60,4 @@ Antes de concluir, verifique que o plugin não extrai sessão automaticamente, n
 
 Plugins oficiais de navegador não iniciam nem encerram o processo físico do Chrome. Eles exigem a sessão fornecida pelo núcleo e fecham somente seus próprios clientes/conexões.
 
-Fonte: [browser-automation.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/browser-automation.md).
+Fonte: [browser-automation.md](https://github.com/andremjr/contentflow/blob/v1.3.1/docs/ecosystem/browser-automation.md).

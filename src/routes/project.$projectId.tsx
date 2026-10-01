@@ -7,11 +7,19 @@ import { PROCESS_META, type ProcessId } from "@/lib/domain";
 import { projectProcessOrder } from "@/lib/process-order";
 import {
   useChannel,
+  useUpgradeState,
+  useProjectExecutions,
   useDatabaseReady,
   useExecutionErrors,
   useHumanTasks,
   useProject,
 } from "@/lib/store";
+import { IncompatibleDataNotice } from "@/components/user-data-upgrade-panel";
+import {
+  channelNeedsUpgrade,
+  methodsNeedUpgrade,
+  methodNeedsUpgrade,
+} from "@/lib/user-data-upgrade";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/project/$projectId")({ component: ProjectLayout });
@@ -30,6 +38,8 @@ const SLUG: Record<ProcessId, string> = {
 function ProjectLayout() {
   const { projectId } = Route.useParams();
   const project = useProject(projectId);
+  const upgrade = useUpgradeState();
+  const executions = useProjectExecutions(projectId);
   const channel = useChannel(project?.channelId ?? "");
   const humanTasks = useHumanTasks();
   const executionErrors = useExecutionErrors();
@@ -61,6 +71,12 @@ function ProjectLayout() {
       </AppShell>
     );
   }
+  const incompatible =
+    upgrade.required ||
+    upgrade.applying ||
+    channelNeedsUpgrade(channel) ||
+    (project.strategySnapshot && methodsNeedUpgrade(project.strategySnapshot.methods)) ||
+    executions.some((execution) => methodNeedsUpgrade(execution.methodSnapshot));
   const base = `/project/${project.id}`;
   const activeSlug = pathname.startsWith(`${base}/`)
     ? pathname.slice(base.length + 1).split("/")[0]
@@ -84,7 +100,7 @@ function ProjectLayout() {
             const slug = SLUG[process];
             const blocked = !(
               project.strategySnapshot?.methods[process] ?? channel.methods[process]
-            )?.blocks.length;
+            )?.blocks?.length;
             const waitingHuman = humanTasks.some(
               (task) => task.project.id === project.id && task.execution.processType === process,
             );
@@ -121,7 +137,7 @@ function ProjectLayout() {
           })}
         </div>
       </nav>
-      <Outlet />
+      {incompatible ? <IncompatibleDataNotice value={{ project, executions }} /> : <Outlet />}
     </AppShell>
   );
 }

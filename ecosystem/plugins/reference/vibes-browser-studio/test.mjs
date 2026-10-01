@@ -146,7 +146,7 @@ function fakeAutomation(overrides = {}) {
 test("manifesto declara B3, B4 e B5 com permissões, lotes, actions e prompt preview", () => {
   assert.equal(manifest.id, PLUGIN_ID);
   assert.equal(manifest.apiVersion, "2");
-  assert.equal(manifest.version, "0.1.0-dev.0");
+  assert.equal(manifest.version, "1.0.0");
   assert.deepEqual(manifest.permissions, [
     "network",
     "filesystem:read",
@@ -901,8 +901,8 @@ test("cliente conecta, envia upload/lease e libera a sessão", async () => {
       "condition-observer.v1",
       "reload.v1",
     ],
-    bridgeVersion: "0.4.0",
-    extensionVersion: "0.4.0",
+    bridgeVersion: "0.5.0",
+    extensionVersion: "0.5.0",
   };
   const context = vm.createContext({
     setTimeout: (callback, ms) => {

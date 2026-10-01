@@ -72,7 +72,7 @@ assert.deepEqual(
   canonicalFixture.slots.map((slot) => slot.expectedItemId),
   ["asset-slot-image-city-dawn", "asset-slot-image-forest-rain", "asset-slot-stock-commute"],
 );
-assert.equal(manifest.version, "1.3.8");
+assert.equal(manifest.version, "2.0.0");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.equal(manifest.apiVersion, "2");
@@ -2217,7 +2217,7 @@ const extensionContent = await readFile(
   "utf8",
 );
 assert.equal(extensionManifest.manifest_version, 3);
-assert.equal(extensionManifest.version, "0.4.0");
+assert.equal(extensionManifest.version, "0.5.0");
 assert.deepEqual(extensionManifest.host_permissions, [
   "https://chatgpt.com/*",
   "https://claude.ai/*",
@@ -2430,5 +2430,5 @@ await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), 
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v1.3.8 validado (lote interno concorrente, animação item a item, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
+  "OK: v2.0.0 validado (lote interno concorrente, animação item a item, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
 );

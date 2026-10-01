@@ -9,7 +9,13 @@ Um **Plugin executa uma capability**. Ele não decide estratégia, próximo Bloc
 
 ## Antes de desenvolver
 
-Leia no checkout atual `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/CONTENT_CONTRACT.md`, `src/lib/plugin-contract.ts`, `server/plugin-validation.ts`, `server/plugin-runner.ts` e `ecosystem/plugin-kit/`. Para navegador, leia também `ecosystem/browser-bridge/`, `server/plugin-profiles.ts`, `server/browser-profile-readiness.ts`, `server/browser-profile-leases.ts` e os contratos vivos de lanes/work units. O contrato vivo prevalece sobre esta skill e seus exemplos.
+Aplique o guardrail `development-contentflow`; fora do checkout, leia a cópia incluída em `guardrails/development-contentflow/SKILL.md`. Leia `AGENTS.md`, `LICENSE`, `AI_USAGE_POLICY.md`, `docs/ARCHITECTURE.md` e `docs/CONTENT_CONTRACT.md` da versão em trabalho. Fora do checkout, siga [documentação standalone e versão](references/documentation.md): o ZIP inclui essas fontes e o guia de migração para 1.3.1. Não exija caminhos de código inexistentes para iniciar a análise nem declare validação automática sem o validador real.
+
+No checkout correspondente, consulte `src/lib/plugin-contract.ts`, `server/plugin-validation.ts`, `server/plugin-runner.ts` e `ecosystem/plugin-kit/`. Para navegador, confira Browser Bridge, perfis, readiness, leases e work units vivos. O schema incluído não substitui validator, sandbox nem cenário real. As fontes vivas do checkout prevalecem sobre o snapshot documental e os exemplos desta skill.
+
+## Migração para 1.3.1
+
+Plugin API v1 é inválida; produza explicitamente um pacote API v2 novo. **Mudança de shape ou porta exige nova major do plugin**, inclusive cardinalidade, representação, chave/remoção de porta e campos incompatíveis de registros. Mudanças de IDs públicos também exigem major; `apiVersion: "2"` é independente da versão semântica do pacote. Atualize handler, fixtures e Métodos consumidores em conjunto, preserve versões anteriores e jobs existentes e siga o [roteiro de migração](references/documentation.md). Não republique bytes diferentes sob a mesma versão/hash nem crie adapter para API v1.
 
 ## Fronteiras
 

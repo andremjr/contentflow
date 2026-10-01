@@ -44,6 +44,7 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import { channelNeedsUpgrade, methodNeedsUpgrade } from "@/lib/user-data-upgrade";
 import { useAppPreferences } from "@/lib/app-preferences";
 import { effectiveProcessOrder } from "@/lib/process-order";
 import { pluginRequirementReadiness } from "@/lib/method-transfer-readiness";
@@ -319,12 +320,15 @@ export function MethodBuilder({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const reusableMethods = channels
-    .filter((candidate) => candidate.id !== channelId)
+    .filter((candidate) => candidate.id !== channelId && !channelNeedsUpgrade(candidate))
     .map((candidate) => ({
       channel: candidate,
       method: candidate.methods?.[processType],
     }))
-    .filter((candidate) => candidate.method?.blocks.length);
+    .filter(
+      (candidate) =>
+        candidate.method && !methodNeedsUpgrade(candidate.method) && candidate.method.blocks.length,
+    );
 
   currentProcessRef.current = processType;
 

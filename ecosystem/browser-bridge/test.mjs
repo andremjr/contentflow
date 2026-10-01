@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { runInNewContext } from "node:vm";
+
+const extensionManifest = JSON.parse(
+  readFileSync(new URL("./manifest.json", import.meta.url), "utf8"),
+);
+assert.equal(extensionManifest.version, "0.5.0");
 
 export async function testExtensionBridge(source) {
   const storage = {};
@@ -28,7 +34,7 @@ export async function testExtensionBridge(source) {
   const tabReloads = [];
   const chrome = {
     runtime: {
-      getManifest: () => ({ version: "2.0.0" }),
+      getManifest: () => extensionManifest,
       onMessage: {
         addListener(listener) {
           runtimeListener = listener;
@@ -240,7 +246,7 @@ export async function testExtensionBridge(source) {
   assert.equal(bridge.identity.protocolVersion, 2);
   assert.equal(bridge.identity.protocol.min, 2);
   assert.equal(bridge.identity.protocol.max, 2);
-  assert.equal(bridge.identity.bridgeVersion, "2.0.0");
+  assert.equal(bridge.identity.bridgeVersion, "0.5.0");
   assert.deepEqual(Array.from(bridge.identity.capabilities), [
     "idempotent-replay.v1",
     "lifecycle-events.v1",
@@ -277,7 +283,7 @@ export async function testExtensionBridge(source) {
     "condition-observer.v1",
     "reload.v1",
   ]);
-  assert.equal(negotiated.bridgeVersion, "2.0.0");
+  assert.equal(negotiated.bridgeVersion, "0.5.0");
   assert.equal(
     (
       await bridge.connect({

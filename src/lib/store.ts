@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from "react";
 import {
-  createEmptyMethods,
   PROCESS_META,
   PROCESS_ORDER,
   type ActionBlock,
@@ -18,11 +17,7 @@ import {
   type StoredFile,
   type UniversalProcess,
 } from "@/lib/domain";
-import {
-  createProcessOutputFields,
-  normalizeActionBlock,
-  normalizeMethodBlocks,
-} from "@/lib/human-workflow";
+import { createProcessOutputFields, normalizeMethodBlocks } from "@/lib/human-workflow";
 import { effectiveProcessOrder } from "@/lib/process-order";
 import type { PortableCollection, PortableLibraryItem } from "@/lib/method-file";
 import {
@@ -42,6 +37,15 @@ export type YouTubeChannelProfile = Pick<
   | "lastSyncedAt"
 >;
 
+import {
+  channelNeedsUpgrade,
+  methodNeedsUpgrade,
+  methodsNeedUpgrade,
+  preserveChannelForPresentation,
+  type UpgradeState,
+} from "@/lib/user-data-upgrade";
+import { upgradeText } from "@/lib/upgrade-translations";
+
 const db = {
   channels: [] as Channel[],
   projects: [] as Project[],
@@ -50,6 +54,7 @@ const db = {
   libraryItems: [] as ChannelLibraryItem[],
   libraryCollections: [] as StrategicCollection[],
   ready: false,
+  upgrade: { required: false, applying: false } as UpgradeState,
 };
 const listeners = new Set<() => void>();
 const orchestratorStateRequests = new Map<string, Promise<boolean>>();
@@ -78,30 +83,34 @@ function useClientStoreVersion() {
   return useSyncExternalStore(subscribe, getVersion, getServerVersion);
 }
 
-function normalizeChannel(channel: Channel): Channel {
-  const emptyMethods = createEmptyMethods();
-  const methods = Object.fromEntries(
-    PROCESS_ORDER.map((processType) => {
-      const saved = channel.methods?.[processType] ?? emptyMethods[processType];
-      return [
-        processType,
-        {
-          contractVersion: saved.contractVersion,
-          name: saved.name?.trim() || `Método de ${PROCESS_META[processType].label}`,
-          imageUrl: saved.imageUrl,
-          processType,
-          blocks: (saved.blocks ?? []).map((block, order) => ({
-            ...normalizeActionBlock(block, processType),
-            order,
-          })),
-        },
-      ];
-    }),
-  ) as Record<UniversalProcess, ProcessMethod>;
-  return { ...channel, methods };
+const normalizeChannel = preserveChannelForPresentation;
+
+function upgradeError() {
+  const lang = typeof document === "undefined" ? "pt-BR" : document.documentElement.lang;
+  return new Error(upgradeText(lang === "en" || lang === "es" ? lang : "pt-BR").incompatible);
+}
+function assertChannelStrategy(channelId: string) {
+  const channel = db.channels.find((item) => item.id === channelId);
+  if (db.upgrade.applying || (channel && channelNeedsUpgrade(channel))) throw upgradeError();
+}
+function assertExecutionCompatible(executionId?: string, projectId?: string) {
+  if (db.upgrade.required || db.upgrade.applying) throw upgradeError();
+  const execution = db.executions.find((item) => item.id === executionId);
+  if (execution && methodNeedsUpgrade(execution.methodSnapshot)) throw upgradeError();
+  const project = db.projects.find((item) => item.id === (projectId ?? execution?.projectId));
+  if (project?.strategySnapshot && methodsNeedUpgrade(project.strategySnapshot.methods))
+    throw upgradeError();
+  if (project) assertChannelStrategy(project.channelId);
+}
+export function useUpgradeState(): UpgradeState {
+  const storeVersion = useClientStoreVersion();
+  return storeVersion >= 0 ? db.upgrade : { required: false, applying: false };
 }
 
-type ServerState = Omit<typeof db, "ready"> & { revision: number };
+type ServerState = Omit<typeof db, "ready" | "upgrade"> & {
+  revision: number;
+  upgrade?: UpgradeState;
+};
 let serverRevision = -1;
 let stateRequest: Promise<boolean> | undefined;
 function reconcileEntities<T extends { id: string }>(current: T[], incoming: T[]): T[] {
@@ -127,6 +136,10 @@ function applyState(state: ServerState) {
   db.orchestrators = reconcileEntities(db.orchestrators, orchestrators);
   db.libraryItems = reconcileEntities(db.libraryItems, libraryItems);
   db.libraryCollections = reconcileEntities(db.libraryCollections, libraryCollections);
+  db.upgrade = state.upgrade ?? {
+    required: channels.some(channelNeedsUpgrade),
+    applying: false,
+  };
   db.ready = true;
   emit();
 }
@@ -261,6 +274,8 @@ export async function startExecutionOrchestrator(input: {
   quantity: number;
   projectPrefix?: string;
 }) {
+  assertExecutionCompatible();
+  assertChannelStrategy(input.channelId);
   const response = await fetch("/api/orchestrators", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -280,6 +295,8 @@ export async function startGlobalExecutionOrchestration(input: {
   quantity: number;
   projectPrefix?: string;
 }) {
+  assertExecutionCompatible();
+  input.channelIds.forEach(assertChannelStrategy);
   const response = await fetch("/api/orchestrators/global", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -327,6 +344,7 @@ export async function stopExecutionOrchestrator(orchestratorId: string) {
 }
 
 export async function resumeExecutionOrchestrator(orchestratorId: string) {
+  assertExecutionCompatible();
   const response = await fetch(`/api/orchestrators/${orchestratorId}/resume`, { method: "POST" });
   const body = (await response.json()) as ExecutionOrchestratorState & { error?: string };
   if (!response.ok || !body.orchestrator) {
@@ -375,7 +393,7 @@ export function useHumanTasks(): HumanTask[] {
     .flatMap<HumanTask>((execution) => {
       const project = db.projects.find((item) => item.id === execution.projectId);
       const channel = db.channels.find((item) => item.id === execution.channelId);
-      if (!project || !channel) return [];
+      if (!project || !channel || methodNeedsUpgrade(execution.methodSnapshot)) return [];
       const tasks = execution.blocks.flatMap<HumanTask>((blockExecution) => {
         if (blockExecution.status !== "awaiting_human") return [];
         const block = execution.methodSnapshot.blocks.find(
@@ -426,7 +444,7 @@ export function useExecutionErrors(): ExecutionErrorTask[] {
     .flatMap<ExecutionErrorTask>((execution) => {
       const project = db.projects.find((item) => item.id === execution.projectId);
       const channel = db.channels.find((item) => item.id === execution.channelId);
-      if (!project || !channel) return [];
+      if (!project || !channel || methodNeedsUpgrade(execution.methodSnapshot)) return [];
       return execution.blocks.flatMap<ExecutionErrorTask>((blockExecution) => {
         if (blockExecution.status !== "failed") return [];
         const block = execution.methodSnapshot.blocks.find(
@@ -449,12 +467,20 @@ export async function createChannel(channel: Omit<Channel, "createdAt">) {
   return next;
 }
 export async function updateChannel(channel: Channel) {
+  const prior = db.channels.find((item) => item.id === channel.id);
+  if (
+    prior &&
+    channelNeedsUpgrade(prior) &&
+    JSON.stringify(prior.methods) !== JSON.stringify(channel.methods)
+  )
+    throw upgradeError();
   await request(`/api/channels/${channel.id}`, "PUT", normalizeChannel(channel));
   await refreshState(true);
   return db.channels.find((item) => item.id === channel.id);
 }
 
 export async function updateProcessOrder(channel: Channel, processOrder: UniversalProcess[]) {
+  assertChannelStrategy(channel.id);
   await request(`/api/channels/${encodeURIComponent(channel.id)}/process-order`, "PUT", {
     processOrder,
     definitionRevision: channel.definitionRevision ?? 0,
@@ -503,6 +529,8 @@ export function rememberMethodDraft(
   processType: UniversalProcess,
   method: ProcessMethod,
 ) {
+  assertChannelStrategy(channelId);
+  if (methodNeedsUpgrade(method)) throw upgradeError();
   const key = methodDraftKey(channelId, processType);
   localStorage.setItem(key, JSON.stringify(method));
 }
@@ -515,11 +543,14 @@ export async function setChannelMethod(
   method: ProcessMethod,
   definitionRevision?: number,
 ) {
+  assertChannelStrategy(channelId);
+  if (methodNeedsUpgrade(method)) throw upgradeError();
   const key = methodDraftKey(channelId, processType);
   const snapshot = JSON.stringify(method);
   const pending = (methodQueues.get(key) ?? Promise.resolve())
     .catch(() => undefined)
     .then(async () => {
+      assertChannelStrategy(channelId);
       await request(`/api/channels/${channelId}/methods/${processType}`, "PUT", {
         name: method.name,
         processType,
@@ -544,6 +575,8 @@ export async function setChannelMethods(
   channelId: string,
   methods: Partial<Record<UniversalProcess, ProcessMethod>>,
 ) {
+  assertChannelStrategy(channelId);
+  if (methodsNeedUpgrade(methods)) throw upgradeError();
   await request(`/api/channels/${channelId}/methods`, "PUT", { methods });
   await refreshState(true);
 }
@@ -561,6 +594,9 @@ export async function applyMethodTransfer(input: {
   selectedProcesses: UniversalProcess[];
   preserveLocalConnections?: boolean;
 }) {
+  if (input.targetChannelId) assertChannelStrategy(input.targetChannelId);
+  if (input.sourceChannelId) assertChannelStrategy(input.sourceChannelId);
+  if (input.methods.some(methodNeedsUpgrade)) throw upgradeError();
   const response = await fetch("/api/method-transfers/apply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -617,6 +653,10 @@ export async function createProject(input: NewProjectInput): Promise<Project> {
 
 const commandQueues = new Map<string, Promise<unknown>>();
 async function command<T>(action: string, input: Record<string, unknown>): Promise<T> {
+  assertExecutionCompatible(
+    input.executionId as string | undefined,
+    input.projectId as string | undefined,
+  );
   const id = crypto.randomUUID();
   const key = String(input.executionId ?? input.projectId);
   const execution = db.executions.find((item) => item.id === input.executionId);
@@ -625,6 +665,10 @@ async function command<T>(action: string, input: Record<string, unknown>): Promi
   const pending = previous
     .catch(() => undefined)
     .then(async () => {
+      assertExecutionCompatible(
+        input.executionId as string | undefined,
+        input.projectId as string | undefined,
+      );
       const response = await fetch("/api/commands", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -776,6 +820,7 @@ export async function updateBlockExecutionValues(
   revision: number,
   values: Record<string, RuntimeValue>,
 ) {
+  assertExecutionCompatible(executionId);
   await request(`/api/executions/${executionId}/blocks/${blockId}/values`, "PATCH", {
     revision,
     values,
@@ -789,6 +834,7 @@ export async function submitBlockRuntimeInputs(
   revision: number,
   values: Record<string, RuntimeValue>,
 ) {
+  assertExecutionCompatible(executionId);
   await request(`/api/executions/${executionId}/blocks/${blockId}/runtime-inputs`, "PATCH", {
     revision,
     values,
@@ -803,6 +849,7 @@ export async function updateBlockExecutionItemOutput(
   revision: number,
   output: unknown,
 ) {
+  assertExecutionCompatible(executionId);
   await request(
     `/api/executions/${executionId}/blocks/${blockId}/items/${encodeURIComponent(itemId)}`,
     "PATCH",
@@ -817,6 +864,7 @@ export async function reorderBlockExecutionItems(
   revision: number,
   itemIds: string[],
 ) {
+  assertExecutionCompatible(executionId);
   await request(`/api/executions/${executionId}/blocks/${blockId}/items-order`, "PATCH", {
     revision,
     itemIds,
@@ -831,6 +879,7 @@ export async function runBlockExecutionItemAction(
   action: "regenerate" | "select",
   revision: number,
 ) {
+  assertExecutionCompatible(executionId);
   await request(
     `/api/executions/${executionId}/blocks/${blockId}/items/${encodeURIComponent(itemId)}/actions/${action}`,
     "POST",

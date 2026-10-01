@@ -16,6 +16,10 @@ Quando houver `branding.iconPath`, inclua o PNG/WebP local no pacote e documente
 
 ## Atualização
 
+Mudança de shape ou porta exige nova major do plugin, independentemente de `apiVersion`.
+Migre explicitamente os Métodos consumidores e preserve pacotes anteriores e jobs em andamento.
+Veja [guia e documentação standalone](documentation.md) antes de substituir a instalação.
+
 Validar compatibilidade antes de substituir. Exigir novo consentimento quando permissões, providers, efeitos, finalidade ou custo mudarem significativamente. Manter a versão anterior até a nova passar nos testes. Jobs em andamento permanecem associados à versão que os iniciou.
 
 ## Remoção
@@ -39,4 +43,4 @@ O Método deve salvar `pluginId`, `pluginVersion`, `capabilityId`, configuraçã
 
 Plugins podem ser gratuitos, pagos, proprietários ou open source conforme sua licença própria, desde que sejam integrações independentes sobre o protocolo público. Não incorpore código protegido do núcleo nem apresente o pacote como clone, rebranding ou substituto do ContentFlow.
 
-Fonte: [distribution.md](https://github.com/andremjr/contentflow/blob/main/docs/ecosystem/distribution.md).
+Fonte: [distribution.md](https://github.com/andremjr/contentflow/blob/v1.3.1/docs/ecosystem/distribution.md).

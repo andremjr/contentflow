@@ -2,7 +2,7 @@
 
 O envelope usa `format: "contentflow-method"`, `version: 3` e um `method` com `contractVersion: 3`, um Processo Universal e 1–200 Blocos.
 
-Cada input e output declara `shape: ValueShape`; nunca declara `type`. Veja [`docs/CONTENT_CONTRACT.md`](../../../../docs/CONTENT_CONTRACT.md).
+Cada input e output declara `shape: ValueShape`; nunca declara `type`. Veja [`docs/CONTENT_CONTRACT.md`](documentation.md).
 
 Exemplo:
 

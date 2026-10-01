@@ -145,7 +145,7 @@
         "order": 0,
         "plugin": {
           "pluginId": "local.contentflow.free-stock-media-studio",
-          "pluginVersion": "0.3.1",
+          "pluginVersion": "1.0.0",
           "capabilityId": "search-stock-images",
           "configuration": {
             "provider": "openverse",
@@ -433,7 +433,7 @@
         "order": 2,
         "plugin": {
           "pluginId": "local.contentflow.free-stock-media-studio",
-          "pluginVersion": "0.3.1",
+          "pluginVersion": "1.0.0",
           "capabilityId": "download-selected-stock-assets",
           "configuration": {},
           "connectionRequired": false

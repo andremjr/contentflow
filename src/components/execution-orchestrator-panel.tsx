@@ -16,6 +16,7 @@ import {
   stopExecutionOrchestrator,
   useChannelExecutionOrchestrator,
   useProjects,
+  useUpgradeState,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,7 @@ export function ExecutionOrchestratorPanel({ channelId }: { channelId: string })
   const { t } = useAppPreferences();
   const orchestrator = useChannelExecutionOrchestrator(channelId);
   const projects = useProjects(channelId);
+  const upgrade = useUpgradeState();
   const [isStopping, setIsStopping] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
   const isActive = !!orchestrator && executionOrchestratorIsActive(orchestrator);
@@ -121,7 +123,7 @@ export function ExecutionOrchestratorPanel({ channelId }: { channelId: string })
                 size="sm"
                 className="gap-1.5 text-white"
                 onClick={resume}
-                disabled={isResuming || isStopping}
+                disabled={upgrade.required || upgrade.applying || isResuming || isStopping}
               >
                 <RotateCcw className="size-3.5" />
                 {isResuming ? "Retomando…" : "Retomar fila"}

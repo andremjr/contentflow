@@ -1,9 +1,31 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const root = process.cwd();
 const output = path.join(root, "release", "ecosystem");
+const methodSource = path.join(root, "historicos-assets-50-imagens.contentflow-method.json");
+const methodBytes = readFileSync(methodSource);
+const validation = spawnSync(
+  process.execPath,
+  [
+    "--import",
+    "tsx",
+    "--input-type=module",
+    "-e",
+    'import { readFileSync } from "node:fs"; import { parseMethodFile } from "./src/lib/method-file.ts"; parseMethodFile(readFileSync(process.argv[1], "utf8"));',
+    methodSource,
+  ],
+  { cwd: fileURLToPath(new URL("..", import.meta.url)), encoding: "utf8" },
+);
+if (validation.error || validation.status !== 0) {
+  throw new Error("O Método do catálogo não passou no parser v3 do ContentFlow.", {
+    cause: validation.error ?? new Error(validation.stderr.trim()),
+  });
+}
+const method = JSON.parse(methodBytes.toString("utf8"));
 const plugins = JSON.parse(
   readFileSync(path.join(output, "ContentFlow-Plugin-Catalog.json"), "utf8"),
 ).plugins;
@@ -21,11 +43,8 @@ for (const entry of plugins) {
 }
 
 mkdirSync(path.join(output, "methods"), { recursive: true });
-const methodSource = path.join(root, "historicos-assets-50-imagens.contentflow-method.json");
 const methodAsset = "methods/historicos-assets-50-imagens.contentflow-method.json";
 copyFileSync(methodSource, path.join(output, methodAsset));
-const method = JSON.parse(readFileSync(methodSource, "utf8"));
-const methodBytes = readFileSync(methodSource);
 
 const catalog = {
   schemaVersion: 1,

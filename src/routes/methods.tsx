@@ -49,6 +49,8 @@ import {
   type StrategicCollection,
   type UniversalProcess,
 } from "@/lib/domain";
+import { IncompatibleDataNotice } from "@/components/user-data-upgrade-panel";
+import { channelNeedsUpgrade, methodNeedsUpgrade } from "@/lib/user-data-upgrade";
 import { useAppPreferences } from "@/lib/app-preferences";
 import { effectiveProcessOrder, resolveProcessOrderForMethods } from "@/lib/process-order";
 import { pluginRequirementReadiness } from "@/lib/method-transfer-readiness";
@@ -176,8 +178,10 @@ function MethodsLibraryPage() {
     () =>
       channels.flatMap<MethodEntry>((channel) =>
         effectiveProcessOrder(channel).flatMap((processType) => {
-          const method = channel.methods[processType];
-          return method.blocks.length ? [{ channel, processType, method }] : [];
+          const method = channel.methods?.[processType];
+          return method && !channelNeedsUpgrade(channel) && method.blocks.length
+            ? [{ channel, processType, method }]
+            : [];
         }),
       ),
     [channels],
@@ -200,6 +204,7 @@ function MethodsLibraryPage() {
   const filteredChannels = channels.filter((channel) => {
     const methods = methodsOf(channel);
     return (
+      !channelNeedsUpgrade(channel) &&
       methods.length > 0 &&
       (!normalizedQuery ||
         channel.name.toLocaleLowerCase("pt-BR").includes(normalizedQuery) ||
@@ -528,6 +533,14 @@ function MethodsLibraryPage() {
       />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <MethodAgentCta className="mb-5" />
+        {channels.filter(channelNeedsUpgrade).map((channel) => (
+          <div key={channel.id}>
+            <h2 data-i18n-ignore className="font-semibold">
+              {channel.name}
+            </h2>
+            <IncompatibleDataNotice value={channel.methods} />
+          </div>
+        ))}
         <section className="grid divide-y divide-border border-y border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           <Stat label="Métodos salvos" value={entries.length} />
           <Stat
@@ -1240,8 +1253,8 @@ function Stat({ label, value, suffix }: { label: string; value: number; suffix?:
 }
 function methodsOf(channel: Channel) {
   return effectiveProcessOrder(channel)
-    .map((process) => channel.methods[process])
-    .filter((method) => method.blocks.length);
+    .map((process) => channel.methods?.[process])
+    .filter((method) => method && !methodNeedsUpgrade(method) && method.blocks.length);
 }
 function slug(value: string) {
   return value

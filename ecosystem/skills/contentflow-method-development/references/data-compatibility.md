@@ -1,6 +1,6 @@
 # Compatibilidade de dados entre Blocos
 
-Leia primeiro [`docs/CONTENT_CONTRACT.md`](../../../../docs/CONTENT_CONTRACT.md). A conexão é válida somente quando `areValueShapesCompatible(source.shape, target.shape)` for verdadeira.
+Leia primeiro [`docs/CONTENT_CONTRACT.md`](documentation.md). A conexão é válida somente quando `areValueShapesCompatible(source.shape, target.shape)` for verdadeira.
 
 Como regra, valide:
 

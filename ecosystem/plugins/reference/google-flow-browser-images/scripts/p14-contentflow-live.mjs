@@ -126,7 +126,7 @@ if (!liveEnabled) {
     ],
     plugin: {
       pluginId: "local.contentflow.google-flow-batch-images",
-      pluginVersion: "1.3.7",
+      pluginVersion: "2.0.0",
       connectionRequired: false,
       configuration: {
         maxConcurrentGenerations: concurrency,
