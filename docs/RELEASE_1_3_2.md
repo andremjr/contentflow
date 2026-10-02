@@ -28,8 +28,12 @@ preservando os contratos internos de execução e as responsabilidades dos plugi
 O criador confirmou em 02/10/2026 a aprovação do fluxo completo no Flow e da
 atualização da instalação anterior, autorizando todo o conjunto pendente. Essa
 evidência é relatada pelo criador; os registros de testes locais preservam seus
-limites de cobertura. A publicação exige `npm run release:verify` no commit final,
-build local dos binários e conferência pública dos assets e links do site.
+limites de cobertura. O sweep local passou por lint, tipos, contratos, plugins, migrações e build.
+As regressões de referência de versão e isolamento de idioma foram corrigidas
+e aprovadas em testes direcionados. Em seguida, o criador solicitou explicitamente
+interromper novos testes e publicar: a repetição de `release:verify` foi interrompida,
+sem aprovação integral de E2E/Electron. A publicação usa build local dos binários
+e conferência pública dos assets e links do site.
 
 Métodos v3 e Plugin API v2 continuam sendo os contratos vigentes. As versões
 anteriores desses contratos não recebem adapter. Nenhum dado de Canal ou snapshot
