@@ -3,6 +3,14 @@ import { randomUUID } from "node:crypto";
 import { createEmptyMethods, type Channel } from "../../src/lib/domain";
 import { contentShape, recordShape } from "../../src/lib/data-shape";
 
+// Preferences belong to the isolated API, so browser-context cleanup is not enough.
+test.afterEach(async ({ request }) => {
+  const preferences = await (await request.get("/api/preferences")).json();
+  expect(
+    (await request.put("/api/preferences", { data: { ...preferences, language: "pt-BR" } })).ok(),
+  ).toBeTruthy();
+});
+
 for (const [language, contentType, family, quantity, options] of [
   ["pt-BR", "Tipo de conteúdo", "Imagem", "Quantidade", ["Texto", "Imagem", "Áudio", "Vídeo"]],
   ["en", "Content type", "Image", "Quantity", ["Text", "Image", "Audio", "Video"]],
