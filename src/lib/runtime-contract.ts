@@ -135,9 +135,12 @@ function collectCandidates({
       const selectedItemId = completed.values.selectedItemId;
       const item =
         typeof selectedItemId === "string"
-          ? libraryItems.find((candidate) => candidate.id === selectedItemId)
+          ? (completed.collectionSelection?.item ??
+            libraryItems.find((candidate) => candidate.id === selectedItemId))
           : undefined;
-      const collection = collections.find((candidate) => candidate.id === item?.collectionId);
+      const collection =
+        completed.collectionSelection?.collection ??
+        collections.find((candidate) => candidate.id === item?.collectionId);
       if (item && collection) {
         for (const field of collection.fields) {
           const value = item.values[field.id];

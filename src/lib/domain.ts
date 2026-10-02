@@ -320,6 +320,8 @@ export type StoredFile = {
   size: number;
   url: string;
   sha256?: string;
+  /** Provider media identity used when a later plugin continues the same room. */
+  flowMediaId?: string;
 };
 
 export type DeliveryStatus = "partial" | "completed" | "invalidated";
@@ -541,6 +543,11 @@ export type BlockExecution = {
   blockId: string;
   status: BlockExecutionStatus;
   values: Record<string, RuntimeValue>;
+  collectionSelection?: {
+    item: ChannelLibraryItem;
+    collection: StrategicCollection;
+    usage: "fixed" | "consumable";
+  };
   /** Valores fornecidos pela interface durante esta execução, sem contaminar o Método. */
   runtimeInputs?: Record<string, RuntimeValue>;
   attempt?: number;
@@ -633,6 +640,8 @@ export type StrategicCollection = {
   id: string;
   channelId: string;
   name: string;
+  /** Missing in existing collections means fixed. */
+  usage?: "fixed" | "consumable";
   fields: StrategicCollectionField[];
   createdAt: string;
 };
@@ -643,6 +652,8 @@ export type ChannelLibraryItem = {
   collectionId: string;
   values: Record<string, RuntimeValue>;
   createdAt: string;
+  /** Read projection of the owning execution; never writable by a client. */
+  reservation?: { executionId: string; blockId: string };
 };
 
 export const PROCESS_META: Record<ProcessId, { label: string; icon: LucideIcon }> = {

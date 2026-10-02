@@ -395,7 +395,9 @@ function ProcessRunnerSession({ project, processId, description }: ProcessRunner
             <HumanChoiceGate
               block={activeBlock}
               collection={collections.find((item) => item.id === activeBlock.collectionId)}
-              items={libraryItems.filter((item) => item.collectionId === activeBlock.collectionId)}
+              items={libraryItems.filter(
+                (item) => item.collectionId === activeBlock.collectionId && !item.reservation,
+              )}
               execution={execution}
               project={project}
               projectExecutions={projectExecutions}
@@ -537,11 +539,12 @@ function MethodExecution({
           const selectedItemId = blockExecution.values.selectedItemId;
           const selectedItem =
             block.type === "ESCOLHER" && typeof selectedItemId === "string"
-              ? libraryItems.find((item) => item.id === selectedItemId)
+              ? (blockExecution.collectionSelection?.item ??
+                libraryItems.find((item) => item.id === selectedItemId))
               : undefined;
-          const collection = collections.find(
-            (candidate) => candidate.id === selectedItem?.collectionId,
-          );
+          const collection =
+            blockExecution.collectionSelection?.collection ??
+            collections.find((candidate) => candidate.id === selectedItem?.collectionId);
           const outputs = (block.outputs ?? []).filter(
             (output) => !isEmptyDisplayValue(blockExecution.values[output.key]),
           );
@@ -1785,8 +1788,12 @@ function HumanBlockGate({
       (item) => item.id === previous.blockId,
     );
     if (previousBlock?.type === "ESCOLHER" && typeof previous.values.selectedItemId === "string") {
-      const selectedItem = libraryItems.find((item) => item.id === previous.values.selectedItemId);
-      const collection = collections.find((item) => item.id === selectedItem?.collectionId);
+      const selectedItem =
+        previous.collectionSelection?.item ??
+        libraryItems.find((item) => item.id === previous.values.selectedItemId);
+      const collection =
+        previous.collectionSelection?.collection ??
+        collections.find((item) => item.id === selectedItem?.collectionId);
       for (const field of collection?.fields ?? []) {
         const value = selectedItem?.values[field.id];
         if (value !== undefined) {

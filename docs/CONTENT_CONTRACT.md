@@ -105,7 +105,7 @@ A direção inversa não existe. A regra também não se aplica a imagem, áudio
 
 O usuário escreve a intenção editorial do Bloco. Quando a saída exige `text/many` ou `record/many`, o executor é responsável por acrescentar a instrução técnica de serialização apropriada à ferramenta, analisar a resposta e devolver exatamente o valor tipado da porta. Texto introdutório, Markdown ou comentários não podem ser promovidos silenciosamente a itens.
 
-O núcleo valida cardinalidade, estrutura, campos obrigatórios e IDs concedidos antes de aceitar a resposta. Ele não executa análise semântica. Uma associação como “personagem X aparece nas cenas A e C” deve ser produzida por um Bloco semanticamente capaz em um campo `identifier` com `referencesInputId`. O plugin consumidor recebe os registros, as deliveries e seus IDs; cabe a ele traduzir a associação validada para o mecanismo específico da ferramenta, como anexar imagens de referência, aplicar legendas ou posicionar assets.
+O núcleo valida cardinalidade, estrutura, campos obrigatórios e IDs concedidos antes de aceitar a resposta. Ele não executa análise semântica. Uma associação como “personagem X aparece nas cenas A e C” é uma decisão do Bloco semanticamente capaz. Em contratos internos estruturados existentes, pode ser representada por um campo `identifier` com `referencesInputId`. Nos novos Métodos estratégicos, pode ser conteúdo de texto JSON com IDs: o plugin produtor fornece os IDs concedidos e valida seu formato, e o plugin consumidor resolve as referências pela proveniência das entregas. O Core não analisa esse texto nem escolhe os personagens. O plugin consumidor recebe os registros, as deliveries e seus IDs; cabe a ele traduzir a associação validada para o mecanismo específico da ferramenta, como anexar imagens de referência, aplicar legendas ou posicionar assets.
 
 Quando uma capability é orquestrada item a item sobre uma saída `many`, cada unidade pode devolver um valor atômico ou várias variantes atômicas compatíveis com o mesmo shape. O núcleo valida cada variante, agrega todas na delivery e preserva em cada uma a mesma linhagem da unidade e do item de origem. Uma lista devolvida por uma unidade não autoriza misturar famílias, estruturas inválidas ou IDs não concedidos.
 
@@ -141,6 +141,26 @@ Um Bloco que produz famílias diferentes usa portas diferentes. Exemplo:
 Não existe porta genérica de assets ou mixed media.
 
 ## Apresentação
+
+No editor estratégico de Métodos, entradas e saídas visíveis são exclusivamente conteúdo
+(`text`, `image`, `audio`, `video`). Não há seletor de conteúdo/controle/registro nem
+editor manual de estrutura nessa superfície. Controles e registros existentes continuam
+preservados no contrato interno, nos bindings, na persistência e no runtime; a projeção
+visual não os converte em texto nem os apaga. Sugestões substituem somente entregas
+de conteúdo, preservando os campos internos e suas chaves.
+
+Um JSON ou SRT pode ser uma entrega de texto, inline ou artifact, aceita explicitamente
+pela porta do plugin. Isso não equivale a `RecordShape`: o núcleo não interpreta JSON
+textual automaticamente como relações entre IDs. Reconhecimento e validação dessas
+relações por uma nova interação devem ter contrato explícito antes da implementação.
+Interações intuitivas de associação serão definidas separadamente; remover o seletor
+não as torna disponíveis.
+
+O Builder MCP publica essa regra em `strategicFields`, nas instruções e no contrato
+consultável. Validação/aplicação rejeitam novos campos estratégicos `control`/`record`,
+preservam shapes/bindings internos existentes e permitem os mecanismos nativos de
+decisão de `VALIDAR`, identidade de `ESCOLHER` e Histórico do Canal. Os outputs oficiais
+de Processo e o protocolo de plugins não são redefinidos por essa projeção de edição.
 
 `presentation` escolhe apenas um renderer permitido. Ele não altera família, cardinalidade, representação ou formatos. Restrições MIME e extensões pertencem a `ContentShape.formats`.
 

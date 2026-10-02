@@ -59,9 +59,10 @@ Plugin avançado de geração de imagens e vídeos no Google Flow através do Ch
 - Nome, descrição, perfil, capabilities, portas, campos e opções estáticas possuem textos em português do Brasil, inglês e espanhol. IDs, aliases, URLs, nomes de modelos e valores salvos não são traduzidos.
 - Preferências locais de instalação e diagnóstico permanecem em `settingsSchema`. Os controles técnicos já persistidos no bloco continuam declarados para que Métodos existentes mantenham seus valores e sua semântica.
 - Todas as capabilities declaram `promptPreview` sem incluir secrets ou dados reais no manifesto.
-- Os campos de modelo consultam as opções disponíveis no perfil selecionado por `configure/options`. O catálogo fica em cache por cinco minutos e o botão **Atualizar opções** força uma nova leitura sem reaproveitar o cache.
-- O cache é isolado por perfil e por capability. Lista vazia é aceita; erro de consulta preserva a seleção salva e faz a interface usar as opções estáticas do manifesto como fallback seguro. Se um modelo salvo desaparecer da conta, ele continua visível como indisponível até o usuário escolher outro.
-- A descoberta reutiliza `FlowAuto.adapter.listModels(type)`, valida o perfil preparado e a origem `flow.google.com`, não cria projetos e não envia prompts. Para consultar a lista, a conta precisa possuir ao menos um projeto existente ou informar uma URL de projeto válida.
+- Modelos são opções fixas do manifesto. Abrir ou verificar a configuração não consulta o Flow nem abre Chrome para carregar modelos. Mudanças na ferramenta exigem atualizar a lista no plugin. Os campos de rótulo manual existentes ficam em **Opções avançadas**, preservando configurações salvas.
+- Imagens por prompt oferece 1, 2, 3 ou 4 variantes. Concorrência de imagens oferece 1, 2, 3, 4 ou 5 prompts em geração: o próximo envio não espera a imagem anterior terminar. A caixa de prompt e as referências são alteradas sob um lock curto até a captura do ID da requisição; a espera pelo resultado ocorre fora desse lock.
+- Em geração concorrente, cada resposta é associada ao ID da requisição reservado pela unidade concedida pelo Core. Resultados fora de ordem são entregues na ordem original. A detecção genérica de imagens novas pelo DOM não participa desse modo; ausência de correlação ou efeito incerto exige reconciliação, sem atribuir mídia de outra unidade nem recarregar uma sessão com gerações em andamento.
+- Os modelos de vídeo fixos incluem Veo 3.1 Quality, Fast, Lite, Lite [Lower Priority] e Omni Flash, conforme os rótulos do bundle de referência. IDs técnicos já persistidos continuam válidos.
 
 ## Itens, variantes e ações
 
@@ -128,3 +129,11 @@ npm run plugin:kit -- check ecosystem/plugins/reference/google-flow-browser-imag
 npm run plugin:kit -- test-contract ecosystem/plugins/reference/google-flow-browser-images
 npm run plugin:kit -- test-sandbox ecosystem/plugins/reference/google-flow-browser-images
 ```
+
+## Prompts de texto com referências por cena
+
+Em `generate-images-in-browser`, `promptFormat=json` interpreta cada item de texto como `{"prompt":"...","referenceItemIds":["ID_DO_PERSONAGEM"]}`. Para gerar referências, use textos `{"name":"...","prompt":"..."}` e `referenceMode=shared`. Para cenas, selecione `referenceMode=per_prompt` e forneça as imagens em `reference_images`. O plugin resolve os IDs de imagem ou os IDs dos itens de personagem presentes na linhagem `derived_from`; nunca associa por posição, nome ou arquivo. IDs sem imagem e excesso de referências interrompem a geração. `[]` significa cena sem referências. O modo padrão continua texto direto.
+
+Fluxo recomendado: roteiro → personagens extraídos do roteiro → imagens de referência → prompts das cenas com IDs → cenas consistentes → seleção humana → animação. O ChatGPT Browser Studio pode produzir esses textos usando `textItemFormat=json`, `textItemFields` (campos `string` ou `string[]`) e `textItemReferenceInputs` (campo → porta de entrada que fornece IDs). O JSON permanece conteúdo de texto, sem contrato de registros do Core.
+
+O bundle fornecido foi consultado como referência técnica de seleção de imagens, modelos, proporção, variantes, animação e uso de frames/elementos. Esta implementação adiciona o caminho de referências por IDs ao fluxo automatizado; não afirma implementar todas as funções da extensão nem comprova execução real no serviço.

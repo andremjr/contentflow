@@ -1,6 +1,6 @@
 # Estado atual e limites de validação
 
-Revisão documental: 01/10/2026. Esta descrição corresponde ao checkout inspecionado, incluindo alterações locais; não afirma que todas elas estejam em uma release publicada. Versão declarada em `package.json`: `1.3.1`. HEAD, branch e alterações devem ser consultados ao vivo.
+Revisão documental: 02/10/2026. Esta descrição corresponde ao checkout inspecionado, incluindo alterações locais; não afirma que todas elas estejam em uma release publicada. Versão declarada em `package.json`: `1.3.2`. HEAD, branch e alterações devem ser consultados ao vivo.
 
 ## Produto disponível
 
@@ -32,3 +32,7 @@ O [Dev Monitor](DEV_MONITOR.md) cobre inicialmente `human-theme` (HTTP/Core/deli
 
 Melhorias são escolhidas e validadas no [fluxo de desenvolvimento vertical](DEVELOPMENT.md). Ideias de integração e tarefas históricas não são capacidades disponíveis nem pré-requisitos para usar o produto.
 
+
+## Validação informada pelo criador para a v1.3.2
+
+Em 02/10/2026, o criador informou aprovação do fluxo completo no Flow e da atualização da instalação anterior, autorizando publicar todo o conjunto pendente. Trata-se de validação relatada pelo criador, distinta dos testes locais e de evidências instrumentadas pelo agente. Os registros locais anteriores preservam seus próprios limites; esta informação não amplia a cobertura do Dev Monitor.

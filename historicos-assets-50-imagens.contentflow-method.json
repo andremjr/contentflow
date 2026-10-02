@@ -61,7 +61,7 @@
         "order": 0,
         "plugin": {
           "pluginId": "local.contentflow.chatgpt-browser-studio",
-          "pluginVersion": "2.0.0",
+          "pluginVersion": "2.0.1",
           "capabilityId": "generate-text-in-browser",
           "configuration": {},
           "connectionRequired": false
@@ -121,7 +121,7 @@
         "order": 1,
         "plugin": {
           "pluginId": "local.contentflow.google-flow-batch-images",
-          "pluginVersion": "2.0.0",
+          "pluginVersion": "2.0.1",
           "capabilityId": "generate-images-in-browser",
           "configuration": {
             "projectMode": "auto",

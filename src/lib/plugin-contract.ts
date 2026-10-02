@@ -58,6 +58,12 @@ export type JsonSchema = {
     property: string;
     values: Array<string | number | boolean>;
   };
+  /** Declarative presentation hints interpreted by the core-owned configuration renderer. */
+  ui?: {
+    section?: "primary" | "advanced";
+    order?: number;
+    width?: "half" | "full";
+  };
 };
 
 export type PluginInputPort = {
@@ -347,6 +353,7 @@ export type PluginArtifact = {
   mimeType: string;
   size?: number;
   source: { kind: "path"; path: string } | { kind: "url"; url: string };
+  flowMediaId?: string;
 };
 
 export type PluginUsage = {

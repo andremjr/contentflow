@@ -132,6 +132,7 @@ test("claimItems concede vários itens na mesma invocação e preserva ownership
     "utf8",
   );
   const manifest = {
+    apiVersion: "2",
     id: "v84.fixture",
     version: "1.0.0",
     permissions: [],

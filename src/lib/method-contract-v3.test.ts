@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseProcessMethodV3 } from "./method-contract-v3";
+import { parseProcessMethodV3, workspaceMethodV3Schema } from "./method-contract-v3";
 import { parseMethodFile, serializeMethodFile } from "./method-file";
 
 const method = {
@@ -37,6 +37,39 @@ const method = {
 
 test("accepts the definitive Method v3 contract", () => {
   assert.equal(parseProcessMethodV3(method).contractVersion, 3);
+});
+
+test("accepts an empty Method while it is being configured", () => {
+  const parsed = parseProcessMethodV3({
+    contractVersion: 3,
+    name: "Thumbnail",
+    processType: "thumbnail",
+    blocks: [],
+  });
+  assert.deepEqual(parsed.blocks, []);
+});
+
+test("an unresolved source is editable as v3 but cannot be executed or exported", () => {
+  const draft = {
+    ...structuredClone(method),
+    blocks: [
+      {
+        ...structuredClone(method.blocks[0]),
+        inputs: [
+          {
+            ...structuredClone(method.blocks[0].inputs[0]),
+            binding: { kind: "previous_block", blockId: "", outputKey: "" },
+          },
+        ],
+      },
+    ],
+  };
+  assert.equal(workspaceMethodV3Schema.safeParse(draft).success, true);
+  assert.throws(() => parseProcessMethodV3(draft));
+  assert.throws(() =>
+    serializeMethodFile("Rascunho", draft as unknown as ReturnType<typeof parseProcessMethodV3>),
+  );
+  assert.equal(workspaceMethodV3Schema.safeParse({ ...draft, contractVersion: 2 }).success, false);
 });
 
 test("rejects Method v2 instead of adapting it", () => {

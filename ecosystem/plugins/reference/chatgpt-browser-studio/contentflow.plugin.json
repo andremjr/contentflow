@@ -3,7 +3,7 @@
   "apiVersion": "2",
   "id": "local.contentflow.chatgpt-browser-studio",
   "name": "ChatGPT Browser Studio",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Automação modular do ChatGPT web para criar, pesquisar, escolher, validar, analisar arquivos e gerar imagens.",
   "localizations": {
     "en": {
@@ -64,6 +64,36 @@
               "startMinimized": {
                 "title": "Start minimized"
               }
+            }
+          }
+        },
+        "generate-text-in-browser": {
+          "blockConfigSchema": {
+            "properties": {
+              "textItemFormat": {
+                "title": "Text item format",
+                "options": [
+                  {
+                    "value": "plain",
+                    "label": "Plain text"
+                  },
+                  {
+                    "value": "json",
+                    "label": "Structured JSON text"
+                  }
+                ]
+              },
+              "textItemFields": {
+                "title": "JSON text fields"
+              },
+              "textItemReferenceInputs": {
+                "title": "Inputs supplying IDs"
+              }
+            }
+          },
+          "inputPorts": {
+            "context_items": {
+              "label": "Reference text items"
             }
           }
         }
@@ -127,6 +157,36 @@
               "startMinimized": {
                 "title": "Iniciar minimizado"
               }
+            }
+          }
+        },
+        "generate-text-in-browser": {
+          "blockConfigSchema": {
+            "properties": {
+              "textItemFormat": {
+                "title": "Formato de cada texto",
+                "options": [
+                  {
+                    "value": "plain",
+                    "label": "Texto directo"
+                  },
+                  {
+                    "value": "json",
+                    "label": "Texto JSON estructurado"
+                  }
+                ]
+              },
+              "textItemFields": {
+                "title": "Campos del texto JSON"
+              },
+              "textItemReferenceInputs": {
+                "title": "Entradas que proporcionan IDs"
+              }
+            }
+          },
+          "inputPorts": {
+            "context_items": {
+              "label": "Lista de textos de referencia"
             }
           }
         }
@@ -208,7 +268,7 @@
         "type": "integer",
         "minimum": 30,
         "maximum": 3600,
-        "default": 600
+        "default": 1200
       },
       "typingChunkSize": {
         "type": "integer",
@@ -391,6 +451,17 @@
               ]
             }
           }
+        },
+        {
+          "key": "context_items",
+          "label": "Lista de textos de referência",
+          "required": false,
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          }
         }
       ],
       "outputPorts": [
@@ -490,6 +561,55 @@
           "startMinimized": {
             "type": "boolean",
             "default": true
+          },
+          "textItemFormat": {
+            "type": "string",
+            "title": "Formato de cada texto",
+            "default": "plain",
+            "oneOf": [
+              {
+                "const": "plain",
+                "title": "Texto direto"
+              },
+              {
+                "const": "json",
+                "title": "Texto JSON estruturado"
+              }
+            ],
+            "ui": {
+              "section": "primary",
+              "order": 0
+            }
+          },
+          "textItemFields": {
+            "type": "string",
+            "title": "Campos do texto JSON",
+            "format": "textarea",
+            "default": "{\"prompt\":\"string\"}",
+            "visibleWhen": {
+              "property": "textItemFormat",
+              "values": [
+                "json"
+              ]
+            },
+            "ui": {
+              "section": "advanced"
+            }
+          },
+          "textItemReferenceInputs": {
+            "type": "string",
+            "title": "Entradas que fornecem IDs",
+            "format": "textarea",
+            "default": "{}",
+            "visibleWhen": {
+              "property": "textItemFormat",
+              "values": [
+                "json"
+              ]
+            },
+            "ui": {
+              "section": "advanced"
+            }
           }
         }
       },

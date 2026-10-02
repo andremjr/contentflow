@@ -4,10 +4,7 @@ export type PluginConfigurationEntry = [string, JsonSchema];
 
 export type PluginConfigurationRendererModel = {
   capabilityEntries: PluginConfigurationEntry[];
-  generationModeOptions: Array<string | number | boolean>;
-  sequenceModeValue?: string;
-  supportsItemSequence: boolean;
-  simpleGenerationMode: string;
+  advancedEntries: PluginConfigurationEntry[];
 };
 
 export function buildPluginConfigurationRendererModel({
@@ -24,41 +21,36 @@ export function buildPluginConfigurationRendererModel({
     profileSetup?.configurationKey,
     profileSetup?.fallbackConfigurationKey,
   ].filter((key): key is string => Boolean(key));
-  const generationModeSchema = configProperties.generationMode;
-  const generationModeOptions = [
-    ...(generationModeSchema?.enum ?? []),
-    ...(generationModeSchema?.oneOf?.map((option) => option.const) ?? []),
-  ].filter(
-    (value): value is string | number | boolean =>
-      typeof value === "string" || typeof value === "number" || typeof value === "boolean",
+  const effectiveConfiguration = Object.fromEntries(
+    Object.entries(configProperties).map(([key, schema]) => [
+      key,
+      configuration[key] ?? schema.default,
+    ]),
   );
-  const sequenceModeValue = generationModeOptions.includes("sequence")
-    ? "sequence"
-    : generationModeOptions.includes("outline_sequence")
-      ? "outline_sequence"
-      : undefined;
-  const supportsItemSequence =
-    generationModeOptions.includes("single") && Boolean(sequenceModeValue);
-  const generationMode = configuration.generationMode;
-  const simpleGenerationMode = generationModeOptions.includes(generationMode as never)
-    ? String(generationMode)
-    : String(generationModeSchema?.default ?? "single");
   const isVisible = (schema: JsonSchema) => {
     const rule = schema.visibleWhen;
-    return !rule || rule.values.includes(configuration[rule.property] as never);
+    return !rule || rule.values.includes(effectiveConfiguration[rule.property] as never);
   };
-  const capabilityEntries = Object.entries(configProperties).filter(
-    ([key, schema]) =>
-      isVisible(schema) &&
-      !(supportsItemSequence && key === "generationMode") &&
-      !profileConfigurationKeys.includes(key),
+  const visibleEntries = Object.entries(configProperties).filter(
+    ([key, schema]) => isVisible(schema) && !profileConfigurationKeys.includes(key),
+  );
+  const sortEntries = (entries: PluginConfigurationEntry[]) =>
+    entries
+      .map((entry, index) => ({ entry, index }))
+      .sort(
+        (left, right) =>
+          (left.entry[1].ui?.order ?? left.index) - (right.entry[1].ui?.order ?? right.index),
+      )
+      .map(({ entry }) => entry);
+  const capabilityEntries = sortEntries(
+    visibleEntries.filter(([, schema]) => schema.ui?.section !== "advanced"),
+  );
+  const advancedEntries = sortEntries(
+    visibleEntries.filter(([, schema]) => schema.ui?.section === "advanced"),
   );
 
   return {
     capabilityEntries,
-    generationModeOptions,
-    sequenceModeValue,
-    supportsItemSequence,
-    simpleGenerationMode,
+    advancedEntries,
   };
 }

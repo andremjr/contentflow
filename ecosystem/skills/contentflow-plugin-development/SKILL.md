@@ -27,6 +27,10 @@ Plugin API v1 é inválida; produza explicitamente um pacote API v2 novo. **Muda
 
 Plugins nunca inventam IDs universais de item/delivery, nem gerenciam diretamente identidade ou proveniência pertencente ao Core.
 
+## Traduzir automações externas
+
+Leia [automation-to-plugin.md](references/automation-to-plugin.md) antes de portar extensões, scripts ou serviços compostos. Inventarie preparo manual, entregas e decisões; redistribua estratégia ao Método e autoridade operacional ao Core antes de implementar a parte específica da ferramenta. Um plugin de IA pode produzir associações na etapa configurada; o consumidor não escolhe silenciosamente essas associações.
+
 ## Capability, Bloco e eficiência
 
 Projete a capability para uma entrega estratégica observável, não para cada operação técnica. Ela pode conter navegação, upload, polling, download, parsing, checkpoints e vários jobs quando tudo servir a uma única intenção do Bloco. O Core continua responsável por work units, perfis, leases, tentativas, distribuição, deliveries e recovery; a Browser Bridge apenas transporta operações autorizadas de navegador.
@@ -96,6 +100,7 @@ O Core cria/persiste identidade, ordem, tentativa e proveniência. O plugin só 
 - `references/protocol.md`
 - `references/security.md`
 - `references/browser-automation.md`
+- `references/automation-to-plugin.md`
 
 ## Checklist
 
@@ -107,3 +112,5 @@ O Core cria/persiste identidade, ordem, tentativa e proveniência. O plugin só 
 - multiperfil distribui work units exclusivos;
 - recovery devolve fatos estruturados, sem decidir política do Core;
 - pacote não contém secrets, estado de máquina, cookies, tokens ou caminhos locais.
+
+Para associações em conteúdo textual, consulte `docs/PLUGIN_INTERFACE.md`: o produtor fornece IDs canônicos ao modelo e valida o JSON conforme configuração do plugin; o consumidor resolve os IDs e traduz para sua ferramenta. O Core preserva identidade/proveniência sem decidir relações editoriais. No exemplo visual: roteiro → personagens → referências → prompts com IDs → cenas. Controles funcionais são declarados pelo plugin, sem interpretação de nomes de campos pelo renderer.

@@ -14,6 +14,7 @@ os objetivos desses documentos foram implementados.
 ```powershell
 npm run dev-monitor -- run human-theme
 npm run dev-monitor -- run sandbox-faults
+npm run dev-monitor -- run strategic-library
 npm run dev-monitor -- inspect <run-id>
 npm run dev-monitor -- evidence <run-id> CORE.BLOCK.REQUIRED_OUTPUTS
 npm run dev-monitor -- diff <before-run-id> <after-run-id>
@@ -26,6 +27,13 @@ npm run test:dev-monitor
 snapshot, conclui um Bloco Humano pela API, confirma delivery/output persistidos
 e repete o mesmo command ID para verificar idempotência. Não acessa dados pessoais.
 `sandbox-faults` executa a suite existente com o worker real e o plugin de teste.
+`strategic-library` valida lote atômico/idempotente, reserva exclusiva, cancelamento,
+reset, consumo no término do Processo, continuidade dos campos tipados e seleções
+por Humano, IA e Código com workers locais reais. O monitor observa o lifecycle
+de um único processo da API; o restart real da API com a mesma base é exercitado
+separadamente por `node --import tsx --test server/strategic-library.integration.test.ts`.
+O renderer e o alinhamento de imagens/textos/links são validados por
+`tests/e2e/strategic-library.spec.ts`, fora do coverage do monitor.
 
 Os bundles ficam em `.dev-monitor/runs/<id>/`, ignorado pelo Git. `run.json`
 declara cenário, produtores, famílias, checks obrigatórios, SHA histórico e

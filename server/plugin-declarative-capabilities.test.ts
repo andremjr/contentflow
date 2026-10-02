@@ -77,6 +77,22 @@ test("aceita opções dinâmicas e ações por item declaradas pela capability",
   );
 });
 
+test("valida a apresentação declarativa da interface da capability", () => {
+  const value = manifest();
+  value.capabilities[0].blockConfigSchema.properties!.model = {
+    type: "string",
+    ui: { section: "primary", order: 1, width: "half" },
+  };
+  assert.doesNotThrow(() => validatePluginManifest(value));
+
+  const invalid = manifest();
+  invalid.capabilities[0].blockConfigSchema.properties!.model = {
+    type: "string",
+    ui: { section: "hidden" as never, width: "wide" as never, order: "first" as never },
+  };
+  assert.throws(() => validatePluginManifest(invalid), PluginValidationError);
+});
+
 test("rejeita provider que referencia campo de configuração inexistente", () => {
   const value = manifest();
   value.capabilities[0].configurationOptions![0].property = "missing";

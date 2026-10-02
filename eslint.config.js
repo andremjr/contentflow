@@ -18,6 +18,7 @@ export default tseslint.config(
       "test-results",
       "compiled/**/*.exe",
       ".agents",
+      ".tmp",
       "ecosystem/plugins/reference/google-flow-browser-images/captured-flow-session.json",
       "ecosystem/plugins/reference/google-flow-browser-images/iniciar-captura.bat",
       "ecosystem/plugins/reference/google-flow-browser-images/scripts/analyze-captured-session.mjs",

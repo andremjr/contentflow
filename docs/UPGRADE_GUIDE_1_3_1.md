@@ -39,6 +39,8 @@ Métodos v1/v2 são inválidos no importador atual. Trabalhe numa cópia e produ
 
 Não converta snapshots de Projetos já iniciados para o novo Método. A revisão da estratégia para novos Projetos e qualquer adoção explícita de revisão numa execução são operações distintas do Core.
 
+Métodos que já satisfazem o schema de edição v3, incluindo rascunhos vazios e snapshots, são preservados sem inferência legada. Uma ligação ainda incompatível ou uma porta de plugin não escolhida exige ajuste da configuração, não migração dos dados. O editor permite salvar uma entrada nova antes de escolher sua origem; o contrato executável e a exportação continuam exigindo referências completas. O plano não redefine o shape declarado de uma entrada v3 a partir de sua origem.
+
 ## 3. Migrar plugins explicitamente
 
 Plugin API v1 é inválida no runtime atual. Gere um pacote API v2 independente com `apiVersion: "2"`, portas `inputPorts`/`outputPorts` com um `shape` por porta e handler que lê `request.inputs[portKey]` e retorna `values[portKey]`. Confira [protocolo](ecosystem/protocol.md), [segurança](ecosystem/security.md) e schema empacotado.

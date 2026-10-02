@@ -43,6 +43,7 @@ test("abre uma única sessão com a porta reservada e devolve somente o endpoint
 
   const session = await manager.open({
     profileDirectory: "C:\\contentflow-test-profile",
+    browserBridgeDirectory: "C:\\contentflow-browser-bridge",
     chromeExecutable: process.execPath,
     visible: false,
   });
@@ -52,7 +53,17 @@ test("abre uma única sessão com a porta reservada e devolve somente o endpoint
   assert.equal(launches.length, 1);
   assert.ok(launches[0]!.args.includes("--remote-debugging-port=45678"));
   assert.ok(launches[0]!.args.includes("--user-data-dir=C:\\contentflow-test-profile"));
+  assert.ok(launches[0]!.args.includes("--load-extension=C:\\contentflow-browser-bridge"));
   assert.ok(launches[0]!.args.includes("--start-minimized"));
+});
+
+test("permite a inicialização fria da Bridge sem reduzir o polling", () => {
+  const manager = new BrowserSessionManager();
+  assert.equal(
+    (manager as unknown as { dependencies: { startupTimeoutMs: number } }).dependencies
+      .startupTimeoutMs,
+    45_000,
+  );
 });
 
 test("cancelamento durante startup encerra o processo e não devolve sessão", async () => {

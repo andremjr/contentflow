@@ -3,6 +3,29 @@ import test from "node:test";
 
 import { translate } from "./app-preferences";
 
+test("content-only Method editor labels are localized in all three languages", () => {
+  const labels = [
+    ["Conteúdo", "Content", "Contenido"],
+    ["Tipo de conteúdo", "Content type", "Tipo de contenido"],
+    ["Quantidade", "Quantity", "Cantidad"],
+    ["Representação", "Representation", "Representación"],
+    ["Texto", "Text", "Texto"],
+    ["Imagem", "Image", "Imagen"],
+    ["Áudio", "Audio", "Audio"],
+    ["Vídeo", "Video", "Vídeo"],
+    ["Um", "One", "Uno"],
+    ["Vários", "Many", "Varios"],
+    ["Direto", "Inline", "Directo"],
+    ["Arquivo", "File", "Archivo"],
+    ["Direto ou arquivo", "Inline or file", "Directo o archivo"],
+  ];
+  for (const [source, english, spanish] of labels) {
+    assert.equal(translate(source, "pt-BR"), source);
+    assert.equal(translate(source, "en"), english);
+    assert.equal(translate(source, "es"), spanish);
+  }
+});
+
 test("translates the local service connection state", () => {
   const phrase =
     "Sem conexão com o serviço local. Seus dados salvos estão preservados; tentando reconectar…";
@@ -461,5 +484,44 @@ test("translates declarative execution item actions in all supported languages",
     assert.equal(translate(phrase, "pt-BR"), phrase);
     assert.notEqual(translate(phrase, "en"), phrase);
     assert.notEqual(translate(phrase, "es"), phrase);
+  }
+});
+
+test("strategic library usage and batch interface translate in all languages", () => {
+  for (const phrase of [
+    "Salvando…",
+    "Uso da coleção",
+    "Fixa",
+    "Consumível",
+    "Reservado",
+    "Salvo",
+    "Os itens permanecem na coleção após o uso.",
+    "Os itens são reservados ao escolher e excluídos somente quando o Processo termina. Falha ou cancelamento mantém a reserva até excluir ou reiniciar a execução.",
+    "Importar em lote",
+    "Preencha as linhas ou importe uma coluna por vez. Revise a ordem antes de salvar.",
+    "Preencher por coluna",
+    "Coluna",
+    "Valores da coluna",
+    "Os arquivos preenchem esta coluna na ordem selecionada, a partir da primeira linha.",
+    "Selecionar arquivos",
+    "Edite os layouts diretamente nas linhas.",
+    "Um valor por linha",
+    "Aplicar à coluna",
+    "Linha",
+    "Remover linha",
+    "Adicionar linha",
+    "Preencha os campos obrigatórios e corrija os valores antes de importar.",
+    "Importar itens",
+    "Lote importado.",
+    "Não foi possível importar o lote. Revise os campos e tente novamente.",
+    "Este item está reservado por outra execução.",
+    "Esta coleção possui itens reservados.",
+    "Lote inválido.",
+    "Revise os campos do lote antes de importar.",
+    "Campo desconhecido na coleção.",
+  ]) {
+    assert.equal(translate(phrase, "pt-BR"), phrase);
+    assert.notEqual(translate(phrase, "en"), phrase);
+    assert.ok(translate(phrase, "es").length);
   }
 });

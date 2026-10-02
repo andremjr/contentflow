@@ -63,7 +63,7 @@ import {
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { PluginConfigurationRenderer } from "@/components/plugin-configuration-renderer";
 import { RuntimeValueViewer } from "@/components/runtime-value-viewer";
-import { LineListTextarea } from "@/components/line-list-textarea";
+import { isMethodContentField, replaceMethodContentFields } from "@/lib/method-content-fields";
 import {
   PRESENTATION_RENDERERS,
   PRESENTATION_RENDERER_REGISTRY,
@@ -109,15 +109,13 @@ import {
   type BlockType,
   type Channel,
   type FieldPresentation,
-  type AtomicValueShape,
   type ContentCardinality,
+  type ContentShape,
   type ContentFamily,
   type ContentRepresentation,
-  type ControlKind,
   type PresentationRendererId,
   type ProfileExecutionPolicy,
   type ProcessMethod,
-  type RecordFieldDefinition,
   type StrategicCollection,
   type UniversalProcess,
   type ValidationMode,
@@ -253,16 +251,6 @@ const OPERATOR_META: Record<BlockOperator, { label: string; icon: typeof Bot }> 
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function newRecordField(index: number): RecordFieldDefinition {
-  return {
-    id: uid("record-field"),
-    label: index === 0 ? "Nome" : "Novo campo",
-    key: index === 0 ? "name" : `field_${index + 1}`,
-    shape: contentShape("text"),
-    required: true,
-  };
 }
 
 function shapeSummary(shape: ValueShape) {
@@ -1337,9 +1325,15 @@ function MethodBlockCardContent({
     block.type === "ESCOLHER" && collectionName
       ? `Coleção: ${collectionName}`
       : block.instructions?.trim() || "Sem instruções";
-  const outputCount = block.outputs?.length ?? 0;
-  const inputLabels = (block.inputs ?? []).map(instructionInputLabel).filter(Boolean);
-  const outputLabels = (block.outputs ?? []).map(instructionInputLabel).filter(Boolean);
+  const outputCount = (block.outputs ?? []).filter(isMethodContentField).length;
+  const inputLabels = (block.inputs ?? [])
+    .filter(isMethodContentField)
+    .map(instructionInputLabel)
+    .filter(Boolean);
+  const outputLabels = (block.outputs ?? [])
+    .filter(isMethodContentField)
+    .map(instructionInputLabel)
+    .filter(Boolean);
 
   return (
     <>
@@ -2750,7 +2744,7 @@ function InstructionEditor({
     { label: "Nome do bloco", token: "{{block.name}}" },
     { label: "Tipo de ação", token: "{{block.type}}" },
   ];
-  const inputVariables = (block.inputs ?? []).map((input) => ({
+  const inputVariables = (block.inputs ?? []).filter(isMethodContentField).map((input) => ({
     label: instructionInputLabel(input),
     token: `{{inputs.${instructionInputKey(input)}}}`,
   }));
@@ -2780,7 +2774,7 @@ function InstructionEditor({
   };
   const previousBlockInputs = methodBlocks.slice(0, blockIndex).flatMap((sourceBlock) =>
     getBlockSourceFields(sourceBlock, collections)
-      .filter((output) => acceptsInputShape(output.shape))
+      .filter((output) => isMethodContentField(output) && acceptsInputShape(output.shape))
       .map((output) =>
         toAvailableInput(
           {
@@ -2817,7 +2811,7 @@ function InstructionEditor({
         ),
       ];
       return sources
-        .filter(({ output }) => acceptsInputShape(output.shape))
+        .filter(({ output }) => isMethodContentField(output) && acceptsInputShape(output.shape))
         .map(({ blockId, blockLabel, output }) =>
           toAvailableInput(
             {
@@ -3819,7 +3813,9 @@ function ContextInputsEditor({
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const inputs = block.inputs ?? [];
-  const regularInputs = inputs.filter((input) => input.binding.kind !== "channel_history");
+  const regularInputs = inputs
+    .filter(isMethodContentField)
+    .filter((input) => input.binding.kind !== "channel_history");
   const addInput = () => {
     const input: BlockInputBinding = {
       id: uid(`${block.id}-input`),
@@ -3923,8 +3919,11 @@ function DataContractEditor({
   onChange: (patch: Partial<ActionBlock>) => void;
 }) {
   const inputs = block.inputs ?? [];
-  const regularInputs = inputs.filter((input) => input.binding.kind !== "channel_history");
+  const regularInputs = inputs
+    .filter(isMethodContentField)
+    .filter((input) => input.binding.kind !== "channel_history");
   const outputs = block.outputs ?? [];
+  const visibleOutputs = outputs.filter(isMethodContentField);
   const addInput = () => {
     const input: BlockInputBinding = {
       id: uid(`${block.id}-input`),
@@ -4029,7 +4028,12 @@ function DataContractEditor({
               variant="ghost"
               className="h-8 px-2 text-[10px]"
               onClick={() =>
-                onChange({ outputs: createSuggestedHumanFields(processType, block.type) })
+                onChange({
+                  outputs: replaceMethodContentFields(
+                    outputs,
+                    createSuggestedHumanFields(processType, block.type),
+                  ),
+                })
               }
             >
               Usar sugestão
@@ -4040,7 +4044,7 @@ function DataContractEditor({
           </div>
         </div>
         <div className="space-y-3">
-          {outputs.map((output) => (
+          {visibleOutputs.map((output) => (
             <OutputFieldEditor
               key={output.id}
               field={output}
@@ -4094,12 +4098,12 @@ function InputBindingEditor({
     binding.kind === "previous_block"
       ? availableBlocks.find((block) => block.id === binding.blockId)
       : undefined;
-  const sourceFields = getBlockSourceFields(sourceBlock, collections);
+  const sourceFields = getBlockSourceFields(sourceBlock, collections).filter(isMethodContentField);
   const previousProcesses = processOrder.slice(0, processOrder.indexOf(processType));
   const previousDeliverySources = previousProcesses.flatMap((sourceProcessType) => {
     const method = channelMethods[sourceProcessType];
     const blockOutputs = (method?.blocks ?? []).flatMap((sourceBlock) =>
-      (sourceBlock.outputs ?? []).map((output) => ({
+      (sourceBlock.outputs ?? []).filter(isMethodContentField).map((output) => ({
         id: `${sourceProcessType}::${sourceBlock.id}::${output.key}`,
         processType: sourceProcessType,
         blockId: sourceBlock.id,
@@ -4107,13 +4111,15 @@ function InputBindingEditor({
         output,
       })),
     );
-    const officialOutputs = createProcessOutputFields(sourceProcessType).map((output) => ({
-      id: `${sourceProcessType}::process::${output.key}`,
-      processType: sourceProcessType,
-      blockId: undefined,
-      blockLabel: "Resultado oficial",
-      output,
-    }));
+    const officialOutputs = createProcessOutputFields(sourceProcessType)
+      .filter(isMethodContentField)
+      .map((output) => ({
+        id: `${sourceProcessType}::process::${output.key}`,
+        processType: sourceProcessType,
+        blockId: undefined,
+        blockLabel: "Resultado oficial",
+        output,
+      }));
     return [...officialOutputs, ...blockOutputs];
   });
   const selectedPreviousDelivery =
@@ -4211,7 +4217,9 @@ function InputBindingEditor({
                   if (source === "static") onChange({ binding: { kind: "static", value: "" } });
                   if (source === "previous_block") {
                     const candidate = availableBlocks.at(-1);
-                    const output = getBlockSourceFields(candidate, collections)[0];
+                    const output = getBlockSourceFields(candidate, collections).filter(
+                      isMethodContentField,
+                    )[0];
                     onChange({
                       ...(output
                         ? {
@@ -4251,7 +4259,9 @@ function InputBindingEditor({
                   value={binding.blockId}
                   onValueChange={(blockId) => {
                     const candidate = availableBlocks.find((item) => item.id === blockId);
-                    const output = getBlockSourceFields(candidate, collections)[0];
+                    const output = getBlockSourceFields(candidate, collections).filter(
+                      isMethodContentField,
+                    )[0];
                     onChange({
                       ...(output
                         ? {
@@ -4406,7 +4416,6 @@ function OutputFieldEditor({
   onRemove: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const usesOptions = field.shape.kind === "control" && field.shape.control === "selection";
   return (
     <div className="rounded-xl border border-border/70 bg-card p-3">
       <div className="flex items-center gap-2">
@@ -4461,23 +4470,6 @@ function OutputFieldEditor({
               })
             }
           />
-          {usesOptions && (
-            <div>
-              <LineListTextarea
-                value={field.shape.kind === "control" ? (field.shape.options ?? []) : []}
-                onChange={(options) =>
-                  field.shape.kind === "control" && onChange({ shape: { ...field.shape, options } })
-                }
-                placeholder="Opções fixas, uma por linha (opcional)"
-                rows={3}
-                className="text-xs"
-              />
-              <p className="mt-1.5 text-[10px] text-muted-foreground">
-                Se ficar vazio, o sistema usa automaticamente a lista mais recente produzida pelo
-                método.
-              </p>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -4487,125 +4479,58 @@ function OutputFieldEditor({
 function ShapeEditor({
   shape,
   onChange,
-  allowRecord = true,
 }: {
   shape: ValueShape;
-  onChange: (shape: ValueShape) => void;
-  allowRecord?: boolean;
+  onChange: (shape: ContentShape) => void;
 }) {
+  const { t } = useAppPreferences();
+  if (shape.kind !== "content") return null;
   return (
     <div className="space-y-2 rounded-lg border border-border/70 bg-background/30 p-3">
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-2">
         <div className="space-y-1">
-          <Label className="text-[10px] text-muted-foreground">Formato</Label>
+          <Label className="text-[10px] text-muted-foreground">{t("Conteúdo")}</Label>
           <Select
-            value={shape.kind}
-            onValueChange={(kind) => {
-              if (kind === "content") onChange(contentShape("text"));
-              if (kind === "control") onChange(controlShape("selection"));
-              if (kind === "record") onChange(recordShape("many", [newRecordField(0)]));
-            }}
+            value={shape.family}
+            onValueChange={(family) =>
+              onChange(contentShape(family as ContentFamily, shape.cardinality))
+            }
           >
-            <SelectTrigger className="h-8 text-xs">
+            <SelectTrigger className="h-8 text-xs" aria-label={t("Tipo de conteúdo")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="content">Conteúdo</SelectItem>
-              <SelectItem value="control">Controle</SelectItem>
-              {allowRecord && <SelectItem value="record">Registros</SelectItem>}
+              <SelectItem value="text">{t("Texto")}</SelectItem>
+              <SelectItem value="image">{t("Imagem")}</SelectItem>
+              <SelectItem value="audio">{t("Áudio")}</SelectItem>
+              <SelectItem value="video">{t("Vídeo")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        {shape.kind === "content" && (
-          <>
-            <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground">Família</Label>
-              <Select
-                value={shape.family}
-                onValueChange={(family) =>
-                  onChange(contentShape(family as ContentFamily, shape.cardinality))
-                }
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Texto</SelectItem>
-                  <SelectItem value="image">Imagem</SelectItem>
-                  <SelectItem value="audio">Áudio</SelectItem>
-                  <SelectItem value="video">Vídeo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <CardinalityEditor
-              value={shape.cardinality}
-              onChange={(cardinality) => onChange({ ...shape, cardinality })}
-            />
-          </>
-        )}
-        {shape.kind === "control" && (
-          <>
-            <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground">Controle</Label>
-              <Select
-                value={shape.control}
-                onValueChange={(control) =>
-                  onChange(controlShape(control as ControlKind, shape.cardinality))
-                }
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="identifier">Identificador</SelectItem>
-                  <SelectItem value="number">Número</SelectItem>
-                  <SelectItem value="boolean">Sim ou não</SelectItem>
-                  <SelectItem value="selection">Seleção</SelectItem>
-                  <SelectItem value="datetime">Data e hora</SelectItem>
-                  <SelectItem value="url">URL</SelectItem>
-                  <SelectItem value="approval">Decisão</SelectItem>
-                  <SelectItem value="thumbnail_layout">Layout de thumbnail</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <CardinalityEditor
-              value={shape.cardinality}
-              onChange={(cardinality) => onChange({ ...shape, cardinality })}
-            />
-          </>
-        )}
-        {shape.kind === "record" && (
-          <CardinalityEditor
-            value={shape.cardinality}
-            onChange={(cardinality) => onChange({ ...shape, cardinality })}
-          />
-        )}
+        <CardinalityEditor
+          value={shape.cardinality}
+          onChange={(cardinality) => onChange({ ...shape, cardinality })}
+        />
       </div>
-      {shape.kind === "content" && shape.family === "text" && (
+      {shape.family === "text" && (
         <div className="space-y-1">
-          <Label className="text-[10px] text-muted-foreground">Representação</Label>
+          <Label className="text-[10px] text-muted-foreground">{t("Representação")}</Label>
           <Select
             value={shape.representation}
             onValueChange={(representation) =>
               onChange({ ...shape, representation: representation as ContentRepresentation })
             }
           >
-            <SelectTrigger className="h-8 text-xs">
+            <SelectTrigger className="h-8 text-xs" aria-label={t("Representação")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="inline">Direto</SelectItem>
-              <SelectItem value="artifact">Arquivo</SelectItem>
-              <SelectItem value="either">Direto ou arquivo</SelectItem>
+              <SelectItem value="inline">{t("Direto")}</SelectItem>
+              <SelectItem value="artifact">{t("Arquivo")}</SelectItem>
+              <SelectItem value="either">{t("Direto ou arquivo")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
-      )}
-      {shape.kind === "record" && (
-        <RecordFieldsEditor
-          fields={shape.fields}
-          onChange={(fields) => onChange({ ...shape, fields })}
-        />
       )}
     </div>
   );
@@ -4618,16 +4543,17 @@ function CardinalityEditor({
   value: ContentCardinality;
   onChange: (value: ContentCardinality) => void;
 }) {
+  const { t } = useAppPreferences();
   return (
     <div className="space-y-1">
-      <Label className="text-[10px] text-muted-foreground">Quantidade</Label>
+      <Label className="text-[10px] text-muted-foreground">{t("Quantidade")}</Label>
       <Select value={value} onValueChange={(next) => onChange(next as ContentCardinality)}>
-        <SelectTrigger className="h-8 text-xs">
+        <SelectTrigger className="h-8 text-xs" aria-label={t("Quantidade")}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="one">Um</SelectItem>
-          <SelectItem value="many">Vários</SelectItem>
+          <SelectItem value="one">{t("Um")}</SelectItem>
+          <SelectItem value="many">{t("Vários")}</SelectItem>
         </SelectContent>
       </Select>
     </div>
@@ -4743,111 +4669,5 @@ function PresentationSelector({
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function RecordFieldsEditor({
-  fields,
-  onChange,
-}: {
-  fields: RecordFieldDefinition[];
-  onChange: (fields: RecordFieldDefinition[]) => void;
-}) {
-  function update(id: string, patch: Partial<RecordFieldDefinition>) {
-    onChange(fields.map((field) => (field.id === id ? { ...field, ...patch } : field)));
-  }
-
-  return (
-    <div className="rounded-lg border border-border/70 bg-background/30 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold">Campos de cada registro</p>
-          <p className="text-[10px] text-muted-foreground">
-            Ex.: cena, narração, descrição visual e duração.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 gap-1 text-[10px]"
-          onClick={() => onChange([...fields, newRecordField(fields.length)])}
-        >
-          <Plus className="size-3" /> Campo
-        </Button>
-      </div>
-      <div className="mt-3 space-y-2">
-        {fields.map((recordField, index) => (
-          <div
-            key={recordField.id}
-            className="grid gap-2 rounded-lg border border-border/60 p-2 sm:grid-cols-[minmax(0,1fr)_32px]"
-          >
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Input
-                className="h-8 text-xs"
-                value={recordField.label}
-                onChange={(event) => update(recordField.id, { label: event.target.value })}
-                placeholder={`Campo ${index + 1}`}
-              />
-              <Input
-                className="h-8 font-mono text-xs"
-                value={recordField.key}
-                onChange={(event) => update(recordField.id, { key: event.target.value })}
-                placeholder="chave_tecnica"
-              />
-            </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-8 text-muted-foreground hover:text-destructive"
-              disabled={fields.length === 1}
-              onClick={() => onChange(fields.filter((field) => field.id !== recordField.id))}
-              aria-label="Remover campo do registro"
-            >
-              <Trash2 className="size-3" />
-            </Button>
-            <ShapeEditor
-              shape={recordField.shape}
-              allowRecord={false}
-              onChange={(shape) => update(recordField.id, { shape: shape as AtomicValueShape })}
-            />
-            <label className="flex items-center gap-2 text-[10px] text-muted-foreground sm:col-span-2">
-              <Checkbox
-                checked={recordField.required}
-                onCheckedChange={(checked) =>
-                  update(recordField.id, { required: checked === true })
-                }
-              />
-              Obrigatório
-            </label>
-            {recordField.shape.kind === "control" && recordField.shape.control === "selection" && (
-              <LineListTextarea
-                className="min-h-20 text-xs sm:col-span-2"
-                value={recordField.shape.options ?? []}
-                onChange={(options) => {
-                  if (
-                    recordField.shape.kind !== "control" ||
-                    recordField.shape.control !== "selection"
-                  ) {
-                    return;
-                  }
-                  update(recordField.id, { shape: { ...recordField.shape, options } });
-                }}
-                placeholder="Uma opção por linha"
-              />
-            )}
-          </div>
-        ))}
-        {!fields.length && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full"
-            onClick={() => onChange([newRecordField(0)])}
-          >
-            Definir primeiro campo
-          </Button>
-        )}
-      </div>
-    </div>
   );
 }

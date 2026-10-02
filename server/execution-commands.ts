@@ -1,4 +1,5 @@
 import { deriveProcessOutput } from "../src/lib/process-output";
+import { captureCollectionSelection } from "../src/lib/strategic-library";
 import { applyGeneratedProjectTitle } from "../src/lib/project-title";
 import {
   PROCESS_META,
@@ -205,6 +206,11 @@ export function executionCommands(db: {
     if (unresolvedInputs.length) return false;
 
     const now = new Date().toISOString();
+    const collection = db.libraryCollections.find(
+      (candidate) => candidate.id === block.collectionId,
+    );
+    if (!collection || !item) return false;
+    captureCollectionSelection(execution, blockId, item, collection, db.executions);
     blockExecution.values = { selectedItemId: itemId };
     blockExecution.status = "completed";
     blockExecution.completedAt = now;

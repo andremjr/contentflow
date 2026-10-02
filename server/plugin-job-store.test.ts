@@ -5,6 +5,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import type { PluginExecutionRequest } from "../src/lib/plugin-contract";
 import { createPersistentPluginJob, isPluginJobTimedOut, PluginJobStore } from "./plugin-job-store";
+import { jobHasCurrentContract } from "./user-data-upgrade";
 
 const directory = await mkdtemp(path.join(tmpdir(), "contentflow-plugin-jobs-"));
 const databasePath = path.join(directory, "jobs.sqlite");
@@ -159,6 +160,51 @@ try {
     "jobs terminais abandonados são limpos por retenção",
   );
   restartedDatabase.close();
+  openDatabase = undefined;
+
+  const mixedDatabase = new Database(":memory:");
+  openDatabase = mixedDatabase;
+  const mixedStore = new PluginJobStore(mixedDatabase);
+  const current = mixedStore.create(
+    createPersistentPluginJob({
+      pluginId: "plugin.example",
+      pluginVersion: "1.0.0",
+      request: request(),
+      timeoutMs: 60_000,
+      now,
+    }),
+  );
+  const historical = mixedStore.create(
+    createPersistentPluginJob({
+      pluginId: "plugin.example",
+      pluginVersion: "1.0.0",
+      request: request(2),
+      timeoutMs: 60_000,
+      now,
+    }),
+  );
+  mixedStore.claim(current.id, now);
+  mixedStore.claim(historical.id, now);
+  const historicalPayload = JSON.parse(
+    (
+      mixedDatabase.prepare("SELECT payload FROM plugin_jobs WHERE id = ?").get(historical.id) as {
+        payload: string;
+      }
+    ).payload,
+  );
+  delete historicalPayload.request.inputContract;
+  mixedDatabase
+    .prepare("UPDATE plugin_jobs SET payload = ? WHERE id = ?")
+    .run(JSON.stringify(historicalPayload), historical.id);
+  const before = mixedDatabase.prepare("SELECT * FROM plugin_jobs WHERE id = ?").get(historical.id);
+  assert.equal(mixedStore.recoverInterrupted(now, jobHasCurrentContract), 1);
+  assert.ok(mixedStore.claim(current.id, now), "histórico não bloqueia recuperação de job atual");
+  assert.deepEqual(
+    mixedDatabase.prepare("SELECT * FROM plugin_jobs WHERE id = ?").get(historical.id),
+    before,
+    "payload e lease históricos são preservados sem adaptação",
+  );
+  mixedDatabase.close();
   openDatabase = undefined;
 
   console.log(

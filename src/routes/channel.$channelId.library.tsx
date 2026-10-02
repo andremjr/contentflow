@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
+import { LibraryBatchImport } from "@/components/library-batch-import";
+import { useAppPreferences } from "@/lib/app-preferences";
 import { CompositionCanvas, CompositionPreview } from "@/components/composition-canvas";
 import { TopBar } from "@/components/top-bar";
 import { Badge } from "@/components/ui/badge";
@@ -187,6 +189,7 @@ function CollectionSection({
   items: ReturnType<typeof useLibraryItems>;
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useAppPreferences();
 
   const removeCollectionLock = useRef(false);
   async function removeCollection() {
@@ -226,7 +229,12 @@ function CollectionSection({
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2">
-              <span className="truncate text-sm font-semibold">{collection.name}</span>
+              <span data-i18n-ignore className="truncate text-sm font-semibold">
+                {collection.name}
+              </span>
+              <Badge variant="outline">
+                {t(collection.usage === "consumable" ? "Consumível" : "Fixa")}
+              </Badge>
               <Badge variant="secondary">
                 {items.length} {items.length === 1 ? "item" : "itens"}
               </Badge>
@@ -234,7 +242,7 @@ function CollectionSection({
             <span className="mt-1.5 flex flex-wrap gap-x-1.5 gap-y-1">
               {collection.fields.map((field) => (
                 <Badge key={field.id} variant="outline" className="text-[10px] font-normal">
-                  {field.label}
+                  <span data-i18n-ignore>{field.label}</span>
                   {!field.required && " · opcional"}
                 </Badge>
               ))}
@@ -245,6 +253,7 @@ function CollectionSection({
           />
         </button>
         <div className="flex shrink-0 gap-1">
+          <LibraryBatchImport collection={collection} />
           <NewCollectionItem collection={collection} />
           <EditCollection collection={collection} />
           <Button
@@ -268,7 +277,7 @@ function CollectionSection({
                   <tr>
                     {collection.fields.map((field) => (
                       <th key={field.id} className="px-4 py-3 font-semibold sm:px-5">
-                        {field.label}
+                        <span data-i18n-ignore>{field.label}</span>
                       </th>
                     ))}
                     <th className="w-12 px-3 py-3" aria-label="Ações" />
@@ -282,14 +291,20 @@ function CollectionSection({
                     >
                       {collection.fields.map((field) => (
                         <td key={field.id} className="max-w-sm px-4 py-3 sm:px-5">
-                          <CollectionValueCell field={field} value={item.values[field.id]} />
+                          <span data-i18n-ignore>
+                            <CollectionValueCell field={field} value={item.values[field.id]} />
+                          </span>
                         </td>
                       ))}
                       <td className="px-2 py-3 text-right">
+                        <Badge variant="outline">
+                          {t(item.reservation ? "Reservado" : "Salvo")}
+                        </Badge>
                         <Button
                           size="icon"
                           variant="ghost"
                           className="size-8 text-muted-foreground hover:text-destructive"
+                          disabled={Boolean(item.reservation)}
                           onClick={() =>
                             void removeLibraryItem(item.id).catch((error) =>
                               toast.error(error.message),
@@ -452,6 +467,8 @@ function EditCollection({ collection }: { collection: StrategicCollection }) {
 function NewCollection({ channelId }: { channelId: string }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [usage, setUsage] = useState<"fixed" | "consumable">("fixed");
+  const { t } = useAppPreferences();
   const [fields, setFields] = useState<StrategicCollectionField[]>([newField(0)]);
   const nameInputId = useId();
   const valid =
@@ -465,6 +482,7 @@ function NewCollection({ channelId }: { channelId: string }) {
 
   function reset() {
     setName("");
+    setUsage("fixed");
     setFields([newField(0)]);
   }
 
@@ -476,6 +494,7 @@ function NewCollection({ channelId }: { channelId: string }) {
       if (!valid) return;
       await createLibraryCollection({
         channelId,
+        usage,
         name: name.trim(),
         fields: fields.map((field) => ({ ...field, label: field.label.trim() })),
       });
@@ -521,6 +540,28 @@ function NewCollection({ channelId }: { channelId: string }) {
               onChange={(event) => setName(event.target.value)}
               placeholder="Ex: CTAs"
             />
+          </div>
+          <div className="space-y-2">
+            <Label>{t("Uso da coleção")}</Label>
+            <Select
+              value={usage}
+              onValueChange={(value) => setUsage(value as "fixed" | "consumable")}
+            >
+              <SelectTrigger aria-label={t("Uso da coleção")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fixed">{t("Fixa")}</SelectItem>
+                <SelectItem value="consumable">{t("Consumível")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                usage === "fixed"
+                  ? "Os itens permanecem na coleção após o uso."
+                  : "Os itens são reservados ao escolher e excluídos somente quando o Processo termina. Falha ou cancelamento mantém a reserva até excluir ou reiniciar a execução.",
+              )}
+            </p>
           </div>
 
           <div>

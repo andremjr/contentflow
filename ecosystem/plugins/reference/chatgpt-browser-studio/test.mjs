@@ -1,3 +1,4 @@
+import "./json-text-items.test.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -174,7 +175,11 @@ test("P30 congela as sete capabilities não visuais por fixture", async (t) => {
 
       const visualConfigurationKeys = Object.keys(
         capability.blockConfigSchema?.properties ?? {},
-      ).filter((key) => /image|aspect|resolution|variant|reference/i.test(key));
+      ).filter(
+        (key) =>
+          key !== "textItemReferenceInputs" &&
+          /image|aspect|resolution|variant|reference/i.test(key),
+      );
       assert.deepEqual(visualConfigurationKeys, []);
 
       const value = p30Request(fixture);
@@ -339,6 +344,7 @@ test("P30 congela conversa nova, continuidade e fallback", async () => {
           result: {
             value: {
               host: "chatgpt.com",
+              readyState: "complete",
               prompt: true,
               login: false,
               captcha: false,
@@ -375,7 +381,7 @@ test("não repete no contexto uma entrada já interpolada na instrução", () =>
 
 test("manifesto declara oito capabilities modulares", () => {
   assert.equal(manifest.id, "local.contentflow.chatgpt-browser-studio");
-  assert.equal(manifest.version, "2.0.0");
+  assert.equal(manifest.version, "2.0.1");
   assert.equal(manifest.supportsConversationContinuation, true);
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
@@ -385,6 +391,9 @@ test("manifesto declara oito capabilities modulares", () => {
     "fallbackAccountProfiles",
     "accountProfile",
     "startMinimized",
+    "textItemFormat",
+    "textItemFields",
+    "textItemReferenceInputs",
   ]);
   assert.deepEqual(generation.outputPorts.find((port) => port.key === "result").shape, {
     kind: "content",
@@ -856,6 +865,7 @@ test("não renavega uma aba nova do ChatGPT antes de usar o compositor", async (
           result: {
             value: {
               host: "chatgpt.com",
+              readyState: "complete",
               prompt: true,
               login: false,
               captcha: false,
@@ -902,6 +912,7 @@ test("reconhece a raiz do ChatGPT como conversa nova sem Page.navigate redundant
           result: {
             value: {
               host: "chatgpt.com",
+              readyState: "complete",
               prompt: true,
               login: false,
               captcha: false,
@@ -1292,7 +1303,7 @@ test("trata lista em content como um único contexto agregado", () => {
   assert.match(parts[0], /Cena C/);
 });
 
-test("exige array JSON estrito para saída canônica text/many", () => {
+test("exige JSON para saída canônica text/many", () => {
   const outputContract = [
     {
       key: "parts",
@@ -1309,13 +1320,34 @@ test("exige array JSON estrito para saída canônica text/many", () => {
     outputContract,
   });
   assert.deepEqual(values, { parts: ["A", "B"] });
+  assert.deepEqual(
+    __test.generationResponseValues('Aqui está o JSON:\n["A","B"]\n', [], { outputContract }),
+    { parts: ["A", "B"] },
+  );
+  assert.deepEqual(__test.generationResponseValues("Prompt A\nPrompt B", [], { outputContract }), {
+    parts: ["Prompt A", "Prompt B"],
+  });
   assert.throws(
     () =>
-      __test.generationResponseValues("Aqui estão os prompts:\nA\nB", [], {
+      __test.generationResponseValues("Provide, Provide Missing Image Prompt", [], {
         outputContract,
       }),
-    /array JSON válido de textos/,
+    /array JSON válido/,
   );
+});
+
+test("normaliza JSONL de registros sem relaxar o contrato estruturado", () => {
+  const values = __test.generationResponseValues(
+    '{"name":"Ana","visual_prompt":"Ana em plano médio","scene_ids":["scene-1"]}\n{"name":"Beto","visual_prompt":"Beto em close","scene_ids":["scene-2"]}',
+    [],
+    {
+      outputContract: [
+        { key: "characters", portKey: "records", shape: { kind: "record", cardinality: "many" } },
+      ],
+    },
+  );
+  assert.equal(values.records.length, 2);
+  assert.equal(values.records[1].name, "Beto");
 });
 
 test("respeita saída list em geração de texto", () => {

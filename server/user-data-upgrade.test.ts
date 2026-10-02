@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { UserDataUpgrade, UpgradeError, planDatabaseMigration } from "./user-data-upgrade";
+import { createEmptyMethods } from "../src/lib/domain";
 
 function fixture(t: test.TestContext, fieldType = "text") {
   const directory = mkdtempSync(path.join(tmpdir(), "contentflow-user-upgrade-"));
@@ -59,19 +60,17 @@ function fixture(t: test.TestContext, fieldType = "text") {
       "p",
       JSON.stringify({ id: "p", channelId: "c", strategySnapshot: { methods: { theme: method } } }),
     );
-  database
-    .prepare("INSERT INTO plugin_jobs VALUES(?,?,?,?)")
-    .run(
-      "old-job",
-      "e",
-      "pending",
-      JSON.stringify({
-        id: "old-job",
-        request: { outputContract: [{ type: "text" }] },
-        status: "pending",
-        partialValues: { theme: "Preserved partial" },
-      }),
-    );
+  database.prepare("INSERT INTO plugin_jobs VALUES(?,?,?,?)").run(
+    "old-job",
+    "e",
+    "pending",
+    JSON.stringify({
+      id: "old-job",
+      request: { outputContract: [{ type: "text" }] },
+      status: "pending",
+      partialValues: { theme: "Preserved partial" },
+    }),
+  );
   mkdirSync(path.join(directory, "uploads"));
   writeFileSync(path.join(directory, "uploads", "sentinel.txt"), "preserved artifact");
   t.after(() => {
@@ -224,6 +223,63 @@ test("new plugin capabilities invalidate prior plans and a refresh can resolve a
   const refreshed = upgrade.plan();
   assert.equal(refreshed.canApply, true);
   assert.equal(refreshed.currentPluginCapabilities, 1);
+});
+
+test("valid v3 drafts and snapshots never trigger legacy inference or an upgrade gate", (t) => {
+  const { database, directory } = fixture(t);
+  const methods = createEmptyMethods();
+  methods.theme.blocks = [
+    {
+      id: "current",
+      type: "CRIAR",
+      operator: "Humano",
+      parameters: [],
+      order: 0,
+      inputs: [
+        {
+          id: "new-input",
+          label: "Nova entrada",
+          shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+          binding: { kind: "previous_block", blockId: "", outputKey: "" },
+        },
+        {
+          id: "quantity",
+          label: "Quantidade",
+          shape: { kind: "control", control: "number", cardinality: "one" },
+          binding: { kind: "static", value: "2" },
+        },
+        {
+          id: "context",
+          label: "Contexto",
+          shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+          binding: { kind: "previous_process", processType: "assets", outputKey: "images" },
+        },
+      ],
+      outputs: [],
+    },
+  ];
+  database
+    .prepare("UPDATE channels SET payload=? WHERE id='c'")
+    .run(JSON.stringify({ id: "c", methods }));
+  database
+    .prepare("UPDATE projects SET payload=? WHERE id='p'")
+    .run(JSON.stringify({ id: "p", strategySnapshot: { methods } }));
+  database
+    .prepare("UPDATE process_executions SET payload=? WHERE id='e'")
+    .run(JSON.stringify({ id: "e", status: "awaiting_human", methodSnapshot: methods.theme }));
+  const before = ["channels", "projects", "process_executions"].map((table) =>
+    database.prepare(`SELECT payload FROM ${table}`).get(),
+  );
+  const upgrade = new UserDataUpgrade(database, directory);
+  assert.equal(upgrade.state().required, false);
+  assert.equal(upgrade.backgroundAllowed(), true);
+  assert.equal(upgrade.plan().pendingUpdates, 0);
+  assert.deepEqual(
+    ["channels", "projects", "process_executions"].map((table) =>
+      database.prepare(`SELECT payload FROM ${table}`).get(),
+    ),
+    before,
+  );
 });
 
 test("a concurrent mutation during backup is detected before any conversion", async (t) => {

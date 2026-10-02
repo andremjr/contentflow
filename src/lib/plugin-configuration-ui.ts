@@ -46,7 +46,9 @@ export function withSavedPluginConfigurationOption(
   options: readonly PluginConfigurationOption[],
   savedValue: PluginConfigurationScalar | undefined,
   unavailableLabel: string,
+  isSelection = true,
 ): PluginConfigurationOption[] {
+  if (!isSelection) return [];
   if (savedValue === undefined || options.some((option) => Object.is(option.value, savedValue))) {
     return [...options];
   }

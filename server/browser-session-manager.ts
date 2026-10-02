@@ -114,7 +114,10 @@ export class BrowserSessionManager {
       browserVersion,
       closeThroughCdp,
       spawnChrome: spawn,
-      startupTimeoutMs: 15_000,
+      // A managed profile can cold-start Chrome and its shared Bridge extension
+      // together. Fifteen seconds was short enough to classify a slow but
+      // healthy profile as unavailable, especially after a Windows restart.
+      startupTimeoutMs: 45_000,
       pollIntervalMs: 250,
       ...dependencies,
     };
@@ -123,6 +126,7 @@ export class BrowserSessionManager {
   async open(input: {
     monitorCorrelation?: DevEvent["correlation"];
     profileDirectory: string;
+    browserBridgeDirectory?: string;
     chromeExecutable?: unknown;
     visible?: boolean;
     signal?: AbortSignal;
@@ -143,6 +147,9 @@ export class BrowserSessionManager {
       "--window-size=1280,800",
       "about:blank",
     ];
+    if (input.browserBridgeDirectory) {
+      args.splice(args.length - 1, 0, `--load-extension=${input.browserBridgeDirectory}`);
+    }
     if (input.visible === false) {
       args.unshift(
         "--start-minimized",

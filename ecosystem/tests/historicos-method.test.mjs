@@ -24,30 +24,48 @@ test("Método Históricos v3 preserva dois Blocos, 50 prompts e as portas API v2
   assert.equal(parsed.method.processType, "assets");
   assert.equal(parsed.method.blocks.length, 2);
   const [prompts, images] = parsed.method.blocks;
-  assert.deepEqual(parsed.method.blocks.map((block) => [block.type, block.operator, block.order]), [
-    ["CRIAR", "IA", 0], ["CRIAR", "IA", 1],
-  ]);
+  assert.deepEqual(
+    parsed.method.blocks.map((block) => [block.type, block.operator, block.order]),
+    [
+      ["CRIAR", "IA", 0],
+      ["CRIAR", "IA", 1],
+    ],
+  );
   assert.equal(prompts.parameters[0].key, "scene_count");
   assert.equal(prompts.parameters[0].value, 50);
   assert.equal(images.plugin.configuration.maxImagesPerPrompt, 1);
   assert.equal(images.plugin.configuration.maxConcurrentGenerations, 1);
   assert.deepEqual(prompts.inputs[0].binding, {
-    kind: "previous_process", processType: "script", outputKey: "script",
+    kind: "previous_process",
+    processType: "script",
+    outputKey: "script",
   });
   assert.deepEqual(images.inputs[0].binding, {
-    kind: "previous_block", blockId: prompts.id, outputKey: prompts.outputs[0].key,
+    kind: "previous_block",
+    blockId: prompts.id,
+    outputKey: prompts.outputs[0].key,
   });
   assert.equal(prompts.inputs[0].portKey, "context_1");
   assert.equal(prompts.outputs[0].portKey, "parts");
   assert.equal(images.inputs[0].portKey, "prompts");
   assert.equal(images.outputs[0].portKey, "images");
   assert.ok(areValueShapesCompatible(prompts.outputs[0].shape, images.inputs[0].shape));
-  for (const [block, directory] of [[prompts, "chatgpt-browser-studio"], [images, "google-flow-browser-images"]]) {
-    const manifest = JSON.parse(readFileSync(path.join(repo, "ecosystem/plugins/reference", directory, "contentflow.plugin.json"), "utf8"));
+  for (const [block, directory] of [
+    [prompts, "chatgpt-browser-studio"],
+    [images, "google-flow-browser-images"],
+  ]) {
+    const manifest = JSON.parse(
+      readFileSync(
+        path.join(repo, "ecosystem/plugins/reference", directory, "contentflow.plugin.json"),
+        "utf8",
+      ),
+    );
     assert.equal(block.plugin.pluginId, manifest.id);
     assert.equal(block.plugin.pluginVersion, "2.0.0");
     assert.equal(block.plugin.pluginVersion, manifest.version);
-    const capability = manifest.capabilities.find((entry) => entry.id === block.plugin.capabilityId);
+    const capability = manifest.capabilities.find(
+      (entry) => entry.id === block.plugin.capabilityId,
+    );
     assert.ok(capability);
     for (const input of block.inputs) {
       const port = capability.inputPorts.find((entry) => entry.key === input.portKey);
@@ -88,8 +106,13 @@ test("o plugin serializa e lê os 50 prompts, sem exigência de linhas no Métod
   };
   assert.match(chatgpt.buildParts(request)[0], /array JSON válido de strings/);
   const prompts = Array.from({ length: 50 }, (_, index) => `Prompt de teste ${index + 1}`);
-  assert.deepEqual(chatgpt.generationResponseValues(JSON.stringify(prompts), [], request), { parts: prompts });
-  assert.throws(() => chatgpt.generationResponseValues(prompts.join("\n"), [], request), /array JSON válido/);
+  assert.deepEqual(chatgpt.generationResponseValues(JSON.stringify(prompts), [], request), {
+    parts: prompts,
+  });
+  assert.throws(
+    () => chatgpt.generationResponseValues(prompts.join("\n"), [], request),
+    /array JSON válido/,
+  );
 });
 
 function catalogWorkspace(t, methodContents) {
@@ -98,13 +121,17 @@ function catalogWorkspace(t, methodContents) {
   t.after(() => rmSync(workspace, { recursive: true, force: true }));
   writeFileSync(path.join(workspace, methodName), methodContents);
   mkdirSync(path.join(workspace, "release/ecosystem"), { recursive: true });
-  writeFileSync(path.join(workspace, "release/ecosystem/ContentFlow-Plugin-Catalog.json"), JSON.stringify({ plugins: [] }));
+  writeFileSync(
+    path.join(workspace, "release/ecosystem/ContentFlow-Plugin-Catalog.json"),
+    JSON.stringify({ plugins: [] }),
+  );
   return workspace;
 }
 
 function prepare(workspace) {
   return spawnSync(process.execPath, [path.join(repo, "scripts/prepare-official-catalog.mjs")], {
-    cwd: workspace, encoding: "utf8",
+    cwd: workspace,
+    encoding: "utf8",
   });
 }
 

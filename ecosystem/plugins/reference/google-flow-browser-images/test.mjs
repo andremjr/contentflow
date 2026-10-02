@@ -72,7 +72,7 @@ assert.deepEqual(
   canonicalFixture.slots.map((slot) => slot.expectedItemId),
   ["asset-slot-image-city-dawn", "asset-slot-image-forest-rain", "asset-slot-stock-commute"],
 );
-assert.equal(manifest.version, "2.0.0");
+assert.equal(manifest.version, "2.0.1");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.equal(manifest.apiVersion, "2");
@@ -167,14 +167,7 @@ assert.ok(
 
 const cap = manifest.capabilities.find((item) => item.id === "generate-images-in-browser");
 assert.ok(cap);
-assert.deepEqual(cap.configurationOptions, [
-  {
-    property: "imageModel",
-    providerId: "flow-image-models",
-    dependsOn: ["accountProfile"],
-    cacheTtlMs: 300000,
-  },
-]);
+assert.equal(cap.configurationOptions, undefined);
 assert.equal(cap.execution.defaultTimeoutMs, 86_400_000);
 assert.deepEqual(
   cap.inputPorts.map((port) => port.key),
@@ -215,6 +208,10 @@ assert.deepEqual(cap.execution.itemOrchestration, {
   outputPort: "images",
   strategies: ["continuous_session", "per_item"],
   preferredStrategy: "continuous_session",
+  profileParallelism: {
+    supported: true,
+    maxProfiles: 2,
+  },
   collectionAssociations: [
     {
       key: "prompt-records-to-images",
@@ -233,7 +230,35 @@ assert.equal(cap.blockConfigSchema.properties.delayBetweenPromptsMs.default, 150
 assert.equal(cap.blockConfigSchema.properties.rateLimitRetryAttempts.default, 8);
 assert.equal(cap.blockConfigSchema.properties.maxReferenceImages.maximum, 10);
 assert.equal(cap.blockConfigSchema.properties.maxImagesPerPrompt.maximum, 4);
-assert.match(
+{
+  const calls = [];
+  const claimed = await __test.claimFlowContinuousItems(
+    {
+      capabilityId: "generate-images-in-browser",
+      inputs: {
+        prompt_records: [
+          { visual_prompt: "primeiro" },
+          { visual_prompt: "segundo" },
+          { visual_prompt: "terceiro" },
+        ],
+      },
+    },
+    {
+      claimItems: async (limit) => {
+        calls.push(limit);
+        return [
+          { itemId: "one", order: 0, input: { visual_prompt: "primeiro" } },
+          { itemId: "two", order: 1, input: { visual_prompt: "segundo" } },
+          { itemId: "three", order: 2, input: { visual_prompt: "terceiro" } },
+        ];
+      },
+      publishItemUpdate: async () => ({ revision: 1 }),
+    },
+  );
+  assert.deepEqual(calls, [3]);
+  assert.equal(claimed.length, 3);
+}
+assert.doesNotMatch(
   await readFile(new URL("./handler.mjs", import.meta.url), "utf8"),
   /\(async \(\) => window\.FlowAuto\?\.adapter\?\.listModels/,
 );
@@ -256,17 +281,7 @@ const productionCap = manifest.capabilities.find(
   (item) => item.id === "produce-visual-assets-in-browser",
 );
 assert.ok(productionCap);
-assert.deepEqual(
-  productionCap.configurationOptions.map((provider) => [
-    provider.property,
-    provider.providerId,
-    provider.cacheTtlMs,
-  ]),
-  [
-    ["imageModel", "flow-image-models", 300000],
-    ["videoModel", "flow-video-models", 300000],
-  ],
-);
+assert.equal(productionCap.configurationOptions, undefined);
 assert.equal(productionCap.itemActions, undefined);
 assert.equal(__test.actionableOutputPort(productionCap.id), undefined);
 assert.deepEqual(
@@ -349,14 +364,7 @@ assert.deepEqual(
 );
 for (const capabilityId of ["animate-image-in-browser", "generate-video-in-browser"]) {
   const capability = manifest.capabilities.find((item) => item.id === capabilityId);
-  assert.deepEqual(capability.configurationOptions, [
-    {
-      property: "videoModel",
-      providerId: "flow-video-models",
-      dependsOn: ["accountProfile"],
-      cacheTtlMs: 300000,
-    },
-  ]);
+  assert.equal(capability.configurationOptions, undefined);
 }
 const videoGenerationCap = manifest.capabilities.find(
   (item) => item.id === "generate-video-in-browser",
@@ -390,107 +398,37 @@ for (const capability of manifest.capabilities) {
   }
 }
 
-const optionsRequest = (accountProfile, overrides = {}) => ({
-  capabilityId: "generate-images-in-browser",
-  invocation: {
-    mode: "configure",
-    action: "options",
-    providerId: "flow-image-models",
-    property: "imageModel",
-  },
-  configuration: { accountProfile },
-  ...overrides,
-});
-const simulatedModelsByProfile = new Map([
-  ["conta-a", ["Nano Banana Pro", "Imagen Experimental", "Nano Banana Pro"]],
-  ["conta-b", ["Nano Banana 2 Lite"]],
-]);
-const simulatedDiscovery = async (request, _services, type) => {
-  assert.equal(type, "image");
-  return simulatedModelsByProfile.get(request.configuration.accountProfile) ?? [];
-};
-const accountAOptions = await __test.configureOptions(
-  optionsRequest("conta-a"),
-  {},
-  {
-    discoverModelLabels: simulatedDiscovery,
-  },
-);
-const accountBOptions = await __test.configureOptions(
-  optionsRequest("conta-b"),
-  {},
-  {
-    discoverModelLabels: simulatedDiscovery,
-  },
-);
-assert.equal(accountAOptions.status, "success");
-assert.deepEqual(
-  accountAOptions.values.options.map((option) => option.label),
-  ["Automático: Pro → 2 → 2 Lite", "Nano Banana Pro", "Imagen Experimental"],
-);
-assert.deepEqual(
-  accountBOptions.values.options.map((option) => option.label),
-  ["Automático: Pro → 2 → 2 Lite", "Nano Banana 2 Lite"],
-);
-assert.equal(
-  accountBOptions.values.options.some((option) => option.label === "Imagen Experimental"),
-  false,
-);
-const experimentalValue = accountAOptions.values.options.at(-1).value;
-assert.match(experimentalValue, /^flow_label:/);
-assert.equal(__test.dynamicFlowModelLabel(experimentalValue, "image"), "Imagen Experimental");
+const rejectedOptions = await execute({ invocation: { mode: "configure", action: "options" } }, {});
+assert.equal(rejectedOptions.code, "INVALID_CONFIGURATION");
+const experimentalValue = "flow_label:" + Buffer.from("Imagen Experimental").toString("base64url");
 assert.equal(
   __test.resolveGenerationPreferences({ imageModel: experimentalValue }).imageModelLabel,
   "Imagen Experimental",
 );
-assert.equal(
-  __test.normalizeFlowModelOptions(["Nano Banana Pro"], "image", "en-US")[0].label,
-  "Automatic: Pro → 2 → 2 Lite",
-);
-assert.equal(
-  __test.normalizeFlowModelOptions(["Nano Banana Pro"], "image", "es-ES")[0].description,
-  "Fallback seguro entre los modelos de imagen conocidos de esta cuenta.",
-);
-const emptyOptions = await __test.configureOptions(
-  optionsRequest("conta-vazia"),
-  {},
-  {
-    discoverModelLabels: simulatedDiscovery,
-  },
-);
-assert.deepEqual(emptyOptions, { status: "success", values: { options: [] } });
-const failedOptions = await __test.configureOptions(
-  optionsRequest("conta-a"),
-  {},
-  {
-    discoverModelLabels: async () => {
-      throw Object.assign(new Error("Catálogo temporariamente indisponível."), {
-        code: "UPSTREAM_UNAVAILABLE",
-        retryable: true,
-      });
-    },
-  },
-);
-assert.deepEqual(failedOptions, {
-  status: "error",
-  code: "UPSTREAM_UNAVAILABLE",
-  message: "Catálogo temporariamente indisponível.",
-  retryable: true,
-});
-const invalidProvider = await __test.configureOptions(
-  optionsRequest("conta-a", {
-    invocation: {
-      mode: "configure",
-      action: "options",
-      providerId: "outro-provider",
-      property: "imageModel",
-    },
-  }),
-  {},
-  { discoverModelLabels: simulatedDiscovery },
-);
-assert.equal(invalidProvider.status, "error");
-assert.equal(invalidProvider.code, "INVALID_CONFIGURATION");
+for (const capability of manifest.capabilities) {
+  assert.equal(capability.configurationOptions, undefined);
+  const props = capability.blockConfigSchema.properties;
+  if (props.maxConcurrentGenerations) {
+    assert.deepEqual(
+      props.maxConcurrentGenerations.oneOf.map((o) => o.const),
+      [1, 2, 3, 4, 5],
+    );
+    assert.equal(props.maxConcurrentGenerations.maximum, 5);
+  }
+  if (props.maxImagesPerPrompt)
+    assert.deepEqual(
+      props.maxImagesPerPrompt.oneOf.map((o) => o.const),
+      [1, 2, 3, 4],
+    );
+  for (const key of ["imageModelLabel", "videoModelLabel"]) {
+    if (props[key]) assert.equal(props[key].ui.section, "advanced");
+  }
+  if (props.videoModel) {
+    for (const option of props.videoModel.oneOf.filter((o) => o.const)) {
+      assert.equal(__test.VIDEO_MODELS[option.const], option.title);
+    }
+  }
+}
 assert.deepEqual(__test.selectAnimationIndexes(10, { maxVideosToAnimate: 3 }), [0, 1, 2]);
 assert.equal(
   __test.generatedArtifactInputPath(
@@ -813,6 +751,7 @@ const uploadClient = {
               dialogs: uploadReadyReads === 1 ? 1 : 0,
               pickerOpen: false,
               consent: false,
+              referenceMatches: uploadReadyReads >= 3,
             },
           },
         };
@@ -833,7 +772,7 @@ await __test.uploadReferenceImages(
 assert.equal(uploadCalls[0].method, "Page.setInterceptFileChooserDialog");
 assert.equal(uploadCalls[0].params.enabled, true);
 assert.ok(uploadCalls.some((call) => call.method === "DOM.setFileInputFiles"));
-assert.equal(uploadReadyReads, 2, "waits until the modal closes before writing the prompt");
+assert.equal(uploadReadyReads, 3, "waits for the uploaded reference after the modal closes");
 assert.deepEqual(uploadCalls.at(-1), {
   method: "Page.setInterceptFileChooserDialog",
   params: { enabled: false },
@@ -1241,6 +1180,8 @@ const checkpointRequest = {
   blockId: "flow-images",
   capabilityId: "generate-images-in-browser",
 };
+assert.equal(__test.isFreshRetryRequest({ attempt: 1 }), false);
+assert.equal(__test.isFreshRetryRequest({ attempt: 2 }), true);
 const checkpointPrompts = ["primeiro", "segundo", "terceiro"];
 await __test.saveGenerationCheckpoint(checkpointRequest, retryServices, checkpointPrompts, {
   completedPromptIndexes: [1, 0, 1],
@@ -1664,6 +1605,43 @@ assert.deepEqual(
 
 // Characterization: cancellation between sequential items stops before the
 // neighboring scene is submitted and therefore cannot exchange its media.
+// Five submissions must be in flight before any generation finishes, and
+// reversed completion must preserve both the prompt and every variant.
+for (const limit of [1, 2, 3, 4, 5]) {
+  const inFlight = new Map();
+  let peak = 0;
+  const finished = [];
+  const plan = await __test.runGenerationPlan({
+    prompts: Array.from({ length: limit * 2 }, (_, index) => `scene-${index}`),
+    maxInFlight: limit,
+    retryAttempts: 0,
+    minDelayMs: 0,
+    submit(task) {
+      const completion = new Promise((resolve) =>
+        inFlight.set(task.index, () => resolve([{ prompt: task.prompt, index: task.index }])),
+      );
+      peak = Math.max(peak, inFlight.size);
+      if (inFlight.size === limit) {
+        for (const index of [...inFlight.keys()].reverse()) {
+          finished.push(index);
+          inFlight.get(index)();
+          inFlight.delete(index);
+        }
+      }
+      return { completion };
+    },
+  });
+  assert.equal(peak, limit);
+  assert.equal(plan.failures.length, 0);
+  assert.deepEqual(
+    plan.results.flat().map((item) => item.prompt),
+    Array.from({ length: limit * 2 }, (_, index) => `scene-${index}`),
+  );
+  assert.deepEqual(
+    finished.slice(0, limit),
+    Array.from({ length: limit }, (_, index) => limit - 1 - index),
+  );
+}
 const cancellation = new AbortController();
 let cancelledPlanSubmissions = 0;
 await assert.rejects(
@@ -2024,7 +2002,9 @@ assert.equal(exactGenerateClick.ok, true);
 assert.deepEqual(generationDispatches, [
   {
     action: "click",
-    payload: { selectors: ["flow-generate-icon-button button"] },
+    payload: {
+      selectors: ["flow-generate-icon-button button"],
+    },
     operationKey: "image:1:submit",
   },
 ]);
@@ -2156,6 +2136,8 @@ for (const [requestId, prompt] of [
     "flow-session",
   );
 }
+assert.equal(await cityReservation.submitted, "request-a");
+assert.equal(await forestReservation.submitted, "request-b");
 trackerListeners.get("Network.loadingFinished")({ requestId: "request-b" }, "flow-session");
 trackerListeners.get("Network.loadingFinished")({ requestId: "request-a" }, "flow-session");
 assert.deepEqual(await cityReservation.promise, {
@@ -2181,6 +2163,7 @@ const cancellationTracker = makeTracker(
 const abortedReservation = cancellationTracker.reserve(1_000);
 cancellationTrackerAbort.abort();
 await assert.rejects(abortedReservation.promise, (error) => error?.code === "CANCELLED");
+await assert.rejects(abortedReservation.submitted, (error) => error?.code === "CANCELLED");
 cancellationTracker.close();
 
 // Characterization: expired direct URLs remain recoverable through the public
@@ -2267,7 +2250,12 @@ assert.ok(source.includes("Nano Banana 2 Lite"));
 assert.ok(source.includes("Quantidade por prompt confirmada"));
 assert.ok(source.includes("produce-visual-assets-in-browser"));
 assert.ok(source.includes("Produção visual:"));
-assert.match(source, /const maxConcurrentGenerations = continuousClaims\s*\? 2/);
+assert.match(source, /const maxConcurrentGenerations = requestedConcurrentGenerations/);
+assert.match(source, /const requestId = await reservation.submitted/);
+assert.match(
+  source,
+  /hasEngine && taskReferencePaths.length === 0 && maxConcurrentGenerations === 1/,
+);
 assert.match(source, /preparando interface na sessão compartilhada/);
 assert.match(source, /const releaseSubmission = await acquireSubmissionLock\(\)/);
 assert.deepEqual(
@@ -2430,5 +2418,5 @@ await assert.rejects(readFile(new URL("./fallback-data.mjs", import.meta.url)), 
 await testExtensionBridge(extensionWorker);
 
 console.log(
-  "OK: v2.0.0 validado (lote interno concorrente, animação item a item, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
+  "OK: v2.0.1 validado (lote interno concorrente, animação item a item, retomada sem duplicar concluídos, entrega image/video e ponte testada com estresse de 300 comandos).",
 );

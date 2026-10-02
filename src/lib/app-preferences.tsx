@@ -45,6 +45,80 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 type Translation = [english: string, spanish: string];
 
 const PHRASES: Record<string, Translation> = {
+  Conteúdo: ["Content", "Contenido"],
+  "Tipo de conteúdo": ["Content type", "Tipo de contenido"],
+  Quantidade: ["Quantity", "Cantidad"],
+  Representação: ["Representation", "Representación"],
+  Direto: ["Inline", "Directo"],
+  "Direto ou arquivo": ["Inline or file", "Directo o archivo"],
+  Um: ["One", "Uno"],
+  Vários: ["Many", "Varios"],
+  Áudio: ["Audio", "Audio"],
+  Vídeo: ["Video", "Vídeo"],
+  "Salvando…": ["Saving…", "Guardando…"],
+  "Uso da coleção": ["Collection usage", "Uso de la colección"],
+  Fixa: ["Fixed", "Fija"],
+  Consumível: ["Consumable", "Consumible"],
+  Reservado: ["Reserved", "Reservado"],
+  Salvo: ["Saved", "Guardado"],
+  "Os itens permanecem na coleção após o uso.": [
+    "Items remain in the collection after use.",
+    "Los elementos permanecen en la colección después de usarlos.",
+  ],
+  "Os itens são reservados ao escolher e excluídos somente quando o Processo termina. Falha ou cancelamento mantém a reserva até excluir ou reiniciar a execução.":
+    [
+      "Items are reserved when selected and deleted only when the Process finishes. Failure or cancellation keeps the reservation until the execution is deleted or restarted.",
+      "Los elementos se reservan al elegirlos y se eliminan solo cuando termina el Proceso. Un fallo o cancelación mantiene la reserva hasta eliminar o reiniciar la ejecución.",
+    ],
+  "Importar em lote": ["Bulk import", "Importar en lote"],
+  "Preencha as linhas ou importe uma coluna por vez. Revise a ordem antes de salvar.": [
+    "Fill in rows or import one column at a time. Review the order before saving.",
+    "Completa las filas o importa una columna a la vez. Revisa el orden antes de guardar.",
+  ],
+  "Preencher por coluna": ["Fill by column", "Completar por columna"],
+  Coluna: ["Column", "Columna"],
+  "Valores da coluna": ["Column values", "Valores de la columna"],
+  "Os arquivos preenchem esta coluna na ordem selecionada, a partir da primeira linha.": [
+    "Files fill this column in the selected order, starting at the first row.",
+    "Los archivos completan esta columna en el orden seleccionado, desde la primera fila.",
+  ],
+  "Edite os layouts diretamente nas linhas.": [
+    "Edit layouts directly in the rows.",
+    "Edita los diseños directamente en las filas.",
+  ],
+  "Um valor por linha": ["One value per line", "Un valor por fila"],
+  "Aplicar à coluna": ["Apply to column", "Aplicar a la columna"],
+  Linha: ["Row", "Fila"],
+  "Remover linha": ["Remove row", "Eliminar fila"],
+  "Adicionar linha": ["Add row", "Agregar fila"],
+  "Preencha os campos obrigatórios e corrija os valores antes de importar.": [
+    "Fill in required fields and correct values before importing.",
+    "Completa los campos obligatorios y corrige los valores antes de importar.",
+  ],
+  "Importar itens": ["Import items", "Importar elementos"],
+  "Lote importado.": ["Batch imported.", "Lote importado."],
+  "Não foi possível importar o lote. Revise os campos e tente novamente.": [
+    "Could not import the batch. Review the fields and try again.",
+    "No se pudo importar el lote. Revisa los campos e inténtalo de nuevo.",
+  ],
+  "Este item está reservado por outra execução.": [
+    "This item is reserved by another execution.",
+    "Este elemento está reservado por otra ejecución.",
+  ],
+  "Esta coleção possui itens reservados.": [
+    "This collection contains reserved items.",
+    "Esta colección contiene elementos reservados.",
+  ],
+  "Lote inválido.": ["Invalid batch.", "Lote no válido."],
+  "Revise os campos do lote antes de importar.": [
+    "Review the batch fields before importing.",
+    "Revisa los campos del lote antes de importar.",
+  ],
+  "Campo desconhecido na coleção.": [
+    "Unknown collection field.",
+    "Campo desconocido en la colección.",
+  ],
+
   "Sem conexão com o serviço local. Seus dados salvos estão preservados; tentando reconectar…": [
     "No connection to the local service. Your saved data is preserved; trying to reconnect…",
     "Sin conexión con el servicio local. Tus datos guardados están preservados; intentando reconectar…",
@@ -359,6 +433,7 @@ const PHRASES: Record<string, Translation> = {
     "Define how this capability should work in this block.",
     "Define cómo debe funcionar esta capacidad en este bloque.",
   ],
+  "Opções avançadas": ["Advanced options", "Opciones avanzadas"],
   "Selecione um perfil já cadastrado. A preparação e o gerenciamento ficam em Plugins.": [
     "Select an existing profile. Preparation and management are handled in Plugins.",
     "Selecciona un perfil existente. La preparación y la gestión se realizan en Plugins.",

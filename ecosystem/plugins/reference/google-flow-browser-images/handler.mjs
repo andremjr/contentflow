@@ -616,13 +616,15 @@ const VIDEO_MODELS = Object.freeze({
   veo_3_1_quality: "Veo 3.1 - Quality",
   veo_3_1_fast: "Veo 3.1 - Fast",
   veo_3_1_lite: "Veo 3.1 - Lite",
-  omni_1_1_flash: "Omni 1.1 Flash",
+  omni_1_1_flash: "Omni Flash",
+  veo_3_1_lite_lower_priority: "Veo 3.1 - Lite [Lower Priority]",
 });
 const VIDEO_MODEL_LABELS = Object.freeze({
   veo_3_1_quality: "Veo 3.1 - Quality",
   veo_3_1_fast: "Veo 3.1 - Fast",
   veo_3_1_lite: "Veo 3.1 - Lite",
-  omni_1_1_flash: "Omni 1.1 Flash",
+  omni_1_1_flash: "Omni Flash",
+  veo_3_1_lite_lower_priority: "Veo 3.1 - Lite [Lower Priority]",
 });
 const FLOW_ATTACHED_REFERENCE_SELECTOR = [
   "flow-base-prompt-box flow-ingredient-chip",
@@ -837,21 +839,6 @@ function modelLabelMap(type) {
   return type === "video" ? VIDEO_MODEL_LABELS : MODEL_LABELS;
 }
 
-function dynamicFlowModelValue(label, type) {
-  const normalizedLabel = normalizeFlowModelLabel(label);
-  const known = Object.entries(modelLabelMap(type)).find(
-    ([key, candidate]) =>
-      key !== "flow_auto" &&
-      String(candidate || "").localeCompare(normalizedLabel, undefined, {
-        sensitivity: "accent",
-      }) === 0,
-  );
-  return (
-    known?.[0] ??
-    `${FLOW_MODEL_VALUE_PREFIX}${Buffer.from(normalizedLabel, "utf8").toString("base64url")}`
-  );
-}
-
 function dynamicFlowModelLabel(value, type) {
   const key = String(value ?? "");
   if (Object.hasOwn(modelLabelMap(type), key)) return modelLabelMap(type)[key];
@@ -863,50 +850,6 @@ function dynamicFlowModelLabel(value, type) {
   } catch {
     return null;
   }
-}
-
-function flowAutoOption(locale) {
-  const language = String(locale || "pt-BR")
-    .toLowerCase()
-    .split("-")[0];
-  if (language === "en") {
-    return {
-      value: "flow_auto",
-      label: "Automatic: Pro → 2 → 2 Lite",
-      description: "Safe fallback between the image models known for this account.",
-    };
-  }
-  if (language === "es") {
-    return {
-      value: "flow_auto",
-      label: "Automático: Pro → 2 → 2 Lite",
-      description: "Fallback seguro entre los modelos de imagen conocidos de esta cuenta.",
-    };
-  }
-  return {
-    value: "flow_auto",
-    label: "Automático: Pro → 2 → 2 Lite",
-    description: "Fallback seguro entre os modelos de imagem conhecidos desta conta.",
-  };
-}
-
-function normalizeFlowModelOptions(labels, type, locale = "pt-BR") {
-  if (!Array.isArray(labels)) {
-    throw codedError("OUTPUT_VALIDATION_FAILED", "O Flow não devolveu uma lista de modelos.");
-  }
-  const options = [];
-  const seen = new Set();
-  for (const rawLabel of labels) {
-    const label = normalizeFlowModelLabel(rawLabel);
-    const value = dynamicFlowModelValue(label, type);
-    if (seen.has(value)) continue;
-    seen.add(value);
-    options.push({ value, label });
-  }
-  if (type === "image" && options.length > 0) {
-    options.unshift(flowAutoOption(locale));
-  }
-  return options;
 }
 
 function codedError(code, message, retryable = false) {
@@ -933,12 +876,15 @@ function sleep(ms, signal) {
   });
 }
 
-function normalizePrompts(value) {
+function normalizePrompts(value, format = "plain", locale) {
   const out = [];
   const visit = (item) => {
     if (typeof item === "string") {
       const text = item.trim();
-      if (text) out.push(text);
+      if (text && format === "json") {
+        const parsed = parseFlowTextItem(text, locale);
+        out.push(parsed.prompt);
+      } else if (text) out.push(text);
       return;
     }
     if (Array.isArray(item)) for (const nested of item) visit(nested);
@@ -1526,6 +1472,10 @@ async function clearVisualProductionCheckpoint(request, services) {
   if (statePath) await rm(statePath, { force: true }).catch(() => undefined);
 }
 
+function isFreshRetryRequest(request) {
+  return Number(request?.attempt ?? 1) > 1 && !request?.[FLOW_INTERNAL_CONTEXT];
+}
+
 function checkpointProjectUrlForProfile(checkpoint, accountProfile) {
   if (!checkpoint?.projectUrl) return undefined;
   return checkpoint.accountProfile === normalizeAccountProfile(accountProfile)
@@ -1562,7 +1512,108 @@ function normalizeReferenceImages(value) {
   return out;
 }
 
+const flowTextMessages = {
+  "Invalid Flow JSON text item.": [
+    "Texto JSON inválido para o Flow.",
+    "Texto JSON inválido para Flow.",
+  ],
+  "Flow JSON requires a prompt and optional referenceItemIds array.": [
+    "O texto JSON exige prompt e uma lista opcional referenceItemIds.",
+    "El texto JSON requiere prompt y una lista opcional referenceItemIds.",
+  ],
+  "Per-prompt references require referenceItemIds, including [] for no references.": [
+    "Cada cena exige referenceItemIds; use [] quando não houver referências.",
+    "Cada escena requiere referenceItemIds; use [] cuando no haya referencias.",
+  ],
+  "A requested reference ID has no image with preserved provenance.": [
+    "Um ID solicitado não possui imagem com proveniência preservada.",
+    "Un ID solicitado no tiene imagen con procedencia preservada.",
+  ],
+  "Per-prompt references require JSON prompts.": [
+    "Referências por cena exigem prompts em texto JSON.",
+    "Las referencias por escena requieren prompts en texto JSON.",
+  ],
+  "Per-prompt references require canonical prompt items.": [
+    "Referências por cena exigem prompts com IDs canônicos.",
+    "Las referencias por escena requieren prompts con IDs canónicos.",
+  ],
+  "The scene exceeds the configured reference limit.": [
+    "A cena excede o limite de referências configurado.",
+    "La escena supera el límite de referencias configurado.",
+  ],
+};
+function flowTextMessage(locale, message) {
+  const language = String(locale ?? "pt-BR");
+  return language.startsWith("en")
+    ? message
+    : (flowTextMessages[message]?.[language.startsWith("es") ? 1 : 0] ?? message);
+}
+
+function parseFlowTextItem(value, locale) {
+  let item;
+  try {
+    item = JSON.parse(value);
+  } catch {
+    throw codedError("INVALID_INPUT", flowTextMessage(locale, "Invalid Flow JSON text item."));
+  }
+  if (
+    !item ||
+    typeof item.prompt !== "string" ||
+    !item.prompt.trim() ||
+    (item.referenceItemIds !== undefined &&
+      (!Array.isArray(item.referenceItemIds) ||
+        item.referenceItemIds.some((id) => typeof id !== "string" || !id.trim())))
+  )
+    throw codedError(
+      "INVALID_INPUT",
+      flowTextMessage(locale, "Flow JSON requires a prompt and optional referenceItemIds array."),
+    );
+  return item;
+}
+
 function referenceImagesForSourceItem(request, sourceItemId) {
+  if (request?.configuration?.referenceMode === "per_prompt") {
+    const deliveries = request.inputDeliveries ?? [];
+    const source = deliveries
+      .filter((delivery) => ["prompts", "prompt"].includes(delivery.portKey))
+      .flatMap((delivery) => delivery.items ?? [])
+      .find((item) => item.id === sourceItemId);
+    if (!sourceItemId && !request.batch) return [];
+    const raw = source?.value ?? request.inputs?.prompts ?? request.inputs?.prompt;
+    const item = parseFlowTextItem(
+      Array.isArray(raw) && raw.length === 1 ? raw[0] : raw,
+      request?.context?.locale,
+    );
+    if (!Array.isArray(item.referenceItemIds))
+      throw codedError(
+        "INVALID_INPUT",
+        flowTextMessage(
+          request?.context?.locale,
+          "Per-prompt references require referenceItemIds, including [] for no references.",
+        ),
+      );
+    const images = deliveries
+      .filter((delivery) => ["reference_images", "reference_image"].includes(delivery.portKey))
+      .flatMap((delivery) => delivery.items ?? []);
+    const selected = new Map();
+    for (const id of new Set(item.referenceItemIds)) {
+      const matches = images.filter(
+        (image) =>
+          image.id === id ||
+          image.references?.some((ref) => ref.role === "derived_from" && ref.itemId === id),
+      );
+      if (!matches.length)
+        throw codedError(
+          "INVALID_INPUT",
+          flowTextMessage(
+            request?.context?.locale,
+            "A requested reference ID has no image with preserved provenance.",
+          ),
+        );
+      for (const image of matches) selected.set(image.id, image.value);
+    }
+    return normalizeReferenceImages([...selected.values()]);
+  }
   const fallback = normalizeReferenceImages([
     request?.inputs?.reference_images,
     request?.inputs?.reference_image,
@@ -1596,7 +1647,10 @@ function referenceImagesForSourceItem(request, sourceItemId) {
 }
 
 function referenceImagesForCurrentItem(request) {
-  return referenceImagesForSourceItem(request, request?.batch?.sourceItemId);
+  const references = referenceImagesForSourceItem(request, request?.batch?.sourceItemId);
+  if (request?.capabilityId === "animate-image-in-browser" && references.length === 0)
+    return normalizeReferenceImages(request?.inputs?.images ?? request?.inputs?.image);
+  return references;
 }
 
 function requestsSingleImage(request) {
@@ -1915,12 +1969,28 @@ async function claimFlowContinuousItems(request, services) {
   ) {
     return undefined;
   }
-  const source = normalizePrompts(request?.inputs?.prompts);
+  // A continuous invocation receives the whole collection on the port that
+  // declared the association. Do not assume that port is named `prompts`:
+  // the same capability can be bound to prompt records, animation prompts,
+  // or another collection without changing the plugin's semantics. The
+  // collection size controls how many core-owned work units we claim for this
+  // single browser/project session.
+  const source = normalizePrompts(
+    request?.inputs?.prompts ?? request?.inputs?.prompt ?? request?.inputs?.prompt_records,
+    request?.configuration?.promptFormat,
+    request?.context?.locale,
+  );
   const claimed = await services.claimItems(Math.max(1, source.length));
   if (!Array.isArray(claimed) || claimed.length === 0) return [];
   const normalized = claimed
     .filter(
-      (item) => typeof item?.itemId === "string" && normalizePrompts(item?.input).length === 1,
+      (item) =>
+        typeof item?.itemId === "string" &&
+        normalizePrompts(
+          item?.input,
+          request?.configuration?.promptFormat,
+          request?.context?.locale,
+        ).length === 1,
     )
     .sort((left, right) => left.order - right.order);
   if (normalized.length !== claimed.length) {
@@ -3697,6 +3767,44 @@ async function openReferencePicker(client, sessionId, bridge, signal) {
   return pickerVisible;
 }
 
+async function openExistingReferencePicker(client, sessionId, bridge, signal) {
+  if (!(await openReferencePicker(client, sessionId, bridge, signal))) return false;
+  try {
+    await bridge.dispatch(
+      "click",
+      {
+        selectors: ["button", '[role="button"]', '[role="menuitem"]', '[role="option"]'],
+        preferDomActivation: true,
+        textIncludes: [
+          "do projeto",
+          "from project",
+          "add from project",
+          "adicionar do projeto",
+          "do flow",
+        ],
+      },
+      "open-existing-reference-picker",
+    );
+  } catch {
+    return false;
+  }
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const state = await evaluate(
+      client,
+      sessionId,
+      `(() => { ${DEEP_HELPERS}
+        const dialogs = cfAll('[role="dialog"]').filter(cfVisible);
+        const cards = cfAll('img, [role="option"], [role="gridcell"]').filter(cfVisible);
+        return { dialogs: dialogs.length, cards: cards.length };
+      })()`,
+    );
+    if (state?.dialogs || state?.cards > 0) return true;
+    await sleep(250, signal);
+  }
+  return false;
+}
+
 async function attachExistingReferenceImages(
   client,
   sessionId,
@@ -3709,8 +3817,29 @@ async function attachExistingReferenceImages(
   if (filePaths.length === 0) return true;
   const baselineCount = await attachedReferenceCount(client, sessionId);
   await ensureImageMode(client, sessionId, settings, signal);
-  if (!(await openReferencePicker(client, sessionId, bridge, signal))) return false;
-  const referenceNames = filePaths.map((filePath) => basename(filePath));
+  const referenceNames = filePaths.map((filePath) => basename(filePath).replace(/\.[^.]+$/, ""));
+  const canonicalLabel = referenceNames[0];
+  const canonicalAttached = await evaluate(
+    client,
+    sessionId,
+    `(async () => {
+      const add = window.FlowAuto?.refs2?.anexarPeloMais;
+      if (typeof add !== "function") return false;
+      await add(${JSON.stringify(canonicalLabel)}, "image");
+      return true;
+    })()`,
+  ).catch(() => false);
+  if (canonicalAttached === true) {
+    const deadline = Date.now() + 8_000;
+    while (Date.now() < deadline) {
+      if ((await attachedReferenceCount(client, sessionId)) >= baselineCount + 1) {
+        step?.(`Referência existente "${canonicalLabel}" selecionada pela busca nominal do Flow.`);
+        return true;
+      }
+      await sleep(250, signal);
+    }
+  }
+  if (!(await openExistingReferencePicker(client, sessionId, bridge, signal))) return false;
   const allVisible = await evaluate(
     client,
     sessionId,
@@ -3737,6 +3866,19 @@ async function attachExistingReferenceImages(
     },
     "include-existing-references",
   );
+  await evaluate(
+    client,
+    sessionId,
+    `(() => { ${DEEP_HELPERS}
+      const button = cfAll('button, [role="button"]').find(el =>
+        cfVisible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true' &&
+        /incluir no comando|add to prompt|include in prompt/i.test(cfText(el))
+      );
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`,
+  ).catch(() => false);
   const deadline = Date.now() + 8_000;
   while (Date.now() < deadline) {
     if ((await attachedReferenceCount(client, sessionId)) >= baselineCount + filePaths.length) {
@@ -3784,6 +3926,80 @@ async function attachReferenceImagesOneByOne(
       );
     }
   }
+}
+
+async function clearAttachedReferenceImages(client, sessionId, bridge, signal, step) {
+  const canonicalCount = await evaluate(
+    client,
+    sessionId,
+    `(async () => {
+      if (typeof window.FlowAuto?.editor2?.limparIngredientes !== "function") return null;
+      return await window.FlowAuto.editor2.limparIngredientes();
+    })()`,
+  ).catch(() => null);
+  if (Number(canonicalCount) > 0) await sleep(500, signal);
+  const selectors = [
+    "flow-base-prompt-box flow-ingredient-chip button",
+    "flow-base-prompt-box flow-image-ingredient-chip button",
+    "flow-ingredient-bar flow-ingredient-chip button",
+    "flow-ingredient-bar flow-image-ingredient-chip button",
+    'button[aria-label*="remove" i]',
+    'button[aria-label*="remover" i]',
+    'button[aria-label*="excluir" i]',
+    'button[aria-label*="delete" i]',
+    'button[aria-label*="close" i]',
+    'button[aria-label*="fechar" i]',
+  ];
+  let count = await attachedReferenceCount(client, sessionId);
+  for (let attempt = 1; count > 0 && attempt <= 8; attempt += 1) {
+    const domRemoved = await evaluate(
+      client,
+      sessionId,
+      `(() => { ${DEEP_HELPERS}
+        const selectors = [
+          'flow-base-prompt-box flow-image-ingredient-chip',
+          'flow-base-prompt-box flow-ingredient-chip',
+          'flow-ingredient-bar flow-image-ingredient-chip',
+          'flow-ingredient-bar flow-ingredient-chip',
+        ];
+        const chips = selectors.flatMap(selector => cfAll(selector).filter(cfVisible));
+        const chip = chips[0];
+        const button = chip?.querySelector('button, [role="button"]');
+        if (!button) return false;
+        for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+          button.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+        }
+        return true;
+      })()`,
+    ).catch(() => false);
+    if (domRemoved) {
+      await sleep(350, signal);
+      const next = await attachedReferenceCount(client, sessionId);
+      if (next < count) {
+        count = next;
+        continue;
+      }
+    }
+    try {
+      await bridge.dispatch(
+        "click",
+        {
+          selectors,
+          preferDomActivation: true,
+          textIncludes: ["remove", "remover", "excluir", "delete", "fechar", "close"],
+        },
+        `clear-reference:${attempt}`,
+      );
+    } catch {
+      break;
+    }
+    await sleep(250, signal);
+    const next = await attachedReferenceCount(client, sessionId);
+    if (next >= count) break;
+    count = next;
+  }
+  if (count === 0) step?.("Referências da tentativa sem efeito removidas do compositor.");
+  return count === 0;
 }
 
 async function prepareReferenceImagePaths(referenceImages, services, maximum) {
@@ -3913,8 +4129,11 @@ async function attachedReferenceCount(client, sessionId) {
         client,
         sessionId,
         `(() => { ${DEEP_HELPERS}
-    const structural = cfAll(${JSON.stringify(FLOW_ATTACHED_REFERENCE_SELECTOR)});
-    if (structural.length > 0) return structural.length;
+    // frame-trigger img is a mirrored child of the chip and is intentionally not counted separately.
+    const base = cfAll('flow-base-prompt-box flow-image-ingredient-chip, flow-base-prompt-box flow-ingredient-chip').filter(cfVisible);
+    if (base.length > 0) return base.length;
+    const bar = cfAll('flow-ingredient-bar flow-image-ingredient-chip, flow-ingredient-bar flow-ingredient-chip').filter(cfVisible);
+    if (bar.length > 0) return bar.length;
     return cfAll('button, [role="button"]').filter(cfVisible).filter(el =>
       /^(elemento|element|ingredient)$/i.test((el.getAttribute('aria-label') || '').trim()) &&
       !!el.querySelector('img')).length;
@@ -3951,10 +4170,38 @@ async function waitReferenceUploadReady(
       );
       consentReported = true;
     }
-    if (state?.editable && !state.dialogs && !state.pickerOpen) return;
+    // The editor can become editable before Flow has finished materializing
+    // the uploaded media. When names were supplied, that state is not enough:
+    // submitting now makes Flow fall back to the most recent image. Wait for
+    // the uploaded asset itself to be visible (or for an attached chip) before
+    // allowing the caller to type/send the prompt.
+    const referenceReady =
+      referenceNames.length === 0 ||
+      state?.referenceMatches === true ||
+      (await attachedReferenceCount(client, sessionId)) > 0;
+    if (state?.editable && !state.dialogs && !state.pickerOpen && referenceReady) return;
     if (!state?.consent && state?.includeReady && state?.referenceMatches && !included && bridge) {
       includeAttempts += 1;
       try {
+        const domClicked = await evaluate(
+          client,
+          sessionId,
+          `(() => { ${DEEP_HELPERS}
+            const button = cfAll('button, [role="button"]').find(el =>
+              cfVisible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true' &&
+              /incluir no comando|add to prompt|include in prompt/i.test(cfText(el))
+            );
+            if (!button) return false;
+            button.click();
+            return true;
+          })()`,
+        ).catch(() => false);
+        if (domClicked === true) {
+          included = true;
+          step?.("Referência enviada incluída no comando do Flow.");
+          await sleep(250, signal);
+          continue;
+        }
         await bridge.dispatch(
           "click",
           {
@@ -4219,15 +4466,6 @@ async function clickGenerateAndConfirm(
       })()`,
     );
   const before = await readState();
-  let click;
-  try {
-    click = await clickGenerateWithExtension(bridge, settings, operationKey);
-  } catch (cause) {
-    if (cause?.code === "COMMAND_OUTCOME_UNKNOWN") cause.externalEffectUncertain = true;
-    if (!/controle não encontrado|control not found/i.test(String(cause?.message || "")))
-      throw cause;
-    click = { ok: false, mechanism: "control-not-found" };
-  }
   const waitForEffect = async (timeoutMs) => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -4244,8 +4482,80 @@ async function clickGenerateAndConfirm(
     }
     return false;
   };
+  const directFirst = await evaluate(
+    client,
+    sessionId,
+    `(() => {
+      const button = window.FlowAuto?.editor2?.findSubmitButton?.() ||
+        document.querySelector('flow-generate-icon-button button');
+      if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') return false;
+      button.click();
+      return true;
+    })()`,
+  ).catch(() => false);
+  if (directFirst === true && (await waitForEffect(8_000))) {
+    return { ok: true, confirmed: true, mechanism: "flow-dom-submit" };
+  }
+  const canonicalFirst = await evaluate(
+    client,
+    sessionId,
+    `(async () => {
+      if (typeof window.FlowAuto?.editor2?.clickSubmit !== "function") return false;
+      return (await window.FlowAuto.editor2.clickSubmit()) === true;
+    })()`,
+  ).catch(() => false);
+  if (canonicalFirst === true && (await waitForEffect(15_000))) {
+    return { ok: true, confirmed: true, mechanism: "flowauto-editor2-clickSubmit" };
+  }
+  let click;
+  try {
+    click = await clickGenerateWithExtension(bridge, settings, operationKey);
+  } catch (cause) {
+    if (cause?.code === "COMMAND_OUTCOME_UNKNOWN") cause.externalEffectUncertain = true;
+    if (!/controle não encontrado|control not found/i.test(String(cause?.message || "")))
+      throw cause;
+    click = { ok: false, mechanism: "control-not-found" };
+  }
   if (click.ok !== false && (await waitForEffect(5_000))) {
     return { ...click, confirmed: true, mechanism: click.mechanism };
+  }
+  const canonicalSubmit = await evaluate(
+    client,
+    sessionId,
+    `(async () => {
+      if (typeof window.FlowAuto?.editor2?.clickSubmit !== "function") return false;
+      return (await window.FlowAuto.editor2.clickSubmit()) === true;
+    })()`,
+  ).catch(() => false);
+  if (canonicalSubmit === true && (await waitForEffect(15_000))) {
+    return { ok: true, confirmed: true, mechanism: "flowauto-editor2-clickSubmit" };
+  }
+  let semanticClick = { ok: false };
+  try {
+    semanticClick = await bridge.dispatch(
+      "clickGenerate",
+      {
+        selectors: [
+          "flow-generate-icon-button button",
+          'button[aria-label*="iniciar geração" i]',
+          'button[aria-label*="start generation" i]',
+          'button[type="submit"]',
+        ],
+        promptSelector: settings?.promptSelector || "",
+        generateSelector: settings?.generateSelector || "",
+      },
+      `${operationKey}:semantic-fallback`,
+    );
+  } catch (cause) {
+    if (
+      !/controle não encontrado|control not found|desabilitado|disabled/i.test(
+        String(cause?.message || ""),
+      )
+    )
+      throw cause;
+  }
+  if (await waitForEffect(8_000)) {
+    return { ...semanticClick, confirmed: true, mechanism: "bridge-clickGenerate" };
   }
   const enter = await bridge.dispatch(
     "pressEnter",
@@ -4637,6 +4947,28 @@ async function triggerAnimateOnImage(client, sessionId, bridge, step) {
   }
 }
 
+async function attachSelectedFlowFrame(client, sessionId, mediaUuid, step) {
+  if (!mediaUuid) return false;
+  const attached = await evaluate(
+    client,
+    sessionId,
+    `(async () => {
+      const attach = window.FlowAuto?.refs2?.attachFrameByWorkflowId;
+      return typeof attach === "function"
+        ? await attach(null, "inicial", null, ${JSON.stringify(mediaUuid)})
+        : false;
+    })()`,
+  );
+  if (attached !== true) {
+    throw codedError(
+      "OUTPUT_VALIDATION_FAILED",
+      `O Flow não confirmou a imagem selecionada como frame inicial (${mediaUuid}).`,
+    );
+  }
+  step?.(`Frame inicial selecionado nominalmente no Flow (${mediaUuid}).`);
+  return true;
+}
+
 function createBatchResponseTracker(client, sessionId, signal) {
   const waiting = [];
   const byRequestId = new Map();
@@ -4654,6 +4986,7 @@ function createBatchResponseTracker(client, sessionId, signal) {
     if (reservation.requestId) byRequestId.delete(reservation.requestId);
     if (ok) reservation.resolve(value);
     else reservation.reject(value);
+    if (!reservation.requestId) reservation.rejectSubmission(value);
   };
 
   const offRequest = client.on("Network.requestWillBeSent", (params, eventSessionId) => {
@@ -4676,6 +5009,7 @@ function createBatchResponseTracker(client, sessionId, signal) {
     if (!reservation) return;
     reservation.requestId = params.requestId;
     byRequestId.set(params.requestId, reservation);
+    reservation.resolveSubmission(params.requestId);
   });
 
   const offResponse = client.on("Network.responseReceived", (params, eventSessionId) => {
@@ -4705,8 +5039,6 @@ function createBatchResponseTracker(client, sessionId, signal) {
           const hasMedia = rpcs.some((r) => extrairMidiasRpc(r.payload).length > 0);
           if (!hasError && !hasMedia) {
             reservation.readingBody = false;
-            reservation.requestId = null;
-            byRequestId.delete(params.requestId);
             return;
           }
         }
@@ -4757,10 +5089,21 @@ function createBatchResponseTracker(client, sessionId, signal) {
         resolve = resolvePromise;
         reject = rejectPromise;
       });
+      let resolveSubmission;
+      let rejectSubmission;
+      const submitted = new Promise((resolve, reject) => {
+        resolveSubmission = resolve;
+        rejectSubmission = reject;
+      });
+      // Both promises can fail before a caller starts waiting for the result.
+      void promise.catch(() => undefined);
+      void submitted.catch(() => undefined);
       const reservation = {
         resolve,
         reject,
         promise,
+        resolveSubmission,
+        rejectSubmission,
         requestId: null,
         responseStatus: null,
         settled: false,
@@ -4781,6 +5124,7 @@ function createBatchResponseTracker(client, sessionId, signal) {
       waiting.push(reservation);
       return {
         promise,
+        submitted,
         cancel(error) {
           settle(reservation, false, error);
         },
@@ -5598,6 +5942,7 @@ async function downloadGeneratedImage(
       mimeType,
       size: bytes.byteLength,
       url: `artifact://${artifactId}`,
+      flowMediaId: String(mediaId),
     },
     artifact: {
       id: artifactId,
@@ -5605,6 +5950,7 @@ async function downloadGeneratedImage(
       mimeType,
       size: bytes.byteLength,
       source: { kind: "path", path: filename },
+      flowMediaId: String(mediaId),
     },
   };
 }
@@ -5902,167 +6248,6 @@ async function configureProfile(request, services) {
   }
 }
 
-const FLOW_CONFIGURATION_OPTION_PROVIDERS = Object.freeze({
-  "produce-visual-assets-in-browser": Object.freeze({
-    imageModel: Object.freeze({ providerId: "flow-image-models", type: "image" }),
-    videoModel: Object.freeze({ providerId: "flow-video-models", type: "video" }),
-  }),
-  "generate-images-in-browser": Object.freeze({
-    imageModel: Object.freeze({ providerId: "flow-image-models", type: "image" }),
-  }),
-  "animate-image-in-browser": Object.freeze({
-    videoModel: Object.freeze({ providerId: "flow-video-models", type: "video" }),
-  }),
-  "generate-video-in-browser": Object.freeze({
-    videoModel: Object.freeze({ providerId: "flow-video-models", type: "video" }),
-  }),
-});
-
-async function waitForExistingFlowProject(client, sessionId, settings, signal, timeoutMs = 20_000) {
-  const deadline = Date.now() + timeoutMs;
-  let last;
-  let navigated = false;
-  while (Date.now() < deadline) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Consulta de modelos cancelada.");
-    last = await getPageState(client, sessionId, settings?.promptSelector || "");
-    if (!isFlowHost(last?.host)) {
-      throw codedError(
-        "OUTPUT_VALIDATION_FAILED",
-        "A aba de opções deixou a origem do Google Flow.",
-      );
-    }
-    if (last?.loginLike || last?.challenge) {
-      throw codedError(
-        "AUTHENTICATION_FAILED",
-        "O perfil precisa concluir login, reautenticação ou CAPTCHA antes de consultar modelos.",
-      );
-    }
-    if (last?.projectLike && last?.promptFound) return last;
-    const candidate =
-      !navigated && Array.isArray(last?.projectLinks) ? last.projectLinks[0]?.href : null;
-    if (typeof candidate === "string" && isFlowUrl(candidate, true)) {
-      await client.send("Page.navigate", { url: candidate }, sessionId);
-      navigated = true;
-    }
-    await sleep(500, signal);
-  }
-  throw codedError(
-    "OUTPUT_VALIDATION_FAILED",
-    "Abra ao menos um projeto existente do Google Flow neste perfil antes de atualizar os modelos.",
-  );
-}
-
-async function discoverFlowModelLabels(request, services, type) {
-  const settings = request?.settings ?? {};
-  const runtime = resolveProfileRuntime(request, services);
-  assertDedicatedProfilePath(runtime.profilePath);
-  if (!(await profileIsPrepared(runtime, runtime.accountProfile))) {
-    throw codedError(
-      "AUTHENTICATION_FAILED",
-      `O perfil ${runtime.accountProfile} ainda não foi preparado para consultar modelos.`,
-    );
-  }
-
-  const configuredProjectUrl = String(request?.configuration?.projectUrl || "").trim();
-  const startUrl = configuredProjectUrl ? validateFlowUrl(configuredProjectUrl) : FLOW_LANDING_URL;
-  let launched;
-  let client;
-  let extensionBridge;
-  try {
-    launched = await launchOrReuseChrome({
-      profilePath: runtime.profilePath,
-      port: runtime.port,
-      coreSession: settings.__contentFlowBrowserSession,
-      startMinimized: true,
-      keepBrowserOpen: false,
-      startUrl,
-      signal: services.signal,
-    });
-    client = await new CdpClient(launched.version.webSocketDebuggerUrl).connect(services.signal);
-    const page = await attachFlowPage(
-      client,
-      startUrl,
-      Boolean(configuredProjectUrl),
-      services.signal,
-      false,
-    );
-    extensionBridge = await attachExtensionBridge(client, page.sessionId, {
-      signal: services.signal,
-      request,
-      profileId: runtime.accountProfile,
-      waitMs: 10_000,
-    });
-    await waitForExistingFlowProject(client, page.sessionId, settings, services.signal);
-    const before = await evaluate(
-      client,
-      page.sessionId,
-      "({ url: location.href, origin: location.origin })",
-    );
-    if (!isFlowUrl(before?.url, true)) {
-      throw codedError(
-        "OUTPUT_VALIDATION_FAILED",
-        "A descoberta não está em um projeto do Google Flow.",
-      );
-    }
-    const labels = await evaluate(
-      client,
-      page.sessionId,
-      `(async () => window.FlowAuto?.adapter?.listModels ? await window.FlowAuto.adapter.listModels(${JSON.stringify(type)}) : null)()`,
-    );
-    const after = await evaluate(
-      client,
-      page.sessionId,
-      "({ url: location.href, origin: location.origin })",
-    );
-    if (!isFlowUrl(after?.url, true) || after.origin !== before.origin) {
-      throw codedError(
-        "OUTPUT_VALIDATION_FAILED",
-        "A origem mudou durante a descoberta de modelos.",
-      );
-    }
-    if (!Array.isArray(labels)) {
-      throw codedError(
-        "OUTPUT_VALIDATION_FAILED",
-        "A técnica protegida do Flow não disponibilizou a lista de modelos.",
-      );
-    }
-    return labels;
-  } finally {
-    await extensionBridge?.dispose();
-    client?.close();
-  }
-}
-
-async function configureOptions(request, services, dependencies = {}) {
-  try {
-    const capabilityProviders = FLOW_CONFIGURATION_OPTION_PROVIDERS[request?.capabilityId];
-    const property = String(request?.invocation?.property || "");
-    const provider = capabilityProviders?.[property];
-    if (
-      request?.invocation?.action !== "options" ||
-      !provider ||
-      request?.invocation?.providerId !== provider.providerId
-    ) {
-      throw codedError("INVALID_CONFIGURATION", "Provider de opções do Google Flow inválido.");
-    }
-    normalizeAccountProfile(request?.configuration?.accountProfile);
-    const discover = dependencies.discoverModelLabels ?? discoverFlowModelLabels;
-    const labels = await discover(request, services, provider.type);
-    return {
-      status: "success",
-      values: {
-        options: normalizeFlowModelOptions(labels, provider.type, request?.context?.locale),
-      },
-    };
-  } catch (error) {
-    return resultError(
-      error?.code || "UPSTREAM_UNAVAILABLE",
-      error?.message || "Não foi possível consultar os modelos disponíveis no Google Flow.",
-      Boolean(error?.retryable),
-    );
-  }
-}
-
 function normalizeItemActionRequest(request) {
   if (request?.invocation?.mode !== "item_action") return request;
   if (request.invocation.action !== "regenerate") return null;
@@ -6098,7 +6283,9 @@ function normalizeItemActionRequest(request) {
 
 async function executeHandler(request, services) {
   if (request?.invocation?.mode === "configure") {
-    if (request?.invocation?.action === "options") return await configureOptions(request, services);
+    if (request?.invocation?.action === "options") {
+      return resultError("INVALID_CONFIGURATION", "Os modelos do Flow são opções fixas do plugin.");
+    }
     return await configureProfile(request, services);
   }
   request = normalizeItemActionRequest(request);
@@ -6118,6 +6305,15 @@ async function executeHandler(request, services) {
     internalContext.artifactNamespace,
     capabilityId === "generate-images-in-browser" ? "image" : "video",
   );
+  if (isFreshRetryRequest(request)) {
+    // A nova tentativa precisa refletir o Método e as entradas atuais. Os
+    // checkpoints do plugin são somente uma otimização operacional e nunca
+    // podem reaplicar efeitos de uma tentativa anterior.
+    await clearGenerationCheckpoint(request, services);
+    await clearVisualProductionCheckpoint(request, services);
+    await clearCaptchaRetryNavigation(request, services);
+    request = { ...request, resume: undefined };
+  }
   if (capabilityId === "produce-visual-assets-in-browser") {
     return executeVisualProductionBatch(request, services);
   }
@@ -6150,9 +6346,18 @@ async function executeHandler(request, services) {
     ? createFlowContinuousItemState(continuousClaims, request?.context?.locale)
     : undefined;
   let prompts = continuousClaims
-    ? continuousClaims.map((claim) => normalizePrompts(claim.input)[0])
+    ? continuousClaims.map(
+        (claim) =>
+          normalizePrompts(
+            claim.input,
+            request?.configuration?.promptFormat,
+            request?.context?.locale,
+          )[0],
+      )
     : normalizePrompts(
         request?.inputs?.prompts ?? request?.inputs?.prompt ?? request?.inputs?.prompt_records,
+        request?.configuration?.promptFormat,
+        request?.context?.locale,
       );
   const singleImageOutput = requestsSingleImage(request);
   // Em uma invocação orquestrada por item, o núcleo precisa receber o valor
@@ -6174,6 +6379,39 @@ async function executeHandler(request, services) {
     if (prompts.length === 0) prompts = [""];
   }
 
+  if (request?.configuration?.referenceMode === "per_prompt") {
+    if (request?.configuration?.promptFormat !== "json")
+      return resultError(
+        "INVALID_CONFIGURATION",
+        flowTextMessage(request?.context?.locale, "Per-prompt references require JSON prompts."),
+      );
+    const sourceIds = continuousClaims
+      ? continuousClaims.map((claim) => claim.sourceItemId)
+      : request.batch
+        ? [request.batch.sourceItemId]
+        : (request.inputDeliveries ?? [])
+            .filter((delivery) => ["prompts", "prompt"].includes(delivery.portKey))
+            .flatMap((delivery) => (delivery.items ?? []).map((item) => item.id));
+    if (!sourceIds.length)
+      return resultError(
+        "INVALID_INPUT",
+        flowTextMessage(
+          request?.context?.locale,
+          "Per-prompt references require canonical prompt items.",
+        ),
+      );
+    for (const id of sourceIds) {
+      const selected = referenceImagesForSourceItem(request, id);
+      if (selected.length > (request.configuration.maxReferenceImages ?? 10))
+        return resultError(
+          "INVALID_INPUT",
+          flowTextMessage(
+            request?.context?.locale,
+            "The scene exceeds the configured reference limit.",
+          ),
+        );
+    }
+  }
   let rawReferences = referenceImagesForCurrentItem(request);
   if (isImageAnimation && !rawReferences) {
     rawReferences = request?.inputs?.images ?? request?.inputs?.image;
@@ -6218,8 +6456,8 @@ async function executeHandler(request, services) {
   const requestedMaxImagesPerPrompt = Number.isInteger(request?.configuration?.maxImagesPerPrompt)
     ? request.configuration.maxImagesPerPrompt
     : 1;
-  if (requestedConcurrentGenerations < 1 || requestedConcurrentGenerations > 3) {
-    return resultError("INVALID_CONFIGURATION", "maxConcurrentGenerations deve ficar entre 1 e 3.");
+  if (requestedConcurrentGenerations < 1 || requestedConcurrentGenerations > 5) {
+    return resultError("INVALID_CONFIGURATION", "maxConcurrentGenerations deve ficar entre 1 e 5.");
   }
   if (retryAttempts < 0 || retryAttempts > 2) {
     return resultError("INVALID_CONFIGURATION", "retryAttempts deve ficar entre 0 e 2.");
@@ -6362,6 +6600,7 @@ async function executeHandler(request, services) {
   let extensionBridge;
   let activeProjectUrl;
   let referencesAttached = navigation.referencesAttached === true;
+  let activeReferenceKey = null;
   let generationSubmitted = false;
   const files = Array.isArray(generationCheckpoint?.files)
     ? structuredClone(generationCheckpoint.files)
@@ -6507,6 +6746,11 @@ async function executeHandler(request, services) {
           },
           step,
         );
+      }
+
+      const selectedFlowMediaId = referenceImages[0]?.flowMediaId;
+      if (selectedFlowMediaId) {
+        await attachSelectedFlowFrame(client, sessionId, selectedFlowMediaId, step);
       }
 
       const promptText = prompts[0] || "";
@@ -6926,9 +7170,9 @@ async function executeHandler(request, services) {
       if (!claim) return undefined;
       return await continuousItems.publish(services, claim.itemId, state, extra);
     };
-    const maxConcurrentGenerations = continuousClaims
-      ? 2
-      : Math.min(3, Math.max(1, requestedConcurrentGenerations));
+    // Serialize composer changes and request binding, not provider generation.
+    // Each in-flight result belongs to the request reserved by its work unit.
+    const maxConcurrentGenerations = requestedConcurrentGenerations;
     let submissionLock = Promise.resolve();
     const acquireSubmissionLock = async () => {
       let unlock;
@@ -6992,6 +7236,15 @@ async function executeHandler(request, services) {
             continuousCurrent?.state === "submitted" ||
             continuousCurrent?.state === "awaiting_result"
           ) {
+            if (maxConcurrentGenerations > 1) {
+              const uncertain = codedError(
+                "UPSTREAM_UNAVAILABLE",
+                flowMediaMessage(request?.context?.locale, "continuousReceiptMissing", "image"),
+                false,
+              );
+              uncertain.externalEffectUncertain = true;
+              throw uncertain;
+            }
             const baselineUrls = await visualBatchItemBaseline(
               request,
               services,
@@ -7032,52 +7285,74 @@ async function executeHandler(request, services) {
           }
           const taskReferenceImages = continuousClaim
             ? referenceImagesForSourceItem(request, continuousClaim.sourceItemId)
-            : referenceImages;
+            : request?.configuration?.referenceMode === "per_prompt" && !request.batch
+              ? referenceImagesForSourceItem(
+                  request,
+                  (request.inputDeliveries ?? [])
+                    .filter((delivery) => ["prompts", "prompt"].includes(delivery.portKey))
+                    .flatMap((delivery) => delivery.items ?? [])[task.index]?.id,
+                )
+              : referenceImages;
           const taskReferencePaths = continuousClaim
             ? await prepareReferenceImagePaths(taskReferenceImages, services, maxReferenceImages)
             : referencePaths;
-          const fallbackModelsTried = new Set();
-          const switchToNextImageModel = async (reason) => {
-            const fallbackModelKey = nextImageModelFallback(activePreferences.modelKey);
-            if (
-              !activePreferences.fallbackOnModelLimit ||
-              !fallbackModelKey ||
-              fallbackModelsTried.has(fallbackModelKey)
-            ) {
-              return false;
-            }
-            activePreferences = {
-              ...activePreferences,
-              modelKey: fallbackModelKey,
-              imageModelName: IMAGE_MODELS[fallbackModelKey],
-            };
-            fallbackModelsTried.add(fallbackModelKey);
-            step(
-              `${label}: ${reason}; repetindo com ${MODEL_LABELS[fallbackModelKey]} na mesma conta.`,
+          if (taskReferencePaths.length > 0) {
+            const referenceNames = taskReferencePaths.map((filePath) =>
+              basename(filePath).replace(/\.[^.]+$/, ""),
             );
+            step(
+              `${label}: ${taskReferencePaths.length} referência(s) nominais preparadas (${referenceNames.join(", ")}).`,
+            );
+          }
+          const fallbackModelsTried = new Set();
+          const switchToNextImageModel = async (reason, composerLocked = false) => {
+            const releaseModelChange = composerLocked
+              ? () => undefined
+              : await acquireSubmissionLock();
             try {
-              await evaluate(
+              const fallbackModelKey = nextImageModelFallback(activePreferences.modelKey);
+              if (
+                !activePreferences.fallbackOnModelLimit ||
+                !fallbackModelKey ||
+                fallbackModelsTried.has(fallbackModelKey)
+              ) {
+                return false;
+              }
+              activePreferences = {
+                ...activePreferences,
+                modelKey: fallbackModelKey,
+                imageModelName: IMAGE_MODELS[fallbackModelKey],
+              };
+              fallbackModelsTried.add(fallbackModelKey);
+              step(
+                `${label}: ${reason}; repetindo com ${MODEL_LABELS[fallbackModelKey]} na mesma conta.`,
+              );
+              try {
+                await evaluate(
+                  client,
+                  sessionId,
+                  `window.FlowAuto?.adapter?.setModel ? window.FlowAuto.adapter.setModel(${JSON.stringify(MODEL_LABELS[fallbackModelKey])}) : null`,
+                );
+              } catch {}
+              await ensureFlowModelAndRatio(
                 client,
                 sessionId,
-                `window.FlowAuto?.adapter?.setModel ? window.FlowAuto.adapter.setModel(${JSON.stringify(MODEL_LABELS[fallbackModelKey])}) : null`,
+                extensionBridge,
+                {
+                  modelName: MODEL_LABELS[fallbackModelKey],
+                  forceImageMode: true,
+                  outputCount: maxImagesPerPrompt,
+                  settings,
+                  signal: services.signal,
+                  locale: request?.context?.locale,
+                },
+                step,
               );
-            } catch {}
-            await ensureFlowModelAndRatio(
-              client,
-              sessionId,
-              extensionBridge,
-              {
-                modelName: MODEL_LABELS[fallbackModelKey],
-                forceImageMode: true,
-                outputCount: maxImagesPerPrompt,
-                settings,
-                signal: services.signal,
-                locale: request?.context?.locale,
-              },
-              step,
-            );
-            await sleep(2_000, services.signal);
-            return true;
+              await sleep(2_000, services.signal);
+              return true;
+            } finally {
+              releaseModelChange();
+            }
           };
           while (true) {
             const releaseSubmission = await acquireSubmissionLock();
@@ -7091,14 +7366,29 @@ async function executeHandler(request, services) {
                 true,
                 trace,
               );
+              const referenceKey = taskReferencePaths
+                .map((filePath) => String(filePath))
+                .join("\n");
               const staleReferenceCount = await attachedReferenceCount(client, sessionId);
-              if (staleReferenceCount !== 0) {
-                throw codedError(
-                  "OUTPUT_VALIDATION_FAILED",
-                  `O editor do Flow reteve ${staleReferenceCount} referência(s) da unidade anterior; o próximo prompt foi bloqueado para evitar associação incorreta.`,
+              const referencesNeedRefresh =
+                activeReferenceKey !== referenceKey ||
+                (taskReferencePaths.length > 0 && staleReferenceCount === 0);
+              if (referencesNeedRefresh && staleReferenceCount !== 0) {
+                const cleared = await clearAttachedReferenceImages(
+                  client,
+                  sessionId,
+                  extensionBridge,
+                  services.signal,
+                  step,
                 );
+                if (!cleared) {
+                  throw codedError(
+                    "OUTPUT_VALIDATION_FAILED",
+                    `O editor do Flow reteve ${staleReferenceCount} referência(s) da unidade anterior e não permitiu removê-las com segurança; o próximo prompt foi bloqueado.`,
+                  );
+                }
               }
-              if (taskReferencePaths.length > 0) {
+              if (referencesNeedRefresh && taskReferencePaths.length > 0) {
                 await attachReferenceImagesOneByOne(
                   client,
                   sessionId,
@@ -7109,7 +7399,10 @@ async function executeHandler(request, services) {
                   step,
                 );
                 referencesAttached = true;
+                activeReferenceKey = referenceKey;
                 step(`${label}: referências específicas da unidade anexadas ao comando.`);
+              } else if (referencesNeedRefresh) {
+                activeReferenceKey = referenceKey;
               }
 
               let selectedMedia = null;
@@ -7118,7 +7411,7 @@ async function executeHandler(request, services) {
                 sessionId,
                 "Boolean(window.FlowAuto?.adapter?.generate)",
               ).catch(() => false);
-              if (hasEngine && taskReferencePaths.length === 0) {
+              if (hasEngine && taskReferencePaths.length === 0 && maxConcurrentGenerations === 1) {
                 step(`${label}: gerando via FlowAuto adapter.`);
                 const baselineMedia = await generatedMediaOnPage(client, sessionId);
                 submissionBaselines.set(
@@ -7154,6 +7447,19 @@ async function executeHandler(request, services) {
                   `${label}: Slate preenchido pela Browser Bridge (${promptResult?.readbackLength || task.prompt.length} caracteres).`,
                 );
                 await waitGenerateEnabled(client, sessionId, settings, services.signal, 20_000);
+                const submitDiagnostics = await evaluate(
+                  client,
+                  sessionId,
+                  `(() => ({
+                    readyState: document.readyState,
+                    flowAutoKeys: Object.keys(window.FlowAuto || {}).sort(),
+                    editor2Keys: Object.keys(window.FlowAuto?.editor2 || {}).sort(),
+                    canonicalButton: Boolean(window.FlowAuto?.editor2?.findSubmitButton?.()),
+                    selectorButtons: document.querySelectorAll('flow-generate-icon-button button').length,
+                    enabledSelectorButtons: [...document.querySelectorAll('flow-generate-icon-button button')].filter((button) => !button.disabled && button.getAttribute('aria-disabled') !== 'true').length,
+                  }))()`,
+                ).catch(() => undefined);
+                step(`${label}: diagnóstico do envio ${JSON.stringify(submitDiagnostics)}.`);
                 ticketInfo = {
                   bilhete: await evaluate(
                     client,
@@ -7302,13 +7608,14 @@ async function executeHandler(request, services) {
                     /aria-disabled=true/i.test(String(cause?.message || ""));
                   if (
                     disabledAfterPrompt &&
-                    (await switchToNextImageModel("o modelo não habilitou a geração"))
+                    (await switchToNextImageModel("o modelo não habilitou a geração", true))
                   ) {
                     continue;
                   }
                   throw cause;
                 }
                 if (
+                  referencesNeedRefresh &&
                   taskReferencePaths.length > 0 &&
                   (await attachedReferenceCount(client, sessionId)) !== taskReferencePaths.length
                 ) {
@@ -7336,29 +7643,49 @@ async function executeHandler(request, services) {
                 let stopPageFallback = false;
                 let pageFallback;
                 try {
-                  await clickGenerateAndConfirm(
-                    client,
-                    sessionId,
-                    extensionBridge,
-                    settings,
-                    `${task.index}:${task.attempt}:submit`,
-                    services.signal,
-                    request?.context?.locale,
-                  );
+                  try {
+                    await clickGenerateAndConfirm(
+                      client,
+                      sessionId,
+                      extensionBridge,
+                      settings,
+                      `${task.index}:${task.attempt}:submit`,
+                      services.signal,
+                      request?.context?.locale,
+                    );
+                  } catch (cause) {
+                    if (
+                      cause?.externalEffectUncertain !== true &&
+                      taskReferencePaths.length === 0
+                    ) {
+                      await clearAttachedReferenceImages(
+                        client,
+                        sessionId,
+                        extensionBridge,
+                        services.signal,
+                        step,
+                      );
+                    }
+                    throw cause;
+                  }
                   generationSubmitted = true;
+                  const requestId = await reservation.submitted;
                   await publishContinuousTaskState(task, "submitted", {
-                    externalReceipt: `flow:image:${task.continuousItemId}`,
+                    externalReceipt: `flow:image:${requestId}`,
                   });
                   await publishContinuousTaskState(task, "awaiting_result");
                   step(`${label}: envio real confirmado pela Browser Bridge.`);
-                  pageFallback = waitForGeneratedMediaOnPage(
-                    client,
-                    sessionId,
-                    baselineUrls,
-                    services.signal,
-                    responseTimeoutMs,
-                    () => stopPageFallback,
-                  );
+                  pageFallback =
+                    maxConcurrentGenerations === 1
+                      ? waitForGeneratedMediaOnPage(
+                          client,
+                          sessionId,
+                          baselineUrls,
+                          services.signal,
+                          responseTimeoutMs,
+                          () => stopPageFallback,
+                        )
+                      : null;
                   releaseSubmission();
                 } catch (cause) {
                   stopPageFallback = true;
@@ -7369,13 +7696,19 @@ async function executeHandler(request, services) {
 
                 let completed;
                 try {
-                  completed = await Promise.race([
-                    reservation.promise.then((captured) => ({ source: "network", captured })),
-                    pageFallback.then((body) => ({
-                      source: "page",
-                      captured: { status: 200, bodyText: JSON.stringify(body) },
-                    })),
-                  ]);
+                  const networkResult = reservation.promise.then((captured) => ({
+                    source: "network",
+                    captured,
+                  }));
+                  completed = pageFallback
+                    ? await Promise.race([
+                        networkResult,
+                        pageFallback.then((body) => ({
+                          source: "page",
+                          captured: { status: 200, bodyText: JSON.stringify(body) },
+                        })),
+                      ])
+                    : await networkResult;
                 } catch (cause) {
                   if (cause?.code === "TIMEOUT" || cause?.code === "UPSTREAM_UNAVAILABLE") {
                     cause.externalEffectUncertain = true;
@@ -7450,6 +7783,7 @@ async function executeHandler(request, services) {
           }
           if (
             continuousClaim &&
+            maxConcurrentGenerations === 1 &&
             flowContinuousStateCanRefresh(continuousState) &&
             ["UPSTREAM_UNAVAILABLE", "TIMEOUT"].includes(error?.code) &&
             typeof extensionBridge?.dispatch === "function"
@@ -7729,10 +8063,16 @@ async function executeHandler(request, services) {
 }
 export async function execute(request, services) {
   const bridgeDiagnosticsState = await createBridgeDiagnostics(request, services);
-  const response = await executeHandler(
-    { ...request, __bridgeDiagnosticsState: bridgeDiagnosticsState },
-    services,
-  );
+  let response;
+  try {
+    response = await executeHandler(
+      { ...request, __bridgeDiagnosticsState: bridgeDiagnosticsState },
+      services,
+    );
+  } catch (cause) {
+    if (!["INVALID_INPUT", "INVALID_CONFIGURATION"].includes(cause?.code)) throw cause;
+    response = resultError(cause.code, cause.message);
+  }
   return { ...response, bridgeDiagnostics: bridgeDiagnosticsState.bridgeDiagnostics };
 }
 
@@ -7758,6 +8098,7 @@ export const __test = {
   clearGenerationCheckpoint,
   durableResumeFiles,
   durableResumeOutputFiles,
+  isFreshRetryRequest,
   promptIndexFromGeneratedFile,
   sortGeneratedOutputs,
   visualProductionCheckpointPath,
@@ -7791,10 +8132,7 @@ export const __test = {
   markProfilePrepared,
   closeBrowserGracefully,
   resolveGenerationPreferences,
-  dynamicFlowModelValue,
   dynamicFlowModelLabel,
-  normalizeFlowModelOptions,
-  configureOptions,
   actionableOutputPort,
   normalizeItemActionRequest,
   mediaItemUpdate,

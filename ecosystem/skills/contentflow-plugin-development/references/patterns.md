@@ -69,11 +69,13 @@ Separe `start`, `resume` e `cancel`. Retorne `pending` rapidamente; persista o j
 
 ## Conversão de automações
 
+Antes de aplicar estas técnicas, leia [automation-to-plugin.md](automation-to-plugin.md) e distribua responsabilidades. As linhas abaixo descrevem apenas a parte da automação que realmente pertence à capability; não autorizam portar estratégia, filas universais ou identidade de itens para o handler.
+
 | Automação                     | Adaptação                                                                            |
 | ----------------------------- | ------------------------------------------------------------------------------------ |
-| JavaScript                    | Mover lógica para handler e substituir caminhos/estado global por portas e services. |
+| JavaScript                    | Mover somente lógica da capability para handler; usar portas/services para paths e estado. |
 | n8n/Make/FastAPI              | Chamar endpoint HTTPS estável; documentar dados e efeitos.                           |
-| Playwright/Puppeteer/Selenium | Empacotar runtime; autenticação e perfil explícitos; confirmação visível.            |
+| Playwright/Puppeteer/Selenium | Traduzir operações de página para Browser Bridge; perfis, leases e lifecycle físico ficam no Core.            |
 | Fila/renderização             | Mapear provider job para `jobId`; implementar reconciliação e idempotência.          |
 
 Separe capabilities quando houver entregas que o usuário precise conectar, validar, substituir ou reutilizar. Mantenha internas as etapas que produzem uma única entrega observável.

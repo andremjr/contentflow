@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Channel, ProcessMethod } from "../src/lib/domain";
+import type { Channel, ProcessMethod, ValueShape } from "../src/lib/domain";
 import type { RegisteredPlugin } from "./plugin-runner";
 import {
   BUILDER_METHOD_CONTRACT,
@@ -96,7 +96,12 @@ function pluginContext(
           inputPorts: inputPortKeys.map((key) => ({
             key,
             label: key,
-            shape: { kind: "control", control: "number", cardinality: "one" },
+            shape: {
+              kind: "content",
+              family: "text",
+              cardinality: "one",
+              representation: "inline",
+            },
             required: false,
           })),
           outputPorts: outputPortKeys.map((key) => ({
@@ -132,7 +137,7 @@ function pluginThemeMethod(): ProcessMethod {
       {
         id: "section-count",
         label: "Quantidade de blocos",
-        shape: { kind: "control", control: "number", cardinality: "one" },
+        shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
         binding: { kind: "static", value: "1" },
       },
     ],
@@ -225,6 +230,83 @@ test("accepts a complete manual Method without requiring a plugin", () => {
   assert.equal(result.ok, true);
   assert.deepEqual(result.errors, []);
   assert.equal(result.methods?.theme?.blocks[0].operator, "Humano");
+});
+
+test("builder accepts JSON as text and rejects new strategic control/record schemas", () => {
+  assert.deepEqual(BUILDER_METHOD_CONTRACT.strategicFields.families, [
+    "text",
+    "image",
+    "audio",
+    "video",
+  ]);
+  const method = manualThemeMethod();
+  method.blocks[0].outputs![0].shape = {
+    kind: "content",
+    family: "text",
+    cardinality: "one",
+    representation: "artifact",
+    formats: { mimeTypes: ["application/json"] },
+  };
+  const validate = () =>
+    validateBuilderMethods({ channel, methods: { theme: method }, plugins: [], collections: [] });
+  assert.equal(validate().ok, true, validate().errors.join("\n"));
+  for (const shape of [
+    { kind: "control", control: "number", cardinality: "one" },
+    {
+      kind: "record",
+      cardinality: "many",
+      fields: [
+        {
+          id: "text",
+          label: "Text",
+          key: "text",
+          required: true,
+          shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+        },
+      ],
+    },
+  ] as const) {
+    method.blocks[0].outputs![0].shape = structuredClone(shape) as ValueShape;
+    assert.equal(validate().ok, false);
+    assert.match(validate().errors.join("\n"), /devem ser conteúdo/);
+  }
+});
+
+test("builder preserves existing internal fields while editing content", () => {
+  const method = manualThemeMethod();
+  method.blocks[0].outputs!.push({
+    id: "internal",
+    key: "internal",
+    label: "Internal",
+    required: true,
+    shape: { kind: "control", control: "number", cardinality: "one" },
+  });
+  const existingChannel = {
+    ...channel,
+    methods: { ...channel.methods, theme: structuredClone(method) },
+  };
+  method.blocks[0].name = "Edited action";
+  const result = validateBuilderMethods({
+    channel: existingChannel,
+    methods: { theme: method },
+    plugins: [],
+    collections: [],
+  });
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.deepEqual(
+    result.methods!.theme!.blocks[0].outputs![1].shape,
+    method.blocks[0].outputs![1].shape,
+  );
+  method.blocks[0].outputs![1].shape = { kind: "control", control: "boolean", cardinality: "one" };
+  assert.equal(
+    validateBuilderMethods({
+      channel: existingChannel,
+      methods: { theme: method },
+      plugins: [],
+      collections: [],
+    }).ok,
+    false,
+  );
 });
 
 test("rejects unknown universal processes", () => {

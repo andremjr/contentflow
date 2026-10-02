@@ -1,3 +1,4 @@
+import { jsonTextInstruction, jsonTextValue, jsonTextValues } from "./json-text-items.mjs";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
@@ -234,11 +235,13 @@ function buildParts(request) {
   );
   return [
     buildInstructionPrompt(request, [
-      structuredRecords
-        ? recordOutputInstruction(request)
-        : textCollection
-          ? "FORMATO OBRIGATÓRIO: responda somente com um array JSON válido de strings, com exatamente um item por unidade pedida, sem Markdown, numeração, comentários, introdução ou texto fora do JSON."
-          : "FORMATO OBRIGATÓRIO: entregue o conteúdo diretamente como texto, sem criar arquivos ou canvas.",
+      request?.configuration?.textItemFormat === "json"
+        ? jsonTextInstruction(request)
+        : structuredRecords
+          ? recordOutputInstruction(request)
+          : textCollection
+            ? "FORMATO OBRIGATÓRIO: responda somente com um array JSON válido de strings, com exatamente um item por unidade pedida, sem Markdown, numeração, comentários, introdução ou texto fora do JSON."
+            : "FORMATO OBRIGATÓRIO: entregue o conteúdo diretamente como texto, sem criar arquivos ou canvas.",
     ]),
   ];
 }
@@ -464,7 +467,38 @@ function parseJsonArray(text) {
     const parsed = JSON.parse(stripped);
     return Array.isArray(parsed) ? parsed : undefined;
   } catch {
-    return undefined;
+    const start = stripped.indexOf("[");
+    const end = stripped.lastIndexOf("]");
+    if (start >= 0 && end > start) {
+      try {
+        const parsed = JSON.parse(stripped.slice(start, end + 1));
+        if (Array.isArray(parsed)) return parsed;
+      } catch {
+        // Continue with the JSONL normalization below.
+      }
+    }
+    {
+      // Alguns provedores devolvem uma coleção de registros como JSONL
+      // (um objeto por linha), mesmo quando receberam a instrução de usar
+      // uma lista JSON. Normalizar esse formato aqui preserva o contrato
+      // estruturado e evita que a resposta seja tratada como texto solto.
+      const lines = stripped
+        .split("\n")
+        .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim())
+        .filter(Boolean);
+      if (lines.length < 1) return undefined;
+      const records = [];
+      for (const line of lines) {
+        try {
+          const value = JSON.parse(line.replace(/,\s*$/, ""));
+          if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+          records.push(value);
+        } catch {
+          return undefined;
+        }
+      }
+      return records.length ? records : undefined;
+    }
   }
 }
 
@@ -582,7 +616,15 @@ function generationResponseValues(result, responses, request) {
   const fields = request?.outputContract ?? [];
   const values = {};
   for (const field of fields) {
-    if (field?.shape?.kind === "record" && field?.shape?.cardinality === "many") {
+    if (
+      request?.configuration?.textItemFormat === "json" &&
+      field?.portKey === "parts" &&
+      field?.shape?.kind === "content" &&
+      field.shape.family === "text" &&
+      field.shape.cardinality === "one"
+    ) {
+      values[field.portKey] = jsonTextValue(result, request);
+    } else if (field?.shape?.kind === "record" && field?.shape?.cardinality === "many") {
       const records = parseJsonArray(result);
       if (
         !records ||
@@ -599,8 +641,23 @@ function generationResponseValues(result, responses, request) {
       field.shape.family === "text" &&
       field.shape.cardinality === "many"
     ) {
-      const items = parseJsonStringArray(result);
-      if (!items)
+      // O contrato define a representação da coleção como JSON estruturado.
+      // Aceitar linhas soltas aqui transformava uma resposta truncada (por
+      // exemplo, `[`, `Provide` ou texto de fallback do provedor) em prompts
+      // válidos e fazia o Flow gerar imagens sem relação com a cena.
+      const items =
+        request?.configuration?.textItemFormat === "json"
+          ? jsonTextValues(result, request)
+          : (parseJsonStringArray(result) ??
+            (() => {
+              const lines = textAsList(result);
+              const operational =
+                /^(?:provide|provide missing|missing image prompt|here(?:'|’)s the answer)\b/i;
+              return lines.length > 1 && !lines.some((line) => operational.test(line))
+                ? lines
+                : undefined;
+            })());
+      if (!items || !items.length)
         throw codedError(
           "OUTPUT_VALIDATION_FAILED",
           "A resposta não contém um array JSON válido de textos.",
@@ -985,6 +1042,30 @@ async function waitForDomMutation(client, sessionId, waitMs, signal) {
   }
 }
 
+async function waitForPageLoadComplete(client, sessionId, waitMs, signal) {
+  const deadline = Date.now() + waitMs;
+  let state;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+    try {
+      state = await evaluate(
+        client,
+        sessionId,
+        "({ readyState: document.readyState, host: location.hostname })",
+      );
+      if (state?.host === CHATGPT_HOST && state?.readyState === "complete") return;
+    } catch (error) {
+      if (error?.code !== "UPSTREAM_UNAVAILABLE") throw error;
+    }
+    await sleep(350, signal);
+  }
+  throw codedError(
+    "UPSTREAM_UNAVAILABLE",
+    "A página do ChatGPT não terminou de carregar no tempo disponível.",
+    true,
+  );
+}
+
 function normalizeEditorText(value) {
   return String(value ?? "")
     .replace(/\s+/gu, " ")
@@ -1013,31 +1094,26 @@ async function attachChatGptPage(client, signal, activate = false, forceNew = fa
   await client.send("Page.enable", {}, sessionId);
   await client.send("Runtime.enable", {}, sessionId);
   if (activate) await client.send("Page.bringToFront", {}, sessionId).catch(() => undefined);
-  await sleep(300, signal);
-  const deadline = Date.now() + 30000;
-  while (Date.now() < deadline) {
-    if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
-    try {
-      const ready = await evaluate(
-        client,
-        sessionId,
-        "({ readyState: document.readyState, host: location.hostname })",
-      );
-      if (ready?.host === CHATGPT_HOST && ["interactive", "complete"].includes(ready?.readyState))
-        break;
-    } catch {}
-    await sleep(300, signal);
-  }
+  // The provider page owns the first loading phase. Do not expose the tab to
+  // Browser Bridge while the document is still loading; this avoids sending
+  // into a half-initialized SPA after a cold or minimized Windows launch.
+  await waitForPageLoadComplete(client, sessionId, PROFILE_SETUP_WAIT_MS, signal);
   return { sessionId, targetId: target.targetId, created };
 }
 
-export async function attachExistingChatGptPage(client, targetId) {
+export async function attachExistingChatGptPage(
+  client,
+  targetId,
+  signal,
+  waitMs = PROFILE_SETUP_WAIT_MS,
+) {
   const { sessionId } = await client.send("Target.attachToTarget", {
     targetId,
     flatten: true,
   });
   await client.send("Page.enable", {}, sessionId);
   await client.send("Runtime.enable", {}, sessionId);
+  await waitForPageLoadComplete(client, sessionId, waitMs, signal);
   return sessionId;
 }
 
@@ -1383,13 +1459,23 @@ async function waitForPrompt(client, sessionId, waitMs, signal) {
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     try {
-      state = await evaluate(client, sessionId, `(${promptPageState.toString()})(document)`);
+      state = await evaluate(
+        client,
+        sessionId,
+        `(() => ({ ...(${promptPageState.toString()})(document), readyState: document.readyState }))()`,
+      );
     } catch (error) {
       if (error?.code !== "UPSTREAM_UNAVAILABLE") throw error;
       await sleep(350, signal);
       continue;
     }
-    if (state?.host === CHATGPT_HOST && state?.prompt && !state?.login) return;
+    if (
+      state?.host === CHATGPT_HOST &&
+      state?.readyState === "complete" &&
+      state?.prompt &&
+      !state?.login
+    )
+      return;
     await sleep(700, signal);
   }
   if (state?.captcha)
@@ -1486,6 +1572,11 @@ export function composerUploadState(doc) {
   );
   return {
     hasPrompt,
+    sendPresent: Boolean(send),
+    sendDisabled: Boolean(send?.disabled || send?.matches?.(":disabled")),
+    sendAriaDisabled: send?.getAttribute("aria-disabled") === "true",
+    sendPointerEvents: send ? doc.defaultView.getComputedStyle(send).pointerEvents : "missing",
+    sendLabel,
     previews,
     attachmentPresent:
       previews.length > 0 || attachmentRemovalControls.length > 0 || (!hasPrompt && sendEnabled),
@@ -1618,9 +1709,11 @@ export async function waitAndClickSend(readState, click, signal, timing = {}) {
   const deadline = now() + (timing.timeoutMs ?? 120000);
   let readyPolls = 0;
   let attempt = 0;
+  let lastState;
   while (now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     const state = await readState();
+    lastState = state;
     if (state?.error) throw codedError("INVALID_INPUT", "O ChatGPT recusou um anexo.");
     readyPolls = state?.hasPrompt && state.sendEnabled && !state.busy ? readyPolls + 1 : 0;
     if (readyPolls < 2) {
@@ -1640,7 +1733,7 @@ export async function waitAndClickSend(readState, click, signal, timing = {}) {
   }
   throw codedError(
     "TIMEOUT",
-    "O ChatGPT não liberou o envio após aguardar os anexos por 120 segundos.",
+    `O ChatGPT não liberou o envio após aguardar o compositor por 120 segundos (prompt=${Boolean(lastState?.hasPrompt)}, envio=${Boolean(lastState?.sendEnabled)}, controle=${Boolean(lastState?.sendPresent)}, desabilitado=${Boolean(lastState?.sendDisabled)}, ariaDesabilitado=${Boolean(lastState?.sendAriaDisabled)}, pointer=${String(lastState?.sendPointerEvents || "desconhecido")}, ocupado=${Boolean(lastState?.busy)}, anexo=${Boolean(lastState?.attachmentPresent)}, erro=${Boolean(lastState?.error)}).`,
     true,
   );
 }
@@ -1861,7 +1954,7 @@ async function generatePart(client, sessionId, bridge, prompt, settings, signal,
     sessionId,
     baseline,
     baselineCompletedActionCount,
-    clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000,
+    clampInteger(settings?.responseTimeoutSeconds, 1200, 30, 3600) * 1000,
     signal,
   );
 }
@@ -1888,7 +1981,7 @@ async function generateImagePart(
     baselineAssistantTurnCount: before?.texts?.length ?? 0,
   });
   const deadline =
-    Date.now() + clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000;
+    Date.now() + clampInteger(settings?.responseTimeoutSeconds, 1200, 30, 3600) * 1000;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
     const state = await evaluate(
@@ -2440,14 +2533,46 @@ async function executeHandler(request, services) {
             await clickSendWithBridge(bridge, services.signal, `send:${index}:${attempt}`);
             await bridge.dispose();
             bridge = undefined;
-            await sleep(300, services.signal);
-            sessionId = await attachExistingChatGptPage(client, taskTargetId);
-            if (
-              !(await confirmPromptSubmitted(client, sessionId, services.signal, {
+            // chrome.debugger.detach is asynchronous in the extension worker;
+            // give the target a short handoff window before CDP confirmation.
+            await sleep(5000, services.signal);
+            sessionId = await attachExistingChatGptPage(client, taskTargetId, services.signal);
+            let submitted = await confirmPromptSubmitted(client, sessionId, services.signal, {
+              baselineUserTurnCount: before?.userTurnCount ?? 0,
+              baselineAssistantTurnCount: baseline,
+            });
+            if (!submitted) {
+              // Enter can be interpreted as editing the composer by a provider
+              // UI variant. Only after the first attempt is reconciled as not
+              // submitted do we issue the idempotent fallback click.
+              await detachChatGptPage(client, sessionId);
+              sessionId = undefined;
+              await sleep(300, services.signal);
+              bridge = await attachContentFlowBridge({
+                client,
+                pageTargetId: taskTargetId,
+                expectedUrl: targetUrl,
+                pluginId: PLUGIN_ID,
+                profileId: profileName,
+                request,
+                signal: services.signal,
+                allowedOrigins: ["https://chatgpt.com"],
+              });
+              await bridge.dispatch(
+                "click",
+                { selectors: CHATGPT_SEND_BUTTON_SELECTORS, preferDomActivation: true },
+                `send:${index}:${attempt}:fallback-click`,
+              );
+              await bridge.dispose();
+              bridge = undefined;
+              await sleep(5000, services.signal);
+              sessionId = await attachExistingChatGptPage(client, taskTargetId, services.signal);
+              submitted = await confirmPromptSubmitted(client, sessionId, services.signal, {
                 baselineUserTurnCount: before?.userTurnCount ?? 0,
                 baselineAssistantTurnCount: baseline,
-              }))
-            ) {
+              });
+            }
+            if (!submitted) {
               throw codedError(
                 "OUTPUT_VALIDATION_FAILED",
                 "O ChatGPT não confirmou o envio do prompt.",
@@ -2460,7 +2585,7 @@ async function executeHandler(request, services) {
                 sessionId,
                 baseline,
                 baselineCompletedActionCount,
-                clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000,
+                clampInteger(settings?.responseTimeoutSeconds, 1200, 30, 3600) * 1000,
                 services.signal,
               ),
             );
@@ -2474,9 +2599,11 @@ async function executeHandler(request, services) {
             bridge = undefined;
           }
           if (!sessionId && taskTargetId && capabilityId !== "generate-image-in-browser") {
-            sessionId = await attachExistingChatGptPage(client, taskTargetId).catch(
-              () => undefined,
-            );
+            sessionId = await attachExistingChatGptPage(
+              client,
+              taskTargetId,
+              services.signal,
+            ).catch(() => undefined);
           }
           if (
             !error?.retryable ||
@@ -2518,7 +2645,7 @@ async function executeHandler(request, services) {
         sessionId,
         services,
         request,
-        clampInteger(settings?.responseTimeoutSeconds, 600, 30, 3600) * 1000,
+        clampInteger(settings?.responseTimeoutSeconds, 1200, 30, 3600) * 1000,
         responses[0]?.imageBaselineSources,
         {
           conversationId,

@@ -1,0 +1,519 @@
+{
+  "contractVersion": 3,
+  "name": "Roteiro → personagens → referências → cenas consistentes → animações",
+  "processType": "assets",
+  "blocks": [
+    {
+      "id": "assets-receber-roteiro",
+      "type": "CRIAR",
+      "operator": "Humano",
+      "name": "Inserir roteiro",
+      "instructions": "Insira o roteiro completo que será transformado em cenas visuais. Preserve a ordem narrativa e inclua todas as informações importantes para a representação visual.",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "assets-roteiro",
+          "label": "Roteiro",
+          "key": "script",
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          },
+          "required": true,
+          "placeholder": "Cole aqui o roteiro completo",
+          "helpText": "Este roteiro será analisado pela IA para criar os prompts visuais.",
+          "presentation": {
+            "renderer": "text-long"
+          }
+        }
+      ],
+      "parameters": [],
+      "order": 0
+    },
+    {
+      "id": "assets-definir-personagens",
+      "type": "CRIAR",
+      "operator": "IA",
+      "name": "Definir personagens recorrentes",
+      "instructions": "Extraia os personagens recorrentes diretamente do roteiro completo. Para cada personagem, produza name e prompt: um nome estável e uma descrição visual detalhada para gerar sua imagem de referência. Preserve idade, aparência, roupas e características distintivas coerentes com o roteiro. Não crie IDs nem relações com cenas nesta etapa.",
+      "inputs": [
+        {
+          "id": "assets-definir-personagens-roteiro",
+          "label": "Roteiro",
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          },
+          "binding": {
+            "kind": "previous_block",
+            "blockId": "assets-receber-roteiro",
+            "outputKey": "script"
+          },
+          "presentation": {
+            "renderer": "text-long"
+          },
+          "portKey": "context_1"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "assets-personagens",
+          "label": "Personagens recorrentes",
+          "key": "characters",
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          },
+          "required": true,
+          "helpText": "Um texto JSON por personagem: name e prompt.",
+          "presentation": {
+            "renderer": "list"
+          },
+          "portKey": "parts"
+        },
+        {
+          "id": "assets-definir-personagens-resposta",
+          "label": "Resposta completa",
+          "key": "response",
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          },
+          "required": true,
+          "portKey": "result",
+          "presentation": {
+            "renderer": "text-long"
+          }
+        }
+      ],
+      "plugin": {
+        "pluginId": "local.contentflow.chatgpt-browser-studio",
+        "pluginVersion": "2.0.1",
+        "capabilityId": "generate-text-in-browser",
+        "configuration": {
+          "fallbackAccountProfiles": "",
+          "accountProfile": "default",
+          "startMinimized": true,
+          "textItemFormat": "json",
+          "textItemFields": "{\"name\":\"string\",\"prompt\":\"string\"}",
+          "textItemReferenceInputs": "{}"
+        },
+        "connectionRequired": false,
+        "conversation": {
+          "mode": "new"
+        }
+      },
+      "parameters": [],
+      "order": 1
+    },
+    {
+      "id": "assets-gerar-personagens-flow",
+      "type": "CRIAR",
+      "operator": "IA",
+      "name": "Gerar referências dos personagens no Flow",
+      "instructions": "Gere uma imagem de referência limpa para cada prompt de personagem, preservando a ordem e a identidade de cada item. Use composição adequada para servir como referência visual das cenas seguintes.",
+      "inputs": [
+        {
+          "id": "assets-gerar-personagens-prompts",
+          "label": "Personagens recorrentes",
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          },
+          "binding": {
+            "kind": "previous_block",
+            "blockId": "assets-definir-personagens",
+            "outputKey": "characters"
+          },
+          "presentation": {
+            "renderer": "list"
+          },
+          "portKey": "prompts"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "assets-personagens-imagens",
+          "label": "Referências dos personagens",
+          "key": "character_references",
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
+          },
+          "required": true,
+          "presentation": {
+            "renderer": "image-gallery"
+          },
+          "portKey": "images"
+        }
+      ],
+      "plugin": {
+        "pluginId": "local.contentflow.google-flow-batch-images",
+        "pluginVersion": "2.0.1",
+        "capabilityId": "generate-images-in-browser",
+        "configuration": {
+          "maxImagesPerPrompt": 1,
+          "delayBetweenPromptsMs": 1500,
+          "maxConcurrentGenerations": 2,
+          "retryAttempts": 1,
+          "imageModelLabel": "",
+          "projectUrl": "",
+          "rateLimitRetryAttempts": 8,
+          "startMinimized": true,
+          "imageModel": "flow_auto",
+          "maxReferenceImages": 10,
+          "aspectRatio": "landscape",
+          "projectMode": "auto",
+          "fallbackOnModelLimit": true,
+          "accountProfile": "default",
+          "fallbackAccountProfiles": "",
+          "promptFormat": "json",
+          "referenceMode": "shared"
+        },
+        "connectionRequired": false
+      },
+      "parameters": [],
+      "order": 2
+    },
+    {
+      "id": "assets-criar-prompts",
+      "type": "CRIAR",
+      "operator": "IA",
+      "name": "Criar prompts e associar personagens",
+      "instructions": "Crie os prompts visuais das cenas na ordem narrativa do roteiro. Use o catálogo de personagens fornecido. Para cada cena, produza prompt, characterNames e referenceItemIds: um prompt visual detalhado, a lista dos nomes exatos dos personagens que aparecem nela e a lista correspondente dos seus IDs canônicos. Identifique os personagens pelo nome também na descrição do prompt, preservando sua aparência e identidade. Use somente nomes do catálogo e os IDs canônicos fornecidos pelo plugin, nunca números de posição ou IDs inventados. Use [] nas duas listas para cenas sem personagens recorrentes. Descreva enquadramento, ação, ambiente, iluminação e estilo visual coerente. Não inclua IDs no texto do prompt; coloque-os apenas em referenceItemIds. As duas listas devem seguir a mesma ordem e corresponder aos mesmos personagens.",
+      "inputs": [
+        {
+          "id": "assets-criar-prompts-roteiro",
+          "label": "Roteiro",
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          },
+          "binding": {
+            "kind": "previous_block",
+            "blockId": "assets-receber-roteiro",
+            "outputKey": "script"
+          },
+          "presentation": {
+            "renderer": "text-long"
+          },
+          "portKey": "context_1"
+        },
+        {
+          "id": "assets-criar-prompts-personagens",
+          "label": "Personagens recorrentes",
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          },
+          "binding": {
+            "kind": "previous_block",
+            "blockId": "assets-definir-personagens",
+            "outputKey": "characters"
+          },
+          "presentation": {
+            "renderer": "list"
+          },
+          "portKey": "context_items"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "assets-prompts",
+          "label": "Prompts das cenas",
+          "key": "prompts",
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          },
+          "required": true,
+          "helpText": "Um texto JSON por cena: prompt, characterNames e referenceItemIds.",
+          "presentation": {
+            "renderer": "list"
+          },
+          "portKey": "parts"
+        },
+        {
+          "id": "assets-criar-prompts-resposta",
+          "label": "Resposta completa",
+          "key": "response",
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
+          },
+          "required": true,
+          "portKey": "result",
+          "presentation": {
+            "renderer": "text-long"
+          }
+        }
+      ],
+      "plugin": {
+        "pluginId": "local.contentflow.chatgpt-browser-studio",
+        "pluginVersion": "2.0.1",
+        "capabilityId": "generate-text-in-browser",
+        "configuration": {
+          "fallbackAccountProfiles": "",
+          "accountProfile": "default",
+          "startMinimized": true,
+          "textItemFormat": "json",
+          "textItemFields": "{\"prompt\":\"string\",\"characterNames\":\"string[]\",\"referenceItemIds\":\"string[]\"}",
+          "textItemReferenceInputs": "{\"referenceItemIds\":\"context_items\"}"
+        },
+        "connectionRequired": false,
+        "conversation": {
+          "mode": "new"
+        }
+      },
+      "parameters": [],
+      "order": 3
+    },
+    {
+      "id": "assets-gerar-cenas-flow",
+      "type": "CRIAR",
+      "operator": "IA",
+      "name": "Gerar cenas com personagens consistentes",
+      "instructions": "Gere uma imagem para cada prompt de cena, preservando ordem e correspondência. Use as imagens dos personagens como referências visuais compartilhadas e mantenha aparência, roupas e identidade consistentes entre as cenas.",
+      "inputs": [
+        {
+          "id": "assets-gerar-cenas-prompts",
+          "label": "Prompts das cenas",
+          "shape": {
+            "kind": "content",
+            "family": "text",
+            "cardinality": "many",
+            "representation": "inline"
+          },
+          "binding": {
+            "kind": "previous_block",
+            "blockId": "assets-criar-prompts",
+            "outputKey": "prompts"
+          },
+          "presentation": {
+            "renderer": "list"
+          },
+          "portKey": "prompts"
+        },
+        {
+          "id": "assets-gerar-cenas-referencias",
+          "label": "Referências dos personagens",
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
+          },
+          "binding": {
+            "kind": "previous_block",
+            "blockId": "assets-gerar-personagens-flow",
+            "outputKey": "character_references"
+          },
+          "presentation": {
+            "renderer": "image-gallery"
+          },
+          "portKey": "reference_images"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "assets-cenas-imagens",
+          "label": "Cenas geradas",
+          "key": "images",
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
+          },
+          "required": true,
+          "presentation": {
+            "renderer": "image-gallery"
+          },
+          "portKey": "images"
+        }
+      ],
+      "plugin": {
+        "pluginId": "local.contentflow.google-flow-batch-images",
+        "pluginVersion": "2.0.1",
+        "capabilityId": "generate-images-in-browser",
+        "configuration": {
+          "maxImagesPerPrompt": 1,
+          "delayBetweenPromptsMs": 1500,
+          "maxConcurrentGenerations": 2,
+          "retryAttempts": 1,
+          "imageModelLabel": "",
+          "projectUrl": "",
+          "rateLimitRetryAttempts": 8,
+          "startMinimized": true,
+          "imageModel": "flow_auto",
+          "maxReferenceImages": 10,
+          "aspectRatio": "landscape",
+          "projectMode": "auto",
+          "fallbackOnModelLimit": true,
+          "accountProfile": "default",
+          "fallbackAccountProfiles": "",
+          "promptFormat": "json",
+          "referenceMode": "per_prompt"
+        },
+        "connectionRequired": false
+      },
+      "parameters": [],
+      "order": 4
+    },
+    {
+      "id": "assets-selecionar-cenas",
+      "type": "VALIDAR",
+      "operator": "Humano",
+      "name": "Selecionar cenas para animar",
+      "instructions": "Revise as cenas geradas e selecione somente as imagens que devem ser animadas. As demais imagens permanecem disponíveis como entregas do processo.",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "assets-cenas-selecionadas",
+          "label": "Cenas selecionadas para animação",
+          "key": "selected_values",
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
+          },
+          "required": true,
+          "optionsSourceBlockId": "assets-gerar-cenas-flow",
+          "optionsSourceKey": "images",
+          "presentation": {
+            "renderer": "image-gallery"
+          }
+        }
+      ],
+      "validation": {
+        "mode": "select_many",
+        "targetBlockId": "assets-gerar-cenas-flow",
+        "targetOutputKey": "images",
+        "onReject": "pause",
+        "maxAttempts": 2,
+        "retryMode": "full"
+      },
+      "parameters": [],
+      "order": 5
+    },
+    {
+      "id": "assets-animar-cenas-flow",
+      "type": "CRIAR",
+      "operator": "IA",
+      "name": "Animar cenas selecionadas no Flow",
+      "instructions": "Anime cada cena selecionada individualmente, preservando sua identidade e ordem. Use movimento natural de personagens e câmera cinematográfica coerente com a composição original.",
+      "inputs": [
+        {
+          "id": "assets-animar-imagens",
+          "label": "Cenas selecionadas",
+          "shape": {
+            "kind": "content",
+            "family": "image",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "image/*"
+              ]
+            }
+          },
+          "binding": {
+            "kind": "previous_block",
+            "blockId": "assets-selecionar-cenas",
+            "outputKey": "selected_values"
+          },
+          "presentation": {
+            "renderer": "image-gallery"
+          },
+          "portKey": "images"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "assets-videos-finais",
+          "label": "Cenas animadas",
+          "key": "videos",
+          "shape": {
+            "kind": "content",
+            "family": "video",
+            "cardinality": "many",
+            "representation": "artifact",
+            "formats": {
+              "mimeTypes": [
+                "video/mp4"
+              ]
+            }
+          },
+          "required": true,
+          "presentation": {
+            "renderer": "file-list"
+          },
+          "portKey": "video"
+        }
+      ],
+      "plugin": {
+        "pluginId": "local.contentflow.google-flow-batch-images",
+        "pluginVersion": "2.0.1",
+        "capabilityId": "animate-image-in-browser",
+        "configuration": {
+          "projectUrl": "",
+          "videoReferenceMode": "frames",
+          "aspectRatio": "landscape",
+          "videoModel": "veo_3_1_fast",
+          "videoDurationSeconds": 8,
+          "videoModelLabel": "",
+          "projectMode": "auto",
+          "startMinimized": true,
+          "retryAttempts": 1,
+          "videoResolution": "flow_current",
+          "accountProfile": "default",
+          "fallbackAccountProfiles": ""
+        },
+        "connectionRequired": false
+      },
+      "parameters": [],
+      "order": 6
+    }
+  ]
+}

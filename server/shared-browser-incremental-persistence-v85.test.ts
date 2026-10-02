@@ -141,6 +141,7 @@ test("worker importa artifact antes de confirmar publishItemUpdate", async () =>
     "utf8",
   );
   const manifest = {
+    apiVersion: "2",
     id: "v85.fixture",
     version: "1.0.0",
     permissions: ["filesystem:write"],

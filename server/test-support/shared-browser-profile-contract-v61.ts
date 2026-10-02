@@ -92,6 +92,7 @@ export async function execute(request, services) {
     "utf8",
   );
   const manifest = {
+    apiVersion: "2",
     id: pluginId,
     version: "1.0.0",
     permissions: ["filesystem:read", "filesystem:write"],

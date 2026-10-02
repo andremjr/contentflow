@@ -35,12 +35,16 @@ Métodos v1/v2 são inválidos; crie explicitamente um novo envelope v3 com `con
 
 O Method é congelado em `methodSnapshot` dentro da execução e pode integrar o `strategySnapshot` do Projeto. Não coloque fallback estratégico, avanço de Processo, retry técnico ou identidade de work units em configuração de plugin.
 
+## Traduzir a intenção em estratégia
+
+Leia [intent-to-method.md](references/intent-to-method.md) antes de compor/revisar Blocos. A descrição do usuário pode omitir preparação manual, resultados intermediários e associações. Ajude a reconstruir essas dependências sem exigir conhecimento arquitetural nem decidir silenciosamente intenção editorial. Escolha plugins depois de definir a composição e preserve as decisões já autorizadas.
+
 ## Workflow
 
 1. Identifique qual dos 8 Processos está sendo modelado. Um arquivo `contentflow-method` v3 contém um único `processType`.
 2. Decomponha o objetivo em transformações estratégicas observáveis antes de escolher plugins. Use os critérios de granularidade abaixo.
 3. Modele a estratégia com os quatro Blocos existentes e operadores compatíveis.
-4. Declare `inputs` e `outputs` no próprio Bloco. Use bindings estruturais (`project`, `previous_process`, `previous_block`, `channel_history`, `channel_library`, `runtime`, `static`) conforme o schema vivo.
+4. Declare entradas e entregas estratégicas no próprio Bloco exclusivamente com `kind: "content"` e famílias `text`, `image`, `audio`, `video`. JSON/SRT continuam texto quando a porta aceita o formato; não assuma parsing de relações pelo Core. Preserve contratos internos existentes sem convertê-los nem apagá-los. Decisão de VALIDAR, identidade de ESCOLHER e Histórico do Canal são mecanismos internos. Não peça ao usuário schemas de controle ou registros. Declare `inputs` e `outputs` no próprio Bloco. Use bindings estruturais (`project`, `previous_process`, `previous_block`, `channel_history`, `channel_library`, `runtime`, `static`) conforme o schema vivo.
 5. Use exclusivamente bindings estruturais explícitos. Contexto implícito e campos planos antigos são inválidos.
 6. Ligue plugin/capability ao Bloco somente quando necessário. O binding escolhe capacidade; não transfere ao plugin autoridade sobre o fluxo nem determina a granularidade do Método.
 7. Valide tipo, schema, cardinalidade, `portKey`, proveniência e ordem antes de conectar uma saída a uma entrada.
@@ -95,6 +99,7 @@ Use `templates/method-skeleton.json` como exemplo mínimo. Antes de reutilizá-l
 - `src/lib/method-file.ts`
 - `references/data-compatibility.md`
 - `references/runtime-execution.md`
+- `references/intent-to-method.md`
 
 ## Checklist
 
@@ -108,3 +113,5 @@ Use `templates/method-skeleton.json` como exemplo mínimo. Antes de reutilizá-l
 - nenhuma identidade intermediária é inventada fora do Core;
 - configuração portátil não contém secrets nem identidade física local;
 - exemplo/arquivo final passa pelo parser real do checkout.
+
+Para associações em conteúdo textual, consulte `docs/PLUGIN_INTERFACE.md`: o produtor fornece IDs canônicos ao modelo e valida o JSON conforme configuração do plugin; o consumidor resolve os IDs e traduz para sua ferramenta. O Core preserva identidade/proveniência sem decidir relações editoriais. No exemplo visual: roteiro → personagens → referências → prompts com IDs → cenas. Controles funcionais são declarados pelo plugin, sem interpretação de nomes de campos pelo renderer.

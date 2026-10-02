@@ -154,6 +154,7 @@ const portableLibraryItemSchema = z.object({
 const portableCollectionSchema = z.object({
   key: z.string().min(1).max(160),
   name: z.string().min(1).max(200),
+  usage: z.enum(["fixed", "consumable"]).optional(),
   fields: z
     .array(
       z.object({
@@ -599,6 +600,7 @@ export function planPortableMethodTransfer(input: {
     return {
       key,
       name: collection.name,
+      usage: collection.usage ?? "fixed",
       fields: collection.fields.map((field, index) => ({
         key:
           portableCollectionFields.get(`${collection.id}:${field.id}`) ??

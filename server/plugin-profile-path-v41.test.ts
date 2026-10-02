@@ -57,6 +57,7 @@ async function fixture() {
     "utf8",
   );
   const manifest = {
+    apiVersion: "2",
     id: "profile-path-v41",
     version: "1.0.0",
     permissions: ["filesystem:read", "filesystem:write"],

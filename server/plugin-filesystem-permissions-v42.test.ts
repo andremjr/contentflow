@@ -78,6 +78,7 @@ async function pluginFixture(permissions: PluginManifest["permissions"]) {
     "utf8",
   );
   const manifest = {
+    apiVersion: "2",
     id: `filesystem-v42-${permissions.join("-") || "none"}`,
     version: "1.0.0",
     permissions,

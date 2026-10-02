@@ -47,7 +47,7 @@ export function materializeBlockDeliveries({
             id: `${block.id}-selected-item`,
             label: "Item estratégico escolhido",
             key: "selectedItemId",
-            shape: controlShape("selection"),
+            shape: controlShape("identifier"),
             required: true,
           },
         ]

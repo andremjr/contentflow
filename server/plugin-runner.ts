@@ -101,6 +101,7 @@ const defaultDataRoot =
     ? path.join(process.env.APPDATA, "ContentFlow", "data")
     : path.join(applicationRoot, "data");
 const dataRoot = path.resolve(process.env.CONTENTFLOW_DATA_DIR ?? defaultDataRoot);
+const browserBridgeDirectory = path.join(dataRoot, "browser-bridge");
 const localPluginsRoot = path.resolve(
   process.env.CONTENTFLOW_LOCAL_PLUGINS_DIR ?? path.join(dataRoot, "plugins", "local"),
 );
@@ -379,9 +380,12 @@ export async function executeRegisteredPlugin(
   const coreBrowserSession = shouldOpenCoreBrowser
     ? await browserSessionManager.open({
         profileDirectory: realProfileDirectory!,
+        browserBridgeDirectory,
         chromeExecutable: request.settings.chromeExecutable,
-        visible:
-          request.invocation.mode === "configure" || request.settings.startMinimized !== true,
+        // Active browser work must run in a normal window. A minimized Chrome can be
+        // throttled or fail to expose the page lifecycle consistently on Windows;
+        // the user preference remains useful for idle/configuration sessions.
+        visible: true,
         signal: options.signal,
         monitorCorrelation: {
           ...options.monitorCorrelation,
@@ -958,6 +962,7 @@ async function importLocalArtifact(
         size,
         url: `${urlPrefix ?? "/api/files"}/${storedName}`,
         sha256: hash.digest("hex"),
+        ...(artifact.flowMediaId ? { flowMediaId: artifact.flowMediaId } : {}),
       } satisfies StoredFile,
     };
   } catch (error) {

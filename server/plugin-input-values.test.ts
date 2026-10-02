@@ -154,6 +154,69 @@ test("respeita a porta explícita escolhida no editor mesmo quando outra aparece
   assert.equal(selectPluginInputPort(input, ports, new Set())?.key, "outline");
 });
 
+test("aceita a contração contratual de texto many para porta text one", () => {
+  const input: BlockInputBinding = {
+    id: "scene-prompts",
+    label: "Prompts das cenas",
+    shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
+    binding: { kind: "previous_block", blockId: "source", outputKey: "prompts" },
+    portKey: "context_1",
+  };
+  const ports: PluginInputPort[] = [
+    {
+      key: "context_1",
+      label: "Contexto adicional 1",
+      shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+      required: false,
+    },
+  ];
+
+  assert.equal(selectPluginInputPort(input, ports, new Set())?.key, "context_1");
+});
+
+test("exige formato conhecido ao conectar artifacts a uma porta com restrição MIME", () => {
+  const input: BlockInputBinding = {
+    id: "selected-scenes",
+    label: "Cenas selecionadas",
+    shape: { kind: "content", family: "image", cardinality: "many", representation: "artifact" },
+    binding: { kind: "previous_block", blockId: "review", outputKey: "selected_values" },
+    portKey: "images",
+  };
+  const ports: PluginInputPort[] = [
+    {
+      key: "images",
+      label: "Imagem para animar",
+      shape: {
+        kind: "content",
+        family: "image",
+        cardinality: "many",
+        representation: "artifact",
+        formats: { mimeTypes: ["image/*"] },
+      },
+      required: true,
+    },
+  ];
+
+  assert.equal(selectPluginInputPort(input, ports, new Set()), undefined);
+  assert.equal(
+    selectPluginInputPort(
+      {
+        ...input,
+        shape: {
+          kind: "content",
+          family: "image",
+          cardinality: "many",
+          representation: "artifact",
+          formats: { mimeTypes: ["image/png"] },
+        },
+      },
+      ports,
+      new Set(),
+    )?.key,
+    "images",
+  );
+});
+
 test("não mascara uma porta explícita inválida com binding automático", () => {
   const input: BlockInputBinding = {
     id: "prompts",

@@ -22,11 +22,8 @@ test("package 12.1 derives the declarative renderer from fixture data without a 
 
   assert.deepEqual(
     model.capabilityEntries.map(([key]) => key),
-    ["model", "productionMode", "temperature"],
+    ["model", "generationMode", "productionMode", "temperature"],
   );
-  assert.equal(model.supportsItemSequence, true);
-  assert.equal(model.sequenceModeValue, "sequence");
-  assert.equal(model.simpleGenerationMode, "sequence");
 });
 
 test("package 12.1 keeps profile keys and invisible schema fields outside generic field rendering", () => {
@@ -35,7 +32,7 @@ test("package 12.1 keeps profile keys and invisible schema fields outside generi
 
   assert.equal(renderedKeys.includes("profileAlias"), false);
   assert.equal(renderedKeys.includes("fallbackAliases"), false);
-  assert.equal(renderedKeys.includes("generationMode"), false);
+  assert.equal(renderedKeys.includes("generationMode"), true);
   assert.equal(renderedKeys.includes("hiddenUnlessSimple"), false);
 });
 

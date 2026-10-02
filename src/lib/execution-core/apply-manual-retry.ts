@@ -102,6 +102,32 @@ export function applyManualBlockRetry(
   }
   retryBlockExecution.progressMessage = undefined;
 
+  // A cancellation marks the unfinished suffix as cancelled. Retrying a block
+  // reopens that suffix as the next executable queue, otherwise successful
+  // completion of the retried block is rejected by the state machine because
+  // the following block is no longer pending.
+  for (let index = retryBlockIndex + 1; index < execution.blocks.length; index += 1) {
+    const suffixBlock = execution.blocks[index];
+    suffixBlock.status = "pending";
+    suffixBlock.values = {};
+    // Give every reopened suffix block a fresh attempt identity. Older jobs
+    // for this execution must remain historical and must never be mistaken
+    // for the newly reopened work.
+    suffixBlock.attempt = (suffixBlock.attempt ?? 1) + 1;
+    suffixBlock.error = undefined;
+    suffixBlock.jobId = undefined;
+    suffixBlock.traceId = undefined;
+    suffixBlock.completedAt = undefined;
+    suffixBlock.progress = undefined;
+    suffixBlock.progressMessage = undefined;
+    suffixBlock.itemProgress = undefined;
+    suffixBlock.profileLaneProgress = undefined;
+    suffixBlock.items = undefined;
+    suffixBlock.itemRetryScope = undefined;
+    suffixBlock.itemRetryId = undefined;
+    suffixBlock.pluginConversation = undefined;
+  }
+
   const retryStatus =
     retryBlock.operator === "Humano" && !retryBlock.plugin ? "awaiting_human" : "blocked_executor";
   retryBlockExecution.status = retryStatus;

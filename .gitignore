@@ -73,3 +73,9 @@ planejamento/
 # Local diagnostic captures and one-off inspection/update scripts
 /preview-home*.png
 /scripts/*.tmp.ts
+
+# Private scratch scripts, method backups and local validation logs
+.tmp/
+
+# Local provider scenarios containing user-supplied scripts
+/test-fixtures/vertical/

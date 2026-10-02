@@ -45,6 +45,15 @@ test("preserves scalar types when selecting dynamic options", () => {
   }
 });
 
+test("saved numbers and free text remain editable fields without declared choices", () => {
+  for (const saved of [3, "project name", true]) {
+    assert.deepEqual(withSavedPluginConfigurationOption([], saved, "Unavailable", false), []);
+  }
+  assert.deepEqual(withSavedPluginConfigurationOption([], 3, "Unavailable", true), [
+    { value: 3, label: "3 — Unavailable", disabled: true },
+  ]);
+});
+
 test("preserves a disappeared saved option as disabled and explicitly unavailable", () => {
   assert.deepEqual(
     withSavedPluginConfigurationOption(

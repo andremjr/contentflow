@@ -61,6 +61,26 @@ const project = {
   createdAt: "2026-08-11T00:00:00.000Z",
 } satisfies Project;
 
+test("ESCOLHER materializa selectedItemId como identificador universal", () => {
+  const block: ActionBlock = {
+    id: "choose",
+    type: "ESCOLHER",
+    operator: "Humano",
+    parameters: [],
+    order: 0,
+  };
+  const execution = executionFor("theme", block);
+  const [delivery] = recordBlockDeliveries(
+    execution,
+    block,
+    { selectedItemId: "item-1" },
+    "completed",
+  );
+  assert.equal(delivery.outputKey, "selectedItemId");
+  assert.deepEqual(delivery.shape, { kind: "control", control: "identifier", cardinality: "one" });
+  assert.equal(delivery.items[0].value, "item-1");
+});
+
 test("materializa uma entrega e um ID universal por item", () => {
   const block: ActionBlock = {
     id: "generate-titles",

@@ -119,6 +119,7 @@ export async function execute(request, services) {
     "utf8",
   );
   const manifest = {
+    apiVersion: "2",
     id: "v83.fixture",
     version: "1.0.0",
     permissions: ["filesystem:write"],

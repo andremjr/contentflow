@@ -492,7 +492,12 @@ test(
     server.stderr.on("data", (chunk) => logs.push(String(chunk)));
 
     const request = async <T>(route: string, init?: RequestInit): Promise<T> => {
-      const response = await fetch(`${base}${route}`, init);
+      const response = await fetch(`${base}${route}`, {
+        ...init,
+        signal: AbortSignal.timeout(10_000),
+      }).catch((error: unknown) => {
+        throw new Error(`API sem resposta em ${route}: ${String(error)}\n${logs.join("")}`);
+      });
       const body = await response.text();
       assert.ok(response.ok, `${response.status} ${route}: ${body}\n${logs.join("")}`);
       return (body ? JSON.parse(body) : undefined) as T;
@@ -539,6 +544,7 @@ test(
           name: "Canal plugin",
           language: "pt-BR",
           niche: "Teste",
+          methods: createEmptyMethods(),
           createdAt: now,
         }),
       });
@@ -567,6 +573,7 @@ test(
         type: "CRIAR",
         operator: "Código",
         name: "Plugin determinístico",
+        instructions: "",
         inputs: [
           {
             id: "plugin-input",

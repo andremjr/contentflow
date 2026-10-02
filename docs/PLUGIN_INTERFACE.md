@@ -79,7 +79,9 @@ O **plugin** declara:
 
 O plugin não injeta uma interface arbitrária. O núcleo interpreta um schema declarativo para que plugins diferentes mantenham uma experiência coerente sem esconder suas capacidades reais.
 
-O contrato de saída também separa intenção de serialização. O usuário não precisa escrever no prompt “responda somente JSON”, impedir introduções ou ensinar IDs internos. O Bloco declara o shape e, quando necessário, campos que referenciam itens de entradas. O núcleo envia ao plugin o contrato e somente os IDs concedidos; o plugin acrescenta a instrução técnica adequada ao provedor, faz o parsing e devolve o valor tipado. O núcleo valida a resposta antes de materializar deliveries.
+Para organizar essa apresentação, cada propriedade de `blockConfigSchema.properties` pode declarar `ui.section` (`primary` ou `advanced`), `ui.order` e `ui.width` (`half` ou `full`). Esses metadados controlam somente a apresentação no renderer do núcleo: não alteram o contrato, o valor, a validação ou a execução. A ausência de `ui` mantém o campo na configuração principal, garantindo compatibilidade com plugins existentes.
+
+O contrato de saída também separa intenção de serialização. O usuário não precisa escrever no prompt “responda somente JSON”, impedir introduções ou ensinar IDs internos. O Bloco declara o shape de conteúdo. O plugin pode declarar uma configuração de texto JSON e fornecer ao modelo os IDs canônicos das entradas para associações editoriais. Contratos internos estruturados existentes podem continuar declarando campos que referenciam itens de entradas. O núcleo envia ao plugin o contrato e somente os IDs concedidos; o plugin acrescenta a instrução técnica adequada ao provedor, faz o parsing e devolve o valor tipado. O núcleo valida a resposta antes de materializar deliveries.
 
 Quando uma capability usa relações estruturadas — por exemplo, cenas ligadas a imagens de personagens — a interface pode explicar funcionalmente o uso dessas referências. A mecânica de anexar, selecionar, ordenar ou converter as referências no serviço externo pertence ao plugin. O Core transporta IDs e proveniência, mas não possui regras sobre personagens, legendas, cortes ou posições.
 
@@ -133,3 +135,9 @@ Uma mudança nessa superfície deve ser rejeitada ou revista quando:
 - novos textos da moldura não existirem em português, inglês e espanhol.
 
 Referências externas ajudam a descobrir **o que** o plugin consegue fazer. Este documento define **como** essas possibilidades entram no modelo mental do ContentFlow.
+
+### Conteúdo JSON e associações de referências
+
+No fluxo de personagens consistentes, extraia personagens do roteiro antes de criar os prompts das cenas. Cada personagem pode ser um texto JSON com descrição; cada cena pode ser um texto JSON contendo o prompt e os IDs dos personagens escolhidos. O plugin produtor recebe os IDs canônicos das entradas e valida seu formato textual. O plugin consumidor resolve esses IDs contra as entregas de imagens e sua proveniência e traduz as referências para a ferramenta externa. O Core cria e armazena IDs, artifacts e linhagem; não decide quais personagens aparecem nem interpreta esse JSON como relação universal.
+
+A moldura e a renderização são padronizadas. Todos os controles funcionais, inclusive formato de prompt e seleção de referências, vêm do schema da capability. O renderer não interpreta nomes de propriedades como `generationMode` para fabricar controles adicionais. Conexões, perfis e política universal de execução continuam sob autoridade do Core.

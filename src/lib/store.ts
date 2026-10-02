@@ -120,10 +120,29 @@ function reconcileEntities<T extends { id: string }>(current: T[], incoming: T[]
     return previous && JSON.stringify(previous) === JSON.stringify(item) ? previous : item;
   });
 }
+
+function normalizeProject(project: Project): Project {
+  const candidate = project as Project & {
+    assignee?: { name?: unknown; initials?: unknown } | null;
+  };
+  if (
+    typeof candidate.assignee?.name === "string" &&
+    typeof candidate.assignee?.initials === "string"
+  )
+    return project;
+  const name = typeof candidate.assignee?.name === "string" ? candidate.assignee.name : "—";
+  const initials =
+    typeof candidate.assignee?.initials === "string" ? candidate.assignee.initials : "—";
+  return {
+    ...project,
+    assignee: { name, initials },
+  };
+}
+
 function applyState(state: ServerState) {
   if (state.revision < serverRevision) return;
   const channels = state.channels.map(normalizeChannel);
-  const projects = state.projects;
+  const projects = state.projects.map(normalizeProject);
   const executions = state.executions;
   const orchestrators = state.orchestrators;
   const libraryItems = state.libraryItems;
@@ -807,11 +826,37 @@ export async function cancelProcessExecution(executionId: string) {
   return true;
 }
 export async function refreshProcessExecution(
-  _executionId: string,
-  _projectId?: string,
-  _processType?: ProcessId,
+  executionId: string,
+  projectId?: string,
+  processType?: ProcessId,
 ) {
-  return refreshState();
+  const query = new URLSearchParams();
+  if (projectId) query.set("projectId", projectId);
+  if (processType) query.set("processType", processType);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const response = await fetch(
+    `/api/executions/${encodeURIComponent(executionId)}/state${suffix}`,
+    {
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  if (!response.ok) throw new Error(await readApiError(response));
+  const payload = (await response.json()) as {
+    execution: ProcessExecution;
+    project?: Project;
+  };
+  const executionIndex = db.executions.findIndex((item) => item.id === payload.execution.id);
+  if (executionIndex >= 0) db.executions[executionIndex] = payload.execution;
+  else db.executions = [payload.execution, ...db.executions];
+  if (payload.project) {
+    const projectIndex = db.projects.findIndex((item) => item.id === payload.project?.id);
+    const project = normalizeProject(payload.project);
+    if (projectIndex >= 0) db.projects[projectIndex] = project;
+    else db.projects = [project, ...db.projects];
+  }
+  connectionError = undefined;
+  emit();
+  return true;
 }
 
 export async function updateBlockExecutionValues(
@@ -916,6 +961,15 @@ export async function createLibraryCollection(
 
 export async function updateLibraryCollection(collection: StrategicCollection) {
   await request(`/api/library/collections/${collection.id}`, "PUT", collection);
+  await refreshState(true);
+}
+
+export async function importLibraryItems(
+  collectionId: string,
+  rows: ChannelLibraryItem["values"][],
+  importId: string,
+) {
+  await request("/api/library/batch", "POST", { collectionId, rows, importId });
   await refreshState(true);
 }
 

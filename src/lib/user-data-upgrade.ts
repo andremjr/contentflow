@@ -1,5 +1,5 @@
 import { PROCESS_ORDER, type Channel, type ProcessMethod } from "./domain";
-import { processMethodV3Schema } from "./method-contract-v3";
+import { workspaceMethodV3Schema } from "./method-contract-v3";
 
 export type UpgradeState = { required: boolean; applying: boolean };
 export type UpgradePlan = {
@@ -15,12 +15,8 @@ export type UpgradePlan = {
   historicalJobsPreserved?: boolean;
 };
 
-// Empty v3 Methods are valid workspace drafts, though not portable executable Methods.
-const workspaceMethodSchema = processMethodV3Schema.extend({
-  blocks: processMethodV3Schema.shape.blocks.min(0),
-});
 export function methodNeedsUpgrade(method: unknown): boolean {
-  return !workspaceMethodSchema.safeParse(method).success;
+  return !workspaceMethodV3Schema.safeParse(method).success;
 }
 export function channelNeedsUpgrade(channel: Channel): boolean {
   return PROCESS_ORDER.some(

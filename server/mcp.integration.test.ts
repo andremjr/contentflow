@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { ProcessMethod } from "../src/lib/domain";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
@@ -283,6 +284,16 @@ test(
           ],
         },
       };
+      const invalidMethods = structuredClone(methods) as unknown as { theme: ProcessMethod };
+      invalidMethods.theme.blocks[0].outputs![0].shape = {
+        kind: "control",
+        control: "number",
+        cardinality: "one",
+      };
+      for (const name of ["validate_contentflow_methods", "apply_contentflow_methods"]) {
+        const rejected = await client.callTool({ name, arguments: { methods: invalidMethods } });
+        assert.match(JSON.stringify(rejected.content), /devem ser conteúdo/);
+      }
       const validated = await client.callTool({
         name: "validate_contentflow_methods",
         arguments: { methods },

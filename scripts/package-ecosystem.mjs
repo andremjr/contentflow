@@ -73,6 +73,7 @@ const guardrailContents = [
   "SKILL.md",
   "references/architecture-map.md",
   "references/collaboration-protocol.md",
+  "references/workflow-translation.md",
 ].map((file) => ({
   path: `guardrails/development-contentflow/${file}`,
   sourcePath: `${guardrailDirectory}/${file}`,

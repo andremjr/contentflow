@@ -3,7 +3,7 @@
   "apiVersion": "2",
   "id": "local.contentflow.google-flow-batch-images",
   "name": "Google Flow Browser Images",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Gera imagens reais e vídeos no Google Flow com modelos Nano Banana e Veo, proporções configuráveis, animação de imagens, referências visuais, continuidade de projeto e produção visual em lote.",
   "localizations": {
     "en": {
@@ -160,10 +160,51 @@
                 ]
               },
               "maxImagesPerPrompt": {
-                "title": "Images per prompt"
+                "title": "Images per prompt",
+                "options": [
+                  {
+                    "value": 1,
+                    "label": "1"
+                  },
+                  {
+                    "value": 2,
+                    "label": "2"
+                  },
+                  {
+                    "value": 3,
+                    "label": "3"
+                  },
+                  {
+                    "value": 4,
+                    "label": "4"
+                  }
+                ]
               },
               "maxConcurrentGenerations": {
-                "title": "Concurrent image generations"
+                "title": "Image concurrency",
+                "options": [
+                  {
+                    "value": 1,
+                    "label": "1"
+                  },
+                  {
+                    "value": 2,
+                    "label": "2"
+                  },
+                  {
+                    "value": 3,
+                    "label": "3"
+                  },
+                  {
+                    "value": 4,
+                    "label": "4"
+                  },
+                  {
+                    "value": 5,
+                    "label": "5"
+                  }
+                ],
+                "description": "Sends the next prompt without waiting for the previous image to finish, up to the selected limit."
               },
               "enableCharacterConsistency": {
                 "title": "Keep characters consistent",
@@ -200,7 +241,11 @@
                   },
                   {
                     "value": "omni_1_1_flash",
-                    "label": "Omni 1.1 Flash"
+                    "label": "Omni Flash"
+                  },
+                  {
+                    "value": "veo_3_1_lite_lower_priority",
+                    "label": "Veo 3.1 - Lite [Lower Priority]"
                   }
                 ]
               },
@@ -459,8 +504,30 @@
                 "description": "Base delay between submissions to avoid accidental consecutive requests."
               },
               "maxConcurrentGenerations": {
-                "title": "Concurrent image generations",
-                "description": "Maximum number of generations running at the same time."
+                "title": "Image concurrency",
+                "description": "Sends the next prompt without waiting for the previous image to finish, up to the selected limit.",
+                "options": [
+                  {
+                    "value": 1,
+                    "label": "1"
+                  },
+                  {
+                    "value": 2,
+                    "label": "2"
+                  },
+                  {
+                    "value": 3,
+                    "label": "3"
+                  },
+                  {
+                    "value": 4,
+                    "label": "4"
+                  },
+                  {
+                    "value": 5,
+                    "label": "5"
+                  }
+                ]
               },
               "retryAttempts": {
                 "title": "Attempts per item",
@@ -476,10 +543,54 @@
               },
               "maxImagesPerPrompt": {
                 "title": "Images per prompt",
-                "description": "Amount requested from Flow per prompt: x1, x2, x3, or x4. The plugin confirms this option before generating."
+                "description": "Amount requested from Flow per prompt: x1, x2, x3, or x4. The plugin confirms this option before generating.",
+                "options": [
+                  {
+                    "value": 1,
+                    "label": "1"
+                  },
+                  {
+                    "value": 2,
+                    "label": "2"
+                  },
+                  {
+                    "value": 3,
+                    "label": "3"
+                  },
+                  {
+                    "value": 4,
+                    "label": "4"
+                  }
+                ]
               },
               "startMinimized": {
                 "title": "Start Chrome minimized"
+              },
+              "promptFormat": {
+                "title": "Prompt format",
+                "options": [
+                  {
+                    "value": "plain",
+                    "label": "Plain text"
+                  },
+                  {
+                    "value": "json",
+                    "label": "JSON text with prompt and IDs"
+                  }
+                ]
+              },
+              "referenceMode": {
+                "title": "Character references",
+                "options": [
+                  {
+                    "value": "shared",
+                    "label": "Use supplied references"
+                  },
+                  {
+                    "value": "per_prompt",
+                    "label": "Use IDs associated with each scene"
+                  }
+                ]
               }
             }
           }
@@ -559,7 +670,11 @@
                   },
                   {
                     "value": "omni_1_1_flash",
-                    "label": "Omni 1.1 Flash"
+                    "label": "Omni Flash"
+                  },
+                  {
+                    "value": "veo_3_1_lite_lower_priority",
+                    "label": "Veo 3.1 - Lite [Lower Priority]"
                   }
                 ]
               },
@@ -719,7 +834,11 @@
                   },
                   {
                     "value": "omni_1_1_flash",
-                    "label": "Omni 1.1 Flash"
+                    "label": "Omni Flash"
+                  },
+                  {
+                    "value": "veo_3_1_lite_lower_priority",
+                    "label": "Veo 3.1 - Lite [Lower Priority]"
                   }
                 ]
               },
@@ -963,10 +1082,51 @@
                 ]
               },
               "maxImagesPerPrompt": {
-                "title": "Imágenes por prompt"
+                "title": "Imágenes por prompt",
+                "options": [
+                  {
+                    "value": 1,
+                    "label": "1"
+                  },
+                  {
+                    "value": 2,
+                    "label": "2"
+                  },
+                  {
+                    "value": 3,
+                    "label": "3"
+                  },
+                  {
+                    "value": 4,
+                    "label": "4"
+                  }
+                ]
               },
               "maxConcurrentGenerations": {
-                "title": "Generaciones de imagen simultáneas"
+                "title": "Concurrencia de imágenes",
+                "options": [
+                  {
+                    "value": 1,
+                    "label": "1"
+                  },
+                  {
+                    "value": 2,
+                    "label": "2"
+                  },
+                  {
+                    "value": 3,
+                    "label": "3"
+                  },
+                  {
+                    "value": 4,
+                    "label": "4"
+                  },
+                  {
+                    "value": 5,
+                    "label": "5"
+                  }
+                ],
+                "description": "Envía el siguiente prompt sin esperar a que termine la imagen anterior, hasta el límite elegido."
               },
               "enableCharacterConsistency": {
                 "title": "Mantener el personaje consistente",
@@ -1003,7 +1163,11 @@
                   },
                   {
                     "value": "omni_1_1_flash",
-                    "label": "Omni 1.1 Flash"
+                    "label": "Omni Flash"
+                  },
+                  {
+                    "value": "veo_3_1_lite_lower_priority",
+                    "label": "Veo 3.1 - Lite [Lower Priority]"
                   }
                 ]
               },
@@ -1262,8 +1426,30 @@
                 "description": "Pausa base entre envíos para evitar solicitudes consecutivas accidentales."
               },
               "maxConcurrentGenerations": {
-                "title": "Generaciones de imagen simultáneas",
-                "description": "Cantidad máxima de generaciones ejecutadas al mismo tiempo."
+                "title": "Concurrencia de imágenes",
+                "description": "Envía el siguiente prompt sin esperar a que termine la imagen anterior, hasta el límite elegido.",
+                "options": [
+                  {
+                    "value": 1,
+                    "label": "1"
+                  },
+                  {
+                    "value": 2,
+                    "label": "2"
+                  },
+                  {
+                    "value": 3,
+                    "label": "3"
+                  },
+                  {
+                    "value": 4,
+                    "label": "4"
+                  },
+                  {
+                    "value": 5,
+                    "label": "5"
+                  }
+                ]
               },
               "retryAttempts": {
                 "title": "Intentos por elemento",
@@ -1279,10 +1465,54 @@
               },
               "maxImagesPerPrompt": {
                 "title": "Imágenes por prompt",
-                "description": "Cantidad solicitada a Flow por prompt: x1, x2, x3 o x4. El plugin confirma esta opción antes de generar."
+                "description": "Cantidad solicitada a Flow por prompt: x1, x2, x3 o x4. El plugin confirma esta opción antes de generar.",
+                "options": [
+                  {
+                    "value": 1,
+                    "label": "1"
+                  },
+                  {
+                    "value": 2,
+                    "label": "2"
+                  },
+                  {
+                    "value": 3,
+                    "label": "3"
+                  },
+                  {
+                    "value": 4,
+                    "label": "4"
+                  }
+                ]
               },
               "startMinimized": {
                 "title": "Iniciar Chrome minimizado"
+              },
+              "promptFormat": {
+                "title": "Formato de los prompts",
+                "options": [
+                  {
+                    "value": "plain",
+                    "label": "Texto directo"
+                  },
+                  {
+                    "value": "json",
+                    "label": "Texto JSON con prompt e IDs"
+                  }
+                ]
+              },
+              "referenceMode": {
+                "title": "Referencias de personajes",
+                "options": [
+                  {
+                    "value": "shared",
+                    "label": "Usar referencias proporcionadas"
+                  },
+                  {
+                    "value": "per_prompt",
+                    "label": "Usar IDs asociados a cada escena"
+                  }
+                ]
               }
             }
           }
@@ -1362,7 +1592,11 @@
                   },
                   {
                     "value": "omni_1_1_flash",
-                    "label": "Omni 1.1 Flash"
+                    "label": "Omni Flash"
+                  },
+                  {
+                    "value": "veo_3_1_lite_lower_priority",
+                    "label": "Veo 3.1 - Lite [Lower Priority]"
                   }
                 ]
               },
@@ -1522,7 +1756,11 @@
                   },
                   {
                     "value": "omni_1_1_flash",
-                    "label": "Omni 1.1 Flash"
+                    "label": "Omni Flash"
+                  },
+                  {
+                    "value": "veo_3_1_lite_lower_priority",
+                    "label": "Veo 3.1 - Lite [Lower Priority]"
                   }
                 ]
               },
@@ -1923,7 +2161,10 @@
             "type": "string",
             "title": "Perfil de conta",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
-            "default": "default"
+            "default": "default",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "fallbackAccountProfiles": {
             "type": "string",
@@ -1931,7 +2172,10 @@
             "format": "textarea",
             "default": "",
             "maxLength": 512,
-            "description": "Aliases adicionais, um por linha, em ordem de uso."
+            "description": "Aliases adicionais, um por linha, em ordem de uso.",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "projectMode": {
             "type": "string",
@@ -1950,7 +2194,10 @@
                 "const": "existing",
                 "title": "Usar projeto específico"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "projectUrl": {
             "type": "string",
@@ -1961,6 +2208,9 @@
               "values": [
                 "existing"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "productionMode": {
@@ -1985,7 +2235,10 @@
                 "const": "images_to_video_all",
                 "title": "Imagens e animar todas"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "imageModel": {
             "type": "string",
@@ -2020,6 +2273,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "imageModelLabel": {
@@ -2034,6 +2290,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "advanced"
             }
           },
           "fallbackOnModelLimit": {
@@ -2047,6 +2306,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "aspectRatio": {
@@ -2070,7 +2332,10 @@
                 "const": "square",
                 "title": "Quadrada (1:1)"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "maxImagesPerPrompt": {
             "type": "integer",
@@ -2085,13 +2350,34 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
-            }
+            },
+            "ui": {
+              "section": "primary"
+            },
+            "oneOf": [
+              {
+                "const": 1,
+                "title": "1"
+              },
+              {
+                "const": 2,
+                "title": "2"
+              },
+              {
+                "const": 3,
+                "title": "3"
+              },
+              {
+                "const": 4,
+                "title": "4"
+              }
+            ]
           },
           "maxConcurrentGenerations": {
             "type": "integer",
-            "title": "Gerações de imagem simultâneas",
+            "title": "Concorrência de imagens",
             "minimum": 1,
-            "maximum": 3,
+            "maximum": 5,
             "default": 3,
             "visibleWhen": {
               "property": "productionMode",
@@ -2100,7 +2386,33 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
-            }
+            },
+            "ui": {
+              "section": "primary"
+            },
+            "oneOf": [
+              {
+                "const": 1,
+                "title": "1"
+              },
+              {
+                "const": 2,
+                "title": "2"
+              },
+              {
+                "const": 3,
+                "title": "3"
+              },
+              {
+                "const": 4,
+                "title": "4"
+              },
+              {
+                "const": 5,
+                "title": "5"
+              }
+            ],
+            "description": "Envia o próximo prompt sem esperar a imagem anterior terminar, até o limite escolhido."
           },
           "enableCharacterConsistency": {
             "type": "boolean",
@@ -2114,6 +2426,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "characterPrompts": {
@@ -2128,6 +2443,9 @@
               "values": [
                 true
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "maxReferenceImages": {
@@ -2143,6 +2461,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "maxCharacterReferences": {
@@ -2157,6 +2478,9 @@
               "values": [
                 true
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "saveCharacterReferences": {
@@ -2168,6 +2492,9 @@
               "values": [
                 true
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "videoModel": {
@@ -2189,7 +2516,11 @@
               },
               {
                 "const": "omni_1_1_flash",
-                "title": "Omni 1.1 Flash"
+                "title": "Omni Flash"
+              },
+              {
+                "const": "veo_3_1_lite_lower_priority",
+                "title": "Veo 3.1 - Lite [Lower Priority]"
               },
               {
                 "type": "string",
@@ -2203,6 +2534,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "videoModelLabel": {
@@ -2217,6 +2551,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "advanced"
             }
           },
           "videoReferenceMode": {
@@ -2239,6 +2576,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "videoDurationSeconds": {
@@ -2270,6 +2610,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "videoResolution": {
@@ -2297,6 +2640,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "maxVideosToAnimate": {
@@ -2311,6 +2657,9 @@
               "values": [
                 "images_then_selected_videos"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "animationSelection": {
@@ -2340,6 +2689,9 @@
               "values": [
                 "images_then_selected_videos"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "animationIndexes": {
@@ -2354,6 +2706,9 @@
               "values": [
                 "manual_indexes"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "imageRetention": {
@@ -2381,6 +2736,9 @@
                 "images_then_selected_videos",
                 "images_to_video_all"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "delayBetweenPromptsMs": {
@@ -2388,40 +2746,31 @@
             "title": "Pausa entre prompts (ms)",
             "minimum": 0,
             "maximum": 30000,
-            "default": 1500
+            "default": 1500,
+            "ui": {
+              "section": "advanced"
+            }
           },
           "retryAttempts": {
             "type": "integer",
             "title": "Tentativas por item",
             "minimum": 0,
             "maximum": 2,
-            "default": 1
+            "default": 1,
+            "ui": {
+              "section": "advanced"
+            }
           },
           "startMinimized": {
             "type": "boolean",
             "title": "Iniciar Chrome minimizado",
-            "default": true
+            "default": true,
+            "ui": {
+              "section": "advanced"
+            }
           }
         }
       },
-      "configurationOptions": [
-        {
-          "property": "imageModel",
-          "providerId": "flow-image-models",
-          "dependsOn": [
-            "accountProfile"
-          ],
-          "cacheTtlMs": 300000
-        },
-        {
-          "property": "videoModel",
-          "providerId": "flow-video-models",
-          "dependsOn": [
-            "accountProfile"
-          ],
-          "cacheTtlMs": 300000
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -2631,7 +2980,7 @@
         "mode": "immediate",
         "defaultTimeoutMs": 86400000,
         "supportsCancellation": true,
-        "maxConcurrency": 1,
+        "maxConcurrency": 2,
         "itemOrchestration": {
           "mode": "sequential",
           "inputPort": "prompts",
@@ -2641,6 +2990,10 @@
             "per_item"
           ],
           "preferredStrategy": "continuous_session",
+          "profileParallelism": {
+            "supported": true,
+            "maxProfiles": 2
+          },
           "collectionAssociations": [
             {
               "key": "prompt-records-to-images",
@@ -2674,7 +3027,10 @@
             "title": "Perfil de conta",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
             "default": "default",
-            "description": "Perfil persistente do Chrome dedicado para isolamento de canais."
+            "description": "Perfil persistente do Chrome dedicado para isolamento de canais.",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "fallbackAccountProfiles": {
             "type": "string",
@@ -2682,7 +3038,10 @@
             "format": "textarea",
             "default": "",
             "maxLength": 512,
-            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente se houver erro."
+            "description": "Aliases adicionais, um por linha, em ordem. O sistema avança automaticamente se houver erro.",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "projectMode": {
             "type": "string",
@@ -2702,7 +3061,10 @@
                 "title": "Usar projeto específico"
               }
             ],
-            "description": "Define se o bloco cria um novo projeto no Google Flow ou continua em um projeto existente."
+            "description": "Define se o bloco cria um novo projeto no Google Flow ou continua em um projeto existente.",
+            "ui": {
+              "section": "primary"
+            }
           },
           "projectUrl": {
             "type": "string",
@@ -2714,6 +3076,9 @@
               "values": [
                 "existing"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "imageModel": {
@@ -2742,20 +3107,29 @@
                 "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$"
               }
             ],
-            "description": "Modelo de geração de imagem selecionado na interface do Google Flow."
+            "description": "Modelo de geração de imagem selecionado na interface do Google Flow.",
+            "ui": {
+              "section": "primary"
+            }
           },
           "imageModelLabel": {
             "type": "string",
             "title": "Outro modelo de imagem (rótulo do Flow)",
             "default": "",
             "maxLength": 120,
-            "description": "Opcional. Usa exatamente o rótulo visível de um modelo novo do Flow e substitui a seleção predefinida."
+            "description": "Opcional. Usa exatamente o rótulo visível de um modelo novo do Flow e substitui a seleção predefinida.",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "fallbackOnModelLimit": {
             "type": "boolean",
             "title": "Fallback de modelo",
             "default": true,
-            "description": "Se o modelo atingir limite ou indisponibilidade, segue a ordem Nano Banana Pro → Nano Banana 2 → Nano Banana 2 Lite na mesma conta."
+            "description": "Se o modelo atingir limite ou indisponibilidade, segue a ordem Nano Banana Pro → Nano Banana 2 → Nano Banana 2 Lite na mesma conta.",
+            "ui": {
+              "section": "primary"
+            }
           },
           "aspectRatio": {
             "type": "string",
@@ -2786,7 +3160,10 @@
                 "const": "square",
                 "title": "Quadrada (1:1)"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "delayBetweenPromptsMs": {
             "type": "integer",
@@ -2794,15 +3171,43 @@
             "minimum": 0,
             "maximum": 30000,
             "default": 1500,
-            "description": "Pausa base entre envios para evitar solicitações consecutivas acidentais."
+            "description": "Pausa base entre envios para evitar solicitações consecutivas acidentais.",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "maxConcurrentGenerations": {
             "type": "integer",
-            "title": "Gerações de imagem simultâneas",
+            "title": "Concorrência de imagens",
             "minimum": 1,
-            "maximum": 3,
+            "maximum": 5,
             "default": 3,
-            "description": "Quantidade máxima em geração simultânea."
+            "description": "Envia o próximo prompt sem esperar a imagem anterior terminar, até o limite escolhido.",
+            "ui": {
+              "section": "primary"
+            },
+            "oneOf": [
+              {
+                "const": 1,
+                "title": "1"
+              },
+              {
+                "const": 2,
+                "title": "2"
+              },
+              {
+                "const": 3,
+                "title": "3"
+              },
+              {
+                "const": 4,
+                "title": "4"
+              },
+              {
+                "const": 5,
+                "title": "5"
+              }
+            ]
           },
           "retryAttempts": {
             "type": "integer",
@@ -2810,7 +3215,10 @@
             "minimum": 0,
             "maximum": 2,
             "default": 1,
-            "description": "Novas tentativas para cada prompt que falhar."
+            "description": "Novas tentativas para cada prompt que falhar.",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "rateLimitRetryAttempts": {
             "type": "integer",
@@ -2818,7 +3226,10 @@
             "minimum": 0,
             "maximum": 8,
             "default": 8,
-            "description": "Reenvios do item após rate limit transitório, sempre respeitando a espera indicada pelo provedor."
+            "description": "Reenvios do item após rate limit transitório, sempre respeitando a espera indicada pelo provedor.",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "maxReferenceImages": {
             "type": "integer",
@@ -2826,7 +3237,10 @@
             "minimum": 0,
             "maximum": 10,
             "default": 10,
-            "description": "Máximo de imagens de referência compartilhadas."
+            "description": "Máximo de imagens de referência compartilhadas.",
+            "ui": {
+              "section": "primary"
+            }
           },
           "maxImagesPerPrompt": {
             "type": "integer",
@@ -2834,25 +3248,83 @@
             "minimum": 1,
             "maximum": 4,
             "default": 1,
-            "description": "Quantidade solicitada ao Flow por prompt: x1, x2, x3 ou x4. O plugin confirma essa opção antes de gerar."
+            "description": "Quantidade solicitada ao Flow por prompt: x1, x2, x3 ou x4. O plugin confirma essa opção antes de gerar.",
+            "ui": {
+              "section": "primary"
+            },
+            "oneOf": [
+              {
+                "const": 1,
+                "title": "1"
+              },
+              {
+                "const": 2,
+                "title": "2"
+              },
+              {
+                "const": 3,
+                "title": "3"
+              },
+              {
+                "const": 4,
+                "title": "4"
+              }
+            ]
           },
           "startMinimized": {
             "type": "boolean",
             "title": "Iniciar Chrome minimizado",
-            "default": true
+            "default": true,
+            "ui": {
+              "section": "advanced"
+            }
+          },
+          "promptFormat": {
+            "type": "string",
+            "title": "Formato dos prompts",
+            "default": "plain",
+            "oneOf": [
+              {
+                "const": "plain",
+                "title": "Texto direto"
+              },
+              {
+                "const": "json",
+                "title": "Texto JSON com prompt e IDs"
+              }
+            ],
+            "ui": {
+              "section": "primary",
+              "order": -2
+            }
+          },
+          "referenceMode": {
+            "type": "string",
+            "title": "Referências de personagens",
+            "default": "shared",
+            "oneOf": [
+              {
+                "const": "shared",
+                "title": "Usar referências fornecidas"
+              },
+              {
+                "const": "per_prompt",
+                "title": "Usar IDs associados a cada cena"
+              }
+            ],
+            "ui": {
+              "section": "primary",
+              "order": -1
+            },
+            "visibleWhen": {
+              "property": "promptFormat",
+              "values": [
+                "json"
+              ]
+            }
           }
         }
       },
-      "configurationOptions": [
-        {
-          "property": "imageModel",
-          "providerId": "flow-image-models",
-          "dependsOn": [
-            "accountProfile"
-          ],
-          "cacheTtlMs": 300000
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -3022,14 +3494,20 @@
             "type": "string",
             "title": "Perfil de conta",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
-            "default": "default"
+            "default": "default",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "fallbackAccountProfiles": {
             "type": "string",
             "title": "Perfis de fallback",
             "format": "textarea",
             "default": "",
-            "maxLength": 512
+            "maxLength": 512,
+            "ui": {
+              "section": "advanced"
+            }
           },
           "projectMode": {
             "type": "string",
@@ -3049,7 +3527,10 @@
                 "title": "Usar projeto específico"
               }
             ],
-            "description": "Define se o bloco cria um novo projeto no Google Flow ou continua em um projeto existente."
+            "description": "Define se o bloco cria um novo projeto no Google Flow ou continua em um projeto existente.",
+            "ui": {
+              "section": "primary"
+            }
           },
           "projectUrl": {
             "type": "string",
@@ -3061,6 +3542,9 @@
               "values": [
                 "existing"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "videoModel": {
@@ -3082,21 +3566,31 @@
               },
               {
                 "const": "omni_1_1_flash",
-                "title": "Omni 1.1 Flash"
+                "title": "Omni Flash"
+              },
+              {
+                "const": "veo_3_1_lite_lower_priority",
+                "title": "Veo 3.1 - Lite [Lower Priority]"
               },
               {
                 "type": "string",
                 "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$"
               }
             ],
-            "description": "Modelo de geração de vídeo utilizado na animação."
+            "description": "Modelo de geração de vídeo utilizado na animação.",
+            "ui": {
+              "section": "primary"
+            }
           },
           "videoModelLabel": {
             "type": "string",
             "title": "Outro modelo de vídeo (rótulo do Flow)",
             "default": "",
             "maxLength": 120,
-            "description": "Opcional. Usa exatamente o rótulo visível de um modelo novo do Flow e substitui a seleção predefinida."
+            "description": "Opcional. Usa exatamente o rótulo visível de um modelo novo do Flow e substitui a seleção predefinida.",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "aspectRatio": {
             "type": "string",
@@ -3115,7 +3609,10 @@
                 "const": "portrait",
                 "title": "Retrato (9:16)"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "videoReferenceMode": {
             "type": "string",
@@ -3131,7 +3628,10 @@
                 "title": "Elemento de referência"
               }
             ],
-            "description": "Define se a imagem animada entra no vídeo como frame ou como elemento de referência."
+            "description": "Define se a imagem animada entra no vídeo como frame ou como elemento de referência.",
+            "ui": {
+              "section": "primary"
+            }
           },
           "videoDurationSeconds": {
             "type": "integer",
@@ -3154,7 +3654,10 @@
                 "const": 10,
                 "title": "10 segundos (somente modelos compatíveis)"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "videoResolution": {
             "type": "string",
@@ -3173,32 +3676,31 @@
                 "const": "res_1080p",
                 "title": "1080p"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "retryAttempts": {
             "type": "integer",
             "title": "Tentativas por item",
             "minimum": 0,
             "maximum": 2,
-            "default": 1
+            "default": 1,
+            "ui": {
+              "section": "advanced"
+            }
           },
           "startMinimized": {
             "type": "boolean",
             "title": "Iniciar Chrome minimizado",
-            "default": true
+            "default": true,
+            "ui": {
+              "section": "advanced"
+            }
           }
         }
       },
-      "configurationOptions": [
-        {
-          "property": "videoModel",
-          "providerId": "flow-video-models",
-          "dependsOn": [
-            "accountProfile"
-          ],
-          "cacheTtlMs": 300000
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -3369,14 +3871,20 @@
             "type": "string",
             "title": "Perfil de conta",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
-            "default": "default"
+            "default": "default",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "fallbackAccountProfiles": {
             "type": "string",
             "title": "Perfis de fallback",
             "format": "textarea",
             "default": "",
-            "maxLength": 512
+            "maxLength": 512,
+            "ui": {
+              "section": "advanced"
+            }
           },
           "projectMode": {
             "type": "string",
@@ -3396,7 +3904,10 @@
                 "title": "Usar projeto específico"
               }
             ],
-            "description": "Define se o bloco cria um novo projeto no Google Flow ou continua em um projeto existente."
+            "description": "Define se o bloco cria um novo projeto no Google Flow ou continua em um projeto existente.",
+            "ui": {
+              "section": "primary"
+            }
           },
           "projectUrl": {
             "type": "string",
@@ -3408,6 +3919,9 @@
               "values": [
                 "existing"
               ]
+            },
+            "ui": {
+              "section": "primary"
             }
           },
           "videoModel": {
@@ -3429,20 +3943,30 @@
               },
               {
                 "const": "omni_1_1_flash",
-                "title": "Omni 1.1 Flash"
+                "title": "Omni Flash"
+              },
+              {
+                "const": "veo_3_1_lite_lower_priority",
+                "title": "Veo 3.1 - Lite [Lower Priority]"
               },
               {
                 "type": "string",
                 "pattern": "^flow_label:[A-Za-z0-9_-]{2,180}$"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "videoModelLabel": {
             "type": "string",
             "title": "Outro modelo de vídeo (rótulo do Flow)",
             "default": "",
             "maxLength": 120,
-            "description": "Opcional. Usa exatamente o rótulo visível de um modelo novo do Flow e substitui a seleção predefinida."
+            "description": "Opcional. Usa exatamente o rótulo visível de um modelo novo do Flow e substitui a seleção predefinida.",
+            "ui": {
+              "section": "advanced"
+            }
           },
           "aspectRatio": {
             "type": "string",
@@ -3461,7 +3985,10 @@
                 "const": "portrait",
                 "title": "Retrato (9:16)"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "videoReferenceMode": {
             "type": "string",
@@ -3476,7 +4003,10 @@
                 "const": "elements",
                 "title": "Elementos de referência"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "videoDurationSeconds": {
             "type": "integer",
@@ -3499,7 +4029,10 @@
                 "const": 10,
                 "title": "10 segundos (somente modelos compatíveis)"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "videoResolution": {
             "type": "string",
@@ -3518,39 +4051,41 @@
                 "const": "res_1080p",
                 "title": "1080p"
               }
-            ]
+            ],
+            "ui": {
+              "section": "primary"
+            }
           },
           "delayBetweenPromptsMs": {
             "type": "integer",
             "title": "Pausa entre prompts (ms)",
             "minimum": 0,
             "maximum": 30000,
-            "default": 8000
+            "default": 8000,
+            "ui": {
+              "section": "advanced"
+            }
           },
           "retryAttempts": {
             "type": "integer",
             "title": "Tentativas por item",
             "minimum": 0,
             "maximum": 2,
-            "default": 1
+            "default": 1,
+            "ui": {
+              "section": "advanced"
+            }
           },
           "startMinimized": {
             "type": "boolean",
             "title": "Iniciar Chrome minimizado",
-            "default": true
+            "default": true,
+            "ui": {
+              "section": "advanced"
+            }
           }
         }
       },
-      "configurationOptions": [
-        {
-          "property": "videoModel",
-          "providerId": "flow-video-models",
-          "dependsOn": [
-            "accountProfile"
-          ],
-          "cacheTtlMs": 300000
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "additionalProperties": false,

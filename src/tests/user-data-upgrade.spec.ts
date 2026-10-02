@@ -193,4 +193,3 @@ test("a changed plan is localized and requires a fresh review; recovery backup r
   expect(fixture.applies).toHaveLength(1);
   expect(JSON.stringify(fixture.channels)).toEqual(fixture.original);
 });
-

@@ -119,7 +119,7 @@ test("keeps runtime input sources deterministic and canonical bindings authorita
   );
   assert.match(portSelection, /if \(!input\.portKey\) return undefined/);
   assert.match(portSelection, /ports\.find\(\(candidate\) => candidate\.key === input\.portKey\)/);
-  assert.match(portSelection, /areValueShapesCompatible\(input\.shape, port\.shape\)/);
+  assert.match(portSelection, /areInputShapesCompatible\(input\.shape, port\.shape\)/);
   assert.match(portSelection, /usedInputPorts\.has\(port\.key\)/);
   assert.doesNotMatch(
     portSelection,

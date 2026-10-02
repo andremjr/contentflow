@@ -1,7 +1,46 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import type { PluginManifest } from "./plugin-contract";
 import { localizePluginManifest } from "./plugin-localization";
+
+test("Flow exposes fixed numeric choices and localized concurrency help in all three languages", () => {
+  const source = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../ecosystem/plugins/reference/google-flow-browser-images/contentflow.plugin.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as PluginManifest;
+  for (const locale of ["pt-BR", "en", "es"] as const) {
+    const localized = localizePluginManifest(source, locale);
+    for (const capability of localized.capabilities) {
+      assert.equal(capability.configurationOptions, undefined);
+      const props = capability.blockConfigSchema.properties!;
+      if (!props.maxConcurrentGenerations) continue;
+      assert.deepEqual(
+        props.maxConcurrentGenerations.oneOf?.map((o) => [o.const, o.title]),
+        [1, 2, 3, 4, 5].map((n) => [n, String(n)]),
+      );
+      assert.ok(props.maxConcurrentGenerations.description);
+      if (locale !== "pt-BR") {
+        const base = source.capabilities.find((c) => c.id === capability.id)!.blockConfigSchema
+          .properties!;
+        assert.notEqual(props.maxConcurrentGenerations.title, base.maxConcurrentGenerations.title);
+        assert.notEqual(
+          props.maxConcurrentGenerations.description,
+          base.maxConcurrentGenerations.description,
+        );
+      }
+      assert.deepEqual(
+        props.maxImagesPerPrompt.oneOf?.map((o) => [o.const, o.title]),
+        [1, 2, 3, 4].map((n) => [n, String(n)]),
+      );
+    }
+  }
+});
 
 function manifest(): PluginManifest {
   return {

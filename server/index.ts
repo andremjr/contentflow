@@ -1,4 +1,8 @@
-import { UserDataUpgrade, registerUserDataUpgradeRoutes } from "./user-data-upgrade";
+import {
+  UserDataUpgrade,
+  jobHasCurrentContract,
+  registerUserDataUpgradeRoutes,
+} from "./user-data-upgrade";
 import { observeExecution, observeJob } from "./dev-monitor/probes";
 import { monitorEnabled, devProbe } from "./dev-monitor/client";
 import express, {
@@ -133,6 +137,12 @@ import { requireNormalizedPluginResponseValues } from "./plugin-response-normali
 import { instructionWithRetryFeedback } from "../src/lib/retry-feedback";
 import { pluginConversationFallbackContext } from "../src/lib/conversation-context";
 import { collectionItemValuesForPlugin } from "../src/lib/plugin-collection";
+import {
+  captureCollectionSelection,
+  completedConsumableItemIds,
+  libraryReservation,
+  libraryValuesIssues,
+} from "../src/lib/strategic-library";
 import {
   appendPluginDiagnostic,
   createPersistentPluginJob,
@@ -528,9 +538,16 @@ const pluginProfileBindings = new PluginProfileBindingStore(database);
 const pluginProfileReadiness = new PluginProfileReadinessStore(database);
 const browserProfileLeases = new BrowserProfileLeaseStore(database);
 const pluginConfigurationOptionsCache = new PluginConfigurationOptionsCache();
-const userDataUpgrade = new UserDataUpgrade(database, dataDirectory, () => activePluginWorkers === 0 && activePluginInvocations.size === 0);
-if (userDataUpgrade.backgroundAllowed() && !userDataUpgrade.hasHistoricalJobs()) pluginJobs.recoverInterrupted();
-if (userDataUpgrade.backgroundAllowed()) browserProfileLeases.recoverExpired();
+const userDataUpgrade = new UserDataUpgrade(
+  database,
+  dataDirectory,
+  () => activePluginWorkers === 0 && activePluginInvocations.size === 0,
+);
+if (userDataUpgrade.backgroundAllowed())
+  pluginJobs.recoverInterrupted(new Date(), jobHasCurrentContract);
+// Expired physical leases are operational state, independent of Method migration.
+// This does not reclaim a live lease or replay an interrupted external effect.
+browserProfileLeases.recoverExpired();
 // A database-wide sequence orders snapshots from commands and background workers.
 database.exec(
   "CREATE TABLE IF NOT EXISTS state_clock (id INTEGER PRIMARY KEY CHECK(id = 1), revision INTEGER NOT NULL); INSERT OR IGNORE INTO state_clock VALUES (1, 0)",
@@ -608,6 +625,7 @@ type StoredPayload = {
   collection?: string;
   collectionId?: string;
   name?: string;
+  usage?: "fixed" | "consumable";
   fields?: unknown[];
   values?: Record<string, unknown>;
 };
@@ -625,7 +643,14 @@ function serializeStoredExecution(execution: ProcessExecution) {
 }
 
 function readPayload<T>(table: string, id: string): T | undefined {
-  const allowedTables = new Set(["channels", "projects", "process_executions"]);
+  const allowedTables = new Set([
+    "channels",
+    "projects",
+    "process_executions",
+    "library_collections",
+    "library_items",
+    "execution_commands",
+  ]);
   if (!allowedTables.has(table)) throw new Error("Tabela de leitura não permitida.");
   const row = database.prepare(`SELECT payload FROM ${table} WHERE id = ?`).get(id) as
     { payload: string } | undefined;
@@ -1069,6 +1094,15 @@ function finishPluginBlock(
   values: Record<string, RuntimeValue>,
 ) {
   const now = new Date().toISOString();
+  if (block.type === "ESCOLHER" && block.operator !== "Humano") {
+    const collection = readPayload<StrategicCollection>(
+      "library_collections",
+      block.collectionId ?? "",
+    );
+    const item = readPayload<ChannelLibraryItem>("library_items", String(values.selectedItemId));
+    if (!collection || !item) throw new Error("Item de biblioteca inválido.");
+    captureCollectionSelection(execution, block.id, item, collection, storedLibraryExecutions());
+  }
   if (block.operator === "Humano") {
     blockExecution.status = "awaiting_human";
     blockExecution.error = undefined;
@@ -1139,6 +1173,23 @@ function executionById(executionId: string) {
   return row ? parseStoredExecution(row.payload) : undefined;
 }
 
+function storedLibraryExecutions() {
+  return (
+    database.prepare("SELECT payload FROM process_executions").all() as { payload: string }[]
+  ).map((row) => parseStoredExecution(row.payload));
+}
+
+/** Called inside the same transaction that commits the successful Process. Files stay in snapshots. */
+function commitLibraryConsumption(execution: ProcessExecution) {
+  for (const id of completedConsumableItemIds(execution)) {
+    database.prepare("DELETE FROM library_items WHERE id = ?").run(id);
+  }
+}
+
+function hasLibraryReservation(itemId: string) {
+  return Boolean(libraryReservation(itemId, storedLibraryExecutions()));
+}
+
 class PersistenceCommitError extends Error {
   constructor(cause: unknown) {
     super("A transição não pôde ser persistida.", { cause });
@@ -1154,6 +1205,7 @@ function persistPluginExecution(execution: ProcessExecution, project: Project) {
   project.updatedAt = "Agora";
   applyGeneratedProjectTitle(project, execution);
   const persist = () => {
+    commitLibraryConsumption(execution);
     database
       .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
       .run(serializeStoredExecution(execution), execution.updatedAt, execution.id);
@@ -1237,7 +1289,10 @@ function automaticPluginBlockReady(block?: ActionBlock, blockExecution?: BlockEx
 }
 
 function scheduleAutomaticPluginBlock(execution: ProcessExecution) {
-  if (!userDataUpgrade.backgroundAllowed() || userDataUpgrade.executionHasHistoricalJobs(execution.id)) return;
+  // Historical jobs are preserved for inspection and are excluded by the
+  // compatible-job claim path. A newly scheduled attempt still has the
+  // current contract and must be allowed to continue the execution.
+  if (!userDataUpgrade.backgroundAllowed()) return;
   if (execution.status !== "blocked_executor") return;
   const blockExecution = execution.blocks.find((item) => item.status !== "completed");
   const block = blockExecution
@@ -1886,6 +1941,7 @@ function cancelStoredProcessExecution(execution: ProcessExecution, project: Proj
       .run(JSON.stringify(project), project.id);
   })();
   abortActivePluginInvocations(execution.id);
+  observeCommittedExecution(execution);
   void processDuePluginJobs();
   return cancellation;
 }
@@ -2445,7 +2501,27 @@ async function processPluginJobClaimed(
     const invocationRequest = continuousSession
       ? continuousInvocationRequestForJob(job, invocation)
       : invocationRequestForJob(job, invocation);
+    const parallelConsolidation = parallelResult
+      ? consolidatedOrchestratedOutputs(parallelResult.job)
+      : undefined;
+    const parallelCompletionResponse: Awaited<ReturnType<typeof executeActivePlugin>> | undefined =
+      parallelConsolidation?.complete && job.itemOrchestration
+        ? {
+            status: "success" as const,
+            values: {
+              [job.itemOrchestration.outputPort]: parallelConsolidation.outputs as RuntimeValue,
+              ...(job.itemOrchestration.combinedOutputPort
+                ? {
+                    [job.itemOrchestration.combinedOutputPort]: parallelConsolidation.outputs
+                      .filter((value): value is string => typeof value === "string")
+                      .join(job.itemOrchestration.separator ?? "\n\n"),
+                  }
+                : {}),
+            },
+          }
+        : undefined;
     const pluginResponse =
+      parallelCompletionResponse ??
       parallelResult?.response ??
       (await executeActivePlugin(job, plugin, invocationRequest, invocationTimeout, secrets, {
         workspaceDirectory,
@@ -5612,6 +5688,14 @@ app.put(
         .json({ error: "Coleção estratégica inválida.", issues: parsed.error.issues });
       return;
     }
+    if (
+      channelLibraryItems(channel.id).some(
+        (item) => item.collectionId === existing.id && hasLibraryReservation(item.id),
+      )
+    ) {
+      response.status(409).json({ error: "Esta coleção possui itens reservados." });
+      return;
+    }
     const nextKey = instructionCollectionKey({ name: parsed.data.name });
     if (
       channelCollections(channel.id).some(
@@ -5712,6 +5796,13 @@ app.delete(
       return;
     }
     const remove = database.transaction(() => {
+      if (
+        channelLibraryItems(channel.id).some(
+          (item) => item.collectionId === collection.id && hasLibraryReservation(item.id),
+        )
+      ) {
+        throw new Error("Esta coleção possui itens reservados.");
+      }
       for (const item of channelLibraryItems(channel.id).filter(
         (candidate) => candidate.collectionId === collection.id,
       )) {
@@ -5788,6 +5879,10 @@ app.put(
       return;
     }
     const updated: ChannelLibraryItem = { ...item, values: normalized.values };
+    if (hasLibraryReservation(item.id)) {
+      response.status(409).json({ error: "Este item está reservado por outra execução." });
+      return;
+    }
     database
       .prepare("UPDATE library_items SET payload = ? WHERE id = ?")
       .run(JSON.stringify(updated), updated.id);
@@ -5811,6 +5906,10 @@ app.delete(
     );
     if (!item) {
       response.status(404).json({ error: "Item não encontrado." });
+      return;
+    }
+    if (hasLibraryReservation(item.id)) {
+      response.status(409).json({ error: "Este item está reservado por outra execução." });
       return;
     }
     database.prepare("DELETE FROM library_items WHERE id = ?").run(item.id);
@@ -5912,7 +6011,8 @@ type ExecutePluginBlockResult = {
 async function executePluginBlockInternal(
   body: ExecutePluginBlockInput,
 ): Promise<ExecutePluginBlockResult> {
-  if (!userDataUpgrade.backgroundAllowed()) return { status: 409, body: { error: "USER_DATA_UPGRADE_REQUIRED" } };
+  if (!userDataUpgrade.backgroundAllowed())
+    return { status: 409, body: { error: "USER_DATA_UPGRADE_REQUIRED" } };
   if (
     !body.projectId ||
     !body.processType ||
@@ -5951,8 +6051,6 @@ async function executePluginBlockInternal(
       body: { error: "Bloco não encontrado no snapshot desta execução." },
     };
   }
-  if (userDataUpgrade.executionHasHistoricalJobs(execution.id))
-    return { status: 409, body: { error: "USER_DATA_UPGRADE_REQUIRED" } };
   const existingJob = pluginJobs.getByExecution(
     execution.id,
     blockExecution.blockId,
@@ -6205,8 +6303,14 @@ async function executePluginBlockInternal(
     block.type === "ESCOLHER"
       ? collections.find((item) => item.id === block.collectionId)
       : undefined;
+  const projectExecutionsForReservations =
+    block.type === "ESCOLHER" ? storedLibraryExecutions() : [];
   const selectedCollectionItems = selectedCollection
-    ? libraryItems.filter((item) => item.collectionId === selectedCollection.id)
+    ? libraryItems.filter(
+        (item) =>
+          item.collectionId === selectedCollection.id &&
+          !libraryReservation(item.id, projectExecutionsForReservations),
+      )
     : [];
   if (block.type === "ESCOLHER" && (!selectedCollection || !selectedCollectionItems.length)) {
     return {
@@ -6587,9 +6691,10 @@ app.get("/api/youtube/channel", async (request, response) => {
 
 function stateSnapshot() {
   return database.transaction(() => {
-    const read = <T>(table: string) =>
+    const reservationExecutions = storedLibraryExecutions();
+    const read = <T>(table: string, order: "ASC" | "DESC" = "DESC") =>
       (
-        database.prepare(`SELECT payload FROM ${table} ORDER BY rowid DESC`).all() as {
+        database.prepare(`SELECT payload FROM ${table} ORDER BY rowid ${order}`).all() as {
           payload: string;
         }[]
       ).map((row) => JSON.parse(row.payload) as T);
@@ -6623,7 +6728,10 @@ function stateSnapshot() {
         }[]
       ).map((row) => parseStoredExecution(row.payload)),
       orchestrators: read<ExecutionOrchestrator>("execution_orchestrators"),
-      libraryItems: read<ChannelLibraryItem>("library_items"),
+      libraryItems: read<ChannelLibraryItem>("library_items", "ASC").map((item) => ({
+        ...item,
+        reservation: libraryReservation(item.id, reservationExecutions),
+      })),
       libraryCollections: read<StrategicCollection>("library_collections"),
     };
   })();
@@ -6774,6 +6882,7 @@ app.post("/api/commands", (request, response) => {
       )
         return result;
       if (updated) {
+        commitLibraryConsumption(updated);
         updated.revision = (updated.revision ?? 0) + 1;
         updated.updatedAt = new Date().toISOString();
         database
@@ -7285,6 +7394,7 @@ app.post("/api/method-transfers/apply", (request, response) => {
       id,
       channelId,
       name: collection.name,
+      usage: collection.usage ?? "fixed",
       fields: collection.fields.map((field) => {
         const fieldId = `field-${randomUUID()}`;
         fieldIds.set(`${collection.key}:${field.key}`, fieldId);
@@ -8649,7 +8759,12 @@ app.post(
 
 app.put("/api/executions/:id", (request, response) => {
   const execution = request.body as ProcessExecution;
-  if (!execution?.id || execution.id !== request.params.id || !execution.updatedAt) {
+  if (
+    !execution?.id ||
+    execution.id !== request.params.id ||
+    !execution.updatedAt ||
+    !Array.isArray(execution.blocks)
+  ) {
     response.status(400).json({ error: "Execução inválida." });
     return;
   }
@@ -8663,6 +8778,13 @@ app.put("/api/executions/:id", (request, response) => {
     execution.projectId !== current.projectId ||
     execution.processType !== current.processType ||
     JSON.stringify(execution.methodSnapshot) !== JSON.stringify(current.methodSnapshot) ||
+    execution.blocks.some((block) => {
+      const prior = current.blocks.find((candidate) => candidate.blockId === block.blockId);
+      return (
+        JSON.stringify(block.collectionSelection) !== JSON.stringify(prior?.collectionSelection) ||
+        (prior?.collectionSelection && block.values.selectedItemId !== prior.values.selectedItemId)
+      );
+    }) ||
     (current.status === "cancelled" && execution.status !== "cancelled")
   ) {
     response
@@ -8671,9 +8793,12 @@ app.put("/api/executions/:id", (request, response) => {
     return;
   }
   execution.revision = (current.revision ?? 0) + 1;
-  const result = database
-    .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
-    .run(serializeStoredExecution(execution), execution.updatedAt, execution.id);
+  const result = database.transaction(() => {
+    commitLibraryConsumption(execution);
+    return database
+      .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
+      .run(serializeStoredExecution(execution), execution.updatedAt, execution.id);
+  })();
   if (result.changes) {
     scheduleAutomaticPluginBlock(execution as unknown as ProcessExecution);
     if (execution.projectId) queueOrchestratorReconciliationForProject(execution.projectId);
@@ -8716,7 +8841,8 @@ app.post("/api/library/collections", (request, response) => {
     !collection.name ||
     !collection.createdAt ||
     !Array.isArray(collection.fields) ||
-    collection.fields.length === 0
+    collection.fields.length === 0 ||
+    (collection.usage !== undefined && !["fixed", "consumable"].includes(String(collection.usage)))
   ) {
     response.status(400).json({ error: "Coleção estratégica inválida." });
     return;
@@ -8738,9 +8864,18 @@ app.put("/api/library/collections/:id", (request, response) => {
     !collection.name ||
     !collection.createdAt ||
     !Array.isArray(collection.fields) ||
-    collection.fields.length === 0
+    collection.fields.length === 0 ||
+    (collection.usage !== undefined && !["fixed", "consumable"].includes(String(collection.usage)))
   ) {
     response.status(400).json({ error: "Coleção estratégica inválida." });
+    return;
+  }
+  if (
+    channelLibraryItems(String(collection.channelId)).some(
+      (item) => item.collectionId === collection.id && hasLibraryReservation(item.id),
+    )
+  ) {
+    response.status(409).json({ error: "Esta coleção possui itens reservados." });
     return;
   }
   const result = database
@@ -8754,6 +8889,14 @@ app.put("/api/library/collections/:id", (request, response) => {
 });
 
 app.delete("/api/library/collections/:id", (request, response) => {
+  if (
+    stateSnapshot().libraryItems.some(
+      (item) => item.collectionId === request.params.id && item.reservation,
+    )
+  ) {
+    response.status(409).json({ error: "Esta coleção possui itens reservados." });
+    return;
+  }
   const remove = database.transaction((collectionId: string) => {
     const itemRows = database.prepare("SELECT id, payload FROM library_items").all() as {
       id: string;
@@ -8795,7 +8938,81 @@ app.post("/api/library", (request, response) => {
   response.status(201).json(item);
 });
 
+const libraryBatchSchema = z.object({
+  importId: z.string().uuid(),
+  collectionId: z.string().min(1),
+  rows: z.array(z.record(z.string(), z.unknown())).min(1).max(1000),
+});
+app.post("/api/library/batch", (request, response) => {
+  const parsed = libraryBatchSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "Lote inválido." });
+    return;
+  }
+  const collection = readPayload<StrategicCollection>(
+    "library_collections",
+    parsed.data.collectionId,
+  );
+  if (!collection) {
+    response.status(404).json({ error: "Coleção não encontrada." });
+    return;
+  }
+  const rows = parsed.data.rows as ChannelLibraryItem["values"][];
+  const invalid = rows
+    .map((values, index) => ({ row: index + 1, fields: libraryValuesIssues(collection, values) }))
+    .filter((row) => row.fields.length);
+  if (invalid.length) {
+    response.status(422).json({ error: "Revise os campos do lote antes de importar.", invalid });
+    return;
+  }
+  try {
+    const result = database.transaction(() => {
+      const receiptId = `library-import:${parsed.data.importId}`;
+      const receipt = readPayload<{
+        rows: ChannelLibraryItem["values"][];
+        collectionId: string;
+        items: ChannelLibraryItem[];
+      }>("execution_commands", receiptId);
+      if (receipt) {
+        if (
+          receipt.collectionId !== collection.id ||
+          JSON.stringify(receipt.rows) !== JSON.stringify(rows)
+        )
+          throw new Error("Lote inválido.");
+        return receipt.items;
+      }
+      const now = new Date().toISOString();
+      const items = rows.map(
+        (values) =>
+          ({
+            id: randomUUID(),
+            channelId: collection.channelId,
+            collectionId: collection.id,
+            values,
+            createdAt: now,
+          }) satisfies ChannelLibraryItem,
+      );
+      const insert = database.prepare(
+        "INSERT INTO library_items (id, channel_id, payload, created_at) VALUES (?, ?, ?, ?)",
+      );
+      for (const item of items)
+        insert.run(item.id, item.channelId, JSON.stringify(item), item.createdAt);
+      database
+        .prepare("INSERT INTO execution_commands (id, payload) VALUES (?, ?)")
+        .run(receiptId, JSON.stringify({ collectionId: collection.id, rows, items }));
+      return items;
+    })();
+    response.status(201).json({ items: result });
+  } catch {
+    response.status(409).json({ error: "Lote inválido." });
+  }
+});
+
 app.put("/api/library/:id", (request, response) => {
+  if (hasLibraryReservation(String(request.params.id))) {
+    response.status(409).json({ error: "Este item está reservado por outra execução." });
+    return;
+  }
   const item = request.body as StoredPayload;
   if (!item?.id || item.id !== request.params.id || !item.channelId) {
     response.status(400).json({ error: "Item de biblioteca inválido." });
@@ -8810,6 +9027,10 @@ app.put("/api/library/:id", (request, response) => {
 });
 
 app.delete("/api/library/:id", (request, response) => {
+  if (hasLibraryReservation(String(request.params.id))) {
+    response.status(409).json({ error: "Este item está reservado por outra execução." });
+    return;
+  }
   const result = database.prepare("DELETE FROM library_items WHERE id = ?").run(request.params.id);
   response.status(result.changes ? 204 : 404).end();
 });

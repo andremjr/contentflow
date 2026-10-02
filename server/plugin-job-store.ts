@@ -366,7 +366,10 @@ export class PluginJobStore {
     })();
   }
 
-  recoverInterrupted(now = new Date()) {
+  recoverInterrupted(
+    now = new Date(),
+    shouldRecover: (job: PersistentPluginJob) => boolean = () => true,
+  ) {
     const timestamp = now.toISOString();
     const rows = this.database
       .prepare(
@@ -387,7 +390,9 @@ export class PluginJobStore {
     return this.database.transaction(() => {
       let changed = 0;
       for (const row of rows) {
-        const recovered = recoverProfileLanePool(parseJob(row.payload), now);
+        const job = parseJob(row.payload);
+        if (!shouldRecover(job)) continue;
+        const recovered = recoverProfileLanePool(job, now);
         const nextPollAt = row.next_poll_at > timestamp ? row.next_poll_at : timestamp;
         const next = {
           ...recovered,

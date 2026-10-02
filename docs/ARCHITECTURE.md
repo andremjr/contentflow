@@ -218,6 +218,13 @@ Dentro dos campos do plugin no bloco, o usuário insere placeholders dinâmicos 
 
 ### C. Contrato Universal de Dados do Bloco
 
+O editor estratégico apresenta somente entradas e entregas de texto, imagem, áudio ou
+vídeo, sem exigir a escolha entre conteúdo, controle e registros. Decisões e estruturas
+internas permanecem preservadas e tipadas; não há conversão ou exclusão automática de
+campos existentes. Relações devem ganhar interações próprias quando forem definidas,
+sem devolver ao usuário um editor técnico de schemas. O contrato de runtime e as portas
+de plugins continuam regidos por `CONTENT_CONTRACT.md`.
+
 Entradas e saídas pertencem ao bloco e não ao operador. Na definição do Método, cada bloco guarda:
 
 - Nome e instruções da ação.
@@ -395,6 +402,14 @@ O operador do bloco `ESCOLHER` pode ser Humano, IA ou Código. Quando executado 
 
 O `ESCOLHER` pode receber entradas de contexto para orientar a decisão, inclusive o Histórico do Canal. Isso não transforma a coleção em uma entrada comum: o núcleo continua entregando a coleção vinculada separadamente e validando que o resultado é um item real. Blocos seguintes recebem apenas os campos do item escolhido.
 
+Ao criar uma coleção, o usuário escolhe `fixed` (fixa) ou `consumable` (consumível). Coleções existentes sem `usage` continuam fixas, sem reescrita dos dados. Itens fixos permanecem após o uso. Um item consumível começa salvo; a conclusão real do `ESCOLHER`, por Humano, IA ou Código, reserva o item exclusivamente para aquele Bloco/execução. Apenas a conclusão do **Processo**, incluindo seu output oficial e validações, consome o item. A exclusão do registro da coleção ocorre na mesma transação SQLite que persiste a conclusão do Processo.
+
+A reserva é derivada do snapshot persistido da escolha, não de um estado concorrente da interface ou do plugin. Espera por output, falha, cancelamento e restart do aplicativo preservam a reserva. Excluir/reiniciar a execução libera uma escolha ainda não consumida; invalidar e refazer a própria escolha também libera sua reserva anterior. Retentar um Bloco posterior preserva a escolha do prefixo. Itens reservados não aparecem como candidatos de outra escolha e não podem ser editados/excluídos; a coleção com reservas não pode ser editada/excluída. O núcleo revalida a exclusividade quando aceita o resultado do plugin, pois candidatos podem ter sido reservados por outra execução durante a chamada.
+
+Cada escolha nova congela no `BlockExecution.collectionSelection` a política de uso, os campos e valores do item. `selectedItemId` continua sendo a entrega universal da decisão, sem alterar `ValueShape` ou portas. Após o consumo, histórico, visualização, artifacts e resolução das entradas seguintes continuam usando o snapshot; consumir remove somente o registro da biblioteca, nunca arquivos referenciados pela execução. Snapshots anteriores permanecem intactos e conservam sua resolução original.
+
+A importação em lote permite editar itens em uma tabela e preencher colunas separadamente. Valores textuais são divididos em linhas e arquivos selecionados preenchem a coluna na ordem apresentada, a partir da primeira linha; as imagens são exibidas para orientar o preenchimento dos demais campos. O usuário revisa todas as linhas antes de salvar. Os campos conservam seus `ValueShape` canônicos. O endpoint valida o lote completo e grava todos os itens em uma única transação; linha inválida impede qualquer inserção. Um ID de importação mantém a operação idempotente, inclusive após consumo posterior dos itens. A ordem de inserção é preservada na projeção da biblioteca. O lote admite até 1.000 linhas por importação.
+
 A Biblioteca Estratégica é diferente da Biblioteca de Métodos: a primeira contém peças utilizadas dentro das ações; a segunda permite reutilizar sequências completas de ações entre canais.
 
 Além dos campos simples, uma coleção pode usar o formato especializado `Layout de thumbnail`. Cada item desse tipo armazena uma composição 16:9 criada no canvas visual, com caixas posicionadas em coordenadas percentuais. O mesmo formato faz parte do contrato universal de blocos, portanto o layout escolhido pode atravessar conexões tipadas e orientar um plugin de montagem programática sem perder sua estrutura.
@@ -427,7 +442,7 @@ O Método não grava IDs de execução. No construtor, o usuário escolhe estrut
 
 As entregas são persistidas no snapshot da execução, sem criar uma segunda base de dados paralela. Uma nova tentativa invalida as entregas afetadas e cria IDs correspondentes à nova tentativa, preservando o histórico. A interface de execução apresenta os resultados concluídos dentro de cada etapa e não duplica essas entregas em um painel consolidado do Projeto. Relações especializadas, como um asset selecionado para uma cena, são referências genéricas entre IDs e permanecem configuradas pelo Método ou plugin, nunca codificadas como uma regra fixa do núcleo.
 
-O Método pode declarar campos de relação por IDs de itens de uma entrada. Um Bloco de IA produz a associação semântica; o Core limita os valores aos IDs concedidos, persiste a relação e transporta a linhagem; o plugin posterior converte essa relação para a operação de seu fornecedor. Assim, o Core não precisa saber o que é personagem, legenda, corte ou imagem de referência, e ferramentas diferentes podem implementar a mesma relação universal de maneiras diferentes.
+Nos novos Métodos, associações editoriais podem viajar como conteúdo textual no formato declarado pelo plugin: o produtor fornece IDs canônicos ao modelo e valida seu texto; o consumidor resolve as referências pela proveniência e traduz o uso para a ferramenta. O Core conserva IDs, ordem e artifacts sem interpretar o JSON ou escolher personagens. Contratos internos de Métodos existentes podem declarar campos de relação por IDs de itens de uma entrada. Um Bloco de IA produz a associação semântica; o Core limita os valores aos IDs concedidos, persiste a relação e transporta a linhagem; o plugin posterior converte essa relação para a operação de seu fornecedor. Esses schemas são preservados, mas não são configurados no editor estratégico nem criados como campos estratégicos pelo MCP. Assim, o Core não precisa saber o que é personagem, legenda, corte ou imagem de referência, e ferramentas diferentes podem implementar a mesma relação universal de maneiras diferentes.
 
 Separadamente, cada Processo Universal possui um output oficial, independente do método e do executor utilizado:
 

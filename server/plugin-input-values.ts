@@ -1,6 +1,6 @@
 import type { BlockInputBinding, RuntimeValue } from "../src/lib/domain";
 import type { PluginInputPort } from "../src/lib/plugin-contract";
-import { areValueShapesCompatible } from "../src/lib/data-shape";
+import { areInputShapesCompatible } from "../src/lib/data-shape";
 
 type AssignedPluginInput = {
   label: string;
@@ -14,7 +14,7 @@ export function selectPluginInputPort(
 ) {
   if (!input.portKey) return undefined;
   const port = ports.find((candidate) => candidate.key === input.portKey);
-  if (!port || !areValueShapesCompatible(input.shape, port.shape) || usedInputPorts.has(port.key)) {
+  if (!port || !areInputShapesCompatible(input.shape, port.shape) || usedInputPorts.has(port.key)) {
     return undefined;
   }
   return port;

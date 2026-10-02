@@ -134,7 +134,7 @@ Princípios:
 - não restaure legado apenas para fazer um caso antigo voltar a funcionar;
 - não transforme renderer, nome de campo, MIME ou formato físico em semântica universal sem contrato explícito.
 
-Para conteúdo, `docs/CONTENT_CONTRACT.md` é a autoridade vigente.
+Para conteúdo, `docs/CONTENT_CONTRACT.md` é a autoridade vigente. No editor estratégico e na criação por MCP, entradas/entregas visíveis usam somente texto, imagem, áudio ou vídeo. Preserve contratos internos existentes; não converta controles/registros em texto, não exponha schemas técnicos e não presuma que JSON textual cria relações validadas pelo Core.
 
 ## Protocolo de decisão
 
@@ -258,6 +258,7 @@ Uma tarefa só está concluída quando:
 
 - `references/architecture-map.md`
 - `references/collaboration-protocol.md`
+- `references/workflow-translation.md` — planejamento de Métodos, adaptação de automações e cenários verticais.
 
 Sempre prefira a arquitetura e o código vivos do checkout às referências desta skill.
 
@@ -274,3 +275,11 @@ Antes de um teste vertical monitorado, leia `docs/DEV_MONITOR.md` do checkout at
 Prioridade de contexto: digest → checks específicos → evidence slices → projeções relevantes → events.jsonl somente se necessário → logs tradicionais somente depois. Se o digest indicar truncamento, consulte os demais checks específicos. Distinga `NOT_OBSERVED` de check aprovado.
 
 Depois de localizar/corrigir a causa, repita exatamente o mesmo cenário e execute `npm run dev-monitor -- diff <before> <after>`. Exija cenário funcional ok, instrumentação íntegra, violações resolvidas e nenhuma nova violação. Diff não comparável não prova correção. Não extrapole um PASS ao Chrome/provider real, renderer, restart ou migração que o cenário não exercitou. Consulte os gaps em `npm run dev-monitor -- coverage`. O monitor observa; não escolhe políticas do Core.
+
+Para associações em conteúdo textual, consulte `docs/PLUGIN_INTERFACE.md`: o produtor fornece IDs canônicos ao modelo e valida o JSON conforme configuração do plugin; o consumidor resolve os IDs e traduz para sua ferramenta. O Core preserva identidade/proveniência sem decidir relações editoriais. No exemplo visual: roteiro → personagens → referências → prompts com IDs → cenas. Controles funcionais são declarados pelo plugin, sem interpretação de nomes de campos pelo renderer.
+
+## Tradução de fluxos para o ContentFlow
+
+Antes de planejar/revisar Métodos, adaptar automações externas ou distribuir etapas de um teste vertical, leia [workflow-translation.md](references/workflow-translation.md). Reconstrua o preparo manual oculto, derive a ordem pelas dependências do conteúdo e distribua responsabilidades antes de escolher plugins. A referência inclui personagens, pesquisa/outline, CTAs e os limites dessa análise.
+
+Regras documentadas não garantem raciocínio correto: apresente dependências e hipóteses de modo verificável, sem prometer confiabilidade por mais Blocos ou testes isolados.

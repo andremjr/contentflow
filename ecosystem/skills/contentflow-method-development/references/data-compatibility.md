@@ -16,9 +16,11 @@ A única contração canônica entre cardinalidades é
 `many`, com seus IDs preservados, enquanto o runtime entrega ao executor um texto unido em ordem.
 Não aplique essa regra a mídia, artifacts, controles ou registros e não permita a direção inversa.
 
-Registros podem declarar campos `identifier` com `referencesInputId` para relacionar seus valores
-a itens de uma entrada do mesmo Bloco. O Método declara a relação; o Core valida somente IDs
+Contratos internos existentes de registros podem declarar campos `identifier` com `referencesInputId` para relacionar seus valores
+a itens de uma entrada do mesmo Bloco. Esses contratos internos preservam a relação; o Core valida somente IDs
 concedidos e o plugin consumidor traduz a relação para sua ferramenta.
+
+Novas entradas e saídas estratégicas criadas no editor ou MCP usam somente conteúdo. JSON/SRT podem ser texto aceito pelo plugin, sem interpretação automática de relações pelo Core. Preserve estruturas existentes; novas interações visuais de associação ainda exigem definição explícita.
 
 Não use label, renderer, posição, extensão isolada ou forma do valor para inferir semântica. Não converta escalar em coleção, artifact em família, texto em seleção ou uma família de mídia em outra. Quando uma transformação for necessária, use um Bloco explícito que produza o shape de destino.
 
@@ -34,3 +36,5 @@ Outputs oficiais:
 | `assets`     | portas `images: image/many/artifact` e `videos: video/many/artifact` |
 | `editing`    | `video/one/artifact`                                                 |
 | `publishing` | controle `url/one` ou registro estruturado                           |
+
+Associações editoriais em texto JSON pertencem ao contrato do plugin produtor/consumidor: o produtor recebe IDs canônicos de `inputDeliveries`, instrui o modelo e valida o texto; o consumidor resolve referências pelas entregas e linhagem. Isso não cria `RecordShape` nem parsing semântico no Core.

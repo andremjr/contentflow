@@ -54,6 +54,7 @@ test("imports and forwards partial plugin snapshots before the final response", 
   );
   const manifest = {
     id: "partial-stream-test",
+    apiVersion: "2",
     version: "1.0.0",
     permissions: ["filesystem:write"],
     capabilities: [],
@@ -149,6 +150,7 @@ test("a rejected partial callback fails the plugin execution without becoming an
   );
   const manifest = {
     id: "partial-stream-rejection-test",
+    apiVersion: "2",
     version: "1.0.0",
     permissions: [],
     capabilities: [],

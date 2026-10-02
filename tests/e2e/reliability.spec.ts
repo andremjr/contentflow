@@ -2008,6 +2008,67 @@ test("persiste a visualização escolhida na Biblioteca de Métodos", async ({ p
     .toBe("methods");
 });
 
+test("canal abre cards e lista com responsáveis incompletos nas três línguas", async ({
+  page,
+  request,
+}) => {
+  const channel = await seed(request);
+  const original = await (await request.get("/api/preferences")).json();
+  const cases = [
+    undefined,
+    null,
+    { name: 7, initials: null },
+    { name: "Ana Silva", initials: "AS" },
+  ];
+  for (const [index, assignee] of cases.entries()) {
+    expect(
+      (
+        await request.post("/api/projects", {
+          data: {
+            id: randomUUID(),
+            channelId: channel.id,
+            title: `Projeto incompleto ${index}`,
+            createdAt: new Date().toISOString(),
+            stages: Object.fromEntries(PROCESS_ORDER.map((process) => [process, "not_started"])),
+            currentStage: "theme",
+            state: "not_started",
+            progress: 0,
+            deadline: "—",
+            duration: "—",
+            updatedAt: "—",
+            thumbHue: 0,
+            ...(assignee === undefined ? {} : { assignee }),
+          },
+        })
+      ).ok(),
+    ).toBeTruthy();
+  }
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  try {
+    for (const language of ["pt-BR", "en", "es"]) {
+      await request.put("/api/preferences", {
+        data: { ...original, language },
+      });
+      await request.put(`/api/channels/${channel.id}/preferences`, {
+        data: { projectView: "cards" },
+      });
+      await page.goto(`/channel/${channel.id}`);
+      for (const index of cases.keys())
+        await expect(page.getByText(`Projeto incompleto ${index}`, { exact: true })).toBeVisible();
+      await expect(page.getByText("Ana", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: /^(List|Lista)$/ }).click();
+      await expect(page.getByRole("table")).toBeVisible();
+      for (const index of cases.keys())
+        await expect(page.getByText(`Projeto incompleto ${index}`, { exact: true })).toBeVisible();
+      await expect(page.getByRole("cell").filter({ hasText: /^AS\s*Ana$/ })).toBeVisible();
+    }
+    expect(errors).toEqual([]);
+  } finally {
+    await request.put("/api/preferences", { data: original });
+  }
+});
+
 test("carrega um projeto sem mostrar inexistência enquanto aguarda o banco", async ({
   page,
   request,

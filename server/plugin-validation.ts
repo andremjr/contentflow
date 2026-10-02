@@ -525,6 +525,78 @@ export const pluginManifestSchema = z
       const configurationKeys = new Set(
         Object.keys((capability.blockConfigSchema.properties ?? {}) as Record<string, unknown>),
       );
+      for (const [propertyKey, rawSchema] of Object.entries(
+        (capability.blockConfigSchema.properties ?? {}) as Record<string, unknown>,
+      )) {
+        if (!rawSchema || typeof rawSchema !== "object") continue;
+        const ui = (rawSchema as Record<string, unknown>).ui;
+        if (ui === undefined) continue;
+        const uiRecord = ui && typeof ui === "object" ? (ui as Record<string, unknown>) : undefined;
+        if (!uiRecord) {
+          context.addIssue({
+            code: "custom",
+            path: ["capabilities", index, "blockConfigSchema", "properties", propertyKey, "ui"],
+            message: "ui deve ser um objeto declarativo",
+          });
+          continue;
+        }
+        if (
+          uiRecord.section !== undefined &&
+          uiRecord.section !== "primary" &&
+          uiRecord.section !== "advanced"
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: [
+              "capabilities",
+              index,
+              "blockConfigSchema",
+              "properties",
+              propertyKey,
+              "ui",
+              "section",
+            ],
+            message: "section deve ser primary ou advanced",
+          });
+        }
+        if (
+          uiRecord.width !== undefined &&
+          uiRecord.width !== "half" &&
+          uiRecord.width !== "full"
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: [
+              "capabilities",
+              index,
+              "blockConfigSchema",
+              "properties",
+              propertyKey,
+              "ui",
+              "width",
+            ],
+            message: "width deve ser half ou full",
+          });
+        }
+        if (
+          uiRecord.order !== undefined &&
+          (typeof uiRecord.order !== "number" || !Number.isFinite(uiRecord.order))
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: [
+              "capabilities",
+              index,
+              "blockConfigSchema",
+              "properties",
+              propertyKey,
+              "ui",
+              "order",
+            ],
+            message: "order deve ser um número finito",
+          });
+        }
+      }
       for (const [providerIndex, provider] of (capability.configurationOptions ?? []).entries()) {
         if (!configurationKeys.has(provider.property)) {
           context.addIssue({

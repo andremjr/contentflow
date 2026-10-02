@@ -53,7 +53,11 @@ export function PluginConfigurationRenderer({
   const { t } = useAppPreferences();
   const model = buildPluginConfigurationRendererModel({ capability, configuration, profileSetup });
   const isCompactConfigurationField = ([, schema]: [string, JsonSchema]) =>
-    schema.type === "integer" || schema.type === "number" || schema.type === "boolean";
+    schema.ui?.width !== "full" &&
+    (schema.ui?.width === "half" ||
+      schema.type === "integer" ||
+      schema.type === "number" ||
+      schema.type === "boolean");
   const renderConfigurationField = ([key, schema]: [string, JsonSchema]) => (
     <PluginConfigurationField
       key={key}
@@ -100,43 +104,24 @@ export function PluginConfigurationRenderer({
               {renderConfigurationField(entry)}
             </div>
           ))}
-          {model.supportsItemSequence && (
-            <div className="space-y-1.5 md:col-span-2">
-              <Label>{t("Como executar")}</Label>
-              <Select
-                value={model.simpleGenerationMode}
-                onValueChange={(value) => {
-                  if (!model.generationModeOptions.includes(value)) return;
-                  onConfigurationChange({ ...configuration, generationMode: value });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="single">{t("Uma vez")}</SelectItem>
-                  {model.generationModeOptions.includes("auto") && (
-                    <SelectItem value="auto">{t("Automático conforme a entrada")}</SelectItem>
-                  )}
-                  {model.sequenceModeValue && (
-                    <SelectItem value={model.sequenceModeValue}>
-                      {t("Uma vez por item, na mesma conversa")}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-muted-foreground">
-                {model.simpleGenerationMode === model.sequenceModeValue
-                  ? t("Envia cada item em ordem e mantém todos na mesma conversa do provedor.")
-                  : model.simpleGenerationMode === "auto"
-                    ? t(
-                        "Usa sequência quando a porta de estrutura recebe vários itens; caso contrário, envia uma vez.",
-                      )
-                    : t("Executa este bloco uma única vez com todo o contexto recebido.")}
-              </p>
-            </div>
-          )}
         </div>
+        {model.advancedEntries.length > 0 && (
+          <details className="rounded-md border border-border/70 bg-background/30 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+              {t("Opções avançadas")}
+            </summary>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {model.advancedEntries.map((entry) => (
+                <div
+                  key={entry[0]}
+                  className={isCompactConfigurationField(entry) ? undefined : "md:col-span-2"}
+                >
+                  {renderConfigurationField(entry)}
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
       </section>
       {connectionSection}
       {profileSection}
@@ -251,6 +236,7 @@ function PluginConfigurationField({
     choices,
     value,
     t("Opção salva indisponível"),
+    choices.length > 0 || Boolean(configurationOptionsProvider),
   );
 
   if (!configurationOptionsProvider && !options && schema.type === "boolean") {

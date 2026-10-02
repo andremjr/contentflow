@@ -144,6 +144,52 @@ test("applies failed + all as a canonical manual retry", () => {
   assert.equal(execution.status, "blocked_executor");
 });
 
+test("reopens cancelled downstream blocks when retrying a block", () => {
+  const execution = executionWithBlock("Código");
+  const nextBlock = structuredClone(execution.methodSnapshot.blocks[0]);
+  nextBlock.id = "next-images";
+  nextBlock.order = 1;
+  execution.methodSnapshot.blocks.push(nextBlock);
+  execution.blocks.push({
+    blockId: "next-images",
+    status: "cancelled",
+    values: { assets: ["stale"] },
+    attempt: 4,
+    error: "cancelled",
+    jobId: "stale-job",
+    traceId: "stale-trace",
+    completedAt: NOW,
+    progress: 0.5,
+    progressMessage: "cancelled",
+  });
+
+  const result = applyManualBlockRetry(
+    execution,
+    { type: "manual_block_retry_requested", blockId: "images", scope: "all" },
+    NOW,
+  );
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(execution.blocks[1], {
+    blockId: "next-images",
+    status: "pending",
+    values: {},
+    attempt: 5,
+    error: undefined,
+    jobId: undefined,
+    traceId: undefined,
+    completedAt: undefined,
+    progress: undefined,
+    progressMessage: undefined,
+    itemProgress: undefined,
+    profileLaneProgress: undefined,
+    items: undefined,
+    itemRetryScope: undefined,
+    itemRetryId: undefined,
+    pluginConversation: undefined,
+  });
+});
+
 test("applies completed + selected while preserving items, values and the official output", () => {
   const execution = executionWithBlock("Código", "completed");
   execution.outputStatus = "completed";

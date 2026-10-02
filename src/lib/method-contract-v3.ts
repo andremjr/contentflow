@@ -173,9 +173,35 @@ export const processMethodV3Schema = z
     name: z.string().min(1).max(200),
     imageUrl: z.string().max(1_500_000).optional(),
     processType: universalProcessSchema,
-    blocks: z.array(actionBlockSchema).min(1).max(200),
+    // An empty method is a valid editable state. The editor must be able to
+    // remove the final block and save the process for later configuration.
+    blocks: z.array(actionBlockSchema).max(200),
   })
   .strict();
+
+// The editor creates an explicit previous-block binding before the user chooses
+// its source. Persist this draft without accepting it as an executable contract.
+const workspaceInputSchema = inputSchema.extend({
+  binding: z.union([
+    inputSourceBindingSchema,
+    z
+      .object({
+        kind: z.literal("previous_block"),
+        blockId: z.string(),
+        outputKey: z.string().max(200),
+      })
+      .strict(),
+  ]),
+});
+export const workspaceMethodV3Schema = processMethodV3Schema.extend({
+  blocks: z
+    .array(
+      actionBlockSchema.extend({
+        inputs: z.array(workspaceInputSchema).max(100).optional(),
+      }),
+    )
+    .max(200),
+});
 
 export function parseProcessMethodV3(value: unknown): ProcessMethod {
   return processMethodV3Schema.parse(value) as ProcessMethod;

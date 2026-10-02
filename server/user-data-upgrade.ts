@@ -5,7 +5,7 @@ import type { Express } from "express";
 import { valueShapeSchema } from "../src/lib/value-shape-schema";
 import type { PluginJobStore, PersistentPluginJob } from "./plugin-job-store";
 import path from "node:path";
-import { processMethodV3Schema } from "../src/lib/method-contract-v3";
+import { processMethodV3Schema, workspaceMethodV3Schema } from "../src/lib/method-contract-v3";
 import { areValueShapesCompatible, validateValueShape } from "../src/lib/data-shape";
 import type { ValueShape } from "../src/lib/domain";
 import { createChannelHistoryRecordFields } from "../src/lib/channel-history";
@@ -714,6 +714,9 @@ export function convertLegacyMethod(
   context: MigrationContext,
   options: { enforceCurrentPluginPorts?: boolean } = {},
 ) {
+  // Current contracts already declare their semantics. Legacy inference must
+  // never reinterpret a valid v3 draft or a frozen execution snapshot.
+  if (workspaceMethodV3Schema.safeParse(source).success) return clone(source);
   const method = clone(source);
   const enforceCurrentPluginPorts =
     options.enforceCurrentPluginPorts !== false && source.contractVersion !== 3;

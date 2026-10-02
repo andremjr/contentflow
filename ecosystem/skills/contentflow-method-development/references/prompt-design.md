@@ -11,7 +11,7 @@ Não selecione o tema final; a escolha ocorrerá em VALIDAR.
 Responda apenas com dados compatíveis com o output `theme_candidates`.
 ```
 
-O prompt não substitui o schema. O `ValueShape` do output e os campos do `RecordShape` são a autoridade para validar o resultado.
+O prompt não substitui o contrato. O `ValueShape` valida família, cardinalidade e representação. Novas entregas estratégicas são conteúdo; se o plugin aceita JSON textual, ele valida os campos desse formato, sem transformá-lo em `RecordShape` do Core. Contratos internos estruturados existentes continuam preservados.
 
 ## Camadas
 
@@ -33,7 +33,7 @@ Quando a capability de plugin declarar `promptPreview`, confira a prévia antes 
 
 ## IA
 
-Declare idioma, contexto, limites, formato e o que não fazer. Se o resultado for `RecordShape`, especifique cada campo no prompt. Se for conteúdo textual com `cardinality: "many"`, não o descreva como tabela ou objeto. Separe geração de seleção: IA produz candidatos; Humano valida.
+Declare idioma, contexto, limites e critérios editoriais. Para `text/many`, descreva a unidade de conteúdo de cada item. Um item pode ser texto JSON quando o plugin declara e valida esse formato; sua instrução técnica de serialização pertence ao plugin. Não exponha schemas internos ao usuário. Separe geração de seleção quando houver decisão própria; configure Humano, IA ou Código conforme a intenção e o contrato de validação.
 
 ## Código
 

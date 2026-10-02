@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isDeepStrictEqual } from "node:util";
 import {
   PROCESS_META,
   PROCESS_ORDER,
@@ -23,6 +24,16 @@ export const BUILDER_METHOD_CONTRACT = {
   universalProcesses: PROCESS_ORDER.map((id) => ({ id, label: PROCESS_META[id].label })),
   blockTypes: ["BUSCAR", "ESCOLHER", "CRIAR", "VALIDAR"],
   operators: ["IA", "Humano", "Código"],
+  strategicFields: {
+    kind: "content",
+    families: ["text", "image", "audio", "video"],
+    textFormats:
+      "JSON, SRT e outros formatos textuais aceitos explicitamente pela porta continuam sendo text; não são interpretados automaticamente como relações pelo Core.",
+    associations:
+      "O plugin produtor fornece IDs canônicos das entradas ao modelo e valida seu formato textual; o plugin consumidor resolve as referências pela proveniência das entregas. O Core não decide associações editoriais. Exemplo: roteiro → personagens → referências → prompts com IDs → cenas consistentes.",
+    internalFields:
+      "Preserve contratos internos existentes. Decisão de VALIDAR, identidade de ESCOLHER e Histórico do Canal são mecanismos internos, não campos estratégicos configuráveis.",
+  },
   processOutputs: {
     theme: [
       {
@@ -115,6 +126,7 @@ export const BUILDER_METHOD_CONTRACT = {
       "Gerar imagens e animá-las deve ser, por padrão, CRIAR images → VALIDAR opcional → CRIAR videos; use um único Bloco apenas se as imagens forem detalhe interno descartável e o contrato exigir somente o vídeo final.",
   },
   rules: [
+    "Crie entradas e entregas estratégicas somente com kind: content e família text, image, audio ou video. Não crie schemas de controle ou registros para o usuário configurar.",
     "Use somente os oito processos, quatro tipos de bloco e três operadores declarados.",
     "Defina a estratégia e as fronteiras dos Blocos antes de escolher plugin ou capability.",
     "Não colapse etapas estratégicas apenas porque uma capability oferece um modo combinado.",
@@ -315,6 +327,42 @@ export function validateBuilderMethods(input: {
     const ids = new Set<string>();
     for (const [index, block] of blocks.entries()) {
       const label = `${processType}/${block.name ?? block.type}`;
+      const existingBlock = input.channel.methods[processType]?.blocks.find(
+        (item) => item.id === block.id,
+      );
+      for (const field of [...(block.inputs ?? []), ...(block.outputs ?? [])]) {
+        if (field.shape.kind === "content") continue;
+        const existingField = [
+          ...(existingBlock?.inputs ?? []),
+          ...(existingBlock?.outputs ?? []),
+        ].find((item) => item.id === field.id);
+        const preserved =
+          existingField &&
+          isDeepStrictEqual(existingField.shape, field.shape) &&
+          ("binding" in field
+            ? "binding" in existingField && isDeepStrictEqual(existingField.binding, field.binding)
+            : "key" in existingField && existingField.key === field.key);
+        const nativeDecision =
+          !("binding" in field) &&
+          field.shape.kind === "control" &&
+          field.shape.cardinality === "one" &&
+          ((block.type === "VALIDAR" &&
+            block.validation?.mode === "approval" &&
+            field.key === "decision" &&
+            field.shape.control === "approval") ||
+            (block.type === "ESCOLHER" &&
+              field.key === "selectedItemId" &&
+              field.shape.control === "identifier"));
+        const nativeHistory =
+          "binding" in field &&
+          field.binding.kind === "channel_history" &&
+          field.shape.kind === "record";
+        if (!preserved && !nativeDecision && !nativeHistory) {
+          errors.push(
+            `${label}: entradas e entregas estratégicas devem ser conteúdo (text, image, audio, video); preserve contratos internos existentes sem criar controles ou registros novos.`,
+          );
+        }
+      }
       if (ids.has(block.id)) errors.push(`${label}: id de bloco duplicado.`);
       ids.add(block.id);
       if (block.order !== index) errors.push(`${label}: order deve ser ${index}.`);
