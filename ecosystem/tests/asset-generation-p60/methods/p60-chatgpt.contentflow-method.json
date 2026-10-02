@@ -56,7 +56,7 @@
         "order": 0,
         "plugin": {
           "pluginId": "local.contentflow.chatgpt-browser-studio",
-          "pluginVersion": "2.0.0",
+          "pluginVersion": "2.0.1",
           "capabilityId": "generate-image-in-browser",
           "configuration": {},
           "connectionRequired": false
