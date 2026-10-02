@@ -273,7 +273,7 @@ function icon(plugin) {
 }
 function urlFor(item) {
   return kind === "plugins"
-    ? `https://github.com/andremjr/contentflow/releases/latest/download/${item.downloadUrl}`
+    ? `https://github.com/andremjr/contentflow/releases/download/v1.3.2/${item.downloadUrl}`
     : item.url;
 }
 function filteredData() {
