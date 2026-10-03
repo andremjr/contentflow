@@ -215,7 +215,7 @@ const pluginMeta = {
 };
 let methodData = [];
 let language = localStorage.getItem("contentflow-site-language") || "pt",
-  kind = "plugins",
+  kind = new URLSearchParams(location.search).get("category") === "methods" ? "methods" : "plugins",
   catalog = [],
   selected = new Set();
 const gallery = document.querySelector("#gallery"),
@@ -277,6 +277,7 @@ function update() {
 }
 function setLanguage(nextLanguage) {
   language = nextLanguage;
+  document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.kind === kind));
   document.documentElement.lang = language === "pt" ? "pt-BR" : language;
   document
     .querySelectorAll("[data-i18n]")
