@@ -3,7 +3,7 @@ import type { AppLanguage } from "./app-preferences";
 export const ecosystemCatalogMessages = {
   plugins: ["Catálogo de plugins", "Plugin catalog", "Catálogo de plugins"],
   methods: ["Métodos disponíveis", "Available Methods", "Métodos disponibles"],
-  repository: ["Abrir repositório", "Open repository", "Abrir repositorio"],
+  explore: ["Explorar ecossistema", "Explore ecosystem", "Explorar ecosistema"],
   refresh: ["Atualizar catálogo", "Refresh catalog", "Actualizar catálogo"],
   loading: ["Consultando catálogo…", "Loading catalog…", "Consultando catálogo…"],
   unavailable: [

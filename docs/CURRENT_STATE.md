@@ -1,6 +1,6 @@
 # Estado atual e limites de validação
 
-Revisão documental: 03/10/2026. Esta descrição corresponde ao checkout inspecionado, incluindo alterações locais; não afirma que todas elas estejam em uma release publicada. Versão declarada em `package.json`: `1.3.3`. HEAD, branch e alterações devem ser consultados ao vivo.
+Revisão documental: 03/10/2026. Esta descrição corresponde ao checkout inspecionado, incluindo alterações locais; não afirma que todas elas estejam em uma release publicada. Versão declarada em `package.json`: `1.3.4`. HEAD, branch e alterações devem ser consultados ao vivo.
 
 ## Produto disponível
 

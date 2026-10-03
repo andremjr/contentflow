@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { useAppPreferences } from "@/lib/app-preferences";
 import { ecosystemCatalogText } from "@/lib/ecosystem-catalog-localization";
+import { ECOSYSTEM_DOWNLOADS } from "@/lib/ecosystem-downloads";
 
 type Entry = {
   id: string;
@@ -65,12 +66,12 @@ export function EcosystemCatalog({
         </Button>
         <a
           className="flex items-center gap-1 text-xs text-brand-soft"
-          href={`https://github.com/andremjr/${kind === "plugins" ? "plugins" : "methods"}-contentflow`}
+          href={ECOSYSTEM_DOWNLOADS[kind]}
           target="_blank"
           rel="noreferrer"
         >
           <ExternalLink className="size-3.5" />
-          {t("repository")}
+          {t("explore")}
         </a>
       </div>
       {open && (
