@@ -1,164 +1,273 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-02T23:31:08.157Z",
+  "generatedAt": "2026-10-03T18:52:33.189Z",
   "plugins": [
     {
+      "id": "com.andremjr.assemblyai-srt",
       "name": "AssemblyAI SRT Studio",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Transcreve uma ou várias mídias com rotação circular de chaves AssemblyAI e compila legendas SRT configuráveis.",
-      "downloadUrl": "ContentFlow-Plugin-assemblyai-srt.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-assemblyai-srt.zip",
+      "asset": "ContentFlow-Plugin-assemblyai-srt.zip",
+      "sha256": "53c9938ff4998f041c47e4e617013c6b4a3d8f87d6310c2b2a39698068603c7c",
+      "size": 16208
     },
     {
+      "id": "com.contentflow.antigravity-skill-runner",
       "name": "Antigravity Skill Runner",
-      "version": "1.0.0",
+      "version": "1.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Executa o agente Antigravity e suas skills locais em etapas de produção, com entregas tipadas para o Método.",
-      "downloadUrl": "ContentFlow-Plugin-antigravity-skill-runner.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-antigravity-skill-runner.zip",
+      "asset": "ContentFlow-Plugin-antigravity-skill-runner.zip",
+      "sha256": "4420af315ad3b6a5cf1cc4c3ef6234439d41c9871aaa5a83bfc4ddbf7c005fdc",
+      "size": 17260
     },
     {
+      "id": "com.contentflow.claude-code-skill-runner",
       "name": "Claude Code Skill Runner",
-      "version": "1.0.0",
+      "version": "1.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Executa o agente Claude Code e suas skills locais em etapas de produção, com entregas tipadas para o Método.",
-      "downloadUrl": "ContentFlow-Plugin-claude-code-skill-runner.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-claude-code-skill-runner.zip",
+      "asset": "ContentFlow-Plugin-claude-code-skill-runner.zip",
+      "sha256": "28c5cea5a49fd58573a00910843523f9a541238a4956119b80dd9fde37844075",
+      "size": 17765
     },
     {
+      "id": "com.contentflow.codex-skill-runner",
       "name": "Codex Skill Runner",
-      "version": "1.0.0",
+      "version": "1.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Executa o agente Codex e suas skills locais em etapas de produção, com entregas tipadas para o Método.",
-      "downloadUrl": "ContentFlow-Plugin-codex-skill-runner.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-codex-skill-runner.zip",
+      "asset": "ContentFlow-Plugin-codex-skill-runner.zip",
+      "sha256": "fea9336687f7b4d65346eb35205a18c452f2c15079b0a968fa619612a6ee84b8",
+      "size": 17190
     },
     {
+      "id": "contentflow.manual-tool-launcher",
       "name": "Abrir ferramenta manual",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Abre um navegador configurado com perfil e URL HTTPS ou um aplicativo local para o operador humano continuar o trabalho manualmente.",
-      "downloadUrl": "ContentFlow-Plugin-manual-tool-launcher.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-manual-tool-launcher.zip",
+      "asset": "ContentFlow-Plugin-manual-tool-launcher.zip",
+      "sha256": "ec4faa4ff6912a86d9b51fb7dbec9f4d980686e9ebc2f9e0eaad87e9115d78dd",
+      "size": 67965
     },
     {
+      "id": "local.contentflow.chatgpt-browser-studio",
       "name": "ChatGPT Browser Studio",
-      "version": "2.0.1",
+      "version": "2.0.2",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Automação modular do ChatGPT web para criar, pesquisar, escolher, validar, analisar arquivos e gerar imagens.",
-      "downloadUrl": "ContentFlow-Plugin-chatgpt-browser-studio.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-chatgpt-browser-studio.zip",
+      "asset": "ContentFlow-Plugin-chatgpt-browser-studio.zip",
+      "sha256": "5ba7c32edee2d6c854f3aae301e8697e8f6effa21ab11d6a88bae3721f2e91d5",
+      "size": 78574
     },
     {
+      "id": "local.contentflow.claude-browser-text",
       "name": "Claude Browser Studio",
-      "version": "2.0.0",
-      "description": "Super plugin do Claude web para criar em uma ou várias etapas, pesquisar, escolher, validar e analisar imagens ou documentos em conversas persistentes.",
-      "downloadUrl": "ContentFlow-Plugin-claude-browser-text.zip",
-      "updatedAt": "2026-10-02"
-    },
-    {
-      "name": "Free Stock Media Studio",
-      "version": "1.0.0",
-      "description": "Pesquisa imagens e vídeos em escala por consulta ou briefing temporal, usando o maior lote permitido por provedor e preservando proveniência, licença e atribuição.",
-      "downloadUrl": "ContentFlow-Plugin-free-stock-media-studio.zip",
-      "updatedAt": "2026-10-02"
-    },
-    {
-      "name": "Gemini Browser Studio",
-      "version": "2.0.0",
-      "description": "Automação modular do Gemini web para texto, pesquisa, escolha, validação, análise de arquivos, imagens e música.",
-      "downloadUrl": "ContentFlow-Plugin-gemini-browser-studio.zip",
-      "updatedAt": "2026-10-02"
-    },
-    {
-      "name": "Google Flow Browser Images",
       "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
+      "description": "Super plugin do Claude web para criar em uma ou várias etapas, pesquisar, escolher, validar e analisar imagens ou documentos em conversas persistentes.",
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-claude-browser-text.zip",
+      "asset": "ContentFlow-Plugin-claude-browser-text.zip",
+      "sha256": "95c3b95a04eefca537ee516528c3ad6659b866fd98e75e7010d0814fee34c15e",
+      "size": 42580
+    },
+    {
+      "id": "local.contentflow.free-stock-media-studio",
+      "name": "Free Stock Media Studio",
+      "version": "1.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
+      "description": "Pesquisa imagens e vídeos em escala por consulta ou briefing temporal, usando o maior lote permitido por provedor e preservando proveniência, licença e atribuição.",
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-free-stock-media-studio.zip",
+      "asset": "ContentFlow-Plugin-free-stock-media-studio.zip",
+      "sha256": "926ad5d6af4b2d78bbea5202adc7518913ee9ef7bdd52693eddfb76e4103cd80",
+      "size": 48986
+    },
+    {
+      "id": "local.contentflow.gemini-browser-studio",
+      "name": "Gemini Browser Studio",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
+      "description": "Automação modular do Gemini web para texto, pesquisa, escolha, validação, análise de arquivos, imagens e música.",
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-gemini-browser-studio.zip",
+      "asset": "ContentFlow-Plugin-gemini-browser-studio.zip",
+      "sha256": "f59f653ef3cb7250f77e3f59aa7d8387fb85e47e454fcf0b411fd16623586024",
+      "size": 40238
+    },
+    {
+      "id": "local.contentflow.google-flow-batch-images",
+      "name": "Google Flow Browser Images",
+      "version": "3.0.0",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Gera imagens reais e vídeos no Google Flow com modelos Nano Banana e Veo, proporções configuráveis, animação de imagens, referências visuais, continuidade de projeto e produção visual em lote.",
-      "downloadUrl": "ContentFlow-Plugin-google-flow-browser-images.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-google-flow-browser-images.zip",
+      "asset": "ContentFlow-Plugin-google-flow-browser-images.zip",
+      "sha256": "f40826efef84595f800fb4e9f1866e5148655cb4957079860c716c0bea8d5628",
+      "size": 161231
     },
     {
+      "id": "local.contentflow.grok-browser-studio",
       "name": "Grok Browser Studio",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Gera texto, pesquisa, imagens e vídeos no Grok web usando um perfil Chrome dedicado, sem API oficial.",
-      "downloadUrl": "ContentFlow-Plugin-grok-browser-studio.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-grok-browser-studio.zip",
+      "asset": "ContentFlow-Plugin-grok-browser-studio.zip",
+      "sha256": "ea38c228e30754198b1bc53397fa7f4e5b1bc836a414c305597f5cf84ec4f6bb",
+      "size": 34585
     },
     {
+      "id": "local.contentflow.mai-playground-browser",
       "name": "MAI Playground Browser",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Gera narração em áudio (TTS) com MAI-Voice-2 e texto no Microsoft AI Playground usando um perfil Chrome dedicado.",
-      "downloadUrl": "ContentFlow-Plugin-mai-playground-browser.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-mai-playground-browser.zip",
+      "asset": "ContentFlow-Plugin-mai-playground-browser.zip",
+      "sha256": "ff99dbd29a66517000267132e6f1b86352bec9265572ebecf45257f7a4053b5a",
+      "size": 77061
     },
     {
+      "id": "local.contentflow.meta-ai-browser-studio",
       "name": "Meta AI Browser Studio",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Gera texto e imagens no Meta AI e vídeos curtos no Vibes usando um perfil Chrome dedicado, sem API oficial.",
-      "downloadUrl": "ContentFlow-Plugin-meta-ai-browser-studio.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-meta-ai-browser-studio.zip",
+      "asset": "ContentFlow-Plugin-meta-ai-browser-studio.zip",
+      "sha256": "d261e4f5c5e8b6218f49749a7b0658d53d2ebd92d3e00f9fb300137a84f564b3",
+      "size": 47099
     },
     {
+      "id": "local.contentflow.text-file-builder",
       "name": "Construtor de Arquivo de Texto",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Consolida textos, listas e registros de blocos anteriores em um arquivo Markdown ou TXT reutilizável como anexo.",
-      "downloadUrl": "ContentFlow-Plugin-text-file-builder.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-text-file-builder.zip",
+      "asset": "ContentFlow-Plugin-text-file-builder.zip",
+      "sha256": "e99031dcab65abef54c15cdb4976e1822791b3eb01c73663d45ae37ee64b5799",
+      "size": 6002
     },
     {
+      "id": "local.contentflow.vibes-browser-studio",
       "name": "Vibes Browser Studio",
-      "version": "1.0.0",
+      "version": "1.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Gera imagens verticais e vídeos por Frames ou Elementos no Vibes usando um perfil Chrome dedicado e a Browser Bridge.",
-      "downloadUrl": "ContentFlow-Plugin-vibes-browser-studio.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-vibes-browser-studio.zip",
+      "asset": "ContentFlow-Plugin-vibes-browser-studio.zip",
+      "sha256": "05689312c066592cee3c278db3bbeb87a61addf075ae4691904d85b4aaebc326",
+      "size": 102704
     },
     {
+      "id": "official-anthropic-claude",
       "name": "Anthropic Claude",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Executa ações baseadas em linguagem com modelos Claude disponíveis na API da Anthropic.",
-      "downloadUrl": "ContentFlow-Plugin-anthropic-claude.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-anthropic-claude.zip",
+      "asset": "ContentFlow-Plugin-anthropic-claude.zip",
+      "sha256": "8fb03ceffc3e227ca8d49769225e46cf6ad7eb500e5246131a6cb9b97691f0c4",
+      "size": 10040
     },
     {
+      "id": "official-edge-tts",
       "name": "Microsoft Edge TTS",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Gera narração MP3 com as vozes online gratuitas usadas pelo recurso Ler em voz alta do Microsoft Edge.",
-      "downloadUrl": "ContentFlow-Plugin-edge-tts.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-edge-tts.zip",
+      "asset": "ContentFlow-Plugin-edge-tts.zip",
+      "sha256": "98b678395b58f6059f8b1541c384b2022e2d80d1b95847fe473eb229b47115ea",
+      "size": 13450012
     },
     {
+      "id": "official-elevenlabs",
       "name": "ElevenLabs Audio",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Gera narração, efeitos sonoros e música, transcreve mídia e consulta vozes pela API oficial da ElevenLabs.",
-      "downloadUrl": "ContentFlow-Plugin-elevenlabs.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-elevenlabs.zip",
+      "asset": "ContentFlow-Plugin-elevenlabs.zip",
+      "sha256": "d9fe8a6152dfe47af1a17edb4852363037d4b579a07f5552b3c67e7058826518",
+      "size": 17062
     },
     {
+      "id": "official-ffmpeg-image-sequence-video",
       "name": "Vídeo por Sequência de Imagens (FFmpeg)",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Monta um vídeo MP4 local com imagens ordenadas, sincronizadas pela duração do áudio ou pelos intervalos de um SRT.",
-      "downloadUrl": "ContentFlow-Plugin-ffmpeg-image-sequence-video.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-ffmpeg-image-sequence-video.zip",
+      "asset": "ContentFlow-Plugin-ffmpeg-image-sequence-video.zip",
+      "sha256": "a063eb8b1979a19c3badc5ac914682832ad565be7278bcbd4b56d1b6096e8e06",
+      "size": 30337439
     },
     {
+      "id": "official-openai-gpt",
       "name": "OpenAI Models",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Executa qualquer bloco baseado em linguagem com um modelo de texto compatível com a Responses API da OpenAI.",
-      "downloadUrl": "ContentFlow-Plugin-openai-gpt.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-openai-gpt.zip",
+      "asset": "ContentFlow-Plugin-openai-gpt.zip",
+      "sha256": "a408f0c26b2d2790903a3ffd23beff59602e30576dd9a384535faba5911f618e",
+      "size": 10797
     },
     {
+      "id": "official-silence-remover",
       "name": "Removedor de Silêncios",
-      "version": "2.0.0",
+      "version": "2.0.1",
+      "apiVersion": "2",
+      "minCoreVersion": "1.3.3",
       "description": "Remove trechos silenciosos de arquivos de áudio e vídeo com parâmetros configuráveis.",
-      "downloadUrl": "ContentFlow-Plugin-silence-remover.zip",
-      "updatedAt": "2026-10-02"
+      "downloadUrl": "https://github.com/andremjr/plugins-contentflow/releases/download/bootstrap-1.3.3/ContentFlow-Plugin-silence-remover.zip",
+      "asset": "ContentFlow-Plugin-silence-remover.zip",
+      "sha256": "e523f51fcd36e5e0665083c66f97fe668c4a265b404b723d127f2386d4ce9074",
+      "size": 30328986
     }
   ],
   "methods": [
     {
-      "name": "Históricos — 50 imagens do roteiro",
-      "version": "3",
-      "description": "Método de Assets Visuais que transforma um roteiro em 50 prompts e imagens em lote.",
-      "downloadUrl": "methods/historicos-assets-50-imagens.contentflow-method.json",
-      "sha256": "b8c0ef2a94f5d8b64b71053f6df0c836fb75c028a71b3624c29a39c28217ed6d",
-      "size": 5412,
-      "updatedAt": "2026-10-01"
+      "id": "gerar-imagens-flow-assets",
+      "name": "Gerar Imagens Flow — Assets Visuais",
+      "version": "1.0.0",
+      "contractVersion": 3,
+      "minCoreVersion": "1.3.3",
+      "license": "MIT",
+      "asset": "gerar-imagens-flow-assets.contentflow-method.zip",
+      "description": "Transforma roteiro em personagens, referências, cenas consistentes e animações no Google Flow, com sete Blocos de Assets Visuais.",
+      "downloadUrl": "https://github.com/andremjr/methods-contentflow/releases/download/gerar-imagens-flow-assets-v1.0.0/gerar-imagens-flow-assets.contentflow-method.zip",
+      "sha256": "a52cf98cd7e6967087566584ac36028a62c77d2ac13983a555c6a2abd3a46bf7",
+      "size": 3885
     }
   ]
 }

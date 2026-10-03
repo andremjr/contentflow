@@ -213,50 +213,7 @@ const pluginMeta = {
     process: ["narration", "editing"],
   },
 };
-const methodData = [
-  [
-    "theme",
-    "Método de Tema",
-    "4 blocos: categoria, ângulo, geração e escolha final.",
-  ],
-  [
-    "title",
-    "Método de Título",
-    "2 blocos: opções de título e validação humana.",
-  ],
-  [
-    "thumbnail",
-    "Método de Thumbnail",
-    "3 blocos: prompt, geração no Flow e aprovação.",
-  ],
-  [
-    "script",
-    "Método de Roteiro",
-    "11 blocos: pesquisa, estrutura, dossiê, roteiro e validação.",
-  ],
-  [
-    "narration",
-    "Método de Narração e Áudio",
-    "Geração da narração a partir do roteiro aprovado.",
-  ],
-  [
-    "assets",
-    "Método de Assets Visuais",
-    "SRT, prompts visuais e imagens em lote no Flow.",
-  ],
-].map(([process, name, description]) => ({
-  slug: process,
-  name,
-  description,
-  url: `downloads/methods/historicos-contentflow-${process}.contentflow-method.zip`,
-  process: [process],
-  delivery:
-    process === "assets"
-      ? ["image", "srt"]
-      : process === "narration"
-        ? ["audio"]
-        : ["text"],
-}));
+let methodData = [];
 let language = localStorage.getItem("contentflow-site-language") || "pt",
   kind = "plugins",
   catalog = [],
@@ -269,20 +226,16 @@ const gallery = document.querySelector("#gallery"),
   processFilter = document.querySelector("#process-filter"),
   resultCount = document.querySelector("#result-count");
 function icon(plugin) {
-  return `ecosystem-assets/plugin-${plugin.downloadUrl.replace("ContentFlow-Plugin-", "").replace(".zip", "")}.png`;
+  return `ecosystem-assets/plugin-${plugin.asset.replace("ContentFlow-Plugin-", "").replace(".zip", "")}.png`;
 }
-function urlFor(item) {
-  return kind === "plugins"
-    ? `https://github.com/andremjr/contentflow/releases/download/v1.3.2/${item.downloadUrl}`
-    : item.url;
-}
+function urlFor(item) { return item.downloadUrl; }
 function filteredData() {
   const source = kind === "plugins" ? catalog : methodData,
     term = search.value.trim().toLocaleLowerCase();
   return source.filter((item) => {
     const matchesSearch =
         !term ||
-        `${item.name} ${item.description}`.toLocaleLowerCase().includes(term),
+        `${escapeHtml(item.name)} ${escapeHtml(item.description)}`.toLocaleLowerCase().includes(term),
       matchesDelivery =
         deliveryFilter.value === "all" ||
         item.delivery.includes(deliveryFilter.value) ||
@@ -293,6 +246,7 @@ function filteredData() {
     return matchesSearch && matchesDelivery && matchesProcess;
   });
 }
+function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;", "'":"&#39;"})[char]); }
 function render() {
   const data = filteredData();
   resultCount.textContent = `${data.length} ${words[language].results}`;
@@ -300,7 +254,7 @@ function render() {
     ? data
         .map((item) => {
           const url = urlFor(item);
-          return `<article class="card ${kind === "plugins" ? "plugin" : ""}"><label><input class="select" type="checkbox" data-url="${url}" ${selected.has(url) ? "checked" : ""}></label><div class="cover"><img src="${kind === "plugins" ? icon(item) : "ecosystem-assets/historicos.webp"}" onerror="this.src='logo-mark.png'" alt="${item.name}"></div><div class="body"><small>${words[language][kind === "plugins" ? "plugin" : "method"]}</small><h2>${item.name}</h2><p>${item.description}</p><a href="${url}" download>${words[language].downloadItem}</a></div></article>`;
+          return `<article class="card ${kind === "plugins" ? "plugin" : ""}"><label><input class="select" type="checkbox" data-url="${escapeHtml(url)}" ${selected.has(url) ? "checked" : ""}></label><div class="cover"><img src="${kind === "plugins" ? icon(item) : "logo-mark.png"}" onerror="this.src='logo-mark.png'" alt="${escapeHtml(item.name)}"></div><div class="body"><small>${words[language][kind === "plugins" ? "plugin" : "method"]}</small><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.description)}</p><a href="${escapeHtml(url)}" download>${words[language].downloadItem}</a></div></article>`;
         })
         .join("")
     : `<div class="empty">${words[language].empty}</div>`;
@@ -385,14 +339,13 @@ download.onclick = () =>
       link.click();
     }, index * 400),
   );
-fetch(new URL("ecosystem-catalog.json", document.baseURI))
-  .then((response) => response.json())
-  .then((data) => {
-    catalog = data.plugins.map((plugin, index) => ({
-      ...plugin,
-      ...(pluginMeta[plugin.downloadUrl] ?? { delivery: [], process: [] }),
-      slug: `plugin-${index}`,
-    }));
-    setLanguage(language);
-  })
-  .catch(() => setLanguage(language));
+Promise.all([
+  fetch("https://raw.githubusercontent.com/andremjr/plugins-contentflow/main/catalog.json").then(response => { if (!response.ok) throw new Error("catalog"); return response.json(); }),
+  fetch("https://raw.githubusercontent.com/andremjr/methods-contentflow/main/catalog.json").then(response => { if (!response.ok) throw new Error("catalog"); return response.json(); }),
+]).then(([plugins, methods]) => {
+  catalog = plugins.plugins.map((plugin, index) => ({
+    ...plugin, ...(pluginMeta[plugin.asset] ?? { delivery: [], process: [] }), slug: `plugin-${index}`,
+  }));
+  methodData = methods.methods.map(method => ({ ...method, slug: method.id, url: method.downloadUrl, process: ["assets"], delivery: ["image", "video"] }));
+  setLanguage(language);
+}).catch(() => setLanguage(language));
