@@ -320,8 +320,6 @@ export type StoredFile = {
   size: number;
   url: string;
   sha256?: string;
-  /** Provider media identity used when a later plugin continues the same room. */
-  flowMediaId?: string;
 };
 
 export type DeliveryStatus = "partial" | "completed" | "invalidated";

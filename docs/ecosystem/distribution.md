@@ -83,7 +83,7 @@ Informações materiais não podem ficar apenas em link externo ou texto genéri
 
 ## 6. Publicação opcional em catálogo
 
-Submeter um plugin a um catálogo futuro é opcional. Serve para descoberta pública e para solicitar sinais como `verified`; não é requisito para compartilhar uma pasta ou executar localmente. A versão atual não inclui publicação, download ou atualização por catálogo.
+Submeter um plugin a um catálogo futuro é opcional. Serve para descoberta pública e para solicitar sinais como `verified`; não é requisito para compartilhar uma pasta ou executar localmente. A versão atual permite consulta, instalação e atualização pelo catálogo configurado. A publicação é feita pelo mantenedor fora do aplicativo.
 
 1. O autor reserva ou comprova o namespace.
 2. Envia pacote imutável, manifesto, licença, README, changelog e informações de suporte/segurança.
@@ -192,3 +192,12 @@ Quando houver indício de malware, exfiltração, fraude ou outra atividade ilí
 - [ ] Changelog e política de descontinuação existem.
 - [ ] Canal privado de vulnerabilidades está ativo.
 - [ ] Nome, marketing e código respeitam a licença e as marcas do ContentFlow.
+
+
+## Distribuição independente a partir da 1.3.3
+
+O núcleo usa releases de andremjr/contentflow. Plugins de autoria do mantenedor são MIT e publicados em andremjr/plugins-contentflow; Métodos publicados pelo mantenedor são MIT em andremjr/methods-contentflow. Dependências de terceiros conservam suas licenças. Ambos os catálogos são catalog.json no branch main, acessíveis por raw.githubusercontent.com. Cada entrada aponta para seu pacote em uma release imutável do próprio repositório, com tamanho e SHA-256. A atualização de uma entrada conserva as outras; não exige republicação integral nem nova versão do aplicativo quando o contrato permanecer compatível.
+
+O Gerenciador de Plugins instala pacotes ausentes mediante ação explícita e mostra atualizações compatíveis de plugins instalados. O catálogo não ativa plugins, não vincula perfis e não concede permissões. Métodos podem ser consultados e importados pela prévia existente, sem substituir silenciosamente personalizações. Versão editorial do Método é independente do envelope v3. Erros de consulta ficam visíveis.
+
+As fontes em plugins-contentflow omitem binários de runtimes de terceiros; os pacotes distribuídos os incluem com suas licenças e notices. Autores devem preparar as dependências conforme cada plugin antes de empacotar. Publique e confirme os assets antes de atualizar o catálogo público. Não use GitHub Actions.

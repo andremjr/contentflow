@@ -4,6 +4,10 @@ Versão **1.3.8**.
 
 Plugin avançado de geração de imagens e vídeos no Google Flow através do Chrome dedicado com perfil persistente. O plugin delega ao ContentFlow a ordem, a identidade e a persistência dos itens da fila, preservando a sessão do navegador entre as invocações:
 
+Na geração de imagens, todas as referências recebidas são preparadas e verificadas antes do primeiro prompt. O plugin mantém um catálogo privado de identidade de mídia, separado por perfil explicitamente escolhido, projeto e hash do arquivo; o nome local do artifact não é usado como nome presumido no Flow. Reutiliza a identidade existente e seu nome atual, inclusive fora da região visível da galeria. Se precisar de upload, confirma a identidade da imagem enviada antes de liberar a fila. A seleção exige ID exato; uma busca sem ID exige nome exato e único.
+
+Eventos de envio são registrados antes de aguardar a confirmação do clique, e respostas correlacionadas ao item concedido pelo núcleo são preservadas no workspace antes do download. URLs assinadas são comparadas pela identidade da mídia, não pelo token temporário. Esses fatos são privados do plugin; não existe campo `project_url` ou identidade específica do Flow no contrato universal de arquivos.
+
 - **Geração de Imagens** com Nano Banana 2, Nano Banana Pro, modelos adicionais pelo rótulo visível do Flow e proporções (16:9, 4:3, 1:1, 3:4, 9:16).
 - **Animação de Imagens (Image-to-Video)** com Veo 3.1 (Quality, Fast, Lite) e Omni 1.1 Flash.
 - **Geração Direta de Vídeo (Text-to-Video)** com modelos selecionáveis, referências visuais, modo Frame/Elemento, duração, proporção e resolução.
@@ -137,3 +141,15 @@ Em `generate-images-in-browser`, `promptFormat=json` interpreta cada item de tex
 Fluxo recomendado: roteiro → personagens extraídos do roteiro → imagens de referência → prompts das cenas com IDs → cenas consistentes → seleção humana → animação. O ChatGPT Browser Studio pode produzir esses textos usando `textItemFormat=json`, `textItemFields` (campos `string` ou `string[]`) e `textItemReferenceInputs` (campo → porta de entrada que fornece IDs). O JSON permanece conteúdo de texto, sem contrato de registros do Core.
 
 O bundle fornecido foi consultado como referência técnica de seleção de imagens, modelos, proporção, variantes, animação e uso de frames/elementos. Esta implementação adiciona o caminho de referências por IDs ao fluxo automatizado; não afirma implementar todas as funções da extensão nem comprova execução real no serviço.
+
+Na animação, as instruções resolvidas do Bloco orientam o movimento mesmo quando a porta opcional de prompts não está conectada. A imagem selecionada é preparada pelo catálogo privado e aplicada ao slot estrutural inicial em Frames, com confirmação de preenchimento; em Elementos, entra como referência. Não se utiliza o menu de uma imagem arbitrária da galeria.
+# Recuperação de animações
+
+Os IDs dos arquivos de vídeo usam a posição concedida pelo Core, sem criar novas unidades de trabalho. Para animações itemizadas, o plugin conserva no workspace privado um recibo por execução, Bloco, item, perfil e projeto: registra o envio pendente antes do clique e o resultado do fornecedor antes do download. Um resultado conhecido pode ser capturado novamente sem geração; um envio pendente ou instrução divergente exige reconciliação e bloqueia nova submissão. Recibos anteriores ausentes não comprovam ausência de efeito externo. Esses dados não pertencem ao contrato universal de conteúdo nem à configuração portátil.
+
+A observação de vídeos compara o caminho estável da mídia, sem contar a renovação dos parâmetros de uma URL assinada como novo resultado. Quando mais de um candidato aparece para uma animação individual, o plugin preserva os candidatos no recibo privado e reporta efeito possível para reconciliação; não seleciona pelo primeiro elemento da galeria. Essa proteção não substitui a correlação do fornecedor nem comprova cobertura integral de uma galeria virtualizada.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

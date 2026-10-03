@@ -27,6 +27,8 @@ import {
   Video,
 } from "lucide-react";
 import { toast } from "sonner";
+import { EcosystemCatalog } from "@/components/ecosystem-catalog";
+import { ecosystemCatalogText } from "@/lib/ecosystem-catalog-localization";
 import { AppShell } from "@/components/app-shell";
 import { TopBar } from "@/components/top-bar";
 import { Badge } from "@/components/ui/badge";
@@ -230,6 +232,7 @@ function PluginsPage() {
   const [loading, setLoading] = useState(true);
   const [updates, setUpdates] = useState<Record<string, PluginUpdate>>({});
   const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updateCheckFailed, setUpdateCheckFailed] = useState(false);
   const [search, setSearch] = useState("");
   const [deliveryFilter, setDeliveryFilter] = useState<"all" | ContentFamily>("all");
   const [blockFilter, setBlockFilter] = useState<"all" | BlockType>("all");
@@ -250,32 +253,39 @@ function PluginsPage() {
     }
   }, []);
 
-  const checkUpdates = useCallback(async (notify = false) => {
-    setCheckingUpdates(true);
-    try {
-      const response = await fetch(`/api/plugins/updates${notify ? "?refresh=true" : ""}`);
-      const result = (await response.json()) as { updates?: PluginUpdate[]; error?: string };
-      if (!response.ok)
-        throw new Error(result.error ?? "Não foi possível consultar as atualizações.");
-      const next = Object.fromEntries((result.updates ?? []).map((update) => [update.id, update]));
-      setUpdates(next);
-      if (notify) {
-        const count = Object.values(next).filter((update) => update.updateAvailable).length;
-        toast.success(
-          count
-            ? `${count} ${count === 1 ? "plugin tem" : "plugins têm"} atualização`
-            : "Todos os plugins estão atualizados",
+  const checkUpdates = useCallback(
+    async (notify = false) => {
+      setCheckingUpdates(true);
+      setUpdateCheckFailed(false);
+      try {
+        const response = await fetch(`/api/plugins/updates${notify ? "?refresh=true" : ""}`);
+        const result = (await response.json()) as { updates?: PluginUpdate[]; error?: string };
+        if (!response.ok)
+          throw new Error(result.error ?? "Não foi possível consultar as atualizações.");
+        const next = Object.fromEntries(
+          (result.updates ?? []).map((update) => [update.id, update]),
         );
+        setUpdates(next);
+        if (notify) {
+          const count = Object.values(next).filter((update) => update.updateAvailable).length;
+          toast.success(
+            count
+              ? `${count} · ${ecosystemCatalogText("available", language)}`
+              : ecosystemCatalogText("upToDate", language),
+          );
+        }
+      } catch (error) {
+        setUpdateCheckFailed(true);
+        if (notify)
+          toast.error(ecosystemCatalogText("unavailable", language), {
+            description: error instanceof Error ? error.message : undefined,
+          });
+      } finally {
+        setCheckingUpdates(false);
       }
-    } catch (error) {
-      if (notify)
-        toast.error("Não foi possível verificar atualizações", {
-          description: error instanceof Error ? error.message : undefined,
-        });
-    } finally {
-      setCheckingUpdates(false);
-    }
-  }, []);
+    },
+    [language],
+  );
 
   const refreshPluginsAndUpdates = useCallback(async () => {
     await refresh();
@@ -345,13 +355,30 @@ function PluginsPage() {
               <RefreshCw
                 className={loading || checkingUpdates ? "size-4 animate-spin" : "size-4"}
               />
-              Verificar atualizações
+              {ecosystemCatalogText("updates", language)}
             </Button>
           </div>
         }
       />
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        {updateCheckFailed && (
+          <p role="alert" className="mb-4 text-sm text-warning">
+            {ecosystemCatalogText("unavailable", language)}
+          </p>
+        )}
+        <EcosystemCatalog
+          kind="plugins"
+          onSelect={async (id) => {
+            const response = await fetch(
+              `/api/plugins/${encodeURIComponent(id)}/install-from-catalog`,
+              { method: "POST" },
+            );
+            if (!response.ok) throw new Error("catalog");
+            toast.success(ecosystemCatalogText("installedNotice", language));
+            await refreshPluginsAndUpdates();
+          }}
+        />
         <section className="mb-4 rounded-xl border border-brand/25 bg-card/55 p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-md">

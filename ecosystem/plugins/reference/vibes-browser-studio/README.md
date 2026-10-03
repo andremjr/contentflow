@@ -78,3 +78,8 @@ A execução de P46 reutilizou um único projeto e confirmou quatro artifacts em
 ## Licença e estado
 
 O código do pacote é MIT. O ícone foi fornecido e autorizado pelo mantenedor especificamente para este plugin; consulte `LICENSE`. A versão permanece `0.1.0-dev.0`, conforme a política do roadmap. Não publique esta prerelease como versão estável.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

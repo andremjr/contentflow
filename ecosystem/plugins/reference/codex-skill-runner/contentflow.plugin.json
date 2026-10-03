@@ -3,21 +3,21 @@
   "apiVersion": "2",
   "id": "com.contentflow.codex-skill-runner",
   "name": "Codex Skill Runner",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Executa o agente Codex e suas skills locais em etapas de produção, com entregas tipadas para o Método.",
   "author": "ContentFlow",
-  "license": "LicenseRef-ContentFlow-Codex-Plugin-Proprietary-1.0",
+  "license": "MIT",
   "branding": {
     "iconPath": "assets/icon.png"
   },
   "homepage": "https://github.com/andremjr/contentflow",
-  "repository": "https://github.com/andremjr/contentflow",
+  "repository": "https://github.com/andremjr/plugins-contentflow",
   "runtime": {
     "kind": "node",
     "version": ">=26 <27",
     "module": "esm"
   },
-  "minCoreVersion": "1.3.1",
+  "minCoreVersion": "1.3.3",
   "entrypoint": "handler.mjs",
   "permissions": [
     "network",

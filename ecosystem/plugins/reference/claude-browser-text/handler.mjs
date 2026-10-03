@@ -947,7 +947,7 @@ function normalizeEditorText(value) {
 async function attachClaudePage(client, signal, activate = false, forceNew = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
   let target = forceNew
-    ? undefined
+    ? targetInfos.find(item => item.type === "page" && (() => { try { const url = new URL(item.url); return url.hostname === CLAUDE_HOST && url.hash === "#contentflow-ready-claude"; } catch { return false; } })())
     : targetInfos.find((item) => item.type === "page" && String(item.url).includes(CLAUDE_HOST));
   let createdTarget = false;
   if (!target) {
@@ -1097,7 +1097,8 @@ function cfResponseState() {
   const texts = entries.map(entry => entry.text);
   const stop = [...document.querySelectorAll('button')].some(el => cfVisible(el) && /stop|parar|interromper/i.test(cfText(el)));
   const body = document.body?.innerText || '';
-  return { texts, entries, stop, url: location.href, bodyHint: body.slice(0, 5000) };
+  const completedActionCount = [...document.querySelectorAll('button')].filter(el => cfVisible(el) && /copy|copiar|copie/i.test(el.getAttribute('aria-label') || el.getAttribute('title') || '')).length;
+  return { texts, entries, stop, completedActionCount, url: location.href, bodyHint: body.slice(0, 5000) };
 }
 `;
 
@@ -1250,7 +1251,7 @@ async function responseState(client, sessionId) {
   );
 }
 
-async function waitForResponse(client, sessionId, baselineCount, timeoutMs, signal) {
+async function waitForResponse(client, sessionId, baselineCount, timeoutMs, signal, baselineCompletedActionCount = Infinity) {
   const deadline = Date.now() + timeoutMs;
   let previous = "";
   let stablePolls = 0;
@@ -1268,15 +1269,17 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
       generating: Boolean(state?.stop),
       stablePolls,
     });
-    if (phase === "completed") {
-      await sleep(5_000, signal);
+    const strongCompletion = texts.length > baselineCount && newest && !state.stop && state.completedActionCount > baselineCompletedActionCount;
+    if (strongCompletion || phase === "completed") {
+      await sleep(strongCompletion ? 500 : 5_000, signal);
       const confirmedState = await responseState(client, sessionId);
       const confirmedTexts = Array.isArray(confirmedState?.texts) ? confirmedState.texts : [];
       const confirmedNewest =
         confirmedTexts.length > baselineCount
           ? confirmedTexts.at(-1)
           : (confirmedTexts.at(-1) ?? "");
-      if (confirmedNewest === newest && !confirmedState?.stop) {
+      if (confirmedTexts.length > baselineCount && confirmedNewest === newest && !confirmedState?.stop &&
+          (!strongCompletion || confirmedState.completedActionCount > baselineCompletedActionCount)) {
         const entry = Array.isArray(confirmedState?.entries)
           ? confirmedState.entries.at(-1)
           : undefined;
@@ -1319,7 +1322,7 @@ async function generatePart(client, sessionId, bridge, prompt, settings, signal,
   await setPrompt(bridge, prompt, `prompt:${operationKey}`);
   await clickSend(bridge, `send:${operationKey}`, signal);
   const timeoutSeconds = clampInteger(settings?.responseTimeoutSeconds, 600, 30, 900);
-  return await waitForResponse(client, sessionId, baselineCount, timeoutSeconds * 1000, signal);
+  return await waitForResponse(client, sessionId, baselineCount, timeoutSeconds * 1000, signal, before.completedActionCount);
 }
 
 async function configureProfile(request, services) {
@@ -1520,7 +1523,7 @@ async function executeHandler(request, services) {
     );
     const { sessionId } = taskPage;
     taskTargetId = taskPage.targetId;
-    closeTaskTarget = taskPage.created || launched.startedByPlugin;
+    closeTaskTarget = true;
     const interactiveWaitSeconds = clampInteger(settings.interactiveWaitSeconds, 600, 30, 900);
     const reusedConversation = await prepareConversation(
       client,
@@ -1663,6 +1666,8 @@ async function executeHandler(request, services) {
         : combined.length;
     const conversationId = await currentConversationUrl(client, sessionId);
     step(`Concluído: ${outputCharacters} caracteres em ${responses.length} resposta(s).`);
+    await evaluate(client, sessionId, `(() => { const url = new URL(location.href); url.hash = "contentflow-ready-claude"; history.replaceState(history.state, "", url); return true; })()`);
+    closeTaskTarget = false;
     return {
       status: "success",
       values,

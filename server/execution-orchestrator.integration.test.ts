@@ -211,7 +211,6 @@ test(
       assert.equal(manualStart.body.result.status, "awaiting_human");
       assert.equal(manualStart.body.result.blocks[0].status, "awaiting_human");
 
-      const frozenTitleBlockId = channel.methods.title.blocks[0].id;
       const liveTitleMethod = {
         ...channel.methods.title,
         blocks: channel.methods.title.blocks.map((block, index) =>
@@ -264,8 +263,8 @@ test(
       assert.equal(standaloneTitle.blocks[0].status, "awaiting_human");
       assert.equal(
         standaloneTitle.methodSnapshot.blocks[0].id,
-        frozenTitleBlockId,
-        "o standalone deixou de usar o snapshot congelado do Projeto",
+        liveTitleMethod.blocks[0].id,
+        "o standalone não adotou o Método vigente do Canal",
       );
       await new Promise((resolve) => setTimeout(resolve, 1_100));
       const standaloneAfterReconcile = await jsonRequest<ProcessExecution[]>(

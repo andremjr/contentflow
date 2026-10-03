@@ -55,3 +55,8 @@ A execução usa a conta conectada ao Claude Code e fica sujeita aos limites ou 
 Desative ou desinstale o plugin no ContentFlow. Para encerrar a sessão do provedor, use o comando de logout disponibilizado pela versão instalada do Claude Code.
 
 Compatibilidade inicial: Windows desktop, Node 26, ContentFlow 0.3.5 e Claude Code com `-p`, `--output-format json`, `--json-schema` e `--resume`.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

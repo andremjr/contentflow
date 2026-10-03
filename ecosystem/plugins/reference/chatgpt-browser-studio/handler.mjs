@@ -1075,7 +1075,7 @@ function normalizeEditorText(value) {
 async function attachChatGptPage(client, signal, activate = false, forceNew = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
   let target = forceNew
-    ? undefined
+    ? targetInfos.find(item => item.type === "page" && (() => { try { const url = new URL(item.url); return url.hostname === CHATGPT_HOST && url.hash === "#contentflow-ready-chatgpt"; } catch { return false; } })())
     : targetInfos.find((item) => item.type === "page" && String(item.url).includes(CHATGPT_HOST));
   let created = false;
   if (!target) {
@@ -1882,7 +1882,7 @@ async function waitForResponse(
       completedActionCount: state?.completedActionCount,
       baselineCompletedActionCount,
     });
-    if (phase === "completed" && strongCompletion) {
+    if (strongCompletion) {
       await sleep(500, signal);
       const confirmedState = await responseState(client, sessionId);
       const confirmedTexts = confirmedState?.texts ?? [];
@@ -2448,7 +2448,7 @@ async function executeHandler(request, services) {
     const taskPage = await attachChatGptPage(client, services.signal, false, launched.reused);
     let { sessionId } = taskPage;
     taskTargetId = taskPage.targetId;
-    closeTaskTarget = taskPage.created || !launched.reused;
+    closeTaskTarget = true;
     step(
       `Aba do ChatGPT anexada (${taskPage.created ? "nova" : "existente"}); preparando conversa.`,
     );
@@ -2461,7 +2461,7 @@ async function executeHandler(request, services) {
       taskPage.created,
     );
     step(`Conversa preparada (${reusedConversation ? "reutilizada" : "nova"}).`);
-    if (taskPage.created) await markTaskPage(client, sessionId, request, services.signal);
+    await markTaskPage(client, sessionId, request, services.signal);
     parts = partsForConversation(parts, conversation, reusedConversation);
     const fallbackAttachments = reusedConversation
       ? []
@@ -2689,6 +2689,8 @@ async function executeHandler(request, services) {
         );
       values = generationResponseValues(result, responses, request);
     }
+    await evaluate(client, sessionId, `(() => { const url = new URL(location.href); url.hash = "contentflow-ready-chatgpt"; history.replaceState(history.state, "", url); return true; })()`);
+    closeTaskTarget = false;
     return {
       status: "success",
       values,

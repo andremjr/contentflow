@@ -49,6 +49,7 @@ import { useAppPreferences } from "@/lib/app-preferences";
 import { effectiveProcessOrder } from "@/lib/process-order";
 import { pluginRequirementReadiness } from "@/lib/method-transfer-readiness";
 import { pluginCapabilityLabel } from "@/lib/plugin-capability-label";
+import { addPluginOutput, bindPluginInput, pluginInputSources } from "@/lib/plugin-method-ports";
 import {
   clonePluginConfigurationDraft,
   preparePluginConfigurationCommit,
@@ -1431,6 +1432,14 @@ function BlockEditor({
     block.plugin ? clonePluginConfigurationDraft(block.plugin) : undefined,
   );
   const [pluginDraftInvalid, setPluginDraftInvalid] = useState(false);
+  const [portDraftBlock, setPortDraftBlock] = useState(() => structuredClone(block));
+  const portDefinitionRef = useRef(JSON.stringify([block.id, block.inputs, block.outputs]));
+  useEffect(() => {
+    const definition = JSON.stringify([block.id, block.inputs, block.outputs]);
+    if (portDefinitionRef.current === definition) return;
+    portDefinitionRef.current = definition;
+    setPortDraftBlock(structuredClone(block));
+  }, [block]);
   const pluginTriggerRef = useRef<HTMLButtonElement>(null);
   const previousPluginConfigurationOpenRef = useRef(pluginConfigurationOpen);
   useEffect(() => {
@@ -1448,6 +1457,7 @@ function BlockEditor({
     onPluginConfigurationOpenChange(open);
     setPluginDraftInvalid(false);
     setPluginDraft(open && block.plugin ? clonePluginConfigurationDraft(block.plugin) : undefined);
+    setPortDraftBlock(structuredClone(block));
     if (!open) requestAnimationFrame(() => pluginTriggerRef.current?.focus());
   };
   const meta = BLOCK_META[block.type];
@@ -1998,6 +2008,102 @@ function BlockEditor({
                   connectionId={pluginDraft.connectionId}
                   configuration={pluginDraft.configuration}
                   profileSetup={profileSetup}
+                  dataSection={
+                    <div
+                      className="space-y-3 border-t border-border/60 pt-3"
+                      data-testid="plugin-method-data"
+                    >
+                      <p className="text-xs font-medium">{t("Dados entre blocos")}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("Escolha as entregas anteriores que esta capacidade deve receber.")}
+                      </p>
+                      {selectedCapability.inputPorts
+                        .filter((port) => port.shape.kind === "content")
+                        .map((port) => {
+                          const sources = pluginInputSources(methodBlocks, block.id, port);
+                          const input = (portDraftBlock.inputs ?? []).find(
+                            (item) => item.portKey === port.key,
+                          );
+                          const sourceValue =
+                            input?.binding.kind === "previous_block"
+                              ? JSON.stringify([input.binding.blockId, input.binding.outputKey])
+                              : undefined;
+                          const value =
+                            sourceValue && sources.some((source) => source.value === sourceValue)
+                              ? sourceValue
+                              : input
+                                ? "configured"
+                                : "none";
+                          return (
+                            <div key={port.key} className="space-y-1">
+                              <Label htmlFor={`${block.id}-plugin-source-${port.key}`}>
+                                {port.label}
+                              </Label>
+                              <Select
+                                value={value}
+                                onValueChange={(source) => {
+                                  if (source === "configured") return;
+                                  setPortDraftBlock((draft) =>
+                                    bindPluginInput(
+                                      draft,
+                                      methodBlocks,
+                                      port,
+                                      source === "none" ? "" : source,
+                                    ),
+                                  );
+                                }}
+                              >
+                                <SelectTrigger id={`${block.id}-plugin-source-${port.key}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">{t("Sem entrega anterior")}</SelectItem>
+                                  {value === "configured" && (
+                                    <SelectItem value="configured">
+                                      {t("Entrada configurada no bloco")}
+                                    </SelectItem>
+                                  )}
+                                  {sources.map((source) => (
+                                    <SelectItem key={source.value} value={source.value}>
+                                      {t("Usar entrega de")}:{" "}
+                                      {source.block.name ?? source.block.type} ·{" "}
+                                      {source.field.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {port.description && (
+                                <p className="text-[11px] text-muted-foreground">
+                                  {port.description}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      {selectedCapability.outputPorts
+                        .filter(
+                          (port) =>
+                            port.shape.kind === "content" &&
+                            !(portDraftBlock.outputs ?? []).some(
+                              (field) => field.portKey === port.key,
+                            ),
+                        )
+                        .map((port) => (
+                          <Button
+                            key={port.key}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setPortDraftBlock((draft) => addPluginOutput(draft, port))
+                            }
+                          >
+                            <Plus className="mr-1 size-3" />
+                            {t("Disponibilizar entrega")}: {port.label}
+                          </Button>
+                        ))}
+                    </div>
+                  }
                   onConfigurationChange={(configuration) => {
                     setPluginDraftInvalid(false);
                     setPluginDraft({ ...pluginDraft, configuration });
@@ -2346,7 +2452,11 @@ function BlockEditor({
                           }
                           setPluginDraft(commit.value);
                           setPluginDraftInvalid(false);
-                          onChange({ plugin: commit.value });
+                          onChange({
+                            plugin: commit.value,
+                            inputs: portDraftBlock.inputs,
+                            outputs: portDraftBlock.outputs,
+                          });
                           setPluginConfigurationVisibility(false);
                         }}
                       >

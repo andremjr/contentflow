@@ -27,3 +27,8 @@ npm run plugin:kit -- check ./ecosystem/plugins/reference/edge-tts
 ```
 
 Versão do ContentFlow testada: 0.4.1. Consulte `THIRD_PARTY_NOTICES.md` para versões, licenças, fontes e hashes do runtime.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

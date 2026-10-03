@@ -1,6 +1,6 @@
 {
   "name": "contentflow-mai-playground-browser",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,5 +8,6 @@
   },
   "scripts": {
     "test": "node --test test.mjs"
-  }
+  },
+  "license": "MIT"
 }

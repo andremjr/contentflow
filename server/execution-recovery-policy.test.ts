@@ -56,6 +56,20 @@ test("efeito externo possível exige reconciliação antes de retry ou fallback"
   );
 });
 
+test("falha de importação após produção exige reconciliação, sem repetir executor", () => {
+  assert.equal(
+    decideExecutionRecovery({
+      job: job(),
+      failure: {
+        code: "OUTPUT_VALIDATION_FAILED",
+        retryable: false,
+        recovery: { stage: "awaiting_result", externalEffect: "possible" },
+      },
+    }).action,
+    "reconcile",
+  );
+});
+
 test("falha segura e ligada ao perfil avança para outro perfil preparado", () => {
   assert.equal(
     decideExecutionRecovery({

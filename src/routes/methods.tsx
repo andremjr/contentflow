@@ -17,6 +17,7 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import { EcosystemCatalog } from "@/components/ecosystem-catalog";
 import { AppShell } from "@/components/app-shell";
 import { ChannelAvatar } from "@/components/channel-avatar";
 import { MethodAgentCta } from "@/components/method-agent-cta";
@@ -533,6 +534,19 @@ function MethodsLibraryPage() {
       />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <MethodAgentCta className="mb-5" />
+        <EcosystemCatalog
+          kind="methods"
+          onSelect={async (id) => {
+            const response = await fetch(`/api/methods/catalog/${encodeURIComponent(id)}/preview`);
+            if (!response.ok) throw new Error("catalog");
+            const result = (await response.json()) as { manifest: string };
+            await importFile(
+              new File([result.manifest], "catalog.contentflow-method.json", {
+                type: "application/json",
+              }),
+            );
+          }}
+        />
         {channels.filter(channelNeedsUpgrade).map((channel) => (
           <div key={channel.id}>
             <h2 data-i18n-ignore className="font-semibold">

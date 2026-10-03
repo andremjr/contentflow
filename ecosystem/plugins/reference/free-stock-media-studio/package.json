@@ -1,11 +1,12 @@
 {
   "name": "contentflow-free-stock-media-studio",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test test.mjs",
     "smoke:real": "node real-smoke.mjs",
     "e2e:p24": "node scripts/p24-contentflow-e2e.mjs"
-  }
+  },
+  "license": "MIT"
 }

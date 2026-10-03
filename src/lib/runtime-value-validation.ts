@@ -56,8 +56,7 @@ export function isStoredFile(value: unknown): value is StoredFile {
     value.size >= 0 &&
     typeof value.url === "string" &&
     /^\/api\/files\/[a-zA-Z0-9._-]+$/.test(value.url) &&
-    (value.sha256 === undefined || typeof value.sha256 === "string") &&
-    (value.flowMediaId === undefined || typeof value.flowMediaId === "string")
+    (value.sha256 === undefined || typeof value.sha256 === "string")
   );
 }
 

@@ -56,8 +56,16 @@ Logs e diagnósticos da Bridge contêm somente metadados: versão, plugin, refer
 
 ## Checklist
 
+Referências de mídia do fornecedor permanecem sob responsabilidade do plugin. O nome local do artifact não implica o nome no site: um catálogo privado pode correlacionar hash do arquivo, projeto e perfil explicitamente escolhido com identidade e nome atuais. Prepare e verifique todas as referências necessárias antes da primeira submissão; uploads e seleção não podem ocorrer por tentativa de adivinhar nomes durante a geração. Percorra galerias virtualizadas com limites e compare identidades estáveis em vez de tokens de URLs assinadas. Preserve respostas correlacionadas aos IDs concedidos pelo Core antes do download, sem acrescentar campos de fornecedor ao contrato universal de conteúdo ou aos diagnósticos da Bridge.
+
 Antes de concluir, verifique que o plugin não extrai sessão automaticamente, não abre origens não declaradas, não usa shell com conteúdo de página, valida conta/origem/resultado, implementa `configure/status/prepare` quando declarado, mantém confirmações explícitas, usa somente perfis de fallback preparados, cancela corretamente e não repete publicação ou compra após timeout sem reconciliação.
 
 Plugins oficiais de navegador não iniciam nem encerram o processo físico do Chrome. Eles exigem a sessão fornecida pelo núcleo e fecham somente seus próprios clientes/conexões.
 
 Fonte: [browser-automation.md](https://github.com/andremjr/contentflow/blob/v1.3.1/docs/ecosystem/browser-automation.md).
+
+Quando o runtime conservar um navegador, reutilize somente abas próprias concluídas e revalide o contexto antes de enviar. Remova sessões e observers da Bridge no fim do job. O cache físico não concede readiness nem permite aproveitar conversas de outros Projetos. Otimize a captura apenas com sinais de conclusão comprovados no provedor, mantendo confirmação conservadora quando não existem. Consulte a política viva em docs/ARCHITECTURE.md.
+
+Uma sondagem sem resposta não autoriza o cliente a encerrar ou substituir o navegador físico. O Core preserva uma instância viva e usa fechamento gracioso das sessões retidas. Metadados de conta no disco não comprovam autenticação válida; valide o cenário real antes de declarar preservação do login. Em invocações itemizadas pelo Core, os valores retornados concluem a unidade concedida; não publique outra unidade incremental para o mesmo resultado.
+
+Uma falha ao importar a entrega não comprova que a produção externa falhou. Preserve no plugin recibos específicos do fornecedor antes do download e reporte fatos de efeito possível ao Core; uma colisão ou falha local não autoriza nova submissão. Recibo pendente exige reconciliação, inclusive após cancelamento ou mudança de tentativa. Ausência de recibo em uma execução anterior não comprova ausência de efeito. IDs de artifacts de resultados diferentes precisam ser distintos no escopo da importação, sem criar IDs próprios de unidades do ContentFlow.

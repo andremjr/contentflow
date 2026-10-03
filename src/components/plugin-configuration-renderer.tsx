@@ -38,6 +38,7 @@ export function PluginConfigurationRenderer({
   connectionSection,
   profileSection,
   conversationSection,
+  dataSection,
   onConfigurationChange,
 }: {
   pluginId: string;
@@ -48,6 +49,7 @@ export function PluginConfigurationRenderer({
   connectionSection?: ReactNode;
   profileSection?: ReactNode;
   conversationSection?: ReactNode;
+  dataSection?: ReactNode;
   onConfigurationChange: (configuration: Record<string, string | number | boolean>) => void;
 }) {
   const { t } = useAppPreferences();
@@ -105,6 +107,7 @@ export function PluginConfigurationRenderer({
             </div>
           ))}
         </div>
+        {dataSection}
         {model.advancedEntries.length > 0 && (
           <details className="rounded-md border border-border/70 bg-background/30 px-3 py-2">
             <summary className="cursor-pointer text-xs font-medium text-muted-foreground">

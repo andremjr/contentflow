@@ -3,6 +3,36 @@ import test from "node:test";
 
 import { translate } from "./app-preferences";
 
+test("browser cache preservation diagnostics are localized", () => {
+  for (const phrase of [
+    "Perfil de navegador ocupado.",
+    "O navegador não respondeu. A sessão foi preservada.",
+  ]) {
+    assert.equal(translate(phrase, "pt-BR"), phrase);
+    assert.notEqual(translate(phrase, "en"), phrase);
+    assert.notEqual(translate(phrase, "es"), phrase);
+  }
+});
+
+test("plugin data connections and live Method synchronization are localized", () => {
+  const phrases = [
+    "Dados entre blocos",
+    "Revise o vínculo da entrega no painel do plugin.",
+    "Escolha as entregas anteriores que esta capacidade deve receber.",
+    "Sem entrega anterior",
+    "Entrada configurada no bloco",
+    "Usar entrega de",
+    "Disponibilizar entrega",
+    "Não é possível remover um bloco com trabalho já iniciado nesta execução.",
+    "A nova ordem do Método interrompe um bloco que já está em execução.",
+  ];
+  for (const phrase of phrases) {
+    assert.equal(translate(phrase, "pt-BR"), phrase);
+    assert.notEqual(translate(phrase, "en"), phrase);
+    assert.ok(translate(phrase, "es").length);
+  }
+});
+
 test("content-only Method editor labels are localized in all three languages", () => {
   const labels = [
     ["Conteúdo", "Content", "Contenido"],

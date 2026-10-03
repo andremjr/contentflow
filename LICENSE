@@ -297,4 +297,12 @@ the official ContentFlow repository:
 
 https://github.com/andremjr/contentflow
 
+SEPARATELY LICENSED MATERIALS — 2026-10-03
+
+Author-owned plugins under ecosystem/plugins/reference are separately licensed
+under the MIT license included in each package. Author-owned Methods published
+at https://github.com/andremjr/methods-contentflow are also licensed under MIT.
+These separate grants do not change the license of the ContentFlow core.
+Third-party materials retain their own licenses and notices.
+
 SPDX-License-Identifier: LicenseRef-ContentFlow-Source-Available-1.0

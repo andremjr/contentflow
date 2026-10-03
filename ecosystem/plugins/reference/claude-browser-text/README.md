@@ -149,3 +149,8 @@ Em 20/08/2026, o fluxo real foi validado na interface web do Claude. A versão 1
 - O plugin mapeia, mas não automatiza billing, mudança de plano, conectores, plugins de terceiros, compartilhamento, microfone ou captura da tela. Esses recursos ampliariam dados e permissões sem necessidade para os blocos do ContentFlow.
 - O plugin não depende do artifact interno do Claude, que pode variar com a interface. Quando o Método pede a saída `document`, ele grava o texto final validado como `.md` e o entrega pelo contrato seguro de artifacts do ContentFlow.
 - Os scripts Python originais não são alterados nem apagados.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

@@ -48,6 +48,10 @@ import {
 
 const browserSessionManager = new BrowserSessionManager();
 
+export async function disposeCoreBrowserSessions() {
+  await browserSessionManager.dispose();
+}
+
 export function storedArtifactsDeclaredByUpdate(
   storedArtifacts: StoredFile[],
   declaredArtifacts: PluginArtifact[] | undefined,
@@ -386,6 +390,7 @@ export async function executeRegisteredPlugin(
         // throttled or fail to expose the page lifecycle consistently on Windows;
         // the user preference remains useful for idle/configuration sessions.
         visible: true,
+        reusable: request.invocation.mode !== "configure",
         signal: options.signal,
         monitorCorrelation: {
           ...options.monitorCorrelation,
@@ -768,8 +773,12 @@ export async function executeRegisteredPlugin(
       });
     throw error;
   } finally {
+    if (coreBrowserSession && !shouldAutoCloseCoreBrowserSession(request.invocation)) {
+      browserSessionManager.releaseForConfiguration(coreBrowserSession);
+    }
     if (coreBrowserSession && shouldAutoCloseCoreBrowserSession(request.invocation)) {
-      await browserSessionManager.close(coreBrowserSession);
+      if (options.signal?.aborted) await browserSessionManager.close(coreBrowserSession);
+      else await browserSessionManager.release(coreBrowserSession);
     }
   }
 }
@@ -794,32 +803,34 @@ export async function importPluginArtifacts(
   const imported = new Map(
     (dependencies.existingArtifacts ?? []).map((file) => [file.id, file] as const),
   );
-  if (!artifacts?.length) {
-    const values = replaceArtifactUrls(responseValues ?? {}, imported) as Record<
-      string,
-      RuntimeValue
-    >;
-    if (containsArtifactUrl(values)) {
-      throw new Error("A resposta contém artifact://, mas não declarou o arquivo correspondente.");
-    }
-    const storedArtifacts = [...imported.values()];
-    return response.status === "success"
-      ? { ...response, values, storedArtifacts }
-      : { ...response, partialValues: values, storedArtifacts };
-  }
-  const newArtifacts = artifacts.filter((artifact) => !imported.has(artifact.id));
-  if (newArtifacts.length > maxArtifactsPerResponse) {
-    throw new Error(`A resposta excede o limite de ${maxArtifactsPerResponse} artifacts.`);
-  }
-  const artifactIds = artifacts.map((artifact) => artifact.id);
-  if (new Set(artifactIds).size !== artifactIds.length) {
-    throw new Error("A resposta do plugin contém IDs de artifacts duplicados.");
-  }
   const createdPaths: string[] = [];
-  let importedBytes = 0;
-  let remoteBytes = 0;
-  const outputRoot = realpathSync(outputDirectory);
   try {
+    if (!artifacts?.length) {
+      const values = replaceArtifactUrls(responseValues ?? {}, imported) as Record<
+        string,
+        RuntimeValue
+      >;
+      if (containsArtifactUrl(values)) {
+        throw new Error(
+          "A resposta contém artifact://, mas não declarou o arquivo correspondente.",
+        );
+      }
+      const storedArtifacts = [...imported.values()];
+      return response.status === "success"
+        ? { ...response, values, storedArtifacts }
+        : { ...response, partialValues: values, storedArtifacts };
+    }
+    const newArtifacts = artifacts.filter((artifact) => !imported.has(artifact.id));
+    if (newArtifacts.length > maxArtifactsPerResponse) {
+      throw new Error(`A resposta excede o limite de ${maxArtifactsPerResponse} artifacts.`);
+    }
+    const artifactIds = artifacts.map((artifact) => artifact.id);
+    if (new Set(artifactIds).size !== artifactIds.length) {
+      throw new Error("A resposta do plugin contém IDs de artifacts duplicados.");
+    }
+    let importedBytes = 0;
+    let remoteBytes = 0;
+    const outputRoot = realpathSync(outputDirectory);
     for (const artifact of artifacts) {
       const existing = imported.get(artifact.id);
       if (existing) {
@@ -895,7 +906,12 @@ export async function importPluginArtifacts(
       : { ...response, partialValues: values, storedArtifacts };
   } catch (error) {
     await Promise.all(createdPaths.map((createdPath) => rm(createdPath, { force: true })));
-    throw error;
+    // Output already exists when import fails. Losing its local delivery is not
+    // evidence that the executor's external effect failed and must not enable replay.
+    throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
+      code: "OUTPUT_VALIDATION_FAILED",
+      recovery: { stage: "awaiting_result", externalEffect: "possible" },
+    });
   }
 }
 
@@ -962,7 +978,6 @@ async function importLocalArtifact(
         size,
         url: `${urlPrefix ?? "/api/files"}/${storedName}`,
         sha256: hash.digest("hex"),
-        ...(artifact.flowMediaId ? { flowMediaId: artifact.flowMediaId } : {}),
       } satisfies StoredFile,
     };
   } catch (error) {

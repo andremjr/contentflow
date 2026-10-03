@@ -21,3 +21,8 @@ As chamadas usam `store: false`; os dados ainda são transmitidos ao provedor pa
 ## Licença
 
 Este plugin é distribuído separadamente do aplicativo e segue a licença indicada no próprio pacote.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

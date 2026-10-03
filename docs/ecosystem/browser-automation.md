@@ -366,6 +366,8 @@ Além dos testes gerais do protocolo, cubra:
 - extensão ausente, incompatível, atualizada ou desconectada durante uma execução;
 - mudança de interface que deve falhar sem clicar em alvo ambíguo.
 
+Identidades e nomes de mídia do fornecedor pertencem ao plugin. Um catálogo privado pode correlacionar o hash do arquivo com o projeto e o perfil explicitamente escolhido, sem acrescentar campos de fornecedor aos arquivos universais. Antes de uma geração que depende de referências, o plugin deve confirmar a disponibilidade delas; nomes locais não implicam nomes no site. Galerias virtualizadas exigem observação limitada de todo o conjunto necessário, e URLs assinadas não substituem identidade estável. Respostas correlacionadas aos IDs concedidos pelo Core devem ser preservadas antes do download; diagnósticos da Bridge permanecem redigidos.
+
 ## 15. Checklist para proposta de um plugin
 
 - [ ] O provedor e o plano permitem a automação proposta.
@@ -380,3 +382,9 @@ Além dos testes gerais do protocolo, cubra:
 - [ ] Mudanças inesperadas da interface falham de forma segura.
 - [ ] Existe plano de testes, manutenção, desativação e suporte.
 - [ ] A integração não depende de endpoint interno sem autorização escrita.
+
+### Abas preparadas e conclusão rápida
+
+O runtime pode reter a instância física depois de uma invocação. O plugin continua obrigado a negociar uma nova sessão da Bridge e validar sua aba autorizada antes de qualquer efeito. Abas conservadas pelo plugin precisam possuir uma marca própria verificável; a próxima tarefa redefine o contexto da conversa conforme a configuração. Login aberto manualmente não é uma aba de tarefa reutilizável por heurística. O fim do job remove observadores, debugger e heartbeats temporários, mesmo quando a página continua aberta.
+
+Uma resposta nova com sinal explícito de conclusão pode usar confirmação curta; ausência do sinal mantém o caminho conservador. Estabilidade de texto isolada não autoriza truncar streaming. Critérios e seletores são responsabilidade do provedor no plugin.

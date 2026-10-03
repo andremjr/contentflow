@@ -199,14 +199,58 @@ if (typeof window !== "undefined") {
   const refresh = () =>
     void refreshState().catch((error) => console.error("Conexão com a API local:", error));
   refresh();
+  let eventsConnected = false;
+  const events =
+    typeof EventSource === "function" ? new EventSource("/api/state/events") : undefined;
+  let notificationTimer: ReturnType<typeof setTimeout> | undefined;
+  let notificationRunning = false;
+  let notificationRevision = serverRevision;
+  let disposed = false;
+  const refreshNotification = async () => {
+    if (notificationRunning || disposed) return;
+    notificationRunning = true;
+    try {
+      do {
+        const requestedRevision = notificationRevision;
+        await refreshState(true);
+        if (notificationRevision === requestedRevision) break;
+      } while (!disposed);
+    } catch (error) {
+      console.error("Conexão com a API local:", error);
+    } finally {
+      notificationRunning = false;
+    }
+  };
+  if (events) {
+    events.onopen = () => {
+      eventsConnected = true;
+      refresh();
+    };
+    events.onerror = () => {
+      eventsConnected = false;
+    };
+    events.onmessage = (event) => {
+      if (Number(event.data) === serverRevision) return;
+      notificationRevision = Number(event.data);
+      clearTimeout(notificationTimer);
+      notificationTimer = setTimeout(() => {
+        void refreshNotification();
+      }, 25);
+    };
+  }
   const refreshWhenVisible = () => {
     if (!document.hidden) refresh();
   };
-  const interval = window.setInterval(refreshWhenVisible, 1_000);
+  const interval = window.setInterval(() => {
+    if (!eventsConnected) refreshWhenVisible();
+  }, 1_000);
   document.addEventListener("visibilitychange", refreshWhenVisible);
   if (import.meta.hot) {
     import.meta.hot.dispose(() => {
       window.clearInterval(interval);
+      disposed = true;
+      clearTimeout(notificationTimer);
+      events?.close();
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     });
   }

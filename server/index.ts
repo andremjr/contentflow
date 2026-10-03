@@ -4,6 +4,8 @@ import {
   registerUserDataUpgradeRoutes,
 } from "./user-data-upgrade";
 import { observeExecution, observeJob } from "./dev-monitor/probes";
+import { stateEvents } from "./state-events";
+import { disposeCoreBrowserSessions } from "./plugin-runner";
 import { monitorEnabled, devProbe } from "./dev-monitor/client";
 import express, {
   type ErrorRequestHandler,
@@ -13,7 +15,9 @@ import express, {
 } from "express";
 import { z } from "zod";
 import { executionCommands } from "./execution-commands";
+import { synchronizeExecutionMethod } from "../src/lib/execution-core/synchronize-method";
 import { createMethodPackage, readMethodPackage } from "./method-package";
+import { fetchMethodCatalog, methodCatalogCompatible, readCatalogMethod } from "./method-catalog";
 import {
   copyImportedMethods,
   parsePortableLibraryItems,
@@ -154,6 +158,7 @@ import {
 import { exportBrowserDiagnostics } from "./browser-diagnostics";
 import { normalizeBlockExecutionWorkUnits } from "./work-unit-normalization";
 import { materializeReceivedInputWorkUnits } from "./work-unit-materialization";
+import { workItemPolicy } from "./plugin-item-orchestration";
 import { registerDerivedWorkItems } from "./work-unit-registration";
 import {
   deletePluginConnectionSecret,
@@ -173,6 +178,7 @@ import {
   canFinalizeFromDurableOrchestratedItems,
   claimOrchestratedItems,
   consolidatedOrchestratedOutputs,
+  orchestratedPartialValues,
   completeContinuousSessionClaims,
   completeCurrentOrchestratedItem,
   continuousInvocationRequestForJob,
@@ -280,7 +286,10 @@ const developmentLinksDirectory = path.resolve(
 );
 const pluginCatalogUrl =
   process.env.CONTENTFLOW_PLUGIN_CATALOG_URL ??
-  "https://github.com/andremjr/contentflow/releases/latest/download/ContentFlow-Plugin-Catalog.json";
+  "https://raw.githubusercontent.com/andremjr/plugins-contentflow/main/catalog.json";
+const methodCatalogUrl =
+  process.env.CONTENTFLOW_METHOD_CATALOG_URL ??
+  "https://raw.githubusercontent.com/andremjr/methods-contentflow/main/catalog.json";
 await migrateSiblingDataDirectory(dataDirectory, process.env.APPDATA);
 const nodeMajorVersion = Number(
   process.env.CONTENTFLOW_PLUGIN_NODE_MAJOR ?? process.versions.node.split(".")[0],
@@ -1199,6 +1208,9 @@ class PersistenceCommitError extends Error {
 function persistPluginExecution(execution: ProcessExecution, project: Project) {
   const latestProject = readPayload<Project>("projects", project.id);
   if (latestProject) Object.assign(project, latestProject);
+  const currentChannel = readPayload<Channel>("channels", execution.channelId);
+  const currentMethod = currentChannel?.methods[execution.processType];
+  if (currentMethod) synchronizeExecutionMethod(execution, currentMethod, new Date().toISOString());
   execution.revision = (executionById(execution.id)?.revision ?? 0) + 1;
   execution.updatedAt = new Date().toISOString();
   applyExecutionProjectProjection(project, execution);
@@ -1491,7 +1503,7 @@ function startOrchestratedProcess(
     ),
   );
   const savedMethod =
-    project.strategySnapshot?.methods[processType] ?? channel.methods?.[processType];
+    channel.methods?.[processType] ?? project.strategySnapshot?.methods[processType];
   const parsedMethod = savedMethod ? processMethodV3Schema.safeParse(savedMethod) : undefined;
   const method = parsedMethod?.success
     ? {
@@ -1965,6 +1977,47 @@ function publicPluginJob(job: PersistentPluginJob) {
   return publicState;
 }
 
+// Saving a Method and updating open executions is one transaction, on every write surface.
+function persistChannelDefinition(channel: Channel) {
+  return database.transaction(() => {
+    const now = new Date().toISOString();
+    const projects = (
+      database.prepare("SELECT payload FROM projects WHERE channel_id = ?").all(channel.id) as {
+        payload: string;
+      }[]
+    ).map((row) => JSON.parse(row.payload) as Project);
+    const projectIds = new Set(projects.map((project) => project.id));
+    const executions = (
+      database.prepare("SELECT payload FROM process_executions").all() as { payload: string }[]
+    )
+      .map((row) => parseStoredExecution(row.payload))
+      .filter((execution) => projectIds.has(execution.projectId));
+    for (const execution of executions) {
+      const method = channel.methods[execution.processType];
+      if (!method || !synchronizeExecutionMethod(execution, method, now)) continue;
+      database
+        .prepare("UPDATE process_executions SET payload = ?, updated_at = ? WHERE id = ?")
+        .run(JSON.stringify(execution), execution.updatedAt, execution.id);
+    }
+    for (const project of projects) {
+      if (!project.strategySnapshot) continue;
+      for (const processType of PROCESS_ORDER) {
+        if (["done", "approved"].includes(project.stages[processType])) continue;
+        project.strategySnapshot.methods[processType] = structuredClone(
+          channel.methods[processType],
+        );
+      }
+      project.strategySnapshot.definitionRevision = channel.definitionRevision ?? 0;
+      database
+        .prepare("UPDATE projects SET payload = ? WHERE id = ?")
+        .run(JSON.stringify(project), project.id);
+    }
+    return database
+      .prepare("UPDATE channels SET payload = ? WHERE id = ?")
+      .run(JSON.stringify(channel), channel.id);
+  })();
+}
+
 function normalizedPluginValues(
   block: ActionBlock,
   responseValues: unknown,
@@ -1983,6 +2036,14 @@ function normalizedPluginValues(
     existingValues,
     inputDeliveries,
   }).values;
+}
+
+function liveJobOutputContract(block: ActionBlock, capability: PluginCapability) {
+  const validation = validatePluginOutputContract(block.outputs ?? [], capability.outputPorts);
+  if (validation.unsupportedFields.length) {
+    throw new Error("Revise o vínculo da entrega no painel do plugin.");
+  }
+  return validation.outputContract;
 }
 
 function declaredItemActionForBlock(block: ActionBlock, action: string) {
@@ -2375,6 +2436,11 @@ async function processPluginJobClaimed(
   );
 
   try {
+    job = {
+      ...job,
+      request: { ...job.request, outputContract: liveJobOutputContract(block, capability) },
+    };
+    claim.job = job;
     const requestedConnectionId =
       typeof job.request.settings.connectionId === "string"
         ? job.request.settings.connectionId
@@ -2698,6 +2764,13 @@ async function processPluginJobClaimed(
           ) {
             return;
           }
+          job = {
+            ...job,
+            request: {
+              ...job.request,
+              outputContract: liveJobOutputContract(latestBlock, capability),
+            },
+          };
           const mappedUpdate = normalizedPluginValues(
             latestBlock,
             update.values,
@@ -2806,6 +2879,11 @@ async function processPluginJobClaimed(
       );
     }
 
+    job = {
+      ...job,
+      request: { ...job.request, outputContract: liveJobOutputContract(block, capability) },
+    };
+    claim.job = job;
     if (pluginResponse.status === "pending") {
       if (capability.execution.mode !== "async") {
         throw new Error("Uma capacidade immediate não pode devolver pending.");
@@ -2827,8 +2905,7 @@ async function processPluginJobClaimed(
           "Jobs persistentes exigem que a credencial seja salva na Central de Plugins.",
         );
       }
-      const partialValues = {
-        ...job.partialValues,
+      const partialValues = orchestratedPartialValues(job, {
         ...normalizedPluginValues(
           block,
           pluginResponse.partialValues ?? {},
@@ -2838,7 +2915,7 @@ async function processPluginJobClaimed(
           undefined,
           job.request.inputDeliveries,
         ),
-      };
+      });
       const progress = Number.isFinite(pluginResponse.progress)
         ? Math.max(job.progress ?? 0, Math.min(1, Math.max(0, pluginResponse.progress!)))
         : job.progress;
@@ -2880,8 +2957,7 @@ async function processPluginJobClaimed(
     }
 
     if (pluginResponse.status === "error") {
-      const partialValues = {
-        ...job.partialValues,
+      const partialValues = orchestratedPartialValues(job, {
         ...normalizedPluginValues(
           block,
           pluginResponse.partialValues ?? {},
@@ -2891,7 +2967,7 @@ async function processPluginJobClaimed(
           undefined,
           job.request.inputDeliveries,
         ),
-      };
+      });
       const partialArtifacts = mergeStoredArtifacts(
         job.partialArtifacts,
         pluginResponse.storedArtifacts,
@@ -3237,7 +3313,13 @@ async function processPluginJobClaimed(
     const fallback = job.profileFallback;
     const recoveryDecision = decideExecutionRecovery({
       job,
-      failure: { code: errorCode, message, retryable: errorCode === "JOB_FAILED" },
+      failure: {
+        code: errorCode,
+        message,
+        retryable: errorCode === "JOB_FAILED",
+        recovery: (error as { recovery?: import("../src/lib/plugin-contract").PluginRecoveryFacts })
+          .recovery,
+      },
     });
     if (fallback && recoveryDecision.action === "switch_profile") {
       const currentProfile = fallback.candidates[fallback.activeIndex];
@@ -4550,17 +4632,10 @@ app.post("/api/plugins/:pluginId/profile", async (request, response) => {
   }
 });
 
-app.post("/api/plugins/install-from-folder", (request, response) => {
-  const requestedPath =
-    typeof request.body?.path === "string" ? normalizeUserProvidedPath(request.body.path) : "";
-  if (!requestedPath) {
-    response.status(400).json({ error: "Informe a pasta de um plugin ou do pacote extraído." });
-    return;
-  }
+function installPluginDirectories(pluginDirectories: string[]) {
   const temporaryDestinations: string[] = [];
   const installedDestinations: string[] = [];
   try {
-    const pluginDirectories = discoverPluginDirectories(requestedPath);
     const candidates = pluginDirectories.map((sourceDirectory) => {
       const validated = validatePluginDirectory(sourceDirectory, true);
       const pluginId = validated.manifest.id;
@@ -4609,17 +4684,26 @@ app.post("/api/plugins/install-from-folder", (request, response) => {
       installedDestinations.push(candidate.destination);
     }
     initializePluginRunner();
-    response.status(staged.length ? 201 : 200).json({
-      installed: staged.map((candidate) => candidate.pluginId),
-      skipped,
-    });
+    return { installed: staged.map((candidate) => candidate.pluginId), skipped };
   } catch (error) {
     for (const destination of [...temporaryDestinations, ...installedDestinations])
       if (existsSync(destination)) rmSync(destination, { recursive: true, force: true });
     initializePluginRunner();
-    response.status(422).json({
-      error: error instanceof Error ? error.message : "Não foi possível instalar os plugins.",
-    });
+    throw error;
+  }
+}
+
+app.post("/api/plugins/install-from-folder", (request, response) => {
+  try {
+    const requestedPath =
+      typeof request.body?.path === "string" ? normalizeUserProvidedPath(request.body.path) : "";
+    if (!requestedPath) throw new Error("Informe a pasta de um plugin ou do pacote extraído.");
+    const result = installPluginDirectories(discoverPluginDirectories(requestedPath));
+    response.status(result.installed.length ? 201 : 200).json(result);
+  } catch (error) {
+    response
+      .status(422)
+      .json({ error: error instanceof Error ? error.message : "PLUGIN_INSTALL_FAILED" });
   }
 });
 
@@ -4681,6 +4765,97 @@ async function currentPluginCatalog(force = false) {
   pluginCatalogCache = { catalog, loadedAt: Date.now() };
   return catalog;
 }
+
+app.get("/api/plugins/catalog", async (_request, response) => {
+  try {
+    const catalog = await currentPluginCatalog(true);
+    const registry = initializePluginRunner();
+    response.json({
+      plugins: catalog.plugins.map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        description: entry.description,
+        version: entry.version,
+        compatible: pluginCatalogCompatibility(entry).status === "compatible",
+        installed: [...registry.plugins, ...registry.administrativePlugins].some(
+          (plugin) => plugin.id === entry.id,
+        ),
+      })),
+    });
+  } catch {
+    response.status(502).json({ error: "CATALOG_UNAVAILABLE" });
+  }
+});
+
+async function extractCatalogPlugin(pluginId: string, temporaryRoot: string) {
+  const catalog = await currentPluginCatalog(true);
+  const entry = catalog.plugins.find((candidate) => candidate.id === pluginId);
+  if (!entry || pluginCatalogCompatibility(entry).status !== "compatible")
+    throw new Error("CATALOG_INCOMPATIBLE");
+  const archivePath = path.join(temporaryRoot, entry.asset);
+  const extractedRoot = path.join(temporaryRoot, "extracted");
+  await downloadCatalogPlugin(pluginCatalogUrl, entry, archivePath);
+  await extractPluginArchive(archivePath, extractedRoot);
+  const directories = discoverPluginDirectories(extractedRoot);
+  if (directories.length !== 1) throw new Error("CATALOG_EXTRA_PLUGINS");
+  const candidate = validatePluginDirectory(directories[0], true).manifest;
+  if (
+    candidate.id !== entry.id ||
+    candidate.version !== entry.version ||
+    candidate.apiVersion !== entry.apiVersion ||
+    candidate.minCoreVersion !== entry.minCoreVersion
+  )
+    throw new Error("CATALOG_MANIFEST_MISMATCH");
+  return directories[0];
+}
+
+app.post("/api/plugins/:pluginId/install-from-catalog", async (request, response) => {
+  const root = path.resolve(dataDirectory, "plugins", "catalog-downloads");
+  mkdirSync(root, { recursive: true });
+  const temporaryRoot = mkdtempSync(path.join(root, "install-"));
+  try {
+    initializePluginRunner();
+    if (getAdministrativePlugin(request.params.pluginId)) {
+      response.status(409).json({ error: "PLUGIN_ALREADY_INSTALLED" });
+      return;
+    }
+    const directory = await extractCatalogPlugin(request.params.pluginId, temporaryRoot);
+    const result = installPluginDirectories([directory]);
+    response.status(result.installed.length ? 201 : 200).json(result);
+  } catch {
+    response.status(422).json({ error: "CATALOG_INSTALL_FAILED" });
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+app.get("/api/methods/catalog", async (_request, response) => {
+  try {
+    const catalog = await fetchMethodCatalog(methodCatalogUrl);
+    response.json({
+      methods: catalog.methods.map((entry) => ({
+        ...entry,
+        compatible: methodCatalogCompatible(entry),
+      })),
+    });
+  } catch {
+    response.status(502).json({ error: "CATALOG_UNAVAILABLE" });
+  }
+});
+
+app.get("/api/methods/catalog/:methodId/preview", async (request, response) => {
+  try {
+    const catalog = await fetchMethodCatalog(methodCatalogUrl);
+    const entry = catalog.methods.find((candidate) => candidate.id === request.params.methodId);
+    if (!entry) {
+      response.status(404).json({ error: "METHOD_NOT_FOUND" });
+      return;
+    }
+    response.json({ manifest: await readCatalogMethod(methodCatalogUrl, entry) });
+  } catch {
+    response.status(422).json({ error: "CATALOG_IMPORT_FAILED" });
+  }
+});
 
 app.get("/api/plugins/updates", async (request, response) => {
   try {
@@ -4841,21 +5016,8 @@ app.put("/api/plugins/:pluginId/update-from-catalog", async (request, response) 
     if (!isNewerPluginVersion(entry.version, plugin.manifest.version))
       throw new Error(`O plugin já está na versão mais recente (v${plugin.manifest.version}).`);
 
-    const archivePath = path.join(temporaryRoot, entry.asset);
-    const extractedRoot = path.join(temporaryRoot, "extracted");
-    await downloadCatalogPlugin(pluginCatalogUrl, entry, archivePath);
-    await extractPluginArchive(archivePath, extractedRoot);
-    const directories = discoverPluginDirectories(extractedRoot);
-    if (directories.length !== 1) throw new Error("O pacote individual contém plugins extras.");
-    const candidate = validatePluginDirectory(directories[0], true).manifest;
-    if (
-      candidate.id !== entry.id ||
-      candidate.version !== entry.version ||
-      candidate.apiVersion !== entry.apiVersion ||
-      candidate.minCoreVersion !== entry.minCoreVersion
-    )
-      throw new Error("O manifesto do pacote não corresponde ao catálogo.");
-    response.json(replaceInstalledPluginFromDirectory(plugin, directories[0]));
+    const directory = await extractCatalogPlugin(plugin.id, temporaryRoot);
+    response.json(replaceInstalledPluginFromDirectory(plugin, directory));
   } catch (error) {
     response.status(422).json({
       error: error instanceof Error ? error.message : "Não foi possível atualizar o plugin.",
@@ -5595,9 +5757,7 @@ app.put(
     }
     channel.processOrder = [...order];
     channel.definitionRevision = (channel.definitionRevision ?? 0) + 1;
-    database
-      .prepare("UPDATE channels SET payload = ? WHERE id = ?")
-      .run(JSON.stringify(channel), channel.id);
+    persistChannelDefinition(channel);
     response.json({
       ok: true,
       channelId: channel.id,
@@ -5761,9 +5921,7 @@ app.put(
       }
       if (changed) {
         channel.definitionRevision = (channel.definitionRevision ?? 0) + 1;
-        database
-          .prepare("UPDATE channels SET payload = ? WHERE id = ?")
-          .run(JSON.stringify(channel), channel.id);
+        persistChannelDefinition(channel);
       }
     }
     response.json({ ok: true, collection: updated });
@@ -5983,9 +6141,7 @@ app.post("/api/builder/channels/:channelId/apply", requireBuilderMcp, async (req
     return;
   }
   channel.definitionRevision = (channel.definitionRevision ?? 0) + 1;
-  database
-    .prepare("UPDATE channels SET payload = ? WHERE id = ?")
-    .run(JSON.stringify(channel), channel.id);
+  persistChannelDefinition(channel);
   response.json({
     ok: true,
     channelId: channel.id,
@@ -6527,6 +6683,7 @@ async function executePluginBlockInternal(
   const materializedInputItems = materializeReceivedInputWorkUnits(
     pluginRequest,
     previousExecutionItems,
+    workItemPolicy(capability, pluginRequest)?.inputPort,
   );
   const requestedRetryScope = blockExecution.itemRetryScope ?? "all";
   const itemCapability = capability;
@@ -6737,6 +6894,18 @@ function stateSnapshot() {
   })();
 }
 
+app.get(
+  "/api/state/events",
+  stateEvents(
+    () =>
+      (
+        database.prepare("SELECT revision FROM state_clock WHERE id = 1").get() as {
+          revision: number;
+        }
+      ).revision,
+  ),
+);
+
 app.get("/api/state", (request, response) => {
   const revision = (
     database.prepare("SELECT revision FROM state_clock WHERE id = 1").get() as { revision: number }
@@ -6834,7 +7003,7 @@ app.post("/api/commands", (request, response) => {
           result = engine.completeProcessOutput(execution!.id, values);
           break;
         case "acceptBlockDelivery":
-          result = engine.acceptBlockDelivery(execution!.id, command.blockId ?? "");
+          result = engine.acceptBlockDelivery(execution!.id, command.blockId ?? "", values);
           break;
         case "outputDraft":
           if (execution!.status !== "awaiting_output") {
@@ -6962,7 +7131,7 @@ function reconcileStandaloneProcesses() {
     const next = nextExecutableProcess(order, project.stages, project.runFrom, project.runThrough);
     if (
       !next ||
-      !(project.strategySnapshot?.methods[next] ?? channel.methods[next])?.blocks.length
+      !(channel.methods[next] ?? project.strategySnapshot?.methods[next])?.blocks.length
     ) {
       delete project.runThrough;
       database
@@ -7173,9 +7342,7 @@ app.put("/api/channels/:id/methods/:processType", (request, response) => {
   }
   channel.methods[processType] = nextMethod;
   channel.definitionRevision = (channel.definitionRevision ?? 0) + 1;
-  database
-    .prepare("UPDATE channels SET payload = ? WHERE id = ?")
-    .run(JSON.stringify(channel), channel.id);
+  persistChannelDefinition(channel);
   response.json({
     method: channel.methods[processType],
     definitionRevision: channel.definitionRevision,
@@ -7252,9 +7419,7 @@ app.put("/api/channels/:id/methods", (request, response) => {
     return;
   }
   channel.definitionRevision = (channel.definitionRevision ?? 0) + 1;
-  database
-    .prepare("UPDATE channels SET payload = ? WHERE id = ?")
-    .run(JSON.stringify(channel), channel.id);
+  persistChannelDefinition(channel);
   response.json({ methods: channel.methods });
 });
 
@@ -7280,9 +7445,7 @@ app.put("/api/channels/:id/process-order", (request, response) => {
   }
   channel.processOrder = [...order];
   channel.definitionRevision = (channel.definitionRevision ?? 0) + 1;
-  database
-    .prepare("UPDATE channels SET payload = ? WHERE id = ?")
-    .run(JSON.stringify(channel), channel.id);
+  persistChannelDefinition(channel);
   response.json({
     processOrder: effectiveProcessOrder(channel),
     definitionRevision: channel.definitionRevision,
@@ -7586,9 +7749,7 @@ app.post("/api/method-transfers/apply", (request, response) => {
         processOrder: resultOrder,
         definitionRevision: (current.definitionRevision ?? 0) + 1,
       };
-      database
-        .prepare("UPDATE channels SET payload = ? WHERE id = ?")
-        .run(JSON.stringify(channel), channel.id);
+      persistChannelDefinition(channel);
     } else {
       channel = {
         id: channelId,
@@ -7688,9 +7849,7 @@ app.put("/api/channels/:id", (request, response) => {
     channel.processOrder = current.processOrder;
     channel.definitionRevision = current.definitionRevision;
   }
-  const result = database
-    .prepare("UPDATE channels SET payload = ? WHERE id = ?")
-    .run(JSON.stringify(channel), channel.id);
+  const result = persistChannelDefinition(channel);
   if (result.changes === 0) {
     response.status(404).json({ error: "Canal não encontrado." });
     return;
@@ -9054,6 +9213,13 @@ app.listen(port, "127.0.0.1", () => {
 
 setInterval(resumeExecutionOrchestrators, 2_000).unref();
 setInterval(reconcileStandaloneProcesses, 1_000).unref();
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    for (const invocation of activePluginInvocations.values()) invocation.controller.abort();
+    void disposeCoreBrowserSessions().finally(() => process.exit(0));
+  });
+}
 
 function boundedEnvironmentNumber(
   name: string,

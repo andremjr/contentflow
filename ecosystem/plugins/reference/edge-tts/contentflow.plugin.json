@@ -3,21 +3,21 @@
   "apiVersion": "2",
   "id": "official-edge-tts",
   "name": "Microsoft Edge TTS",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Gera narração MP3 com as vozes online gratuitas usadas pelo recurso Ler em voz alta do Microsoft Edge.",
   "author": "ContentFlow",
-  "license": "LicenseRef-ContentFlow-Source-Available-1.0",
+  "license": "MIT",
   "branding": {
     "iconPath": "assets/icon.png"
   },
   "homepage": "https://github.com/andremjr/contentflow",
-  "repository": "https://github.com/andremjr/contentflow",
+  "repository": "https://github.com/andremjr/plugins-contentflow",
   "runtime": {
     "kind": "node",
     "version": ">=26 <27",
     "module": "esm"
   },
-  "minCoreVersion": "1.3.1",
+  "minCoreVersion": "1.3.3",
   "entrypoint": "handler.mjs",
   "permissions": [
     "network",

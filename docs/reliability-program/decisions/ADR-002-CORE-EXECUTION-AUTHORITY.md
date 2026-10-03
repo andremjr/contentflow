@@ -10,7 +10,7 @@ Quando interface, adaptadores, plugins ou executores assumem transições estrat
 
 ## Decisão
 
-O Método define a estratégia e sua ordem; o snapshot as congela. O Core é a única autoridade para identidade operacional, proveniência e transições da execução e para aplicar a ordem congelada. UI, Orchestrator, adaptadores, plugins e executores enviam intenções, comandos, fatos e resultados; o Core valida e persiste a mudança de estado.
+O Método define a estratégia e a ordem dos Blocos. Por decisão explícita do criador em 02/10/2026, suas edições são aplicadas imediatamente às execuções abertas, preservando resultados, identidades e tentativas. O campo persistido `methodSnapshot` é uma projeção sincronizada, sem autoridade para congelar essas definições. A ordem dos Processos do Projeto continua sendo um contrato separado. O Core é a única autoridade para identidade operacional, proveniência e transições da execução. UI, Orchestrator, adaptadores, plugins e executores enviam intenções, comandos, fatos e resultados; o Core valida e persiste a mudança de estado.
 
 ## Consequências
 

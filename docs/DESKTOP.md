@@ -58,7 +58,7 @@ Os artefatos intermediários são gerados em `release/v1`. Os binários não ent
 
 ### Publicação direta com a credencial de sessão
 
-O ContentFlow não usa GitHub Actions para validar, montar ou publicar releases. O repositório não deve manter workflow acionado por tags, e o envio de uma tag nunca deve iniciar um job. Toda release autorizada é validada e construída localmente no estado exato do commit com `npm run release:verify`; instalador, portátil, blockmap, `latest.yml`, manifesto SHA-256 e pacotes do ecossistema são publicados diretamente na mesma release estável pela API do GitHub.
+O ContentFlow não usa GitHub Actions para validar, montar ou publicar releases. O repositório não deve manter workflow acionado por tags, e o envio de uma tag nunca deve iniciar um job. Toda release autorizada é validada e construída localmente no estado exato do commit com `npm run release:verify`; instalador, portátil, blockmap, `latest.yml`, manifesto SHA-256 e pacotes do ecossistema são publicados diretamente pela API do GitHub: o núcleo em contentflow, plugins em plugins-contentflow e Métodos em methods-contentflow.
 
 A autenticação deve reutilizar exclusivamente a credencial de sessão existente no Git Credential Manager. O token nunca deve aparecer na saída, em logs, documentação, scripts versionados, variáveis persistentes ou arquivos temporários. Depois do upload, confirme pela API pública que a tag é a release `latest`, que todos os assets estão no estado `uploaded`, que os tamanhos e hashes correspondem aos arquivos locais, que o catálogo contém as versões esperadas e que `https://andremjr.github.io/contentflow/` aponta para a release correta. Falhas de teste, build, assinatura, integridade ou conteúdo devem ser corrigidas e validadas antes de publicar.
 
@@ -78,3 +78,6 @@ Get-FileHash -Algorithm SHA256 `
 Antes de enviar a tag estável, atualize `package.json`, valide localmente, prepare as notas da versão e confirme que não existe workflow acionado pela tag. Depois do push, crie ou atualize a release diretamente pela API do GitHub com a credencial segura da sessão. Não reutilize uma versão ou tag já publicada. Builds beta devem usar outra política futura e não entram no canal `latest` da V1.
 
 O empacotamento inclui o runtime Node 26 privado em `resources/runtime/node.exe`. A API inicia em uma porta local aleatória e a janela Electron encaminha `/api` internamente, evitando portas fixas e conflitos com uma cópia de desenvolvimento.
+
+
+Para a 1.3.3, o criador dispensou suites e migração de instalações antigas e autorizou distribuir a base local atual. Essa exceção é específica desta publicação e não estabelece uma política geral de validação. A montagem permanece local, sem GitHub Actions, com integridade e disponibilidade pública verificadas.

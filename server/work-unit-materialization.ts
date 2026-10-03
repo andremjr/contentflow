@@ -13,12 +13,14 @@ import { normalizeBlockExecutionItem } from "../src/lib/work-units";
 export function materializeReceivedInputWorkUnits(
   request: Pick<PluginExecutionRequest, "inputs" | "inputDeliveries" | "attempt">,
   previousItems: BlockExecutionItem[] | undefined,
+  workInputPort?: string,
 ) {
   const previous = previousItems ?? [];
   const claimedPreviousIds = new Set<string>();
   const materialized: BlockExecutionItem[] = [];
 
   for (const [inputPort, receivedValue] of Object.entries(request.inputs)) {
+    if (workInputPort && inputPort !== workInputPort) continue;
     const values = Array.isArray(receivedValue) ? receivedValue : [receivedValue];
     const kind = Array.isArray(receivedValue) ? ("list_item" as const) : ("scalar" as const);
     const deliveryCandidates = (request.inputDeliveries ?? []).filter(

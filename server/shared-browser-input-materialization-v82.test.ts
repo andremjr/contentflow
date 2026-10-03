@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { StoredFile } from "../src/lib/domain";
 import type { PluginCapability, PluginExecutionRequest } from "../src/lib/plugin-contract";
-import { declaredItemOrchestration } from "./plugin-item-orchestration";
+import { declaredItemOrchestration, workItemPolicy } from "./plugin-item-orchestration";
 import { materializeReceivedInputWorkUnits } from "./work-unit-materialization";
 
 const baseRequest = {
@@ -28,6 +28,40 @@ const baseRequest = {
     previousBlockOutputs: [],
   },
 } satisfies PluginExecutionRequest;
+
+test("a porta declarada define 16 unidades; duas imagens e texto permanecem contexto", () => {
+  const request = {
+    ...baseRequest,
+    inputs: {
+      prompts: Array.from({ length: 16 }, (_, index) => `scene ${index}`),
+      references: ["reference A", "reference B"],
+      context: "project context",
+    },
+  } satisfies PluginExecutionRequest;
+  const capability = {
+    execution: {
+      itemOrchestration: { mode: "sequential", inputPort: "prompts", outputPort: "images" },
+    },
+  } as PluginCapability;
+  const previous = materializeReceivedInputWorkUnits(request, undefined);
+  assert.equal(previous.length, 19);
+  const items = materializeReceivedInputWorkUnits(
+    request,
+    previous,
+    workItemPolicy(capability, request)?.inputPort,
+  );
+  assert.equal(items.length, 16);
+  assert.deepEqual(
+    items.map((item) => item.order),
+    Array.from({ length: 16 }, (_, index) => index),
+  );
+  assert.deepEqual(
+    items.map((item) => item.id),
+    previous.slice(0, 16).map((item) => item.id),
+  );
+  assert.equal(request.inputs.references.length, 2);
+  assert.equal(request.inputs.context, "project context");
+});
 
 test("materializa escalar como uma unidade e lista como uma unidade por elemento", () => {
   const request = {

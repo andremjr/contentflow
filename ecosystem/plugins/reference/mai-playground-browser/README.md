@@ -76,3 +76,8 @@ npm run plugin:kit -- check ./ecosystem/plugins/reference/mai-playground-browser
 npm run plugin:kit -- test-contract ./ecosystem/plugins/reference/mai-playground-browser
 npm run plugin:kit -- test-sandbox ./ecosystem/plugins/reference/mai-playground-browser
 ```
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

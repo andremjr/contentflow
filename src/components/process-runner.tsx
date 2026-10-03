@@ -1109,23 +1109,25 @@ function ExecutionItemsWorkspace({
                         </div>
                       ) : null}
 
-                      {item.attempts.length > 1 ? (
+                      {item.attempts.some((attempt) => attempt.attempt < item.attempt) ? (
                         <details className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
                           <summary className="cursor-pointer text-[10px]">
                             {t("Ver tentativas anteriores")}
                           </summary>
                           <div className="mt-2 space-y-1 text-[10px]">
-                            {item.attempts.map((attempt) => (
-                              <div
-                                key={attempt.attempt}
-                                className="flex items-center justify-between gap-2"
-                              >
-                                <span>
-                                  {t("Tentativa")} {attempt.attempt}
-                                </span>
-                                <span>{itemStatusLabel(attempt.status)}</span>
-                              </div>
-                            ))}
+                            {item.attempts
+                              .filter((attempt) => attempt.attempt < item.attempt)
+                              .map((attempt) => (
+                                <div
+                                  key={attempt.attempt}
+                                  className="flex items-center justify-between gap-2"
+                                >
+                                  <span>
+                                    {t("Tentativa")} {attempt.attempt}
+                                  </span>
+                                  <span>{itemStatusLabel(attempt.status)}</span>
+                                </div>
+                              ))}
                           </div>
                         </details>
                       ) : null}

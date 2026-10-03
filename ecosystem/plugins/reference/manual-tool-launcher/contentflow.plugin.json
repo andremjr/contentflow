@@ -2,10 +2,10 @@
   "apiVersion": "2",
   "id": "contentflow.manual-tool-launcher",
   "name": "Abrir ferramenta manual",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Abre um navegador configurado com perfil e URL HTTPS ou um aplicativo local para o operador humano continuar o trabalho manualmente.",
   "author": "ContentFlow",
-  "license": "LicenseRef-ContentFlow-Source-Available-1.0",
+  "license": "MIT",
   "branding": {
     "iconPath": "assets/icon.png"
   },
@@ -14,7 +14,7 @@
     "version": ">=26 <27",
     "module": "esm"
   },
-  "minCoreVersion": "1.3.1",
+  "minCoreVersion": "1.3.3",
   "entrypoint": "handler.mjs",
   "permissions": [
     "process"
@@ -104,5 +104,6 @@
       }
     }
   ],
-  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json"
+  "$schema": "https://raw.githubusercontent.com/andremjr/contentflow/main/docs/ecosystem/schemas/contentflow-plugin-v2.schema.json",
+  "repository": "https://github.com/andremjr/plugins-contentflow"
 }

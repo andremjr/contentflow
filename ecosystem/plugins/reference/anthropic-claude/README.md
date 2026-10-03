@@ -19,4 +19,9 @@ O usuário é responsável pelos custos e termos aplicáveis à API da Anthropic
 
 Este plugin é mantido pelo ContentFlow e integra a API da Anthropic. “Anthropic” e “Claude” pertencem aos respectivos titulares; a integração não implica patrocínio ou endosso do provedor.
 
-O código faz parte da distribuição oficial do ContentFlow e segue a licença proprietária source-available do repositório raiz.
+O código do plugin é distribuído sob a licença MIT incluída em LICENSE.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

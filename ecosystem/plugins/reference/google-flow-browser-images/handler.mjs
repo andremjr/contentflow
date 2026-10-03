@@ -4,6 +4,7 @@ import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs
 import { homedir, platform } from "node:os";
 import { basename, join } from "node:path";
 import { createBridgeDiagnostics } from "./bridge-diagnostics.mjs";
+import { rememberMedia, recalledMedia, prepareReferenceCatalog, rememberResult, recalledResult, referenceMessage, saveAnimationReceipt, readAnimationReceipt } from "./media-catalog.mjs";
 
 let FLOW_ENGINE_CODE = "";
 try {
@@ -787,6 +788,26 @@ function mediaItemUpdate({ key, variantKey, outputPort, input, value }) {
     input,
     value,
   };
+}
+
+function mediaItemUpdatesForInvocation(request, updates) {
+  // The Core completes the granted batch unit from this invocation's values.
+  // Incremental keys here would create a second logical unit for the same effect.
+  return isCoreItemInvocation(request) ? undefined : updates;
+}
+
+function generationFailureRecovery(cause, awaitingAnimation) {
+  if (cause?.recovery?.externalEffect === "possible" || cause?.externalEffectUncertain || cause?.code === "COMMAND_OUTCOME_UNKNOWN" || awaitingAnimation) {
+    return { externalEffect: "possible", stage: "awaiting_result" };
+  }
+  return undefined;
+}
+
+function singleAnimationResult(media, locale) {
+  if (!Array.isArray(media) || media.length !== 1 || !media[0]?.video?.fifeUrl) {
+    throw Object.assign(codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(locale, "animationAmbiguous")), { externalEffectUncertain: true });
+  }
+  return media[0];
 }
 
 function mediaItemUpdatesForPrompt({ continuous, index, outputPort, input, value }) {
@@ -1800,7 +1821,7 @@ async function saveVisualBatchItemBaseline(request, services, itemId, kind, base
           : {}),
         [itemId]: {
           kind,
-          urls: baselineUrls.filter((value) => typeof value === "string").slice(0, 32),
+          urls: baselineUrls.filter((value) => typeof value === "string"),
           updatedAt: new Date().toISOString(),
         },
       },
@@ -1858,6 +1879,13 @@ function isCoreItemInvocation(request) {
     Number.isInteger(request.batch.total) &&
     request.batch.total > request.batch.index
   );
+}
+
+function invocationMediaContext(request) {
+  return {
+    ...(isCoreItemInvocation(request) ? { promptOrdinal: request.batch.index + 1 } : {}),
+    ...(request?.[FLOW_INTERNAL_CONTEXT] ?? {}),
+  };
 }
 
 function keepBrowserForCurrentItem(request, hasFollowUpPhase = false) {
@@ -2799,8 +2827,15 @@ async function attachExtensionBridge(
   const attachWorkerSession = async (timeoutMs = waitMs) => {
     const deadline = Date.now() + timeoutMs;
     const rejectedTargets = new Set();
+    let nextDiscoveryAt = 0;
     while (Date.now() < deadline) {
       if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+      if (Date.now() >= nextDiscoveryAt) {
+        nextDiscoveryAt = Date.now() + 1_000;
+        await client.send("Runtime.evaluate", {
+          expression: `window.postMessage({ source: "contentflow-bridge-client", action: "discover" }, location.origin)`,
+        }, flowSessionId).catch(() => undefined);
+      }
       const { targetInfos = [] } = await client.send("Target.getTargets");
       const candidates = targetInfos.filter(
         (item) =>
@@ -2943,6 +2978,7 @@ async function attachExtensionBridge(
       await connectWorker();
       response = await evaluateBridge(dispatchExpression);
     }
+    client.trace?.(`Bridge ${action}: ${response?.ok ? "OK" : String(response?.code || "NO_RESPONSE")}`);
     if (!response?.ok) {
       const code = String(response?.code || "");
       if (code === "CANCELLED") throw codedError("CANCELLED", "Execução cancelada.");
@@ -3890,6 +3926,78 @@ async function attachExistingReferenceImages(
   return false;
 }
 
+async function findNativeReference(client, sessionId, mediaId) {
+  if (!RPC_UUID_RE.test(String(mediaId || ""))) return null;
+  return await evaluate(client, sessionId, `(async () => {
+    const find = window.FlowAuto?.refs2?.acharTile;
+    if (typeof find !== "function") return null;
+    const tile = await find({ mediaUuid: ${JSON.stringify(mediaId)} });
+    return tile?.mediaId === ${JSON.stringify(mediaId)} && tile.nome
+      ? { mediaId: tile.mediaId, name: tile.nome } : null;
+  })()`);
+}
+
+async function attachNativeReference(client, sessionId, reference, signal, step, locale) {
+  const current = await findNativeReference(client, sessionId, reference.mediaId);
+  if (!current) throw codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(locale, "missing"));
+  const before = await attachedReferenceCount(client, sessionId);
+  const confirmed = await evaluate(client, sessionId, `(async () => {
+    const attach = window.FlowAuto?.refs2?.attachImageRefViaAddPanel;
+    return typeof attach === "function" && await attach(null, null, ${JSON.stringify(current.mediaId)});
+  })()`).catch(() => false);
+  if (!confirmed) throw codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(locale, "unconfirmed"));
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    if (await attachedReferenceCount(client, sessionId) === before + 1) {
+      step?.(referenceMessage(locale, "confirmed"));
+      return true;
+    }
+    await sleep(250, signal);
+  }
+  throw codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(locale, "unconfirmed"));
+}
+
+async function prepareAllFlowReferences(client, sessionId, bridge, images, request, services, projectUrl, settings, step) {
+  const context = { projectUrl, accountProfile: normalizeAccountProfile(request.configuration.accountProfile) };
+  return prepareReferenceCatalog(images, async (image) => {
+    const path = (await prepareReferenceImagePaths([image], services, 1))[0];
+    const digest = createHash("sha256").update(await readFile(path)).digest("hex");
+    const saved = await recalledMedia(services, digest, context);
+    // Import an already persisted provider fact into the plugin-owned catalogue;
+    // old operational facts are preserved verbatim, without a core adapter.
+    const mediaId = saved?.mediaId || image.flowMediaId;
+    let reference = mediaId ? await findNativeReference(client, sessionId, mediaId) : null;
+    if (!await clearAttachedReferenceImages(client, sessionId, bridge, services.signal, step))
+      throw codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(request.context?.locale, "clear"));
+    if (reference) {
+      await attachNativeReference(client, sessionId, reference, services.signal, step, request.context?.locale);
+    } else {
+      // Upload happens only in this barrier, never after the first prompt is submitted.
+      const extension = extensionForMime(image.mimeType) || ".png";
+      const uploadedPath = services.getWorkspacePath(`reference-${digest}${extension.startsWith(".") ? extension : "." + extension}`);
+      await copyFile(path, uploadedPath);
+      await uploadReferenceImages(client, sessionId, bridge, [uploadedPath], settings, services.signal, step);
+      const uploadedIds = await evaluate(client, sessionId, `(() => { ${DEEP_HELPERS}
+        const ids = new Set();
+        for (const chip of cfAll('flow-image-ingredient-chip, flow-ingredient-chip').filter(cfVisible))
+          for (const img of chip.querySelectorAll('img')) {
+            try { const url = new URL(img.currentSrc || img.src);
+              const id = url.searchParams.get('name') || url.pathname.match(/\\/(?:image|video)\\/([a-f0-9-]{36})/i)?.[1];
+              if (id) ids.add(id);
+            } catch {}
+          }
+        return [...ids];
+      })()`);
+      if (uploadedIds?.length === 1) reference = await findNativeReference(client, sessionId, uploadedIds[0]);
+      if (!reference) throw codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(request.context?.locale, "uploaded"));
+    }
+    await rememberMedia(services, digest, context, reference);
+    if (!await clearAttachedReferenceImages(client, sessionId, bridge, services.signal, step))
+      throw codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(request.context?.locale, "clear"));
+    return reference;
+  }, referenceMessage(request.context?.locale, "unavailable"));
+}
+
 async function attachReferenceImagesOneByOne(
   client,
   sessionId,
@@ -3898,10 +4006,16 @@ async function attachReferenceImagesOneByOne(
   settings,
   signal,
   step,
+  references,
+  locale,
 ) {
   for (const [index, filePath] of filePaths.entries()) {
     const baselineCount = await attachedReferenceCount(client, sessionId);
-    const reused = await attachExistingReferenceImages(
+    const nativeReference = references?.[index];
+    if (references && !nativeReference) {
+      throw codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(locale, "unavailable"));
+    }
+    const reused = nativeReference ? await attachNativeReference(client, sessionId, nativeReference, signal, step, locale) : await attachExistingReferenceImages(
       client,
       sessionId,
       bridge,
@@ -4235,7 +4349,25 @@ async function setPromptWithExtension(
   signal,
   client,
   sessionId,
+  locale = "pt-BR",
 ) {
+  if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+  if (client && sessionId && !customSelector) {
+    const engineFill = await evaluate(client, sessionId, `(async () => {
+      const adapter = window.FlowAuto?.adapter;
+      if (typeof adapter?.setPrompt !== "function") return { available: false };
+      const expectedPrompt = ${JSON.stringify(prompt)};
+      const applied = await adapter.setPrompt(expectedPrompt);
+      return { available: true, applied: applied === true,
+        matches: String(adapter.getPromptText?.() || "").trim() === expectedPrompt.trim() };
+    })()`);
+    if (engineFill?.available) {
+      if (engineFill.applied && engineFill.matches) {
+        return { readbackLength: prompt.length, mechanism: "flow-engine" };
+      }
+      throw codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(locale, "promptMismatch"));
+    }
+  }
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
@@ -4310,6 +4442,16 @@ async function setPromptWithExtension(
       return res;
     } catch (error) {
       lastError = error;
+      if (error?.code === "BRIDGE_PAGE_UNAVAILABLE" && client && sessionId) {
+        const verified = await evaluate(client, sessionId, `(() => { ${DEEP_HELPERS}
+          const editor = cfPromptCandidate(${JSON.stringify(customSelector || "")});
+          const expectedPrompt = ${JSON.stringify(prompt)};
+          return !!editor?.isConnected && cfVisible(editor) &&
+            cfAll('[role="dialog"]').filter(cfVisible).length === 0 &&
+            String(editor.innerText || editor.textContent || '').trim() === expectedPrompt.trim();
+        })()`).catch(() => false);
+        if (verified) return { readbackLength: prompt.length, reconciledFromEditor: true };
+      }
       if (error?.code !== "OUTPUT_VALIDATION_FAILED" || attempt === 3) {
         const state = await evaluate(
           client,
@@ -4922,29 +5064,10 @@ async function ensureFlowModelAndRatio(
   }
 }
 
-async function triggerAnimateOnImage(client, sessionId, bridge, step) {
-  step?.("Localizando card de imagem no Google Flow para animar...");
-  try {
-    await bridge.dispatch("click", {
-      selectors: [
-        'button[aria-label*="mais opç" i]',
-        'button[aria-label*="more option" i]',
-        'button[aria-label*="más opci" i]',
-      ],
-      textIncludes: ["more_vert"],
-    });
-    await sleep(400);
-    await bridge.dispatch("click", {
-      selectors: ['[role="menuitem"]', "button"],
-      textIncludes: ["Animar", "Animate", "motion_blur"],
-    });
-    step?.("Ação Animar acionada no Google Flow.");
-  } catch (err) {
-    throw codedError(
-      "OUTPUT_VALIDATION_FAILED",
-      `Não consegui acionar o menu Animar na imagem: ${err?.message || err}`,
-    );
-  }
+function animationPrompts(request, prompts) {
+  const instruction = String(request.resolvedInstruction ?? request.context?.block?.instructions ?? "").trim();
+  return prompts.length ? prompts.map(prompt => instruction && !prompt.includes(instruction)
+    ? `${instruction}\n\n${prompt}` : prompt) : instruction ? [instruction] : [];
 }
 
 async function attachSelectedFlowFrame(client, sessionId, mediaUuid, step) {
@@ -5640,11 +5763,22 @@ function mediaItemsFromImageCandidates(candidates) {
   );
 }
 
+function imageMediaIdentity(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === MEDIA_HOST ? parsed.pathname : url;
+  } catch { return url; }
+}
+
 async function generatedMediaOnPage(client, sessionId) {
   const candidates = await evaluate(
     client,
     sessionId,
-    `(() => { ${DEEP_HELPERS}
+    `(async () => { ${DEEP_HELPERS}
+      if (typeof window.FlowAuto?.refs2?.listProjectMedia === "function") {
+        return (await window.FlowAuto.refs2.listProjectMedia())
+          .map(tile => ({ url: tile.url, cardType: tile.kind }));
+      }
       return cfAll('img')
         .filter(cfVisible)
         .map(img => {
@@ -5708,7 +5842,7 @@ async function waitForGeneratedMediaOnPage(
   timeoutMs,
   isCancelled = () => false,
 ) {
-  const baseline = new Set(baselineUrls);
+  const baseline = new Set(baselineUrls.map(imageMediaIdentity));
   const deadline = Date.now() + timeoutMs;
   let initialErrorCount = 0;
   try {
@@ -5784,7 +5918,7 @@ async function waitForGeneratedMediaOnPage(
         }
       }
       const fresh = (await generatedMediaOnPage(client, sessionId)).filter(
-        (item) => !baseline.has(item.image.generatedImage.fifeUrl),
+        (item) => !baseline.has(imageMediaIdentity(item.image.generatedImage.fifeUrl)),
       );
       if (fresh.length > 0) return { media: fresh };
     } catch (err) {
@@ -5868,6 +6002,7 @@ async function downloadGeneratedImage(
   services,
   namespace = "image",
   locale,
+  externalContext,
 ) {
   const generated = item?.image?.generatedImage;
   const mediaUrl = generated?.fifeUrl;
@@ -5934,6 +6069,7 @@ async function downloadGeneratedImage(
         ? services.getWorkspacePath(filename)
         : filename;
   await writeFile(outputPath, bytes);
+  if (externalContext) await rememberMedia(services, createHash("sha256").update(bytes).digest("hex"), externalContext, { mediaId: String(mediaId) });
 
   return {
     file: {
@@ -5942,7 +6078,6 @@ async function downloadGeneratedImage(
       mimeType,
       size: bytes.byteLength,
       url: `artifact://${artifactId}`,
-      flowMediaId: String(mediaId),
     },
     artifact: {
       id: artifactId,
@@ -5950,7 +6085,6 @@ async function downloadGeneratedImage(
       mimeType,
       size: bytes.byteLength,
       source: { kind: "path", path: filename },
-      flowMediaId: String(mediaId),
     },
   };
 }
@@ -5961,11 +6095,11 @@ function mediaItemsFromVideoUrls(urls) {
   for (const raw of Array.isArray(urls) ? urls : []) {
     try {
       const parsed = new URL(String(raw || ""));
-      if (parsed.protocol !== "https:" || parsed.hostname !== MEDIA_HOST || seen.has(parsed.href)) {
+      if (parsed.protocol !== "https:" || parsed.hostname !== MEDIA_HOST || seen.has(imageMediaIdentity(parsed.href))) {
         continue;
       }
       if (!parsed.pathname.includes("/video/")) continue;
-      seen.add(parsed.href);
+      seen.add(imageMediaIdentity(parsed.href));
       const mediaId =
         parsed.pathname.split("/").filter(Boolean).at(-1) || `video-${media.length + 1}`;
       media.push({ video: { fifeUrl: parsed.href, mediaId } });
@@ -5996,7 +6130,7 @@ async function waitForGeneratedVideosOnPage(
   timeoutMs,
   isCancelled = () => false,
 ) {
-  const baseline = new Set(baselineUrls);
+  const baseline = new Set(baselineUrls.map(imageMediaIdentity));
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline && !isCancelled()) {
     if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
@@ -6059,7 +6193,7 @@ async function waitForGeneratedVideosOnPage(
         }
       }
       const fresh = (await generatedVideosOnPage(client, sessionId)).filter(
-        (item) => !baseline.has(item.video.fifeUrl),
+        (item) => !baseline.has(imageMediaIdentity(item.video.fifeUrl)),
       );
       if (fresh.length > 0) return { media: fresh };
     } catch (err) {
@@ -6300,7 +6434,7 @@ async function executeHandler(request, services) {
   }
 
   const capabilityId = String(request?.capabilityId ?? "generate-images-in-browser");
-  const internalContext = request?.[FLOW_INTERNAL_CONTEXT] ?? {};
+  const internalContext = invocationMediaContext(request);
   const outputArtifactNamespace = artifactNamespace(
     internalContext.artifactNamespace,
     capabilityId === "generate-images-in-browser" ? "image" : "video",
@@ -6376,7 +6510,8 @@ async function executeHandler(request, services) {
     if (prompts.length === 0)
       return resultError("INVALID_INPUT", "Informe pelo menos um prompt de vídeo.");
   } else if (isImageAnimation) {
-    if (prompts.length === 0) prompts = [""];
+    prompts = animationPrompts(request, prompts);
+    if (!prompts.length) return resultError("INVALID_INPUT", referenceMessage(request.context?.locale, "animationInstruction"));
   }
 
   if (request?.configuration?.referenceMode === "per_prompt") {
@@ -6413,12 +6548,15 @@ async function executeHandler(request, services) {
     }
   }
   let rawReferences = referenceImagesForCurrentItem(request);
+  if (!isVideoCapability && (continuousClaims || !request.batch)) {
+    rawReferences = request?.inputs?.reference_images ?? request?.inputs?.reference_image ?? rawReferences;
+  }
   if (isImageAnimation && !rawReferences) {
     rawReferences = request?.inputs?.images ?? request?.inputs?.image;
   }
   const referenceImages = normalizeReferenceImages(rawReferences);
   const coreBatchIndex = Number.isInteger(request?.batch?.index) ? request.batch.index : undefined;
-  const coreBatchTotal = Number.isInteger(request?.batch?.total) ? request.batch.total : undefined;
+  const coreBatchTotal = Number.isInteger(request?.batch?.total) ? request.batch.total : continuousClaims?.[0]?.total;
 
   const settings = request?.settings ?? {};
   const keepBrowserOpen = keepBrowserForCurrentItem(request);
@@ -6549,6 +6687,7 @@ async function executeHandler(request, services) {
   let generationPreferences;
   let videoPreferences;
   let referencePaths;
+  let preparedReferences = new Map();
   try {
     profileRuntime = resolveProfileRuntime(request, services);
     if (isVideoCapability) {
@@ -6599,6 +6738,7 @@ async function executeHandler(request, services) {
   let responseTracker;
   let extensionBridge;
   let activeProjectUrl;
+  let failureCode;
   let referencesAttached = navigation.referencesAttached === true;
   let activeReferenceKey = null;
   let generationSubmitted = false;
@@ -6712,25 +6852,24 @@ async function executeHandler(request, services) {
     }
 
     if (isImageAnimation) {
-      step("Iniciando fluxo de animação de imagem no Google Flow...");
-      if (
-        referencePaths.length > 0 &&
-        (!referencesAttached || (await attachedReferenceCount(client, sessionId)) === 0)
-      ) {
-        await uploadReferenceImages(
-          client,
-          sessionId,
-          extensionBridge,
-          referencePaths,
-          settings,
-          services.signal,
-          step,
-        );
-        referencesAttached = true;
+      const receiptContext = { accountProfile: profileRuntime.accountProfile, projectUrl: activeProjectUrl };
+      const receiptItemId = isCoreItemInvocation(request) ? request.batch.itemId : null;
+      const promptText = prompts[0] || "";
+      const promptDigest = createHash("sha256").update(promptText).digest("hex");
+      const animationReceipt = await readAnimationReceipt(services, request, receiptItemId, receiptContext);
+      if (animationReceipt && (animationReceipt.promptDigest !== promptDigest || !animationReceipt.video)) {
+        throw Object.assign(codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(request.context?.locale, "animationPending")), { externalEffectUncertain: true });
       }
-
-      await triggerAnimateOnImage(client, sessionId, extensionBridge, step);
-      await sleep(1000, services.signal);
+      let selectedVideo = animationReceipt?.video;
+      if (animationReceipt) generationSubmitted = true;
+      if (!selectedVideo) {
+      step("Iniciando fluxo de animação de imagem no Google Flow...");
+      const imageMode = await evaluate(client, sessionId,
+        `(async () => window.FlowAuto?.adapter?.configureGeneration
+          ? await window.FlowAuto.adapter.configureGeneration({ type: "image" }) : null)()`);
+      if (!imageMode?.ok) throw codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(request.context?.locale, "unavailable"));
+      preparedReferences = await prepareAllFlowReferences(client, sessionId, extensionBridge,
+        referenceImages, request, services, activeProjectUrl, settings, step);
 
       if (videoPreferences) {
         await ensureFlowModelAndRatio(
@@ -6739,6 +6878,7 @@ async function executeHandler(request, services) {
           extensionBridge,
           {
             modelName: videoPreferences.videoModelName,
+            ratioLabel: ASPECT_RATIO_LABELS[videoPreferences.aspectRatioKey] || null,
             resolutionLabel: videoPreferences.videoResolutionLabel,
             videoMode: videoPreferences.videoReferenceMode,
             durationSeconds: videoPreferences.durationSeconds,
@@ -6748,12 +6888,18 @@ async function executeHandler(request, services) {
         );
       }
 
-      const selectedFlowMediaId = referenceImages[0]?.flowMediaId;
-      if (selectedFlowMediaId) {
+      const selectedReferencePath = referencePaths[0];
+      const selectedReferenceDigest = selectedReferencePath ? createHash("sha256").update(await readFile(selectedReferencePath)).digest("hex") : null;
+      const selectedFlowMediaId = preparedReferences.get(referenceImages[0]?.id)?.mediaId
+        || (await recalledMedia(services, selectedReferenceDigest, { projectUrl: activeProjectUrl, accountProfile: profileRuntime.accountProfile }))?.mediaId;
+      if (!selectedFlowMediaId) throw codedError("OUTPUT_VALIDATION_FAILED", referenceMessage(request.context?.locale, "unavailable"));
+      if (videoPreferences.videoReferenceMode === "frames") {
         await attachSelectedFlowFrame(client, sessionId, selectedFlowMediaId, step);
+      } else {
+        await attachNativeReference(client, sessionId, preparedReferences.get(referenceImages[0]?.id),
+          services.signal, step, request.context?.locale);
       }
 
-      const promptText = prompts[0] || "";
       if (promptText) {
         await waitForPromptEditorStable(
           client,
@@ -6769,6 +6915,7 @@ async function executeHandler(request, services) {
           services.signal,
           client,
           sessionId,
+          request?.context?.locale,
         );
         step(`Instrução de animação preenchida (${promptText.length} caracteres).`);
       }
@@ -6776,6 +6923,10 @@ async function executeHandler(request, services) {
       await waitGenerateEnabled(client, sessionId, settings, services.signal, 15000);
       const baselineMedia = await generatedVideosOnPage(client, sessionId);
       const baselineUrls = baselineMedia.map((item) => item.video.fifeUrl);
+
+      await saveAnimationReceipt(services, request, receiptItemId, receiptContext, { promptDigest, baselineUrls });
+      // Persist uncertainty before clicking: a lost acknowledgement must never enable replay.
+      generationSubmitted = true;
 
       await clickGenerateAndConfirm(
         client,
@@ -6803,7 +6954,13 @@ async function executeHandler(request, services) {
         if (cause?.code === "TIMEOUT") cause.externalEffectUncertain = true;
         throw cause;
       }
-      const selectedVideo = videoResult.media[0];
+      if (videoResult.media?.length !== 1) {
+        await saveAnimationReceipt(services, request, receiptItemId, receiptContext,
+          { promptDigest, baselineUrls, candidates: videoResult.media });
+      }
+      selectedVideo = singleAnimationResult(videoResult.media, request.context?.locale);
+      await saveAnimationReceipt(services, request, receiptItemId, receiptContext, { promptDigest, video: selectedVideo });
+      }
       const result = await downloadGeneratedVideo(
         selectedVideo,
         promptText || "animacao",
@@ -6821,7 +6978,7 @@ async function executeHandler(request, services) {
           ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
         },
         artifacts,
-        itemUpdates: [
+        itemUpdates: mediaItemUpdatesForInvocation(request, [
           mediaItemUpdate({
             key: "animation:0",
             variantKey: "video:0",
@@ -6829,7 +6986,7 @@ async function executeHandler(request, services) {
             input: promptText,
             value: result.file,
           }),
-        ],
+        ]),
         progress: 1,
         message: "Vídeo animado capturado.",
       });
@@ -6951,6 +7108,7 @@ async function executeHandler(request, services) {
             services.signal,
             client,
             sessionId,
+            request?.context?.locale,
           );
           step(`${label}: prompt preenchido (${currentPrompt.length} caracteres).`);
 
@@ -7038,7 +7196,7 @@ async function executeHandler(request, services) {
             ...(activeProjectUrl ? { project_url: activeProjectUrl } : {}),
           },
           artifacts,
-          itemUpdates: [
+          itemUpdates: continuousClaim ? undefined : mediaItemUpdatesForInvocation(request, [
             mediaItemUpdate({
               key: `prompt:${index}`,
               variantKey: "video:0",
@@ -7046,7 +7204,7 @@ async function executeHandler(request, services) {
               input: currentPrompt,
               value: result.file,
             }),
-          ],
+          ]),
           progress: (index + 1) / prompts.length,
           message: `${label}: vídeo capturado.`,
         });
@@ -7139,19 +7297,10 @@ async function executeHandler(request, services) {
     }
 
     step("Editor Slate detectado.");
-    if (!referencesAttached || (await attachedReferenceCount(client, sessionId)) === 0)
-      await uploadReferenceImages(
-        client,
-        sessionId,
-        extensionBridge,
-        referencePaths,
-        settings,
-        services.signal,
-        step,
-      );
-    referencesAttached = referencePaths.length > 0;
-    if (navigation.referencesAttached)
-      step("Retomando o projeto com a referência já anexada, sem repetir o upload.");
+    if (referenceImages.length) {
+      preparedReferences = await prepareAllFlowReferences(client, sessionId, extensionBridge, referenceImages, request, services, activeProjectUrl, settings, step);
+    }
+    referencesAttached = false;
 
     const pendingPromptEntries = prompts
       .map((prompt, index) => ({ prompt, index }))
@@ -7191,6 +7340,8 @@ async function executeHandler(request, services) {
     };
     const submissionBaselines = new Map();
     const materializeImageResults = async (task, selectedMedia) => {
+      await rememberResult(services, request, task.continuousItemId,
+        { projectUrl: activeProjectUrl, accountProfile: profileRuntime.accountProfile }, task.prompt, selectedMedia);
       const absolutePromptIndex = coreBatchIndex ?? task.index;
       const label = `Prompt ${absolutePromptIndex + 1}/${coreBatchTotal ?? prompts.length}`;
       const results = [];
@@ -7203,6 +7354,7 @@ async function executeHandler(request, services) {
           services,
           outputArtifactNamespace,
           request?.context?.locale,
+          { projectUrl: activeProjectUrl, accountProfile: profileRuntime.accountProfile },
         );
         results.push(result);
         step(`${label}: artifact salvo (${result.file.name}).`);
@@ -7225,6 +7377,10 @@ async function executeHandler(request, services) {
           const continuousCurrent = task.continuousItemId
             ? continuousItems?.get(task.continuousItemId)
             : undefined;
+          const capturedMedia = await recalledResult(services, request, task.continuousItemId,
+            { projectUrl: activeProjectUrl, accountProfile: profileRuntime.accountProfile }, task.prompt,
+            ["submitted", "awaiting_result"].includes(continuousCurrent?.state));
+          if (capturedMedia) return materializeImageResults(task, capturedMedia);
           if (continuousCurrent?.state === "awaiting_human") {
             throw codedError(
               "AUTHENTICATION_FAILED",
@@ -7234,7 +7390,8 @@ async function executeHandler(request, services) {
           }
           if (
             continuousCurrent?.state === "submitted" ||
-            continuousCurrent?.state === "awaiting_result"
+            continuousCurrent?.state === "awaiting_result" ||
+            (task.continuousItemId && await visualBatchItemBaseline(request, services, task.continuousItemId, "image"))
           ) {
             if (maxConcurrentGenerations > 1) {
               const uncertain = codedError(
@@ -7293,9 +7450,7 @@ async function executeHandler(request, services) {
                     .flatMap((delivery) => delivery.items ?? [])[task.index]?.id,
                 )
               : referenceImages;
-          const taskReferencePaths = continuousClaim
-            ? await prepareReferenceImagePaths(taskReferenceImages, services, maxReferenceImages)
-            : referencePaths;
+          const taskReferencePaths = await prepareReferenceImagePaths(taskReferenceImages, services, maxReferenceImages);
           if (taskReferencePaths.length > 0) {
             const referenceNames = taskReferencePaths.map((filePath) =>
               basename(filePath).replace(/\.[^.]+$/, ""),
@@ -7397,6 +7552,8 @@ async function executeHandler(request, services) {
                   settings,
                   services.signal,
                   step,
+                  taskReferenceImages.map((image) => preparedReferences.get(image.id)),
+                  request.context?.locale,
                 );
                 referencesAttached = true;
                 activeReferenceKey = referenceKey;
@@ -7442,6 +7599,7 @@ async function executeHandler(request, services) {
                   services.signal,
                   client,
                   sessionId,
+                  request?.context?.locale,
                 );
                 step(
                   `${label}: Slate preenchido pela Browser Bridge (${promptResult?.readbackLength || task.prompt.length} caracteres).`,
@@ -7588,6 +7746,7 @@ async function executeHandler(request, services) {
                   services.signal,
                   client,
                   sessionId,
+                  request?.context?.locale,
                 );
                 step(
                   `${label}: Slate preenchido (${promptResult?.readbackLength || 0} caracteres).`,
@@ -7640,6 +7799,21 @@ async function executeHandler(request, services) {
                 }
                 const responseTimeoutMs = requestTimeoutSeconds * 1000;
                 const reservation = responseTracker.reserve(responseTimeoutMs);
+                const submissionPublished = reservation.submitted.then(async (requestId) => {
+                  generationSubmitted = true;
+                  await publishContinuousTaskState(task, "submitted", {
+                    externalReceipt: `flow:image:${requestId}`,
+                  });
+                });
+                void submissionPublished.catch(() => undefined);
+                const capturedPublished = reservation.promise.then(async (captured) => {
+                  const result = parseGenerationResponse(captured);
+                  await rememberResult(services, request, task.continuousItemId,
+                    { projectUrl: activeProjectUrl, accountProfile: profileRuntime.accountProfile },
+                    task.prompt, result.media.slice(0, maxImagesPerPrompt));
+                  return captured;
+                });
+                void capturedPublished.catch(() => undefined);
                 let stopPageFallback = false;
                 let pageFallback;
                 try {
@@ -7668,11 +7842,7 @@ async function executeHandler(request, services) {
                     }
                     throw cause;
                   }
-                  generationSubmitted = true;
-                  const requestId = await reservation.submitted;
-                  await publishContinuousTaskState(task, "submitted", {
-                    externalReceipt: `flow:image:${requestId}`,
-                  });
+                  await submissionPublished;
                   await publishContinuousTaskState(task, "awaiting_result");
                   step(`${label}: envio real confirmado pela Browser Bridge.`);
                   pageFallback =
@@ -7690,13 +7860,14 @@ async function executeHandler(request, services) {
                 } catch (cause) {
                   stopPageFallback = true;
                   reservation.cancel(cause);
-                  await reservation.promise.catch(() => undefined);
+                  await submissionPublished.catch(() => undefined);
+                  await capturedPublished.catch(() => undefined);
                   throw cause;
                 }
 
                 let completed;
                 try {
-                  const networkResult = reservation.promise.then((captured) => ({
+                  const networkResult = capturedPublished.then((captured) => ({
                     source: "network",
                     captured,
                   }));
@@ -7766,6 +7937,10 @@ async function executeHandler(request, services) {
       failFast: coreBatchIndex !== undefined,
       async reconcile({ task, error }) {
         const continuousClaim = continuousClaims?.[task.index];
+        const recoveredTask = { ...task, index: originalPromptIndex(task.index), continuousItemId: continuousClaim?.itemId };
+        const capturedMedia = await recalledResult(services, request, continuousClaim?.itemId,
+          { projectUrl: activeProjectUrl, accountProfile: profileRuntime.accountProfile }, recoveredTask.prompt);
+        if (capturedMedia) return { status: "recovered", value: await materializeImageResults(recoveredTask, capturedMedia) };
         let continuousState = continuousClaim
           ? continuousItems?.get(continuousClaim.itemId)?.state
           : undefined;
@@ -7812,9 +7987,9 @@ async function executeHandler(request, services) {
         const reconciledTask = { ...task, index: originalPromptIndex(task.index) };
         const baselineUrls = submissionBaselines.get(reconciledTask.index);
         if (!Array.isArray(baselineUrls)) return { status: "uncertain" };
-        const baseline = new Set(baselineUrls);
+        const baseline = new Set(baselineUrls.map(imageMediaIdentity));
         const recoveredMedia = (await generatedMediaOnPage(client, sessionId)).filter(
-          (item) => !baseline.has(item.image.generatedImage.fifeUrl),
+          (item) => !baseline.has(imageMediaIdentity(item.image.generatedImage.fifeUrl)),
         );
         if (recoveredMedia.length === 0) return { status: "uncertain" };
         step(
@@ -7886,7 +8061,7 @@ async function executeHandler(request, services) {
             values: imageOutputValues(request, files, activeProjectUrl),
             artifacts,
             itemUpdates: mediaItemUpdatesForPrompt({
-              continuous: continuousClaims !== undefined,
+              continuous: continuousClaims !== undefined || isCoreItemInvocation(request),
               index,
               outputPort: "images",
               input: task.prompt,
@@ -7972,6 +8147,8 @@ async function executeHandler(request, services) {
       ],
     };
   } catch (cause) {
+    failureCode = /^[A-Z][A-Z_]+$/.test(String(cause?.code || ""))
+      ? cause.code : "UPSTREAM_UNAVAILABLE";
     if (responseTracker) {
       try {
         responseTracker.close();
@@ -8014,7 +8191,10 @@ async function executeHandler(request, services) {
       Boolean(cause?.retryable),
       cause?.retryAfterMs,
     );
-    if (cause?.code === "PROVIDER_SECURITY_CHALLENGE") {
+    const generationRecovery = generationFailureRecovery(cause,
+      isImageAnimation && generationSubmitted && files.length === 0);
+    if (generationRecovery) errorResponse.recovery = generationRecovery;
+    if (cause?.code === "PROVIDER_SECURITY_CHALLENGE" && !generationRecovery) {
       errorResponse.recovery = {
         externalEffect: "none",
         intervention: "provider_security_challenge",
@@ -8050,6 +8230,7 @@ async function executeHandler(request, services) {
             attempt: request?.attempt,
             startedWithProfile: request?.configuration?.accountProfile,
             endedAt: new Date().toISOString(),
+            ...(failureCode ? { failureCode, generationSubmitted } : {}),
             steps: stepLogs,
             cdpTrace: diagnosticLogs,
           },
@@ -8077,6 +8258,7 @@ export async function execute(request, services) {
 }
 
 export const __test = {
+  animationPrompts,
   describeCdpParams,
   uploadReferenceImages,
   waitReferenceUploadReady,
@@ -8119,6 +8301,7 @@ export const __test = {
   createFlowContinuousItemState,
   claimFlowContinuousItems,
   isCoreItemInvocation,
+  invocationMediaContext,
   keepBrowserForCurrentItem,
   visualBatchItemSelection,
   filesForCurrentBatchItem,
@@ -8136,6 +8319,10 @@ export const __test = {
   actionableOutputPort,
   normalizeItemActionRequest,
   mediaItemUpdate,
+  mediaItemUpdatesForInvocation,
+  generationFailureRecovery,
+  singleAnimationResult,
+  waitForGeneratedVideosOnPage,
   mediaItemUpdatesForPrompt,
   artifactNamespace,
   flowMediaMessage,
@@ -8143,6 +8330,8 @@ export const __test = {
   validateVideoArtifactBytes,
   nextImageModelFallback,
   normalizeReferenceImages,
+  prepareAllFlowReferences,
+  attachReferenceImagesOneByOne,
   referenceImagesForSourceItem,
   referenceImagesForCurrentItem,
   requestsSingleImage,
@@ -8152,9 +8341,11 @@ export const __test = {
   configurationForProjectContinuation,
   mediaItemsFromImageUrls,
   mediaItemsFromImageCandidates,
+  imageMediaIdentity,
   mediaItemsFromVideoUrls,
   parseGenerationResponse,
   waitForPromptEditorStable,
+  setPromptWithExtension,
   downloadGeneratedImage,
   downloadGeneratedVideo,
   resolveVideoPreferences,

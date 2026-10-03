@@ -89,6 +89,11 @@ O teste de contrato gera mídias sintéticas localmente, inclusive um vídeo cuj
 
 ## Licenças, suporte e segurança
 
-O código do plugin segue a licença proprietária source-available incluída em [`LICENSE`](LICENSE). O executável FFmpeg é um programa separado, distribuído sob GPLv3 ou posterior, com licença, configuração do build, origem e acesso ao código-fonte preservados na distribuição.
+O código do plugin segue a licença MIT incluída em [`LICENSE`](LICENSE). O executável FFmpeg é um programa separado, distribuído sob GPLv3 ou posterior, com licença, configuração do build, origem e acesso ao código-fonte preservados na distribuição.
 
 Para suporte, use o repositório do ContentFlow. Vulnerabilidades devem seguir o canal privado indicado no arquivo `SECURITY.md` do projeto.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

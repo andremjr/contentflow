@@ -58,7 +58,7 @@ function execution(
   };
 }
 
-test("C01 — snapshot sovereignty ignores later changes to a live Method", () => {
+test("C01 — evaluator uses the persisted projection until the save boundary synchronizes it", () => {
   const liveMethod: ProcessMethod = {
     contractVersion: 3,
     name: "Live",

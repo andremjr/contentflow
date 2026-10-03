@@ -953,7 +953,12 @@ test("expõe e persiste o contrato ambíguo do plugin no editor do Método", asy
   await page.getByText("Dados usados pelo plugin", { exact: true }).click();
 
   const dialog = page.getByRole("region", { name: "Configurar plugin executor" });
-  await dialog.getByRole("combobox").nth(1).click();
+  await dialog
+    .locator("details")
+    .filter({ hasText: "Dados usados pelo plugin" })
+    .getByRole("combobox")
+    .first()
+    .click();
   await page.getByRole("option", { name: "Outline / estrutura", exact: true }).click();
   await expect(page.getByText("Pronto para executar", { exact: true })).toBeVisible();
   await expect
@@ -1938,6 +1943,7 @@ test("edita texto e substitui mídia de um item sem alterar identidade ou posiç
   await expect(
     page.getByRole("button", { name: "Substituir arquivo", exact: true }).first(),
   ).toBeVisible();
+  await expect(page.getByText("Ver tentativas anteriores", { exact: true })).toHaveCount(0);
 });
 
 test("salva separadamente som e notificações do Windows", async ({ page, request }) => {

@@ -17,6 +17,10 @@ export function shouldAutoCloseCoreBrowserSession(invocation?: { mode?: string; 
 type ManagedSession = CoreBrowserSession & {
   child: ChildProcess;
   monitorCorrelation?: DevEvent["correlation"];
+  poolKey?: string;
+  active?: boolean;
+  idleTimer?: ReturnType<typeof setTimeout>;
+  interactive?: boolean;
 };
 
 export type BrowserSessionManagerDependencies = {
@@ -26,6 +30,9 @@ export type BrowserSessionManagerDependencies = {
   spawnChrome: typeof spawn;
   startupTimeoutMs: number;
   pollIntervalMs: number;
+  idleTimeoutMs: number;
+  maxRetainedSessions: number;
+  shutdownTimeoutMs: number;
 };
 
 async function reserveLoopbackPort() {
@@ -71,7 +78,7 @@ function chromeCandidates(explicit?: unknown) {
 async function browserVersion(port: number) {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/json/version`, {
-      signal: AbortSignal.timeout(1_000),
+      signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) return undefined;
     const value = (await response.json()) as { webSocketDebuggerUrl?: string };
@@ -93,10 +100,17 @@ async function closeThroughCdp(webSocketDebuggerUrl: string) {
     socket.addEventListener("open", () =>
       socket.send(JSON.stringify({ id: 1, method: "Browser.close" })),
     );
-    socket.addEventListener("message", () => {
+    socket.addEventListener("message", (event) => {
+      let response: { id?: number; error?: unknown };
+      try {
+        response = JSON.parse(String(event.data));
+      } catch {
+        return;
+      }
+      if (response.id !== 1) return;
       clearTimeout(timeout);
       socket.close();
-      resolve(true);
+      resolve(!response.error);
     });
     socket.addEventListener("error", () => {
       clearTimeout(timeout);
@@ -107,6 +121,10 @@ async function closeThroughCdp(webSocketDebuggerUrl: string) {
 
 export class BrowserSessionManager {
   private readonly dependencies: BrowserSessionManagerDependencies;
+  private readonly sessions = new Map<string, ManagedSession>();
+  private readonly interactiveSessions = new Map<string, ManagedSession>();
+  private readonly opening = new Set<string>();
+  private readonly closing = new Map<string, Promise<boolean>>();
 
   constructor(dependencies: Partial<BrowserSessionManagerDependencies> = {}) {
     this.dependencies = {
@@ -119,11 +137,64 @@ export class BrowserSessionManager {
       // healthy profile as unavailable, especially after a Windows restart.
       startupTimeoutMs: 45_000,
       pollIntervalMs: 250,
+      idleTimeoutMs: 10 * 60_000,
+      maxRetainedSessions: 2,
+      shutdownTimeoutMs: 10_000,
       ...dependencies,
     };
   }
 
   async open(input: {
+    monitorCorrelation?: DevEvent["correlation"];
+    profileDirectory: string;
+    browserBridgeDirectory?: string;
+    chromeExecutable?: unknown;
+    visible?: boolean;
+    signal?: AbortSignal;
+    reusable?: boolean;
+  }): Promise<ManagedSession> {
+    if (input.signal?.aborted)
+      throw Object.assign(new Error("Execução cancelada."), { code: "CANCELLED" });
+    const key = path.resolve(input.profileDirectory);
+    await this.closing.get(key);
+    const existing = this.sessions.get(key) ?? this.interactiveSessions.get(key);
+    if (this.opening.has(key) || existing?.active)
+      throw Object.assign(new Error("Perfil de navegador ocupado."), { code: "LEASE_UNAVAILABLE" });
+    if (existing) {
+      clearTimeout(existing.idleTimer);
+      existing.active = true;
+      const endpoint = await this.dependencies.browserVersion(existing.port);
+      if (endpoint === existing.webSocketDebuggerUrl && !input.signal?.aborted) {
+        existing.monitorCorrelation = input.monitorCorrelation;
+        return existing;
+      }
+      existing.active = false;
+      if (input.signal?.aborted)
+        throw Object.assign(new Error("Execução cancelada."), { code: "CANCELLED" });
+      // A missing probe is not evidence that Chrome exited. Preserve the browser
+      // and its profile rather than closing it or launching a competing instance.
+      if (existing.child.exitCode === null || endpoint) {
+        this.armIdleExpiration(existing);
+        throw Object.assign(new Error("O navegador não respondeu. A sessão foi preservada."), {
+          code: "BRIDGE_DISCONNECTED",
+        });
+      }
+      await this.close(existing);
+    }
+    this.opening.add(key);
+    try {
+      const session = await this.launch(input);
+      session.poolKey = key;
+      session.active = true;
+      session.interactive = input.reusable === false;
+      (session.interactive ? this.interactiveSessions : this.sessions).set(key, session);
+      return session;
+    } finally {
+      this.opening.delete(key);
+    }
+  }
+
+  private async launch(input: {
     monitorCorrelation?: DevEvent["correlation"];
     profileDirectory: string;
     browserBridgeDirectory?: string;
@@ -211,18 +282,97 @@ export class BrowserSessionManager {
   }
 
   async close(session: ManagedSession) {
-    await this.dependencies.closeThroughCdp(session.webSocketDebuggerUrl).catch(() => false);
+    if (session.poolKey) {
+      const pending = this.closing.get(session.poolKey);
+      if (pending) return pending;
+      clearTimeout(session.idleTimer);
+      const closing = this.closeProcess(session);
+      this.closing.set(session.poolKey, closing);
+      try {
+        const closed = await closing;
+        if (closed) {
+          if (this.sessions.get(session.poolKey) === session) this.sessions.delete(session.poolKey);
+          if (this.interactiveSessions.get(session.poolKey) === session)
+            this.interactiveSessions.delete(session.poolKey);
+        }
+        session.active = false;
+        return closed;
+      } finally {
+        this.closing.delete(session.poolKey);
+      }
+    }
+    return await this.closeProcess(session);
+  }
+
+  async release(session: ManagedSession) {
+    if (session.interactive) {
+      session.active = false;
+      return;
+    }
+    if (!session.poolKey || this.sessions.get(session.poolKey) !== session) {
+      await this.close(session);
+      return;
+    }
+    session.active = false;
+    // Map insertion order is the last-use order; evict idle sessions only.
+    this.sessions.delete(session.poolKey);
+    this.sessions.set(session.poolKey, session);
+    while (this.sessions.size > this.dependencies.maxRetainedSessions) {
+      const oldest = [...this.sessions.values()].find((candidate) => !candidate.active);
+      if (!oldest) break;
+      if (!(await this.close(oldest))) break;
+    }
+    if (this.sessions.get(session.poolKey) === session) {
+      this.armIdleExpiration(session);
+    }
+  }
+
+  private armIdleExpiration(session: ManagedSession) {
+    if (session.interactive) return;
+    clearTimeout(session.idleTimer);
+    session.idleTimer = setTimeout(() => {
+      void this.close(session);
+    }, this.dependencies.idleTimeoutMs);
+    session.idleTimer.unref();
+  }
+
+  async dispose() {
+    await Promise.all([...this.sessions.values()].map((session) => this.close(session)));
+  }
+
+  releaseForConfiguration(session: ManagedSession) {
+    if (!session.poolKey) return;
+    clearTimeout(session.idleTimer);
+    this.sessions.delete(session.poolKey);
+    session.interactive = true;
+    session.active = false;
+    this.interactiveSessions.set(session.poolKey, session);
+  }
+
+  private async closeProcess(session: ManagedSession) {
+    if (session.child.exitCode === null) {
+      const requested = await this.dependencies
+        .closeThroughCdp(session.webSocketDebuggerUrl)
+        .catch(() => false);
+      if (session.child.exitCode === null && !requested) return false;
+    }
     if (session.child.exitCode === null) {
       await new Promise<void>((resolve) => {
-        const timeout = setTimeout(resolve, 2_000);
-        timeout.unref();
-        session.child.once("exit", () => {
+        const onExit = () => {
           clearTimeout(timeout);
           resolve();
-        });
+        };
+        const timeout = setTimeout(() => {
+          session.child.removeListener("exit", onExit);
+          resolve();
+        }, this.dependencies.shutdownTimeoutMs);
+        timeout.unref();
+        session.child.once("exit", onExit);
       });
     }
-    if (session.child.exitCode === null) session.child.kill();
+    // Never terminate a retained Chrome while it may be flushing profile data.
+    // If graceful shutdown cannot be confirmed, keep ownership and block replacement.
+    if (session.child.exitCode === null) return false;
     const probe = devProbe("profiles", "browser-session-manager");
     if (probe.enabled)
       probe.emit({
@@ -231,5 +381,6 @@ export class BrowserSessionManager {
         correlation: session.monitorCorrelation ?? {},
         payload: { status: "closed" },
       });
+    return true;
   }
 }

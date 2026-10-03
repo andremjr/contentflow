@@ -31,3 +31,8 @@ npm run plugin:kit -- check ./ecosystem/plugins/reference/ffmpeg-image-sequence-
 ```
 
 Versão do ContentFlow testada: 0.4.1. Runtime: Node 26/ESM. Não há secrets, autenticação ou credenciais para revogar.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

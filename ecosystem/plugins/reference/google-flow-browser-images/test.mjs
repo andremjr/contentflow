@@ -82,7 +82,7 @@ assert.ok(manifest.permissions.includes("network"));
 assert.ok(manifest.permissions.includes("process"));
 assert.deepEqual(
   manifest.capabilities[0].outputPorts.map((port) => port.shape.family ?? port.shape.control),
-  ["image", "image", "image", "video", "url"],
+  ["image", "image", "image", "video", "text"],
 );
 
 const emptyContinuousResult = await execute(
@@ -161,7 +161,10 @@ for (const locale of ["en", "es"]) {
 }
 assert.ok(
   manifest.capabilities.every(
-    (capability) => capability.promptPreview?.template === "{{INPUT:prompts}}",
+    (capability) => capability.promptPreview?.template ===
+      (capability.id === "animate-image-in-browser"
+        ? "{{BLOCK_INSTRUCTIONS}}\n\n{{INPUT:prompts}}"
+        : "{{INPUT:prompts}}"),
   ),
 );
 
@@ -192,7 +195,18 @@ assert.deepEqual(cap.outputPorts[0].shape, {
   representation: "artifact",
   formats: { mimeTypes: ["image/*"] },
 });
-assert.equal(cap.outputPorts.find((port) => port.key === "project_url").shape.control, "url");
+for (const capability of manifest.capabilities) {
+  for (const port of [...capability.inputPorts, ...capability.outputPorts].filter(
+    (port) => port.key === "project_url",
+  )) {
+    assert.deepEqual(port.shape, {
+      kind: "content",
+      family: "text",
+      cardinality: "one",
+      representation: "inline",
+    });
+  }
+}
 assert.equal(cap.blockConfigSchema.properties.accountProfile.default, "default");
 assert.equal(cap.blockConfigSchema.properties.imageModel.default, "flow_auto");
 assert.equal(cap.blockConfigSchema.properties.fallbackOnModelLimit.default, true);
@@ -2251,7 +2265,7 @@ assert.ok(source.includes("Quantidade por prompt confirmada"));
 assert.ok(source.includes("produce-visual-assets-in-browser"));
 assert.ok(source.includes("Produção visual:"));
 assert.match(source, /const maxConcurrentGenerations = requestedConcurrentGenerations/);
-assert.match(source, /const requestId = await reservation.submitted/);
+assert.match(source, /const submissionPublished = reservation.submitted.then/);
 assert.match(
   source,
   /hasEngine && taskReferencePaths.length === 0 && maxConcurrentGenerations === 1/,

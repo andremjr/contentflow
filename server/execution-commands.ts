@@ -65,10 +65,10 @@ export function executionCommands(db: {
         db.executions.some((item) => item.projectId === projectId),
       );
     const snapshotMethod = project?.strategySnapshot?.methods[processType];
-    const storedMethod = snapshotMethod ?? channel?.methods[processType];
+    const storedMethod = channel?.methods[processType] ?? snapshotMethod;
     const method = storedMethod
       ? db.adaptMethod
-        ? db.adaptMethod(storedMethod, snapshotMethod ? "strategy_snapshot" : "persisted_channel")
+        ? db.adaptMethod(storedMethod, channel ? "persisted_channel" : "strategy_snapshot")
         : storedMethod
       : undefined;
     const normalizedMethod = method
@@ -370,14 +370,30 @@ export function executionCommands(db: {
     return { ok: true };
   }
 
-  function acceptBlockDelivery(executionId: string, blockId: string) {
+  function acceptBlockDelivery(
+    executionId: string,
+    blockId: string,
+    recoveredValues: Record<string, RuntimeValue> = {},
+  ) {
     const execution = db.executions.find((item) => item.id === executionId);
     const blockExecution = execution?.blocks.find((item) => item.blockId === blockId);
     const block = execution?.methodSnapshot.blocks.find((item) => item.id === blockId);
     if (!execution || !blockExecution || !block) {
       return { ok: false as const, missing: ["Esta entrega não pode ser finalizada neste estado"] };
     }
-    const missing = blockDeliveryIssues(block, blockExecution.values);
+    // Explicitly recovering a missing declared output must never replace preserved work.
+    if (
+      Object.entries(recoveredValues).some(
+        ([key, value]) =>
+          !block.outputs?.some((field) => field.key === key) ||
+          (blockExecution.values[key] !== undefined &&
+            JSON.stringify(blockExecution.values[key]) !== JSON.stringify(value)),
+      )
+    ) {
+      return { ok: false as const, missing: ["Esta entrega não pode ser finalizada neste estado"] };
+    }
+    const values = { ...blockExecution.values, ...recoveredValues };
+    const missing = blockDeliveryIssues(block, values);
     if (missing.length) return { ok: false as const, missing };
 
     const now = new Date().toISOString();
@@ -389,6 +405,7 @@ export function executionCommands(db: {
     if (!acceptance.ok) {
       return { ok: false as const, missing: ["Esta entrega não pode ser finalizada neste estado"] };
     }
+    blockExecution.values = values;
     recordBlockDeliveries(execution, block, blockExecution.values, "completed", now);
     const updated = activateNextBlock(execution, blockExecution.blockId);
     return { ok: true as const, completedProcess: updated.status === "completed" };
@@ -417,7 +434,6 @@ export function executionCommands(db: {
       { type: "manual_block_retry_requested", blockId, scope: retryScope, itemId },
       new Date().toISOString(),
       currentMethod,
-      channel?.definitionRevision,
     );
     if (!result.ok) return false;
     if (channel) refreshProjectProcessStrategy(project, channel, execution.processType);

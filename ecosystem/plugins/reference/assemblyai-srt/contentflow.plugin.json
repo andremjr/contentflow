@@ -3,10 +3,10 @@
   "apiVersion": "2",
   "id": "com.andremjr.assemblyai-srt",
   "name": "AssemblyAI SRT Studio",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Transcreve uma ou várias mídias com rotação circular de chaves AssemblyAI e compila legendas SRT configuráveis.",
   "author": "André Marinho Jr.",
-  "license": "Proprietary",
+  "license": "MIT",
   "branding": {
     "iconPath": "assets/icon.png"
   },
@@ -15,7 +15,7 @@
     "version": ">=26 <27",
     "module": "esm"
   },
-  "minCoreVersion": "1.3.1",
+  "minCoreVersion": "1.3.3",
   "entrypoint": "handler.mjs",
   "permissions": [
     "network",
@@ -250,5 +250,6 @@
         ]
       }
     }
-  ]
+  ],
+  "repository": "https://github.com/andremjr/plugins-contentflow"
 }

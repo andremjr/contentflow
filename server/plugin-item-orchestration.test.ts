@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { BlockExecutionItem } from "../src/lib/domain";
 import type { PluginCapability, PluginExecutionRequest } from "../src/lib/plugin-contract";
-import { createPersistentPluginJob } from "./plugin-job-store";
+import { createPersistentPluginJob, type PersistentPluginJob } from "./plugin-job-store";
 import {
   appendOrchestratedOutput,
   blockExecutionItemsForJob,
@@ -15,6 +15,7 @@ import {
   itemProgressForJob,
   itemActionRequestForJob,
   legacyItemOrchestration,
+  orchestratedPartialValues,
   resumedItemOrchestration,
   resumedItemOrchestrationFromItems,
   selectedItemOrchestrationFromItems,
@@ -51,6 +52,59 @@ const capability = {
     itemOrchestration: { inputPort: "prompts", outputPort: "images", mode: "sequential" },
   },
 } as PluginCapability;
+
+test("retoma lacunas no meio do lote sem atribuir o output de outro item pela contagem", () => {
+  const batchRequest = {
+    ...request,
+    inputs: { prompts: Array.from({ length: 16 }, (_, i) => `scene ${i}`) },
+  };
+  const orchestration: NonNullable<PersistentPluginJob["itemOrchestration"]> =
+    declaredItemOrchestration(capability, batchRequest)!;
+  orchestration.workItems = orchestration.workItems!.map((item, index) =>
+    [8, 11].includes(index) ? item : { ...item, status: "completed", output: `result ${index}` },
+  );
+  orchestration.accumulatedItems = orchestration.workItems
+    .filter((item) => item.output !== undefined)
+    .map((item) => item.output!);
+  const prior = createPersistentPluginJob({
+    pluginId: "test.browser",
+    pluginVersion: "1.0.0",
+    request: batchRequest,
+    timeoutMs: 60_000,
+    itemOrchestration: orchestration,
+  });
+  const resumed: NonNullable<PersistentPluginJob["itemOrchestration"]> = resumedItemOrchestration(
+    capability,
+    { ...batchRequest, attempt: 2 },
+    prior,
+  )!;
+  assert.equal(resumed.currentIndex, 8);
+  assert.deepEqual(
+    resumed.workItems!.filter((item) => item.status !== "completed").map((item) => item.order),
+    [8, 11],
+  );
+  assert.equal(resumed.workItems![8].output, undefined);
+  assert.equal(resumed.workItems![11].output, undefined);
+  assert.equal(resumed.workItems![9].output, "result 9");
+  assert.equal(resumed.workItems![12].output, "result 12");
+  assert.deepEqual(resumed.itemIds, orchestration.itemIds);
+  prior.request.outputContract = [
+    {
+      key: "images",
+      portKey: "images",
+      label: "Images",
+      required: true,
+      shape: { kind: "content", family: "text", cardinality: "many", representation: "inline" },
+    },
+  ];
+  prior.partialValues = { images: orchestration.accumulatedItems as string[] };
+  prior.itemOrchestration!.workItems![8].status = "completed";
+  prior.itemOrchestration!.workItems![8].output = "new result 8";
+  const values = orchestratedPartialValues(prior, { images: ["new result 8"] });
+  assert.equal((values.images as string[]).length, 15);
+  assert.equal((values.images as string[])[8], "new result 8");
+  assert.equal((values.images as string[])[9], "result 9");
+});
 
 test("expande uma lista em chamadas atômicas com ID e posição", () => {
   const itemOrchestration = declaredItemOrchestration(capability, request);
@@ -292,7 +346,7 @@ test("remove unidades obsoletas de tentativas antigas sem perder unidades retoma
   );
   assert.equal(
     items.some((item) => item.id === "current-input"),
-    true,
+    false,
   );
   assert.equal(
     items.some((item) => item.id === itemOrchestration.workItems![0].id),
@@ -317,6 +371,10 @@ test("retoma um lote a partir do primeiro item ainda não concluído", () => {
   previous.status = "failed";
   previous.itemOrchestration!.currentIndex = 2;
   previous.itemOrchestration!.accumulatedItems = ["image-a", "image-b"];
+  for (const [index, output] of ["image-a", "image-b"].entries()) {
+    previous.itemOrchestration!.workItems![index].status = "completed";
+    previous.itemOrchestration!.workItems![index].output = output;
+  }
 
   assert.deepEqual(itemProgressForJob(previous), {
     total: 3,

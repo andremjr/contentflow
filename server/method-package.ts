@@ -201,6 +201,7 @@ function readZipEntries(buffer: Buffer) {
           entry.fileName.includes("..") ||
           entry.fileName.includes("\\") ||
           (entry.fileName !== "manifest.json" &&
+            entry.fileName !== "LICENSE" &&
             !/^assets\/[a-z0-9-]+\.(webp|png|jpg)$/.test(entry.fileName) &&
             !/^assets\/items\/[a-z0-9._-]+$/.test(entry.fileName))
         ) {

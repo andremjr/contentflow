@@ -170,6 +170,27 @@ try {
     { existingArtifacts: importedPartial.storedArtifacts },
   );
   assert.equal(repeatedPartial.status, "pending");
+  await assert.rejects(
+    importPluginArtifacts(
+      {
+        ...partialResponse,
+        partialArtifacts: [{ ...partialResponse.partialArtifacts![0], size: 8 }],
+      },
+      integrationOutput,
+      uploadsDirectory,
+      manifest,
+      { existingArtifacts: importedPartial.storedArtifacts },
+    ),
+    (error: unknown) => {
+      const failure = error as {
+        code: string;
+        recovery: { externalEffect: string; stage: string };
+      };
+      assert.equal(failure.code, "OUTPUT_VALIDATION_FAILED");
+      assert.deepEqual(failure.recovery, { stage: "awaiting_result", externalEffect: "possible" });
+      return true;
+    },
+  );
   const importedErrorPartial = await importPluginArtifacts(
     {
       status: "error",

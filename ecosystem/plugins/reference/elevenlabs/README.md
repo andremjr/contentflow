@@ -35,3 +35,8 @@ npm run plugin:kit -- check ecosystem/plugins/reference/elevenlabs
 Com `ELEVENLABS_API_KEY` definida no ambiente, `npm run smoke:real --prefix ecosystem/plugins/reference/elevenlabs` executa uma narração curta, usa esse áudio para validar a transcrição, gera um efeito curto e tenta uma composição instrumental de três segundos.
 
 Documentação: https://elevenlabs.io/docs/api-reference/introduction/
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

@@ -45,6 +45,30 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 type Translation = [english: string, spanish: string];
 
 const PHRASES: Record<string, Translation> = {
+  "Dados entre blocos": ["Data between blocks", "Datos entre bloques"],
+  "Escolha as entregas anteriores que esta capacidade deve receber.": [
+    "Choose the previous deliveries this capability should receive.",
+    "Elige las entregas anteriores que debe recibir esta capacidad.",
+  ],
+  "Sem entrega anterior": ["No previous delivery", "Sin entrega anterior"],
+  "Entrada configurada no bloco": [
+    "Input configured in the block",
+    "Entrada configurada en el bloque",
+  ],
+  "Usar entrega de": ["Use delivery from", "Usar entrega de"],
+  "Disponibilizar entrega": ["Make delivery available", "Habilitar entrega"],
+  "Revise o vínculo da entrega no painel do plugin.": [
+    "Review the delivery binding in the plugin panel.",
+    "Revisa el vínculo de la entrega en el panel del plugin.",
+  ],
+  "Não é possível remover um bloco com trabalho já iniciado nesta execução.": [
+    "A block with work already started in this execution cannot be removed.",
+    "No se puede eliminar un bloque con trabajo ya iniciado en esta ejecución.",
+  ],
+  "A nova ordem do Método interrompe um bloco que já está em execução.": [
+    "The new Method order interrupts a block that is already running.",
+    "El nuevo orden del Método interrumpe un bloque que ya está en ejecución.",
+  ],
   Conteúdo: ["Content", "Contenido"],
   "Tipo de conteúdo": ["Content type", "Tipo de contenido"],
   Quantidade: ["Quantity", "Cantidad"],
@@ -1063,6 +1087,14 @@ const PHRASES: Record<string, Translation> = {
       "Ejecuta cualquier bloque basado en lenguaje con un modelo de texto compatible con la API Responses de OpenAI.",
     ],
   "Execução cancelada": ["Execution cancelled", "Ejecución cancelada"],
+  "Perfil de navegador ocupado.": [
+    "Browser profile is busy.",
+    "El perfil del navegador está ocupado.",
+  ],
+  "O navegador não respondeu. A sessão foi preservada.": [
+    "The browser did not respond. The session was preserved.",
+    "El navegador no respondió. Se conservó la sesión.",
+  ],
   "Exportar manifesto": ["Export manifest", "Exportar manifiesto"],
   "Frequência de publicação": ["Publishing frequency", "Frecuencia de publicación"],
   "Gerencie as ferramentas que executam blocos de IA e Código": [

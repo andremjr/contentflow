@@ -3,10 +3,10 @@
   "apiVersion": "2",
   "id": "local.contentflow.gemini-browser-studio",
   "name": "Gemini Browser Studio",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Automação modular do Gemini web para texto, pesquisa, escolha, validação, análise de arquivos, imagens e música.",
   "author": "André Marinho Jr.",
-  "license": "Proprietary",
+  "license": "MIT",
   "branding": {
     "iconPath": "assets/icon.png"
   },
@@ -15,7 +15,7 @@
     "version": ">=26 <27",
     "module": "esm"
   },
-  "minCoreVersion": "1.3.1",
+  "minCoreVersion": "1.3.3",
   "entrypoint": "handler.mjs",
   "browserRuntime": {
     "lifecycle": "core"
@@ -1156,5 +1156,6 @@
       },
       "instructionUsage": "required"
     }
-  ]
+  ],
+  "repository": "https://github.com/andremjr/plugins-contentflow"
 }

@@ -52,3 +52,8 @@ A execução fica sujeita aos limites e termos da conta conectada. Instruções 
 Desative ou desinstale o plugin no ContentFlow. Para revogar a sessão, use o mecanismo de logout disponibilizado pelo Antigravity CLI.
 
 Compatibilidade inicial: Windows desktop, Node 26, ContentFlow 0.3.5 e Antigravity CLI com headless JSON, JSON Schema e retomada por conversa.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

@@ -405,7 +405,7 @@ test("C10 — output obrigatório ausente preserva a execução", () => {
   assert.equal(project.stages.theme, "awaiting_human");
 });
 
-test("C11 — snapshot do Método permanece congelado após alteração do Canal", () => {
+test("C11 — mutação não salva do Canal não altera a projeção persistida da execução", () => {
   const originalBlocks = [humanBlock("frozen-first", 0), humanBlock("frozen-second", 1)];
   const { commands, channel, project } = fixture(originalBlocks);
   const execution = commands.startProcessExecution(project.id, "theme")!;

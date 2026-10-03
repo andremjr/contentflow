@@ -32,6 +32,8 @@ Cardinalidade é sempre explícita. O runtime não a deduz de arrays, nomes, ren
 
 `artifact` é representação, não família. Texto pode ser inline ou artifact — por exemplo TXT, Markdown e SRT continuam sendo `family: "text"`. Imagem, áudio e vídeo usam representação `artifact`.
 
+Uma referência textual a um projeto externo pode ser declarada pelo plugin como conteúdo `text/one/inline`. O Método disponibiliza essa saída e liga explicitamente a entrada do Bloco consumidor. O núcleo transporta o texto pelo contrato declarado, sem reconhecer URLs pelo nome da porta ou pelo conteúdo. Interpretar e abrir o projeto pertence ao plugin. Isso não altera contratos administrativos existentes de controle `url` nem dispensa a declaração das portas: a resposta de um executor só pode preencher saídas declaradas no Bloco.
+
 ## Controle e estrutura
 
 Valores que não são conteúdo usam contratos separados:

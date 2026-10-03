@@ -2112,21 +2112,58 @@ window.FA_VARIANT = "estudio";
     return D2.$$(S2.menuItem);
   }
   async function acharTile({ workflowId, mediaUuid, nome }) {
-    let t = mediaUuid ? D2.findTileByMediaId(mediaUuid) : null;
-    if (!t && workflowId) {
-      const m = NS.media2.chegadas().find((x) => x.workflowId === workflowId);
-      if (m) t = D2.findTileByMediaId(m.mediaId);
-    }
-    if (!t && nome) t = D2.findTileByName(nome);
-    if (!t) {
-      const sc = D2.getScroller();
-      if (sc) {
-        sc.scrollTop = 0;
-        await NS.sleep(400);
+    const find = () => {
+      let t = mediaUuid ? D2.findTileByMediaId(mediaUuid) : null;
+      if (!t && workflowId) {
+        const m = NS.media2.chegadas().find((x) => x.workflowId === workflowId);
+        if (m && (!mediaUuid || m.mediaId === mediaUuid)) t = D2.findTileByMediaId(m.mediaId);
       }
-      t = mediaUuid ? D2.findTileByMediaId(mediaUuid) : nome ? D2.findTileByName(nome) : null;
+      if (!t && !mediaUuid && nome) t = D2.findTileByName(nome);
+      return t && (!mediaUuid || t.mediaId === mediaUuid) ? t : null;
+    };
+    let t = find();
+    if (t) return t;
+    const sc = D2.getScroller();
+    if (!sc) return null;
+    const originalTop = sc.scrollTop;
+    try {
+      sc.scrollTop = 0;
+      for (let page = 0; page < 100; page++) {
+        await NS.sleep(300);
+        t = find();
+        if (t) return t;
+        const before = sc.scrollTop;
+        sc.scrollTop += Math.max(200, Math.floor(sc.clientHeight * 0.8));
+        if (sc.scrollTop === before) break;
+      }
+      return null;
+    } finally {
+      if (!t) sc.scrollTop = originalTop;
     }
-    return t;
+  }
+
+  async function listProjectMedia() {
+    const sc = D2.getScroller();
+    const originalTop = sc?.scrollTop;
+    const found = new Map();
+    try {
+      if (sc) sc.scrollTop = 0;
+      for (let page = 0; page < 100; page++) {
+        if (sc) await NS.sleep(300);
+        for (const tile of D2.listTiles()) {
+          if (tile.mediaId && tile.url) found.set(tile.mediaId, {
+            mediaId: tile.mediaId, url: tile.url, kind: tile.kind, name: tile.nome,
+          });
+        }
+        if (!sc || sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1) return [...found.values()];
+        const before = sc.scrollTop;
+        sc.scrollTop += Math.max(200, Math.floor(sc.clientHeight * 0.8));
+        if (sc.scrollTop === before) return [...found.values()];
+      }
+      throw new Error("Project gallery scan did not finish.");
+    } finally {
+      if (sc) sc.scrollTop = originalTop;
+    }
   }
 
   async function uiRenameTile(ref, newName) {
@@ -2219,7 +2256,7 @@ window.FA_VARIANT = "estudio";
     return { ok: faltando.length === 0, missing: faltando, available: [...disp.keys()] };
   }
 
-  async function anexarPeloMais(nome) {
+  async function anexarPeloMais(nome, mediaUuid = null, aba = null) {
     if (!D2.$(S2.addMenuPopover)) {
       const b = D2.$(S2.addMenuButton);
       if (!b) throw new Error("botão + não encontrado (e o painel não estava aberto)");
@@ -2228,6 +2265,10 @@ window.FA_VARIANT = "estudio";
     }
     const pop = D2.$(S2.addMenuPopover);
     if (!pop) throw new Error("painel do + não abriu");
+    if (aba) {
+      await abrirAbaDoMais(aba);
+      await NS.sleep(300);
+    }
     const inp = D2.$(S2.addMenuSearch);
     if (inp) {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
@@ -2241,13 +2282,22 @@ window.FA_VARIANT = "estudio";
     const textoDe = (it) => D2.rotulo(it).replace(/\s+/g, " ").trim().toLowerCase();
     const item = await D2.esperar(() => {
       const todos = D2.$$(S2.addMenuItem);
-      return (
-        todos.find((it) => textoDe(it) === alvo) ||
-        todos.find((it) => {
-          const t = (it.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-          return t.startsWith(alvo) || t.includes(alvo);
-        })
-      );
+      const exact = todos.filter((it) => [textoDe(it), it.getAttribute?.('title'), it.getAttribute?.('aria-label'),
+        ...[...it.querySelectorAll('img, [title], [aria-label]')].flatMap(node =>
+          [node.getAttribute?.('title'), node.getAttribute?.('aria-label'), node.getAttribute?.('alt')])]
+        .some(value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase() === alvo));
+      if (mediaUuid) {
+        const identified = todos.find((it) => [it, ...it.querySelectorAll('[data-media-id], [data-mention-id], img')].some((img) => {
+          if ([img.getAttribute?.('data-media-id'), img.getAttribute?.('data-mention-id'), img.id].includes(mediaUuid)) return true;
+          try {
+            const url = new URL(img.currentSrc || img.src);
+            return url.searchParams.get('name') === mediaUuid ||
+              url.pathname.split('/').includes(mediaUuid);
+          } catch { return false; }
+        }));
+        if (identified) return identified;
+      }
+      return exact.length === 1 ? exact[0] : null;
     }, 15000);
     if (!item) {
       await D2.fecharOverlays();
@@ -2280,7 +2330,7 @@ window.FA_VARIANT = "estudio";
       nome = t && t.nome;
     }
     if (!nome) throw new Error("não sei o nome da imagem pra anexar pelo +");
-    return anexarPeloMais(nome);
+    return anexarPeloMais(nome, mediaUuid, S2.addMenuNavIcons.imagens);
   }
 
   async function attachFrameByWorkflowId(
@@ -2290,14 +2340,21 @@ window.FA_VARIANT = "estudio";
     mediaUuid = null,
   ) {
     await NS.menu2.configureGeneration({ type: "video", videoMode: "frames" });
-    const slot = D2.$$('flow-base-prompt-box button, flow-base-prompt-box [role="button"]').find(
-      (x) => (position === "final" ? /^fim$|^end$/i : /^in[íi]cio$|^start$/i).test(D2.rotulo(x)),
-    );
-    if (slot) {
-      D2.clicar(slot);
-      await D2.esperar(() => D2.$(S2.addMenuPopover), 2000);
-    }
-    return attachImageRefViaAddPanel(workflowId, name, mediaUuid);
+    const trigger = D2.$$('flow-base-prompt-box .frame-trigger')[position === "final" ? 1 : 0];
+    const slot = trigger ? D2.$$('button, [role="button"]', trigger)[0] || trigger
+      : D2.$$('flow-base-prompt-box button, flow-base-prompt-box [role="button"]').find(
+        (x) => (position === "final" ? /^(?:fim|end|final|last)$/i : /^(?:in[íi]cio|inicial|initial|start|first)$/i).test(D2.rotulo(x)),
+      );
+    if (!slot) throw new Error("Frame slot unavailable");
+    const root = trigger || slot;
+    const filled = () => !!root.querySelector('img, video, [data-media-id], flow-image-ingredient-chip');
+    if (filled()) throw new Error("Frame slot already occupied");
+    D2.clicar(slot);
+    if (!await D2.esperar(() => D2.$(S2.addMenuPopover), 2000))
+      throw new Error("Frame picker unavailable");
+    await attachImageRefViaAddPanel(workflowId, name, mediaUuid);
+    if (!await D2.esperar(filled, 5000)) throw new Error("Initial frame not confirmed");
+    return true;
   }
 
   async function abrirAbaDoMais(nomeDoIcone) {
@@ -2494,6 +2551,7 @@ window.FA_VARIANT = "estudio";
     uiRenameProjectTitle,
     anexarPeloMais,
     acharTile,
+    listProjectMedia,
   };
 })();
 

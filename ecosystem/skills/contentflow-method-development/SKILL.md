@@ -33,7 +33,7 @@ Métodos v1/v2 são inválidos; crie explicitamente um novo envelope v3 com `con
 
 `Core → cria a execução, persiste identidade/proveniência/ordem, decide progressão e recovery`
 
-O Method é congelado em `methodSnapshot` dentro da execução e pode integrar o `strategySnapshot` do Projeto. Não coloque fallback estratégico, avanço de Processo, retry técnico ou identidade de work units em configuração de plugin.
+O Method vigente é sincronizado imediatamente nas execuções abertas ao salvar, preservando resultados, identidades e tentativas. `methodSnapshot` é uma projeção persistida, não uma definição congelada; a ordem dos Processos do Projeto tem contrato separado. Consulte `docs/ARCHITECTURE.md` para efeitos externos em andamento e restrições de remoção/reordenação. Não coloque fallback estratégico, avanço de Processo, retry técnico ou identidade de work units em configuração de plugin. Declare explicitamente saídas de conteúdo e suas ligações com entradas seguintes; textos específicos do provedor são interpretados pelo plugin, nunca pelo núcleo.
 
 ## Traduzir a intenção em estratégia
 
@@ -115,3 +115,8 @@ Use `templates/method-skeleton.json` como exemplo mínimo. Antes de reutilizá-l
 - exemplo/arquivo final passa pelo parser real do checkout.
 
 Para associações em conteúdo textual, consulte `docs/PLUGIN_INTERFACE.md`: o produtor fornece IDs canônicos ao modelo e valida o JSON conforme configuração do plugin; o consumidor resolve os IDs e traduz para sua ferramenta. O Core preserva identidade/proveniência sem decidir relações editoriais. No exemplo visual: roteiro → personagens → referências → prompts com IDs → cenas. Controles funcionais são declarados pelo plugin, sem interpretação de nomes de campos pelo renderer.
+
+
+## Distribuição independente
+
+A partir da 1.3.3, consulte docs/ecosystem/distribution.md: plugins publicados pelo mantenedor são MIT em andremjr/plugins-contentflow; Métodos publicados são MIT em andremjr/methods-contentflow. Preserve versão editorial, compatibilidade, identidade, hash e URLs imutáveis. Publique assets antes de atualizar catálogo. A licença do núcleo não muda.

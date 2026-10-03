@@ -114,3 +114,8 @@ O Core cria/persiste identidade, ordem, tentativa e proveniência. O plugin só 
 - pacote não contém secrets, estado de máquina, cookies, tokens ou caminhos locais.
 
 Para associações em conteúdo textual, consulte `docs/PLUGIN_INTERFACE.md`: o produtor fornece IDs canônicos ao modelo e valida o JSON conforme configuração do plugin; o consumidor resolve os IDs e traduz para sua ferramenta. O Core preserva identidade/proveniência sem decidir relações editoriais. No exemplo visual: roteiro → personagens → referências → prompts com IDs → cenas. Controles funcionais são declarados pelo plugin, sem interpretação de nomes de campos pelo renderer.
+
+
+## Distribuição independente
+
+A partir da 1.3.3, consulte docs/ecosystem/distribution.md: plugins publicados pelo mantenedor são MIT em andremjr/plugins-contentflow; Métodos publicados são MIT em andremjr/methods-contentflow. Preserve versão editorial, compatibilidade, identidade, hash e URLs imutáveis. Publique assets antes de atualizar catálogo. A licença do núcleo não muda.

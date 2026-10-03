@@ -353,7 +353,6 @@ export type PluginArtifact = {
   mimeType: string;
   size?: number;
   source: { kind: "path"; path: string } | { kind: "url"; url: string };
-  flowMediaId?: string;
 };
 
 export type PluginUsage = {

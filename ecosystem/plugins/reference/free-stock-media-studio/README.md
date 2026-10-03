@@ -99,3 +99,8 @@ npm run e2e:p24 --prefix ecosystem/plugins/reference/free-stock-media-studio
 Com as quatro variáveis de ambiente dos provedores desejados definidas, `npm run smoke:real --prefix ecosystem/plugins/reference/free-stock-media-studio` valida buscas e downloads reais sem imprimir credenciais ou URLs assinadas. `SMOKE_PROVIDERS` pode limitar a matriz; Openverse, Wikimedia Commons e NASA não exigem variável.
 
 O comando `e2e:p24` sobe uma API isolada com dados temporários, vincula esta pasta ao vivo e executa o Método de `fixtures/p24-real-method.contentflow-method.json` em PT-BR, inglês e espanhol. O cenário usa Openverse para fazer `BUSCAR → VALIDAR → CRIAR` na rede real, confirma que o núcleo importou exatamente um artifact por execução e registra somente IDs, MIME, tamanho, SHA-256, licença e presença de atribuição. Nenhuma chave do cofre é lida ou impressa.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

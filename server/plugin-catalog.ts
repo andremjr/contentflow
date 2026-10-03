@@ -3,6 +3,7 @@ import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSyn
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import yauzl, { type Entry, type ZipFile } from "yauzl";
+import { catalogDownloadUrl } from "./catalog-download";
 
 const CATALOG_SCHEMA_VERSION = 1;
 const MAX_CATALOG_BYTES = 2 * 1024 * 1024;
@@ -17,6 +18,8 @@ export type PluginCatalogEntry = {
   apiVersion?: string;
   minCoreVersion?: string;
   asset: string;
+  downloadUrl?: string;
+  description?: string;
   sha256: string;
   size: number;
 };
@@ -111,6 +114,8 @@ function isCatalogEntry(value: unknown): value is PluginCatalogEntry {
     (entry.minCoreVersion === undefined || isSafePluginVersion(entry.minCoreVersion)) &&
     typeof entry.asset === "string" &&
     /^ContentFlow-Plugin-[A-Za-z0-9._-]+\.zip$/.test(entry.asset) &&
+    (entry.downloadUrl === undefined || typeof entry.downloadUrl === "string") &&
+    (entry.description === undefined || typeof entry.description === "string") &&
     typeof entry.sha256 === "string" &&
     /^[A-Fa-f0-9]{64}$/.test(entry.sha256) &&
     Number.isSafeInteger(entry.size) &&
@@ -171,6 +176,7 @@ export async function fetchPluginCatalog(catalogUrl: string): Promise<PluginCata
 }
 
 export function pluginAssetUrl(catalogUrl: string, entry: PluginCatalogEntry) {
+  if (entry.downloadUrl) return catalogDownloadUrl(catalogUrl, entry.downloadUrl);
   const catalog = new URL(catalogUrl);
   const asset = new URL(entry.asset, catalog);
   if (asset.origin !== catalog.origin) throw new Error("A origem do pacote é inválida.");

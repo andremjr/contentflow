@@ -3,21 +3,21 @@
   "apiVersion": "2",
   "id": "official-anthropic-claude",
   "name": "Anthropic Claude",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Executa ações baseadas em linguagem com modelos Claude disponíveis na API da Anthropic.",
   "author": "ContentFlow",
-  "license": "LicenseRef-ContentFlow-Source-Available-1.0",
+  "license": "MIT",
   "branding": {
     "iconPath": "assets/icon.png"
   },
   "homepage": "https://github.com/andremjr/contentflow",
-  "repository": "https://github.com/andremjr/contentflow",
+  "repository": "https://github.com/andremjr/plugins-contentflow",
   "runtime": {
     "kind": "node",
     "version": ">=22",
     "module": "esm"
   },
-  "minCoreVersion": "1.3.1",
+  "minCoreVersion": "1.3.3",
   "entrypoint": "handler.ts",
   "permissions": [
     "network"

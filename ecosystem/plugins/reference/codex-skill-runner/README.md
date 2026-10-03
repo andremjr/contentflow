@@ -82,3 +82,8 @@ Desative ou desinstale o plugin na Central de Plugins. Para encerrar também a s
 ## Suporte
 
 Compatibilidade inicial: Windows desktop, Node 26, ContentFlow 0.3.5 e Codex CLI com suporte aos flags documentados de `codex exec`.
+
+
+## Licença MIT
+
+O código deste plugin é aberto sob MIT: uso pessoal ou comercial, modificação e redistribuição são permitidos com preservação dos avisos de autoria e licença. Dependências de terceiros conservam suas próprias licenças e avisos. A licença do aplicativo ContentFlow é separada.

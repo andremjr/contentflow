@@ -109,8 +109,17 @@ export async function attachContentFlowBridge({
   const attachWorkerSession = async (timeoutMs = waitMs) => {
     const deadline = Date.now() + timeoutMs;
     const rejectedTargets = new Set();
+    let nextDiscoveryAt = 0;
     while (Date.now() < deadline) {
       if (signal?.aborted) throw codedError("CANCELLED", "Execução cancelada.");
+      // document_idle may install the listener after the first discovery. Wake
+      // only while attaching, with bounded frequency, never during idle retention.
+      if (Date.now() >= nextDiscoveryAt) {
+        nextDiscoveryAt = Date.now() + 1_000;
+        await client.send("Runtime.evaluate", {
+          expression: `window.postMessage({ source: "contentflow-bridge-client", action: "discover" }, location.origin)`,
+        }, pageSessionId).catch(() => undefined);
+      }
       const { targetInfos = [] } = await client.send("Target.getTargets");
       const candidates = targetInfos.filter(
         (item) =>

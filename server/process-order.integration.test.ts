@@ -288,7 +288,7 @@ test(
 );
 
 test(
-  "batch V4 keeps custom order, frozen methods and persisted plan across restart",
+  "batch V4 keeps custom process order and persisted plan while adopting live Methods across restart",
   { timeout: 90_000 },
   async () => {
     const port = await availablePort();
@@ -389,7 +389,12 @@ test(
         const execution = state.executions.find(
           (item) => item.projectId === event.projectId && item.processType === event.processType,
         )!;
-        assert.equal(execution.methodSnapshot.name, `Congelado ${event.processType}`);
+        assert.equal(
+          execution.methodSnapshot.name,
+          event.processType === "script"
+            ? "Método alterado depois do lote"
+            : `Congelado ${event.processType}`,
+        );
 
         const human = await api<{
           result: { ok: boolean; completedProcess?: boolean; missing?: string[] };

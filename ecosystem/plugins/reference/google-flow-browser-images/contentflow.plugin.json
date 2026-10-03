@@ -3,7 +3,7 @@
   "apiVersion": "2",
   "id": "local.contentflow.google-flow-batch-images",
   "name": "Google Flow Browser Images",
-  "version": "2.0.1",
+  "version": "3.0.0",
   "description": "Gera imagens reais e vídeos no Google Flow com modelos Nano Banana e Veo, proporções configuráveis, animação de imagens, referências visuais, continuidade de projeto e produção visual em lote.",
   "localizations": {
     "en": {
@@ -1861,7 +1861,7 @@
     "version": ">=26 <27",
     "module": "esm"
   },
-  "minCoreVersion": "1.3.1",
+  "minCoreVersion": "1.3.3",
   "entrypoint": "handler.mjs",
   "permissions": [
     "network",
@@ -2042,9 +2042,10 @@
           "description": "Projeto do Google Flow opcional para preservar a sala, as referências e o histórico.",
           "required": false,
           "shape": {
-            "kind": "control",
-            "control": "url",
-            "cardinality": "one"
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -2126,9 +2127,10 @@
           "label": "URL do projeto",
           "required": false,
           "shape": {
-            "kind": "control",
-            "control": "url",
-            "cardinality": "one"
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -2917,9 +2919,10 @@
           "description": "URL opcional de um projeto do Flow para continuar na mesma sala/chat preservando personagens e histórico.",
           "required": false,
           "shape": {
-            "kind": "control",
-            "control": "url",
-            "cardinality": "one"
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -2970,9 +2973,10 @@
           "description": "URL do projeto ativo no Google Flow para reaproveitar em blocos seguintes do método.",
           "required": false,
           "shape": {
-            "kind": "control",
-            "control": "url",
-            "cardinality": "one"
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -3355,7 +3359,7 @@
       "description": "Transforma uma imagem de referência em vídeo com movimento e câmera configuráveis.",
       "operator": "IA",
       "promptPreview": {
-        "template": "{{INPUT:prompts}}"
+        "template": "{{BLOCK_INSTRUCTIONS}}\n\n{{INPUT:prompts}}"
       },
       "blockTypes": [
         "CRIAR"
@@ -3417,9 +3421,10 @@
           "description": "URL opcional do projeto/chat do Flow onde a imagem já reside.",
           "required": false,
           "shape": {
-            "kind": "control",
-            "control": "url",
-            "cardinality": "one"
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -3450,9 +3455,10 @@
           "description": "URL do projeto ativo no Google Flow para encadear em blocos seguintes.",
           "required": false,
           "shape": {
-            "kind": "control",
-            "control": "url",
-            "cardinality": "one"
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -3723,7 +3729,8 @@
         "required": [
           "video"
         ]
-      }
+      },
+      "instructionUsage": "optional"
     },
     {
       "id": "generate-video-in-browser",
@@ -3793,9 +3800,10 @@
           "description": "URL opcional do projeto do Flow para gerar o vídeo dentro da mesma sala.",
           "required": false,
           "shape": {
-            "kind": "control",
-            "control": "url",
-            "cardinality": "one"
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -3826,9 +3834,10 @@
           "description": "URL do projeto ativo no Google Flow.",
           "required": false,
           "shape": {
-            "kind": "control",
-            "control": "url",
-            "cardinality": "one"
+            "kind": "content",
+            "family": "text",
+            "cardinality": "one",
+            "representation": "inline"
           }
         }
       ],
@@ -4110,5 +4119,6 @@
         ]
       }
     }
-  ]
+  ],
+  "repository": "https://github.com/andremjr/plugins-contentflow"
 }

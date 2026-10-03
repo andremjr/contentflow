@@ -86,6 +86,23 @@ export function aggregateCompatibilityItemOrchestration(
   } satisfies NonNullable<PersistentPluginJob["itemOrchestration"]>;
 }
 
+export function workItemPolicy(capability: PluginCapability, request: PluginExecutionRequest) {
+  const policy = capability.execution.itemOrchestration;
+  const association = policy?.collectionAssociations?.find((candidate) => {
+    const value = request.inputs[candidate.inputPort];
+    return Array.isArray(value) && value.length >= 1;
+  });
+  return association
+    ? {
+        ...policy!,
+        inputPort: association.inputPort,
+        outputPort: association.outputPort,
+        combinedOutputPort: association.combinedOutputPort,
+        separator: association.separator,
+      }
+    : policy;
+}
+
 export function declaredItemOrchestration(
   capability: PluginCapability,
   request: PluginExecutionRequest,
@@ -96,15 +113,7 @@ export function declaredItemOrchestration(
     const value = request.inputs[candidate.inputPort];
     return Array.isArray(value) && value.length >= 1;
   });
-  const policy = association
-    ? {
-        ...declaredPolicy!,
-        inputPort: association.inputPort,
-        outputPort: association.outputPort,
-        combinedOutputPort: association.combinedOutputPort,
-        separator: association.separator,
-      }
-    : declaredPolicy;
+  const policy = workItemPolicy(capability, request);
   const items = policy ? request.inputs[policy.inputPort] : undefined;
   const minimumItems = association ? 1 : 2;
   if (!policy || !Array.isArray(items) || items.length < minimumItems) return undefined;
@@ -187,19 +196,27 @@ export function resumedItemOrchestration(
   ) {
     return undefined;
   }
-  const completed = itemProgressForJob(previousJob)?.completed ?? 0;
+  const rootCompleted = (item: BlockExecutionItem) => {
+    const required = requiredItemsFromRoots(
+      [...(previous.workItems ?? []), ...(previousJob.registeredItems ?? [])],
+      [item.id],
+    );
+    return (
+      required.length > 0 &&
+      required.every((leaf) => leaf.status === "completed" && leaf.output !== undefined)
+    );
+  };
+  const completed = previous.workItems?.length
+    ? previous.workItems.filter(rootCompleted).length
+    : (itemProgressForJob(previousJob)?.completed ?? 0);
   if (completed >= fresh.items.length) return undefined;
-  const resumedWorkItems = previous.workItems?.map((item, index) => {
-    const wasCompleted = item.status === "completed" || index < completed;
+  const resumedWorkItems = previous.workItems?.map((item) => {
+    const wasCompleted = rootCompleted(item);
     return {
       ...structuredClone(item),
       status: wasCompleted ? ("completed" as const) : ("pending" as const),
       attempt: wasCompleted ? item.attempt : item.attempt + 1,
-      output:
-        item.output ??
-        (index < (previous.accumulatedItems?.length ?? 0)
-          ? (structuredClone(previous.accumulatedItems![index]) as BlockExecutionItemValue)
-          : undefined),
+      output: item.output === undefined ? undefined : structuredClone(item.output),
       error: undefined,
     };
   }) satisfies BlockExecutionItem[] | undefined;
@@ -210,8 +227,10 @@ export function resumedItemOrchestration(
         ? structuredClone(previous.itemIds)
         : fresh.itemIds,
     workItems: resumedWorkItems?.length === fresh.items.length ? resumedWorkItems : fresh.workItems,
-    currentIndex: completed,
-    accumulatedItems: structuredClone(previous.accumulatedItems ?? []),
+    currentIndex: resumedWorkItems?.find((item) => item.status !== "completed")?.order ?? completed,
+    accumulatedItems: resumedWorkItems
+      ? completedOutputs(resumedWorkItems)
+      : structuredClone(previous.accumulatedItems ?? []),
   } satisfies NonNullable<PersistentPluginJob["itemOrchestration"]>;
 }
 
@@ -440,6 +459,18 @@ export function blockExecutionItemsForJob(
   const jobItemIds = new Set(jobItems.map((item) => item.id));
   const merged = new Map<string, BlockExecutionItem>();
   for (const item of currentItems ?? []) {
+    // Auxiliary input deliveries are context, not additional work in an itemized job.
+    // Keep performed work as history; only discard inert materialization placeholders.
+    if (
+      job.itemOrchestration &&
+      !jobItemIds.has(item.id) &&
+      item.provenance?.origin === "block_input" &&
+      item.provenance.inputPort !== job.itemOrchestration.inputPort &&
+      item.status === "pending" &&
+      !item.attempts.length &&
+      item.output === undefined
+    )
+      continue;
     if (item.attempt === job.attempt || jobItemIds.has(item.id)) {
       merged.set(item.id, structuredClone(item));
     }
@@ -473,6 +504,29 @@ export function consolidatedOrchestratedOutputs(job: PersistentPluginJob) {
       requiredItems.length > 0 &&
       requiredItems.every((item) => item.status === "completed" && item.output !== undefined),
   };
+}
+
+export function orchestratedPartialValues(
+  job: PersistentPluginJob,
+  incoming: Record<string, RuntimeValue>,
+) {
+  const values = { ...job.partialValues, ...incoming };
+  const policy = job.itemOrchestration;
+  if (!policy) return values;
+  const outputs = consolidatedOrchestratedOutputs(job).outputs;
+  if (!outputs.length) return values;
+  const outputKey = job.request.outputContract.find(
+    (field) => field.portKey === policy.outputPort,
+  )?.key;
+  const combinedKey = job.request.outputContract.find(
+    (field) => field.portKey === policy.combinedOutputPort,
+  )?.key;
+  if (outputKey) values[outputKey] = outputs as RuntimeValue;
+  if (combinedKey)
+    values[combinedKey] = outputs
+      .filter((value): value is string => typeof value === "string")
+      .join(policy.separator ?? "\n\n");
+  return values;
 }
 
 export function canFinalizeFromDurableOrchestratedItems(
