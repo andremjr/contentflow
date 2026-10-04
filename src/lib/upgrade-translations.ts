@@ -20,7 +20,10 @@ export const upgradeTranslations = {
     confirm: "Autorizo criar um backup recuperável antes de migrar meus dados.",
     apply: "Criar backup e aplicar migração",
     applying: "Criando backup e migrando…",
-    blocked: "Resolva os diagnósticos e atualize os plugins necessários. Depois, atualize o plano.",
+    blocked:
+      "Atualize os plugins necessários. Se houver incompatibilidades nos Métodos, conecte um agente via MCP no Canal para revisar e propor a migração. Depois, atualize o plano.",
+    proposed:
+      "Há revisões de Métodos propostas pelo MCP. Serão salvas somente ao confirmar a migração com backup.",
     diagnostics: "Diagnósticos",
     guide: "Guia de migração e recuperação",
     skill: "Skill para revisão assistida",
@@ -57,7 +60,10 @@ export const upgradeTranslations = {
     confirm: "I authorize creating a recoverable backup before migrating my data.",
     apply: "Create backup and apply migration",
     applying: "Creating backup and migrating…",
-    blocked: "Resolve the diagnostics and update the required plugins. Then refresh the plan.",
+    blocked:
+      "Update the required plugins. If Methods are incompatible, connect an agent via MCP in the Channel to review and propose migration. Then refresh the plan.",
+    proposed:
+      "Method revisions have been proposed through MCP. They will only be saved when migration with backup is confirmed.",
     diagnostics: "Diagnostics",
     guide: "Migration and recovery guide",
     skill: "Skill for assisted review",
@@ -95,7 +101,9 @@ export const upgradeTranslations = {
     apply: "Crear copia de seguridad y aplicar migración",
     applying: "Creando copia de seguridad y migrando…",
     blocked:
-      "Resuelve los diagnósticos y actualiza los plugins necesarios. Después, actualiza el plan.",
+      "Actualiza los plugins necesarios. Si los Métodos son incompatibles, conecta un agente por MCP en el Canal para revisar y proponer la migración. Después, actualiza el plan.",
+    proposed:
+      "Hay revisiones de Métodos propuestas por MCP. Solo se guardarán al confirmar la migración con copia de seguridad.",
     diagnostics: "Diagnósticos",
     guide: "Guía de migración y recuperación",
     skill: "Skill para revisión asistida",

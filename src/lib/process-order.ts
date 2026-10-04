@@ -118,7 +118,11 @@ export function validateProcessDependencies(
                 .find((candidate) => candidate.id === blockId)
                 ?.outputs?.find((field) => field.key === outputKey);
         if (!output) errors.push(`${label}: saída anterior não encontrada para “${input.label}”.`);
-        else if (!areInputShapesCompatible(output.shape, input.shape))
+        else if (
+          !output.shape ||
+          !input.shape ||
+          !areInputShapesCompatible(output.shape, input.shape)
+        )
           errors.push(`${label}: tipo incompatível na entrada “${input.label}”.`);
       }
       const reuse = block.plugin?.conversation;

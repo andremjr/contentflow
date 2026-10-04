@@ -3,6 +3,37 @@ import test from "node:test";
 
 import { translate } from "./app-preferences";
 
+test("whole Method deletion and its confirmation are localized", () => {
+  for (const phrase of [
+    "Apagar Método",
+    "Apagar este Método e todos os seus Blocos?",
+    "O Processo ficará sem Método configurado. Coleções e resultados já produzidos serão preservados.",
+    "Método apagado.",
+    "Não foi possível apagar o Método.",
+  ]) {
+    assert.equal(translate(phrase, "pt-BR"), phrase);
+    assert.notEqual(translate(phrase, "en"), phrase);
+    assert.notEqual(translate(phrase, "es"), phrase);
+  }
+});
+
+test("strategic item editing labels are localized without changing user values", () => {
+  for (const phrase of [
+    "Editar item",
+    "Salvar alterações",
+    "Item atualizado",
+    "Revise os campos do item antes de salvar.",
+    "Preencha o formato definido para esta coleção.",
+    "Selecionar arquivo",
+    "Substituir arquivo",
+    "Nenhum arquivo selecionado",
+  ]) {
+    assert.equal(translate(phrase, "pt-BR"), phrase);
+    assert.notEqual(translate(phrase, "en"), phrase);
+    assert.notEqual(translate(phrase, "es"), phrase);
+  }
+});
+
 test("browser cache preservation diagnostics are localized", () => {
   for (const phrase of [
     "Perfil de navegador ocupado.",

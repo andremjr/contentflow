@@ -39,6 +39,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type {
   RuntimeValue,
+  ChannelLibraryItem,
   StoredFile,
   StrategicCollection,
   StrategicCollectionField,
@@ -55,6 +56,7 @@ import {
   useLibraryCollections,
   useLibraryItems,
   updateLibraryCollection,
+  updateLibraryItem,
 } from "@/lib/store";
 
 type CollectionItemValue = RuntimeValue;
@@ -280,7 +282,7 @@ function CollectionSection({
                         <span data-i18n-ignore>{field.label}</span>
                       </th>
                     ))}
-                    <th className="w-12 px-3 py-3" aria-label="Ações" />
+                    <th className="w-32 px-3 py-3" aria-label="Ações" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -300,6 +302,7 @@ function CollectionSection({
                         <Badge variant="outline">
                           {t(item.reservation ? "Reservado" : "Salvo")}
                         </Badge>
+                        <NewCollectionItem collection={collection} item={item} />
                         <Button
                           size="icon"
                           variant="ghost"
@@ -725,7 +728,14 @@ function CollectionFieldEditor({
   );
 }
 
-function NewCollectionItem({ collection }: { collection: StrategicCollection }) {
+function NewCollectionItem({
+  collection,
+  item,
+}: {
+  collection: StrategicCollection;
+  item?: ChannelLibraryItem;
+}) {
+  const { t } = useAppPreferences();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<Record<string, CollectionItemValue>>({});
   const [uploadingFieldId, setUploadingFieldId] = useState<string | null>(null);
@@ -761,25 +771,30 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
   }
 
   const saveLock = useRef(false);
+  const [saving, setSaving] = useState(false);
   async function save() {
     if (saveLock.current) return;
     saveLock.current = true;
     try {
-      if (!valid) return;
-      await createLibraryItem({
-        channelId: collection.channelId,
-        collectionId: collection.id,
-        values: Object.fromEntries(
-          collection.fields.map((field) => {
-            const value = values[field.id];
-            if (typeof value === "string") {
-              return [field.id, isControl(field, "number") && value ? Number(value) : value.trim()];
-            }
-            return [field.id, value ?? ""];
-          }),
-        ),
-      });
-      toast.success(`Item adicionado a “${collection.name}”.`);
+      if (!valid || uploadingFieldId || item?.reservation) return;
+      setSaving(true);
+      const nextValues = Object.fromEntries(
+        collection.fields.map((field) => {
+          const value = values[field.id];
+          if (typeof value === "string") {
+            return [field.id, isControl(field, "number") && value ? Number(value) : value.trim()];
+          }
+          return [field.id, value ?? ""];
+        }),
+      );
+      if (item) await updateLibraryItem({ ...item, values: nextValues });
+      else
+        await createLibraryItem({
+          channelId: collection.channelId,
+          collectionId: collection.id,
+          values: nextValues,
+        });
+      toast.success(item ? t("Item atualizado") : t(`Item adicionado a “${collection.name}”.`));
       setValues({});
       setOpen(false);
     } catch (error) {
@@ -788,6 +803,7 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
       });
     } finally {
       saveLock.current = false;
+      setSaving(false);
     }
   }
 
@@ -795,7 +811,9 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
+        if (saving || uploadingFieldId) return;
         setOpen(nextOpen);
+        if (nextOpen) setValues(item ? structuredClone(item.values) : {});
         if (!nextOpen) {
           setValues({});
           setUploadingFieldId(null);
@@ -803,14 +821,31 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
       }}
     >
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-1.5">
-          <Plus className="size-3.5" /> Adicionar item
+        <Button
+          size={item ? "icon" : "sm"}
+          variant={item ? "ghost" : "outline"}
+          className={item ? "size-8" : "gap-1.5"}
+          disabled={Boolean(item?.reservation)}
+          aria-label={t(item ? "Editar item" : "Adicionar item")}
+        >
+          {item ? (
+            <Pencil className="size-3.5" />
+          ) : (
+            <>
+              <Plus className="size-3.5" /> {t("Adicionar item")}
+            </>
+          )}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Novo item em {collection.name}</DialogTitle>
-          <DialogDescription>Preencha o formato definido para esta coleção.</DialogDescription>
+          <DialogTitle>
+            {item ? t("Editar item") : t("Novo item")} —{" "}
+            <span data-i18n-ignore>{collection.name}</span>
+          </DialogTitle>
+          <DialogDescription>
+            {t("Preencha o formato definido para esta coleção.")}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           {collection.fields.map((field) => {
@@ -818,7 +853,7 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
             return (
               <div key={field.id} className="space-y-1.5">
                 <Label>
-                  {field.label}
+                  <span data-i18n-ignore>{field.label}</span>
                   {field.required && <span className="ml-1 text-destructive">*</span>}
                 </Label>
                 {isContent(field, "text") ? (
@@ -849,19 +884,28 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
                   <div className="rounded-xl border border-dashed border-input p-4">
                     {isStoredFile(fieldValue) ? (
                       <div className="space-y-3">
-                        <img
-                          src={fieldValue.url}
-                          alt={fieldValue.name}
-                          className="max-h-56 w-full rounded-lg object-contain"
-                        />
-                        <p className="truncate text-center text-xs text-muted-foreground">
+                        {field.shape.family === "image" ? (
+                          <img
+                            src={fieldValue.url}
+                            alt={fieldValue.name}
+                            className="max-h-56 w-full rounded-lg object-contain"
+                          />
+                        ) : field.shape.family === "audio" ? (
+                          <audio controls src={fieldValue.url} className="w-full" />
+                        ) : (
+                          <video controls src={fieldValue.url} className="max-h-56 w-full" />
+                        )}
+                        <p
+                          data-i18n-ignore
+                          className="truncate text-center text-xs text-muted-foreground"
+                        >
                           {fieldValue.name}
                         </p>
                       </div>
                     ) : (
                       <div className="text-center text-xs text-muted-foreground">
                         <ImageIcon className="mx-auto mb-2 size-5" />
-                        Nenhum arquivo selecionado
+                        {t("Nenhum arquivo selecionado")}
                       </div>
                     )}
                     <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm">
@@ -870,12 +914,12 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
                       ) : (
                         <ImageIcon className="size-4" />
                       )}
-                      {isStoredFile(fieldValue) ? "Substituir arquivo" : "Selecionar arquivo"}
+                      {t(isStoredFile(fieldValue) ? "Substituir arquivo" : "Selecionar arquivo")}
                       <input
                         type="file"
                         accept={`${field.shape.family}/*`}
                         className="hidden"
-                        disabled={uploadingFieldId === field.id}
+                        disabled={Boolean(uploadingFieldId) || saving}
                         onChange={(event) => void uploadMedia(field.id, event.target.files?.[0])}
                       />
                     </label>
@@ -911,8 +955,13 @@ function NewCollectionItem({ collection }: { collection: StrategicCollection }) 
               </div>
             );
           })}
-          <Button className="w-full gradient-brand text-white" disabled={!valid} onClick={save}>
-            Adicionar item
+          <Button
+            className="w-full gradient-brand text-white"
+            disabled={!valid || saving || Boolean(uploadingFieldId) || Boolean(item?.reservation)}
+            onClick={save}
+          >
+            {saving && <LoaderCircle className="mr-2 size-4 animate-spin" />}
+            {t(item ? "Salvar alterações" : "Adicionar item")}
           </Button>
         </div>
       </DialogContent>

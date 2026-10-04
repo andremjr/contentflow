@@ -1,5 +1,6 @@
 import {
   UserDataUpgrade,
+  UpgradeError,
   jobHasCurrentContract,
   registerUserDataUpgradeRoutes,
 } from "./user-data-upgrade";
@@ -5637,6 +5638,18 @@ function normalizeBuilderLibraryValues(
   return { ok: true, values: normalized };
 }
 
+app.post("/api/builder/upgrade/apply", requireBuilderMcp, async (request, response) => {
+  try {
+    response.json(
+      await userDataUpgrade.apply(request.body?.planId, request.body?.confirmBackup === true),
+    );
+  } catch (error) {
+    const failure = error instanceof UpgradeError ? error : new UpgradeError("UPGRADE_FAILED");
+    response
+      .status(409)
+      .json({ error: failure.code, code: failure.code, backupPath: failure.backupPath });
+  }
+});
 registerUserDataUpgradeRoutes(app, userDataUpgrade);
 
 app.get("/api/builder/mcp-info", (request, response) => {
@@ -5715,6 +5728,12 @@ app.get(
       })),
       plugins: plugins.map(publicBuilderPlugin),
       contract: BUILDER_METHOD_CONTRACT,
+      migration: userDataUpgrade.state().required
+        ? {
+            ...userDataUpgrade.plan(),
+            reviewMethods: userDataUpgrade.reviewChannel(channel).methods,
+          }
+        : undefined,
     });
   },
 );
@@ -6085,10 +6104,11 @@ app.post(
       return;
     }
     const result = validateBuilderMethods({
-      channel,
+      channel: userDataUpgrade.state().required ? userDataUpgrade.reviewChannel(channel) : channel,
       methods: request.body?.methods,
       plugins: await builderPluginContexts(),
       collections: channelCollections(channel.id),
+      migrationReview: userDataUpgrade.state().required,
     });
     response.status(result.ok ? 200 : 422).json(result);
   },
@@ -6101,13 +6121,32 @@ app.post("/api/builder/channels/:channelId/apply", requireBuilderMcp, async (req
     return;
   }
   const result = validateBuilderMethods({
-    channel,
+    channel: userDataUpgrade.state().required ? userDataUpgrade.reviewChannel(channel) : channel,
     methods: request.body?.methods,
     plugins: await builderPluginContexts(),
     collections: channelCollections(channel.id),
+    migrationReview: userDataUpgrade.state().required,
   });
   if (!result.ok || !result.methods) {
     response.status(422).json(result);
+    return;
+  }
+  if (userDataUpgrade.state().required) {
+    try {
+      const plan = userDataUpgrade.proposeMethods(channel.id, result.methods, request.body?.planId);
+      response.json({
+        ok: true,
+        staged: true,
+        channelId: channel.id,
+        methods: result.methods,
+        warnings: result.warnings,
+        migration: plan,
+      });
+    } catch (error) {
+      response
+        .status(409)
+        .json({ ok: false, error: error instanceof Error ? error.message : "UPGRADE_FAILED" });
+    }
     return;
   }
   for (const [processType, method] of Object.entries(result.methods) as [
@@ -7271,6 +7310,43 @@ app.put("/api/channels/order", (request, response) => {
   });
   saveOrder(requestedIds);
   response.json({ channelIds: requestedIds });
+});
+
+app.delete("/api/channels/:id/methods/:processType", (request, response) => {
+  const channel = readPayload<Channel>("channels", String(request.params.id));
+  const processType = request.params.processType as UniversalProcess;
+  if (!channel) {
+    response.status(404).json({ error: "Canal não encontrado." });
+    return;
+  }
+  if (!PROCESS_ORDER.includes(processType)) {
+    response.status(400).json({ error: "Método inválido." });
+    return;
+  }
+  if (request.body?.definitionRevision !== (channel.definitionRevision ?? 0)) {
+    response.status(409).json({
+      error: "A definição do Canal mudou em outra aba. Recarregue antes de salvar o Método.",
+    });
+    return;
+  }
+  channel.methods[processType] = createEmptyMethods()[processType];
+  const errors = validateProcessDependencies(effectiveProcessOrder(channel), channel.methods);
+  if (errors.length) {
+    response.status(422).json({ error: errors[0], errors });
+    return;
+  }
+  channel.definitionRevision = (channel.definitionRevision ?? 0) + 1;
+  try {
+    persistChannelDefinition(channel);
+    response.json({
+      method: channel.methods[processType],
+      definitionRevision: channel.definitionRevision,
+    });
+  } catch (error) {
+    response.status(409).json({
+      error: error instanceof Error ? error.message : "Não foi possível apagar o Método.",
+    });
+  }
 });
 
 app.put("/api/channels/:id/methods/:processType", (request, response) => {
@@ -9172,14 +9248,34 @@ app.put("/api/library/:id", (request, response) => {
     response.status(409).json({ error: "Este item está reservado por outra execução." });
     return;
   }
-  const item = request.body as StoredPayload;
-  if (!item?.id || item.id !== request.params.id || !item.channelId) {
+  const original = readPayload<ChannelLibraryItem>("library_items", String(request.params.id));
+  if (!original) {
+    response.status(404).json({ error: "Item não encontrado." });
+    return;
+  }
+  const collection = readPayload<StrategicCollection>("library_collections", original.collectionId);
+  const values = request.body?.values;
+  if (
+    !collection ||
+    collection.channelId !== original.channelId ||
+    !values ||
+    typeof values !== "object" ||
+    Array.isArray(values)
+  ) {
     response.status(400).json({ error: "Item de biblioteca inválido." });
     return;
   }
+  const issues = libraryValuesIssues(collection, values);
+  if (issues.length) {
+    response
+      .status(422)
+      .json({ error: "Revise os campos do item antes de salvar.", fields: issues });
+    return;
+  }
+  const item = { ...original, values };
   const result = database
-    .prepare("UPDATE library_items SET channel_id = ?, payload = ? WHERE id = ?")
-    .run(item.channelId, JSON.stringify(item), item.id);
+    .prepare("UPDATE library_items SET payload = ? WHERE id = ?")
+    .run(JSON.stringify(item), item.id);
   response
     .status(result.changes ? 200 : 404)
     .json(result.changes ? item : { error: "Item não encontrado." });

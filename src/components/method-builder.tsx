@@ -158,6 +158,7 @@ import {
   readMethodDraft,
   rememberMethodDraft,
   setChannelMethod,
+  removeChannelMethod,
   useChannel,
   useChannels,
   useLibraryCollections,
@@ -289,6 +290,9 @@ export function MethodBuilder({
     "idle",
   );
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
   const [readinessPlugins, setReadinessPlugins] = useState<DiscoveredPlugin[]>([]);
   const [readinessConnections, setReadinessConnections] = useState<Record<string, string[]>>({});
   const [transferPreview, setTransferPreview] = useState<MethodTransferPreview>();
@@ -401,7 +405,7 @@ export function MethodBuilder({
 
   const persistMethod = useCallback(
     async (showConfirmation = false) => {
-      if (!channel) return;
+      if (!channel || deletingRef.current) return;
       const savingProcess = processType;
       const savingBlocks = blocks;
       const savingVersion = editVersionRef.current;
@@ -487,6 +491,7 @@ export function MethodBuilder({
   if (!channel || !method) return null;
 
   const saveBlocks = (nextBlocks: ActionBlock[]) => {
+    if (deletingRef.current) return;
     editVersionRef.current += 1;
     rememberMethodDraft(channelId, processType, {
       contractVersion: 3,
@@ -499,6 +504,34 @@ export function MethodBuilder({
     setIsDirty(true);
     setSaveStatus("pending");
   };
+
+  async function deleteMethod() {
+    if (!channel || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    const wasDirty = isDirty;
+    setIsDirty(false);
+    editVersionRef.current += 1;
+    try {
+      await saveQueueRef.current.catch(() => undefined);
+      await removeChannelMethod(channel.id, processType, definitionRevisionRef.current);
+      setDraftBlocks([]);
+      setDraftImageUrl(undefined);
+      setSelectedBlockId(null);
+      setPluginPanelBlockId(null);
+      setSaveStatus("idle");
+      setDeleteOpen(false);
+      toast.success(t("Método apagado."));
+    } catch (error) {
+      setIsDirty(wasDirty);
+      toast.error(t("Não foi possível apagar o Método."), {
+        description: error instanceof Error ? t(error.message) : undefined,
+      });
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
+    }
+  }
 
   const loadAppliedProcess = (nextProcess: UniversalProcess) => {
     loadedProcessRef.current = null;
@@ -775,6 +808,53 @@ export function MethodBuilder({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Dialog
+              open={deleteOpen}
+              onOpenChange={(open) => {
+                if (!deleting) setDeleteOpen(open);
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-destructive"
+                  disabled={!blocks.length || deleting || saveStatus === "saving"}
+                >
+                  <Trash2 className="size-3.5" /> {t("Apagar Método")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t("Apagar este Método e todos os seus Blocos?")}</DialogTitle>
+                  <DialogDescription>
+                    {t(
+                      "O Processo ficará sem Método configurado. Coleções e resultados já produzidos serão preservados.",
+                    )}
+                  </DialogDescription>
+                </DialogHeader>
+                <p data-i18n-ignore className="break-words text-sm font-medium">
+                  {draftName}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={deleting}
+                    onClick={() => setDeleteOpen(false)}
+                  >
+                    {t("Cancelar")}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={deleting}
+                    onClick={() => void deleteMethod()}
+                  >
+                    {deleting && <LoaderCircle className="mr-2 size-4 animate-spin" />}
+                    {t("Apagar Método")}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
             <input
               ref={fileInputRef}
               type="file"

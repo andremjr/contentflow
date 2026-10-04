@@ -9,7 +9,7 @@ import {
   type UniversalProcess,
 } from "../src/lib/domain";
 import { getMethodConfigurationIssue, normalizeMethodBlocks } from "../src/lib/human-workflow";
-import { areValueShapesCompatible } from "../src/lib/data-shape";
+import { areInputShapesCompatible, areValueShapesCompatible } from "../src/lib/data-shape";
 import { processMethodV3Schema } from "../src/lib/method-contract-v3";
 import { effectiveProcessOrder, validateProcessDependencies } from "../src/lib/process-order";
 import type { RegisteredPlugin } from "./plugin-runner";
@@ -294,6 +294,7 @@ export function validateBuilderMethods(input: {
   methods: unknown;
   plugins: BuilderPluginContext[];
   collections: StrategicCollection[];
+  migrationReview?: boolean;
 }): BuilderValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -387,7 +388,10 @@ export function validateBuilderMethods(input: {
           );
           if (sourceIndex < 0 || sourceIndex >= index || !sourceOutput)
             errors.push(`${label}: referência inválida na entrada “${binding.label}”.`);
-          else if (!areValueShapesCompatible(sourceOutput.shape, binding.shape))
+          else if (
+            !sourceOutput.shape ||
+            !areInputShapesCompatible(sourceOutput.shape, binding.shape)
+          )
             errors.push(`${label}: tipo incompatível na entrada “${binding.label}”.`);
         }
       }
@@ -416,7 +420,13 @@ export function validateBuilderMethods(input: {
       );
     }
   }
-  errors.push(...validateProcessDependencies(order, { ...input.channel.methods, ...methods }));
+  errors.push(
+    ...validateProcessDependencies(
+      order,
+      { ...input.channel.methods, ...methods },
+      input.migrationReview ? (Object.keys(methods) as UniversalProcess[]) : order,
+    ),
+  );
   return {
     ok: errors.length === 0,
     methods,

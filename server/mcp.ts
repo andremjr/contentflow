@@ -352,10 +352,14 @@ server.registerTool(
   {
     title: "Apply ContentFlow Methods",
     description:
-      "Atomically validates and saves a partial map of Methods to an existing channel. Use only after inspection and successful validation, and only when the user asked to apply the plan.",
+      "Validates and saves Methods to an existing channel. During data migration, only stages reviewed v3 Methods in the migration plan without writing data; pass the current planId from channel context. Inspect and validate first. Apply only when requested by the user. Migration is committed separately with backup consent.",
     inputSchema: {
       channelId: z.string().optional().describe("Existing ContentFlow channel ID"),
       methods: z.record(z.unknown()).describe("Partial Record<UniversalProcess, ProcessMethod>"),
+      planId: z
+        .string()
+        .optional()
+        .describe("Required during migration: the fresh reviewed migration plan ID"),
     },
     annotations: {
       readOnlyHint: false,
@@ -364,13 +368,52 @@ server.registerTool(
       openWorldHint: false,
     },
   },
-  async ({ channelId: requested, methods }) => {
+  async ({ channelId: requested, methods, planId }) => {
     const payload = await api(
       `/api/builder/channels/${encodeURIComponent(channelId(requested))}/apply`,
-      { method: "POST", body: JSON.stringify({ methods }) },
+      { method: "POST", body: JSON.stringify({ methods, planId }) },
     );
     return result(payload, payload?.ok === false);
   },
+);
+
+server.registerTool(
+  "get_contentflow_migration_plan",
+  {
+    title: "Inspect ContentFlow migration",
+    description:
+      "Read migration diagnostics and staged Method proposals. Inspect channel context for original methods, reviewMethods and installed plugin ports. Proposals are temporary and invalidated by changes to data or plugin contracts. Execution stays blocked until migration is applied.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  async () => result(await api("/api/upgrade/plan")),
+);
+
+server.registerTool(
+  "apply_contentflow_migration",
+  {
+    title: "Apply reviewed ContentFlow migration",
+    description:
+      "Create and verify a recoverable backup, then atomically apply the reviewed migration and staged Method proposals. Only after explicit user authorization for this plan and backup. Refuses remaining diagnostics or a changed plan; preserves historical jobs and completed work.",
+    inputSchema: {
+      planId: z.string().describe("Fresh migration plan ID reviewed by the user"),
+      confirmBackup: z
+        .boolean()
+        .describe("Explicit user consent to create a recoverable backup and apply this migration"),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+  },
+  async ({ planId, confirmBackup }) =>
+    result(
+      await api("/api/builder/upgrade/apply", {
+        method: "POST",
+        body: JSON.stringify({ planId, confirmBackup }),
+      }),
+    ),
 );
 
 await server.connect(new StdioServerTransport());

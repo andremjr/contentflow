@@ -6,8 +6,20 @@ import { valueShapeSchema } from "../src/lib/value-shape-schema";
 import type { PluginJobStore, PersistentPluginJob } from "./plugin-job-store";
 import path from "node:path";
 import { processMethodV3Schema, workspaceMethodV3Schema } from "../src/lib/method-contract-v3";
-import { areValueShapesCompatible, validateValueShape } from "../src/lib/data-shape";
-import type { ValueShape } from "../src/lib/domain";
+import {
+  areInputShapesCompatible,
+  areValueShapesCompatible,
+  validateValueShape,
+} from "../src/lib/data-shape";
+import type {
+  Channel,
+  ProcessExecution,
+  ProcessMethod,
+  UniversalProcess,
+  ValueShape,
+} from "../src/lib/domain";
+import { synchronizeExecutionMethod } from "../src/lib/execution-core/synchronize-method";
+import { effectiveProcessOrder, validateProcessDependencies } from "../src/lib/process-order";
 import { createChannelHistoryRecordFields } from "../src/lib/channel-history";
 import { runtimeValueMatchesShape } from "../src/lib/runtime-value-validation";
 
@@ -301,7 +313,12 @@ function capabilityKey(pluginId: string, capabilityId: string) {
   return `${pluginId}\u0000${capabilityId}`;
 }
 
-function migrationPortCompatible(source: ValueShape, target: ValueShape) {
+function migrationPortCompatible(
+  source: ValueShape,
+  target: ValueShape,
+  direction: "input" | "output" = "output",
+) {
+  if (direction === "input" && areInputShapesCompatible(source, target)) return true;
   if (areValueShapesCompatible(source, target)) return true;
   if (
     source.kind === "content" &&
@@ -343,7 +360,7 @@ function resolvePortShape(
     if (
       port &&
       !usedPorts.has(port.key) &&
-      (!desiredShape || migrationPortCompatible(desiredShape, port.shape))
+      (!desiredShape || migrationPortCompatible(desiredShape, port.shape, direction))
     ) {
       return clone(port.shape);
     }
@@ -353,7 +370,7 @@ function resolvePortShape(
     (port) =>
       !usedPorts.has(port.key) &&
       (desiredShape
-        ? migrationPortCompatible(desiredShape, port.shape)
+        ? migrationPortCompatible(desiredShape, port.shape, direction)
         : legacyCompatibleWithShape(field, port.shape)),
   );
   if (candidates.length === 1) {
@@ -429,7 +446,21 @@ function applyTerminalOutputShapeEvidence(
       const value = blockExecution.values[output.key];
       if (!exactShape || value === undefined || !runtimeValueMatchesShape(exactShape, value))
         continue;
+      const previousShape = output.shape;
       output.shape = exactShape;
+      // Repair only links which declared the very same historical shape and
+      // point to this proven output. Do not reinterpret unrelated v3 inputs.
+      for (const consumer of Array.isArray(next.blocks) ? next.blocks : []) {
+        for (const input of Array.isArray(consumer.inputs) ? consumer.inputs : []) {
+          if (
+            input.binding?.kind === "previous_block" &&
+            input.binding.blockId === block.id &&
+            input.binding.outputKey === output.key &&
+            JSON.stringify(input.shape) === JSON.stringify(previousShape)
+          )
+            input.shape = clone(exactShape);
+        }
+      }
     }
   }
   return next;
@@ -845,13 +876,20 @@ export function convertLegacyMethod(
   return method;
 }
 
-function convertMethodRecord(methods: unknown, basePath: string, context: MigrationContext) {
+function convertMethodRecord(
+  methods: unknown,
+  basePath: string,
+  context: MigrationContext,
+  enforceCurrentPluginPorts = true,
+) {
   if (!methods || typeof methods !== "object") return methods;
   const result = clone(methods as JsonObject);
   for (const processType of PROCESS_TYPES) {
     const method = result[processType];
     if (!method || typeof method !== "object") continue;
-    result[processType] = convertLegacyMethod(method, `${basePath}.${processType}`, context);
+    result[processType] = convertLegacyMethod(method, `${basePath}.${processType}`, context, {
+      enforceCurrentPluginPorts,
+    });
   }
   return result;
 }
@@ -869,6 +907,7 @@ function convertProject(project: JsonObject, rowPath: string, context: Migration
       next.strategySnapshot.methods,
       `${rowPath}.strategySnapshot.methods`,
       context,
+      false,
     );
   }
   return next;
@@ -895,6 +934,21 @@ function convertDelivery(
   context: MigrationContext,
 ) {
   const next = clone(delivery);
+  if (
+    valueShapeSchema.safeParse(next.shape).success &&
+    Array.isArray(next.items) &&
+    next.items.length
+  ) {
+    const historicalValue =
+      next.shape.cardinality === "many"
+        ? next.items.map((item: JsonObject) => item.value)
+        : next.items[0]?.value;
+    if (runtimeValueMatchesShape(next.shape, historicalValue)) {
+      delete next.type;
+      delete next.cardinality;
+      return next;
+    }
+  }
   let shape = methodOutputShape(execution.methodSnapshot ?? {}, next.blockId, next.outputKey);
   if (shape && Array.isArray(next.items) && next.items.length) {
     const materializedValue =
@@ -933,7 +987,7 @@ export function convertExecution(
       ? applyTerminalOutputShapeEvidence(next.methodSnapshot, next, context)
       : next.methodSnapshot;
     next.methodSnapshot = convertLegacyMethod(snapshot, `${rowPath}.methodSnapshot`, context, {
-      enforceCurrentPluginPorts: next.status !== "completed" && next.status !== "cancelled",
+      enforceCurrentPluginPorts: false,
     });
   }
   if (Array.isArray(next.deliveries)) {
@@ -1070,7 +1124,13 @@ export class UpgradeError extends Error {
   }
 }
 
-export function planDatabaseMigration(database: Database.Database, dataDirectory: string) {
+export type MigrationMethods = Map<string, Partial<Record<UniversalProcess, ProcessMethod>>>;
+
+export function planDatabaseMigration(
+  database: Database.Database,
+  dataDirectory: string,
+  proposals: MigrationMethods = new Map(),
+) {
   const collections = new Map<string, JsonObject>();
   if (tableExists(database, "library_collections")) {
     for (const row of database
@@ -1090,6 +1150,7 @@ export function planDatabaseMigration(database: Database.Database, dataDirectory
   };
   const updates: Array<{ table: string; id: string; before: string; after: string }> = [];
   const scanned: Record<string, number> = {};
+  const proposedRevisions = new Map<string, number>();
 
   for (const definition of TABLE_CONVERSIONS) {
     if (!tableExists(database, definition.table)) continue;
@@ -1101,7 +1162,51 @@ export function planDatabaseMigration(database: Database.Database, dataDirectory
       const rowPath = `${definition.table}.${row.id}`;
       const payload = parseJson(row.payload, rowPath, context);
       if (!payload) continue;
-      const converted = definition.convert(payload, rowPath, context);
+      let source = payload;
+      const proposed = proposals.get(String(payload.channelId ?? row.id));
+      if (definition.table === "channels" && proposed) {
+        source = {
+          ...payload,
+          methods: { ...payload.methods, ...clone(proposed) },
+          definitionRevision: (payload.definitionRevision ?? 0) + 1,
+        };
+      }
+      const converted = definition.convert(source, rowPath, context);
+      if (proposed && definition.table === "channels") {
+        proposedRevisions.set(row.id, converted.definitionRevision);
+        for (const message of validateProcessDependencies(
+          effectiveProcessOrder(converted as Channel),
+          converted.methods,
+        ))
+          diagnostic(context, `${rowPath}.methods`, message);
+      }
+      // Adopt reviewed definitions only in open work, using the same Core guard
+      // as an ordinary Method save. Operational facts never come from the proposal.
+      if (proposed && definition.table === "projects" && converted.strategySnapshot?.methods) {
+        for (const [process, method] of Object.entries(proposed)) {
+          if (!["done", "approved"].includes(converted.stages?.[process]))
+            converted.strategySnapshot.methods[process] = clone(method);
+        }
+        converted.strategySnapshot.definitionRevision = proposedRevisions.get(converted.channelId);
+      }
+      if (proposed && definition.table === "process_executions") {
+        const method = proposed[converted.processType as UniversalProcess];
+        if (method) {
+          try {
+            synchronizeExecutionMethod(
+              converted as ProcessExecution,
+              method,
+              converted.updatedAt ?? "1970-01-01T00:00:00.000Z",
+            );
+          } catch (error) {
+            diagnostic(
+              context,
+              `${rowPath}.methodSnapshot`,
+              error instanceof Error ? error.message : "METHOD_SYNCHRONIZATION_FAILED",
+            );
+          }
+        }
+      }
       const after = JSON.stringify(converted);
       if (after !== JSON.stringify(payload))
         updates.push({ table: definition.table, id: row.id, before: row.payload, after });
@@ -1218,6 +1323,8 @@ export class UserDataUpgrade {
   private revision = -1;
   private required = true;
   private readonly inspectedPlans = new Set<string>();
+  private readonly proposedMethods: MigrationMethods = new Map();
+  private proposalBase?: string;
   constructor(
     private database: Database.Database,
     private dataDirectory: string,
@@ -1288,7 +1395,12 @@ export class UserDataUpgrade {
     return undefined;
   }
   plan() {
-    const plan = planDatabaseMigration(this.database, this.dataDirectory);
+    const base = this.baseFingerprint();
+    if (this.proposalBase && this.proposalBase !== base) {
+      this.proposedMethods.clear();
+      this.proposalBase = undefined;
+    }
+    const plan = planDatabaseMigration(this.database, this.dataDirectory, this.proposedMethods);
     const planId = createHash("sha256")
       .update(databaseFingerprint(this.database))
       .update(JSON.stringify([...plan.context.capabilities]))
@@ -1308,11 +1420,54 @@ export class UserDataUpgrade {
       scanned: plan.scanned,
       diagnostics: plan.context.diagnostics,
       currentPluginCapabilities: plan.context.capabilities.size,
+      proposedMethods: [...this.proposedMethods].map(([channelId, methods]) => ({
+        channelId,
+        processes: Object.keys(methods),
+      })),
       historicalJobsPreserved: this.hasHistoricalJobs(),
-      guideUrl: "https://github.com/andremjr/contentflow/blob/v1.3.1/docs/UPGRADE_GUIDE_1_3_1.md",
+      guideUrl: "https://github.com/andremjr/contentflow/blob/v1.3.5/docs/UPGRADE_GUIDE_1_3_1.md",
       skillUrl:
-        "https://github.com/andremjr/contentflow/blob/v1.3.1/ecosystem/skills/contentflow-method-development/SKILL.md",
+        "https://github.com/andremjr/contentflow/blob/v1.3.5/ecosystem/skills/contentflow-method-development/SKILL.md",
     };
+  }
+  private baseFingerprint() {
+    return createHash("sha256")
+      .update(databaseFingerprint(this.database))
+      .update(JSON.stringify([...loadCurrentPluginCapabilities(this.dataDirectory)]))
+      .digest("hex");
+  }
+  reviewChannel(channel: Channel): Channel {
+    const plan = planDatabaseMigration(this.database, this.dataDirectory, this.proposedMethods);
+    const update = plan.updates.find((row) => row.table === "channels" && row.id === channel.id);
+    return update ? (JSON.parse(update.after) as Channel) : clone(channel);
+  }
+  proposeMethods(
+    channelId: string,
+    methods: Partial<Record<UniversalProcess, ProcessMethod>>,
+    planId: string,
+  ) {
+    if (this.applying || !this.isIdle()) throw new UpgradeError("UPGRADE_BUSY");
+    if (!this.inspectedPlans.has(planId) || this.plan().planId !== planId)
+      throw new UpgradeError("PLAN_CHANGED");
+    if (!this.required) throw new UpgradeError("PLAN_CHANGED");
+    if (
+      !Object.keys(methods).length ||
+      Object.entries(methods).some(
+        ([process, method]) =>
+          !PROCESS_TYPES.includes(process as UniversalProcess) ||
+          !workspaceMethodV3Schema.safeParse(method).success ||
+          method?.processType !== process,
+      )
+    )
+      throw new UpgradeError("UPGRADE_AMBIGUOUS");
+    if (!this.database.prepare("SELECT 1 FROM channels WHERE id = ?").get(channelId))
+      throw new UpgradeError("PLAN_CHANGED");
+    this.proposalBase = this.baseFingerprint();
+    this.proposedMethods.set(channelId, {
+      ...this.proposedMethods.get(channelId),
+      ...clone(methods),
+    });
+    return this.plan();
   }
   async apply(planId: string, confirmBackup: boolean) {
     if (!confirmBackup) throw new UpgradeError("BACKUP_CONFIRMATION_REQUIRED");
@@ -1324,10 +1479,12 @@ export class UserDataUpgrade {
     this.applying = true;
     let backupPath: string | undefined;
     try {
-      const plan = planDatabaseMigration(this.database, this.dataDirectory);
+      const plan = planDatabaseMigration(this.database, this.dataDirectory, this.proposedMethods);
       backupPath = await verifiedUserDataBackup(this.database, this.dataDirectory);
       if (this.plan().planId !== planId) throw new UpgradeError("PLAN_CHANGED");
       commitMigration(this.database, this.dataDirectory, plan);
+      this.proposedMethods.clear();
+      this.proposalBase = undefined;
       return { applied: true, backupPath, plan: this.plan() };
     } catch (error) {
       throw new UpgradeError(
@@ -1361,13 +1518,19 @@ export function registerUserDataUpgradeRoutes(app: Express, upgrade: UserDataUpg
         .json({ code: failure.code, error: failure.code, backupPath: failure.backupPath });
     }
   });
-  // Plugin administration remains available to install the current capability needed by a plan.
+  // Validation is read-only. Method application during upgrade only stages a
+  // reviewed proposal; the existing backup/transaction path remains the writer.
   app.use((request, response, next) => {
     if (["GET", "HEAD", "OPTIONS"].includes(request.method) || !request.path.startsWith("/api/"))
       return next();
     if (
       !upgrade.backgroundAllowed() &&
-      !/^\/api\/channels\/(order|[^/]+\/preferences)$/.test(request.path)
+      !/^\/api\/channels\/(order|[^/]+\/preferences)$/.test(request.path) &&
+      !(
+        request.method === "POST" &&
+        !upgrade.applying &&
+        /^\/api\/builder\/channels\/[^/]+\/(validate|apply)$/.test(request.path)
+      )
     ) {
       response
         .status(409)

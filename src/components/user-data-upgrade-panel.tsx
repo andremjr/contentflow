@@ -130,6 +130,7 @@ export function UserDataUpgradePanel() {
           <>
             {!plan.required ? <p>{text.ready}</p> : !plan.canApply && <p>{text.blocked}</p>}
             {plan.historicalJobsPreserved && <p>{text.historical}</p>}
+            {Boolean(plan.proposedMethods?.length) && <p role="status">{text.proposed}</p>}
             {plan.diagnostics.length > 0 && (
               <details>
                 <summary>

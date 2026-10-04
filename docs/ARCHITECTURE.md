@@ -252,6 +252,8 @@ Métodos compostos integralmente por blocos humanos podem ser executados de pont
 
 ### D. Conexões locais e migração de armazenamento
 
+Durante uma migração de contratos, o Builder MCP pode validar e propor Métodos v3 no plano sem alterar dados persistidos. Propostas são temporárias e invalidadas por mudanças dos dados ou capabilities. A aplicação usa a autoridade de migração, com confirmação do plano, backup verificado e transação, preservando fatos operacionais e sincronizando somente definições abertas pelas restrições do Core. Snapshots históricos não são associados automaticamente às portas de um plugin atualizado. Consulte `UPGRADE_GUIDE_1_3_1.md` para ferramentas e limites.
+
 Na migração do armazenamento de credenciais, cada credencial global válida origina uma conexão local com ID estável. O núcleo copia o secret para a nova entrada do cofre, valida a leitura e só então remove a origem; uma falha mantém a origem intacta e apresenta recuperação, nunca apaga silenciosamente a credencial. Essa migração preserva dados locais e não adapta contratos de Método ou plugin.
 
 Todo Bloco de Método v3 que exige conta deve possuir um `connectionId` local válido; ausência, revogação ou ambiguidade bloqueia a execução e exige associação explícita. Snapshots operacionais persistidos preservam seu significado e passam apenas por migrações recuperáveis de storage. A importação portátil aceita exclusivamente envelopes v3 e nunca usa uma conexão instalada como justificativa para reinterpretar um arquivo anterior.
@@ -259,6 +261,8 @@ Todo Bloco de Método v3 que exige conta deve possuir um `connectionId` local v�
 ---
 
 ## 7. O Motor de Execução (Execution Engine)
+
+A ação **Apagar Método** remove de uma vez os Blocos, o nome personalizado e a capa daquele Método, deixando o Processo Universal com sua definição vazia v3. Os oito Processos continuam presentes. A operação exige confirmação e revisão vigente do Canal e usa a mesma transação de gravação/sincronização de Métodos: dependências quebradas ou remoção de trabalho iniciado são rejeitadas. Coleções da Biblioteca, artifacts e execuções encerradas permanecem preservados. A edição de itens da Biblioteca conserva identidade e metadados; reservas impedem alterações, e seleções já capturadas em execuções não são reescritas.
 
 O motor de execução funciona como uma **máquina de estados persistente**:
 

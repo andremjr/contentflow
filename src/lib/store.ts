@@ -634,6 +634,32 @@ export async function setChannelMethod(
   }
 }
 
+export async function removeChannelMethod(
+  channelId: string,
+  processType: UniversalProcess,
+  definitionRevision: number,
+) {
+  assertChannelStrategy(channelId);
+  const key = methodDraftKey(channelId, processType);
+  const pending = (methodQueues.get(key) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(async () => {
+      assertChannelStrategy(channelId);
+      await request(`/api/channels/${channelId}/methods/${processType}`, "DELETE", {
+        definitionRevision,
+      });
+      clearMethodDraft(channelId, processType);
+      await refreshState(true);
+      return db.channels.find((item) => item.id === channelId)?.definitionRevision;
+    });
+  methodQueues.set(key, pending);
+  try {
+    await pending;
+  } finally {
+    if (methodQueues.get(key) === pending) methodQueues.delete(key);
+  }
+}
+
 export async function setChannelMethods(
   channelId: string,
   methods: Partial<Record<UniversalProcess, ProcessMethod>>,

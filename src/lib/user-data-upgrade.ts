@@ -13,6 +13,7 @@ export type UpgradePlan = {
   guideUrl: string;
   skillUrl: string;
   historicalJobsPreserved?: boolean;
+  proposedMethods?: Array<{ channelId: string; processes: string[] }>;
 };
 
 export function methodNeedsUpgrade(method: unknown): boolean {

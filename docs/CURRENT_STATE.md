@@ -1,6 +1,12 @@
 # Estado atual e limites de validação
 
-Revisão documental: 03/10/2026. Esta descrição corresponde ao checkout inspecionado, incluindo alterações locais; não afirma que todas elas estejam em uma release publicada. Versão declarada em `package.json`: `1.3.4`. HEAD, branch e alterações devem ser consultados ao vivo.
+Mudança local de migração assistida: o MCP pode validar e propor Métodos durante o bloqueio; a gravação permanece na migração confirmada com backup. Testes com bancos sintéticos verificam staging sem escrita, transação, preservação de trabalho e invalidação de propostas. Não há validação na instalação do aluno que relatou o bloqueio; o criador definiu que ele fará essa confirmação após uma futura publicação autorizada. Nenhuma migração é aplicada aos dados locais do criador como parte desse trabalho.
+
+A Biblioteca Estratégica oferece edição de itens pelo mesmo formulário da criação. O servidor valida os campos e conserva identidade, coleção, Canal e data de criação; itens reservados continuam bloqueados. A edição não altera seleções já capturadas em execuções.
+
+O editor oferece **Apagar Método** com confirmação para remover a definição inteira do Processo. A ação respeita revisão do Canal, dependências e restrições de trabalho iniciado, sem excluir o Processo Universal nem dados da Biblioteca.
+
+Revisão documental: 04/10/2026. Esta descrição corresponde ao checkout inspecionado, incluindo alterações locais; não afirma que todas elas estejam em uma release publicada. Versão declarada em `package.json`: `1.3.5`. HEAD, branch e alterações devem ser consultados ao vivo.
 
 ## Produto disponível
 

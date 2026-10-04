@@ -6,6 +6,7 @@ import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import Database from "better-sqlite3";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -91,11 +92,13 @@ test(
       const tools = await client.listTools();
       assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
         "apply_contentflow_methods",
+        "apply_contentflow_migration",
         "create_contentflow_strategic_collection",
         "create_contentflow_strategic_item",
         "delete_contentflow_strategic_collection",
         "delete_contentflow_strategic_item",
         "get_contentflow_method_contract",
+        "get_contentflow_migration_plan",
         "get_contentflow_strategic_library",
         "inspect_contentflow_channel",
         "list_contentflow_channels",
@@ -320,6 +323,81 @@ test(
       }>;
       assert.equal(channels[0].methods.theme.name, "Tema manual");
       assert.deepEqual(channels[0].processOrder, processOrder);
+
+      // A separate synthetic database simulates an old installation. The MCP
+      // must review/stage it without opening any user's data directory.
+      const db = new Database(path.join(testDirectory, "contentflow.sqlite"));
+      const stored = JSON.parse(
+        (
+          db.prepare("SELECT payload FROM channels WHERE id=?").get(channel.id) as {
+            payload: string;
+          }
+        ).payload,
+      );
+      const legacy = structuredClone(stored);
+      legacy.methods.theme.contractVersion = 2;
+      legacy.methods.theme.blocks[0].outputs[0].type = "textarea";
+      delete legacy.methods.theme.blocks[0].outputs[0].shape;
+      db.prepare("UPDATE channels SET payload=? WHERE id=?").run(
+        JSON.stringify(legacy),
+        channel.id,
+      );
+      const original = JSON.stringify(legacy);
+      const parseResult = (value: Awaited<ReturnType<Client["callTool"]>>) =>
+        JSON.parse((value.content as Array<{ text: string }>)[0].text);
+      const plan = parseResult(
+        await client.callTool({ name: "get_contentflow_migration_plan", arguments: {} }),
+      );
+      assert.equal(plan.required, true);
+      assert.equal(
+        (
+          await fetch(`${apiUrl}/api/channels`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(channel),
+          })
+        ).status,
+        409,
+      );
+      const review = await client.callTool({
+        name: "validate_contentflow_methods",
+        arguments: { methods },
+      });
+      assert.equal(parseResult(review).ok, true);
+      const staged = parseResult(
+        await client.callTool({
+          name: "apply_contentflow_methods",
+          arguments: { methods, planId: plan.planId },
+        }),
+      );
+      assert.equal(staged.staged, true);
+      assert.equal(
+        (
+          db.prepare("SELECT payload FROM channels WHERE id=?").get(channel.id) as {
+            payload: string;
+          }
+        ).payload,
+        original,
+      );
+      const migrated = parseResult(
+        await client.callTool({
+          name: "apply_contentflow_migration",
+          arguments: { planId: staged.migration.planId, confirmBackup: true },
+        }),
+      );
+      assert.equal(migrated.applied, true);
+      assert.equal(migrated.plan.required, false);
+      const backup = new Database(migrated.backupPath, { readonly: true });
+      assert.equal(
+        (
+          backup.prepare("SELECT payload FROM channels WHERE id=?").get(channel.id) as {
+            payload: string;
+          }
+        ).payload,
+        original,
+      );
+      backup.close();
+      db.close();
     } finally {
       await client?.close().catch(() => undefined);
       if (process.platform === "win32" && apiProcess.pid) {

@@ -302,6 +302,26 @@ const PHRASES: Record<string, Translation> = {
     "Usa solo las acciones declaradas por el plugin; arrastra para reorganizar la secuencia.",
   ],
   "Item atualizado": ["Item updated", "Elemento actualizado"],
+  "Apagar Método": ["Delete Method", "Eliminar Método"],
+  "Apagar este Método e todos os seus Blocos?": [
+    "Delete this Method and all its Blocks?",
+    "¿Eliminar este Método y todos sus Bloques?",
+  ],
+  "O Processo ficará sem Método configurado. Coleções e resultados já produzidos serão preservados.":
+    [
+      "The Process will have no configured Method. Collections and existing results will be preserved.",
+      "El Proceso quedará sin Método configurado. Se conservarán las colecciones y los resultados ya producidos.",
+    ],
+  "Método apagado.": ["Method deleted.", "Método eliminado."],
+  "Não foi possível apagar o Método.": [
+    "Could not delete the Method.",
+    "No se pudo eliminar el Método.",
+  ],
+  "Nenhum arquivo selecionado": ["No file selected", "Ningún archivo seleccionado"],
+  "Revise os campos do item antes de salvar.": [
+    "Review the item fields before saving.",
+    "Revisa los campos del elemento antes de guardar.",
+  ],
   "Item substituído": ["Item replaced", "Elemento sustituido"],
   "Não foi possível atualizar o item": [
     "Could not update the item",

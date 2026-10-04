@@ -41,6 +41,16 @@ Não converta snapshots de Projetos já iniciados para o novo Método. A revisã
 
 Métodos que já satisfazem o schema de edição v3, incluindo rascunhos vazios e snapshots, são preservados sem inferência legada. Uma ligação ainda incompatível ou uma porta de plugin não escolhida exige ajuste da configuração, não migração dos dados. O editor permite salvar uma entrada nova antes de escolher sua origem; o contrato executável e a exportação continuam exigindo referências completas. O plano não redefine o shape declarado de uma entrada v3 a partir de sua origem.
 
+### Revisão assistida de Métodos durante o bloqueio
+
+Com os plugins atualizados, conecte o agente pelo MCP do Canal. `inspect_contentflow_channel` fornece os Métodos originais, `migration.reviewMethods` como prévia estrutural e as portas instaladas. A prévia pode conter pendências: não é uma configuração aprovada. `get_contentflow_migration_plan` informa o plano e os diagnósticos globais. `validate_contentflow_methods` continua disponível durante o bloqueio, usando os mesmos validadores atuais; registros não viram texto automaticamente. A ligação de texto `many/inline` para uma entrada `one/inline` respeita a contração já prevista no contrato.
+
+Durante a migração, `apply_contentflow_methods` recebe também o `planId` revisado e apenas propõe os Métodos no plano (`staged: true`). Não escreve no banco, não inicia execução e não substitui jobs. É possível revisar vários Processos e Canais em etapas; dependências do conjunto continuam sujeitas à validação antes da aplicação. As propostas são temporárias, pertencem à sessão da API e são descartadas se os dados ou as capabilities mudarem ou se o aplicativo reiniciar. Consulte novamente o contexto após esse descarte.
+
+Depois de revisar todas as propostas e resolver os diagnósticos, confirme no painel **Atualizar plano** → **Criar backup e aplicar migração**, ou use `apply_contentflow_migration` somente com autorização explícita para aquele `planId` e `confirmBackup: true`. A mesma autoridade verifica o backup e aplica todas as conversões em uma transação. Métodos propostos adotam a regra vigente de sincronização nas execuções abertas, com rejeição de remoção/reordenação que interrompa trabalho iniciado. Identidades, estados, tentativas, itens, jobs, entregas e artifacts não são fornecidos pela proposta e permanecem preservados.
+
+Snapshots persistidos são convertidos estruturalmente com seus contratos históricos; não precisam ser compatíveis com as portas de um pacote que substituiu o original para que o plano de storage seja válido. Snapshots encerrados não recebem a estratégia proposta. Preservar um snapshot ou um job antigo não comprova que ele possa executar com um plugin atualizado: contrato e versão continuam sujeitos aos bloqueios do runtime. Ambiguidade estrutural restante ainda impede a aplicação; não use edição direta do banco para contorná-la.
+
 ## 3. Migrar plugins explicitamente
 
 Plugin API v1 é inválida no runtime atual. Gere um pacote API v2 independente com `apiVersion: "2"`, portas `inputPorts`/`outputPorts` com um `shape` por porta e handler que lê `request.inputs[portKey]` e retorna `values[portKey]`. Confira [protocolo](ecosystem/protocol.md), [segurança](ecosystem/security.md) e schema empacotado.

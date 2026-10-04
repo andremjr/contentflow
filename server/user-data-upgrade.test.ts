@@ -5,7 +5,12 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, mkdirSync, writeFileSyn
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { UserDataUpgrade, UpgradeError, planDatabaseMigration } from "./user-data-upgrade";
+import {
+  UserDataUpgrade,
+  UpgradeError,
+  planDatabaseMigration,
+  convertLegacyMethod,
+} from "./user-data-upgrade";
 import { createEmptyMethods } from "../src/lib/domain";
 
 function fixture(t: test.TestContext, fieldType = "text") {
@@ -295,4 +300,197 @@ test("a concurrent mutation during backup is detected before any conversion", as
   }) as typeof database.backup;
   await assert.rejects(upgrade.apply(plan.planId, true), { code: "PLAN_CHANGED" });
   assert.equal(JSON.parse(payload(database)).name, "Concurrent");
+});
+
+test("reviewed Methods are staged read-only, then committed with backup and open-work synchronization", async (t) => {
+  const { database, directory, upgrade } = fixture(t);
+  const before = payload(database);
+  const execution = JSON.parse(payload(database, "process_executions", "e"));
+  execution.blocks[0].values = {};
+  database
+    .prepare("UPDATE process_executions SET payload=? WHERE id='e'")
+    .run(JSON.stringify(execution));
+  const originalExecution = payload(database, "process_executions", "e");
+  const method = structuredClone(upgrade.reviewChannel(JSON.parse(before)).methods.theme);
+  method.name = "Reviewed strategy";
+  method.blocks[0].instructions = "Preserved intent, revised configuration";
+  const plan = upgrade.proposeMethods("c", { theme: method }, upgrade.plan().planId);
+  assert.equal(plan.canApply, true);
+  assert.equal(upgrade.backgroundAllowed(), false);
+  assert.equal(payload(database), before);
+  assert.equal(payload(database, "process_executions", "e"), originalExecution);
+  assert.equal(readdirSync(directory).includes("migration-backups"), false);
+  await assert.rejects(upgrade.apply(plan.planId, false), { code: "BACKUP_CONFIRMATION_REQUIRED" });
+  const result = await upgrade.apply(plan.planId, true);
+  assert.equal(result.plan.required, false);
+  assert.equal(JSON.parse(payload(database)).methods.theme.name, "Reviewed strategy");
+  assert.equal(
+    JSON.parse(payload(database, "projects", "p")).strategySnapshot.definitionRevision,
+    JSON.parse(payload(database)).definitionRevision,
+  );
+  const after = JSON.parse(payload(database, "process_executions", "e"));
+  assert.equal(after.methodSnapshot.name, "Reviewed strategy");
+  assert.deepEqual(after.blocks[0].items, execution.blocks[0].items);
+  assert.equal(after.blocks[0].attempt, 2);
+  const backup = new Database(result.backupPath, { readonly: true });
+  assert.equal(payload(backup), before);
+  backup.close();
+});
+
+test("proposals expire when data changes and cannot remove started work", (t) => {
+  const { database, upgrade } = fixture(t);
+  const before = payload(database);
+  const method = upgrade.reviewChannel(JSON.parse(before)).methods.theme;
+  const removed = structuredClone(method);
+  removed.blocks = [];
+  const staged = upgrade.proposeMethods("c", { theme: removed }, upgrade.plan().planId);
+  assert.equal(staged.canApply, false);
+  assert.ok(staged.diagnostics.some((issue) => /remover um bloco/.test(issue.message)));
+  assert.equal(payload(database), before);
+  database
+    .prepare("UPDATE channels SET payload=? WHERE id='c'")
+    .run(JSON.stringify({ ...JSON.parse(before), name: "Changed" }));
+  assert.deepEqual(upgrade.plan().proposedMethods, []);
+  assert.throws(() => upgrade.proposeMethods("c", { theme: method }, staged.planId), {
+    code: "PLAN_CHANGED",
+  });
+});
+
+test("updated plugins do not force historical snapshots into their new port shapes", async (t) => {
+  const { database, directory, upgrade } = fixture(t);
+  const channel = JSON.parse(payload(database));
+  const method = channel.methods.theme;
+  method.blocks[0].plugin = {
+    pluginId: "test.writer",
+    pluginVersion: "1.0.0",
+    capabilityId: "write",
+    configuration: {},
+  };
+  method.blocks[0].outputs[0].type = "records";
+  method.blocks[0].outputs[0].recordFields = [
+    { id: "value", key: "value", label: "Value", type: "text", required: true },
+  ];
+  database.prepare("UPDATE channels SET payload=? WHERE id='c'").run(JSON.stringify(channel));
+  const execution = JSON.parse(payload(database, "process_executions", "e"));
+  execution.status = "completed";
+  execution.methodSnapshot = method;
+  database
+    .prepare("UPDATE process_executions SET payload=? WHERE id='e'")
+    .run(JSON.stringify(execution));
+  const root = path.join(directory, "plugins", "installed", "test.writer");
+  mkdirSync(root, { recursive: true });
+  const shape = {
+    kind: "content",
+    family: "text",
+    cardinality: "one",
+    representation: "inline",
+  } as const;
+  writeFileSync(
+    path.join(root, "contentflow.plugin.json"),
+    JSON.stringify({
+      id: "test.writer",
+      apiVersion: "2",
+      version: "2.0.0",
+      capabilities: [{ id: "write", inputPorts: [], outputPorts: [{ key: "text", shape }] }],
+    }),
+  );
+  const prior = upgrade.plan();
+  assert.equal(prior.canApply, false);
+  const reviewed = upgrade.reviewChannel(channel).methods.theme;
+  reviewed.blocks[0].outputs![0].shape = shape;
+  reviewed.blocks[0].outputs![0].portKey = "text";
+  reviewed.blocks[0].plugin!.pluginVersion = "2.0.0";
+  const staged = upgrade.proposeMethods("c", { theme: reviewed }, prior.planId);
+  assert.equal(staged.canApply, true);
+  await upgrade.apply(staged.planId, true);
+  const snapshot = JSON.parse(payload(database, "process_executions", "e"));
+  assert.equal(snapshot.methodSnapshot.blocks[0].outputs[0].shape.kind, "record");
+  assert.equal(snapshot.methodSnapshot.blocks[0].plugin.pluginVersion, "1.0.0");
+  assert.deepEqual(snapshot.blocks, execution.blocks);
+});
+
+test("migration consumes a text collection through a scalar input, but never coerces records", () => {
+  const text = {
+    kind: "content",
+    family: "text",
+    cardinality: "one",
+    representation: "inline",
+  } as const;
+  for (const type of ["list", "records"]) {
+    const context = {
+      capabilities: new Map([
+        [
+          "test.writer\u0000write",
+          {
+            pluginId: "test.writer",
+            pluginVersion: "2.0.0",
+            capabilityId: "write",
+            inputPorts: [{ key: "context", shape: text }],
+            outputPorts: [{ key: "text", shape: text }],
+          },
+        ],
+      ]),
+      collections: new Map(),
+      diagnostics: [] as Array<{ path: string; message: string }>,
+    };
+    const output = {
+      id: "source-output",
+      key: "rows",
+      label: "Rows",
+      type,
+      required: true,
+      ...(type === "records"
+        ? {
+            recordFields: [
+              { id: "value", key: "value", label: "Value", type: "text", required: true },
+            ],
+          }
+        : {}),
+    };
+    const method = {
+      name: "Migration",
+      processType: "theme",
+      blocks: [
+        {
+          id: "source",
+          type: "CRIAR",
+          operator: "Humano",
+          inputs: [],
+          outputs: [output],
+          parameters: [],
+          order: 0,
+        },
+        {
+          id: "target",
+          type: "CRIAR",
+          operator: "IA",
+          inputs: [
+            {
+              id: "input",
+              label: "Context",
+              type,
+              source: "previous_block",
+              blockId: "source",
+              sourceKey: "rows",
+            },
+          ],
+          outputs: [{ id: "output", key: "theme", label: "Theme", type: "text", required: true }],
+          parameters: [],
+          order: 1,
+          plugin: {
+            pluginId: "test.writer",
+            pluginVersion: "2.0.0",
+            capabilityId: "write",
+            configuration: {},
+          },
+        },
+      ],
+    };
+    const converted = convertLegacyMethod(method, "synthetic", context);
+    if (type === "list") {
+      assert.deepEqual(context.diagnostics, []);
+      assert.equal(converted.blocks[0].outputs[0].shape.cardinality, "many");
+      assert.deepEqual(converted.blocks[1].inputs[0].shape, text);
+    } else assert.ok(context.diagnostics.some((issue) => /Nenhuma porta/.test(issue.message)));
+  }
 });

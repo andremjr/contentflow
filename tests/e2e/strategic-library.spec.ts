@@ -7,6 +7,124 @@ import {
   type ChannelLibraryItem,
 } from "../../src/lib/domain";
 
+for (const [language, editLabel, saveLabel] of [
+  ["pt-BR", "Editar item", "Salvar alterações"],
+  ["en", "Edit item", "Save changes"],
+  ["es", "Editar elemento", "Guardar cambios"],
+] as const) {
+  test(`edits library items in ${language}, preserves identity and cancels without saving`, async ({
+    page,
+    request,
+  }) => {
+    const id = randomUUID();
+    const channel = {
+      id,
+      name: "Canal edição",
+      handle: "@edit",
+      color: "#2563eb",
+      subscribers: "0",
+      niche: "Teste",
+      language: "pt-BR",
+      activeProjects: 0,
+      frequency: "",
+      nextPublish: "",
+      currentProjectProgress: 0,
+      status: "healthy",
+      trend: [],
+      methods: createEmptyMethods(),
+      createdAt: new Date().toISOString(),
+    };
+    await request.post("/api/channels", { data: channel });
+    const collection = {
+      id: randomUUID(),
+      channelId: id,
+      name: "Coleção edição",
+      usage: "fixed",
+      fields: [
+        {
+          id: "text",
+          label: "Salvo",
+          required: true,
+          shape: { kind: "content", family: "text", cardinality: "one", representation: "inline" },
+        },
+        {
+          id: "number",
+          label: "Zero",
+          required: true,
+          shape: { kind: "control", control: "number", cardinality: "one" },
+        },
+        {
+          id: "link",
+          label: "Link",
+          required: true,
+          shape: { kind: "control", control: "url", cardinality: "one" },
+        },
+      ],
+      createdAt: new Date().toISOString(),
+    };
+    await request.post("/api/library/collections", { data: collection });
+    const item = {
+      id: randomUUID(),
+      channelId: id,
+      collectionId: collection.id,
+      values: { text: "Editar item", number: 0, link: "https://example.com/original" },
+      createdAt: new Date().toISOString(),
+    };
+    await request.post("/api/library", { data: item });
+    const preferences = await (await request.get("/api/preferences")).json();
+    await request.put("/api/preferences", { data: { ...preferences, language } });
+    await page.goto(`/channel/${id}/library`);
+    await page
+      .getByRole("button", { name: /Coleção edição/ })
+      .first()
+      .click();
+    await page.getByRole("button", { name: editLabel, exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Salvo", { exact: true })).toBeVisible();
+    await expect(dialog.locator("textarea")).toHaveValue("Editar item");
+    await expect(dialog.locator('input[type="number"]')).toHaveValue("0");
+    await dialog.locator("textarea").fill("Cancelado");
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    let saved = (
+      (await (await request.get("/api/state")).json()).libraryItems as ChannelLibraryItem[]
+    ).find((row) => row.id === item.id)!;
+    expect(saved.values).toEqual(item.values);
+    await page.getByRole("button", { name: editLabel, exact: true }).click();
+    await expect(dialog.locator("textarea")).toHaveValue("Editar item");
+    await dialog.locator("textarea").fill("");
+    await expect(dialog.getByRole("button", { name: saveLabel, exact: true })).toBeDisabled();
+    await dialog.locator("textarea").fill("Revisado pelo usuário");
+    await dialog.locator('input[type="url"]').fill("https://example.com/revised");
+    await dialog.getByRole("button", { name: saveLabel, exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await page.reload();
+    await page
+      .getByRole("button", { name: /Coleção edição/ })
+      .first()
+      .click();
+    await expect(page.getByText("Revisado pelo usuário", { exact: true })).toBeVisible();
+    saved = (
+      (await (await request.get("/api/state")).json()).libraryItems as ChannelLibraryItem[]
+    ).find((row) => row.id === item.id)!;
+    expect(saved).toMatchObject({
+      id: item.id,
+      collectionId: item.collectionId,
+      channelId: id,
+      createdAt: item.createdAt,
+      values: { text: "Revisado pelo usuário", number: 0, link: "https://example.com/revised" },
+    });
+    expect(
+      (
+        await request.put(`/api/library/${item.id}`, {
+          data: { ...item, values: { ...item.values, link: "invalid" } },
+        })
+      ).status(),
+    ).toBe(422);
+    await request.put("/api/preferences", { data: { ...preferences, language: "pt-BR" } });
+  });
+}
+
 test("creates consumable collection and imports rows, text/link columns and images in order", async ({
   page,
   request,
