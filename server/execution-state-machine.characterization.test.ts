@@ -637,6 +637,13 @@ test(
         updatedAt: now,
       };
 
+      // Open executions use the Channel's current Method; the fixture must
+      // declare the same strategy instead of leaving that Method empty.
+      await request("/api/channels/plugin-channel/methods/theme", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(execution.methodSnapshot),
+      });
       await request("/api/executions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
