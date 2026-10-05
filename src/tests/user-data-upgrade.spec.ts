@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import { createEmptyMethods, type Channel } from "../lib/domain";
 import { upgradeText } from "../lib/upgrade-translations";
+import { translate } from "../lib/app-preferences";
 import type { AppLanguage } from "../lib/app-preferences";
 
 function fixtureChannels(): Channel[] {
@@ -58,20 +59,44 @@ function fixtureChannels(): Channel[] {
   ] as unknown as Channel[];
 }
 
-async function setup(page: Page, language: AppLanguage, ambiguous = false, code?: string) {
+async function setup(
+  page: Page,
+  language: AppLanguage,
+  ambiguous = false,
+  code?: string,
+  deletion = false,
+) {
   const channels = fixtureChannels();
   const original = JSON.stringify(channels);
   let required = true;
   let planNumber = 1;
+  let blocked = ambiguous;
+  const projects = deletion
+    ? ["bad", "good"].map((id) => ({
+        id,
+        channelId: channels[0].id,
+        title: `User project ${id}`,
+        currentStage: "theme",
+        state: "not_started",
+        progress: 0,
+        thumbHue: 200,
+        duration: "00:00",
+        deadline: "",
+        assignee: { name: "User", initials: "U" },
+        stages: {},
+        createdAt: "2026-01-01",
+      }))
+    : [];
+  const deletions: string[] = [];
   const applies: unknown[] = [];
   const forceRefreshes: string[] = [];
   const plan = () => ({
     planId: `plan-${planNumber}`,
     required,
-    canApply: !ambiguous,
+    canApply: !blocked,
     pendingUpdates: [],
     scanned: {},
-    diagnostics: ambiguous
+    diagnostics: blocked
       ? [{ path: "channels.methods.theme", message: "Contrato ambíguo preservado" }]
       : [],
     historicalJobsPreserved: true,
@@ -82,6 +107,15 @@ async function setup(page: Page, language: AppLanguage, ambiguous = false, code?
   });
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
+    if (deletion && route.request().method() === "DELETE" && url.pathname === "/api/projects/bad") {
+      deletions.push("bad");
+      projects.splice(
+        projects.findIndex((project) => project.id === "bad"),
+        1,
+      );
+      blocked = false;
+      return route.fulfill({ status: 204 });
+    }
     if (url.pathname === "/api/preferences")
       return route.fulfill({ json: { language, theme: "dark", methodsLibraryView: "channels" } });
     if (url.pathname === "/api/upgrade/plan") {
@@ -105,9 +139,9 @@ async function setup(page: Page, language: AppLanguage, ambiguous = false, code?
       if (url.searchParams.get("since") === "-1") forceRefreshes.push(url.href);
       return route.fulfill({
         json: {
-          revision: required ? 1 : 2,
+          revision: (required ? 1 : 2) + deletions.length,
           channels,
-          projects: [],
+          projects,
           executions: [],
           orchestrators: [],
           libraryItems: [],
@@ -122,7 +156,46 @@ async function setup(page: Page, language: AppLanguage, ambiguous = false, code?
   });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  return { channels, original, applies, forceRefreshes, errors };
+  return { channels, original, applies, forceRefreshes, errors, deletions };
+}
+
+for (const language of ["pt-BR", "en", "es"] as const) {
+  test(`project deletion during blocked migration confirms and automatically refreshes diagnostics (${language})`, async ({
+    page,
+  }) => {
+    const fixture = await setup(page, language, true, undefined, true);
+    const text = upgradeText(language);
+    await page.goto(`/channel/${fixture.channels[0].id}`);
+    const panel = page.getByTestId("user-data-upgrade");
+    await expect(panel.getByText(text.blocked)).toBeVisible();
+    const card = page
+      .locator("div.group")
+      .filter({ has: page.getByRole("heading", { name: "User project bad", exact: true }) });
+    await card.hover();
+    await card.getByRole("button").click();
+    await page.getByRole("menuitem", { name: translate("Excluir projeto", language) }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByRole("heading", { name: translate("Excluir projeto?", language) }),
+    ).toBeVisible();
+    expect(fixture.deletions).toEqual([]);
+    await dialog
+      .getByRole("button", { name: translate("Excluir projeto", language), exact: true })
+      .click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "User project bad", exact: true })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole("heading", { name: "User project good", exact: true }),
+    ).toBeVisible();
+    await expect(panel.getByText(text.blocked)).toHaveCount(0);
+    await panel.getByRole("checkbox", { name: text.confirm }).check();
+    await expect(panel.getByRole("button", { name: text.apply })).toBeEnabled();
+    expect(fixture.deletions).toEqual(["bad"]);
+    expect(fixture.applies).toEqual([]);
+    expect(fixture.errors).toEqual([]);
+  });
 }
 
 for (const language of ["pt-BR", "en", "es"] as const) {

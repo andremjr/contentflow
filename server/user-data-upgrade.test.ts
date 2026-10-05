@@ -12,6 +12,9 @@ import {
   convertLegacyMethod,
 } from "./user-data-upgrade";
 import { createEmptyMethods } from "../src/lib/domain";
+import express from "express";
+import { once } from "node:events";
+import { registerUserDataUpgradeRoutes } from "./user-data-upgrade";
 
 function fixture(t: test.TestContext, fieldType = "text") {
   const directory = mkdtempSync(path.join(tmpdir(), "contentflow-user-upgrade-"));
@@ -89,6 +92,35 @@ function payload(database: Database.Database, table = "channels", id = "c") {
     database.prepare(`SELECT payload FROM ${table} WHERE id=?`).get(id) as { payload: string }
   ).payload;
 }
+
+test("pending migration permits only idle project deletion, never other writes or deletion during apply", async (t) => {
+  const { database, directory } = fixture(t, "files");
+  let idle = true;
+  const upgrade = new UserDataUpgrade(database, directory, () => idle);
+  const app = express();
+  registerUserDataUpgradeRoutes(app, upgrade);
+  app.use((_request, response) => response.sendStatus(204));
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => server.close());
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const base = `http://127.0.0.1:${address.port}`;
+  assert.equal((await fetch(`${base}/api/projects/p`, { method: "DELETE" })).status, 204);
+  for (const [method, route] of [
+    ["POST", "/api/projects"],
+    ["PUT", "/api/projects/p"],
+    ["DELETE", "/api/projects"],
+    ["DELETE", "/api/projects/p/other"],
+    ["DELETE", "/api/channels/c"],
+  ])
+    assert.equal((await fetch(`${base}${route}`, { method })).status, 409);
+  idle = false;
+  assert.equal((await fetch(`${base}/api/projects/p`, { method: "DELETE" })).status, 409);
+  idle = true;
+  upgrade.applying = true;
+  assert.equal((await fetch(`${base}/api/projects/p`, { method: "DELETE" })).status, 409);
+});
 
 test("planning is read-only and old channels remain raw and visible", (t) => {
   const { database, directory, upgrade, channel } = fixture(t);

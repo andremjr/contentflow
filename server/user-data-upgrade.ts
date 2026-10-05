@@ -1345,6 +1345,9 @@ export class UserDataUpgrade {
     const state = this.state();
     return !state.required && !state.applying;
   }
+  projectDeletionAllowed() {
+    return !this.applying && this.isIdle();
+  }
   hasHistoricalJobs() {
     if (!tableExists(this.database, "plugin_jobs")) return false;
     return (
@@ -1425,9 +1428,9 @@ export class UserDataUpgrade {
         processes: Object.keys(methods),
       })),
       historicalJobsPreserved: this.hasHistoricalJobs(),
-      guideUrl: "https://github.com/andremjr/contentflow/blob/v1.3.5/docs/UPGRADE_GUIDE_1_3_1.md",
+      guideUrl: "https://github.com/andremjr/contentflow/blob/v1.3.6/docs/UPGRADE_GUIDE_1_3_1.md",
       skillUrl:
-        "https://github.com/andremjr/contentflow/blob/v1.3.5/ecosystem/skills/contentflow-method-development/SKILL.md",
+        "https://github.com/andremjr/contentflow/blob/v1.3.6/ecosystem/skills/contentflow-method-development/SKILL.md",
     };
   }
   private baseFingerprint() {
@@ -1525,6 +1528,11 @@ export function registerUserDataUpgradeRoutes(app: Express, upgrade: UserDataUpg
       return next();
     if (
       !upgrade.backgroundAllowed() &&
+      !(
+        request.method === "DELETE" &&
+        /^\/api\/projects\/[^/]+$/.test(request.path) &&
+        upgrade.projectDeletionAllowed()
+      ) &&
       !/^\/api\/channels\/(order|[^/]+\/preferences)$/.test(request.path) &&
       !(
         request.method === "POST" &&

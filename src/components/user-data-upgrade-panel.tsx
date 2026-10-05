@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useAppPreferences } from "@/lib/app-preferences";
-import { refreshState, useUpgradeState } from "@/lib/store";
+import { refreshState, useProjects, useUpgradeState } from "@/lib/store";
 import {
   applyUpgradePlan,
   loadUpgradePlan,
@@ -22,6 +22,7 @@ function errorKey(
 
 export function UserDataUpgradePanel() {
   const upgrade = useUpgradeState();
+  const projectCount = useProjects().length;
   const { language } = useAppPreferences();
   const text = upgradeText(language);
   const [plan, setPlan] = useState<UpgradePlan>();
@@ -40,6 +41,8 @@ export function UserDataUpgradePanel() {
     const id = ++requestId.current;
     setLoading(true);
     setConfirmed(false);
+    setPlan(undefined);
+    setError(undefined);
     void loadUpgradePlan()
       .then((next) => {
         if (active && id === requestId.current) setPlan(next);
@@ -53,7 +56,7 @@ export function UserDataUpgradePanel() {
     return () => {
       active = false;
     };
-  }, [upgrade.required]);
+  }, [upgrade.required, projectCount]);
 
   async function refresh() {
     const id = ++requestId.current;
