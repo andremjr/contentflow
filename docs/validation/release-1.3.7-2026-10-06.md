@@ -34,3 +34,15 @@ Após receber as evidências e limites acima, o criador autorizou explicitamente
 Nenhum workflow versionado existe em `.github/workflows`; a montagem e publicação não usam GitHub Actions. A atualização dos links do site gh-pages deve apontar diretamente para o Setup da 1.3.7, preservando comunidade, assinatura e downloads independentes.
 
 Este registro é de preparação; a conclusão exige conferência pública de assets, integridade, latest.yml e links do site.
+
+## Publicação concluída
+
+A autorização foi executada em 06/10/2026. O commit `dee47c7ebfbcf22b13df0ff95f4ce806d40d1af9` e a tag anotada `v1.3.7` foram enviados ao GitHub sem workflows versionados. A montagem local terminou com instalador (135.656.521 bytes), portátil (135.332.492 bytes), blockmap, `latest.yml`, extensão, duas skills e manifesto SHA-256 dos sete arquivos.
+
+A repetição no commit exato aprovou i18n, lint, tipos e as suites até execução automática. Um teste de startup do Orchestrator excedeu o prazo durante compactação concorrente. Após terminar a montagem, a validação foi retomada nessa suite: ela passou, assim como todas as restantes, build, 53 testes web e seis testes desktop. O resultado agregado ficou registrado em `release/v1/verification-commit-137.json` (`complete: true`), sem mudança de código nem intervenção no domínio. Os arquivos desktop e bundles API/MCP do executável foram comparados com os arquivos validados do checkout; as skills registram esse commit e `sourceHasLocalChanges: false`.
+
+A [release estável](https://github.com/andremjr/contentflow/releases/tag/v1.3.7) foi criada e preenchida diretamente pela API com a credencial existente do Git Credential Manager mantida somente em memória. Todos os oito assets tiveram estado, tamanho e SHA-256 confirmados pelo upload e pela API pública. A conferência pública baixou `latest.yml`, manifesto e ZIPs, verificou o SHA-512 do instalador, a integridade dos ZIPs e os hashes/documentação das skills. Todos os downloads, incluindo os três links `latest/download` usados pela interface, resolveram HTTP 200.
+
+O branch gh-pages foi atualizado para `f18e93db72419c5794b5d6df8b802b9de8025b9c`. A primeira leitura ainda encontrou o site antigo durante propagação; a repetição pública confirmou todos os links em `/`, `index.html`, comunidade, conceito, ecossistema e o chunk da página inicial apontando diretamente para `ContentFlow-V1-1.3.7-x64-Setup.exe`. A auditoria local comprovou que somente as URLs do instalador foram substituídas. Comunidade, assinatura, plugins e Métodos conservaram seus links.
+
+Os catálogos públicos permaneceram byte a byte iguais aos capturados antes da publicação: plugins SHA-256 `6acfe2543455c856d936990b5ea1af126584ee9a62bed69073c34c3afa45e5b9`; Métodos SHA-256 `f342f43a39e1b28a92854f843ccc4cf63df5b9e70c99c7d88a57872c7856f57f`. Os estados, tamanhos e hashes dos 21 assets do catálogo de plugins também foram conferidos pela API pública. A evidência final está em `release/v1/publication-verified-137.json`. Os limites de hidratação/startup e de ambientes externos descritos acima permanecem explícitos. Não foi usado GitHub Actions.
