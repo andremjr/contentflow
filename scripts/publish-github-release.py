@@ -5,7 +5,9 @@ Usage: python scripts/publish-github-release.py plan.json
 """
 import hashlib
 import json
+import os
 import pathlib
+import re
 import subprocess
 import sys
 import urllib.error
@@ -13,11 +15,39 @@ import urllib.parse
 import urllib.request
 
 
+def validate_files(plan):
+    files = [pathlib.Path(file).resolve() for file in plan["files"]]
+    if not files or any(not file.is_file() for file in files):
+        raise RuntimeError("Artefatos locais ausentes.")
+    names = [file.name for file in files]
+    if len(names) != len(set(names)):
+        raise RuntimeError("Nomes de assets duplicados.")
+    if plan["repository"] == "andremjr/contentflow":
+        if not re.fullmatch(r"v\d+\.\d+\.\d+", plan["tag"]):
+            raise RuntimeError("Tag estável inválida.")
+        version = plan["tag"][1:]
+        required = {
+            f"ContentFlow-V1-{version}-x64-Setup.exe",
+            f"ContentFlow-V1-{version}-x64-Portable.exe",
+            f"ContentFlow-V1-{version}-x64-Setup.exe.blockmap",
+            f"ContentFlow-V1-{version}-SHA256.txt",
+            "latest.yml",
+            "ContentFlow-Browser-Bridge.zip",
+            "ContentFlow-Skill-Plugin-Development.zip",
+            "ContentFlow-Skill-Method-Development.zip",
+        }
+        missing = required - set(names)
+        if missing:
+            raise RuntimeError("Release incompleta: " + ", ".join(sorted(missing)))
+    return files
+
+
 def main():
     plan = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8-sig"))
     if plan["repository"] not in ["andremjr/contentflow", "andremjr/plugins-contentflow", "andremjr/methods-contentflow"]:
         raise RuntimeError("Repositório não autorizado para este publicador.")
-    result = subprocess.run(["git", "credential", "fill"], input="protocol=https\nhost=github.com\n\n", text=True, capture_output=True)
+    files = validate_files(plan)
+    result = subprocess.run(["git", "credential-manager", "get"], input="protocol=https\nhost=github.com\n\n", text=True, capture_output=True, env={**os.environ, "GCM_INTERACTIVE": "never", "GIT_TERMINAL_PROMPT": "0"})
     credential = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
     if result.returncode or not credential.get("password"):
         raise RuntimeError("Credencial segura de sessão indisponível.")
@@ -36,9 +66,6 @@ def main():
         except urllib.error.HTTPError as error:
             raise RuntimeError(f"GitHub recusou {method}: HTTP {error.code}") from None
 
-    files = [pathlib.Path(file).resolve() for file in plan["files"]]
-    if not files or any(not file.is_file() for file in files):
-        raise RuntimeError("Artefatos locais ausentes.")
     base = f"https://api.github.com/repos/{plan['repository']}"
     releases = api(base + "/releases?per_page=100")
     release = next((item for item in releases if item["tag_name"] == plan["tag"]), None)

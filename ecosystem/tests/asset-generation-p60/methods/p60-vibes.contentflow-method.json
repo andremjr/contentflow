@@ -58,7 +58,7 @@
         "order": 0,
         "plugin": {
           "pluginId": "local.contentflow.vibes-browser-studio",
-          "pluginVersion": "1.0.0",
+          "pluginVersion": "1.0.1",
           "capabilityId": "generate-images-in-browser",
           "configuration": {},
           "connectionRequired": false

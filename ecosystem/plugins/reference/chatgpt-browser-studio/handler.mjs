@@ -1075,7 +1075,18 @@ function normalizeEditorText(value) {
 async function attachChatGptPage(client, signal, activate = false, forceNew = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
   let target = forceNew
-    ? targetInfos.find(item => item.type === "page" && (() => { try { const url = new URL(item.url); return url.hostname === CHATGPT_HOST && url.hash === "#contentflow-ready-chatgpt"; } catch { return false; } })())
+    ? targetInfos.find(
+        (item) =>
+          item.type === "page" &&
+          (() => {
+            try {
+              const url = new URL(item.url);
+              return url.hostname === CHATGPT_HOST && url.hash === "#contentflow-ready-chatgpt";
+            } catch {
+              return false;
+            }
+          })(),
+      )
     : targetInfos.find((item) => item.type === "page" && String(item.url).includes(CHATGPT_HOST));
   let created = false;
   if (!target) {
@@ -2689,7 +2700,11 @@ async function executeHandler(request, services) {
         );
       values = generationResponseValues(result, responses, request);
     }
-    await evaluate(client, sessionId, `(() => { const url = new URL(location.href); url.hash = "contentflow-ready-chatgpt"; history.replaceState(history.state, "", url); return true; })()`);
+    await evaluate(
+      client,
+      sessionId,
+      `(() => { const url = new URL(location.href); url.hash = "contentflow-ready-chatgpt"; history.replaceState(history.state, "", url); return true; })()`,
+    );
     closeTaskTarget = false;
     return {
       status: "success",

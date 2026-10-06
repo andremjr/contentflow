@@ -2151,11 +2151,16 @@ window.FA_VARIANT = "estudio";
       for (let page = 0; page < 100; page++) {
         if (sc) await NS.sleep(300);
         for (const tile of D2.listTiles()) {
-          if (tile.mediaId && tile.url) found.set(tile.mediaId, {
-            mediaId: tile.mediaId, url: tile.url, kind: tile.kind, name: tile.nome,
-          });
+          if (tile.mediaId && tile.url)
+            found.set(tile.mediaId, {
+              mediaId: tile.mediaId,
+              url: tile.url,
+              kind: tile.kind,
+              name: tile.nome,
+            });
         }
-        if (!sc || sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1) return [...found.values()];
+        if (!sc || sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1)
+          return [...found.values()];
         const before = sc.scrollTop;
         sc.scrollTop += Math.max(200, Math.floor(sc.clientHeight * 0.8));
         if (sc.scrollTop === before) return [...found.values()];
@@ -2282,19 +2287,46 @@ window.FA_VARIANT = "estudio";
     const textoDe = (it) => D2.rotulo(it).replace(/\s+/g, " ").trim().toLowerCase();
     const item = await D2.esperar(() => {
       const todos = D2.$$(S2.addMenuItem);
-      const exact = todos.filter((it) => [textoDe(it), it.getAttribute?.('title'), it.getAttribute?.('aria-label'),
-        ...[...it.querySelectorAll('img, [title], [aria-label]')].flatMap(node =>
-          [node.getAttribute?.('title'), node.getAttribute?.('aria-label'), node.getAttribute?.('alt')])]
-        .some(value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase() === alvo));
+      const exact = todos.filter((it) =>
+        [
+          textoDe(it),
+          it.getAttribute?.("title"),
+          it.getAttribute?.("aria-label"),
+          ...[...it.querySelectorAll("img, [title], [aria-label]")].flatMap((node) => [
+            node.getAttribute?.("title"),
+            node.getAttribute?.("aria-label"),
+            node.getAttribute?.("alt"),
+          ]),
+        ].some(
+          (value) =>
+            String(value || "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .toLowerCase() === alvo,
+        ),
+      );
       if (mediaUuid) {
-        const identified = todos.find((it) => [it, ...it.querySelectorAll('[data-media-id], [data-mention-id], img')].some((img) => {
-          if ([img.getAttribute?.('data-media-id'), img.getAttribute?.('data-mention-id'), img.id].includes(mediaUuid)) return true;
-          try {
-            const url = new URL(img.currentSrc || img.src);
-            return url.searchParams.get('name') === mediaUuid ||
-              url.pathname.split('/').includes(mediaUuid);
-          } catch { return false; }
-        }));
+        const identified = todos.find((it) =>
+          [it, ...it.querySelectorAll("[data-media-id], [data-mention-id], img")].some((img) => {
+            if (
+              [
+                img.getAttribute?.("data-media-id"),
+                img.getAttribute?.("data-mention-id"),
+                img.id,
+              ].includes(mediaUuid)
+            )
+              return true;
+            try {
+              const url = new URL(img.currentSrc || img.src);
+              return (
+                url.searchParams.get("name") === mediaUuid ||
+                url.pathname.split("/").includes(mediaUuid)
+              );
+            } catch {
+              return false;
+            }
+          }),
+        );
         if (identified) return identified;
       }
       return exact.length === 1 ? exact[0] : null;
@@ -2340,20 +2372,25 @@ window.FA_VARIANT = "estudio";
     mediaUuid = null,
   ) {
     await NS.menu2.configureGeneration({ type: "video", videoMode: "frames" });
-    const trigger = D2.$$('flow-base-prompt-box .frame-trigger')[position === "final" ? 1 : 0];
-    const slot = trigger ? D2.$$('button, [role="button"]', trigger)[0] || trigger
-      : D2.$$('flow-base-prompt-box button, flow-base-prompt-box [role="button"]').find(
-        (x) => (position === "final" ? /^(?:fim|end|final|last)$/i : /^(?:in[íi]cio|inicial|initial|start|first)$/i).test(D2.rotulo(x)),
-      );
+    const trigger = D2.$$("flow-base-prompt-box .frame-trigger")[position === "final" ? 1 : 0];
+    const slot = trigger
+      ? D2.$$('button, [role="button"]', trigger)[0] || trigger
+      : D2.$$('flow-base-prompt-box button, flow-base-prompt-box [role="button"]').find((x) =>
+          (position === "final"
+            ? /^(?:fim|end|final|last)$/i
+            : /^(?:in[íi]cio|inicial|initial|start|first)$/i
+          ).test(D2.rotulo(x)),
+        );
     if (!slot) throw new Error("Frame slot unavailable");
     const root = trigger || slot;
-    const filled = () => !!root.querySelector('img, video, [data-media-id], flow-image-ingredient-chip');
+    const filled = () =>
+      !!root.querySelector("img, video, [data-media-id], flow-image-ingredient-chip");
     if (filled()) throw new Error("Frame slot already occupied");
     D2.clicar(slot);
-    if (!await D2.esperar(() => D2.$(S2.addMenuPopover), 2000))
+    if (!(await D2.esperar(() => D2.$(S2.addMenuPopover), 2000)))
       throw new Error("Frame picker unavailable");
     await attachImageRefViaAddPanel(workflowId, name, mediaUuid);
-    if (!await D2.esperar(filled, 5000)) throw new Error("Initial frame not confirmed");
+    if (!(await D2.esperar(filled, 5000))) throw new Error("Initial frame not confirmed");
     return true;
   }
 

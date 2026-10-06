@@ -78,7 +78,10 @@ test("package 12.2 keeps renderer edits local and applies through a single block
   );
 
   assert.match(builderSource, /setPluginDraft\(\{ \.\.\.pluginDraft, configuration \}\)/);
-  assert.match(builderSource, /onChange\(\{ plugin: commit\.value \}\)/);
+  assert.match(
+    builderSource,
+    /onChange\(\{\s*plugin: commit\.value,\s*inputs: portDraftBlock\.inputs,\s*outputs: portDraftBlock\.outputs,\s*\}\)/,
+  );
   assert.match(builderSource, /clonePluginConfigurationDraft\(block\.plugin!\)/);
   assert.match(builderSource, /t\("Cancelar"\)/);
   assert.match(builderSource, /t\("Aplicar"\)/);

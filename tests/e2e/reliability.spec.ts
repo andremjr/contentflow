@@ -1261,7 +1261,7 @@ test("editor expõe um campo da coleção como saída do bloco Escolher", async 
       {
         id: "layout-field",
         label: "Layout",
-        shape: controlShape("thumbnail_layout"),
+        shape: contentShape("text"),
         required: true,
       },
     ],
@@ -1291,7 +1291,7 @@ test("editor expõe um campo da coleção como saída do bloco Escolher", async 
       {
         id: "chosen-layout",
         label: "layout escolhido",
-        shape: controlShape("thumbnail_layout"),
+        shape: contentShape("text"),
         binding: {
           kind: "previous_block",
           blockId: chooseBlock.id,
@@ -2164,7 +2164,7 @@ test("comandos repetidos são idempotentes e um rascunho atrasado não reabre ex
   ).toBe("cancelled");
 });
 
-test("salva o Método mesmo saindo imediatamente do editor e preserva o snapshot já iniciado", async ({
+test("salva o Método mesmo saindo imediatamente do editor e sincroniza a execução aberta", async ({
   page,
   request,
 }) => {
@@ -2199,7 +2199,7 @@ test("salva o Método mesmo saindo imediatamente do editor e preserva o snapshot
     })
     .toBe("Alteração antes de sair");
   const state = await (await request.get(`/api/executions/${started.result.id}/state`)).json();
-  expect(state.execution.methodSnapshot.blocks[0].name).toBe("Entrega theme");
+  expect(state.execution.methodSnapshot.blocks[0].name).toBe("Alteração antes de sair");
   await page.goto(`/channel/${channel.id}/methods?process=theme`);
   await expect(page.getByText("Alteração antes de sair", { exact: true })).toBeVisible();
 });

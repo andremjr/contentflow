@@ -33,11 +33,18 @@ connectContentFlowBridge();
 // transport; authorization and protocol negotiation still happen in the worker.
 let lastDiscovery = 0;
 addEventListener("message", (event) => {
-  if (event.source !== window || event.origin !== location.origin ||
-      event.data?.source !== "contentflow-bridge-client" || event.data?.action !== "discover") return;
+  if (
+    event.source !== window ||
+    event.origin !== location.origin ||
+    event.data?.source !== "contentflow-bridge-client" ||
+    event.data?.action !== "discover"
+  )
+    return;
   if (Date.now() - lastDiscovery < 1_000) return;
   lastDiscovery = Date.now();
-  void chrome.runtime.sendMessage({ source: "contentflow-provider-page", action: "wake" }).catch(() => {});
+  void chrome.runtime
+    .sendMessage({ source: "contentflow-provider-page", action: "wake" })
+    .catch(() => {});
 });
 
 addEventListener("pagehide", () => {

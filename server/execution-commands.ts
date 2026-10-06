@@ -64,8 +64,8 @@ export function executionCommands(db: {
         channel,
         db.executions.some((item) => item.projectId === projectId),
       );
-    const snapshotMethod = project?.strategySnapshot?.methods[processType];
-    const storedMethod = channel?.methods[processType] ?? snapshotMethod;
+    const snapshotMethod = project?.strategySnapshot?.methods?.[processType];
+    const storedMethod = channel?.methods?.[processType] ?? snapshotMethod;
     const method = storedMethod
       ? db.adaptMethod
         ? db.adaptMethod(storedMethod, channel ? "persisted_channel" : "strategy_snapshot")
@@ -421,7 +421,7 @@ export function executionCommands(db: {
     if (!execution) return false;
     const project = db.projects.find((item) => item.id === execution.projectId);
     const channel = db.channels.find((item) => item.id === execution.channelId);
-    const storedCurrentMethod = channel?.methods[execution.processType];
+    const storedCurrentMethod = channel?.methods?.[execution.processType];
     const currentMethod = storedCurrentMethod
       ? db.adaptMethod
         ? db.adaptMethod(storedCurrentMethod, "persisted_channel")

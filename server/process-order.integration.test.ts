@@ -66,7 +66,7 @@ function fixtureChannel(order: UniversalProcess[]): Channel {
           order: 0,
           name: `Executar ${processType}`,
           inputs: [],
-          outputs: [],
+          outputs: createProcessOutputFields(processType),
           parameters: [],
         },
       ],
@@ -118,7 +118,7 @@ function outputValue(processType: UniversalProcess) {
 }
 
 test(
-  "two end-to-end orders finish eight stages and keep the first method revision",
+  "two end-to-end orders finish eight stages and keep their order while adopting live Methods",
   { timeout: 90_000 },
   async () => {
     const port = await availablePort();
@@ -186,7 +186,10 @@ test(
             JSON.stringify(state?.orchestrator),
           );
           const execution = state!.executions.find((item) => item.processType === processType)!;
-          assert.equal(execution.methodSnapshot.name, `Congelado ${processType}`);
+          assert.equal(
+            execution.methodSnapshot.name,
+            index === 1 ? "Alterado após iniciar" : `Congelado ${processType}`,
+          );
           const human = await api<{
             result: { ok: boolean; completedProcess?: boolean; missing?: string[] };
           }>(base, "/api/commands", "POST", {

@@ -505,7 +505,7 @@ test("refaz somente o bloco cancelado e mantém os anteriores consolidados", () 
   assert.equal(project.stages.assets, "blocked");
 });
 
-test("retry manual adota o Método atual do Canal a partir do alvo", () => {
+test("retry manual adota as definições atuais e preserva entregas anteriores ao alvo", () => {
   const methods = createEmptyMethods();
   const oldMethod = structuredClone(methods.assets);
   oldMethod.name = "Assets antigo";
@@ -613,7 +613,7 @@ test("retry manual adota o Método atual do Canal a partir do alvo", () => {
 
   assert.equal(commands.retryBlockExecution(execution.id, "characters", "all"), true);
   assert.equal(execution.methodSnapshot.name, "Assets atual");
-  assert.equal(execution.methodSnapshot.blocks[0].name, "Prompts antigos");
+  assert.equal(execution.methodSnapshot.blocks[0].name, "Prompts atuais");
   assert.equal(execution.methodSnapshot.blocks[1].name, "Personagens corrigidos");
   assert.equal(execution.methodSnapshot.blocks[2].id, "scenes");
   assert.equal(execution.blocks[0].status, "completed");

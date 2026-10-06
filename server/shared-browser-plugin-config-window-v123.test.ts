@@ -28,7 +28,7 @@ test("package 12.3 returns to the centered block through close, cancel, apply, o
   assert.match(builderSource, /setPluginConfigurationVisibility\(false\)/);
   assert.match(
     builderSource,
-    /onChange\(\{ plugin: commit\.value \}\);\s*setPluginConfigurationVisibility\(false\)/,
+    /onChange\(\{\s*plugin: commit\.value,\s*inputs: portDraftBlock\.inputs,\s*outputs: portDraftBlock\.outputs,\s*\}\);\s*setPluginConfigurationVisibility\(false\)/,
   );
   assert.match(builderSource, /onEscapeKeyDown=\{\(event\) =>/);
   assert.match(builderSource, /pluginPanelBlockId === selectedBlock\?\.id/);

@@ -72,7 +72,7 @@ assert.deepEqual(
   canonicalFixture.slots.map((slot) => slot.expectedItemId),
   ["asset-slot-image-city-dawn", "asset-slot-image-forest-rain", "asset-slot-stock-commute"],
 );
-assert.equal(manifest.version, "2.0.1");
+assert.equal(manifest.version, "3.0.0");
 assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
 assert.equal(manifest.id, "local.contentflow.google-flow-batch-images");
 assert.equal(manifest.apiVersion, "2");
@@ -161,7 +161,8 @@ for (const locale of ["en", "es"]) {
 }
 assert.ok(
   manifest.capabilities.every(
-    (capability) => capability.promptPreview?.template ===
+    (capability) =>
+      capability.promptPreview?.template ===
       (capability.id === "animate-image-in-browser"
         ? "{{BLOCK_INSTRUCTIONS}}\n\n{{INPUT:prompts}}"
         : "{{INPUT:prompts}}"),

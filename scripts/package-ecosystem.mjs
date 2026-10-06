@@ -15,6 +15,7 @@ import archiver from "archiver";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const skillsOnly = process.argv.includes("--skills-only");
+const appOnly = process.argv.includes("--app-only");
 const outputDirectory = path.resolve(
   repositoryRoot,
   process.argv.slice(2).find((argument) => !argument.startsWith("--")) ?? "release/ecosystem",
@@ -202,7 +203,7 @@ async function createArchive(fileName, addContents) {
   return destination;
 }
 
-if (!skillsOnly) {
+if (!skillsOnly && !appOnly) {
   const pluginsArchive = await createArchive("ContentFlow-Plugins.zip", (archive) => {
     archive.glob("**/*", {
       cwd: path.join(repositoryRoot, "ecosystem", "plugins", "reference"),
@@ -279,6 +280,12 @@ if (!skillsOnly) {
     "utf8",
   );
 
+  console.log(`Pacote de plugins: ${pluginsArchive}`);
+  console.log(`Catálogo de plugins: ${pluginCatalogPath}`);
+  console.log(`Pacotes individuais: ${catalogPlugins.length}`);
+}
+
+if (!skillsOnly) {
   const bridgeArchive = await createArchive("ContentFlow-Browser-Bridge.zip", (archive) => {
     const bridgeRoot = path.join(repositoryRoot, "ecosystem", "browser-bridge");
     for (const fileName of [
@@ -293,9 +300,6 @@ if (!skillsOnly) {
       });
     }
   });
-  console.log(`Pacote de plugins: ${pluginsArchive}`);
-  console.log(`Catálogo de plugins: ${pluginCatalogPath}`);
-  console.log(`Pacotes individuais: ${catalogPlugins.length}`);
   console.log(`Browser Bridge: ${bridgeArchive}`);
 }
 

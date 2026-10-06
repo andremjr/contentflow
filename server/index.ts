@@ -1215,7 +1215,7 @@ function persistPluginExecution(execution: ProcessExecution, project: Project) {
   const latestProject = readPayload<Project>("projects", project.id);
   if (latestProject) Object.assign(project, latestProject);
   const currentChannel = readPayload<Channel>("channels", execution.channelId);
-  const currentMethod = currentChannel?.methods[execution.processType];
+  const currentMethod = currentChannel?.methods?.[execution.processType];
   if (currentMethod) synchronizeExecutionMethod(execution, currentMethod, new Date().toISOString());
   execution.revision = (executionById(execution.id)?.revision ?? 0) + 1;
   execution.updatedAt = new Date().toISOString();

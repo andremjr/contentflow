@@ -643,7 +643,18 @@ async function markTaskPage(client, sessionId, request, signal) {
 async function attach(c, signal, activate = false, forceNew = false) {
   const { targetInfos = [] } = await c.send("Target.getTargets");
   let t = forceNew
-    ? targetInfos.find(item => item.type === "page" && (() => { try { const url = new URL(item.url); return url.hostname === HOST && url.hash === "#contentflow-ready-gemini"; } catch { return false; } })())
+    ? targetInfos.find(
+        (item) =>
+          item.type === "page" &&
+          (() => {
+            try {
+              const url = new URL(item.url);
+              return url.hostname === HOST && url.hash === "#contentflow-ready-gemini";
+            } catch {
+              return false;
+            }
+          })(),
+      )
     : targetInfos.find((x) => x.type === "page" && String(x.url).includes(HOST));
   let created = false;
   if (!t) {
@@ -1272,7 +1283,11 @@ async function executeHandler(request, services) {
         throw err("OUTPUT_VALIDATION_FAILED", `Resultado abaixo de ${min} caracteres.`, true);
       values = generationValues(result, responses, request);
     }
-    await evaluate(client, sessionId, `(() => { const url = new URL(location.href); url.hash = "contentflow-ready-gemini"; history.replaceState(history.state, "", url); return true; })()`);
+    await evaluate(
+      client,
+      sessionId,
+      `(() => { const url = new URL(location.href); url.hash = "contentflow-ready-gemini"; history.replaceState(history.state, "", url); return true; })()`,
+    );
     closeTaskTarget = false;
     return {
       status: "success",

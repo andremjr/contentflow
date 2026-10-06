@@ -5,17 +5,34 @@ import test from "node:test";
 import vm from "node:vm";
 
 test("an explicit discovery wakes a dormant worker without idle polling or page effects", async () => {
-  const source = await readFile(path.join(process.cwd(), "ecosystem/browser-bridge/content-script.js"), "utf8");
+  const source = await readFile(
+    path.join(process.cwd(), "ecosystem/browser-bridge/content-script.js"),
+    "utf8",
+  );
   let listener;
   let wakes = 0;
   const page = {};
   vm.runInNewContext(source, {
-    window: page, location: { origin: "https://flow.google.com" },
-    chrome: { runtime: { connect: () => ({ onMessage: { addListener() {} }, onDisconnect: { addListener() {} } }),
-      sendMessage: async message => { assert.equal(message.action, "wake"); wakes++; } } },
-    addEventListener: (type, callback) => { if (type === "message") listener = callback; },
+    window: page,
+    location: { origin: "https://flow.google.com" },
+    chrome: {
+      runtime: {
+        connect: () => ({ onMessage: { addListener() {} }, onDisconnect: { addListener() {} } }),
+        sendMessage: async (message) => {
+          assert.equal(message.action, "wake");
+          wakes++;
+        },
+      },
+    },
+    addEventListener: (type, callback) => {
+      if (type === "message") listener = callback;
+    },
   });
-  const request = { source: page, origin: "https://flow.google.com", data: { source: "contentflow-bridge-client", action: "discover" } };
+  const request = {
+    source: page,
+    origin: "https://flow.google.com",
+    data: { source: "contentflow-bridge-client", action: "discover" },
+  };
   listener({ ...request, source: {} });
   listener({ ...request, origin: "https://unexpected.invalid" });
   assert.equal(wakes, 0);

@@ -947,7 +947,18 @@ function normalizeEditorText(value) {
 async function attachClaudePage(client, signal, activate = false, forceNew = false) {
   const { targetInfos = [] } = await client.send("Target.getTargets");
   let target = forceNew
-    ? targetInfos.find(item => item.type === "page" && (() => { try { const url = new URL(item.url); return url.hostname === CLAUDE_HOST && url.hash === "#contentflow-ready-claude"; } catch { return false; } })())
+    ? targetInfos.find(
+        (item) =>
+          item.type === "page" &&
+          (() => {
+            try {
+              const url = new URL(item.url);
+              return url.hostname === CLAUDE_HOST && url.hash === "#contentflow-ready-claude";
+            } catch {
+              return false;
+            }
+          })(),
+      )
     : targetInfos.find((item) => item.type === "page" && String(item.url).includes(CLAUDE_HOST));
   let createdTarget = false;
   if (!target) {
@@ -1251,7 +1262,14 @@ async function responseState(client, sessionId) {
   );
 }
 
-async function waitForResponse(client, sessionId, baselineCount, timeoutMs, signal, baselineCompletedActionCount = Infinity) {
+async function waitForResponse(
+  client,
+  sessionId,
+  baselineCount,
+  timeoutMs,
+  signal,
+  baselineCompletedActionCount = Infinity,
+) {
   const deadline = Date.now() + timeoutMs;
   let previous = "";
   let stablePolls = 0;
@@ -1269,7 +1287,11 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
       generating: Boolean(state?.stop),
       stablePolls,
     });
-    const strongCompletion = texts.length > baselineCount && newest && !state.stop && state.completedActionCount > baselineCompletedActionCount;
+    const strongCompletion =
+      texts.length > baselineCount &&
+      newest &&
+      !state.stop &&
+      state.completedActionCount > baselineCompletedActionCount;
     if (strongCompletion || phase === "completed") {
       await sleep(strongCompletion ? 500 : 5_000, signal);
       const confirmedState = await responseState(client, sessionId);
@@ -1278,8 +1300,12 @@ async function waitForResponse(client, sessionId, baselineCount, timeoutMs, sign
         confirmedTexts.length > baselineCount
           ? confirmedTexts.at(-1)
           : (confirmedTexts.at(-1) ?? "");
-      if (confirmedTexts.length > baselineCount && confirmedNewest === newest && !confirmedState?.stop &&
-          (!strongCompletion || confirmedState.completedActionCount > baselineCompletedActionCount)) {
+      if (
+        confirmedTexts.length > baselineCount &&
+        confirmedNewest === newest &&
+        !confirmedState?.stop &&
+        (!strongCompletion || confirmedState.completedActionCount > baselineCompletedActionCount)
+      ) {
         const entry = Array.isArray(confirmedState?.entries)
           ? confirmedState.entries.at(-1)
           : undefined;
@@ -1322,7 +1348,14 @@ async function generatePart(client, sessionId, bridge, prompt, settings, signal,
   await setPrompt(bridge, prompt, `prompt:${operationKey}`);
   await clickSend(bridge, `send:${operationKey}`, signal);
   const timeoutSeconds = clampInteger(settings?.responseTimeoutSeconds, 600, 30, 900);
-  return await waitForResponse(client, sessionId, baselineCount, timeoutSeconds * 1000, signal, before.completedActionCount);
+  return await waitForResponse(
+    client,
+    sessionId,
+    baselineCount,
+    timeoutSeconds * 1000,
+    signal,
+    before.completedActionCount,
+  );
 }
 
 async function configureProfile(request, services) {
@@ -1666,7 +1699,11 @@ async function executeHandler(request, services) {
         : combined.length;
     const conversationId = await currentConversationUrl(client, sessionId);
     step(`Concluído: ${outputCharacters} caracteres em ${responses.length} resposta(s).`);
-    await evaluate(client, sessionId, `(() => { const url = new URL(location.href); url.hash = "contentflow-ready-claude"; history.replaceState(history.state, "", url); return true; })()`);
+    await evaluate(
+      client,
+      sessionId,
+      `(() => { const url = new URL(location.href); url.hash = "contentflow-ready-claude"; history.replaceState(history.state, "", url); return true; })()`,
+    );
     closeTaskTarget = false;
     return {
       status: "success",

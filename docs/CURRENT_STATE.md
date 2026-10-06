@@ -1,6 +1,6 @@
 # Estado atual e limites de validação
 
-Em 06/10/2026, o criador autorizou atualizar o GitHub e publicar a v1.3.7 do aplicativo com a correção de inclusão/preservação do rascunho de VALIDAR e o diagnóstico local de suporte. Plugins e Métodos independentes mantêm suas versões e catálogos. A repetição de release:verify encontrou os mesmos 389 problemas de formatação já registrados na base 1.3.6; não há aprovação geral das suites. Os cenários verticais específicos e as verificações direcionadas são registrados separadamente em [validação da 1.3.7](validation/release-1.3.7-2026-10-06.md).
+Em 06/10/2026, a preparação da v1.3.7 inclui inclusão/preservação do rascunho de VALIDAR, diagnóstico local de suporte e correção da distribuição dos downloads da interface. A v1.3.6 não publicou a extensão nem as duas skills, provocando HTTP 404 nos links `latest/download`; o empacotamento agora gera os três e a publicação exige sua presença. A revisão também corrigiu erro 500 ao persistir resultado de plugin em Canal sem mapa de Métodos e alinhou regressões antigas ao contrato vigente de Métodos vivos. A formatação preexistente foi corrigida. A rodada final passou check/build, 35 testes i18n, 53 web, seis desktop e seis cenários adicionais de VALIDAR/logs no executável. O aviso de hidratação #419 permanece; uma rodada concorrente excedeu o prazo de startup, e a repetição isolada concluiu. Isto não declara publicação nem ausência de limitações. Plugins e Métodos independentes mantêm versões e catálogos publicados. Consulte [evidências, limites e autorização pendente da 1.3.7](validation/release-1.3.7-2026-10-06.md).
 
 Implementação local em 06/10/2026: Preferências inclui Suporte e diagnóstico no desktop, com abertura da pasta e exportação manual de ZIP. Arquivos de suporte possuem retenção de até 24 horas, teto de 4 MiB, fila limitada e gravação assíncrona; não registram payloads privados nem polling bem-sucedido. O diagnóstico não substitui o histórico operacional. Consulte [validação e limites](validation/support-diagnostics-2026-10-06.md). Não é uma release publicada.
 
@@ -12,7 +12,7 @@ A Biblioteca Estratégica oferece edição de itens pelo mesmo formulário da cr
 
 O editor oferece **Apagar Método** com confirmação para remover a definição inteira do Processo. A ação respeita revisão do Canal, dependências e restrições de trabalho iniciado, sem excluir o Processo Universal nem dados da Biblioteca.
 
-Revisão documental: 04/10/2026. Esta descrição corresponde ao checkout inspecionado, incluindo alterações locais; não afirma que todas elas estejam em uma release publicada. Versão declarada em `package.json`: `1.3.5`. HEAD, branch e alterações devem ser consultados ao vivo.
+Revisão documental: 06/10/2026. Esta descrição corresponde ao checkout inspecionado, incluindo alterações locais; não afirma que todas elas estejam em uma release publicada. Versão declarada em `package.json`: `1.3.7`. HEAD, branch e alterações devem ser consultados ao vivo.
 
 ## Produto disponível
 

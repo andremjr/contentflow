@@ -74,6 +74,8 @@ O ContentFlow não usa GitHub Actions para validar, montar ou publicar releases.
 
 A publicação de cada produto é independente e exige escopo explícito: uma release somente do aplicativo não incrementa, monta nem publica plugins ou Métodos em seus repositórios separados. Nesse caso, os catálogos existentes permanecem inalterados.
 
+Toda release estável do aplicativo inclui também `ContentFlow-Browser-Bridge.zip`, `ContentFlow-Skill-Plugin-Development.zip` e `ContentFlow-Skill-Method-Development.zip`: esses são os downloads apontados pela interface em `releases/latest/download`. `desktop:release` gera os três em `release/app-ecosystem` usando `package-ecosystem.mjs --app-only`, sem montar plugins nem regenerar seu catálogo. O publicador rejeita uma release sem qualquer um dos oito assets obrigatórios antes de consultar credenciais ou criar um draft. A validação de distribuição abre os ZIPs e verifica arquivos da extensão e hashes documentais das skills.
+
 A autenticação deve reutilizar exclusivamente a credencial de sessão existente no Git Credential Manager. O token nunca deve aparecer na saída, em logs, documentação, scripts versionados, variáveis persistentes ou arquivos temporários. Depois do upload, confirme pela API pública que a tag é a release `latest`, que todos os assets estão no estado `uploaded`, que os tamanhos e hashes correspondem aos arquivos locais, que o catálogo contém as versões esperadas e que `https://andremjr.github.io/contentflow/` aponta para a release correta. Falhas de teste, build, assinatura, integridade ou conteúdo devem ser corrigidas e validadas antes de publicar.
 
 Assinatura Authenticode é a política recomendada para distribuição pública da V1. Quando houver certificado, o build local poderá receber `CSC_LINK` e `CSC_KEY_PASSWORD` somente durante o processo seguro de montagem; enquanto ele não estiver configurado, o Windows pode continuar exibindo aviso, embora a verificação HTTPS e SHA-512 do updater permaneça ativa.
@@ -84,7 +86,12 @@ Depois do build, gere o manifesto de integridade no PowerShell:
 $releaseVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
 Get-FileHash -Algorithm SHA256 `
   "release/v1/ContentFlow-V1-$releaseVersion-x64-Setup.exe", `
-  "release/v1/ContentFlow-V1-$releaseVersion-x64-Portable.exe" |
+  "release/v1/ContentFlow-V1-$releaseVersion-x64-Portable.exe", `
+  "release/v1/ContentFlow-V1-$releaseVersion-x64-Setup.exe.blockmap", `
+  "release/v1/latest.yml", `
+  "release/app-ecosystem/ContentFlow-Browser-Bridge.zip", `
+  "release/app-ecosystem/ContentFlow-Skill-Plugin-Development.zip", `
+  "release/app-ecosystem/ContentFlow-Skill-Method-Development.zip" |
   ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
   Set-Content -Encoding ascii "release/v1/ContentFlow-V1-$releaseVersion-SHA256.txt"
 ```

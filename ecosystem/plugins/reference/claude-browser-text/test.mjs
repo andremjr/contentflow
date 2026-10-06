@@ -38,7 +38,7 @@ function outputContractFor(capabilityId, validation, fields) {
 }
 
 test("manifesto prepara perfis antes da execução", () => {
-  assert.equal(manifest.version, "2.0.0");
+  assert.equal(manifest.version, "2.0.1");
   assert.equal(manifest.profileSetup.configurationKey, "accountProfile");
   assert.equal(manifest.settingsSchema.properties.allowExistingChromeProfile.default, false);
 });
