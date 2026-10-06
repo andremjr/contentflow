@@ -388,7 +388,7 @@ export function MethodBuilder({
     const changedProcess = loadedProcessRef.current !== processType;
     if (!changedProcess && isDirty) return;
 
-    const recovered = changedProcess ? readMethodDraft(channelId, processType) : undefined;
+    const recovered = readMethodDraft(channelId, processType);
     const loadedMethod = recovered ?? method;
     setDraftName(loadedMethod?.name ?? `Método de ${PROCESS_META[processType].label}`);
     setDraftImageUrl(loadedMethod?.imageUrl);

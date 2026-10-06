@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseProcessMethodV3, workspaceMethodV3Schema } from "./method-contract-v3";
 import { parseMethodFile, serializeMethodFile } from "./method-file";
+import { createValidationFields, getMethodConfigurationIssue } from "./human-workflow";
+import { methodNeedsUpgrade } from "./user-data-upgrade";
 
 const method = {
   contractVersion: 3,
@@ -74,6 +76,46 @@ test("an unresolved source is editable as v3 but cannot be executed or exported"
 
 test("rejects Method v2 instead of adapting it", () => {
   assert.throws(() => parseProcessMethodV3({ ...method, contractVersion: 2 }));
+});
+
+test("a new VALIDAR is editable without a target but remains invalid for execution and export", () => {
+  const draft = {
+    ...parseProcessMethodV3(method),
+    blocks: [
+      {
+        id: "review",
+        type: "VALIDAR" as const,
+        operator: "Humano" as const,
+        name: "Review",
+        inputs: [],
+        outputs: createValidationFields("approval"),
+        parameters: [],
+        order: 0,
+        validation: {
+          targetBlockId: "",
+          mode: "approval" as const,
+          onReject: "retry_target" as const,
+          maxAttempts: 3,
+          retryMode: "full" as const,
+        },
+      },
+    ],
+  };
+  assert.equal(workspaceMethodV3Schema.safeParse(draft).success, true);
+  assert.equal(methodNeedsUpgrade(draft), false);
+  assert.match(getMethodConfigurationIssue(draft)!, /Selecione um bloco anterior/);
+  assert.throws(() => parseProcessMethodV3(draft));
+  assert.throws(() => serializeMethodFile("Review", draft));
+  for (const invalid of [
+    { ...draft, contractVersion: 2 },
+    {
+      ...draft,
+      blocks: [
+        { ...draft.blocks[0], validation: { ...draft.blocks[0].validation, mode: "unknown" } },
+      ],
+    },
+  ])
+    assert.equal(workspaceMethodV3Schema.safeParse(invalid).success, false);
 });
 
 test("rejects legacy pseudo-types instead of inferring a shape", () => {

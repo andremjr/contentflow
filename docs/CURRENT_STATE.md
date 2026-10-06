@@ -1,5 +1,11 @@
 # Estado atual e limites de validação
 
+Em 06/10/2026, o criador autorizou atualizar o GitHub e publicar a v1.3.7 do aplicativo com a correção de inclusão/preservação do rascunho de VALIDAR e o diagnóstico local de suporte. Plugins e Métodos independentes mantêm suas versões e catálogos. A repetição de release:verify encontrou os mesmos 389 problemas de formatação já registrados na base 1.3.6; não há aprovação geral das suites. Os cenários verticais específicos e as verificações direcionadas são registrados separadamente em [validação da 1.3.7](validation/release-1.3.7-2026-10-06.md).
+
+Implementação local em 06/10/2026: Preferências inclui Suporte e diagnóstico no desktop, com abertura da pasta e exportação manual de ZIP. Arquivos de suporte possuem retenção de até 24 horas, teto de 4 MiB, fila limitada e gravação assíncrona; não registram payloads privados nem polling bem-sucedido. O diagnóstico não substitui o histórico operacional. Consulte [validação e limites](validation/support-diagnostics-2026-10-06.md). Não é uma release publicada.
+
+Correção local em 05/10/2026: o editor aceita o novo Bloco VALIDAR com alvo pendente no rascunho e preserva esse rascunho na inicialização repetida. Execução, exportação e gravação canônicas continuam exigindo a configuração completa. O fluxo de inclusão, recuperação do rascunho, seleção explícita, salvamento pela API e reabertura passou nas três línguas sobre uma base isolada. Consulte [evidências e histórico](validation/method-add-validation-2026-10-05.md). Não é uma release publicada.
+
 Mudança local de migração assistida: o MCP pode validar e propor Métodos durante o bloqueio; a gravação permanece na migração confirmada com backup. Testes com bancos sintéticos verificam staging sem escrita, transação, preservação de trabalho e invalidação de propostas. Não há validação na instalação do aluno que relatou o bloqueio; o criador definiu que ele fará essa confirmação após uma futura publicação autorizada. Nenhuma migração é aplicada aos dados locais do criador como parte desse trabalho.
 
 A Biblioteca Estratégica oferece edição de itens pelo mesmo formulário da criação. O servidor valida os campos e conserva identidade, coleção, Canal e data de criação; itens reservados continuam bloqueados. A edição não altera seleções já capturadas em execuções.

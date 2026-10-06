@@ -278,6 +278,8 @@ Os métodos permanecem lineares: não existem ramificações, junções, paralel
 
 Todo bloco `VALIDAR` referencia um bloco anterior específico e opera em um de três modos: aprovar ou reprovar, escolher uma opção, ou escolher várias opções. Uma reprovação pode pausar a execução ou solicitar uma nova tentativa do bloco validado. Nesse último caso, o motor invalida e executa novamente o trecho linear entre o bloco-alvo e a validação, preservando o feedback da reprovação como contexto da nova tentativa e respeitando o limite configurado. Uma escolha concluída torna-se uma saída tipada do próprio bloco `VALIDAR`, disponível para os blocos seguintes.
 
+Durante a edição, um `VALIDAR` recém-adicionado pode ter `targetBlockId` vazio no rascunho local, até o usuário selecionar explicitamente o alvo. Esse estado é reconhecido como Método v3 em configuração, sem exigir migração nem selecionar automaticamente outro Bloco. O contrato de execução, exportação e gravação pela API permanece estrito: a configuração deve ser completada antes dessas operações.
+
 Se a tentativa reprovada produziu imagens e o executor precisar abrir outra conversa para refazer o bloco, o núcleo preserva as referências autorizadas e o plugin anexa essas imagens à nova conversa. Quando a conversa anterior puder ser reutilizada, a mídia não é reenviada.
 
 Cada nova tentativa incrementa a identidade de execução dos blocos já iniciados no trecho invalidado. Jobs, artifacts e entregas da tentativa anterior permanecem rastreáveis, mas não podem ser reutilizados como se pertencessem à nova tentativa.
@@ -518,6 +520,12 @@ O programa instalado é substituível e os dados persistentes permanecem em `%AP
 O instalador NSIS consulta o canal estável público por um updater executado somente no processo principal do Electron. A interface recebe por preload isolado apenas estado, verificação, download, instalação e abertura da release oficial. O download é iniciado pelo usuário, mostra progresso e só reinicia depois de confirmação. Preview web não executa updater; a versão portátil abre a release mais recente em vez de prometer substituição automática.
 
 Cada release atualizável publica instalador e `latest.yml` no mesmo build para preservar integridade. Falha de rede, metadata ausente, checksum ou assinatura mantém a versão atual. Logs locais do updater são redigidos. Assinatura Authenticode é a política recomendada para releases públicas da V1; o mecanismo pode ser validado tecnicamente antes da disponibilidade do certificado.
+
+### Diagnóstico local de suporte
+
+Preferências oferece exportação manual de ZIP e abertura da pasta de logs pelo preload isolado. O processo principal é a única autoridade de gravação desses arquivos; aceita somente eventos estruturados autorizados do renderer e frames marcados da API. O contrato compartilhado remove payloads e mensagens privadas antes da persistência, limita campos técnicos e resume IDs de correlação por hash. O diagnóstico observa marcos existentes de jobs sem redefinir seus estados, retries ou identidades, nem substituir registros operacionais canônicos.
+
+A política de suporte mantém até 24 horas, 4 MiB totais e 256 KiB por segmento de hora. Limpeza acontece no startup, ao gravar e na virada de hora, com recuperação na próxima abertura se o aplicativo estava fechado. A fila em memória é limitada a 64 KiB, gravação assíncrona em lotes de um segundo, deduplicação e limite de 40 eventos por segundo; excedentes podem ser omitidos. Consultas bem-sucedidas de leitura e progresso granular não geram registros. Exportação revalida arquivos e compacta somente a pedido, sem envio automático. Retenção não altera banco, snapshots, perfis, credenciais ou pastas de trabalho. Consulte [a operação desktop](DESKTOP.md).
 
 ### Reutilização local de navegadores
 

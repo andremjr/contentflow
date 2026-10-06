@@ -3,6 +3,25 @@ import test from "node:test";
 
 import { translate } from "./app-preferences";
 
+test("support diagnostics controls and feedback are localized in three languages", () => {
+  for (const phrase of [
+    "Preferências do aplicativo",
+    "Suporte e diagnóstico",
+    "Inclui códigos de erro, etapas, horários e versões técnicas do aplicativo e dos plugins.",
+    "Exportar diagnóstico",
+    "Abrir pasta de logs",
+    "Aguarde…",
+    "Disponível no aplicativo instalado ou portátil.",
+    "Registros locais por até 24 horas, com limite de 4 MB. Sem prompts, conteúdo, senhas ou cookies.",
+    "Diagnóstico exportado. Você pode enviar o ZIP ao suporte.",
+    "Não foi possível acessar o diagnóstico. Tente novamente.",
+  ]) {
+    assert.equal(translate(phrase, "pt-BR"), phrase);
+    assert.notEqual(translate(phrase, "en"), phrase);
+    if (phrase !== "Exportar diagnóstico") assert.notEqual(translate(phrase, "es"), phrase);
+  }
+});
+
 test("whole Method deletion and its confirmation are localized", () => {
   for (const phrase of [
     "Apagar Método",

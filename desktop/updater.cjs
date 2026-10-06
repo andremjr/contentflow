@@ -76,7 +76,7 @@ function createInitialState(app, distribution) {
   };
 }
 
-function configureDesktopUpdater({ app, ipcMain, shell, getWindow, updater, logger }) {
+function configureDesktopUpdater({ app, ipcMain, shell, getWindow, updater, logger, supportLog }) {
   const distribution = updaterDistribution(app);
   let state = createInitialState(app, distribution);
   let autoUpdater;
@@ -95,10 +95,22 @@ function configureDesktopUpdater({ app, ipcMain, shell, getWindow, updater, logg
 
   if (distribution === "installer") {
     autoUpdater = updater ?? require("electron-updater").autoUpdater;
-    log = logger ?? require("electron-log/main");
-    log.transports.file.fileName = "updates.log";
-    log.transports.file.level = "info";
-    log.transports.console.level = false;
+    log = supportLog
+      ? {
+          info: (_message, data) =>
+            supportLog({
+              area: "updater",
+              code: "UPDATE_CHECK",
+              version: data?.currentVersion ?? data?.version,
+            }),
+          error: () => supportLog({ area: "updater", code: "UPDATE_ERROR" }),
+        }
+      : (logger ?? require("electron-log/main"));
+    if (!supportLog) {
+      log.transports.file.fileName = "updates.log";
+      log.transports.file.level = "info";
+      log.transports.console.level = false;
+    }
     autoUpdater.logger = null;
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
@@ -113,6 +125,7 @@ function configureDesktopUpdater({ app, ipcMain, shell, getWindow, updater, logg
       });
     });
     autoUpdater.on("update-available", (info) => {
+      supportLog?.({ area: "updater", code: "UPDATE_AVAILABLE", version: info.version });
       log.info("Release estável disponível", { version: info.version });
       updateState({
         status: "available",
@@ -122,6 +135,7 @@ function configureDesktopUpdater({ app, ipcMain, shell, getWindow, updater, logg
       });
     });
     autoUpdater.on("update-not-available", () => {
+      supportLog?.({ area: "updater", code: "UPDATE_CURRENT", version: app.getVersion() });
       log.info("Aplicativo já está atualizado", { currentVersion: app.getVersion() });
       updateState({
         status: "up-to-date",
@@ -138,6 +152,7 @@ function configureDesktopUpdater({ app, ipcMain, shell, getWindow, updater, logg
       });
     });
     autoUpdater.on("update-downloaded", (info) => {
+      supportLog?.({ area: "updater", code: "UPDATE_DOWNLOADED", version: info.version });
       log.info("Release baixada e verificada", { version: info.version });
       updateState({
         status: "downloaded",

@@ -198,6 +198,12 @@ export const workspaceMethodV3Schema = processMethodV3Schema.extend({
     .array(
       actionBlockSchema.extend({
         inputs: z.array(workspaceInputSchema).max(100).optional(),
+        // A newly added VALIDAR has no target until the user selects one.
+        // Only the workspace accepts this state; execution/export stay strict.
+        validation: actionBlockSchema.shape.validation
+          .unwrap()
+          .extend({ targetBlockId: z.string() })
+          .optional(),
       }),
     )
     .max(200),

@@ -52,6 +52,10 @@ declare global {
     contentflowDesktop?: {
       updater: DesktopUpdaterBridge;
       humanTasks?: DesktopHumanTasksBridge;
+      diagnostics?: {
+        openFolder(): Promise<{ status: "opened" | "error" }>;
+        export(): Promise<{ status: "exported" | "cancelled" | "error" }>;
+      };
     };
   }
 }

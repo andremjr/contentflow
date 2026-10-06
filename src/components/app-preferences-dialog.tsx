@@ -1,4 +1,17 @@
-import { Bell, Check, Languages, Moon, Settings2, Sun, Volume2 } from "lucide-react";
+import {
+  Bell,
+  Check,
+  Languages,
+  Moon,
+  Settings2,
+  Sun,
+  Volume2,
+  Download,
+  FolderOpen,
+} from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import "@/lib/desktop-updater";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -33,7 +46,26 @@ export function AppPreferencesDialog() {
     setLanguage,
     setNotificationSound,
     setSystemNotifications,
+    t,
   } = useAppPreferences();
+  const [supportBusy, setSupportBusy] = useState(false);
+  const diagnostics =
+    typeof window === "undefined" ? undefined : window.contentflowDesktop?.diagnostics;
+  async function supportAction(action: "export" | "openFolder") {
+    if (!diagnostics || supportBusy) return;
+    setSupportBusy(true);
+    try {
+      const result = await diagnostics[action]();
+      if (result.status === "error")
+        toast.error(t("Não foi possível acessar o diagnóstico. Tente novamente."));
+      if (result.status === "exported")
+        toast.success(t("Diagnóstico exportado. Você pode enviar o ZIP ao suporte."));
+    } catch {
+      toast.error(t("Não foi possível acessar o diagnóstico. Tente novamente."));
+    } finally {
+      setSupportBusy(false);
+    }
+  }
 
   return (
     <Dialog>
@@ -47,9 +79,9 @@ export function AppPreferencesDialog() {
           <span className="hidden text-xs font-medium sm:block">Preferências</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Aparência, idioma e notificações</DialogTitle>
+          <DialogTitle>{t("Preferências do aplicativo")}</DialogTitle>
           <DialogDescription>
             Estas preferências são globais e ficam salvas neste dispositivo.
           </DialogDescription>
@@ -162,6 +194,47 @@ export function AppPreferencesDialog() {
               />
             </label>
           </div>
+        </section>
+        <section className="border-t border-border pt-4">
+          <h3 className="text-xs font-semibold text-muted-foreground">
+            {t("Suporte e diagnóstico")}
+          </h3>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t(
+              "Inclui códigos de erro, etapas, horários e versões técnicas do aplicativo e dos plugins.",
+            )}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t(
+              "Registros locais por até 24 horas, com limite de 4 MB. Sem prompts, conteúdo, senhas ou cookies.",
+            )}
+          </p>
+          {diagnostics ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={supportBusy}
+                onClick={() => void supportAction("export")}
+              >
+                <Download className="size-3.5" />
+                {t(supportBusy ? "Aguarde…" : "Exportar diagnóstico")}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={supportBusy}
+                onClick={() => void supportAction("openFolder")}
+              >
+                <FolderOpen className="size-3.5" />
+                {t("Abrir pasta de logs")}
+              </Button>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {t("Disponível no aplicativo instalado ou portátil.")}
+            </p>
+          )}
         </section>
       </DialogContent>
     </Dialog>

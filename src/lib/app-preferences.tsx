@@ -45,6 +45,32 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 type Translation = [english: string, spanish: string];
 
 const PHRASES: Record<string, Translation> = {
+  "Preferências do aplicativo": ["Application preferences", "Preferencias de la aplicación"],
+  "Suporte e diagnóstico": ["Support and diagnostics", "Soporte y diagnóstico"],
+  "Inclui códigos de erro, etapas, horários e versões técnicas do aplicativo e dos plugins.": [
+    "Includes error codes, steps, times and technical versions of the application and plugins.",
+    "Incluye códigos de error, etapas, horarios y versiones técnicas de la aplicación y los plugins.",
+  ],
+  "Registros locais por até 24 horas, com limite de 4 MB. Sem prompts, conteúdo, senhas ou cookies.":
+    [
+      "Local records for up to 24 hours, limited to 4 MB. No prompts, content, passwords or cookies.",
+      "Registros locales por hasta 24 horas, limitados a 4 MB. Sin prompts, contenido, contraseñas ni cookies.",
+    ],
+  "Exportar diagnóstico": ["Export diagnostics", "Exportar diagnóstico"],
+  "Abrir pasta de logs": ["Open logs folder", "Abrir carpeta de registros"],
+  "Aguarde…": ["Please wait…", "Espera…"],
+  "Disponível no aplicativo instalado ou portátil.": [
+    "Available in the installed or portable application.",
+    "Disponible en la aplicación instalada o portátil.",
+  ],
+  "Diagnóstico exportado. Você pode enviar o ZIP ao suporte.": [
+    "Diagnostics exported. You can send the ZIP to support.",
+    "Diagnóstico exportado. Puedes enviar el ZIP a soporte.",
+  ],
+  "Não foi possível acessar o diagnóstico. Tente novamente.": [
+    "Could not access diagnostics. Please try again.",
+    "No se pudo acceder al diagnóstico. Inténtalo de nuevo.",
+  ],
   "Dados entre blocos": ["Data between blocks", "Datos entre bloques"],
   "Escolha as entregas anteriores que esta capacidade deve receber.": [
     "Choose the previous deliveries this capability should receive.",

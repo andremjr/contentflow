@@ -6,6 +6,11 @@ import {
 } from "./user-data-upgrade";
 import { observeExecution, observeJob } from "./dev-monitor/probes";
 import { stateEvents } from "./state-events";
+import {
+  reportSupportEvent,
+  supportRequestDiagnostics,
+  supportErrorDiagnostics,
+} from "./support-diagnostics";
 import { disposeCoreBrowserSessions } from "./plugin-runner";
 import { monitorEnabled, devProbe } from "./dev-monitor/client";
 import express, {
@@ -3646,6 +3651,7 @@ function migrateLegacyLibraryItems() {
 migrateLegacyLibraryItems();
 
 const app = express();
+app.use(supportRequestDiagnostics);
 app.use(express.json({ limit: "20mb" }));
 app.use(
   "/api/files",
@@ -9301,8 +9307,10 @@ const payloadErrorHandler: ErrorRequestHandler = (error, _request, response, nex
 };
 
 app.use(payloadErrorHandler);
+app.use(supportErrorDiagnostics);
 
 app.listen(port, "127.0.0.1", () => {
+  reportSupportEvent({ area: "api", code: "API_STARTED" });
   console.log(`ContentFlow API local pronta em http://127.0.0.1:${port}`);
   resumeExecutionOrchestrators();
 });

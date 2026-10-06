@@ -14,6 +14,12 @@ const { readFile } = require("node:fs/promises");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { configureDesktopUpdater } = require("./updater.cjs");
+const {
+  createDiagnostics,
+  exportDiagnostics,
+  createApiDiagnosticReader,
+} = require("./diagnostics.cjs");
+const { safeError, safeConsoleError } = require("./diagnostic-contract.cjs");
 
 app.setName("ContentFlow");
 app.setAppUserModelId("com.contentflow.app");
@@ -30,6 +36,9 @@ let apiProcess;
 let appOrigin;
 let notificationIcon;
 let quitting = false;
+let diagnostics;
+let exportingDiagnostics = false;
+let diagnosticsClosed = false;
 const staticAssetCache = new Map();
 const notifiedHumanTasks = new Set();
 const HUMAN_TASKS_UPDATE_CHANNEL = "contentflow:human-tasks-update";
@@ -47,6 +56,7 @@ app
   .whenReady()
   .then(startDesktop)
   .catch((error) => {
+    diagnostics?.record({ area: "desktop", code: "APP_START_FAILED", ...safeError(error) });
     dialog.showErrorBox(
       "O ContentFlow não conseguiu iniciar",
       error instanceof Error ? (error.stack ?? error.message) : String(error),
@@ -58,7 +68,19 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
+  if (diagnostics && !diagnosticsClosed) {
+    event.preventDefault();
+    if (!quitting) {
+      quitting = true;
+      diagnostics.record({ area: "desktop", code: "APP_STOPPED" });
+      void diagnostics.close().finally(() => {
+        diagnosticsClosed = true;
+        app.quit();
+      });
+    }
+    return;
+  }
   quitting = true;
   webServer?.close();
   webServer?.closeAllConnections?.();
@@ -66,6 +88,10 @@ app.on("before-quit", () => {
 });
 
 async function startDesktop() {
+  const logDirectory = path.join(app.getPath("userData"), "logs");
+  diagnostics = createDiagnostics(logDirectory);
+  diagnostics.record({ area: "desktop", code: "APP_STARTED", version: app.getVersion() });
+  configureSupportDiagnostics(logDirectory);
   const appRoot = app.getAppPath();
   const resourcesRoot = app.isPackaged ? process.resourcesPath : path.resolve(appRoot);
   const runtimeRoot = app.isPackaged
@@ -86,23 +112,31 @@ async function startDesktop() {
   process.env.CONTENTFLOW_PLUGIN_NODE_EXECUTABLE = path.join(runtimeRoot, "node.exe");
   process.env.CONTENTFLOW_PLUGIN_NODE_MAJOR = "26";
   process.env.NODE_ENV = "production";
+  process.env.CONTENTFLOW_SUPPORT_DIAGNOSTICS = "1";
 
   const apiEntry = path.join(appRoot, "desktop-dist", "api.mjs");
   apiProcess = spawn(process.env.CONTENTFLOW_PLUGIN_NODE_EXECUTABLE, [apiEntry], {
     env: process.env,
     windowsHide: true,
-    stdio: ["ignore", "ignore", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
   });
+  apiProcess.stdout.on(
+    "data",
+    createApiDiagnosticReader((event) => diagnostics.record(event)),
+  );
   let apiError = "";
   let apiLaunchError;
   let apiReady = false;
   apiProcess.stderr.on("data", (chunk) => {
+    diagnostics.record({ area: "api", code: "API_ERROR" });
     apiError = `${apiError}${chunk.toString("utf8")}`.slice(-12_000);
   });
   apiProcess.once("error", (error) => {
+    diagnostics.record({ area: "api", code: "API_ERROR", ...safeError(error) });
     apiLaunchError = error;
   });
   apiProcess.once("exit", (code) => {
+    diagnostics.record({ area: "api", code: "API_EXITED", exitCode: code });
     if (!quitting && apiReady) {
       dialog.showErrorBox(
         "A API local foi encerrada",
@@ -140,6 +174,20 @@ async function startDesktop() {
     },
   });
   appOrigin = `http://127.0.0.1:${webPort}`;
+  mainWindow.webContents.on("render-process-gone", (_event, details) =>
+    diagnostics.record({ area: "interface", code: "UI_CRASHED", exitCode: details.exitCode }),
+  );
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode) =>
+    diagnostics.record({ area: "interface", code: "UI_LOAD_FAILED", status: Math.abs(errorCode) }),
+  );
+  mainWindow.webContents.on("console-message", (details) => {
+    if (details.level === "error")
+      diagnostics.record({
+        area: "interface",
+        line: details.lineNumber,
+        ...safeConsoleError(details),
+      });
+  });
   configureHumanTaskNotifications();
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://") || url.startsWith("http://")) void shell.openExternal(url);
@@ -150,10 +198,54 @@ async function startDesktop() {
     event.preventDefault();
     if (url.startsWith("https://") || url.startsWith("http://")) void shell.openExternal(url);
   });
-  configureDesktopUpdater({ app, ipcMain, shell, getWindow: () => mainWindow });
+  configureDesktopUpdater({
+    app,
+    ipcMain,
+    shell,
+    getWindow: () => mainWindow,
+    supportLog: (event) => diagnostics.record(event),
+  });
   mainWindow.once("ready-to-show", () => mainWindow?.show());
   await mainWindow.loadURL(`${appOrigin}/dashboard`);
   if (!mainWindow.isVisible()) mainWindow.show();
+}
+
+function configureSupportDiagnostics(logDirectory) {
+  const authorized = (event) =>
+    mainWindow &&
+    event.sender === mainWindow.webContents &&
+    event.senderFrame === mainWindow.webContents.mainFrame;
+  ipcMain.on("contentflow:diagnostics:record", (event, input) => {
+    if (!authorized(event) || !["UI_ERROR", "UI_REJECTION"].includes(input?.code)) return;
+    diagnostics.record({ ...input, area: "interface" });
+  });
+  ipcMain.handle("contentflow:diagnostics:open", async (event) => {
+    if (!authorized(event)) return { status: "error" };
+    try {
+      await diagnostics.prepare();
+      const error = await shell.openPath(logDirectory);
+      return { status: error ? "error" : "opened" };
+    } catch {
+      return { status: "error" };
+    }
+  });
+  ipcMain.handle("contentflow:diagnostics:export", async (event) => {
+    if (!authorized(event) || exportingDiagnostics) return { status: "error" };
+    exportingDiagnostics = true;
+    try {
+      const selection = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: `ContentFlow-diagnostic-${new Date().toISOString().replace(/[:.]/g, "-")}.zip`,
+        filters: [{ name: "ZIP", extensions: ["zip"] }],
+      });
+      if (selection.canceled || !selection.filePath) return { status: "cancelled" };
+      await exportDiagnostics(selection.filePath, await diagnostics.read(), app.getVersion());
+      return { status: "exported" };
+    } catch {
+      return { status: "error" };
+    } finally {
+      exportingDiagnostics = false;
+    }
+  });
 }
 
 function configureHumanTaskNotifications() {

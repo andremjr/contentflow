@@ -29,5 +29,43 @@ contextBridge.exposeInMainWorld(
         return () => ipcRenderer.removeListener(HUMAN_TASKS_NAVIGATE_CHANNEL, listener);
       },
     }),
+    diagnostics: Object.freeze({
+      openFolder: () => ipcRenderer.invoke("contentflow:diagnostics:open"),
+      export: () => ipcRenderer.invoke("contentflow:diagnostics:export"),
+    }),
   }),
+);
+
+function reportInterfaceError(code, error, filename, line, column) {
+  const source = String(filename ?? error?.stack ?? "")
+    .slice(0, 8000)
+    .match(/((?:assets|src)\/[a-zA-Z0-9_/-]+\.(?:js|tsx?))(?::(\d+):(\d+))?/);
+  const message = String(error?.message ?? "").slice(0, 2000);
+  const errorKind = /Cannot (?:read|set) properties of (?:undefined|null)/.test(message)
+    ? "UNDEFINED_ACCESS"
+    : /is not a function/.test(message)
+      ? "NOT_CALLABLE"
+      : /^(Failed to fetch|NetworkError when attempting to fetch resource\.)$/.test(message)
+        ? "NETWORK_UNAVAILABLE"
+        : message.startsWith("Este conteúdo precisa de migração antes de editar ou executar.")
+          ? "MIGRATION_REQUIRED"
+          : undefined;
+  ipcRenderer.send("contentflow:diagnostics:record", {
+    code,
+    errorType: error?.name,
+    errorKind,
+    ...(source
+      ? {
+          location: source[1],
+          line: line ?? Number(source[2]),
+          column: column ?? Number(source[3]),
+        }
+      : {}),
+  });
+}
+window.addEventListener("error", (event) =>
+  reportInterfaceError("UI_ERROR", event.error, event.filename, event.lineno, event.colno),
+);
+window.addEventListener("unhandledrejection", (event) =>
+  reportInterfaceError("UI_REJECTION", event.reason),
 );

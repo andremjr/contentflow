@@ -18,7 +18,19 @@ No instalador NSIS, abra a página inicial e use **Verificar atualização**. O 
 
 A versão portátil não é atualizada no lugar. Seu cartão abre a release estável mais recente para baixar o instalador recomendado. Projetos, plugins, perfis e credenciais continuam em `%APPDATA%\ContentFlow\data` e não são removidos ao substituir o programa.
 
-Se a release estiver incompleta, a rede falhar ou a integridade não puder ser confirmada, o aplicativo mantém a versão atual e permite tentar novamente. O log local do mecanismo fica no arquivo `updates.log` da pasta de logs do aplicativo e registra somente estados e versões, sem chaves, conteúdo de Projetos ou caminhos privados.
+Se a release estiver incompleta, a rede falhar ou a integridade não puder ser confirmada, o aplicativo mantém a versão atual e permite tentar novamente. Os estados e versões do updater entram no diagnóstico local descrito abaixo, sem chaves, conteúdo de Projetos ou caminhos privados. Esta implementação deixa de escrever `updates.log`; arquivos de versões anteriores não são importados no ZIP nem apagados automaticamente.
+
+## Enviar um diagnóstico ao suporte
+
+Abra **Preferências → Suporte e diagnóstico → Exportar diagnóstico** logo após o erro. Escolha onde salvar o ZIP e envie-o junto com o horário e uma descrição do que tentou fazer. O pacote contém `LEIA-ME.txt` com explicações em português, inglês e espanhol, `environment.json` com versões técnicas e `events.jsonl` com os eventos estruturados. O envio é manual; o aplicativo não transmite o diagnóstico automaticamente.
+
+**Abrir pasta de logs** abre `%APPDATA%\ContentFlow\logs`. Instalador e portátil oferecem os dois botões; o preview web informa que o recurso está disponível no aplicativo desktop.
+
+Os registros de suporte são mantidos por até 24 horas, com teto de 4 MiB no conjunto e 256 KiB por segmento de hora. Segmentos antigos são removidos na abertura, durante a gravação e a cada virada de hora enquanto o aplicativo estiver aberto. Com o aplicativo fechado, a limpeza ocorre na próxima abertura. Arquivos externos e ZIPs salvos pelo usuário não são removidos. Ao atingir os limites, eventos podem ser omitidos; o relatório registra omissões quando houver espaço.
+
+São registrados erros da interface e do serviço local, início/encerramento, operações de escrita da API, marcos de jobs e estados de atualização. Consultas de estado bem-sucedidas, cada clique, progresso de cada item e conteúdo de mensagens não são registrados. A gravação é assíncrona, em lotes de até um segundo, com fila de 64 KiB, deduplicação e limitação de frequência. A compressão só acontece ao exportar. Um encerramento forçado pode perder o último lote.
+
+O diagnóstico usa códigos, classes de erro, localização relativa no código, status, duração, versões e IDs de correlação resumidos por hash. Não inclui mensagens brutas de exceção, prompts, conteúdo produzido, nomes de Projetos/Canais/Métodos, URLs privadas, caminhos físicos, tokens, senhas, cookies ou sessões. Isso limita a investigação de erros sem classificação: reproduzir o cenário e informar o que aconteceu continua necessário. Os registros operacionais canônicos de execução e plugin permanecem no armazenamento existente; a retenção curta só se aplica aos arquivos de suporte.
 
 ## Onde ficam os dados
 

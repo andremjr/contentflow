@@ -49,7 +49,8 @@ test("o Electron inicia fechado, isolado e sem bloquear no stdout da API", () =>
   assert.match(desktopMain, /contextIsolation:\s*true/);
   assert.match(desktopMain, /nodeIntegration:\s*false/);
   assert.match(desktopMain, /sandbox:\s*true/);
-  assert.match(desktopMain, /stdio:\s*\["ignore",\s*"ignore",\s*"pipe"\]/);
+  assert.match(desktopMain, /stdio:\s*\["ignore",\s*"pipe",\s*"pipe"\]/);
+  assert.match(desktopMain, /apiProcess\.stdout\.on\(\s*"data",\s*createApiDiagnosticReader/);
   assert.match(desktopMain, /ready-to-show/);
 });
 

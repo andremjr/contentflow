@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { reportSupportEvent } from "./support-diagnostics";
 import type Database from "better-sqlite3";
 import type {
   BlockExecutionItem,
@@ -182,7 +183,7 @@ export class PluginJobStore {
   }
 
   create(job: PersistentPluginJob) {
-    this.database
+    const inserted = this.database
       .prepare(
         `INSERT OR IGNORE INTO plugin_jobs
           (id, execution_id, block_id, attempt, status, next_poll_at, payload, created_at, updated_at)
@@ -199,6 +200,17 @@ export class PluginJobStore {
         job.createdAt,
         job.updatedAt,
       );
+    if (inserted.changes)
+      reportSupportEvent({
+        area: "plugin",
+        code: "JOB_CREATED",
+        jobId: job.id,
+        executionId: job.executionId,
+        blockId: job.blockId,
+        pluginId: job.pluginId,
+        pluginVersion: job.pluginVersion,
+        attempt: job.attempt,
+      });
     return this.getByExecution(job.executionId, job.blockId, job.attempt)!;
   }
 
@@ -528,6 +540,19 @@ export function appendPluginDiagnostic(
     ...event,
     at: event.at ?? new Date().toISOString(),
   });
+  if (sanitized)
+    reportSupportEvent({
+      area: "plugin",
+      code: sanitized.code,
+      jobId: job.id,
+      executionId: job.executionId,
+      blockId: job.blockId,
+      pluginId: job.pluginId,
+      pluginVersion: job.pluginVersion,
+      attempt: sanitized.attempt ?? job.attempt,
+      reasonCode: sanitized.reasonCode,
+      profileId: sanitized.profileId,
+    });
   return {
     ...job,
     diagnosticTimeline: [
