@@ -1,0 +1,349 @@
+﻿Prompt 1 — Organizar os sinais encontrados
+
+Depois de usar o Radar da Nichos Virais Academy e escolher alguns canais/vídeos:
+
+Quero analisar oportunidades no YouTube a partir dos canais e vídeos que encontrei.
+
+Vou fornecer abaixo alguns canais, vídeos ou dados que chamaram minha atenção por apresentarem crescimento, desempenho fora da curva ou algum padrão interessante.
+
+Sua tarefa nesta etapa NÃO é sugerir nichos nem ideias de vídeos.
+
+Quero apenas organizar os sinais encontrados.
+
+Para cada exemplo, identifique:
+
+- nicho ou mercado
+- público provável
+- tópico central do conteúdo
+- tema ou posicionamento específico
+- formato utilizado
+- o que parece estar fora da curva
+- padrões que se repetem entre os exemplos
+- diferenças relevantes entre eles
+
+Lembre-se:
+
+Tópico central = a área de interesse ou demanda em que o vídeo se encaixa.
+
+Tema = a tese, abordagem ou posicionamento específico daquele vídeo dentro do tópico.
+
+Ao final, destaque os 3 sinais mais interessantes para investigarmos mais profundamente.
+
+Dados encontrados:
+
+[COLE AQUI OS CANAIS, VÍDEOS, TÍTULOS, NÚMEROS E OBSERVAÇÕES]
+
+---
+
+Prompt 2 — Entender por que funcionou
+
+Esse é o coração da sua metodologia.
+
+Agora quero fazer engenharia reversa dos exemplos que selecionamos.
+
+Não analise apenas título, thumbnail ou formato superficialmente.
+
+Quero entender o MECANISMO que pode estar por trás do resultado.
+
+Para cada exemplo, analise:
+
+1. PÚBLICO
+Quem provavelmente se interessa por esse conteúdo?
+O que esse público deseja, teme, rejeita ou busca?
+
+2. SISTEMA DE CRENÇAS
+O que esse público provavelmente já acredita sobre o assunto?
+Qual crença o vídeo reforça, desafia ou explora?
+
+3. IDENTIFICAÇÃO
+O que faz o espectador pensar:
+"isso é para mim" ou "isso tem relação comigo"?
+
+4. QUEBRA DE PADRÃO
+O que existe nessa abordagem que foge daquilo que esse público normalmente espera encontrar?
+
+5. EMOÇÃO
+Qual emoção essa quebra de padrão provoca?
+Curiosidade, medo, desejo, esperança, indignação, surpresa, ambição, nostalgia ou outra?
+
+6. GAP DE CURIOSIDADE
+Qual expectativa o conteúdo cria?
+O que o espectador entende imediatamente?
+Qual informação fica faltando e gera necessidade de continuar?
+
+7. MECANISMO CENTRAL
+Resuma em uma frase por que esse conteúdo provavelmente funcionou.
+
+Muito importante:
+
+Não confunda o mecanismo com elementos superficiais.
+
+Por exemplo, se um vídeo sobre "hábitos japoneses para longevidade" funcionou, não conclua simplesmente que "Japão funciona".
+
+Investigue se o mecanismo real pode estar relacionado a tradição, autoridade cultural, segredo, longevidade, contraste com hábitos modernos ou outra crença do público.
+
+No final, separe claramente:
+
+SUPERFÍCIE DO CONTEÚDO
+versus
+MECANISMO QUE PODE TER GERADO O INTERESSE.
+
+---
+
+Prompt 3 — Formular hipóteses de brecha
+
+Aqui começamos a criar oportunidade.
+
+Com base nos mecanismos que identificamos, quero formular hipóteses de novas oportunidades.
+
+Não quero simples trocas de palavras.
+
+Não faça coisas como:
+
+"Japão" → "Alemanha"
+"longevidade" → "emagrecimento"
+
+a menos que exista uma justificativa real baseada no comportamento e nas crenças do público.
+
+Quero encontrar NOVAS FORMAS DE ATIVAR O MESMO MECANISMO.
+
+Faça este processo em duas etapas:
+
+ETAPA 1 — ABRIR O ESPAÇO CRIATIVO
+
+Gere 15 possíveis transposições do mecanismo identificado para outros contextos, nichos, públicos, culturas, desejos, problemas, formatos ou objetivos.
+
+Nesta primeira etapa:
+
+- priorize variedade
+- busque combinações não óbvias
+- preserve coerência psicológica
+- evite trocas aleatórias de palavras
+- procure novas formas de provocar a mesma reação no público
+
+Uma boa transposição deve parecer nova, mas fazer sentido quando explicada.
+
+O objetivo é encontrar combinações que provoquem a sensação:
+
+"Nunca tinha pensado nisso, mas faz total sentido."
+
+ETAPA 2 — FILTRAR PELA METODOLOGIA
+
+Analise as 15 possibilidades e selecione apenas as 5 melhores.
+
+Use estes critérios:
+
+- identificação forte com o público
+- quebra de padrão real
+- emoção clara
+- coerência com o sistema de crenças
+- demanda existente
+- justificativa real para a combinação
+- capacidade de preservar o mecanismo central
+- diferença suficiente da oferta atual
+- não depender apenas de substituição superficial
+
+Para cada uma das 5 hipóteses finalistas:
+
+- defina o público
+- indique a demanda que já existe
+- identifique o mecanismo preservado
+- explique a nova abordagem
+- diga qual crença é ativada, atacada ou defendida
+- mostre onde está a identificação
+- mostre onde está a quebra de padrão
+- explique qual emoção essa quebra deve provocar
+- explique por que a combinação faz sentido
+- explique por que pode existir uma brecha
+- indique o principal risco da hipótese
+
+Muito importante:
+
+A oportunidade não nasce quando apenas trocamos os elementos.
+
+Ela nasce quando entendemos por que os elementos originais funcionaram e encontramos outra combinação capaz de provocar uma reação semelhante.
+
+Pense em:
+
+SUPERFÍCIE NOVA
++
+MECANISMO COMPROVADO
++
+CRENÇA COERENTE
++
+IDENTIFICAÇÃO
++
+QUEBRA DE PADRÃO
++
+EMOÇÃO
+
+Não trate nenhuma hipótese como oportunidade confirmada.
+
+Neste momento estamos criando hipóteses que ainda precisam ser validadas no YouTube.
+
+---
+
+Prompt 4 — Validar a hipótese no YouTube
+
+Aqui você volta ao YouTube, pesquisa cada hipótese e depois traz os resultados para o ChatGPT.
+
+Formulamos anteriormente uma hipótese de oportunidade.
+
+Agora fiz uma nova pesquisa no YouTube especificamente para validar essa hipótese.
+
+Vou fornecer os resultados encontrados.
+
+Quero que você compare esses resultados com a hipótese original.
+
+Analise três possibilidades:
+
+A) Ninguém parece ter explorado essa abordagem.
+
+Nesse caso, avalie:
+- pode ser uma brecha real?
+- ou pode simplesmente não existir interesse?
+
+B) Existem conteúdos semelhantes e eles funcionaram.
+
+Nesse caso, avalie:
+- isso valida o mecanismo?
+- a abordagem ainda possui espaço?
+- qual diferenciação ainda poderia existir?
+
+C) Existem conteúdos semelhantes e eles tiveram resultados fracos.
+
+Nesse caso, não descarte automaticamente a hipótese.
+
+Investigue se o problema pode ter sido:
+
+- tema
+- título
+- thumbnail
+- falta de identificação
+- quebra de padrão fraca
+- emoção insuficiente
+- crença mal interpretada
+- execução
+- contexto do canal
+- ou o próprio mecanismo
+
+Quero distinguir:
+
+FALHA DO MECANISMO
+
+de
+
+FALHA DA EXECUÇÃO.
+
+Ao final, classifique a hipótese como:
+
+- forte candidata
+- precisa de ajustes
+- evidência insuficiente
+- melhor descartar
+
+Explique objetivamente o motivo.
+
+HIPÓTESE:
+
+[COLE A HIPÓTESE]
+
+RESULTADOS DA PESQUISA:
+
+[COLE OS VÍDEOS, CANAIS E DADOS ENCONTRADOS]
+
+---
+
+Prompt 5 — Tomar a decisão
+
+Aqui você fecha o ciclo de pesquisa.
+
+Agora quero tomar uma decisão sobre essa oportunidade usando tudo o que analisamos.
+
+Considere:
+
+- demanda observada
+- público
+- sistema de crenças
+- mecanismo identificado
+- identificação
+- quebra de padrão
+- emoção
+- gap de curiosidade
+- concorrência encontrada
+- validação no YouTube
+- riscos identificados
+
+Não quero entusiasmo artificial.
+
+Quero uma decisão crítica.
+
+Escolha uma das opções:
+
+EXECUTAR
+A hipótese tem evidências suficientes para justificar um teste.
+
+AJUSTAR
+O mecanismo parece interessante, mas a abordagem precisa mudar.
+
+CRIAR OUTRA HIPÓTESE
+A demanda continua interessante, porém essa abordagem não parece ser a melhor.
+
+DESCARTAR
+As evidências encontradas tornam essa oportunidade pouco interessante.
+
+Depois da decisão, explique:
+
+- qual é a principal evidência favorável
+- qual é o principal risco
+- o que ainda não sabemos
+- qual seria o teste mais simples para obter uma resposta do público
+
+Lembre-se:
+
+Não estamos procurando certeza.
+
+Estamos procurando uma hipótese com probabilidade suficiente para justificar um teste.
+
+---
+
+Prompt 6 — Preparar a primeira execução
+
+Eu deixaria propositalmente este último prompt mais curto, porque ele funciona como gancho para seu próximo vídeo.
+
+A hipótese foi aprovada para teste.
+
+Agora quero transformar essa oportunidade em um primeiro vídeo.
+
+Ainda NÃO quero desenvolver roteiro completo, thumbnail final ou produção.
+
+Quero apenas preparar o conceito estratégico do teste.
+
+Defina:
+
+- tópico central
+- tema do vídeo
+- tese ou posicionamento
+- crença que vamos atacar ou defender
+- expectativa criada
+- gap de curiosidade
+- elemento de identificação
+- quebra de padrão
+- emoção principal
+- promessa central do vídeo
+
+Depois proponha 3 conceitos diferentes para o primeiro vídeo.
+
+Cada conceito deve testar o mesmo mecanismo por uma abordagem diferente.
+
+Ao final, explique qual dos três você testaria primeiro e por quê.
+
+Pare nessa etapa.
+
+A construção de título, thumbnail, roteiro e produção será feita posteriormente.
+
+O ciclo completo fica muito simples de visualizar
+
+Radar → analisar mecanismo → criar hipótese → voltar ao YouTube → validar → decidir → preparar o teste.
+
+Esses prompts não são independentes. O ideal é executar todos na mesma conversa, porque o ChatGPT vai acumulando a pesquisa, os mecanismos encontrados, as hipóteses e a validação.

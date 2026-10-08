@@ -1,5 +1,14 @@
 const words = {
   pt: {
+    materials: "Materiais do canal",
+    materialsIntro: "Os materiais compartilhados nos vídeos do canal, reunidos aqui para você baixar e usar.",
+    skill: "SKILL",
+    prompts: "PROMPTS",
+    catalogLabel: "Catálogo do ecossistema",
+    typeLabel: "Tipo",
+    processLabel: "Processo",
+    selectItem: "Selecionar para download",
+
     navFlow: "Como funciona",
     navCommunity: "Comunidade VIP",
     navEcosystem: "Ecossistema",
@@ -41,6 +50,15 @@ const words = {
     results: "resultados",
   },
   en: {
+    materials: "Channel materials",
+    materialsIntro: "The materials shared in the channel’s videos, collected here for you to download and use.",
+    skill: "SKILL",
+    prompts: "PROMPTS",
+    catalogLabel: "Ecosystem catalog",
+    typeLabel: "Type",
+    processLabel: "Process",
+    selectItem: "Select for download",
+
     navFlow: "How it works",
     navCommunity: "VIP Community",
     navEcosystem: "Ecosystem",
@@ -82,6 +100,15 @@ const words = {
     results: "results",
   },
   es: {
+    materials: "Materiales del canal",
+    materialsIntro: "Los materiales compartidos en los vídeos del canal, reunidos aquí para descargar y usar.",
+    skill: "SKILL",
+    prompts: "PROMPTS",
+    catalogLabel: "Catálogo del ecosistema",
+    typeLabel: "Tipo",
+    processLabel: "Proceso",
+    selectItem: "Seleccionar para descargar",
+
     navFlow: "Cómo funciona",
     navCommunity: "Comunidad VIP",
     navEcosystem: "Ecosistema",
@@ -216,9 +243,9 @@ const pluginMeta = {
     process: ["narration", "editing"],
   },
 };
-let methodData = [];
+let methodData = [], materialData = [];
 let language = localStorage.getItem("contentflow-site-language") || "pt",
-  kind = new URLSearchParams(location.search).get("category") === "methods" ? "methods" : "plugins",
+  kind = ["plugins", "methods", "materials"].includes(new URLSearchParams(location.search).get("category")) ? new URLSearchParams(location.search).get("category") : "plugins",
   catalog = [],
   selected = new Set();
 const gallery = document.querySelector("#gallery"),
@@ -233,31 +260,40 @@ function icon(plugin) {
 }
 function urlFor(item) { return item.downloadUrl; }
 function filteredData() {
-  const source = kind === "plugins" ? catalog : methodData,
+  const source = kind === "plugins" ? catalog : kind === "methods" ? methodData : materialData,
     term = search.value.trim().toLocaleLowerCase();
   return source.filter((item) => {
     const matchesSearch =
         !term ||
-        `${escapeHtml(item.name)} ${escapeHtml(item.description)}`.toLocaleLowerCase().includes(term),
+        `${item.name} ${descriptionFor(item)}`.toLocaleLowerCase().includes(term),
       matchesDelivery =
-        deliveryFilter.value === "all" ||
+        kind === "materials" || deliveryFilter.value === "all" ||
         item.delivery.includes(deliveryFilter.value) ||
         item.features?.includes(deliveryFilter.value),
       matchesProcess =
-        processFilter.value === "all" ||
+        kind === "materials" || processFilter.value === "all" ||
         item.process.includes(processFilter.value);
     return matchesSearch && matchesDelivery && matchesProcess;
   });
 }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;", "'":"&#39;"})[char]); }
+function descriptionFor(item) {
+  return typeof item.description === "string" ? item.description : item.description?.[language] ?? item.description?.pt ?? "";
+}
 function render() {
+  const materials = kind === "materials";
+  deliveryFilter.hidden = materials;
+  processFilter.hidden = materials;
+  document.querySelector(".source-links").hidden = materials;
+  document.querySelector("#materials-intro").hidden = !materials;
+
   const data = filteredData();
   resultCount.textContent = `${data.length} ${words[language].results}`;
   gallery.innerHTML = data.length
     ? data
         .map((item) => {
           const url = urlFor(item);
-          return `<article class="card ${kind === "plugins" ? "plugin" : ""}"><label><input class="select" type="checkbox" data-url="${escapeHtml(url)}" ${selected.has(url) ? "checked" : ""}></label><div class="cover"><img src="${kind === "plugins" ? icon(item) : "logo-mark.png"}" onerror="this.src='logo-mark.png'" alt="${escapeHtml(item.name)}"></div><div class="body"><small>${words[language][kind === "plugins" ? "plugin" : "method"]}</small><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.description)}</p><a href="${escapeHtml(url)}" download>${words[language].downloadItem}</a></div></article>`;
+          return `<article class="card ${kind === "plugins" ? "plugin" : kind === "materials" ? "material" : ""}"><label><input class="select" type="checkbox" aria-label="${escapeHtml(words[language].selectItem + ": " + item.name)}" data-url="${escapeHtml(url)}" ${selected.has(url) ? "checked" : ""}></label><div class="cover"><img src="${kind === "plugins" ? icon(item) : kind === "materials" ? item.cover : "logo-mark.png"}" onerror="this.src='logo-mark.png'" alt="${escapeHtml(item.name)}"></div><div class="body"><small>${words[language][kind === "plugins" ? "plugin" : kind === "methods" ? "method" : item.type] + (kind === "materials" ? " · " + item.format : "")}</small><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(descriptionFor(item))}</p><a href="${escapeHtml(url)}" download>${words[language].downloadItem}</a></div></article>`;
         })
         .join("")
     : `<div class="empty">${words[language].empty}</div>`;
@@ -280,7 +316,7 @@ function update() {
 }
 function setLanguage(nextLanguage) {
   language = nextLanguage;
-  document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.kind === kind));
+  document.querySelectorAll(".tab").forEach(tab => (tab.classList.toggle("active", tab.dataset.kind === kind), tab.setAttribute("aria-pressed", tab.dataset.kind === kind)));
   document.documentElement.lang = language === "pt" ? "pt-BR" : language;
   document
     .querySelectorAll("[data-i18n]")
@@ -325,9 +361,16 @@ document.querySelectorAll(".tab").forEach(
     (element.onclick = () => {
       kind = element.dataset.kind;
       selected.clear();
+      search.value = "";
+      deliveryFilter.value = "all";
+      processFilter.value = "all";
+      const url = new URL(location.href);
+      url.searchParams.set("category", kind);
+      history.replaceState(null, "", url);
+
       document
         .querySelectorAll(".tab")
-        .forEach((tab) => tab.classList.toggle("active", tab === element));
+        .forEach((tab) => (tab.classList.toggle("active", tab === element), tab.setAttribute("aria-pressed", tab === element)));
       render();
     }),
 );
@@ -343,13 +386,23 @@ download.onclick = () =>
       link.click();
     }, index * 400),
   );
-Promise.all([
-  fetch("https://raw.githubusercontent.com/andremjr/plugins-contentflow/main/catalog.json").then(response => { if (!response.ok) throw new Error("catalog"); return response.json(); }),
-  fetch("https://raw.githubusercontent.com/andremjr/methods-contentflow/main/catalog.json").then(response => { if (!response.ok) throw new Error("catalog"); return response.json(); }),
-]).then(([plugins, methods]) => {
-  catalog = plugins.plugins.map((plugin, index) => ({
-    ...plugin, ...(pluginMeta[plugin.asset] ?? { delivery: [], process: [] }), slug: `plugin-${index}`,
-  }));
-  methodData = methods.methods.map(method => ({ ...method, slug: method.id, url: method.downloadUrl, process: ["assets"], delivery: ["image", "video"] }));
-  setLanguage(language);
-}).catch(() => setLanguage(language));
+// Each catalog loads independently, so channel downloads remain available if an external catalog fails.
+setLanguage(language);
+fetch(new URL("channel-materials.json", document.baseURI))
+  .then(response => { if (!response.ok) throw new Error("materials"); return response.json(); })
+  .then(data => { materialData = data.materials; render(); })
+  .catch(() => render());
+fetch("https://raw.githubusercontent.com/andremjr/plugins-contentflow/main/catalog.json")
+  .then(response => { if (!response.ok) throw new Error("catalog"); return response.json(); })
+  .then(data => {
+    catalog = data.plugins.map((plugin, index) => ({
+      ...plugin, ...(pluginMeta[plugin.asset] ?? { delivery: [], process: [] }), slug: `plugin-${index}`,
+    }));
+    render();
+  }).catch(() => render());
+fetch("https://raw.githubusercontent.com/andremjr/methods-contentflow/main/catalog.json")
+  .then(response => { if (!response.ok) throw new Error("catalog"); return response.json(); })
+  .then(data => {
+    methodData = data.methods.map(method => ({ ...method, slug: method.id, url: method.downloadUrl, process: ["assets"], delivery: ["image", "video"] }));
+    render();
+  }).catch(() => render());

@@ -28,7 +28,7 @@
     <title>Ecossistema — ContentFlow</title>
     <link rel="icon" href="logo-mark.png">
     <link rel="stylesheet" href="shared-header.css">
-    <link rel="stylesheet" href="ecosystem.css?v=1.3.4">
+    <link rel="stylesheet" href="ecosystem.css?v=channel-materials-20261008">
   </head>
   <body>
     <header class="topbar">
@@ -61,21 +61,23 @@
           <a class="community-cta-secondary" href="https://www.youtube.com/@andremarinhojr" target="_blank" rel="noreferrer" data-i18n="communityCtaYoutube">Ver canal no YouTube</a>
         </div>
       </section>
-      <section class="catalog" aria-label="Ecosystem catalog">
+      <section class="catalog" aria-label="Catálogo do ecossistema" data-i18n-aria="catalogLabel">
         <div class="toolbar">
           <div class="tabs">
             <button class="tab active" data-kind="plugins" data-i18n="plugins">Plugins</button>
             <button class="tab" data-kind="methods" data-i18n="methods">Métodos</button>
+            <button class="tab" data-kind="materials" data-i18n="materials">Materiais do canal</button>
           </div>
           <span id="selection-count" class="selection-count" aria-live="polite"></span>
           <button id="download-selected" class="download-selected" disabled data-i18n="downloadSelected">Baixar selecionados</button>
         </div>
+        <p id="materials-intro" class="materials-intro" data-i18n="materialsIntro" hidden>Os materiais compartilhados nos vídeos do canal, reunidos aqui para você baixar e usar.</p>
         <div class="filter-row">
           <input id="search" class="filter-control search" type="search" data-i18n-placeholder="searchPlaceholder" data-i18n-aria="searchLabel" placeholder="Pesquisar por nome ou função" aria-label="Pesquisar por nome ou função">
-          <select id="delivery-filter" class="filter-control" aria-label="Tipo">
+          <select id="delivery-filter" class="filter-control" aria-label="Tipo" data-i18n-aria="typeLabel">
             <option value="all" data-i18n="allTypes">Todos os tipos</option><option value="text" data-i18n="text">Gerador de texto</option><option value="image" data-i18n="image">Gerador de imagem</option><option value="audio" data-i18n="audio">Áudio</option><option value="video" data-i18n="video">Vídeo</option><option value="srt">SRT</option><option value="processing" data-i18n="tool">Ferramenta</option>
           </select>
-          <select id="process-filter" class="filter-control" aria-label="Processo">
+          <select id="process-filter" class="filter-control" aria-label="Processo" data-i18n-aria="processLabel">
             <option value="all" data-i18n="allProcesses">Todos os processos</option><option value="theme" data-i18n="theme">Tema</option><option value="title" data-i18n="title">Título</option><option value="thumbnail" data-i18n="thumbnail">Thumbnail</option><option value="script" data-i18n="script">Roteiro</option><option value="narration" data-i18n="narration">Narração</option><option value="assets" data-i18n="assets">Assets</option><option value="editing" data-i18n="editing">Edição</option><option value="publishing" data-i18n="publishing">Publicação</option>
           </select>
           <span id="result-count" class="result-count" aria-live="polite"></span>
@@ -89,6 +91,6 @@
       </section>
     </main>
     <footer><span>© 2026 ContentFlow</span><a href="./" data-i18n="home">Início</a></footer>
-    <script src="ecosystem.js?v=1.3.4"></script>
+    <script src="ecosystem.js?v=channel-materials-20261008"></script>
   </body>
 </html>

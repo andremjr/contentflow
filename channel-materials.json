@@ -1,0 +1,30 @@
+{
+  "materials": [
+    {
+      "id": "youtube-opportunity-engine",
+      "name": "YouTube Opportunity Engine",
+      "description": {
+        "pt": "Skill para encontrar brechas e oportunidades no YouTube: analisar sinais, entender mecanismos, validar hipóteses e preparar testes.",
+        "en": "A skill to find gaps and opportunities on YouTube: analyze signals, understand mechanisms, validate hypotheses, and prepare tests.",
+        "es": "Skill para encontrar brechas y oportunidades en YouTube: analizar señales, entender mecanismos, validar hipótesis y preparar pruebas."
+      },
+      "type": "skill",
+      "format": "ZIP",
+      "downloadUrl": "downloads/channel-materials/youtube-opportunity-engine.zip",
+      "cover": "ecosystem-assets/channel-skill.svg"
+    },
+    {
+      "id": "youtube-opportunity-prompts",
+      "name": "Prompts para encontrar brechas no YouTube",
+      "description": {
+        "pt": "Seis prompts para organizar sinais, investigar o que funcionou, criar e validar hipóteses e preparar o primeiro vídeo. Material em português.",
+        "en": "Six prompts to organize signals, investigate what worked, create and validate hypotheses, and prepare the first video. Material in Portuguese.",
+        "es": "Seis prompts para organizar señales, investigar qué funcionó, crear y validar hipótesis y preparar el primer vídeo. Material en portugués."
+      },
+      "type": "prompts",
+      "format": "TXT",
+      "downloadUrl": "downloads/channel-materials/encontrar-brechas-no-youtube.txt",
+      "cover": "ecosystem-assets/channel-prompts.svg"
+    }
+  ]
+}
